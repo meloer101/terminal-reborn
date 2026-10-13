@@ -1,0 +1,52 @@
+.header {
+  flex: none;
+  height: var(--titlebar-height);
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 0 var(--space-8) 0 var(--space-16);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+/* Leave room for the traffic lights when the sidebar is hidden. */
+.header[data-sidebar-collapsed='true'] {
+  padding-left: 80px;
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-m);
+  letter-spacing: var(--tracking-title-m);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.branch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.tools {
+  display: inline-flex;
+  gap: var(--space-2);
+  padding-left: var(--space-8);
+}

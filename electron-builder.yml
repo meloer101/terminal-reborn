@@ -1,0 +1,22 @@
+appId: dev.terminalreborn.app
+productName: Terminal Reborn
+directories:
+  buildResources: build
+  output: release/${version}
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - node_modules/node-pty/**
+mac:
+  category: public.app-category.developer-tools
+  # Ad-hoc signature only (no Apple Developer ID yet). Users clear quarantine
+  # once after download; see README. Switch to a Developer ID + notarize later.
+  identity: '-'
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+publish:
+  provider: github

@@ -1,0 +1,43 @@
+import { useWorkspace } from '../state/workspace'
+import { Sidebar } from '../sidebar/Sidebar'
+import { SessionHeader } from '../session-header/SessionHeader'
+import { TerminalArea } from '../terminal/TerminalArea'
+import { Composer } from '../composer/Composer'
+import { RightPanel } from '../panels/RightPanel'
+import styles from './AppShell.module.css'
+
+/**
+ * Window layout (Figma Screens 01–08):
+ *   sidebar 264 │ main: header 44 / terminal / composer │ right panel (changes 440 · graph 560)
+ * Each region is owned by one feature directory; this file only arranges them.
+ */
+export function AppShell() {
+  const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
+  const rightPanel = useWorkspace((s) => s.rightPanel)
+
+  return (
+    <div className={styles.shell}>
+      {!sidebarCollapsed && (
+        <aside className={styles.sidebar} data-region="sidebar">
+          <Sidebar />
+        </aside>
+      )}
+      <main className={styles.main} data-region="main">
+        <SessionHeader />
+        <section className={styles.terminal} data-region="terminal">
+          <TerminalArea />
+        </section>
+        <Composer />
+      </main>
+      {rightPanel && (
+        <aside
+          className={styles.panel}
+          data-region="panel"
+          style={{ width: rightPanel === 'graph' ? 'var(--panel-width-graph)' : 'var(--panel-width-changes)' }}
+        >
+          <RightPanel tab={rightPanel} />
+        </aside>
+      )}
+    </div>
+  )
+}

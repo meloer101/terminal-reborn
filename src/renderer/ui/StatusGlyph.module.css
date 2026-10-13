@@ -1,0 +1,15 @@
+.glyph {
+  flex: none;
+  display: block;
+}
+
+.spin {
+  transform-origin: 7px 7px;
+  animation: spin 1.1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

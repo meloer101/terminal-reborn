@@ -1,0 +1,24 @@
+.tabs {
+  flex: none;
+  height: var(--titlebar-height);
+  display: flex;
+  gap: var(--space-20);
+  padding: 0 var(--space-16);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+.tab {
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: var(--text-body-strong);
+  -webkit-app-region: no-drag;
+}
+
+.tab[aria-selected='true'] {
+  color: var(--text-primary);
+  border-bottom-color: var(--fill-primary);
+}

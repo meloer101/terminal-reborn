@@ -1,0 +1,21 @@
+.composer {
+  flex: none;
+  min-height: 79px;
+  padding: var(--space-12) var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.input {
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: var(--text-composer);
+  color: var(--text-primary);
+  user-select: text;
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
