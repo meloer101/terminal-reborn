@@ -1,6 +1,6 @@
 // Entry for the Electron utilityProcess that owns all node-pty instances.
 // Talks to src/main/pty over process.parentPort using the messages in ./protocol.
-import { chmodSync } from 'node:fs'
+import { accessSync, chmodSync, constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import * as nodePty from 'node-pty'
@@ -22,11 +22,20 @@ function post(event: HostEvent): void {
   process.parentPort.postMessage(event)
 }
 
-/** node-pty's prebuilt spawn-helper ships without the executable bit on some installs. */
+/**
+ * node-pty's prebuilt spawn-helper ships without the executable bit on some installs.
+ * `postinstall` fixes it before packaging; this is a dev-time fallback that only touches the
+ * file when it really isn't executable, so a packaged (signed) bundle is never modified.
+ */
 function ensureSpawnHelperExecutable(): void {
   try {
     const pkgDir = dirname(require.resolve('node-pty/package.json')).replace('app.asar', 'app.asar.unpacked')
-    chmodSync(join(pkgDir, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'), 0o755)
+    const helper = join(pkgDir, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper')
+    try {
+      accessSync(helper, constants.X_OK)
+    } catch {
+      chmodSync(helper, 0o755)
+    }
   } catch {
     // Source builds have no prebuilds directory; nothing to fix.
   }

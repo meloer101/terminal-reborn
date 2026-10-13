@@ -20,7 +20,7 @@
     "test:watch": "vitest",
     "test:e2e": "electron-vite build && playwright test",
     "check": "npm run typecheck && npm run lint && npm run test",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && (chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true)",
     "dist": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {

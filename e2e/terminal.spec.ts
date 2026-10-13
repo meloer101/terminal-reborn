@@ -10,6 +10,9 @@ const SECOND = 's-perf'
 let app: ElectronApplication
 let page: Page
 
+/** The terminal pane (sidebar rows carry the same data-session-id). */
+const pane = (sessionId: string) => page.locator(`[data-region="terminal"] [data-session-id="${sessionId}"]`)
+
 const screen = (sessionId: string, scrollback = 0) =>
   page.evaluate(
     ([id, n]) => (globalThis as unknown as { __trTerminals: Hook }).__trTerminals.readScreen(id as string, n as number),
@@ -26,7 +29,7 @@ const setTheme = (theme: 'dark' | 'light') =>
   }, theme)
 
 async function run(sessionId: string, command: string): Promise<void> {
-  await page.locator(`[data-session-id="${sessionId}"]`).click()
+  await pane(sessionId).click()
   await page.keyboard.type(command)
   await page.keyboard.press('Enter')
 }
@@ -42,7 +45,7 @@ test.beforeAll(async () => {
     ;(globalThis as unknown as { __TR_E2E__: boolean }).__TR_E2E__ = true
   })
   await page.reload()
-  await expect(page.locator(`[data-session-id="${FIRST}"]`)).toBeVisible()
+  await expect(pane(FIRST)).toBeVisible()
   // A prompt (any output at all) means the login shell is up.
   await expect.poll(() => screen(FIRST), { timeout: 20_000 }).not.toBe('')
 })
@@ -74,13 +77,13 @@ test('switching sessions keeps each terminal alive with its own scrollback', asy
   await expect.poll(() => screen(FIRST), { timeout: 10_000 }).toMatch(/^marker-one$/m)
 
   await page.getByText('结算页性能优化').click()
-  await expect(page.locator(`[data-session-id="${FIRST}"]`)).toBeHidden()
+  await expect(pane(FIRST)).toBeHidden()
   await expect.poll(() => screen(SECOND), { timeout: 20_000 }).not.toBe('')
   await run(SECOND, 'echo marker-two')
   await expect.poll(() => screen(SECOND), { timeout: 10_000 }).toMatch(/^marker-two$/m)
 
   await page.getByText('Cookie 会话迁移').click()
-  await expect(page.locator(`[data-session-id="${FIRST}"]`)).toBeVisible()
+  await expect(pane(FIRST)).toBeVisible()
   const first = await screen(FIRST, 500)
   expect(first).toMatch(/^marker-one$/m)
   expect(first).not.toContain('marker-two')
