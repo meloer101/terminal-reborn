@@ -1,0 +1,82 @@
+/* Figma SessionRow 11:51 — 248×52, padding 8/12, gap 8; selected = --bg-selected; attention recolors the activity line only. */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row[data-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* 2px top inset aligns the 14px glyph to the 18px title line. */
+.glyph {
+  flex: none;
+  display: flex;
+  padding-top: var(--space-2);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.title,
+.activity {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+.activity {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.row[data-attention='true'] .activity {
+  color: var(--status-attention);
+}
+
+.meta {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Fixed line box so rows without time/stat keep the same height and column. */
+.metaLine {
+  display: block;
+  min-height: 16px;
+}

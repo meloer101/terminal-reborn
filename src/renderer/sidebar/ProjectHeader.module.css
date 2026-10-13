@@ -1,0 +1,24 @@
+/* Figma ProjectHeader 11:52 — 28px: padding 6/12, gap 6. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-12);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.count {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}

@@ -1,68 +1,46 @@
+/* Figma Sidebar 14:3 — titlebar 44 · nav · sessions (flex) · footer. Width/background/border come from AppShell. */
 .titlebar {
   flex: none;
   height: var(--titlebar-height);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: 0 var(--space-8);
+  padding: 0 var(--space-8) 0 var(--space-16);
   -webkit-app-region: drag;
 }
 
+/* Reserved for the native macOS traffic lights (52px wide, starting at x=16). */
+.trafficLights {
+  flex: 1;
+  min-width: 52px;
+}
+
 .nav {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-8);
-}
-
-.navItem,
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  width: 100%;
-  height: 30px;
-  padding: 0 var(--space-8);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-secondary);
-  font: var(--text-body);
-  text-align: left;
-}
-
-.navItem:hover,
-.row:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.navItem kbd {
-  margin-left: auto;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
+  padding: var(--space-4) var(--space-8) var(--space-8);
 }
 
 .sessions {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
   padding: var(--space-8);
 }
 
-.project {
-  margin: var(--space-12) 0 var(--space-4);
-  padding: 0 var(--space-8);
-  font: var(--text-caption-strong);
-  color: var(--text-tertiary);
-}
-
-.row[data-selected='true'] {
-  background: var(--bg-selected);
-  color: var(--text-primary);
+.group {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .footer {
   flex: none;
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-8) var(--space-12);
   border-top: 1px solid var(--border-subtle);
 }
