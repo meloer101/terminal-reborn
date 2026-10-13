@@ -27,6 +27,8 @@ export interface PtyApi {
   write(sessionId: SessionId, data: string): void
   resize(sessionId: SessionId, cols: number, rows: number): void
   kill(sessionId: SessionId): void
+  /** Flow control: tells the PTY host how many UTF-16 units of output the terminal has finished parsing. */
+  ack(sessionId: SessionId, count: number): void
   onData(sessionId: SessionId, listener: (data: string) => void): Unsubscribe
   onExit(sessionId: SessionId, listener: (exit: PtyExit) => void): Unsubscribe
 }
@@ -53,6 +55,7 @@ export const IPC = {
   ptyWrite: 'pty:write',
   ptyResize: 'pty:resize',
   ptyKill: 'pty:kill',
+  ptyAck: 'pty:ack',
   /** main → renderer, payload { sessionId, data } */
   ptyData: 'pty:data',
   /** main → renderer, payload { sessionId, exit } */
