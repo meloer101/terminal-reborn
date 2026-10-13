@@ -81,13 +81,15 @@ Project（git 仓库根目录）
 - **直通**：输入栏为空时，Esc、↑、↓、⇧Tab、Ctrl+C 直接转发给 agent。
 - 拖入图片或文件：存为临时文件，以 bracketed paste 写入**路径**。
 - `@` 引用文件：在 worktree 内做模糊搜索（P1）。
-- **发送协议**（`src/shared/send-protocol.ts`，纯函数，可单元测试）：
+- **发送协议**（`src/shared/send-protocol.ts` 规划 + `send-executor.ts` 执行；实测依据见 [docs/spikes/send-protocol.md](spikes/send-protocol.md)，Claude Code 2.1.296 / Codex 0.142.5）：
   1. 每个 PTY 一个串行发送队列；
-  2. 首字符是 `/` 或 `#` 时单独作为按键写入；不带参数的 slash 命令末尾补一个空格；
-  3. 正文用 `ESC[200~ … ESC[201~` 包起来写入；
-  4. 闭环确认：在 xterm buffer 中看到正文或 `[Pasted text` 占位符后，才进入下一步；超时时间按 **UTF-8 字节数**计算；
-  5. 回车 `\r` **单独写一次**；对 Codex 额外等待至少 150 ms（避开它 120 ms 的粘贴突发窗口）；
-  6. agent 正忙时发送，视为插话（steer）。
+  2. 正文用 `ESC[200~ … ESC[201~` 包起来写入，先清除会提前结束粘贴的控制字符；
+  3. 闭环确认：在 xterm buffer 中看到正文开头或占位符后，才进入下一步；超时按 **UTF-8 字节数**计算；
+  4. 回车 `\r` 单独写一次（Claude 等 60 ms，Codex 等 150 ms）。新版本里不分开也能提交，保留作为保险；
+  5. 占位符阈值按 agent 区分：Claude 超过 800 字符或含 3 个以上换行；Codex 超过 1000 字符；
+  6. `/` 命令：首字符单独按键；Claude 里长到会变成占位符的 `/cmd` 必须逐字输入，否则不再被识别为命令；不带参数的 slash 命令在 Codex 末尾补空格可防止误执行模糊匹配项（Claude 补空格无效）。`#` 不再特殊处理；
+  7. agent 正忙时发送 = **排队**（Claude 依次处理；Codex 会把多条合并），不是打断；
+  8. 启动弹窗：Codex 用 `-c check_for_update_on_startup=false` 与按次的 `projects` 信任参数跳过；Claude 的目录信任框需要预写 `~/.claude.json` 中该项目的信任标记，或检测到弹窗时禁用输入栏。
 - 终端内键位补充：⌘⌫ → Ctrl+U，⌘← / ⌘→ → Ctrl+A / Ctrl+E，⌥← / ⌥→ → ESC b / ESC f。
 - **验收**：§1.3 的测试矩阵在 Claude 和 Codex 上全部通过；搜狗和系统拼音输入法下，选字时回车不会误发。
 
