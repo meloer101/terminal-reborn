@@ -11,14 +11,15 @@ export interface TerminalAppearance {
   /** CJK fallback family, placed right after fontFamily in the stack. */
   cjkFontFamily: string
   fontSize: number
+  /** Multiple of the font size (xterm semantics); Figma Mono/Terminal 13px/20px is 20 / 13. */
   lineHeight: number
   ligatures: boolean
 }
 
 export interface TerminalSurface extends Disposable {
   mount(container: HTMLElement): void
-  /** Bytes from the PTY. */
-  write(data: string): void
+  /** Bytes from the PTY. `callback` fires once the data has been parsed (used for flow control). */
+  write(data: string, callback?: () => void): void
   /** Keystrokes typed directly into the terminal (to be forwarded to the PTY). */
   onInput(listener: (data: string) => void): Disposable
   /** Recompute cols/rows from the container; returns the new size. */
