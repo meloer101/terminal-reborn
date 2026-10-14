@@ -16,7 +16,7 @@ function registerAppHandlers(): void {
   ipcMain.on(IPC.appVersion, (event) => {
     event.returnValue = app.getVersion()
   })
-  ipcMain.on(IPC.uiOpenSettings, () => openSettingsWindow())
+  ipcMain.on(IPC.uiOpenSettings, (event) => openSettingsWindow(BrowserWindow.fromWebContents(event.sender)))
 }
 
 void app.whenReady().then(() => {

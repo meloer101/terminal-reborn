@@ -41,14 +41,40 @@ export function createMainWindow(): BrowserWindow {
   return win
 }
 
-/** Opens the settings window (Figma 07, 1200×800), or focuses it if already open. */
-export function openSettingsWindow(): BrowserWindow {
+/**
+ * Opens the settings window (Figma 07, 1200×800), or focuses it if already open.
+ * It is a child of the window it was opened from and can't go full screen, so when the main window
+ * is in macOS full screen it floats over it in the same Space instead of opening a Space of its own.
+ */
+export function openSettingsWindow(from?: BrowserWindow | null): BrowserWindow {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.show()
     settingsWindow.focus()
     return settingsWindow
   }
-  const win = new BrowserWindow({ ...baseOptions(), width: 1200, height: 800, minWidth: 880, minHeight: 600, title: '设置' })
+  const parent = from && !from.isDestroyed() && from !== settingsWindow ? from : BrowserWindow.getFocusedWindow()
+  const win = new BrowserWindow({
+    ...baseOptions(),
+    width: 1200,
+    height: 800,
+    minWidth: 880,
+    minHeight: 600,
+    title: '设置',
+    fullscreenable: false,
+    ...(parent ? { parent } : {})
+  })
+  if (parent) {
+    // Keep it on screen over the parent, even when the parent is full screen.
+    const bounds = parent.getBounds()
+    const width = Math.min(1200, bounds.width - 80)
+    const height = Math.min(800, bounds.height - 80)
+    win.setBounds({
+      width,
+      height,
+      x: Math.round(bounds.x + (bounds.width - width) / 2),
+      y: Math.round(bounds.y + (bounds.height - height) / 2)
+    })
+  }
   settingsWindow = win
   win.on('closed', () => {
     if (settingsWindow === win) settingsWindow = null
@@ -65,7 +91,7 @@ export function installAppMenu(): void {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
-        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => openSettingsWindow() },
+        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: (_item, window) => openSettingsWindow(window instanceof BrowserWindow ? window : null) },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
