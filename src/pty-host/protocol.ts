@@ -11,6 +11,8 @@ export interface HostSpawnRequest {
   env?: Record<string, string>
   /** Hooks-only settings file for `claude --settings` (set by main/hooks). */
   claudeSettingsPath?: string
+  /** `-c` override values for `codex` (hook definitions + trust pins, set by main/hooks). */
+  codexConfig?: string[]
   cols: number
   rows: number
 }

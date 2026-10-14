@@ -8,13 +8,16 @@ export function shellQuote(value: string): string {
 }
 
 /** TOML basic string. */
-function tomlString(value: string): string {
+export function tomlString(value: string): string {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
 }
 
 /**
  * Argument vector for the agent CLI. Codex trust is granted per launch with `-c` overrides,
  * so nothing is written to `~/.codex`; the inline-table form is the one that works (spike §6).
+ * Codex hooks are injected the same way: `-c hooks.<Event>=[…]` plus a `-c hooks.state={…trusted_hash…}`
+ * that pins exactly those definitions as trusted (docs/spikes/codex.md), so no `~/.codex` write and no
+ * `--dangerously-bypass-hook-trust`.
  * Claude has no such flag: its trust dialog is answered by the user in the terminal.
  * Claude's hooks are injected per launch with `--settings <file>` (PRD §6.2); the file holds hooks
  * only and Claude merges it with the user's own settings, so nothing global is written
@@ -23,6 +26,8 @@ function tomlString(value: string): string {
 export interface AgentLaunchOptions {
   /** Hooks-only settings JSON for Claude (see src/main/hooks/settings.ts). */
   claudeSettingsPath?: string
+  /** TOML `key=value` overrides for Codex, each passed as its own `-c` (see src/main/hooks/codex-config.ts). */
+  codexConfig?: readonly string[]
 }
 
 export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, options: AgentLaunchOptions = {}): string[] {
@@ -32,7 +37,8 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
     '-c',
     'check_for_update_on_startup=false',
     '-c',
-    `projects={${tomlString(realCwd)}={trust_level="trusted"}}`
+    `projects={${tomlString(realCwd)}={trust_level="trusted"}}`,
+    ...(options.codexConfig ?? []).flatMap((override) => ['-c', override])
   ]
 }
 

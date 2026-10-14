@@ -108,7 +108,7 @@ export class HookBridge {
         createdAt: at
       }
       return new Promise<string>((resolve) => {
-        this.registry.add({ prompt, suggestions: draft.suggestions, release: resolve })
+        this.registry.add({ prompt, suggestions: draft.suggestions, agent, release: resolve })
         // Claude gave up on the hook (it is exiting): nothing is waiting for an answer any more.
         request.signal.addEventListener('abort', () => this.registry.cancel(prompt.id, 'terminal'), { once: true })
         this.emitter.prompt(prompt)

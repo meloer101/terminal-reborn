@@ -9,6 +9,11 @@ export const SELF_HEAL_AFTER_MS = 3 * 60_000
 /** A busy title right after an event is the tail of that event, not new work. */
 const TITLE_SETTLE_MS = 2_000
 const MESSAGE_MAX_CHARS = 80
+/**
+ * Codex has no Interrupt / failure hook in 0.142.5: after Esc, Ctrl+C or a failed model request there is no
+ * Stop. A turn whose title went idle and that has been silent this long is over (docs/spikes/codex.md §5).
+ */
+export const CODEX_IDLE_HEAL_MS = 4_000
 
 export type Signal =
   | { type: 'event'; event: AgentEvent }
@@ -39,6 +44,10 @@ export interface SessionState {
   toolAction?: string
   /** The process has exited; nothing can change the state any more. */
   ended: boolean
+  /** Codex only: `running` was inferred from a busy title alone (no hook event has confirmed it since). */
+  titleRun?: boolean
+  /** Codex only: `needs_you` was inferred from the `Action Required` title (its own approval dialog is up). */
+  titleAction?: boolean
 }
 
 export function initialState(
@@ -62,6 +71,8 @@ export function initialState(
 
 const IDLE_TITLE = /^✳/
 const BUSY_TITLE = /^[⠀-⣿]/
+/** Codex blinks `[ . ] Action Required | <dir>` / `[ ! ] …` while its own approval or question dialog is up. */
+const CODEX_ACTION_TITLE = /^\[ [.!] \] Action Required/
 
 function clip(text: string | undefined): string | undefined {
   if (!text) return undefined
@@ -122,14 +133,68 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
   }
 }
 
+/** A finished-looking Codex turn (idle title, silent) that hooks never closed: back to idle. */
+function healCodex(state: SessionState, now: number): SessionState {
+  if (!state.titleIdle) return state
+  const active = state.status === 'running' || state.status === 'needs_you'
+  if (!active || now - state.lastEventAt < CODEX_IDLE_HEAL_MS) return state
+  return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined, titleRun: false, titleAction: false }
+}
+
+/**
+ * Codex title rules (docs/spikes/codex.md §5): braille spinner = busy, `Action Required` = its own dialog is up,
+ * any other title = idle. Hooks stay authoritative; the title only fills their gaps (startup spinner, interrupts,
+ * the TUI dialog after a hook hold timed out).
+ */
+function reduceCodexTitle(state: SessionState, title: string, now: number): SessionState {
+  if (CODEX_ACTION_TITLE.test(title)) {
+    if (state.status === 'needs_you' || state.status === 'exited') return state.titleIdle ? { ...state, titleIdle: false } : state
+    if (state.status === 'error') return state
+    return {
+      ...state,
+      titleIdle: false,
+      status: 'needs_you',
+      currentAction: state.toolAction ? `等你确认：${state.toolAction}` : '等你确认',
+      titleAction: true,
+      titleRun: false,
+      lastActivityAt: now
+    }
+  }
+
+  if (BUSY_TITLE.test(title)) {
+    // The dialog was answered (in the TUI): the turn goes on.
+    if (state.titleAction && state.status === 'needs_you') {
+      return { ...state, titleIdle: false, status: 'running', currentAction: state.toolAction, titleAction: false, lastActivityAt: now }
+    }
+    if (state.status === 'idle' && now - state.lastEventAt > TITLE_SETTLE_MS) {
+      return { ...state, titleIdle: false, status: 'running', titleRun: true, lastActivityAt: now }
+    }
+    return state.titleIdle ? { ...state, titleIdle: false } : state
+  }
+
+  // Idle title.
+  const idle: SessionState = state.titleIdle ? state : { ...state, titleIdle: true }
+  if (idle.titleRun && idle.status === 'running') {
+    return { ...idle, status: 'idle', currentAction: undefined, toolAction: undefined, titleRun: false }
+  }
+  if (idle.titleAction && idle.status === 'needs_you') {
+    return { ...idle, status: 'idle', currentAction: undefined, toolAction: undefined, titleAction: false }
+  }
+  return healCodex(idle, now)
+}
+
 /** Next state for a signal at time `now` (epoch ms). Returns the same object when nothing changed. */
 export function reduce(state: SessionState, signal: Signal, now: number): SessionState {
   if (state.ended) return state
   const agent = state.kind !== 'shell'
 
   switch (signal.type) {
-    case 'event':
-      return agent ? reduceEvent(state, signal.event, now) : state
+    case 'event': {
+      if (!agent) return state
+      const next = reduceEvent(state, signal.event, now)
+      // A hook event is authoritative: whatever the title alone had inferred is settled now.
+      return state.titleRun || state.titleAction ? { ...next, titleRun: false, titleAction: false } : next
+    }
 
     case 'pty-exit': {
       const crashed = signal.code !== 0 && agent && ['running', 'needs_you', 'error'].includes(state.status)
@@ -145,6 +210,7 @@ export function reduce(state: SessionState, signal: Signal, now: number): Sessio
 
     case 'title': {
       if (!agent) return state
+      if (state.kind === 'codex') return reduceCodexTitle(state, signal.title, now)
       const titleIdle = IDLE_TITLE.test(signal.title)
       // Lowest-priority signal for "working": only when hooks have been quiet and we think we are idle.
       if (BUSY_TITLE.test(signal.title) && state.status === 'idle' && now - state.lastEventAt > TITLE_SETTLE_MS) {
@@ -162,6 +228,10 @@ export function reduce(state: SessionState, signal: Signal, now: number): Sessio
       return state.viewing ? { ...state, viewing: false } : state
 
     case 'tick':
+      if (state.kind === 'codex') {
+        const healed = healCodex(state, now)
+        if (healed !== state) return healed
+      }
       if (state.status === 'running' && state.titleIdle && now - state.lastEventAt >= SELF_HEAL_AFTER_MS) {
         return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined }
       }

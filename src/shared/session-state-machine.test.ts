@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from './agent-events'
 import {
+  CODEX_IDLE_HEAL_MS,
   initialState,
   reduce,
   SELF_HEAL_AFTER_MS,
@@ -275,5 +276,106 @@ describe('referential stability', () => {
     expect(reduce(s, { type: 'viewed' }, T0 + 1)).toBe(s)
     expect(reduce(s, { type: 'tick' }, T0 + 1)).toBe(s)
     expect(reduce(s, { type: 'title', title: 'zsh' }, T0 + 1)).toBe(s)
+  })
+})
+
+// Codex titles (docs/spikes/codex.md §5): braille spinner = busy, `Action Required` = its own dialog, anything else = idle.
+describe('codex titles', () => {
+  const codex = (status: SessionStatus, action?: string) => make(status, { kind: 'codex', action })
+  const title = (t: string): Signal => ({ type: 'title', title: t })
+  const BUSY = '⠼ tr-codex-lab'
+  const IDLE = 'tr-codex-lab'
+  const ACTION = '[ ! ] Action Required | tr-codex-lab'
+
+  it('a spinner after a quiet period starts running (startup, MCP loading)', () => {
+    expect(reduce(codex('idle'), title(BUSY), T0 + 10_000)).toMatchObject({ status: 'running', titleRun: true })
+  })
+
+  it('a spinner right after an event is only that event\'s tail', () => {
+    expect(reduce(codex('idle'), title(BUSY), T0 + 500).status).toBe('idle')
+  })
+
+  it('a run inferred from the spinner alone ends as soon as the title goes idle', () => {
+    let s = reduce(codex('idle'), title(BUSY), T0 + 10_000)
+    s = reduce(s, title(IDLE), T0 + 12_000)
+    expect(s).toMatchObject({ status: 'idle', titleRun: false, titleIdle: true })
+  })
+
+  it('a hook event confirms the run; the idle title then waits out the heal window', () => {
+    let s = reduce(codex('idle'), title(BUSY), T0 + 10_000)
+    s = reduce(s, toolStart('Bash', { command: 'ls' }), T0 + 10_500)
+    expect(s.titleRun).toBe(false)
+    s = reduce(s, title(IDLE), T0 + 11_000)
+    expect(s.status).toBe('running')
+  })
+
+  it('a turn Codex never closed (Esc, Ctrl+C, failed request: no Stop hook) heals after the window on the next tick', () => {
+    let s = reduce(codex('idle'), promptSubmit, T0 + 1_000)
+    s = reduce(s, title(IDLE), T0 + 2_000)
+    expect(s.status).toBe('running')
+    expect(reduce(s, { type: 'tick' }, T0 + 1_000 + CODEX_IDLE_HEAL_MS - 1).status).toBe('running')
+    expect(reduce(s, { type: 'tick' }, T0 + 1_000 + CODEX_IDLE_HEAL_MS)).toMatchObject({ status: 'idle', currentAction: undefined })
+  })
+
+  it('an idle title that arrives after the window heals immediately', () => {
+    const s = reduce(codex('idle'), promptSubmit, T0 + 1_000)
+    expect(reduce(s, title(IDLE), T0 + 1_000 + CODEX_IDLE_HEAL_MS).status).toBe('idle')
+  })
+
+  it('a busy title keeps a running turn alive however long hooks stay quiet', () => {
+    let s = reduce(codex('idle'), promptSubmit, T0 + 1_000)
+    s = reduce(s, title(BUSY), T0 + 1_100)
+    expect(reduce(s, { type: 'tick' }, T0 + 60_000).status).toBe('running')
+  })
+
+  it('a permission prompt held by the hook (spinner title) stays needs_you', () => {
+    let s = reduce(codex('running'), notification('permission'), T0 + 1)
+    s = reduce(s, title(BUSY), T0 + 30_000)
+    expect(reduce(s, { type: 'tick' }, T0 + 60_000).status).toBe('needs_you')
+  })
+
+  it('an interrupted turn leaves needs_you once the title is idle and hooks are silent', () => {
+    let s = reduce(codex('running'), notification('permission'), T0 + 1)
+    s = reduce(s, title(IDLE), T0 + 2)
+    expect(reduce(s, { type: 'tick' }, T0 + 1 + CODEX_IDLE_HEAL_MS).status).toBe('idle')
+  })
+
+  it('Action Required means Codex\'s own dialog is up: needs_you even without a hook', () => {
+    const s = reduce(codex('running', '运行 ls'), title(ACTION), T0 + 100)
+    expect(s).toMatchObject({ status: 'needs_you', currentAction: '等你确认：运行 ls', titleAction: true })
+  })
+
+  it('the blinking Action Required variants are one state', () => {
+    let s = reduce(codex('running'), title(ACTION), T0 + 100)
+    s = reduce(s, title('[ . ] Action Required | tr-codex-lab'), T0 + 1_100)
+    expect(s.status).toBe('needs_you')
+  })
+
+  it('answering that dialog in the TUI (spinner returns) resumes running', () => {
+    let s = reduce(codex('running', '运行 ls'), title(ACTION), T0 + 100)
+    s = reduce(s, title(BUSY), T0 + 5_000)
+    expect(s).toMatchObject({ status: 'running', currentAction: '运行 ls', titleAction: false })
+  })
+
+  it('cancelling it (title goes idle, turn interrupted) returns to idle', () => {
+    let s = reduce(codex('running'), title(ACTION), T0 + 100)
+    s = reduce(s, title(IDLE), T0 + 5_000)
+    expect(s.status).toBe('idle')
+  })
+
+  it('a hook event settles an action-title wait', () => {
+    let s = reduce(codex('running'), title(ACTION), T0 + 100)
+    s = reduce(s, toolEnd(), T0 + 5_000)
+    expect(s).toMatchObject({ status: 'running', titleAction: false })
+  })
+
+  it('does not disturb error or exited sessions', () => {
+    expect(reduce(codex('error'), title(ACTION), T0 + 100).status).toBe('error')
+    expect(reduce(codex('error'), title(BUSY), T0 + 60_000).status).toBe('error')
+  })
+
+  it('claude sessions ignore the codex rules', () => {
+    expect(reduce(make('running'), title(ACTION), T0 + 100).status).toBe('running')
+    expect(reduce(make('running'), { type: 'tick' }, T0 + CODEX_IDLE_HEAL_MS * 10).status).toBe('running')
   })
 })
