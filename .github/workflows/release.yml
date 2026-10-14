@@ -1,0 +1,70 @@
+name: Release
+
+# Push a tag like v0.1.0 (see docs/releasing.md). Builds unsigned (ad-hoc) dmg + zip for arm64 and x64
+# and attaches them to a DRAFT GitHub Release; a human publishes it after a look. No secrets are used
+# beyond the workflow's own GITHUB_TOKEN.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Tag matches package.json
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version ($expected)"
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run check
+
+      - name: Build dmg + zip (arm64, x64)
+        run: npm run dist
+
+      - name: Verify signatures and launch the arm64 app
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          for app in "release/$version/mac-arm64/Terminal Reborn.app" "release/$version/mac/Terminal Reborn.app"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done
+          npm run test:packaged
+
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          # This version's section of CHANGELOG.md becomes the release notes.
+          awk -v v="$version" '
+            /^## \[/ { if (found) exit; found = index($0, "[" v "]") > 0; next }
+            found && /^\[[^]]+\]: / { next }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then echo "Terminal Reborn $version" > release-notes.md; fi
+          files=(release/$version/Terminal-Reborn-$version-arm64.dmg release/$version/Terminal-Reborn-$version-arm64.zip release/$version/Terminal-Reborn-$version-x64.dmg release/$version/Terminal-Reborn-$version-x64.zip)
+          flags=(--draft --verify-tag --title "Terminal Reborn $version" --notes-file release-notes.md)
+          case "$version" in *-*) flags+=(--prerelease) ;; esac
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" "${flags[@]}"
+          fi
