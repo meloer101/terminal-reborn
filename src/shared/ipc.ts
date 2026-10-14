@@ -3,7 +3,7 @@
 // Changing a signature here is a cross-track change — note it in the PR.
 
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
-import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from './agent-events'
+import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { AgentKind, SessionId } from './types'
 
@@ -105,6 +105,13 @@ export interface SettingsApi {
   /** Merges and persists; resolves to the sanitized result. Every window gets onChange. */
   update(patch: SettingsPatch): Promise<AppSettings>
   onChange(listener: (settings: AppSettings) => void): Unsubscribe
+  /** A settings write failed (disk full, permissions, …); the change is applied in memory but not saved. */
+  onSaveError(listener: (error: SettingsSaveError) => void): Unsubscribe
+}
+
+export interface SettingsSaveError {
+  /** English diagnostic (errno message), not UI copy. */
+  message: string
 }
 
 export interface UpdateInfo {
@@ -131,6 +138,11 @@ export interface AgentApi {
   onPromptResolved(listener: (resolution: PromptResolution) => void): Unsubscribe
   /** Answers a pending permission prompt (releases the blocked hook). Unknown ids are ignored. */
   respondPermission(promptId: string, decision: PermissionDecision): void
+  /** Current state of the hook server; pair with onHooksHealth, which only fires on changes. */
+  getHooksHealth(): Promise<HooksHealth>
+  onHooksHealth(listener: (health: HooksHealth) => void): Unsubscribe
+  /** Per-session: launched without hooks, or no hook event within SESSION_START_TIMEOUT_MS of launch. */
+  onSessionHooks(listener: (signal: SessionHooksSignal) => void): Unsubscribe
 }
 
 export interface TrApi {
@@ -172,6 +184,12 @@ export const IPC = {
   /** main → renderer, payload PromptResolution */
   agentPromptResolved: 'agent:prompt-resolved',
   agentRespondPermission: 'agent:respond-permission',
+  /** invoke → HooksHealth */
+  agentGetHooksHealth: 'agent:get-hooks-health',
+  /** main → renderer, payload HooksHealth (on change) */
+  agentHooksHealth: 'agent:hooks-health',
+  /** main → renderer, payload SessionHooksSignal */
+  agentSessionHooks: 'agent:session-hooks',
   uiOpenSettings: 'ui:open-settings',
   /** main → renderer: show the settings dialog */
   uiShowSettings: 'ui:show-settings',
@@ -181,6 +199,8 @@ export const IPC = {
   settingsUpdate: 'settings:update',
   /** main → every window, payload AppSettings */
   settingsChanged: 'settings:changed',
+  /** main → every window, payload SettingsSaveError */
+  settingsSaveFailed: 'settings:save-failed',
   /** sync: returns the app version */
   appVersion: 'app:version',
   appCheckForUpdates: 'app:check-for-updates',

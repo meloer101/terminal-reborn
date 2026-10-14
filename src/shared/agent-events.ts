@@ -70,3 +70,19 @@ export interface PromptResolution {
   /** gui = answered in our UI; terminal = answered in the TUI; timeout = fell back to the TUI prompt. */
   by: 'gui' | 'terminal' | 'timeout' | 'session-ended'
 }
+
+/** Why an agent session runs without our hooks (status then falls back to terminal titles). */
+export type HooksUnavailableReason = 'server-unavailable' | 'codex-not-installed' | 'codex-probe-failed'
+
+/**
+ * Whether the app-wide hook server is reachable (phase 2a · A8/A9). The UI shows "hooks 不可用 · 状态仅按标题判断"
+ * while `ok` is false. `detail` is an English diagnostic for logs / tooltips, not UI copy.
+ */
+export type HooksHealth = { ok: true } | { ok: false; reason: 'server-unavailable'; detail: string }
+
+/** Per-session hook signals from main. Receiving any AgentEvent for the session withdraws a pending 'start-timeout'. */
+export type SessionHooksSignal =
+  /** Sent at launch: this agent session was started without hooks. */
+  | { sessionId: SessionId; kind: 'unavailable'; reason: HooksUnavailableReason; detail?: string }
+  /** Hooks are attached but nothing (not even SessionStart) arrived `afterMs` after launch: a trust / update prompt may be blocking the agent. */
+  | { sessionId: SessionId; kind: 'start-timeout'; afterMs: number }

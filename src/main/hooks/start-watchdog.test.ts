@@ -1,0 +1,50 @@
+import { describe, expect, it, vi } from 'vitest'
+import { StartWatchdog } from './start-watchdog'
+
+describe('StartWatchdog', () => {
+  it('fires once when nothing arrives in time', () => {
+    vi.useFakeTimers()
+    const onTimeout = vi.fn()
+    const dog = new StartWatchdog(onTimeout, 15_000)
+    dog.arm('s1')
+    vi.advanceTimersByTime(14_999)
+    expect(onTimeout).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(onTimeout).toHaveBeenCalledExactlyOnceWith('s1', 15_000)
+    vi.advanceTimersByTime(60_000)
+    expect(onTimeout).toHaveBeenCalledTimes(1)
+    expect(dog.size).toBe(0)
+    vi.useRealTimers()
+  })
+
+  it('stays quiet once disarmed (an event arrived or the session ended)', () => {
+    vi.useFakeTimers()
+    const onTimeout = vi.fn()
+    const dog = new StartWatchdog(onTimeout, 1000)
+    dog.arm('s1')
+    dog.disarm('s1')
+    dog.disarm('unknown')
+    vi.advanceTimersByTime(5000)
+    expect(onTimeout).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('re-arming restarts the countdown; sessions are independent; clear() drops all', () => {
+    vi.useFakeTimers()
+    const onTimeout = vi.fn()
+    const dog = new StartWatchdog(onTimeout, 1000)
+    dog.arm('s1')
+    dog.arm('s2')
+    vi.advanceTimersByTime(800)
+    dog.arm('s1')
+    vi.advanceTimersByTime(300)
+    expect(onTimeout.mock.calls.map((c) => c[0])).toEqual(['s2'])
+    vi.advanceTimersByTime(800)
+    expect(onTimeout.mock.calls.map((c) => c[0])).toEqual(['s2', 's1'])
+    dog.arm('s3')
+    dog.clear()
+    vi.advanceTimersByTime(5000)
+    expect(onTimeout).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+})

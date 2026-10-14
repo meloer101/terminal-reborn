@@ -6,6 +6,7 @@ import { IPC, type PtySpawnOptions } from '@shared/ipc'
 import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
 import type { HostEvent, HostRequest } from '../../pty-host/protocol'
 import { endAgentSession, prepareAgentLaunch } from '../hooks'
+import { isOrphanSpawn } from './late-spawn'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
@@ -89,6 +90,8 @@ function notifyExit(owner: WebContents, sessionId: string, exitCode: number, sig
 function handleHostEvent(event: HostEvent): void {
   switch (event.type) {
     case 'spawned': {
+      // Late news of a spawn main already gave up on: kill it rather than leave an invisible live process.
+      if (isOrphanSpawn(sessions, event.id)) send({ type: 'kill', id: event.id })
       const spawn = pending.get(event.id)
       if (!spawn) break
       clearTimeout(spawn.timer)
@@ -136,6 +139,9 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       pending.delete(id)
       sessions.delete(id)
       endAgentSession(id)
+      // The host handles messages in order, so this lands right after the spawn it is still working on.
+      // If it somehow slips past, handleHostEvent kills the late process when it reports in.
+      if (host) send({ type: 'kill', id })
       reject(new Error('timed out starting the terminal process'))
     }, SPAWN_TIMEOUT_MS)
     pending.set(id, { resolve, reject, timer })
