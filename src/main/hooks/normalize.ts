@@ -3,6 +3,7 @@
 // captured in docs/spikes/hooks.md (see ./fixtures.ts). Codex (0.142.5) payloads follow its hooks reference and
 // the captures in docs/spikes/codex.md (see ./codex-fixtures.ts); they are mapped onto Claude's tool vocabulary
 // (Bash, Edit/Write, AskUserQuestion) so the status, prompt-bar and permission code stays agent-agnostic.
+import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
 
 export interface PermissionDraft {
@@ -151,13 +152,19 @@ const TUI_ONLY_PERMISSION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion
 
 const NONE: NormalizedHook = { events: [], clears: 'none' }
 
+/** SessionStart for both agents: carries the conversation id (`session_id`) that `--resume` needs after a restart. */
+function sessionStart(payload: Rec): AgentEvent {
+  const id = str(payload.session_id)
+  return id && isSafeAgentSessionId(id) ? { type: 'session-start', agentSessionId: id } : { type: 'session-start' }
+}
+
 function normalizeClaude(event: string, payload: Rec): NormalizedHook {
   const tool = str(payload.tool_name) ?? 'unknown'
   const input = isRec(payload.tool_input) ? payload.tool_input : {}
 
   switch (event) {
     case 'SessionStart':
-      return { events: [{ type: 'session-start' }], clears: 'none' }
+      return { events: [sessionStart(payload)], clears: 'none' }
     case 'UserPromptSubmit':
       return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
     case 'PreToolUse': {
@@ -253,7 +260,7 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
 
   switch (event) {
     case 'SessionStart':
-      return { events: [{ type: 'session-start' }], clears: 'none' }
+      return { events: [sessionStart(payload)], clears: 'none' }
     case 'UserPromptSubmit':
       return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
     case 'PreToolUse': {

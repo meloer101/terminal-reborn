@@ -23,8 +23,15 @@ export class SessionTerminal {
   constructor(
     readonly sessionId: SessionId,
     private readonly cwd: string,
-    private readonly agent: AgentKind = 'shell'
+    private readonly agent: AgentKind = 'shell',
+    /** Relaunch the agent into this earlier conversation instead of starting a new one. */
+    private readonly resumeAgentSessionId?: string
   ) {}
+
+  /** The PTY is running (spawn requested, not exited, not disposed). */
+  get alive(): boolean {
+    return this.started && !this.exited && !this.disposed
+  }
 
   /** Attaches to a container; the first call also starts the PTY at the fitted size. */
   attach(container: HTMLElement): void {
@@ -56,7 +63,14 @@ export class SessionTerminal {
 
     const { cols, rows } = this.surface.fit()
     try {
-      await pty.spawn({ sessionId: id, cwd: this.cwd, agent: this.agent, cols, rows })
+      await pty.spawn({
+        sessionId: id,
+        cwd: this.cwd,
+        agent: this.agent,
+        ...(this.resumeAgentSessionId ? { resumeAgentSessionId: this.resumeAgentSessionId } : {}),
+        cols,
+        rows
+      })
     } catch (error) {
       this.exited = true
       const message = error instanceof Error ? error.message : String(error)

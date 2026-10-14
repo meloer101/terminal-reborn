@@ -9,12 +9,14 @@ import {
   addProject,
   addSession,
   closeSession,
+  persistedStateChanged,
+  removedSessionIds,
   removeProject,
   restoreWorkspace,
   serializeWorkspace,
-  WORKSPACE_STORAGE_KEY,
   type WorkspaceData
 } from './workspace-model'
+import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
 
 export type RightPanelTab = 'changes' | 'graph'
 
@@ -36,31 +38,18 @@ interface WorkspaceState extends WorkspaceData {
   patchSession(id: SessionId, patch: SessionPatch): void
 }
 
-export type SessionPatch = Partial<Pick<Session, 'status' | 'currentAction' | 'title' | 'lastActivityAt'>>
+export type SessionPatch = Partial<Pick<Session, 'status' | 'currentAction' | 'title' | 'lastActivityAt' | 'agentSessionId' | 'phase'>>
 
 // End-to-end tests opt in to the Figma 01 fixtures and never touch the saved workspace.
 const fixtures = (globalThis as { __TR_E2E__?: boolean }).__TR_E2E__ === true
 
-function storage(): Pick<Storage, 'getItem' | 'setItem'> | null {
-  if (fixtures) return null
-  try {
-    return globalThis.localStorage ?? null
-  } catch {
-    return null
-  }
-}
+const saved = fixtures ? null : initialWorkspaceFile()
 
 function initialData(): WorkspaceData {
   if (fixtures) {
     return { projects: mockProjects, worktrees: mockWorktrees, sessions: mockSessions, activeSessionId: mockSessions[0]?.id ?? null }
   }
-  let raw: string | null = null
-  try {
-    raw = storage()?.getItem(WORKSPACE_STORAGE_KEY) ?? null
-  } catch {
-    // Unavailable storage: start empty.
-  }
-  return restoreWorkspace(raw, Date.now())
+  return restoreWorkspace(saved)
 }
 
 const pick = (s: WorkspaceState): WorkspaceData => ({
@@ -72,8 +61,8 @@ const pick = (s: WorkspaceState): WorkspaceData => ({
 
 export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   ...initialData(),
-  sidebarCollapsed: false,
-  rightPanel: null,
+  sidebarCollapsed: saved?.sidebarCollapsed ?? false,
+  rightPanel: saved?.rightPanel ?? null,
 
   setActiveSession: (id) => set({ activeSessionId: id }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -105,22 +94,16 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     })
 }))
 
-// Persist structural changes (not live status, which changes constantly).
+// Persist what defines the workspace (not live status, which changes constantly). The store in main
+// debounces and writes atomically; a closed session's draft goes with it.
+setSnapshotProvider(() => {
+  const state = useWorkspace.getState()
+  return serializeWorkspace(pick(state), { sidebarCollapsed: state.sidebarCollapsed, rightPanel: state.rightPanel }, drafts.snapshot())
+})
 useWorkspace.subscribe((state, prev) => {
-  if (
-    state.projects === prev.projects &&
-    state.worktrees === prev.worktrees &&
-    state.sessions.length === prev.sessions.length &&
-    state.sessions.every((s, i) => s.id === prev.sessions[i]?.id && s.title === prev.sessions[i]?.title) &&
-    state.activeSessionId === prev.activeSessionId
-  ) {
-    return
-  }
-  try {
-    storage()?.setItem(WORKSPACE_STORAGE_KEY, serializeWorkspace(pick(state)))
-  } catch {
-    // Quota or privacy mode: the workspace still works for this run.
-  }
+  if (!persistedStateChanged(state, prev)) return
+  for (const id of removedSessionIds(state, prev)) drafts.remove(id)
+  requestSave()
 })
 
 if (fixtures) (globalThis as { __trWorkspace?: typeof useWorkspace }).__trWorkspace = useWorkspace
