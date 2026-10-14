@@ -14,7 +14,7 @@ Fixtures built from these captures: `src/main/hooks/codex-fixtures.ts` (scrubbed
 
 ## 0. How the evidence was gathered (read this first)
 
-**The user's model provider (`agentrouter.org`, group `default`) answered `503 无可用渠道` for every model I tried** (`gpt-5.6-sol` = the configured one, `gpt-5.5`, `gpt-5`, `gpt-5.1-codex`; the earlier M1 spike never got a completed turn either). So no real model turn ever completed. What I did instead:
+**The user's model provider (a third-party OpenAI-compatible relay) answered `503 无可用渠道` for every model I tried** (`gpt-5.6-sol` = the configured one, `gpt-5.5`, `gpt-5`, `gpt-5.1-codex`; the earlier M1 spike never got a completed turn either). So no real model turn ever completed. What I did instead:
 
 - **Real turns used: 4**, all failed with 503 before any tool call. They did prove hook delivery on a real provider path: `SessionStart` + `UserPromptSubmit` were delivered for the 503 turns, and *no* `Stop` is sent when the request fails (relevant for §5).
 - Everything else ran the **real Codex 0.142.5 binary** (real TUI, real sandbox/approval logic, real hook engine, real hook processes through `tr-hook.sh`) against `codex-mock-provider.mjs`, a local Responses-API stand-in that returns scripted tool calls. It is pointed at per launch with `-c model_provider="mock" -c 'model_providers.mock={…base_url="http://127.0.0.1:PORT/v1"…requires_openai_auth=false}'` (nothing written to `~/.codex`). Only the *model* is fake. Payloads in §1 therefore contain whatever tool arguments my mock chose, in Codex's real envelope.

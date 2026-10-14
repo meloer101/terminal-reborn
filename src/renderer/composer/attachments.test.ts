@@ -3,7 +3,7 @@ import { formatPath, imageExtensionFor, pathsInsertion, pickPastedImage, restore
 
 describe('formatPath', () => {
   it('leaves plain and CJK paths alone', () => {
-    expect(formatPath('/Users/m/项目/a-b_c.png')).toBe('/Users/m/项目/a-b_c.png')
+    expect(formatPath('/Users/dev/项目/a-b_c.png')).toBe('/Users/dev/项目/a-b_c.png')
   })
   it('escapes spaces and shell metacharacters', () => {
     expect(formatPath('/tmp/Screen Shot (1).png')).toBe('/tmp/Screen\\ Shot\\ \\(1\\).png')

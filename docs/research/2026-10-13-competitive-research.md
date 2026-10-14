@@ -276,7 +276,7 @@ Codex 坑：非托管 hook 必须在 `config.toml` 有匹配的 `trusted_hash` �
 
 ## 附录 A：关键源码索引
 
-本地克隆位置：`/private/tmp/claude-501/-Users-m-Desktop-TerminalReborn/b08ba8db-67a7-4755-8bfc-2399288fa912/scratchpad/repos/`（临时目录，会话结束可能被清理）
+本地克隆位置：调研时的临时目录（已清理）
 
 | 主题 | 文件 |
 |---|---|

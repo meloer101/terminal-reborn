@@ -26,12 +26,12 @@ describe('agentArgv', () => {
   })
 
   it('pre-trusts the codex directory per launch and skips the update prompt', () => {
-    expect(agentArgv('codex', '/Users/m/code/acme')).toEqual([
+    expect(agentArgv('codex', '/Users/dev/code/acme')).toEqual([
       'codex',
       '-c',
       'check_for_update_on_startup=false',
       '-c',
-      'projects={"/Users/m/code/acme"={trust_level="trusted"}}'
+      'projects={"/Users/dev/code/acme"={trust_level="trusted"}}'
     ])
   })
 

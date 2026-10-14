@@ -45,6 +45,6 @@ describe('misc formatting', () => {
   it('formats', () => {
     expect(formatPercent(0.96)).toBe('96%')
     expect(gradientCss({ kind: 'gradient', from: '#000000', to: '#ffffff', angle: 90.4 })).toBe('linear-gradient(90deg, #000000, #ffffff)')
-    expect(fileName('/Users/m/Pictures/bg.png')).toBe('bg.png')
+    expect(fileName('/Users/dev/Pictures/bg.png')).toBe('bg.png')
   })
 })

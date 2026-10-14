@@ -177,7 +177,7 @@ codex -c check_for_update_on_startup=false -c 'projects={"/abs/realpath"={trust_
 ```
 
 The dotted spelling `-c 'projects."/abs/path".trust_level="trusted"'` did **not** work (dialog still appeared); the
-inline-table form did. (The user's global config trusts `/Users/m` but that does not cascade to temp dirs.)
+inline-table form did. (The user's global config trusts the home directory but that does not cascade to temp dirs.)
 
 **Decision:** `detectBlockingDialog(screen)` recognises `claude-trust`, `codex-trust`, `codex-update`; the composer
 must stay disabled while one is on screen. For Claude, either let the user answer in the terminal (preferred: it is a

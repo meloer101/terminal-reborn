@@ -20,15 +20,15 @@ function ids(): MakeId {
 
 function withSessions(...kinds: Array<'claude' | 'codex' | 'shell'>): WorkspaceData {
   const makeId = ids()
-  const { data, projectId } = addProject(EMPTY_WORKSPACE, '/Users/m/code/acme', makeId)
+  const { data, projectId } = addProject(EMPTY_WORKSPACE, '/Users/dev/code/acme', makeId)
   return kinds.reduce((d, kind) => addSession(d, projectId, kind, 1000, makeId)!.data, data)
 }
 
 describe('addProject', () => {
   it('creates a project named after the folder, with a main worktree', () => {
-    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/Users/m/code/acme/', ids())
-    expect(data.projects).toEqual([{ id: projectId, name: 'acme', rootPath: '/Users/m/code/acme/' }])
-    expect(data.worktrees).toEqual([{ id: 'w-2', projectId, branch: '', path: '/Users/m/code/acme/', isMain: true }])
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/Users/dev/code/acme/', ids())
+    expect(data.projects).toEqual([{ id: projectId, name: 'acme', rootPath: '/Users/dev/code/acme/' }])
+    expect(data.worktrees).toEqual([{ id: 'w-2', projectId, branch: '', path: '/Users/dev/code/acme/', isMain: true }])
   })
 
   it('reuses the project when the folder is already added', () => {

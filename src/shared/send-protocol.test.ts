@@ -119,7 +119,7 @@ describe('slash helpers', () => {
     ['/ spaced', false, false],
     ['//comment', false, false],
     ['text /help', false, false],
-    ['/Users/m/file.ts', true, false]
+    ['/Users/dev/file.ts', true, false]
   ])('%s -> slash=%s bare=%s', (text, slash, bare) => {
     expect(isSlashText(text)).toBe(slash)
     expect(isBareSlashCommand(text)).toBe(bare)
