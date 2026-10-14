@@ -6,6 +6,7 @@ import { Composer } from '../composer/Composer'
 import { PromptBar } from '../prompt-bar/PromptBar'
 import { CommandPalette } from '../command-palette/CommandPalette'
 import { StatusBridge } from '../status/StatusBridge'
+import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { RightPanel } from '../panels/RightPanel'
 import styles from './AppShell.module.css'
 
@@ -44,6 +45,7 @@ export function AppShell() {
       )}
       <CommandPalette />
       <StatusBridge />
+      <AppearanceBridge />
     </div>
   )
 }

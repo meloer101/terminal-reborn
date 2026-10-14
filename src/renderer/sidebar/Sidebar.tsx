@@ -87,7 +87,7 @@ export function Sidebar() {
         )}
       </div>
       <div className={styles.footer}>
-        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut="⌘," />
+        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut="⌘," onClick={() => window.tr.ui.openSettings()} />
       </div>
     </>
   )

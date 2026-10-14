@@ -20,7 +20,7 @@ In a fresh worktree run `npm install` first.
 
 | Path | What | Owner |
 |---|---|---|
-| `src/shared/` | Pure, typed contracts and logic shared by main + renderer (`types`, `ipc`, `agent-events`, `send-protocol`, `keys`, `session-status`) | integrator — **additive changes only** from tracks, call them out in the commit message |
+| `src/shared/` | Pure, typed contracts and logic shared by main + renderer (`types`, `ipc`, `agent-events`, `settings`, `send-protocol`, `keys`, `session-status`) | integrator — **additive changes only** from tracks, call them out in the commit message |
 | `src/main/` | Electron main: window, IPC handlers, (later) hook server, git | integrator; `pty-terminal` adds `src/main/pty/` |
 | `src/pty-host/` | utilityProcess owning node-pty | `pty-terminal` |
 | `src/preload/` | `window.tr` (implements `TrApi` from `src/shared/ipc.ts`) | `pty-terminal` may change transport, not the `TrApi` shape |
@@ -33,6 +33,10 @@ In a fresh worktree run `npm install` first.
 | `src/renderer/status/`, `src/shared/session-state-machine.ts`, `src/shared/current-action.ts` | Live status, notifications, Dock badge (M2) | `session-status` |
 | `src/renderer/prompt-bar/`, `src/shared/question-keys.ts` | Permission / question bar (M2) | `prompt-bar` |
 | `src/renderer/command-palette/` | ⌘K (M2) | `command-palette` |
+| `src/renderer/settings/` | Settings window UI (M3) | `settings-ui` |
+| `src/renderer/appearance/`, `src/main/appearance.ts`, `src/renderer/theme.ts` | Applying appearance settings (M3) | `appearance-runtime` |
+| `src/main/hooks/` (Codex parts), `docs/spikes/codex.md` | Codex hooks/approvals (M3) | `codex-adapter` |
+| `build/`, `electron-builder.yml`, `.github/workflows/release.yml`, `src/main/updates.ts` | Packaging, icon, update check (M3) | `release` |
 
 Stay inside the directories your task owns. If you truly need a change elsewhere, keep it minimal and say so in the commit message — don't refactor shared files.
 

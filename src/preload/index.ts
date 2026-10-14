@@ -64,13 +64,23 @@ const api: TrApi = {
     popupMenu: (entries) => ipcRenderer.invoke(IPC.uiPopupMenu, entries),
     setBadge: (count) => ipcRenderer.send(IPC.uiSetBadge, count),
     notify: (notification) => ipcRenderer.send(IPC.uiNotify, notification),
-    onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener)
+    onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),
+    openSettings: () => ipcRenderer.send(IPC.uiOpenSettings)
   },
   agent: {
     onEvent: (listener) => listen(IPC.agentEvent, listener),
     onPrompt: (listener) => listen(IPC.agentPrompt, listener),
     onPromptResolved: (listener) => listen(IPC.agentPromptResolved, listener),
     respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision)
+  },
+  settings: {
+    get: () => ipcRenderer.invoke(IPC.settingsGet),
+    update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
+    onChange: (listener) => listen(IPC.settingsChanged, listener)
+  },
+  app: {
+    version: String(ipcRenderer.sendSync(IPC.appVersion)),
+    checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates)
   }
 }
 

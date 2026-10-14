@@ -3,6 +3,7 @@
 // Changing a signature here is a cross-track change — note it in the PR.
 
 import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from './agent-events'
+import type { AppSettings, SettingsPatch } from './settings'
 import type { AgentKind, SessionId } from './types'
 
 export type Unsubscribe = () => void
@@ -64,6 +65,29 @@ export interface UiApi {
   /** System notification. Clicking it focuses the window and fires onNotificationClick with `tag`. */
   notify(notification: { title: string; body: string; tag: string }): void
   onNotificationClick(listener: (tag: string) => void): Unsubscribe
+  /** Opens (or focuses) the settings window (⌘,). */
+  openSettings(): void
+}
+
+export interface SettingsApi {
+  get(): Promise<AppSettings>
+  /** Merges and persists; resolves to the sanitized result. Every window gets onChange. */
+  update(patch: SettingsPatch): Promise<AppSettings>
+  onChange(listener: (settings: AppSettings) => void): Unsubscribe
+}
+
+export interface UpdateInfo {
+  version: string
+  /** Release page to open in the browser. */
+  url: string
+  notes?: string
+}
+
+export interface AppInfoApi {
+  /** package.json version of the running app. */
+  version: string
+  /** Latest GitHub release if newer than the running version, else null. Never throws. */
+  checkForUpdates(): Promise<UpdateInfo | null>
 }
 
 export interface AgentApi {
@@ -84,6 +108,8 @@ export interface TrApi {
   files: FilesApi
   ui: UiApi
   agent: AgentApi
+  settings: SettingsApi
+  app: AppInfoApi
 }
 
 export const IPC = {
@@ -109,5 +135,13 @@ export const IPC = {
   agentPrompt: 'agent:prompt',
   /** main → renderer, payload PromptResolution */
   agentPromptResolved: 'agent:prompt-resolved',
-  agentRespondPermission: 'agent:respond-permission'
+  agentRespondPermission: 'agent:respond-permission',
+  uiOpenSettings: 'ui:open-settings',
+  settingsGet: 'settings:get',
+  settingsUpdate: 'settings:update',
+  /** main → every window, payload AppSettings */
+  settingsChanged: 'settings:changed',
+  /** sync: returns the app version */
+  appVersion: 'app:version',
+  appCheckForUpdates: 'app:check-for-updates'
 } as const
