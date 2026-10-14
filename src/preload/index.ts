@@ -74,12 +74,16 @@ const api: TrApi = {
     onEvent: (listener) => listen(IPC.agentEvent, listener),
     onPrompt: (listener) => listen(IPC.agentPrompt, listener),
     onPromptResolved: (listener) => listen(IPC.agentPromptResolved, listener),
-    respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision)
+    respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision),
+    getHooksHealth: () => ipcRenderer.invoke(IPC.agentGetHooksHealth),
+    onHooksHealth: (listener) => listen(IPC.agentHooksHealth, listener),
+    onSessionHooks: (listener) => listen(IPC.agentSessionHooks, listener)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
-    onChange: (listener) => listen(IPC.settingsChanged, listener)
+    onChange: (listener) => listen(IPC.settingsChanged, listener),
+    onSaveError: (listener) => listen(IPC.settingsSaveFailed, listener)
   },
   app: {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),
