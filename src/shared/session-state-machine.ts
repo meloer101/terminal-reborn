@@ -2,10 +2,20 @@
 // it signals and a clock. Hooks can drop events, so the reducer also knows how to self-heal.
 import { currentAction } from './current-action'
 import type { AgentEvent } from './agent-events'
-import type { AgentKind, SessionStatus } from './types'
+import type { AgentMarker } from './agent-launch'
+import { blockedAction, blockedReasonOf, readScreen, type BlockedReason } from './startup-screen'
+import type { AgentKind, AgentPhase, SessionStatus } from './types'
 
-/** `running` with no hook event for this long, and an idle title, is treated as finished. */
-export const SELF_HEAL_AFTER_MS = 3 * 60_000
+/**
+ * Claude: `running` with an idle `✳` title and no hook event for this long is a turn that ended without a Stop
+ * (Esc / Ctrl+C send no hook at all, verified against Claude Code 2.1.299). While a permission dialog is up the
+ * title is idle too, but that state is `needs_you`, not `running`, so it is not touched.
+ */
+export const CLAUDE_IDLE_HEAL_MS = 6_000
+/** An agent that shows nothing recognisable for this long after launch is handed to the user anyway. */
+export const STARTUP_TIMEOUT_MS = 6_000
+/** `needs_you` whose dialog is gone from the screen (answered in the TUI) for this long goes back to idle. */
+export const NEEDS_YOU_HEAL_MS = 2_000
 /** A busy title right after an event is the tail of that event, not new work. */
 const TITLE_SETTLE_MS = 2_000
 const MESSAGE_MAX_CHARS = 80
@@ -26,6 +36,16 @@ export type Signal =
   /** The session is no longer being looked at (another session selected, or the window lost focus). */
   | { type: 'unviewed' }
   | { type: 'tick' }
+  /** The agent is (re)started in this session: fresh state, phase `starting`. No-op for sessions without a phase. */
+  | { type: 'launch' }
+  /** The PTY could not be started at all (missing directory, spawn error). */
+  | { type: 'launch-failed' }
+  /** The launch script's OSC marker: the agent process ended, or the CLI is not installed. */
+  | { type: 'agent-marker'; marker: AgentMarker }
+  /** The session's visible terminal text, fed while the screen can change the state (startup, dialogs). */
+  | { type: 'screen'; text: string }
+  /** The hook watchdog reports silence after launch (the agent may be blocked, or hooks cannot reach us). */
+  | { type: 'hooks-silent' }
 
 export interface SessionState {
   kind: AgentKind
@@ -42,8 +62,20 @@ export interface SessionState {
   titleIdle: boolean
   /** The action of the latest tool call, kept so `needs_you` can say what is being asked. */
   toolAction?: string
-  /** The process has exited; nothing can change the state any more. */
+  /** The PTY has exited; nothing can change the state any more (except a new launch). */
   ended: boolean
+  /** Agent process lifecycle (undefined = not tracked: shells and fixture sessions). */
+  phase?: AgentPhase
+  /** Epoch ms when the phase last changed; the startup timeout counts from here. */
+  phaseSince: number
+  /** What `blocked` is waiting for. */
+  blocked?: BlockedReason
+  /** Some hook event has arrived since the launch. */
+  hooksSeen: boolean
+  /** The agent is up but its hooks never reported (Claude): status can only follow the terminal title. */
+  hooksSilent: boolean
+  /** Since when a `needs_you` session's input footer has been back on screen (it was answered in the TUI). */
+  footerSince?: number
   /** Codex only: `running` was inferred from a busy title alone (no hook event has confirmed it since). */
   titleRun?: boolean
   /** Codex only: `needs_you` was inferred from the `Action Required` title (its own approval dialog is up). */
@@ -53,7 +85,13 @@ export interface SessionState {
 export function initialState(
   kind: AgentKind,
   now: number,
-  options: { status?: SessionStatus; currentAction?: string; viewing?: boolean; lastActivityAt?: number } = {}
+  options: {
+    status?: SessionStatus
+    currentAction?: string
+    viewing?: boolean
+    lastActivityAt?: number
+    phase?: AgentPhase
+  } = {}
 ): SessionState {
   const status = options.status ?? 'idle'
   return {
@@ -65,12 +103,17 @@ export function initialState(
     viewing: options.viewing ?? false,
     titleIdle: false,
     toolAction: options.currentAction,
-    ended: status === 'exited'
+    ended: status === 'exited',
+    ...(kind !== 'shell' && options.phase ? { phase: options.phase } : {}),
+    phaseSince: now,
+    hooksSeen: false,
+    hooksSilent: false
   }
 }
 
 const IDLE_TITLE = /^✳/
-const BUSY_TITLE = /^[⠀-⣿]/
+/** Braille frames (older Claude / Codex) and the quarter-circle frames Claude Code 2.1.x animates. */
+const BUSY_TITLE = /^[⠀-⣿◐◑◒◓]/
 /** Codex blinks `[ . ] Action Required | <dir>` / `[ ! ] …` while its own approval or question dialog is up. */
 const CODEX_ACTION_TITLE = /^\[ [.!] \] Action Required/
 
@@ -94,7 +137,9 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
   switch (event.type) {
     case 'session-start':
       // A fresh agent is idle; a restart after a failure clears the error. Compaction mid-turn stays running.
-      return state.status === 'error' ? { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined } : touched
+      return state.status === 'error' || state.status === 'exited'
+        ? { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined }
+        : touched
 
     case 'prompt-submit':
       return running(state, now, undefined)
@@ -129,8 +174,105 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     }
 
     case 'session-end':
-      return { ...touched, status: 'exited', currentAction: undefined, toolAction: undefined, ended: true }
+      // /clear and /resume end the old conversation and start another a moment later (SessionStart revives it).
+      if (event.reason === 'clear' || event.reason === 'resume') {
+        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined }
+      }
+      // Only the PTY exiting is final: a SessionStart after this (a new agent in the same shell) revives the session.
+      return {
+        ...touched,
+        status: 'exited',
+        currentAction: undefined,
+        toolAction: undefined,
+        ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
+      }
   }
+}
+
+function launched(state: SessionState, now: number): SessionState {
+  if (state.phase === undefined) return state
+  return {
+    ...state,
+    status: 'idle',
+    currentAction: undefined,
+    toolAction: undefined,
+    ended: false,
+    phase: 'starting',
+    phaseSince: now,
+    blocked: undefined,
+    hooksSeen: false,
+    hooksSilent: false,
+    footerSince: undefined,
+    titleIdle: false,
+    titleRun: false,
+    titleAction: false,
+    lastEventAt: now,
+    lastActivityAt: now
+  }
+}
+
+function ready(state: SessionState, now: number): SessionState {
+  return { ...state, phase: 'ready', phaseSince: now, blocked: undefined }
+}
+
+function sameReason(a: BlockedReason | undefined, b: BlockedReason): boolean {
+  if (!a || a.kind !== b.kind) return false
+  return a.kind === 'dialog' && b.kind === 'dialog' ? a.dialog === b.dialog : true
+}
+
+function blockedBy(state: SessionState, reason: BlockedReason, now: number): SessionState {
+  if (state.phase === 'blocked' && sameReason(state.blocked, reason)) return state
+  return {
+    ...state,
+    phase: 'blocked',
+    phaseSince: now,
+    blocked: reason,
+    status: 'needs_you',
+    currentAction: blockedAction(reason),
+    lastActivityAt: now
+  }
+}
+
+/** The agent's screen while it starts, is blocked by a first-run dialog, or waits on a dialog the TUI may have answered. */
+function reduceScreen(state: SessionState, text: string, now: number): SessionState {
+  const reading = readScreen(state.kind, text)
+  const claude = state.kind === 'claude'
+
+  if (state.phase === 'starting' || state.phase === 'blocked') {
+    const reason = blockedReasonOf(reading)
+    if (reason) return blockedBy(state, reason, now)
+    const settled: SessionState =
+      state.phase === 'blocked' ? { ...state, status: 'idle', currentAction: undefined, lastActivityAt: now } : state
+    if (reading.agentUi) return ready(settled, now)
+    if (state.phase === 'blocked') return { ...settled, phase: 'starting', phaseSince: now, blocked: undefined }
+    // Nothing recognisable after a while: it is the user's terminal, so hand it over rather than lock the composer.
+    if (!reading.blank && now - state.phaseSince >= STARTUP_TIMEOUT_MS) {
+      return { ...ready(settled, now), hooksSilent: claude && !state.hooksSeen }
+    }
+    return state
+  }
+
+  if (state.phase === 'ready' || state.phase === undefined) {
+    let next = state
+    // Claude is up and its hooks stayed silent: the header says status follows the title only.
+    if (claude && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent && now - state.phaseSince >= STARTUP_TIMEOUT_MS) {
+      next = { ...next, hooksSilent: true }
+    }
+    // Claude: the dialog behind `needs_you` was answered in the TUI (no hook says so). The title is idle both while
+    // the dialog is up and after it, so only the dialog's footer being replaced by the input footer is proof.
+    if (claude && next.status === 'needs_you' && next.titleIdle && !next.titleAction) {
+      if (reading.idleFooter) {
+        if (next.footerSince === undefined) return { ...next, footerSince: now }
+        if (now - next.footerSince >= NEEDS_YOU_HEAL_MS && now - next.lastEventAt >= NEEDS_YOU_HEAL_MS) {
+          return { ...next, status: 'idle', currentAction: undefined, toolAction: undefined, footerSince: undefined }
+        }
+      } else if (next.footerSince !== undefined) {
+        return { ...next, footerSince: undefined }
+      }
+    }
+    return next
+  }
+  return state
 }
 
 /** A finished-looking Codex turn (idle title, silent) that hooks never closed: back to idle. */
@@ -185,16 +327,60 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
 
 /** Next state for a signal at time `now` (epoch ms). Returns the same object when nothing changed. */
 export function reduce(state: SessionState, signal: Signal, now: number): SessionState {
+  if (signal.type === 'launch') return launched(state, now)
   if (state.ended) return state
   const agent = state.kind !== 'shell'
 
   switch (signal.type) {
     case 'event': {
       if (!agent) return state
-      const next = reduceEvent(state, signal.event, now)
+      // Nothing is running yet; a stale event must not start a session that has not been started.
+      if (state.phase === 'not-started') return state
+      // After the agent exited only a SessionStart (a new agent in the same shell) means anything.
+      if (state.phase === 'exited' && signal.event.type !== 'session-start') return state
+      const waking = state.phase === 'starting' || state.phase === 'blocked' || state.phase === 'exited'
+      const base: SessionState = waking
+        ? {
+            ...ready(state, now),
+            ...(state.phase !== 'starting' && state.status !== 'error' ? { status: 'idle' as const, currentAction: undefined } : {})
+          }
+        : state
+      const next = { ...reduceEvent(base, signal.event, now), hooksSeen: true, hooksSilent: false, footerSince: undefined }
       // A hook event is authoritative: whatever the title alone had inferred is settled now.
       return state.titleRun || state.titleAction ? { ...next, titleRun: false, titleAction: false } : next
     }
+
+    case 'launch-failed':
+      return state.phase === undefined
+        ? state
+        : { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, phase: 'exited', phaseSince: now, blocked: undefined }
+
+    case 'agent-marker': {
+      if (!agent || state.phase === undefined) return state
+      const { marker } = signal
+      const crashed =
+        marker.type === 'exit' &&
+        marker.code !== 0 &&
+        (['running', 'needs_you', 'error'].includes(state.status) || state.phase === 'starting' || state.phase === 'blocked')
+      return {
+        ...state,
+        status: crashed ? 'error' : 'exited',
+        currentAction: crashed && marker.type === 'exit' ? `进程异常退出，退出码 ${marker.code}` : undefined,
+        toolAction: undefined,
+        phase: 'exited',
+        phaseSince: now,
+        blocked: undefined,
+        lastActivityAt: now
+      }
+    }
+
+    case 'screen':
+      return agent ? reduceScreen(state, signal.text, now) : state
+
+    case 'hooks-silent':
+      return state.kind === 'claude' && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent
+        ? { ...state, hooksSilent: true }
+        : state
 
     case 'pty-exit': {
       const crashed = signal.code !== 0 && agent && ['running', 'needs_you', 'error'].includes(state.status)
@@ -204,12 +390,22 @@ export function reduce(state: SessionState, signal: Signal, now: number): Sessio
         currentAction: crashed ? `进程异常退出，退出码 ${signal.code}` : undefined,
         toolAction: undefined,
         lastActivityAt: now,
-        ended: true
+        ended: true,
+        ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
       }
     }
 
     case 'title': {
       if (!agent) return state
+      // Before the agent is up (or after it left) titles come from the shell around it.
+      if (state.phase === 'not-started' || state.phase === 'exited') return state
+      if (state.phase === 'starting' || state.phase === 'blocked') {
+        // Claude's own title (`✳` idle, a spinner frame busy) proves its UI is up. Codex titles are not distinctive.
+        if (state.kind === 'claude' && state.phase === 'starting' && (IDLE_TITLE.test(signal.title) || BUSY_TITLE.test(signal.title))) {
+          return { ...ready(state, now), titleIdle: IDLE_TITLE.test(signal.title) }
+        }
+        return state
+      }
       if (state.kind === 'codex') return reduceCodexTitle(state, signal.title, now)
       const titleIdle = IDLE_TITLE.test(signal.title)
       // Lowest-priority signal for "working": only when hooks have been quiet and we think we are idle.
@@ -232,7 +428,7 @@ export function reduce(state: SessionState, signal: Signal, now: number): Sessio
         const healed = healCodex(state, now)
         if (healed !== state) return healed
       }
-      if (state.status === 'running' && state.titleIdle && now - state.lastEventAt >= SELF_HEAL_AFTER_MS) {
+      if (state.status === 'running' && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
         return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined }
       }
       return state

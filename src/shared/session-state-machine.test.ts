@@ -4,7 +4,7 @@ import {
   CODEX_IDLE_HEAL_MS,
   initialState,
   reduce,
-  SELF_HEAL_AFTER_MS,
+  CLAUDE_IDLE_HEAL_MS,
   type SessionState,
   type Signal
 } from './session-state-machine'
@@ -163,42 +163,42 @@ describe('self-heal', () => {
   const idleTitle: Signal = { type: 'title', title: '✳ Claude Code' }
   const tick: Signal = { type: 'tick' }
 
-  it('running + no event for 3 min + idle title → idle', () => {
+  it('running + no event for 6 s + idle title → idle', () => {
     let s = reduce(make('running', { action: '读取 a.ts' }), idleTitle, T0 + 1_000)
-    s = reduce(s, tick, T0 + SELF_HEAL_AFTER_MS)
+    s = reduce(s, tick, T0 + CLAUDE_IDLE_HEAL_MS)
     expect(s.status).toBe('idle')
     expect(s.currentAction).toBeUndefined()
   })
 
   it('does nothing just before the threshold', () => {
     let s = reduce(make('running'), idleTitle, T0 + 1_000)
-    s = reduce(s, tick, T0 + SELF_HEAL_AFTER_MS - 1)
+    s = reduce(s, tick, T0 + CLAUDE_IDLE_HEAL_MS - 1)
     expect(s.status).toBe('running')
   })
 
   it('does nothing without an idle title', () => {
-    const s = reduce(make('running'), tick, T0 + SELF_HEAL_AFTER_MS * 2)
+    const s = reduce(make('running'), tick, T0 + CLAUDE_IDLE_HEAL_MS * 2)
     expect(s.status).toBe('running')
   })
 
   it('does nothing when the title is busy again', () => {
     let s = reduce(make('running'), idleTitle, T0 + 1_000)
     s = reduce(s, { type: 'title', title: '⠂ Claude Code' }, T0 + 2_000)
-    s = reduce(s, tick, T0 + SELF_HEAL_AFTER_MS * 2)
+    s = reduce(s, tick, T0 + CLAUDE_IDLE_HEAL_MS * 2)
     expect(s.status).toBe('running')
   })
 
   it('a recent event postpones healing', () => {
     let s = reduce(make('running'), idleTitle, T0 + 1_000)
-    s = reduce(s, toolEnd(), T0 + SELF_HEAL_AFTER_MS)
-    s = reduce(s, tick, T0 + SELF_HEAL_AFTER_MS + 1_000)
+    s = reduce(s, toolEnd(), T0 + CLAUDE_IDLE_HEAL_MS)
+    s = reduce(s, tick, T0 + CLAUDE_IDLE_HEAL_MS + 1_000)
     expect(s.status).toBe('running')
   })
 
   it('only heals running sessions', () => {
     for (const status of ['needs_you', 'done_unread', 'error'] as const) {
       let s = reduce(make(status), idleTitle, T0 + 1_000)
-      s = reduce(s, tick, T0 + SELF_HEAL_AFTER_MS * 2)
+      s = reduce(s, tick, T0 + CLAUDE_IDLE_HEAL_MS * 2)
       expect(s.status).toBe(status)
     }
   })
@@ -242,7 +242,7 @@ describe('shell sessions', () => {
     ['busy title', { type: 'title', title: '⠐ zsh' }],
     ['tick', { type: 'tick' }]
   ])('ignore %s', (_name, signal) => {
-    expect(reduce(shell(), signal, T0 + SELF_HEAL_AFTER_MS * 2)).toEqual(shell())
+    expect(reduce(shell(), signal, T0 + CLAUDE_IDLE_HEAL_MS * 2)).toEqual(shell())
   })
 
   it('exits with any code, never errors', () => {

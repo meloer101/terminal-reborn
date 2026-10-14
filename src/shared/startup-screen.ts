@@ -43,7 +43,7 @@ export function readScreen(kind: AgentKind, screen: string): ScreenReading {
 }
 
 /** What the session is blocked on, for the status line and the Blocked card. */
-export type BlockedReason = { kind: 'dialog'; dialog: BlockingDialog } | { kind: 'prompt' } | { kind: 'unknown' }
+export type BlockedReason = { kind: 'dialog'; dialog: BlockingDialog } | { kind: 'prompt' }
 
 export function blockedReasonOf(reading: ScreenReading): BlockedReason | null {
   if (reading.dialog) return { kind: 'dialog', dialog: reading.dialog }
@@ -54,6 +54,5 @@ export function blockedReasonOf(reading: ScreenReading): BlockedReason | null {
 /** Sidebar / status text, in the style of `等你确认：…`. */
 export function blockedAction(reason: BlockedReason): string {
   if (reason.kind === 'dialog') return reason.dialog === 'codex-update' ? '等你确认：更新提示' : '等你确认：信任此文件夹'
-  if (reason.kind === 'prompt') return '等你回答：终端里的提示'
-  return '终端里可能有提示'
+  return '等你回答：终端里的提示'
 }
