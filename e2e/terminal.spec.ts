@@ -94,7 +94,12 @@ test('switching sessions keeps each terminal alive with its own scrollback', asy
 
 test('resizing the window reflows the terminal', async () => {
   const before = await size(FIRST)
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 700))
+  // Shrink relative to the current size: CI displays can be smaller than the default 1440×900 window.
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    const [width = 1440, height = 900] = win?.getSize() ?? []
+    win?.setSize(Math.max(960, width - 300), Math.max(600, height - 100))
+  })
   await expect.poll(async () => (await size(FIRST))?.cols).toBeLessThan(before?.cols ?? 0)
   // The shell sees the new size too.
   await run(FIRST, 'clear; echo cols-$(tput cols)')
