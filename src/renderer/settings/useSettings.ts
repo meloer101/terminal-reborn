@@ -1,0 +1,45 @@
+import { useCallback, useEffect, useState } from 'react'
+import { applySettingsPatch, DEFAULT_SETTINGS, type AppSettings, type AppearanceSettings } from '@shared/settings'
+import { applyTheme } from '../theme'
+
+export interface SettingsHandle {
+  settings: AppSettings
+  /** True once the persisted settings have been read (before that, defaults are shown). */
+  loaded: boolean
+  updateAppearance(patch: Partial<AppearanceSettings>): void
+}
+
+/**
+ * Live view of AppSettings for the settings window: reads once, follows every onChange, and
+ * applies edits optimistically so controls never lag behind the main-process round trip.
+ * The window also follows `appearance.theme` itself.
+ */
+export function useSettings(): SettingsHandle {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const accept = (next: AppSettings): void => {
+      if (cancelled) return
+      setSettings(next)
+      applyTheme(next.appearance.theme)
+    }
+    const unsubscribe = window.tr.settings.onChange(accept)
+    void window.tr.settings.get().then((initial) => {
+      accept(initial)
+      if (!cancelled) setLoaded(true)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  const updateAppearance = useCallback((patch: Partial<AppearanceSettings>) => {
+    setSettings((current) => applySettingsPatch(current, { appearance: patch }))
+    void window.tr.settings.update({ appearance: patch })
+  }, [])
+
+  return { settings, loaded, updateAppearance }
+}

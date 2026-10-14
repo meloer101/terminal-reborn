@@ -1,0 +1,75 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  max-width: 460px;
+  padding: var(--titlebar-height) 40px 40px 48px;
+}
+
+.title {
+  margin: 0 0 28px;
+  font: var(--text-title-l);
+  letter-spacing: var(--tracking-title-l);
+  color: var(--text-primary);
+}
+
+.quiet {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.aboutRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  min-height: 43px;
+  padding: var(--space-12) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.aboutName {
+  flex: 1;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.version {
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  user-select: text;
+}
+
+.button {
+  height: 30px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  font: var(--text-body);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.button:disabled {
+  color: var(--text-disabled);
+}
+
+.button:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.status {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.link {
+  color: var(--text-primary);
+  text-underline-offset: 2px;
+}

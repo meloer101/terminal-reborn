@@ -1,0 +1,87 @@
+.page {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 48px;
+  row-gap: var(--space-32);
+  /* Titlebar height above, 40px below/right, 48px left (Figma 07 "Content"). */
+  padding: var(--titlebar-height) 40px 40px 48px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 460px;
+  min-width: 360px;
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-l);
+  letter-spacing: var(--tracking-title-l);
+  color: var(--text-primary);
+}
+
+.hint {
+  margin: var(--space-8) 0 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.colors {
+  display: flex;
+  gap: var(--space-16);
+}
+
+.fileButton {
+  display: flex;
+  align-items: center;
+  width: 220px;
+  height: 30px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  font: var(--text-body);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.fileButton:hover {
+  border-color: var(--border-strong);
+}
+
+.fileName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 320px;
+  min-width: 320px;
+  /* Aligns the 预览 label with the first section label (title 28 + gap 28). */
+  padding-top: 56px;
+  position: sticky;
+  top: 0;
+}
+
+.previewTitle {
+  margin: 0;
+  font: var(--text-caption-strong);
+  color: var(--text-tertiary);
+}
+
+.caption {
+  margin: 0;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
