@@ -1,6 +1,7 @@
-// The settings window (Figma 07 · 设置 · 外观). main.tsx renders this when location.hash === '#settings'.
+// Settings content (Figma 07 · 设置 · 外观), shown inside SettingsDialog over the main window.
 import { useRef, useState, type KeyboardEvent } from 'react'
-import { Bot, Info, Keyboard, SlidersHorizontal, Terminal, Type, type LucideIcon } from 'lucide-react'
+import { Bot, Info, Keyboard, SlidersHorizontal, Terminal, Type, X, type LucideIcon } from 'lucide-react'
+import { IconButton } from '../ui/IconButton'
 import { AboutPane } from './AboutPane'
 import { AppearancePane } from './AppearancePane'
 import { PlaceholderPane } from './PlaceholderPane'
@@ -18,7 +19,7 @@ const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
   { id: 'about', label: '关于', Icon: Info }
 ]
 
-export function SettingsApp() {
+export function SettingsApp({ onClose }: { onClose(): void }) {
   const { settings, loaded, updateAppearance } = useSettings()
   const [pane, setPane] = useState<PaneId>('appearance')
   const items = useRef(new Map<PaneId, HTMLButtonElement>())
@@ -39,7 +40,7 @@ export function SettingsApp() {
   return (
     <div className={styles.window}>
       <nav className={styles.nav} aria-label="设置">
-        <div className={styles.titlebar} />
+        <h1 className={styles.title}>设置</h1>
         <div className={styles.items} role="tablist" aria-orientation="vertical" onKeyDown={onNavKeyDown}>
           {NAV.map(({ id, label, Icon }) => (
             <button
@@ -64,7 +65,11 @@ export function SettingsApp() {
         </div>
       </nav>
       <main className={styles.content} id="settings-pane" role="tabpanel" aria-labelledby={`tab-${pane}`} data-loaded={loaded}>
-        <div className={styles.dragStrip} />
+        <div className={styles.closeBar}>
+          <IconButton label="关闭设置（Esc）" onClick={onClose}>
+            <X size={16} strokeWidth={1.75} />
+          </IconButton>
+        </div>
         {pane === 'appearance' && loaded && <AppearancePane appearance={settings.appearance} update={updateAppearance} />}
         {pane === 'about' && <AboutPane />}
         {pane !== 'appearance' && pane !== 'about' && active && <PlaceholderPane title={active.label} />}

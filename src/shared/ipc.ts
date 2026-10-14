@@ -72,8 +72,10 @@ export interface UiApi {
   /** System notification. Clicking it focuses the window and fires onNotificationClick with `tag`. */
   notify(notification: { title: string; body: string; tag: string }): void
   onNotificationClick(listener: (tag: string) => void): Unsubscribe
-  /** Opens (or focuses) the settings window (⌘,). */
+  /** Shows the settings dialog in this window (same as ⌘,). */
   openSettings(): void
+  /** ⌘, from the app menu: show the settings dialog. */
+  onShowSettings(listener: () => void): Unsubscribe
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
 }
@@ -146,6 +148,8 @@ export const IPC = {
   agentPromptResolved: 'agent:prompt-resolved',
   agentRespondPermission: 'agent:respond-permission',
   uiOpenSettings: 'ui:open-settings',
+  /** main → renderer: show the settings dialog */
+  uiShowSettings: 'ui:show-settings',
   uiRevealInFinder: 'ui:reveal-in-finder',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',

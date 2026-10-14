@@ -8,11 +8,12 @@ interface TrWindow {
   }
 }
 
+/** Opens the settings dialog in the main window and returns that page. */
 async function openSettings(app: ElectronApplication): Promise<Page> {
-  const main = await app.firstWindow()
-  const opened = app.waitForEvent('window')
-  await main.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
-  const settings = await opened
+  const settings = await app.firstWindow()
+  await settings.waitForSelector('[data-region="sidebar"]')
+  await settings.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
+  await expect(settings.getByRole('dialog', { name: '设置' })).toBeVisible()
   await expect(settings.getByRole('tab', { name: '外观' })).toBeVisible()
   await expect(settings.getByTestId('preview-terminal')).toBeVisible()
   return settings
@@ -92,5 +93,32 @@ test('about pane shows the version and checks for updates', async () => {
   await expect(settings.getByRole('button', { name: '检查更新' })).toBeVisible()
   await settings.getByRole('tab', { name: '终端' }).click()
   await expect(settings.getByText('即将推出')).toBeVisible()
+  await app.close()
+})
+
+test('settings is a dialog in the main window: sidebar, Esc, close button, and the scrim close it', async () => {
+  const app = await launchApp()
+  const page = await openSettings(app)
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  expect(app.windows()).toHaveLength(1)
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+
+  await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^设置/ }).click()
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '关闭设置（Esc）' }).click()
+  await expect(dialog).toBeHidden()
+
+  await page.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
+  await expect(dialog).toBeVisible()
+  await page.mouse.click(8, 400) // the scrim, outside the sheet
+  await expect(dialog).toBeHidden()
+
+  // An open font menu takes Esc first; the dialog stays.
+  await page.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
+  await dialog.getByRole('combobox', { name: '字号' }).click()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeVisible()
   await app.close()
 })

@@ -66,6 +66,7 @@ const api: TrApi = {
     notify: (notification) => ipcRenderer.send(IPC.uiNotify, notification),
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),
     openSettings: () => ipcRenderer.send(IPC.uiOpenSettings),
+    onShowSettings: (listener) => listen(IPC.uiShowSettings, listener),
     revealInFinder: (path) => ipcRenderer.send(IPC.uiRevealInFinder, path)
   },
   agent: {

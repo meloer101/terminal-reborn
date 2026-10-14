@@ -33,7 +33,7 @@ In a fresh worktree run `npm install` first.
 | `src/renderer/status/`, `src/shared/session-state-machine.ts`, `src/shared/current-action.ts` | Live status, notifications, Dock badge (M2) | `session-status` |
 | `src/renderer/prompt-bar/`, `src/shared/question-keys.ts` | Permission / question bar (M2) | `prompt-bar` |
 | `src/renderer/command-palette/` | ⌘K (M2) | `command-palette` |
-| `src/renderer/settings/` | Settings window UI (M3) | `settings-ui` |
+| `src/renderer/settings/` | Settings dialog UI (M3; a sheet over the main window) | `settings-ui` |
 | `src/renderer/appearance/`, `src/main/appearance.ts`, `src/renderer/theme.ts` | Applying appearance settings (M3) | `appearance-runtime` |
 | `src/main/hooks/` (Codex parts), `docs/spikes/codex.md` | Codex hooks/approvals (M3) | `codex-adapter` |
 | `build/`, `electron-builder.yml`, `.github/workflows/release.yml`, `src/main/updates.ts` | Packaging, icon, update check (M3) | `release` |

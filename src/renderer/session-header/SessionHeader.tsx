@@ -38,6 +38,8 @@ export function SessionHeader() {
           </span>
         </>
       )}
+      {/* Without a session there is no status to push the tools right. */}
+      {!active && <span className={styles.spacer} />}
       <span className={styles.tools}>
         <IconButton
           label="变更面板"

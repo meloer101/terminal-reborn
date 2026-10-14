@@ -6,6 +6,7 @@ import { openNewSessionMenu, openProjectInteractive, openProjectMenu, openSessio
 import { IconButton } from '../ui/IconButton'
 import { NavItem } from './NavItem'
 import { openCommandPalette } from '../command-palette'
+import { openSettings } from '../settings/SettingsDialog'
 import { ProjectHeader } from './ProjectHeader'
 import { SessionRow } from './SessionRow'
 import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
@@ -102,7 +103,7 @@ export function Sidebar() {
         )}
       </div>
       <div className={styles.footer}>
-        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut="⌘," onClick={() => window.tr.ui.openSettings()} />
+        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut="⌘," onClick={openSettings} />
       </div>
     </>
   )

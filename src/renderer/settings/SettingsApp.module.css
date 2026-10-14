@@ -15,11 +15,13 @@
   background: var(--bg-sidebar);
 }
 
-/* Room for the native traffic lights; the whole strip drags the window. */
-.titlebar {
+.title {
   flex-shrink: 0;
-  height: var(--titlebar-height);
-  -webkit-app-region: drag;
+  margin: 0;
+  padding: var(--space-16) var(--space-16) var(--space-8);
+  font: var(--text-title-m);
+  letter-spacing: var(--tracking-title-m);
+  color: var(--text-primary);
 }
 
 .items {
@@ -67,12 +69,19 @@
   overflow-y: auto;
 }
 
-.dragStrip {
+/* Close button pinned to the top-right corner while the pane scrolls. */
+.closeBar {
   position: sticky;
   z-index: 5;
   top: 0;
+  display: flex;
+  justify-content: flex-end;
   height: var(--titlebar-height);
   margin-bottom: calc(-1 * var(--titlebar-height));
-  -webkit-app-region: drag;
+  padding: var(--space-8) var(--space-8) 0 0;
   pointer-events: none;
+}
+
+.closeBar > * {
+  pointer-events: auto;
 }
