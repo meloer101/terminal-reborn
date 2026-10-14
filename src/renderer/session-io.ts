@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { SessionId } from '@shared/types'
 import { PASSTHROUGH_BYTES, type PassthroughKey } from '@shared/keys'
-import { detectBlockingDialog, planSend, type BlockingDialog } from '@shared/send-protocol'
+import { detectBlockingDialog, planSend, type BlockingDialog, type SendStep } from '@shared/send-protocol'
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
 import { useWorkspace } from './state/workspace'
 import { getSendIo, readViewport } from './terminal/registry'
@@ -29,6 +29,14 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
     if (error instanceof SendTimeoutError) throw new Error('终端没有显示刚才的输入，未发送回车，已放回输入栏', { cause: error })
     throw error
   }
+}
+
+/**
+ * Runs pre-planned keystroke steps (e.g. answering an AskUserQuestion menu) on the session's
+ * serial queue, so they never interleave with a composer send.
+ */
+export function runSteps(sessionId: SessionId, steps: readonly SendStep[]): Promise<void> {
+  return sendQueued(queue, sessionId, steps, getSendIo(sessionId))
 }
 
 export function sendPassthrough(sessionId: SessionId, key: PassthroughKey): void {

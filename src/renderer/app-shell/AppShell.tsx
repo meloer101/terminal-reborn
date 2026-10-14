@@ -3,6 +3,9 @@ import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { TerminalArea } from '../terminal/TerminalArea'
 import { Composer } from '../composer/Composer'
+import { PromptBar } from '../prompt-bar/PromptBar'
+import { CommandPalette } from '../command-palette/CommandPalette'
+import { StatusBridge } from '../status/StatusBridge'
 import { RightPanel } from '../panels/RightPanel'
 import styles from './AppShell.module.css'
 
@@ -27,6 +30,7 @@ export function AppShell() {
         <section className={styles.terminal} data-region="terminal">
           <TerminalArea />
         </section>
+        <PromptBar />
         <Composer />
       </main>
       {rightPanel && (
@@ -38,6 +42,8 @@ export function AppShell() {
           <RightPanel tab={rightPanel} />
         </aside>
       )}
+      <CommandPalette />
+      <StatusBridge />
     </div>
   )
 }

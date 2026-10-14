@@ -2,6 +2,7 @@
 // The preload implements TrApi; main registers handlers for IPC channels.
 // Changing a signature here is a cross-track change — note it in the PR.
 
+import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from './agent-events'
 import type { AgentKind, SessionId } from './types'
 
 export type Unsubscribe = () => void
@@ -58,6 +59,21 @@ export interface UiApi {
   pickFolder(): Promise<string | null>
   /** Native context menu at the cursor; resolves to the chosen item id, or null when dismissed. */
   popupMenu(entries: MenuEntry[]): Promise<string | null>
+  /** Dock badge; 0 clears it. */
+  setBadge(count: number): void
+  /** System notification. Clicking it focuses the window and fires onNotificationClick with `tag`. */
+  notify(notification: { title: string; body: string; tag: string }): void
+  onNotificationClick(listener: (tag: string) => void): Unsubscribe
+}
+
+export interface AgentApi {
+  /** Every normalized hook event from every agent session. */
+  onEvent(listener: (envelope: AgentEventEnvelope) => void): Unsubscribe
+  /** A permission request or question the UI can answer. */
+  onPrompt(listener: (prompt: PendingPrompt) => void): Unsubscribe
+  onPromptResolved(listener: (resolution: PromptResolution) => void): Unsubscribe
+  /** Answers a pending permission prompt (releases the blocked hook). Unknown ids are ignored. */
+  respondPermission(promptId: string, decision: PermissionDecision): void
 }
 
 export interface TrApi {
@@ -67,6 +83,7 @@ export interface TrApi {
   pty: PtyApi
   files: FilesApi
   ui: UiApi
+  agent: AgentApi
 }
 
 export const IPC = {
@@ -81,5 +98,16 @@ export const IPC = {
   ptyExit: 'pty:exit',
   filesSaveTempImage: 'files:save-temp-image',
   uiPickFolder: 'ui:pick-folder',
-  uiPopupMenu: 'ui:popup-menu'
+  uiPopupMenu: 'ui:popup-menu',
+  uiSetBadge: 'ui:set-badge',
+  uiNotify: 'ui:notify',
+  /** main → renderer, payload tag */
+  uiNotificationClick: 'ui:notification-click',
+  /** main → renderer, payload AgentEventEnvelope */
+  agentEvent: 'agent:event',
+  /** main → renderer, payload PendingPrompt */
+  agentPrompt: 'agent:prompt',
+  /** main → renderer, payload PromptResolution */
+  agentPromptResolved: 'agent:prompt-resolved',
+  agentRespondPermission: 'agent:respond-permission'
 } as const

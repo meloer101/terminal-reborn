@@ -20,7 +20,7 @@ In a fresh worktree run `npm install` first.
 
 | Path | What | Owner |
 |---|---|---|
-| `src/shared/` | Pure, typed contracts and logic shared by main + renderer (`types`, `ipc`, `send-protocol`, `keys`, `session-status`) | integrator — **additive changes only** from tracks, call them out in the commit message |
+| `src/shared/` | Pure, typed contracts and logic shared by main + renderer (`types`, `ipc`, `agent-events`, `send-protocol`, `keys`, `session-status`) | integrator — **additive changes only** from tracks, call them out in the commit message |
 | `src/main/` | Electron main: window, IPC handlers, (later) hook server, git | integrator; `pty-terminal` adds `src/main/pty/` |
 | `src/pty-host/` | utilityProcess owning node-pty | `pty-terminal` |
 | `src/preload/` | `window.tr` (implements `TrApi` from `src/shared/ipc.ts`) | `pty-terminal` may change transport, not the `TrApi` shape |
@@ -29,6 +29,10 @@ In a fresh worktree run `npm install` first.
 | `src/renderer/composer/` | Input box | `composer` |
 | `src/renderer/sidebar/` | Status sidebar | `sidebar-ui` |
 | `src/renderer/panels/` | Right panel (changes / graph) | later milestones |
+| `src/main/hooks/`, `resources/hooks/`, `src/shared/agent-launch.ts` | Per-launch Claude hooks → `AgentEvent` / `PendingPrompt` (M2) | `hooks-bridge` |
+| `src/renderer/status/`, `src/shared/session-state-machine.ts`, `src/shared/current-action.ts` | Live status, notifications, Dock badge (M2) | `session-status` |
+| `src/renderer/prompt-bar/`, `src/shared/question-keys.ts` | Permission / question bar (M2) | `prompt-bar` |
+| `src/renderer/command-palette/` | ⌘K (M2) | `command-palette` |
 
 Stay inside the directories your task owns. If you truly need a change elsewhere, keep it minimal and say so in the commit message — don't refactor shared files.
 

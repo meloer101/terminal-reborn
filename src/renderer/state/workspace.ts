@@ -32,7 +32,11 @@ interface WorkspaceState extends WorkspaceData {
   /** Starts a session in the project and selects it; null if the project is gone. */
   addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
   closeSession(id: SessionId): void
+  /** Live, non-persisted fields driven by agent signals (status track, M2). */
+  patchSession(id: SessionId, patch: SessionPatch): void
 }
+
+export type SessionPatch = Partial<Pick<Session, 'status' | 'currentAction' | 'title' | 'lastActivityAt'>>
 
 // End-to-end tests opt in to the Figma 01 fixtures and never touch the saved workspace.
 const fixtures = (globalThis as { __TR_E2E__?: boolean }).__TR_E2E__ === true
@@ -87,7 +91,18 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     set(result.data)
     return result.sessionId
   },
-  closeSession: (id) => set(closeSession(pick(get()), id))
+  closeSession: (id) => set(closeSession(pick(get()), id)),
+  patchSession: (id, patch) =>
+    set((s) => {
+      const index = s.sessions.findIndex((x) => x.id === id)
+      const current = s.sessions[index]
+      if (!current) return {}
+      const keys = Object.keys(patch) as (keyof SessionPatch)[]
+      if (keys.every((k) => current[k] === patch[k])) return {}
+      const sessions = s.sessions.slice()
+      sessions[index] = { ...current, ...patch }
+      return { sessions }
+    })
 }))
 
 // Persist structural changes (not live status, which changes constantly).

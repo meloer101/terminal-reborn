@@ -35,6 +35,14 @@ ipcRenderer.on(IPC.ptyExit, (_event, message: { sessionId: SessionId; exit: PtyE
   exitListeners.emit(message.sessionId, message.exit)
 })
 
+function listen<T>(channel: string, listener: (payload: T) => void): () => void {
+  const handler = (_event: Electron.IpcRendererEvent, payload: T) => listener(payload)
+  ipcRenderer.on(channel, handler)
+  return () => {
+    ipcRenderer.removeListener(channel, handler)
+  }
+}
+
 const api: TrApi = {
   platform: process.platform,
   homeDir: process.env.HOME ?? '/',
@@ -53,7 +61,16 @@ const api: TrApi = {
   },
   ui: {
     pickFolder: () => ipcRenderer.invoke(IPC.uiPickFolder),
-    popupMenu: (entries) => ipcRenderer.invoke(IPC.uiPopupMenu, entries)
+    popupMenu: (entries) => ipcRenderer.invoke(IPC.uiPopupMenu, entries),
+    setBadge: (count) => ipcRenderer.send(IPC.uiSetBadge, count),
+    notify: (notification) => ipcRenderer.send(IPC.uiNotify, notification),
+    onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener)
+  },
+  agent: {
+    onEvent: (listener) => listen(IPC.agentEvent, listener),
+    onPrompt: (listener) => listen(IPC.agentPrompt, listener),
+    onPromptResolved: (listener) => listen(IPC.agentPromptResolved, listener),
+    respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision)
   }
 }
 
