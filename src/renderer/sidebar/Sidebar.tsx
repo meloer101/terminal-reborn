@@ -5,6 +5,7 @@ import { useWorkspace } from '../state/workspace'
 import { addProjectInteractive, openNewSessionMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
 import { NavItem } from './NavItem'
+import { openCommandPalette } from '../command-palette'
 import { ProjectHeader } from './ProjectHeader'
 import { SessionRow } from './SessionRow'
 import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
@@ -58,7 +59,7 @@ export function Sidebar() {
       </div>
       <nav className={styles.nav} aria-label="导航">
         <NavItem icon={<Plus {...ICON} />} label="新任务" shortcut="⌘N" onClick={() => void openNewSessionMenu()} />
-        <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut="⌘K" />
+        <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut="⌘K" onClick={openCommandPalette} />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
         {groups.map((group) => (

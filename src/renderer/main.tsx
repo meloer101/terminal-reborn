@@ -3,10 +3,10 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/jetbrains-mono'
 import './styles/tokens.css'
 import './styles/base.css'
-import { applyTheme } from './theme'
+import { initTheme } from './theme'
 import { AppShell } from './app-shell/AppShell'
 
-applyTheme('system')
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
