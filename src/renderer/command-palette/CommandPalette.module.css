@@ -1,0 +1,145 @@
+/* ⌘K sheet. No Figma frame: built from the sidebar's patterns (NavItem / SessionRow density, hairlines, --radius-md rows). */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 14vh var(--space-16) 0;
+  background: var(--scrim);
+  -webkit-app-region: no-drag;
+}
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: 100%;
+  max-height: min(460px, 72vh);
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-overlay);
+  color: var(--text-primary);
+}
+
+.inputRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 44px;
+  padding: 0 var(--space-16);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+}
+
+.icon {
+  flex: none;
+  display: flex;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-composer);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.kbd {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-8) var(--space-8);
+}
+
+.section {
+  padding: var(--space-8) var(--space-8) var(--space-4);
+  font: var(--text-caption-strong);
+  color: var(--text-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.row[data-selected='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+/* 16px slot so status glyphs (14px) and action icons (16px) share one column. */
+.lead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+
+.title {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.subtitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.row[data-selected='true'] .subtitle {
+  color: var(--text-secondary);
+}
+
+.row[data-attention='true'] .subtitle {
+  color: var(--status-attention);
+}
+
+/* Matched characters: weight only, so highlighting never reads as a second color. */
+.hit {
+  font-weight: 600;
+  background: transparent;
+  color: inherit;
+}
+
+.empty {
+  padding: var(--space-24) var(--space-16);
+  text-align: center;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
