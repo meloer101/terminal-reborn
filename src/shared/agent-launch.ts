@@ -42,13 +42,38 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
   ]
 }
 
+/** OSC number the launch script uses to tell the terminal what became of the agent process. */
+export const AGENT_MARKER_OSC = 7771
+
+export type AgentMarker =
+  /** The agent process ended (its exit code); the PTY now holds a plain login shell. */
+  | { type: 'exit'; code: number }
+  /** The CLI is not on the login shell's PATH. */
+  | { type: 'missing' }
+
+export function parseAgentMarker(payload: string): AgentMarker | null {
+  if (payload === 'missing') return { type: 'missing' }
+  const match = /^exit;(-?\d{1,3})$/.exec(payload)
+  return match ? { type: 'exit', code: Number(match[1]) } : null
+}
+
 /**
  * Shell arguments that run the agent and then stay in an interactive login shell, so the
  * session survives the agent exiting (the user can re-run it or inspect the directory).
  * `-i` loads the user's rc files so version managers put the CLI on PATH.
+ *
+ * The script also reports what happened as an OSC marker (AGENT_MARKER_OSC): `missing` when the CLI is
+ * not installed (phase 2 · A8 preflight: `command -v` in the same login shell that would run it) and
+ * `exit;<code>` once the agent process is gone, so the app knows the shell prompt is back (A3).
  */
 export function agentShellArgs(kind: AgentKind, realCwd: string, shell: string, options: AgentLaunchOptions = {}): string[] {
   if (kind === 'shell') return ['-l']
   const line = agentArgv(kind, realCwd, options).map(shellQuote).join(' ')
-  return ['-l', '-i', '-c', `${line}; exec ${shellQuote(shell)} -l`]
+  const marker = (payload: string) => `printf '\\033]${AGENT_MARKER_OSC};${payload}\\007'`
+  const check = `command -v ${kind} >/dev/null 2>&1`
+  const fish = /(?:^|\/)fish$/.test(shell)
+  const script = fish
+    ? `if ${check}; ${line}; ${marker('exit;%s')} $status; else; ${marker('missing')}; end`
+    : `if ${check}; then ${line}; ${marker('exit;%s')} "$?"; else ${marker('missing')}; fi`
+  return ['-l', '-i', '-c', `${script}; exec ${shellQuote(shell)} -l`]
 }
