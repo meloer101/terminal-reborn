@@ -135,6 +135,16 @@ export function classifyNotification(type: string | undefined, message: string):
   return 'other'
 }
 
+/**
+ * Which of Claude's `permission_suggestions` "allow always" may hand back as `updatedPermissions`.
+ * `setMode` is dropped (spike §4: it silently switched the session to acceptEdits) and so is
+ * anything persisted to `userSettings`, which would write the user's global config (PRD §6.2).
+ */
+export function safeSuggestions(raw: unknown): unknown[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((s) => isRec(s) && s.type !== 'setMode' && s.destination !== 'userSettings')
+}
+
 /** Tools whose PermissionRequest dialog has no allow/deny meaning here: leave it to the TUI. */
 const TUI_ONLY_PERMISSION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion', 'ExitPlanMode'])
 
@@ -163,7 +173,7 @@ function normalizeClaude(event: string, payload: Rec): NormalizedHook {
       return { events: [{ type: 'tool-end', tool, input, ok: false }], clears: 'tool' }
     case 'PermissionRequest': {
       if (TUI_ONLY_PERMISSION_TOOLS.has(tool)) return NONE
-      const suggestions = Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : []
+      const suggestions = safeSuggestions(payload.permission_suggestions)
       return {
         events: [],
         permission: { tool, input, summary: summarizeToolUse(tool, input), suggestions },

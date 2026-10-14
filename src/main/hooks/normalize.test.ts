@@ -95,6 +95,23 @@ describe('normalizeHook · PermissionRequest', () => {
     expect(permission?.summary).toBe('写入 b/c.ts')
   })
 
+  it('allow-always never carries setMode or userSettings suggestions (real payload had setMode acceptEdits)', () => {
+    const { permission } = claude('PermissionRequest', {
+      tool_name: 'Bash',
+      tool_input: { command: 'mkdir -p x' },
+      permission_suggestions: [
+        { type: 'addDirectories', directories: ['/work/project'], destination: 'session' },
+        { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
+        { type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'x' }], behavior: 'allow', destination: 'userSettings' },
+        { type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'y' }], behavior: 'allow', destination: 'localSettings' }
+      ]
+    })
+    expect(permission?.suggestions).toEqual([
+      { type: 'addDirectories', directories: ['/work/project'], destination: 'session' },
+      { type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'y' }], behavior: 'allow', destination: 'localSettings' }
+    ])
+  })
+
   it('AskUserQuestion is left to the TUI: no permission draft', () => {
     const result = claude('PermissionRequest', fx.PermissionRequest_AskUserQuestion)
     expect(result.permission).toBeUndefined()

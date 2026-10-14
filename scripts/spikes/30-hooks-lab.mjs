@@ -178,6 +178,22 @@ const SCENARIOS = {
     if (held.length) held.splice(0).forEach((h) => h.decide('allow'))
     console.log('stop seen:', await waitStop())
   },
+  // "allow always": answer the first request with its own suggestions, then see whether a similar command asks again
+  async always() {
+    await prompt('Use the Bash tool to run exactly: mkdir -p /tmp/tr-hooks-lab/always1   Then reply DONE.')
+    const t = Date.now()
+    while (!held.length && Date.now() - t < 60000) await sleep(100)
+    log({ dir: 'suggestions', s: held[0]?.body.permission_suggestions })
+    held.splice(0).forEach((h) => h.decide('allow', h.body.permission_suggestions ? { updatedPermissions: h.body.permission_suggestions } : {}))
+    await waitStop()
+    log({ dir: 'second-prompt' })
+    await prompt('Use the Bash tool to run exactly: mkdir -p /tmp/tr-hooks-lab/always2   Then reply DONE.')
+    await sleep(25000)
+    log({ dir: 'held-after-second', n: held.length })
+    show('screen', c.visible())
+    held.splice(0).forEach((h) => h.decide('allow'))
+    await waitStop(30000)
+  },
   async startup() {
     await sleep(4000)
   },
