@@ -12,7 +12,10 @@ test('app window opens with the shell regions', async () => {
     () => typeof (globalThis as unknown as { tr?: { pty?: { spawn?: unknown } } }).tr?.pty?.spawn
   )
   expect(spawnType).toBe('function')
-  // A fresh profile has no sessions yet and offers to add a project.
-  await expect(page.getByRole('button', { name: '添加项目…' })).toBeVisible()
+  // A fresh profile has no projects yet: the sidebar explains that and offers to open one (Figma 09 · A).
+  const sidebar = page.locator('[data-region="sidebar"]')
+  await expect(sidebar.getByText('还没有项目', { exact: true })).toBeVisible()
+  await expect(sidebar.getByRole('button', { name: '打开项目…', exact: true })).toBeVisible()
+  await expect(sidebar.getByRole('button', { name: /^打开项目… ⌘O$/ })).toBeVisible()
   await app.close()
 })

@@ -25,14 +25,15 @@ function session(id: string, worktreeId: string, status: SessionStatus, lastActi
 }
 
 describe('buildSidebarGroups', () => {
-  it('groups by project in store order and omits empty projects', () => {
+  it('groups by project in store order and keeps projects without sessions', () => {
     const groups = buildSidebarGroups({
       projects,
       worktrees,
       sessions: [session('s1', 'wa1', 'running'), session('s2', 'wb1', 'idle'), session('s3', 'wa2', 'running')]
     })
-    expect(groups.map((g) => g.title)).toEqual(['alpha', 'beta'])
+    expect(groups.map((g) => g.title)).toEqual(['alpha', 'beta', 'empty'])
     expect(groups[0]?.rows.map((r) => r.session.id)).toEqual(['s1', 's3'])
+    expect(groups[2]).toMatchObject({ rows: [], sessionCount: 0 })
   })
 
   it('hoists attention sessions into a top queue, most urgent first, without duplicating them', () => {
@@ -53,8 +54,8 @@ describe('buildSidebarGroups', () => {
     expect(all).toHaveLength(5)
     expect(new Set(all).size).toBe(5)
     expect(groups.find((g) => g.id === 'pa')?.rows.map((r) => r.session.id)).toEqual(['run'])
-    // beta had only an errored session; with it hoisted the project disappears
-    expect(groups.find((g) => g.id === 'pb')).toBeUndefined()
+    // beta's only session is hoisted: the project stays (empty) but still counts that session
+    expect(groups.find((g) => g.id === 'pb')).toMatchObject({ rows: [], sessionCount: 1 })
   })
 
   it('shows no queue when nothing needs attention', () => {

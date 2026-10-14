@@ -1,5 +1,6 @@
 // Native pickers and menus the renderer cannot create itself.
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, type MenuItemConstructorOptions } from 'electron'
+import { isAbsolute } from 'node:path'
 import type { MenuEntry } from '@shared/ipc'
 import { IPC } from '@shared/ipc'
 import { parseMenuEntries } from './menu-spec'
@@ -12,7 +13,13 @@ function toTemplate(entries: MenuEntry[], choose: (id: string) => void): MenuIte
       case 'submenu':
         return { label: entry.label, submenu: toTemplate(entry.items, choose) }
       case 'item':
-        return { label: entry.label, enabled: entry.enabled ?? true, click: () => choose(entry.id) }
+        return {
+          label: entry.label,
+          enabled: entry.enabled ?? true,
+          click: () => choose(entry.id),
+          // Display only: the renderer owns the keyboard shortcut.
+          ...(entry.accelerator ? { accelerator: entry.accelerator, registerAccelerator: false } : {})
+        }
     }
   })
 }
@@ -23,6 +30,10 @@ const text = (value: unknown, max: number): string => (typeof value === 'string'
 const liveNotifications = new Set<Notification>()
 
 export function registerUiHandlers(): void {
+  ipcMain.on(IPC.uiRevealInFinder, (_event, path: unknown) => {
+    if (typeof path === 'string' && path.length <= 4096 && isAbsolute(path)) shell.showItemInFolder(path)
+  })
+
   ipcMain.on(IPC.uiSetBadge, (_event, count: unknown) => {
     const n = typeof count === 'number' && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0
     app.dock?.setBadge(n > 0 ? String(n) : '')

@@ -1,9 +1,11 @@
-/* Figma ProjectHeader 11:52 — 28px: padding 6/12, gap 6. */
+/* Figma ProjectHeader 50:1473 — 28px: padding 6/12, gap 6. Hover: bg-hover, padding 4/4/4/12, actions replace the count. */
 .header {
   display: flex;
   align-items: center;
   gap: var(--space-6);
+  height: 28px;
   padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-md);
 }
 
 .name {
@@ -21,4 +23,49 @@
   flex: none;
   font: var(--text-mono-s);
   color: var(--text-tertiary);
+}
+
+.actions {
+  display: none;
+  flex: none;
+  gap: var(--space-2);
+}
+
+.header[data-actions='true']:hover,
+.header[data-actions='true']:focus-within {
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
+  background: var(--bg-hover);
+}
+
+.header[data-actions='true']:hover .count,
+.header[data-actions='true']:focus-within .count {
+  display: none;
+}
+
+.header[data-actions='true']:hover .actions,
+.header[data-actions='true']:focus-within .actions {
+  display: inline-flex;
+}
+
+.action {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.action:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }

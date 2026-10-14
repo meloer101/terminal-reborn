@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, type KeyboardEvent } from 'react'
-import { PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Folder, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
-import { addProjectInteractive, openNewSessionMenu, openSessionContextMenu } from '../state/session-actions'
+import { openNewSessionMenu, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
 import { NavItem } from './NavItem'
 import { openCommandPalette } from '../command-palette'
@@ -58,13 +58,21 @@ export function Sidebar() {
         </IconButton>
       </div>
       <nav className={styles.nav} aria-label="导航">
-        <NavItem icon={<Plus {...ICON} />} label="新任务" shortcut="⌘N" onClick={() => void openNewSessionMenu()} />
+        <NavItem icon={<Folder {...ICON} />} label="打开项目…" shortcut="⌘O" onClick={() => void openProjectInteractive()} />
         <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut="⌘K" onClick={openCommandPalette} />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
         {groups.map((group) => (
           <section key={group.id} className={styles.group} aria-label={group.title}>
-            <ProjectHeader name={group.title} count={group.rows.length} />
+            <ProjectHeader
+              name={group.title}
+              count={group.rows.length}
+              actions={
+                group.kind === 'project'
+                  ? { onNewSession: () => void openNewSessionMenu(group.id), onMenu: () => void openProjectMenu(group.id) }
+                  : undefined
+              }
+            />
             {group.rows.map((row) => (
               <SessionRow
                 key={row.session.id}
@@ -75,13 +83,20 @@ export function Sidebar() {
                 onContextMenu={onRowContextMenu}
               />
             ))}
+            {group.kind === 'project' && group.sessionCount === 0 && (
+              <button type="button" className={styles.newSession} onClick={() => void openNewSessionMenu(group.id)}>
+                <Plus {...ICON} />
+                新建会话
+              </button>
+            )}
           </section>
         ))}
         {groups.length === 0 && (
           <div className={styles.empty}>
-            <p>还没有会话</p>
-            <button type="button" className={styles.emptyAction} onClick={() => void addProjectInteractive()}>
-              添加项目…
+            <p className={styles.emptyTitle}>还没有项目</p>
+            <p className={styles.emptyText}>打开一个代码仓库或文件夹，就能在里面启动 Claude Code、Codex 或终端。</p>
+            <button type="button" className={styles.emptyAction} onClick={() => void openProjectInteractive()}>
+              打开项目…
             </button>
           </div>
         )}

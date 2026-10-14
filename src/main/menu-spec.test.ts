@@ -17,7 +17,14 @@ describe('parseMenuEntries', () => {
     ])
   })
 
+  it('keeps a display-only accelerator', () => {
+    expect(parseMenuEntries([{ type: 'item', id: 'a', label: 'A', accelerator: 'CmdOrCtrl+N' }])).toEqual([
+      { type: 'item', id: 'a', label: 'A', accelerator: 'CmdOrCtrl+N' }
+    ])
+  })
+
   it.each([
+    ['bad accelerator', [{ type: 'item', id: 'a', label: 'A', accelerator: 'Cmd+N; rm' }]],
     ['not an array', {}],
     ['unknown type', [{ type: 'role', role: 'quit' }]],
     ['bad id', [{ type: 'item', id: 'a b', label: 'A' }]],

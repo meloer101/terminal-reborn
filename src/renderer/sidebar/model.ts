@@ -21,6 +21,8 @@ export interface SidebarGroup {
   kind: 'attention' | 'project'
   title: string
   rows: SessionRowModel[]
+  /** All sessions belonging to the group (for a project: including ones hoisted into the queue). */
+  sessionCount: number
 }
 
 export interface SidebarInput {
@@ -49,7 +51,8 @@ function toRow(session: Session, worktree: Worktree | undefined): SessionRowMode
  * - Sessions that need attention are hoisted into a top "等你处理" group, most urgent first,
  *   and are not repeated under their project.
  * - Projects keep store order; sessions within a project keep store order.
- * - Projects with nothing left to show are omitted. A header's count is the number of rows under it.
+ * - Every project is listed, even with no rows, so it always offers "新建会话". A header's count is the number
+ *   of rows under it; `sessionCount` counts all of the project's sessions, including ones hoisted to the queue.
  */
 export function buildSidebarGroups({ projects, worktrees, sessions }: SidebarInput): SidebarGroup[] {
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
@@ -61,15 +64,15 @@ export function buildSidebarGroups({ projects, worktrees, sessions }: SidebarInp
       id: ATTENTION_GROUP_ID,
       kind: 'attention',
       title: ATTENTION_GROUP_TITLE,
-      rows: queue.map((s) => toRow(s, worktreeById.get(s.worktreeId)))
+      rows: queue.map((s) => toRow(s, worktreeById.get(s.worktreeId))),
+      sessionCount: queue.length
     })
   }
 
   for (const project of projects) {
-    const rows = sessions
-      .filter((s) => !needsAttention(s.status) && worktreeById.get(s.worktreeId)?.projectId === project.id)
-      .map((s) => toRow(s, worktreeById.get(s.worktreeId)))
-    if (rows.length > 0) groups.push({ id: project.id, kind: 'project', title: project.name, rows })
+    const own = sessions.filter((s) => worktreeById.get(s.worktreeId)?.projectId === project.id)
+    const rows = own.filter((s) => !needsAttention(s.status)).map((s) => toRow(s, worktreeById.get(s.worktreeId)))
+    groups.push({ id: project.id, kind: 'project', title: project.name, rows, sessionCount: own.length })
   }
   return groups
 }

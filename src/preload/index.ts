@@ -65,7 +65,8 @@ const api: TrApi = {
     setBadge: (count) => ipcRenderer.send(IPC.uiSetBadge, count),
     notify: (notification) => ipcRenderer.send(IPC.uiNotify, notification),
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),
-    openSettings: () => ipcRenderer.send(IPC.uiOpenSettings)
+    openSettings: () => ipcRenderer.send(IPC.uiOpenSettings),
+    revealInFinder: (path) => ipcRenderer.send(IPC.uiRevealInFinder, path)
   },
   agent: {
     onEvent: (listener) => listen(IPC.agentEvent, listener),

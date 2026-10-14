@@ -51,7 +51,14 @@ export interface FilesApi {
 
 /** A native context-menu entry. Clicking an item resolves `popup()` with its id. */
 export type MenuEntry =
-  | { type: 'item'; id: string; label: string; enabled?: boolean }
+  | {
+      type: 'item'
+      id: string
+      label: string
+      enabled?: boolean
+      /** Shortcut shown next to the label (display only, e.g. 'CmdOrCtrl+N'); the renderer handles the key. */
+      accelerator?: string
+    }
   | { type: 'submenu'; label: string; items: MenuEntry[] }
   | { type: 'separator' }
 
@@ -67,6 +74,8 @@ export interface UiApi {
   onNotificationClick(listener: (tag: string) => void): Unsubscribe
   /** Opens (or focuses) the settings window (⌘,). */
   openSettings(): void
+  /** Reveals a file or folder in Finder. Absolute paths only. */
+  revealInFinder(path: string): void
 }
 
 export interface SettingsApi {
@@ -137,6 +146,7 @@ export const IPC = {
   agentPromptResolved: 'agent:prompt-resolved',
   agentRespondPermission: 'agent:respond-permission',
   uiOpenSettings: 'ui:open-settings',
+  uiRevealInFinder: 'ui:reveal-in-finder',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   /** main → every window, payload AppSettings */
