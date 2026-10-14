@@ -4,6 +4,7 @@ import type { SessionId } from '@shared/types'
 import { getSurface } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
 import { useWorkspace } from '../state/workspace'
+import { titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
 
@@ -105,7 +106,24 @@ export function startStatusBridge(): () => void {
   const unsubscribeStore = useWorkspace.subscribe((state, prev) => {
     if (state.sessions !== prev.sessions || state.activeSessionId !== prev.activeSessionId) sync()
   })
-  const unsubscribeEvents = window.tr.agent.onEvent((envelope) => controller.handleEvent(envelope.sessionId, envelope.event))
+  const unsubscribeEvents = window.tr.agent.onEvent((envelope) => {
+    const { sessionId, event } = envelope
+    if (event.type === 'prompt-submit') {
+      const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+      const title = session && titleFromFirstPrompt(session, event.prompt)
+      if (title) useWorkspace.getState().patchSession(sessionId, { title })
+    }
+    controller.handleEvent(sessionId, event)
+  })
+  // A PermissionRequest / AskUserQuestion prompt is the authoritative "needs you" signal: Claude's own
+  // Notification(permission_prompt) lags ~6 s behind it (docs/spikes/hooks.md).
+  const unsubscribePrompts = window.tr.agent.onPrompt((prompt) =>
+    controller.handleEvent(prompt.sessionId, {
+      type: 'notification',
+      kind: prompt.kind,
+      message: prompt.kind === 'permission' ? prompt.summary : ''
+    })
+  )
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
   const onViewChange = (): void => controller.refreshViewing()
@@ -123,6 +141,7 @@ export function startStatusBridge(): () => void {
   })
 
   return () => {
+    unsubscribePrompts()
     clearTimeout(timer)
     unsubscribeStore()
     unsubscribeEvents()

@@ -154,3 +154,20 @@ export function restoreWorkspace(raw: string | null, now: number): WorkspaceData
   const active = isString(value.activeSessionId) && sessions.some((s) => s.id === value.activeSessionId)
   return { projects, worktrees, sessions, activeSessionId: active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null) }
 }
+
+const TITLE_MAX_CHARS = 40
+
+/**
+ * Title for a session still carrying its default name, taken from the first prompt (PRD F2).
+ * Returns null when the session already has a real title or the prompt has nothing usable.
+ */
+export function titleFromFirstPrompt(session: Pick<Session, 'kind' | 'title'>, prompt: string): string | null {
+  if (session.title !== DEFAULT_SESSION_TITLE[session.kind]) return null
+  const line = prompt
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l !== '' && !l.startsWith('/'))
+  if (!line) return null
+  const chars = [...line.replace(/\s+/g, ' ')]
+  return chars.length > TITLE_MAX_CHARS ? `${chars.slice(0, TITLE_MAX_CHARS).join('')}…` : chars.join('')
+}

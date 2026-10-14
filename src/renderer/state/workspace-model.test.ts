@@ -8,6 +8,7 @@ import {
   removeProject,
   restoreWorkspace,
   serializeWorkspace,
+  titleFromFirstPrompt,
   type MakeId,
   type WorkspaceData
 } from './workspace-model'
@@ -114,5 +115,19 @@ describe('persistence', () => {
 
   it.each([null, '', '{', '[]', '42'])('falls back to an empty workspace for %j', (raw) => {
     expect(restoreWorkspace(raw, 0)).toEqual(EMPTY_WORKSPACE)
+  })
+})
+
+describe('titleFromFirstPrompt', () => {
+  const fresh = { kind: 'claude' as const, title: 'Claude Code' }
+  it('uses the first non-empty line of the first prompt', () => {
+    expect(titleFromFirstPrompt(fresh, '\n  修复登录页 cookie 过期  \nmore')).toBe('修复登录页 cookie 过期')
+  })
+  it('clips long prompts by characters', () => {
+    expect(titleFromFirstPrompt(fresh, '中'.repeat(50))).toBe(`${'中'.repeat(40)}…`)
+  })
+  it('keeps a title the session already has and ignores slash commands', () => {
+    expect(titleFromFirstPrompt({ kind: 'claude', title: '结算页性能优化' }, 'hello')).toBeNull()
+    expect(titleFromFirstPrompt(fresh, '/model')).toBeNull()
   })
 })
