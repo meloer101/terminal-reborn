@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { registerFileHandlers } from './files'
+import { registerHookHandlers } from './hooks'
 import { registerPtyHandlers } from './pty'
 import { registerUiHandlers } from './ui'
 
@@ -45,6 +46,7 @@ function createMainWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   registerFileHandlers()
+  registerHookHandlers()
   registerPtyHandlers()
   registerUiHandlers()
   createMainWindow()

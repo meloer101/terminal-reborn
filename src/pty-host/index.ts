@@ -63,7 +63,9 @@ function spawn(request: HostSpawnRequest): void {
     request.command !== undefined
       ? (request.args ?? [])
       : request.agent && request.agent !== 'shell'
-        ? agentShellArgs(request.agent, realpath(cwd), shell.command)
+        ? agentShellArgs(request.agent, realpath(cwd), shell.command, {
+            ...(request.claudeSettingsPath ? { claudeSettingsPath: request.claudeSettingsPath } : {})
+          })
         : shell.args
 
   let proc: nodePty.IPty

@@ -4,6 +4,7 @@ import { app, ipcMain, utilityProcess, type UtilityProcess, type WebContents } f
 import { join } from 'node:path'
 import { IPC, type PtySpawnOptions } from '@shared/ipc'
 import type { HostEvent, HostRequest } from '../../pty-host/protocol'
+import { endAgentSession, prepareAgentLaunch } from '../hooks'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
@@ -31,7 +32,10 @@ function ensureHost(): UtilityProcess {
     if (host !== child) return
     host = null
     // The host died: every live terminal is gone with it.
-    for (const [id, session] of sessions) notifyExit(session.owner, id, -1)
+    for (const [id, session] of sessions) {
+      endAgentSession(id)
+      notifyExit(session.owner, id, -1)
+    }
     sessions.clear()
     for (const [id, spawn] of pending) {
       clearTimeout(spawn.timer)
@@ -64,6 +68,7 @@ function handleHostEvent(event: HostEvent): void {
     }
     case 'spawn-error': {
       sessions.delete(event.id)
+      endAgentSession(event.id)
       const spawn = pending.get(event.id)
       if (!spawn) break
       clearTimeout(spawn.timer)
@@ -80,26 +85,37 @@ function handleHostEvent(event: HostEvent): void {
       const session = sessions.get(event.id)
       if (!session) break
       sessions.delete(event.id)
+      endAgentSession(event.id)
       notifyExit(session.owner, event.id, event.exitCode, event.signal)
       break
     }
   }
 }
 
-function spawnSession(owner: WebContents, options: PtySpawnOptions): Promise<{ pid: number }> {
+async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promise<{ pid: number }> {
   const id = options.sessionId
   // Re-spawning an id (e.g. after a renderer reload) makes the host replace the old process.
   sessions.set(id, { owner })
+
+  // Agent sessions get their hook environment and the per-launch `--settings` file. Our TR_* keys
+  // come last so the renderer cannot spoof them.
+  const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent) : null
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id)
       sessions.delete(id)
+      endAgentSession(id)
       reject(new Error('timed out starting the terminal process'))
     }, SPAWN_TIMEOUT_MS)
     pending.set(id, { resolve, reject, timer })
-    const { sessionId: _sessionId, ...rest } = options
-    send({ type: 'spawn', id, ...rest })
+    const { sessionId: _sessionId, env, ...rest } = options
+    send({
+      type: 'spawn',
+      id,
+      ...rest,
+      ...(hooks ? { env: { ...env, ...hooks.env }, claudeSettingsPath: hooks.settingsPath } : env ? { env } : {})
+    })
   })
 }
 
@@ -107,6 +123,7 @@ function killOwnedBy(owner: WebContents): void {
   for (const [id, session] of sessions) {
     if (session.owner !== owner) continue
     sessions.delete(id)
+    endAgentSession(id)
     send({ type: 'kill', id })
   }
 }
