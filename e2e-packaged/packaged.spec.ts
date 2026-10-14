@@ -81,13 +81,14 @@ test('is the packaged build with the right version and resources', async () => {
   const info = await app.evaluate(({ app: electronApp }) => ({
     packaged: electronApp.isPackaged,
     version: electronApp.getVersion(),
-    resources: process.resourcesPath
+    resources: process.resourcesPath,
+    arch: process.arch
   }))
   expect(info.packaged).toBe(true)
   expect(info.version).toBe(version)
   const hook = join(info.resources, 'hooks', 'tr-hook.sh')
   expect(() => accessSync(hook, constants.X_OK)).not.toThrow()
-  const helper = join(info.resources, 'app.asar.unpacked', 'node_modules', 'node-pty', 'prebuilds', `darwin-${process.arch}`, 'spawn-helper')
+  const helper = join(info.resources, 'app.asar.unpacked', 'node_modules', 'node-pty', 'prebuilds', `darwin-${info.arch}`, 'spawn-helper')
   expect(() => accessSync(helper, constants.X_OK)).not.toThrow()
   for (const region of ['sidebar', 'main', 'terminal']) await expect(page.locator(`[data-region="${region}"]`)).toBeVisible()
 })
