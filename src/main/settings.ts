@@ -44,7 +44,10 @@ function persist(settings: AppSettings): Promise<void> {
 }
 
 export async function updateSettings(patch: unknown): Promise<AppSettings> {
-  const next = applySettingsPatch(getSettings(), patch)
+  const previous = getSettings()
+  const next = applySettingsPatch(previous, patch)
+  // No-op patches neither write nor broadcast (keeps onChange → update round trips from looping).
+  if (JSON.stringify(next) === JSON.stringify(previous)) return previous
   current = next
   await persist(next)
   for (const win of BrowserWindow.getAllWindows()) {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { applySettingsPatch, DEFAULT_SETTINGS, type AppSettings, type AppearanceSettings } from '@shared/settings'
-import { applyTheme } from '../theme'
 
 export interface SettingsHandle {
   settings: AppSettings
@@ -12,7 +11,7 @@ export interface SettingsHandle {
 /**
  * Live view of AppSettings for the settings window: reads once, follows every onChange, and
  * applies edits optimistically so controls never lag behind the main-process round trip.
- * The window also follows `appearance.theme` itself.
+ * The window's theme follows settings through initTheme() (main.tsx), like every window.
  */
 export function useSettings(): SettingsHandle {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
@@ -23,7 +22,6 @@ export function useSettings(): SettingsHandle {
     const accept = (next: AppSettings): void => {
       if (cancelled) return
       setSettings(next)
-      applyTheme(next.appearance.theme)
     }
     const unsubscribe = window.tr.settings.onChange(accept)
     void window.tr.settings.get().then((initial) => {
