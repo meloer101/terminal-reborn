@@ -1,0 +1,87 @@
+// Starting a session's agent (phase 2 · A2): the one place that decides *whether to resume* the agent's
+// earlier conversation. Sessions restored from disk are `not-started` and nothing is spawned for them until
+// they are viewed; `startSession` then spawns the terminal, resuming the saved conversation when asked to.
+//
+// UI track: call `startSession(id, { resume: true })` for "恢复对话" and `{ resume: false }` for "开始新对话"
+// (also for the Exited card's "恢复上次对话" / "重新启动"). Until those buttons exist, a not-started session
+// starts by itself, resuming, when it is first viewed; set AUTO_START_ON_VIEW to false when the buttons ship.
+import { useEffect } from 'react'
+import { create } from 'zustand'
+import type { SessionId } from '@shared/types'
+import { disposeTerminal, isTerminalAlive } from '../terminal/registry'
+import { agentSessionIdPatch, planStart, shouldAutoStart, type StartOptions } from './session-start-plan'
+import { useWorkspace } from './workspace'
+
+export { AUTO_START_ON_VIEW, hasStartChoice, type StartOptions } from './session-start-plan'
+
+interface StartRequest {
+  resumeAgentSessionId: string | undefined
+  /** Bumped by every start, so an already-running terminal is replaced. */
+  generation: number
+}
+
+/** How each session's terminal should be (re)created; read by TerminalArea. Not persisted. */
+export const useStartRequests = create<{ requests: Record<SessionId, StartRequest | undefined> }>(() => ({ requests: {} }))
+
+const STOP_WAIT_MS = 1000
+
+/** Kills a session's running PTY and waits (briefly) for it to be gone, so a new one can take its id. */
+async function stopTerminal(sessionId: SessionId): Promise<void> {
+  if (!isTerminalAlive(sessionId)) {
+    disposeTerminal(sessionId)
+    return
+  }
+  const gone = new Promise<void>((resolve) => {
+    const off = window.tr.pty.onExit(sessionId, () => {
+      off()
+      resolve()
+    })
+    setTimeout(() => {
+      off()
+      resolve()
+    }, STOP_WAIT_MS)
+  })
+  disposeTerminal(sessionId) // kills the PTY
+  await gone
+}
+
+/**
+ * Starts (or restarts) the session's agent in a fresh terminal. Works for a not-started session and for
+ * one whose agent has exited; a running terminal is stopped first. Shell sessions are ignored.
+ */
+export async function startSession(sessionId: SessionId, options: StartOptions = { resume: true }): Promise<void> {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (!session || session.kind === 'shell') return
+  const plan = planStart(session, options)
+  await stopTerminal(sessionId)
+  // The session may have been closed while the old terminal was shutting down.
+  if (!useWorkspace.getState().sessions.some((s) => s.id === sessionId)) return
+  useStartRequests.setState((state) => ({
+    requests: {
+      ...state.requests,
+      [sessionId]: { resumeAgentSessionId: plan.resumeAgentSessionId, generation: (state.requests[sessionId]?.generation ?? 0) + 1 }
+    }
+  }))
+  useWorkspace.getState().patchSession(sessionId, plan.patch)
+}
+
+/** Mounted once (by TerminalArea): records conversation ids and starts not-started sessions when they are viewed. */
+export function useSessionStartup(): void {
+  useEffect(
+    () =>
+      window.tr.agent.onEvent(({ sessionId, event }) => {
+        const patch = agentSessionIdPatch(event)
+        if (patch) useWorkspace.getState().patchSession(sessionId, patch)
+      }),
+    []
+  )
+
+  const active = useWorkspace((s) => s.sessions.find((x) => x.id === s.activeSessionId))
+  const start = shouldAutoStart(active)
+  const activeId = active?.id
+  useEffect(() => {
+    // Re-checked here: effects can run twice (StrictMode) and a start in between already moved the phase on.
+    const current = useWorkspace.getState().sessions.find((s) => s.id === activeId)
+    if (start && activeId && current?.phase === 'not-started') void startSession(activeId, { resume: true })
+  }, [start, activeId])
+}

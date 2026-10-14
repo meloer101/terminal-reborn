@@ -1,6 +1,7 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree } from '@shared/types'
+import { WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
 export interface WorkspaceData {
   projects: Project[]
@@ -89,70 +90,95 @@ export function projectOfSession(data: WorkspaceData, sessionId: SessionId | nul
 }
 
 // ---------------------------------------------------------------------------------------------
-// Persistence
+// Persistence (the file format and its sanitizer live in @shared/workspace-file)
 // ---------------------------------------------------------------------------------------------
 
-export const WORKSPACE_STORAGE_KEY = 'tr.workspace.v1'
+/** UI state saved next to the workspace. */
+export interface WorkspaceUi {
+  sidebarCollapsed: boolean
+  rightPanel: PersistedRightPanel | null
+}
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
-export function serializeWorkspace(data: WorkspaceData): string {
-  return JSON.stringify({
-    projects: data.projects,
-    worktrees: data.worktrees.map(({ id, projectId, branch, path, isMain }) => ({ id, projectId, branch, path, isMain })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, title }) => ({ id, worktreeId, kind, title })),
-    activeSessionId: data.activeSessionId
+export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts: Readonly<Record<string, string>>): WorkspaceFile {
+  return {
+    version: WORKSPACE_FILE_VERSION,
+    projects: data.projects.map(({ id, name, rootPath }) => ({ id, name, rootPath })),
+    worktrees: data.worktrees.map(({ id, projectId, branch, path, isMain, baseBranch }) => ({
+      id,
+      projectId,
+      branch,
+      path,
+      isMain,
+      ...(baseBranch ? { baseBranch } : {})
+    })),
+    sessions: data.sessions.map(({ id, worktreeId, kind, title, agentSessionId, startedAt, lastActivityAt }) => ({
+      id,
+      worktreeId,
+      kind,
+      title,
+      ...(agentSessionId ? { agentSessionId } : {}),
+      startedAt,
+      lastActivityAt
+    })),
+    activeSessionId: data.activeSessionId,
+    sidebarCollapsed: ui.sidebarCollapsed,
+    rightPanel: ui.rightPanel,
+    drafts: Object.fromEntries(
+      Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
+    )
+  }
+}
+
+/**
+ * Workspace from a saved file. Processes do not survive a restart, so agent sessions come back
+ * `not-started` (spawned, and resumed when they have a conversation id, the first time they are
+ * viewed); shells have no phase. `startedAt` is kept, not reset.
+ */
+export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
+  if (!file) return EMPTY_WORKSPACE
+  return {
+    projects: file.projects,
+    worktrees: file.worktrees.map((w) => ({ ...w })),
+    sessions: file.sessions.map((s) => ({
+      id: s.id,
+      worktreeId: s.worktreeId,
+      kind: s.kind,
+      title: s.title,
+      status: 'idle',
+      startedAt: s.startedAt,
+      lastActivityAt: s.lastActivityAt,
+      ...(s.agentSessionId ? { agentSessionId: s.agentSessionId } : {}),
+      ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
+    })),
+    activeSessionId: file.activeSessionId
+  }
+}
+
+type PersistedView = WorkspaceData & WorkspaceUi
+
+/** Whether anything that is saved changed. Live status and activity times change constantly and do not count. */
+export function persistedStateChanged(next: PersistedView, prev: PersistedView): boolean {
+  if (
+    next.projects !== prev.projects ||
+    next.worktrees !== prev.worktrees ||
+    next.activeSessionId !== prev.activeSessionId ||
+    next.sidebarCollapsed !== prev.sidebarCollapsed ||
+    next.rightPanel !== prev.rightPanel ||
+    next.sessions.length !== prev.sessions.length
+  ) {
+    return true
+  }
+  return next.sessions.some((s, i) => {
+    const before = prev.sessions[i]
+    return !before || s.id !== before.id || s.title !== before.title || s.agentSessionId !== before.agentSessionId || s.worktreeId !== before.worktreeId
   })
 }
 
-const isString = (v: unknown): v is string => typeof v === 'string'
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const KINDS: ReadonlySet<unknown> = new Set<AgentKind>(['claude', 'codex', 'shell'])
-
-/**
- * Restores a saved workspace, dropping anything malformed or orphaned. Processes do not survive
- * a restart (M6), so every session comes back as a fresh `idle` one.
- */
-export function restoreWorkspace(raw: string | null, now: number): WorkspaceData {
-  if (!raw) return EMPTY_WORKSPACE
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch {
-    return EMPTY_WORKSPACE
-  }
-  if (!isRecord(value)) return EMPTY_WORKSPACE
-  const list = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(isRecord) : [])
-
-  const projects: Project[] = list(value.projects)
-    .filter((p) => isString(p.id) && isString(p.name) && isString(p.rootPath))
-    .map((p) => ({ id: p.id as string, name: p.name as string, rootPath: p.rootPath as string }))
-  const projectIds = new Set(projects.map((p) => p.id))
-
-  const worktrees: Worktree[] = list(value.worktrees)
-    .filter((w) => isString(w.id) && isString(w.projectId) && projectIds.has(w.projectId) && isString(w.branch) && isString(w.path))
-    .map((w) => ({
-      id: w.id as string,
-      projectId: w.projectId as string,
-      branch: w.branch as string,
-      path: w.path as string,
-      isMain: w.isMain === true
-    }))
-  const worktreeIds = new Set(worktrees.map((w) => w.id))
-
-  const sessions: Session[] = list(value.sessions)
-    .filter((s) => isString(s.id) && isString(s.worktreeId) && worktreeIds.has(s.worktreeId) && KINDS.has(s.kind) && isString(s.title))
-    .map((s) => ({
-      id: s.id as string,
-      worktreeId: s.worktreeId as string,
-      kind: s.kind as AgentKind,
-      title: s.title as string,
-      status: 'idle',
-      startedAt: now,
-      lastActivityAt: now
-    }))
-
-  const active = isString(value.activeSessionId) && sessions.some((s) => s.id === value.activeSessionId)
-  return { projects, worktrees, sessions, activeSessionId: active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null) }
+/** Sessions in `prev` that are gone in `next`. */
+export function removedSessionIds(next: WorkspaceData, prev: WorkspaceData): SessionId[] {
+  const alive = new Set(next.sessions.map((s) => s.id))
+  return prev.sessions.filter((s) => !alive.has(s.id)).map((s) => s.id)
 }
 
 const TITLE_MAX_CHARS = 40

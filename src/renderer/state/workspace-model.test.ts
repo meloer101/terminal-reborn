@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { sanitizeWorkspaceFile } from '@shared/workspace-file'
 import {
   addProject,
   addSession,
   closeSession,
   EMPTY_WORKSPACE,
+  persistedStateChanged,
   projectOfSession,
+  removedSessionIds,
   removeProject,
   restoreWorkspace,
   serializeWorkspace,
@@ -83,38 +86,81 @@ describe('projectOfSession', () => {
 })
 
 describe('persistence', () => {
-  it('round-trips and restores sessions as fresh idle ones', () => {
-    const data = withSessions('claude', 'shell')
-    const live = { ...data, sessions: data.sessions.map((s) => ({ ...s, status: 'running' as const, currentAction: 'x' })) }
-    const restored = restoreWorkspace(serializeWorkspace(live), 5000)
+  const ui = { sidebarCollapsed: true, rightPanel: 'changes' as const }
+
+  it('round-trips; agent sessions come back not-started, shells have no phase, startedAt is kept', () => {
+    const data = withSessions('claude', 'shell') // s-3, s-4 (startedAt 1000)
+    const live: WorkspaceData = {
+      ...data,
+      sessions: data.sessions.map((s) => ({
+        ...s,
+        status: 'running' as const,
+        currentAction: 'x',
+        phase: 'ready' as const,
+        lastActivityAt: 4242,
+        ...(s.kind === 'claude' ? { agentSessionId: 'conv-1' } : {})
+      }))
+    }
+    const file = serializeWorkspace(live, ui, { 's-3': 'draft' })
+    expect(file.sidebarCollapsed).toBe(true)
+    expect(file.rightPanel).toBe('changes')
+    expect(file.drafts).toEqual({ 's-3': 'draft' })
+    // Everything live is left out of the file.
+    expect(JSON.stringify(file)).not.toMatch(/running|currentAction|phase|ready/)
+
+    const restored = restoreWorkspace(sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0))
     expect(restored.projects).toEqual(data.projects)
     expect(restored.worktrees).toEqual(data.worktrees)
-    expect(restored.sessions).toEqual(data.sessions.map((s) => ({ ...s, startedAt: 5000, lastActivityAt: 5000 })))
+    expect(restored.sessions).toEqual([
+      { id: 's-3', worktreeId: 'w-2', kind: 'claude', title: 'Claude Code', status: 'idle', startedAt: 1000, lastActivityAt: 4242, agentSessionId: 'conv-1', phase: 'not-started' },
+      { id: 's-4', worktreeId: 'w-2', kind: 'shell', title: '终端', status: 'idle', startedAt: 1000, lastActivityAt: 4242 }
+    ])
     expect(restored.activeSessionId).toBe(data.activeSessionId)
   })
 
-  it('drops malformed and orphaned entries', () => {
-    const raw = JSON.stringify({
-      projects: [{ id: 'p', name: 'p', rootPath: '/p' }, { id: 1 }],
-      worktrees: [
-        { id: 'w', projectId: 'p', branch: '', path: '/p', isMain: true },
-        { id: 'w2', projectId: 'gone', branch: '', path: '/x', isMain: true }
-      ],
-      sessions: [
-        { id: 's', worktreeId: 'w', kind: 'claude', title: 't' },
-        { id: 's2', worktreeId: 'w2', kind: 'claude', title: 't' },
-        { id: 's3', worktreeId: 'w', kind: 'gemini', title: 't' }
-      ],
-      activeSessionId: 's2'
-    })
-    const restored = restoreWorkspace(raw, 0)
-    expect(restored.sessions.map((s) => s.id)).toEqual(['s'])
-    expect(restored.worktrees.map((w) => w.id)).toEqual(['w'])
-    expect(restored.activeSessionId).toBe('s')
+  it('drops drafts of sessions that do not exist', () => {
+    const data = withSessions('claude')
+    expect(serializeWorkspace(data, ui, { 's-3': 'keep', gone: 'drop', 's-4': '' }).drafts).toEqual({ 's-3': 'keep' })
   })
 
-  it.each([null, '', '{', '[]', '42'])('falls back to an empty workspace for %j', (raw) => {
-    expect(restoreWorkspace(raw, 0)).toEqual(EMPTY_WORKSPACE)
+  it('restores nothing as an empty workspace', () => {
+    expect(restoreWorkspace(null)).toEqual(EMPTY_WORKSPACE)
+  })
+
+  it('a conversation id replaced later (after /clear) is what gets saved', () => {
+    const data = withSessions('codex')
+    const replaced = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'second' })) }
+    expect(serializeWorkspace(replaced, ui, {}).sessions[0]?.agentSessionId).toBe('second')
+  })
+})
+
+describe('persistedStateChanged', () => {
+  const ui = { sidebarCollapsed: false, rightPanel: null }
+  const base = { ...withSessions('claude'), ...ui }
+
+  it('ignores live status and activity', () => {
+    const live = { ...base, sessions: base.sessions.map((s) => ({ ...s, status: 'running' as const, currentAction: 'x', lastActivityAt: 9, phase: 'ready' as const })) }
+    expect(persistedStateChanged(live, base)).toBe(false)
+  })
+
+  it('notices structure, title, conversation id, selection and UI state', () => {
+    const first = base.sessions[0]!
+    expect(persistedStateChanged({ ...base, sessions: [] }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, sessions: [{ ...first, title: 'x' }] }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, sessions: [{ ...first, agentSessionId: 'c' }] }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, activeSessionId: null }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, sidebarCollapsed: true }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, rightPanel: 'graph' }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, projects: [...base.projects] }, base)).toBe(true)
+  })
+})
+
+describe('removedSessionIds', () => {
+  it('lists the sessions that disappeared', () => {
+    const data = withSessions('claude', 'codex')
+    expect(removedSessionIds(closeSession(data, 's-3'), data)).toEqual(['s-3'])
+    expect(removedSessionIds(removeProject(data, 'p-1'), data)).toEqual(['s-3', 's-4'])
+    expect(removedSessionIds(data, data)).toEqual([])
   })
 })
 

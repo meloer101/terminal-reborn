@@ -20,6 +20,15 @@ describe('parseSpawnOptions', () => {
     expect(() => parseSpawnOptions({ ...base, agent: 'bash' })).toThrow()
   })
 
+  it('accepts a resume id and rejects ones that could be read as an option or a shell word', () => {
+    expect(parseSpawnOptions({ ...base, agent: 'claude', resumeAgentSessionId: '3f2a9c1e-7b4d-4e08-9a55-0c1d2e3f4a5b' }).resumeAgentSessionId).toBe(
+      '3f2a9c1e-7b4d-4e08-9a55-0c1d2e3f4a5b'
+    )
+    for (const bad of ['', '--model', "a'b", 'a b', 5, 'a'.repeat(129)]) {
+      expect(() => parseSpawnOptions({ ...base, resumeAgentSessionId: bad })).toThrow()
+    }
+  })
+
   it.each([
     ['null', null],
     ['non-object', 'x'],

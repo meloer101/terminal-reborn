@@ -40,6 +40,53 @@ describe('agentArgv', () => {
   })
 })
 
+describe('resuming a conversation', () => {
+  const id = '3f2a9c1e-7b4d-4e08-9a55-0c1d2e3f4a5b'
+
+  it('claude: --resume <id> next to the hooks settings', () => {
+    expect(agentArgv('claude', '/tmp/x', { resumeAgentSessionId: id })).toEqual(['claude', '--resume', id])
+    expect(agentArgv('claude', '/tmp/x', { resumeAgentSessionId: id, claudeSettingsPath: '/s.json' })).toEqual([
+      'claude',
+      '--resume',
+      id,
+      '--settings',
+      '/s.json'
+    ])
+  })
+
+  it('codex: the resume subcommand comes first, then the per-launch -c overrides', () => {
+    expect(agentArgv('codex', '/a', { resumeAgentSessionId: id, codexConfig: ['hooks.x=1'] })).toEqual([
+      'codex',
+      'resume',
+      id,
+      '-c',
+      'check_for_update_on_startup=false',
+      '-c',
+      'projects={"/a"={trust_level="trusted"}}',
+      '-c',
+      'hooks.x=1'
+    ])
+  })
+
+  it('does not resume without an id, or with an id that is not a plain token', () => {
+    expect(agentArgv('claude', '/a', {})).toEqual(['claude'])
+    expect(agentArgv('claude', '/a', { resumeAgentSessionId: '' })).toEqual(['claude'])
+    expect(agentArgv('claude', '/a', { resumeAgentSessionId: '--dangerously-skip-permissions' })).toEqual(['claude'])
+    expect(agentArgv('codex', '/a', { resumeAgentSessionId: '$(reboot)' })).not.toContain('resume')
+  })
+
+  it('shell-quotes the id as one word', () => {
+    expect(agentShellArgs('claude', '/tmp', '/bin/zsh', { resumeAgentSessionId: id })[3]).toBe(`'claude' '--resume' '${id}'; exec '/bin/zsh' -l`)
+    expect(agentShellArgs('codex', '/a b', '/bin/zsh', { resumeAgentSessionId: id })[3]).toBe(
+      `'codex' 'resume' '${id}' '-c' 'check_for_update_on_startup=false' '-c' 'projects={"/a b"={trust_level="trusted"}}'; exec '/bin/zsh' -l`
+    )
+  })
+
+  it('a plain shell session ignores the id', () => {
+    expect(agentShellArgs('shell', '/tmp', '/bin/zsh', { resumeAgentSessionId: id })).toEqual(['-l'])
+  })
+})
+
 describe('agentShellArgs', () => {
   it('is a plain login shell for shell sessions', () => {
     expect(agentShellArgs('shell', '/tmp', '/bin/zsh')).toEqual(['-l'])

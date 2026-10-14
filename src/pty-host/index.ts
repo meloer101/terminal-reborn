@@ -66,7 +66,8 @@ function spawn(request: HostSpawnRequest): void {
       : request.agent && request.agent !== 'shell'
         ? agentShellArgs(request.agent, realpath(cwd), shell.command, {
             ...(request.claudeSettingsPath ? { claudeSettingsPath: request.claudeSettingsPath } : {}),
-            ...(request.codexConfig ? { codexConfig: request.codexConfig } : {})
+            ...(request.codexConfig ? { codexConfig: request.codexConfig } : {}),
+            ...(request.resumeAgentSessionId ? { resumeAgentSessionId: request.resumeAgentSessionId } : {})
           })
         : shell.args
 

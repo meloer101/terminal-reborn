@@ -8,6 +8,7 @@ import { releaseSessionsOf } from './pty'
 import { isQuitting } from './quit'
 
 let mainWindow: BrowserWindow | null = null
+import { restoreBounds, saveBounds } from './window-state'
 
 function baseOptions(): BrowserWindowConstructorOptions {
   return {
@@ -40,7 +41,10 @@ function load(win: BrowserWindow): void {
 }
 
 export function createMainWindow(): BrowserWindow {
-  const win = new BrowserWindow({ ...baseOptions(), width: 1440, height: 900, minWidth: 960, minHeight: 600, title: 'Terminal Reborn' })
+  const min = { minWidth: 960, minHeight: 600 }
+  const restored = restoreBounds({ width: 1440, height: 900 }, min)
+  const win = new BrowserWindow({ ...baseOptions(), ...restored.options, ...min, title: 'Terminal Reborn' })
+  saveBounds(win, restored)
   mainWindow = win
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null

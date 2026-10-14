@@ -17,14 +17,24 @@ export function setTerminalAppearance(next: TerminalAppearance): void {
 }
 
 /** Creates the terminal for a session on first call; later calls return the same one. */
-export function ensureTerminal(sessionId: SessionId, cwd: string, agent: AgentKind = 'shell'): SessionTerminal {
+export function ensureTerminal(
+  sessionId: SessionId,
+  cwd: string,
+  agent: AgentKind = 'shell',
+  resumeAgentSessionId?: string
+): SessionTerminal {
   let terminal = terminals.get(sessionId)
   if (!terminal) {
-    terminal = new SessionTerminal(sessionId, cwd, agent)
+    terminal = new SessionTerminal(sessionId, cwd, agent, resumeAgentSessionId)
     if (appearance) terminal.surface.setAppearance(appearance)
     terminals.set(sessionId, terminal)
   }
   return terminal
+}
+
+/** Whether the session's PTY is running right now. */
+export function isTerminalAlive(sessionId: SessionId): boolean {
+  return terminals.get(sessionId)?.alive ?? false
 }
 
 /** The session's surface, or undefined until the session has been viewed once. */
