@@ -24,7 +24,7 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   const group = sidebar.locator('section[aria-label="docs-site"]')
   await expect(group).toBeVisible()
   await expect(group.getByRole('button', { name: '新建会话', exact: true })).toBeVisible()
-  await expect(group.locator('h2 + span')).toHaveCount(0) // no "0" count on an empty project
+  await expect(group.locator('> div').first()).toHaveText('docs-site') // no "0" count on an empty project
 
   // Actions appear on hover and replace the count.
   const header = sidebar.locator('section[aria-label="acme-web"] > div').first()
