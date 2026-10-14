@@ -2,6 +2,12 @@
 import { app, BrowserWindow, Menu, shell, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
+import { viewMenuItems } from '@shared/lifecycle'
+import { clearActivity } from './activity'
+import { releaseSessionsOf } from './pty'
+import { isQuitting } from './quit'
+
+let mainWindow: BrowserWindow | null = null
 
 function baseOptions(): BrowserWindowConstructorOptions {
   return {
@@ -35,6 +41,29 @@ function load(win: BrowserWindow): void {
 
 export function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({ ...baseOptions(), width: 1440, height: 900, minWidth: 960, minHeight: 600, title: 'Terminal Reborn' })
+  mainWindow = win
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
+  // The red close button only hides the window: agents keep running, and the Dock icon brings it back.
+  win.on('close', (event) => {
+    if (isQuitting() || process.platform !== 'darwin') return
+    event.preventDefault()
+    // A full-screen window must leave full screen first or macOS leaves an empty Space behind.
+    if (win.isFullScreen()) {
+      win.once('leave-full-screen', () => win.hide())
+      win.setFullScreen(false)
+    } else {
+      win.hide()
+    }
+  })
+  // A crashed renderer is reloaded; the workspace restores. Its terminals died with it, so release them.
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[main] renderer process gone:', details.reason, details.exitCode)
+    clearActivity(win.webContents)
+    releaseSessionsOf(win.webContents)
+    if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.webContents.reload()
+  })
   load(win)
   return win
 }
@@ -45,6 +74,19 @@ export function showSettings(win: BrowserWindow | null | undefined): void {
   if (!target) return
   target.show()
   target.webContents.send(IPC.uiShowSettings)
+}
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+}
+
+/** Shows (or recreates) the main window and focuses it: Dock click, second launch. */
+export function showMainWindow(): BrowserWindow {
+  const win = getMainWindow() ?? createMainWindow()
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  return win
 }
 
 /** macOS app menu: standard roles (copy/paste need the Edit menu) plus 设置… ⌘,. */
@@ -69,14 +111,10 @@ export function installAppMenu(): void {
     { role: 'editMenu' },
     {
       label: 'View',
-      submenu: [
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
-      ]
+      submenu: viewMenuItems(app.isPackaged).map((item): MenuItemConstructorOptions => (item === 'separator' ? { type: 'separator' } : { role: item }))
     },
-    { role: 'windowMenu' }
+    // Not `windowMenu`: its Close item owns ⌘W, which closes the active session instead (renderer).
+    { role: 'window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }] }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }

@@ -53,6 +53,28 @@ export function readViewport(sessionId: SessionId): string {
   return terminals.get(sessionId)?.surface.readScreen(0) ?? ''
 }
 
+const restartListeners = new Set<(sessionId: SessionId) => void>()
+
+/** Fires after a terminal's process was started again in place (see restartTerminal). */
+export function onTerminalRestarted(listener: (sessionId: SessionId) => void): () => void {
+  restartListeners.add(listener)
+  return () => {
+    restartListeners.delete(listener)
+  }
+}
+
+/**
+ * Starts a new process in an existing terminal whose process is gone, keeping its scrollback.
+ * With `resumeAgentSessionId` an agent picks its previous conversation back up. False if there is
+ * no such terminal or the process could not start.
+ */
+export async function restartTerminal(sessionId: SessionId, resumeAgentSessionId?: string): Promise<boolean> {
+  const terminal = terminals.get(sessionId)
+  if (!terminal || !(await terminal.restart(resumeAgentSessionId))) return false
+  for (const listener of [...restartListeners]) listener(sessionId)
+  return true
+}
+
 export function disposeTerminal(sessionId: SessionId): void {
   terminals.get(sessionId)?.dispose()
   terminals.delete(sessionId)

@@ -3,11 +3,14 @@
 import { app, ipcMain, utilityProcess, type UtilityProcess, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { IPC, type PtySpawnOptions } from '@shared/ipc'
+import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
 import type { HostEvent, HostRequest } from '../../pty-host/protocol'
 import { endAgentSession, prepareAgentLaunch } from '../hooks'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
+/** Crashes older than this no longer count towards the restart backoff. */
+const CRASH_WINDOW_MS = 60_000
 
 interface LiveSession {
   owner: WebContents
@@ -23,28 +26,55 @@ let host: UtilityProcess | null = null
 const sessions = new Map<string, LiveSession>()
 const pending = new Map<string, PendingSpawn>()
 const watchedOwners = new WeakSet<WebContents>()
+let crashTimes: number[] = []
+let restartTimer: ReturnType<typeof setTimeout> | null = null
 
 function ensureHost(): UtilityProcess {
   if (host) return host
   const child = utilityProcess.fork(join(__dirname, 'pty-host.js'), [], { serviceName: 'terminal-reborn-pty-host' })
   child.on('message', (event: HostEvent) => handleHostEvent(event))
-  child.on('exit', () => {
+  child.on('exit', (code) => {
     if (host !== child) return
     host = null
-    // The host died: every live terminal is gone with it.
-    for (const [id, session] of sessions) {
-      endAgentSession(id)
-      notifyExit(session.owner, id, -1)
-    }
-    sessions.clear()
-    for (const [id, spawn] of pending) {
-      clearTimeout(spawn.timer)
-      spawn.reject(new Error('pty host exited'))
-      pending.delete(id)
-    }
+    console.error(`[main] pty host exited unexpectedly (code ${code})`)
+    handleHostCrash()
   })
   host = child
   return child
+}
+
+/** The host died: every live terminal is gone with it. Tell each owner which sessions, and bring a host back. */
+function handleHostCrash(): void {
+  const lostByOwner = new Map<WebContents, string[]>()
+  for (const [id, session] of sessions) {
+    endAgentSession(id)
+    notifyExit(session.owner, id, -1)
+    lostByOwner.set(session.owner, [...(lostByOwner.get(session.owner) ?? []), id])
+  }
+  sessions.clear()
+  for (const [id, spawn] of pending) {
+    clearTimeout(spawn.timer)
+    spawn.reject(new Error('pty host exited'))
+    pending.delete(id)
+  }
+
+  const now = Date.now()
+  crashTimes = [...crashTimes.filter((t) => now - t < CRASH_WINDOW_MS), now]
+  // Restart in the background (with backoff for a crash loop). A spawn arriving earlier forks it lazily.
+  if (restartTimer) clearTimeout(restartTimer)
+  restartTimer = setTimeout(() => {
+    restartTimer = null
+    try {
+      ensureHost()
+    } catch (error) {
+      console.error('[main] could not restart the pty host:', error)
+    }
+  }, hostRestartDelay(crashTimes.length))
+
+  for (const [owner, sessionIds] of lostByOwner) {
+    if (owner.isDestroyed()) continue
+    owner.send(IPC.ptyHostRestarted, { sessionIds } satisfies HostRestartedEvent)
+  }
 }
 
 function send(message: HostRequest): void {
@@ -127,6 +157,11 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   })
 }
 
+/** Kills every terminal a window owns (its renderer crashed or the window is gone). */
+export function releaseSessionsOf(owner: WebContents): void {
+  killOwnedBy(owner)
+}
+
 function killOwnedBy(owner: WebContents): void {
   for (const [id, session] of sessions) {
     if (session.owner !== owner) continue
@@ -173,7 +208,9 @@ export function registerPtyHandlers(): void {
     if (id) send({ type: 'ack', id, count: parseAckCount(count) })
   })
 
-  app.on('before-quit', () => {
+  // `will-quit` (not `before-quit`): the quit guard may still cancel a quit after before-quit fired.
+  app.on('will-quit', () => {
+    if (restartTimer) clearTimeout(restartTimer)
     if (!host) return
     host.postMessage({ type: 'killAll' } satisfies HostRequest)
     host.kill()

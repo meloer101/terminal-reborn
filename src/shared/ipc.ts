@@ -2,9 +2,12 @@
 // The preload implements TrApi; main registers handlers for IPC channels.
 // Changing a signature here is a cross-track change — note it in the PR.
 
+import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { AgentKind, SessionId } from './types'
+
+export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
 export type Unsubscribe = () => void
 
@@ -40,6 +43,11 @@ export interface PtyApi {
   ack(sessionId: SessionId, count: number): void
   onData(sessionId: SessionId, listener: (data: string) => void): Unsubscribe
   onExit(sessionId: SessionId, listener: (exit: PtyExit) => void): Unsubscribe
+  /**
+   * The pty-host process died and was restarted: these sessions lost their terminal process (each
+   * also got onExit with code -1). Respawn them with spawn() to recover.
+   */
+  onHostRestarted(listener: (sessionIds: SessionId[]) => void): Unsubscribe
 }
 
 export type ImageExtension = 'png' | 'jpg' | 'gif' | 'webp'
@@ -78,25 +86,10 @@ export interface UiApi {
   openSettings(): void
   /** ⌘, from the app menu: show the settings dialog. */
   onShowSettings(listener: () => void): Unsubscribe
-  /** Native confirmation sheet on this window. Resolves true when the confirm button is chosen. */
-  confirm(options: ConfirmOptions): Promise<boolean>
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
-}
-
-export interface ConfirmOptions {
-  message: string
-  detail?: string
-  /** Label of the confirming button, e.g. "关闭会话". Cancel is always "取消". */
-  confirmLabel: string
-  /** Style the confirm button as destructive. */
-  destructive?: boolean
-}
-
-/** What main needs to know about live sessions (e.g. to confirm quitting). Sent by the renderer on change. */
-export interface ActivitySummary {
-  /** Sessions that are running or waiting on the user. */
-  active: number
+  /** Native confirmation sheet; resolves to true when the user picked the confirm button. */
+  confirm(options: ConfirmOptions): Promise<boolean>
 }
 
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
@@ -163,6 +156,8 @@ export const IPC = {
   ptyData: 'pty:data',
   /** main → renderer, payload { sessionId, exit } */
   ptyExit: 'pty:exit',
+  /** main → renderer, payload HostRestartedEvent */
+  ptyHostRestarted: 'pty:host-restarted',
   filesSaveTempImage: 'files:save-temp-image',
   uiPickFolder: 'ui:pick-folder',
   uiPopupMenu: 'ui:popup-menu',
@@ -181,6 +176,7 @@ export const IPC = {
   /** main → renderer: show the settings dialog */
   uiShowSettings: 'ui:show-settings',
   uiRevealInFinder: 'ui:reveal-in-finder',
+  uiConfirm: 'ui:confirm',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   /** main → every window, payload AppSettings */
@@ -189,7 +185,6 @@ export const IPC = {
   appVersion: 'app:version',
   appCheckForUpdates: 'app:check-for-updates',
   appReportActivity: 'app:report-activity',
-  uiConfirm: 'ui:confirm',
   /** sync */
   workspaceLoad: 'workspace:load',
   workspaceSave: 'workspace:save'

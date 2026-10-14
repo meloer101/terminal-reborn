@@ -60,6 +60,11 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     if (!Array.isArray(o.args) || o.args.length > MAX_ARGS) throw new Error('invalid args')
     result.args = o.args.map((arg) => parseString(arg, 'arg'))
   }
+  if (o.resumeAgentSessionId !== undefined) {
+    const id = parseString(o.resumeAgentSessionId, 'resume id')
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(id)) throw new Error('invalid resume id')
+    result.resumeAgentSessionId = id
+  }
   if (o.env !== undefined) {
     if (typeof o.env !== 'object' || o.env === null || Array.isArray(o.env)) throw new Error('invalid env')
     const entries = Object.entries(o.env as Record<string, unknown>)
