@@ -1,7 +1,8 @@
-import { _electron as electron, expect, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { launchApp } from './launch'
 
 test('app window opens with the shell regions', async () => {
-  const app = await electron.launch({ args: ['.'] })
+  const app = await launchApp()
   const page = await app.firstWindow()
   await expect(page).toHaveTitle('Terminal Reborn')
   for (const region of ['sidebar', 'main', 'terminal']) {
@@ -11,5 +12,7 @@ test('app window opens with the shell regions', async () => {
     () => typeof (globalThis as unknown as { tr?: { pty?: { spawn?: unknown } } }).tr?.pty?.spawn
   )
   expect(spawnType).toBe('function')
+  // A fresh profile has no sessions yet and offers to add a project.
+  await expect(page.getByRole('button', { name: '添加项目…' })).toBeVisible()
   await app.close()
 })

@@ -2,6 +2,10 @@ import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { registerFileHandlers } from './files'
 import { registerPtyHandlers } from './pty'
+import { registerUiHandlers } from './ui'
+
+// Lets e2e runs use a throwaway profile instead of the user's real workspace and drafts.
+if (process.env.TR_USER_DATA_DIR) app.setPath('userData', process.env.TR_USER_DATA_DIR)
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -42,6 +46,7 @@ function createMainWindow(): BrowserWindow {
 void app.whenReady().then(() => {
   registerFileHandlers()
   registerPtyHandlers()
+  registerUiHandlers()
   createMainWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()

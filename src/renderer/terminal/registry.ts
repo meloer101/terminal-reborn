@@ -1,7 +1,7 @@
 // Module-level registry of live terminals, keyed by session id. Terminals outlive React
 // re-renders; the integrator wires the composer's send executor to getSendIo().
 import type { SendIo } from '@shared/send-protocol'
-import type { SessionId } from '@shared/types'
+import type { AgentKind, SessionId } from '@shared/types'
 import { SessionTerminal } from './session-terminal'
 import type { TerminalSurface } from './surface'
 import type { XtermSurface } from './xterm-surface'
@@ -9,10 +9,10 @@ import type { XtermSurface } from './xterm-surface'
 const terminals = new Map<SessionId, SessionTerminal>()
 
 /** Creates the terminal for a session on first call; later calls return the same one. */
-export function ensureTerminal(sessionId: SessionId, cwd: string): SessionTerminal {
+export function ensureTerminal(sessionId: SessionId, cwd: string, agent: AgentKind = 'shell'): SessionTerminal {
   let terminal = terminals.get(sessionId)
   if (!terminal) {
-    terminal = new SessionTerminal(sessionId, cwd)
+    terminal = new SessionTerminal(sessionId, cwd, agent)
     terminals.set(sessionId, terminal)
   }
   return terminal
@@ -37,6 +37,11 @@ export function getSendIo(sessionId: SessionId): SendIo {
     write: (data) => window.tr.pty.write(sessionId, data),
     readScreen: () => terminals.get(sessionId)?.surface.readScreen(200) ?? ''
   }
+}
+
+/** Only the visible viewport: for detecting full-screen dialogs that are on screen right now. */
+export function readViewport(sessionId: SessionId): string {
+  return terminals.get(sessionId)?.surface.readScreen(0) ?? ''
 }
 
 export function disposeTerminal(sessionId: SessionId): void {

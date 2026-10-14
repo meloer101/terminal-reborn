@@ -50,6 +50,10 @@ const api: TrApi = {
   files: {
     pathForFile: (file) => webUtils.getPathForFile(file),
     saveTempImage: (data, extension) => ipcRenderer.invoke(IPC.filesSaveTempImage, data, extension)
+  },
+  ui: {
+    pickFolder: () => ipcRenderer.invoke(IPC.uiPickFolder),
+    popupMenu: (entries) => ipcRenderer.invoke(IPC.uiPopupMenu, entries)
   }
 }
 

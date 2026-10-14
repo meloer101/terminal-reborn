@@ -1,5 +1,6 @@
 // Validation for every pty IPC payload. The renderer is not trusted to send well-formed data.
 import type { PtySpawnOptions } from '@shared/ipc'
+import type { AgentKind } from '@shared/types'
 
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -9,6 +10,7 @@ const MAX_STRING = 32 * 1024
 const MAX_ARGS = 256
 const MAX_ENV = 256
 const MAX_DIMENSION = 1000
+const AGENT_KINDS: ReadonlySet<unknown> = new Set<AgentKind>(['claude', 'codex', 'shell'])
 
 export function parseSessionId(value: unknown): string {
   if (typeof value !== 'string' || !SESSION_ID.test(value)) throw new Error('invalid session id')
@@ -45,6 +47,10 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
   const { cols, rows } = parseSize(o.cols, o.rows)
   const result: PtySpawnOptions = { sessionId, cwd, cols, rows }
 
+  if (o.agent !== undefined) {
+    if (!AGENT_KINDS.has(o.agent)) throw new Error('invalid agent')
+    result.agent = o.agent as AgentKind
+  }
   if (o.command !== undefined) {
     const command = parseString(o.command, 'command')
     if (command.length === 0) throw new Error('invalid command')

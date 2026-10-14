@@ -1,9 +1,11 @@
 // Messages exchanged between main (src/main/pty) and the pty-host utilityProcess.
+import type { AgentKind } from '@shared/types'
 
 export interface HostSpawnRequest {
   type: 'spawn'
   id: string
   cwd: string
+  agent?: AgentKind
   command?: string
   args?: string[]
   env?: Record<string, string>

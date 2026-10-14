@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, type KeyboardEvent } from 'react'
 import { PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
+import { addProjectInteractive, openNewSessionMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
 import { NavItem } from './NavItem'
 import { ProjectHeader } from './ProjectHeader'
@@ -25,6 +26,7 @@ export function Sidebar() {
     }))
   )
   const listRef = useRef<HTMLDivElement>(null)
+  const onRowContextMenu = useCallback((id: string) => void openSessionContextMenu(id), [])
 
   const groups = useMemo(() => buildSidebarGroups({ projects, worktrees, sessions }), [projects, worktrees, sessions])
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
@@ -55,7 +57,7 @@ export function Sidebar() {
         </IconButton>
       </div>
       <nav className={styles.nav} aria-label="导航">
-        <NavItem icon={<Plus {...ICON} />} label="新任务" shortcut="⌘N" />
+        <NavItem icon={<Plus {...ICON} />} label="新任务" shortcut="⌘N" onClick={() => void openNewSessionMenu()} />
         <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut="⌘K" />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
@@ -69,10 +71,19 @@ export function Sidebar() {
                 selected={row.session.id === activeSessionId}
                 tabStop={row.session.id === tabStopId}
                 onSelect={setActiveSession}
+                onContextMenu={onRowContextMenu}
               />
             ))}
           </section>
         ))}
+        {groups.length === 0 && (
+          <div className={styles.empty}>
+            <p>还没有会话</p>
+            <button type="button" className={styles.emptyAction} onClick={() => void addProjectInteractive()}>
+              添加项目…
+            </button>
+          </div>
+        )}
       </div>
       <div className={styles.footer}>
         <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut="⌘," />

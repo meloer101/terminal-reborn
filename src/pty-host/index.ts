@@ -1,9 +1,10 @@
 // Entry for the Electron utilityProcess that owns all node-pty instances.
 // Talks to src/main/pty over process.parentPort using the messages in ./protocol.
-import { accessSync, chmodSync, constants } from 'node:fs'
+import { accessSync, chmodSync, constants, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import * as nodePty from 'node-pty'
+import { agentShellArgs } from '@shared/agent-launch'
 import { OutputBatcher } from './batcher'
 import { buildPtyEnv, resolveCwd, resolveShell } from './env'
 import { FlowControl } from './flow-control'
@@ -41,14 +42,29 @@ function ensureSpawnHelperExecutable(): void {
   }
 }
 
+/** Codex keys trust by real path (spike §6), so /tmp → /private/tmp matters. */
+function realpath(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
+}
+
 function spawn(request: HostSpawnRequest): void {
   const previous = sessions.get(request.id)
   if (previous) destroy(request.id, previous)
 
   const env = buildPtyEnv(process.env, request.env)
   const shell = resolveShell(env)
+  const cwd = resolveCwd(request.cwd, homedir())
   const command = request.command ?? shell.command
-  const args = request.command === undefined ? shell.args : (request.args ?? [])
+  const args =
+    request.command !== undefined
+      ? (request.args ?? [])
+      : request.agent && request.agent !== 'shell'
+        ? agentShellArgs(request.agent, realpath(cwd), shell.command)
+        : shell.args
 
   let proc: nodePty.IPty
   try {
@@ -56,7 +72,7 @@ function spawn(request: HostSpawnRequest): void {
       name: 'xterm-256color',
       cols: request.cols,
       rows: request.rows,
-      cwd: resolveCwd(request.cwd, homedir()),
+      cwd,
       env,
       encoding: 'utf8'
     })

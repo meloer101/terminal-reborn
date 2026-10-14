@@ -1,4 +1,5 @@
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { launchApp } from './launch'
 
 interface Hook {
   readScreen(sessionId: string, scrollbackLines?: number): string
@@ -38,7 +39,7 @@ test.describe.configure({ mode: 'serial' })
 test.setTimeout(60_000)
 
 test.beforeAll(async () => {
-  app = await electron.launch({ args: ['.'] })
+  app = await launchApp()
   page = await app.firstWindow()
   // Opt in to the screen-reading hook, then reload so it exists before the renderer boots.
   await page.addInitScript(() => {

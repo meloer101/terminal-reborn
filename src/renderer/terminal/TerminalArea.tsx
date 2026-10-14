@@ -3,18 +3,19 @@
 // switching sessions.
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { SessionId } from '@shared/types'
-import { useWorkspace } from '../state/workspace'
+import type { AgentKind, SessionId } from '@shared/types'
+import { launchKind, useWorkspace } from '../state/workspace'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals } from './registry'
 import styles from './TerminalArea.module.css'
 
 interface PaneProps {
   sessionId: SessionId
   cwd: string
+  agent: AgentKind
   active: boolean
 }
 
-function TerminalPane({ sessionId, cwd, active }: PaneProps) {
+function TerminalPane({ sessionId, cwd, agent, active }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   // Spawn lazily: nothing is created until the session has been active once.
   const [everActive, setEverActive] = useState(active)
@@ -23,8 +24,8 @@ function TerminalPane({ sessionId, cwd, active }: PaneProps) {
   useEffect(() => {
     const host = hostRef.current
     if (!everActive || !host) return
-    ensureTerminal(sessionId, cwd).attach(host)
-  }, [everActive, sessionId, cwd])
+    ensureTerminal(sessionId, cwd, agent).attach(host)
+  }, [everActive, sessionId, cwd, agent])
 
   // Refit + resize on show, and release the WebGL context while hidden.
   useEffect(() => {
@@ -83,6 +84,7 @@ export function TerminalArea() {
           key={session.id}
           sessionId={session.id}
           cwd={worktrees.find((w) => w.id === session.worktreeId)?.path ?? window.tr.homeDir}
+          agent={launchKind(session)}
           active={session.id === activeSessionId}
         />
       ))}

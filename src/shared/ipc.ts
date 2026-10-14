@@ -2,13 +2,18 @@
 // The preload implements TrApi; main registers handlers for IPC channels.
 // Changing a signature here is a cross-track change — note it in the PR.
 
-import type { SessionId } from './types'
+import type { AgentKind, SessionId } from './types'
 
 export type Unsubscribe = () => void
 
 export interface PtySpawnOptions {
   sessionId: SessionId
   cwd: string
+  /**
+   * Start this agent inside the user's login shell (see agent-launch.ts). Ignored when
+   * `command` is set; omitted or 'shell' gives a plain login shell.
+   */
+  agent?: AgentKind
   /** Defaults to the user's login shell. */
   command?: string
   args?: string[]
@@ -42,12 +47,26 @@ export interface FilesApi {
   saveTempImage(data: ArrayBuffer, extension: ImageExtension): Promise<string>
 }
 
+/** A native context-menu entry. Clicking an item resolves `popup()` with its id. */
+export type MenuEntry =
+  | { type: 'item'; id: string; label: string; enabled?: boolean }
+  | { type: 'submenu'; label: string; items: MenuEntry[] }
+  | { type: 'separator' }
+
+export interface UiApi {
+  /** Native folder picker; resolves to an absolute path, or null when cancelled. */
+  pickFolder(): Promise<string | null>
+  /** Native context menu at the cursor; resolves to the chosen item id, or null when dismissed. */
+  popupMenu(entries: MenuEntry[]): Promise<string | null>
+}
+
 export interface TrApi {
   platform: string
   /** User's home directory, for default cwd. */
   homeDir: string
   pty: PtyApi
   files: FilesApi
+  ui: UiApi
 }
 
 export const IPC = {
@@ -60,5 +79,7 @@ export const IPC = {
   ptyData: 'pty:data',
   /** main → renderer, payload { sessionId, exit } */
   ptyExit: 'pty:exit',
-  filesSaveTempImage: 'files:save-temp-image'
+  filesSaveTempImage: 'files:save-temp-image',
+  uiPickFolder: 'ui:pick-folder',
+  uiPopupMenu: 'ui:popup-menu'
 } as const

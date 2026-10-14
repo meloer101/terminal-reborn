@@ -44,3 +44,37 @@
   padding: var(--space-8) var(--space-8) var(--space-12);
   border-top: 1px solid var(--border-subtle);
 }
+
+/* No Figma screen for an empty workspace: a quiet line and one text action. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-12);
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.empty p {
+  margin: 0;
+}
+
+.emptyAction {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.emptyAction:hover {
+  color: var(--text-primary);
+}
+
+.emptyAction:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

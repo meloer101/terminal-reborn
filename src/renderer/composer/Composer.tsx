@@ -18,7 +18,7 @@ import {
 } from 'react'
 import { ArrowUp, AtSign, Image as ImageIcon, Paperclip, Square } from 'lucide-react'
 import type { SessionId } from '@shared/types'
-import { sendPassthrough, submitPrompt } from '../session-io'
+import { BLOCKING_DIALOG_HINT, sendPassthrough, submitPrompt, useBlockingDialog } from '../session-io'
 import { useActiveSession } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
 import { pathsInsertion, imageExtensionFor, pickPastedImage, restoreAfterFailure } from './attachments'
@@ -53,6 +53,7 @@ export function Composer() {
   const active = useActiveSession()
   const sessionId = active?.session.id ?? null
   const running = active?.session.status === 'running'
+  const blocked = useBlockingDialog(sessionId) !== null
 
   const [state, setState] = useState<EditorState>(() => ({
     sessionId,
@@ -101,7 +102,7 @@ export function Composer() {
 
   const submit = useCallback(async () => {
     const el = textareaRef.current
-    if (!sessionId || !el || sendingRef.current) return
+    if (!sessionId || !el || sendingRef.current || blocked) return
     const value = el.value
     if (value.trim().length === 0) return
     sendingRef.current = true
@@ -118,7 +119,7 @@ export function Composer() {
     } finally {
       sendingRef.current = false
     }
-  }, [sessionId, setText])
+  }, [sessionId, setText, blocked])
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!sessionId) return
@@ -208,7 +209,7 @@ export function Composer() {
     e.target.value = ''
   }
 
-  const canSend = sessionId !== null && text.trim().length > 0
+  const canSend = sessionId !== null && !blocked && text.trim().length > 0
   const visibleError = error && error.sessionId === sessionId ? error.message : null
 
   return (
@@ -228,7 +229,9 @@ export function Composer() {
         disabled={sessionId === null}
         spellCheck={false}
         aria-label="输入框"
-        placeholder={running ? '智能体运行中，↵ 发送会作为插话' : '输入任务或回复，↵ 发送，⇧↵ 换行'}
+        placeholder={
+          blocked ? BLOCKING_DIALOG_HINT : running ? '智能体运行中，↵ 发送会排队' : '输入任务或回复，↵ 发送，⇧↵ 换行'
+        }
         onChange={onChange}
         onKeyDown={onKeyDown}
         onPaste={onPaste}

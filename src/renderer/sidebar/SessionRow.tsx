@@ -11,10 +11,11 @@ interface Props {
   /** Roving tabindex: exactly one row in the list is reachable with Tab. */
   tabStop: boolean
   onSelect(id: string): void
+  onContextMenu?(id: string): void
 }
 
 /** Figma component `SessionRow` (11:51): 52px, glyph · title/activity · time/diff. */
-export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onSelect }: Props) {
+export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onSelect, onContextMenu }: Props) {
   const { session, secondary, attention, stat } = row
   const ref = useRef<HTMLButtonElement>(null)
 
@@ -34,6 +35,14 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
       aria-current={selected ? 'true' : undefined}
       tabIndex={tabStop ? 0 : -1}
       onClick={() => onSelect(session.id)}
+      onContextMenu={
+        onContextMenu &&
+        ((e) => {
+          e.preventDefault()
+          onSelect(session.id)
+          onContextMenu(session.id)
+        })
+      }
     >
       <span className={styles.glyph}>
         <StatusGlyph status={session.status} />

@@ -15,6 +15,11 @@ describe('parseSpawnOptions', () => {
     expect(parsed.env).toEqual({ FOO: 'bar' })
   })
 
+  it('accepts a known agent kind and rejects others', () => {
+    expect(parseSpawnOptions({ ...base, agent: 'codex' }).agent).toBe('codex')
+    expect(() => parseSpawnOptions({ ...base, agent: 'bash' })).toThrow()
+  })
+
   it.each([
     ['null', null],
     ['non-object', 'x'],

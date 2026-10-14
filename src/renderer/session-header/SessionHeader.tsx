@@ -25,7 +25,7 @@ export function SessionHeader() {
       {active && (
         <>
           <h1 className={styles.title}>{active.session.title}</h1>
-          {active.worktree && (
+          {active.worktree?.branch && (
             <span className={styles.branch}>
               <GitBranch size={16} strokeWidth={1.75} />
               {active.worktree.branch}
