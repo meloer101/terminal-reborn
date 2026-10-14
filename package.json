@@ -1,9 +1,11 @@
 {
   "name": "terminal-reborn",
   "productName": "Terminal Reborn",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A macOS terminal built for running many CLI coding agents in parallel",
   "license": "MIT",
+  "repository": "github:meloer101/terminal-reborn",
+  "homepage": "https://github.com/meloer101/terminal-reborn",
   "author": "jacobyu80",
   "private": true,
   "main": "./out/main/index.js",
@@ -21,7 +23,10 @@
     "test:e2e": "electron-vite build && playwright test",
     "check": "npm run typecheck && npm run lint && npm run test",
     "postinstall": "electron-builder install-app-deps && (chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true)",
-    "dist": "electron-vite build && electron-builder --mac"
+    "icon": "scripts/make-icon.sh",
+    "dist": "electron-vite build && electron-builder --mac --publish never",
+    "dist:dir": "electron-vite build && electron-builder --mac --dir --publish never",
+    "test:packaged": "playwright test -c playwright.packaged.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

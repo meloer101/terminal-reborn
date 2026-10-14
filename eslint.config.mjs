@@ -8,8 +8,14 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/main/**', 'src/preload/**', 'src/pty-host/**', 'e2e/**', '*.config.*'],
+    files: ['src/main/**', 'src/preload/**', 'src/pty-host/**', 'e2e/**', 'e2e-packaged/**', '*.config.*'],
     languageOptions: { globals: globals.node }
+  },
+  {
+    // Build-time CommonJS helpers (electron-builder hooks, icon rendering).
+    files: ['build/**/*.cjs', 'scripts/**/*.cjs'],
+    languageOptions: { globals: globals.node },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
   },
   {
     files: ['src/renderer/**'],
