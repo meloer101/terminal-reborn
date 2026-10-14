@@ -1,16 +1,43 @@
-// Live-session summary reported by the renderer (phase 2 · A1): main uses it to confirm quitting.
-import { ipcMain } from 'electron'
-import { IPC, type ActivitySummary } from '@shared/ipc'
+// Live-work summary reported by the renderer, read by the quit guard. Main cannot see sessions
+// itself (the workspace lives in the renderer), so it trusts the latest report from each window.
+import { ipcMain, type WebContents } from 'electron'
+import { IPC } from '@shared/ipc'
+import type { ActivitySummary } from '@shared/lifecycle'
 
-let summary: ActivitySummary = { active: 0 }
+const MAX_ACTIVE = 10_000
+/** webContents id → running + waiting sessions in that window. */
+const reports = new Map<number, number>()
 
+export function parseActivity(raw: unknown): ActivitySummary {
+  if (typeof raw !== 'object' || raw === null) throw new Error('invalid activity')
+  const active = (raw as Record<string, unknown>).active
+  if (typeof active !== 'number' || !Number.isFinite(active) || active < 0) throw new Error('invalid activity')
+  return { active: Math.min(MAX_ACTIVE, Math.floor(active)) }
+}
+
+/** Running + waiting sessions across all windows. */
 export function getActivity(): ActivitySummary {
-  return summary
+  let active = 0
+  for (const count of reports.values()) active += count
+  return { active }
+}
+
+/** Forgets a window's report (it crashed or reloaded; the renderer re-reports once it is back). */
+export function clearActivity(contents: WebContents): void {
+  reports.delete(contents.id)
 }
 
 export function registerActivityHandlers(): void {
-  ipcMain.on(IPC.appReportActivity, (_event, raw: unknown) => {
-    const active = typeof raw === 'object' && raw !== null ? (raw as { active?: unknown }).active : undefined
-    if (typeof active === 'number' && Number.isInteger(active) && active >= 0 && active < 10_000) summary = { active }
+  ipcMain.on(IPC.appReportActivity, (event, raw: unknown) => {
+    let summary: ActivitySummary
+    try {
+      summary = parseActivity(raw)
+    } catch {
+      return
+    }
+    const sender = event.sender
+    const id = sender.id
+    if (!reports.has(id)) sender.once('destroyed', () => reports.delete(id))
+    reports.set(id, summary.active)
   })
 }

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC, type PtyExit, type TrApi } from '@shared/ipc'
+import type { HostRestartedEvent } from '@shared/lifecycle'
 import type { SessionId } from '@shared/types'
 
 // One ipcRenderer listener per channel, fanned out by session id. Per-session listeners
@@ -53,7 +54,8 @@ const api: TrApi = {
     kill: (sessionId) => ipcRenderer.send(IPC.ptyKill, sessionId),
     ack: (sessionId, count) => ipcRenderer.send(IPC.ptyAck, sessionId, count),
     onData: (sessionId, listener) => dataListeners.add(sessionId, listener),
-    onExit: (sessionId, listener) => exitListeners.add(sessionId, listener)
+    onExit: (sessionId, listener) => exitListeners.add(sessionId, listener),
+    onHostRestarted: (listener) => listen<HostRestartedEvent>(IPC.ptyHostRestarted, (event) => listener(event.sessionIds))
   },
   files: {
     pathForFile: (file) => webUtils.getPathForFile(file),
@@ -74,12 +76,16 @@ const api: TrApi = {
     onEvent: (listener) => listen(IPC.agentEvent, listener),
     onPrompt: (listener) => listen(IPC.agentPrompt, listener),
     onPromptResolved: (listener) => listen(IPC.agentPromptResolved, listener),
-    respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision)
+    respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision),
+    getHooksHealth: () => ipcRenderer.invoke(IPC.agentGetHooksHealth),
+    onHooksHealth: (listener) => listen(IPC.agentHooksHealth, listener),
+    onSessionHooks: (listener) => listen(IPC.agentSessionHooks, listener)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
-    onChange: (listener) => listen(IPC.settingsChanged, listener)
+    onChange: (listener) => listen(IPC.settingsChanged, listener),
+    onSaveError: (listener) => listen(IPC.settingsSaveFailed, listener)
   },
   app: {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),

@@ -6,7 +6,10 @@ const codex = (event: string, payload: unknown) => normalizeHook('codex', event,
 
 describe('normalizeHook · codex lifecycle (real payloads)', () => {
   it('SessionStart', () => {
-    expect(codex('SessionStart', fx.SessionStart)).toEqual({ events: [{ type: 'session-start' }], clears: 'none' })
+    expect(codex('SessionStart', fx.SessionStart)).toEqual({
+      events: [{ type: 'session-start', agentSessionId: '00000000-0000-7000-8000-000000000000' }],
+      clears: 'none'
+    })
   })
 
   it('UserPromptSubmit carries the prompt and clears pending prompts', () => {

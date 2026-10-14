@@ -6,7 +6,23 @@ const claude = (event: string, payload: unknown) => normalizeHook('claude', even
 
 describe('normalizeHook · lifecycle events (real payloads)', () => {
   it('SessionStart', () => {
-    expect(claude('SessionStart', fx.SessionStart)).toEqual({ events: [{ type: 'session-start' }], clears: 'none' })
+    expect(claude('SessionStart', fx.SessionStart)).toEqual({
+      events: [{ type: 'session-start', agentSessionId: '00000000-0000-4000-8000-000000000000' }],
+      clears: 'none'
+    })
+  })
+
+  it('SessionStart without a usable session_id still starts the session', () => {
+    const start = { events: [{ type: 'session-start' }], clears: 'none' }
+    expect(claude('SessionStart', { ...fx.SessionStart, session_id: undefined })).toEqual(start)
+    expect(claude('SessionStart', { ...fx.SessionStart, session_id: 42 })).toEqual(start)
+    expect(claude('SessionStart', { ...fx.SessionStart, session_id: '--resume; rm -rf ~' })).toEqual(start)
+  })
+
+  it('a SessionStart after /clear carries the new conversation id', () => {
+    expect(claude('SessionStart', { ...fx.SessionStart, source: 'clear', session_id: 'new-id-1' }).events).toEqual([
+      { type: 'session-start', agentSessionId: 'new-id-1' }
+    ])
   })
 
   it('UserPromptSubmit carries the prompt and clears pending prompts', () => {

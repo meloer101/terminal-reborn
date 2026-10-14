@@ -79,6 +79,17 @@ export class StatusController {
     this.apply(sessionId, { type: 'pty-exit', code })
   }
 
+  /** The session's process was started again in place (pty-host recovery): forget that it ended. */
+  handleRestart(sessionId: SessionId): void {
+    const session = this.deps.sessions().find((s) => s.id === sessionId)
+    if (!session || !this.states.has(sessionId)) return
+    const now = this.deps.now()
+    this.states.set(sessionId, initialState(session.kind, now, { status: 'idle', viewing: false }))
+    this.deps.patch(sessionId, { status: 'idle', currentAction: undefined, lastActivityAt: now })
+    this.refreshViewing()
+    this.updateBadge()
+  }
+
   handleTitle(sessionId: SessionId, title: string): void {
     this.apply(sessionId, { type: 'title', title })
   }

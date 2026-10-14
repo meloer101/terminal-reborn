@@ -1,6 +1,7 @@
 // How a session's agent is started inside the user's login shell (PRD §4 F1 step 8,
 // docs/spikes/send-protocol.md §6). Pure: the pty-host supplies the shell and the real cwd.
 import type { AgentKind } from './types'
+import { isSafeAgentSessionId } from './workspace-file'
 
 /** Single-quotes a word for POSIX shells. */
 export function shellQuote(value: string): string {
@@ -28,12 +29,25 @@ export interface AgentLaunchOptions {
   claudeSettingsPath?: string
   /** TOML `key=value` overrides for Codex, each passed as its own `-c` (see src/main/hooks/codex-config.ts). */
   codexConfig?: readonly string[]
+  /**
+   * Continue this earlier conversation instead of starting a new one: `claude --resume <id>` /
+   * `codex resume <id>` (Codex 0.142.5 `codex resume [OPTIONS] [SESSION_ID]`). Ignored unless it is a safe id.
+   */
+  resumeAgentSessionId?: string
 }
 
 export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, options: AgentLaunchOptions = {}): string[] {
-  if (kind === 'claude') return options.claudeSettingsPath ? ['claude', '--settings', options.claudeSettingsPath] : ['claude']
+  const resumeId = isSafeAgentSessionId(options.resumeAgentSessionId) ? options.resumeAgentSessionId : undefined
+  if (kind === 'claude') {
+    return [
+      'claude',
+      ...(resumeId ? ['--resume', resumeId] : []),
+      ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : [])
+    ]
+  }
   return [
     'codex',
+    ...(resumeId ? ['resume', resumeId] : []),
     '-c',
     'check_for_update_on_startup=false',
     '-c',

@@ -1,20 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { createDraftStore, DRAFTS_STORAGE_KEY } from './drafts'
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const data = { ...initial }
-  return {
-    data,
-    getItem: (k: string) => data[k] ?? null,
-    setItem: (k: string, v: string) => {
-      data[k] = v
-    }
-  }
-}
+import { describe, expect, it, vi } from 'vitest'
+import { createDraftStore } from './drafts'
 
 describe('draft store', () => {
   it('keeps drafts separate per session', () => {
-    const store = createDraftStore(memoryStorage())
+    const store = createDraftStore()
     store.set('a', 'one')
     store.set('b', 'two')
     expect(store.get('a')).toBe('one')
@@ -22,44 +11,46 @@ describe('draft store', () => {
     expect(store.get('c')).toBe('')
   })
 
-  it('persists across store instances (app restart)', () => {
-    const storage = memoryStorage()
-    createDraftStore(storage).set('a', '多行\n草稿')
-    expect(createDraftStore(storage).get('a')).toBe('多行\n草稿')
+  it('starts from saved drafts and ignores empty ones', () => {
+    const store = createDraftStore({ a: '多行\n草稿', b: '' })
+    expect(store.get('a')).toBe('多行\n草稿')
+    expect(store.snapshot()).toEqual({ a: '多行\n草稿' })
   })
 
   it('removes the entry when text becomes empty', () => {
-    const storage = memoryStorage()
-    const store = createDraftStore(storage)
+    const store = createDraftStore()
     store.set('a', 'x')
     store.set('a', '')
-    expect(JSON.parse(storage.data[DRAFTS_STORAGE_KEY] ?? '')).toEqual({})
+    expect(store.snapshot()).toEqual({})
   })
 
-  it('ignores corrupt or malformed persisted data', () => {
-    expect(createDraftStore(memoryStorage({ [DRAFTS_STORAGE_KEY]: '{not json' })).get('a')).toBe('')
-    expect(createDraftStore(memoryStorage({ [DRAFTS_STORAGE_KEY]: '[1,2]' })).get('a')).toBe('')
-    const mixed = memoryStorage({ [DRAFTS_STORAGE_KEY]: '{"a":5,"b":"ok"}' })
-    expect(createDraftStore(mixed).get('a')).toBe('')
-    expect(createDraftStore(mixed).get('b')).toBe('ok')
+  it('deletes the draft of a closed session', () => {
+    const onChange = vi.fn()
+    const store = createDraftStore({ a: 'x', b: 'y' }, onChange)
+    store.remove('a')
+    expect(store.get('a')).toBe('')
+    expect(store.snapshot()).toEqual({ b: 'y' })
+    expect(onChange).toHaveBeenCalledTimes(1)
+    store.remove('a')
+    expect(onChange).toHaveBeenCalledTimes(1)
   })
 
-  it('works without storage', () => {
-    const store = createDraftStore(null)
+  it('reports real changes only', () => {
+    const onChange = vi.fn()
+    const store = createDraftStore({}, onChange)
+    store.set('a', '')
+    expect(onChange).not.toHaveBeenCalled()
     store.set('a', 'x')
-    expect(store.get('a')).toBe('x')
+    store.set('a', 'x')
+    store.set('a', 'xy')
+    store.set('a', '')
+    expect(onChange).toHaveBeenCalledTimes(3)
   })
 
-  it('survives a throwing storage', () => {
-    const store = createDraftStore({
-      getItem: () => {
-        throw new Error('blocked')
-      },
-      setItem: () => {
-        throw new Error('quota')
-      }
-    })
-    store.set('a', 'x')
+  it('snapshot is a copy', () => {
+    const store = createDraftStore({ a: 'x' })
+    const copy = store.snapshot()
+    copy.a = 'changed'
     expect(store.get('a')).toBe('x')
   })
 })

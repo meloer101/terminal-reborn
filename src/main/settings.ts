@@ -1,30 +1,29 @@
 // Settings persistence (PRD F7): <userData>/settings.json, sanitized on read and write, broadcast to
 // every window on change. Main-process consumers (window vibrancy, …) subscribe with onSettingsChange.
+// Disk handling (corrupt-file backup, the write chain) lives in ./settings-file.ts.
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { readFileSync } from 'node:fs'
-import { rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { IPC } from '@shared/ipc'
-import { applySettingsPatch, sanitizeSettings, type AppSettings } from '@shared/settings'
+import { IPC, type SettingsSaveError } from '@shared/ipc'
+import { applySettingsPatch, type AppSettings } from '@shared/settings'
+import { loadSettingsFile, SettingsWriter } from './settings-file'
 
 let current: AppSettings | null = null
 const listeners = new Set<(settings: AppSettings) => void>()
-let writeChain: Promise<void> = Promise.resolve()
+let writer: SettingsWriter | null = null
 
 function file(): string {
   return join(app.getPath('userData'), 'settings.json')
 }
 
-export function getSettings(): AppSettings {
-  if (!current) {
-    let raw: unknown = null
-    try {
-      raw = JSON.parse(readFileSync(file(), 'utf8'))
-    } catch {
-      // Missing or unreadable: defaults.
-    }
-    current = sanitizeSettings(raw)
+function broadcastSaveError(error: Error): void {
+  const payload: SettingsSaveError = { message: error.message }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.webContents.isDestroyed()) win.webContents.send(IPC.settingsSaveFailed, payload)
   }
+}
+
+export function getSettings(): AppSettings {
+  if (!current) current = loadSettingsFile(file()).settings
   return current
 }
 
@@ -33,23 +32,14 @@ export function onSettingsChange(listener: (settings: AppSettings) => void): () 
   return () => listeners.delete(listener)
 }
 
-function persist(settings: AppSettings): Promise<void> {
-  // Serialize writes; write-then-rename so a crash never leaves a truncated file.
-  writeChain = writeChain.then(async () => {
-    const tmp = `${file()}.tmp`
-    await writeFile(tmp, JSON.stringify(settings, null, 2))
-    await rename(tmp, file())
-  })
-  return writeChain.catch(() => {})
-}
-
 export async function updateSettings(patch: unknown): Promise<AppSettings> {
   const previous = getSettings()
   const next = applySettingsPatch(previous, patch)
   // No-op patches neither write nor broadcast (keeps onChange → update round trips from looping).
   if (JSON.stringify(next) === JSON.stringify(previous)) return previous
   current = next
-  await persist(next)
+  writer ??= new SettingsWriter(file(), broadcastSaveError)
+  await writer.write(next)
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.webContents.isDestroyed()) win.webContents.send(IPC.settingsChanged, next)
   }

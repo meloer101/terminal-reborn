@@ -8,6 +8,7 @@ import { agentShellArgs } from '@shared/agent-launch'
 import { OutputBatcher } from './batcher'
 import { buildPtyEnv, resolveCwd, resolveShell } from './env'
 import { FlowControl } from './flow-control'
+import { guarded } from './guard'
 import type { HostEvent, HostRequest, HostSpawnRequest } from './protocol'
 
 interface PtySession {
@@ -65,7 +66,8 @@ function spawn(request: HostSpawnRequest): void {
       : request.agent && request.agent !== 'shell'
         ? agentShellArgs(request.agent, realpath(cwd), shell.command, {
             ...(request.claudeSettingsPath ? { claudeSettingsPath: request.claudeSettingsPath } : {}),
-            ...(request.codexConfig ? { codexConfig: request.codexConfig } : {})
+            ...(request.codexConfig ? { codexConfig: request.codexConfig } : {}),
+            ...(request.resumeAgentSessionId ? { resumeAgentSessionId: request.resumeAgentSessionId } : {})
           })
         : shell.args
 
@@ -88,65 +90,71 @@ function spawn(request: HostSpawnRequest): void {
   const session: PtySession = { proc, batcher, flow: new FlowControl(), paused: false }
   sessions.set(request.id, session)
 
-  proc.onData((data) => {
-    batcher.append(data)
-    if (session.flow.onOutput(data.length) && !session.paused) {
-      session.paused = true
-      proc.pause()
-    }
-  })
-  proc.onExit(({ exitCode, signal }) => {
-    batcher.flush()
-    batcher.dispose()
-    // A replaced session's late exit must not report on the new one.
-    if (sessions.get(request.id) !== session) return
-    sessions.delete(request.id)
-    post({ type: 'exit', id: request.id, exitCode, ...(signal ? { signal } : {}) })
-  })
+  proc.onData((data) =>
+    guarded(`data ${request.id}`, () => {
+      batcher.append(data)
+      if (session.flow.onOutput(data.length) && !session.paused) {
+        session.paused = true
+        proc.pause()
+      }
+    })
+  )
+  proc.onExit(({ exitCode, signal }) =>
+    guarded(`exit ${request.id}`, () => {
+      guarded(`flush ${request.id}`, () => batcher.flush())
+      batcher.dispose()
+      // A replaced session's late exit must not report on the new one.
+      if (sessions.get(request.id) !== session) return
+      sessions.delete(request.id)
+      post({ type: 'exit', id: request.id, exitCode, ...(signal ? { signal } : {}) })
+    })
+  )
   post({ type: 'spawned', id: request.id, pid: proc.pid })
 }
 
 function destroy(id: string, session: PtySession): void {
   sessions.delete(id)
-  session.batcher.dispose()
-  try {
-    session.proc.kill()
-  } catch {
-    // Already gone.
-  }
+  guarded(`dispose ${id}`, () => session.batcher.dispose())
+  // An already-gone process throws here; that is fine, but never let it escape.
+  guarded(`kill ${id}`, () => session.proc.kill())
 }
 
+/** Every per-session operation is guarded: a PTY that throws (EBADF, already exited, ...) only costs itself. */
 function handle(message: HostRequest): void {
   switch (message.type) {
     case 'spawn':
-      spawn(message)
+      if (!guarded(`spawn ${message.id}`, () => spawn(message))) {
+        post({ type: 'spawn-error', id: message.id, message: 'the terminal host failed to start the process' })
+      }
       break
     case 'write':
-      sessions.get(message.id)?.proc.write(message.data)
+      guarded(`write ${message.id}`, () => sessions.get(message.id)?.proc.write(message.data))
       break
     case 'resize':
-      try {
-        sessions.get(message.id)?.proc.resize(message.cols, message.rows)
-      } catch {
-        // The PTY exited between the renderer's resize and now.
-      }
+      // The PTY may have exited between the renderer's resize and now.
+      guarded(`resize ${message.id}`, () => sessions.get(message.id)?.proc.resize(message.cols, message.rows))
       break
     case 'kill':
-      sessions.get(message.id)?.proc.kill()
+      guarded(`kill ${message.id}`, () => sessions.get(message.id)?.proc.kill())
       break
-    case 'ack': {
-      const session = sessions.get(message.id)
-      if (session?.flow.onAck(message.count) && session.paused) {
-        session.paused = false
-        session.proc.resume()
-      }
+    case 'ack':
+      guarded(`ack ${message.id}`, () => {
+        const session = sessions.get(message.id)
+        if (session?.flow.onAck(message.count) && session.paused) {
+          session.paused = false
+          session.proc.resume()
+        }
+      })
       break
-    }
     case 'killAll':
       for (const [id, session] of [...sessions]) destroy(id, session)
       break
   }
 }
 
-ensureSpawnHelperExecutable()
-process.parentPort.on('message', (event) => handle(event.data as HostRequest))
+// Last line of defence: log and keep serving the other terminals instead of dying with the first bug.
+process.on('uncaughtException', (error) => console.error('[pty-host] uncaughtException', error))
+process.on('unhandledRejection', (reason) => console.error('[pty-host] unhandledRejection', reason))
+
+guarded('ensure spawn-helper', ensureSpawnHelperExecutable)
+process.parentPort.on('message', (event) => guarded('message', () => handle(event.data as HostRequest)))

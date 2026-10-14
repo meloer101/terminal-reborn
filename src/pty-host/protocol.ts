@@ -13,6 +13,8 @@ export interface HostSpawnRequest {
   claudeSettingsPath?: string
   /** `-c` override values for `codex` (hook definitions + trust pins, set by main/hooks). */
   codexConfig?: string[]
+  /** Relaunch the agent into this earlier conversation (see agent-launch.ts). */
+  resumeAgentSessionId?: string
   cols: number
   rows: number
 }

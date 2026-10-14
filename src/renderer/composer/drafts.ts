@@ -1,64 +1,32 @@
-// Per-session composer drafts, persisted so they survive session switches and restarts.
+// Per-session composer drafts. They live in memory and are saved with the workspace (main-owned
+// `workspace.json`, see state/persistence.ts); a draft is deleted when its session is closed.
 import type { SessionId } from '@shared/types'
-
-export const DRAFTS_STORAGE_KEY = 'tr.composer.drafts.v1'
-
-type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
 export interface DraftStore {
   get(sessionId: SessionId): string
   /** Empty text removes the draft. */
   set(sessionId: SessionId, text: string): void
+  /** Deletes the draft of a closed session. */
+  remove(sessionId: SessionId): void
+  /** All non-empty drafts (a copy), for saving. */
+  snapshot(): Record<SessionId, string>
 }
 
-function parse(raw: string | null): Record<string, string> {
-  if (!raw) return {}
-  try {
-    const value: unknown = JSON.parse(raw)
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(value)) if (typeof v === 'string' && v.length > 0) out[k] = v
-    return out
-  } catch {
-    return {}
-  }
-}
-
-/** `storage` may be null (unavailable); drafts then live in memory only. */
-export function createDraftStore(storage: StorageLike | null): DraftStore {
-  let drafts: Record<string, string> | null = null
-
-  function load(): Record<string, string> {
-    if (drafts) return drafts
-    let raw: string | null
-    try {
-      raw = storage?.getItem(DRAFTS_STORAGE_KEY) ?? null
-    } catch {
-      raw = null
-    }
-    drafts = parse(raw)
-    return drafts
-  }
+/** `onChange` runs after every real change (not for writes that leave a draft as it was). */
+export function createDraftStore(initial: Readonly<Record<SessionId, string>> = {}, onChange?: () => void): DraftStore {
+  const drafts = new Map<SessionId, string>(Object.entries(initial).filter(([, text]) => text.length > 0))
 
   return {
-    get: (id) => load()[id] ?? '',
+    get: (id) => drafts.get(id) ?? '',
     set(id, text) {
-      const d = load()
-      if (text.length === 0) delete d[id]
-      else d[id] = text
-      try {
-        storage?.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(d))
-      } catch {
-        // Quota or privacy mode: keep the in-memory copy.
-      }
-    }
-  }
-}
-
-export function browserStorage(): StorageLike | null {
-  try {
-    return globalThis.localStorage ?? null
-  } catch {
-    return null
+      if ((drafts.get(id) ?? '') === text) return
+      if (text.length === 0) drafts.delete(id)
+      else drafts.set(id, text)
+      onChange?.()
+    },
+    remove(id) {
+      if (drafts.delete(id)) onChange?.()
+    },
+    snapshot: () => Object.fromEntries(drafts)
   }
 }

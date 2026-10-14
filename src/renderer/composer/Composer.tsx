@@ -23,11 +23,10 @@ import { useActiveSession } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
 import { pathsInsertion, imageExtensionFor, pickPastedImage, restoreAfterFailure } from './attachments'
 import { decideKey, isFocusShortcut } from './composer-keys'
-import { browserStorage, createDraftStore } from './drafts'
+import { drafts } from '../state/persistence'
 import styles from './Composer.module.css'
 
 const MAX_LINES = 10
-const drafts = createDraftStore(browserStorage())
 
 interface EditorState {
   sessionId: SessionId | null

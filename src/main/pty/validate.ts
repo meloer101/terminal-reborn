@@ -1,6 +1,7 @@
 // Validation for every pty IPC payload. The renderer is not trusted to send well-formed data.
 import type { PtySpawnOptions } from '@shared/ipc'
 import type { AgentKind } from '@shared/types'
+import { isSafeAgentSessionId } from '@shared/workspace-file'
 
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -51,6 +52,10 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     if (!AGENT_KINDS.has(o.agent)) throw new Error('invalid agent')
     result.agent = o.agent as AgentKind
   }
+  if (o.resumeAgentSessionId !== undefined) {
+    if (!isSafeAgentSessionId(o.resumeAgentSessionId)) throw new Error('invalid resume id')
+    result.resumeAgentSessionId = o.resumeAgentSessionId
+  }
   if (o.command !== undefined) {
     const command = parseString(o.command, 'command')
     if (command.length === 0) throw new Error('invalid command')
@@ -59,6 +64,11 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
   if (o.args !== undefined) {
     if (!Array.isArray(o.args) || o.args.length > MAX_ARGS) throw new Error('invalid args')
     result.args = o.args.map((arg) => parseString(arg, 'arg'))
+  }
+  if (o.resumeAgentSessionId !== undefined) {
+    const id = parseString(o.resumeAgentSessionId, 'resume id')
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(id)) throw new Error('invalid resume id')
+    result.resumeAgentSessionId = id
   }
   if (o.env !== undefined) {
     if (typeof o.env !== 'object' || o.env === null || Array.isArray(o.env)) throw new Error('invalid env')
