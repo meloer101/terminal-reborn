@@ -42,7 +42,6 @@
 .footer {
   flex: none;
   padding: var(--space-8) var(--space-8) var(--space-12);
-  border-top: 1px solid var(--border-subtle);
 }
 
 /* No Figma screen for an empty workspace: a quiet line and one text action. */

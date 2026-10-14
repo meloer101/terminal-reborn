@@ -1,12 +1,16 @@
-/* Figma PromptBar 11:173 — 16/12 padding, 12 gap, hairline on top. Head: 14 glyph, 10 gap. Options: 24 indent, 8 gap. */
+/* Figma PromptBar 11:173 — 16/12 padding, 12 gap. Head: 14 glyph, 10 gap. Options: 24 indent, 8 gap.
+   Presented as a floating card stacked above the composer card. */
 .bar {
   flex: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-12);
+  margin: 0 var(--space-12) var(--space-8);
   padding: var(--space-12) var(--space-16);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-sidebar);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
   -webkit-app-region: no-drag;
 }
 

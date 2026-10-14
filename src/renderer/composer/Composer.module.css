@@ -1,12 +1,16 @@
-/* Figma Composer 11:172 — 12/16/8 padding, 8 gap, 14/22 text, 28px toolbar. */
+/* Figma Composer 11:172 — 12/16/8 padding, 8 gap, 14/22 text, 28px toolbar; presented as a floating card. */
+/* A card floating over the terminal: inset from the main area's edges, hairline border, soft shadow. */
 .composer {
   flex: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+  margin: 0 var(--space-12) var(--space-12);
   padding: var(--space-12) var(--space-16) var(--space-8);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-sidebar);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
 }
 
 .composer[data-dragging='true'] {
