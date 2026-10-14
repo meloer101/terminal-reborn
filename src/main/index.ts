@@ -6,6 +6,7 @@ import { registerHookHandlers } from './hooks'
 import { registerPtyHandlers } from './pty'
 import { registerSettingsHandlers } from './settings'
 import { registerUiHandlers } from './ui'
+import { registerUpdateHandlers } from './updates'
 import { createMainWindow, installAppMenu, openSettingsWindow } from './windows'
 
 // Lets e2e runs use a throwaway profile instead of the user's real workspace and drafts.
@@ -15,8 +16,6 @@ function registerAppHandlers(): void {
   ipcMain.on(IPC.appVersion, (event) => {
     event.returnValue = app.getVersion()
   })
-  // Replaced by the release track's GitHub update check.
-  ipcMain.handle(IPC.appCheckForUpdates, () => null)
   ipcMain.on(IPC.uiOpenSettings, () => openSettingsWindow())
 }
 
@@ -28,6 +27,7 @@ void app.whenReady().then(() => {
   registerHookHandlers()
   registerPtyHandlers()
   registerUiHandlers()
+  registerUpdateHandlers()
   installAppMenu()
   createMainWindow()
   app.on('activate', () => {

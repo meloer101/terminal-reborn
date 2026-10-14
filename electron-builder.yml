@@ -6,13 +6,27 @@ directories:
 files:
   - out/**
   - package.json
+  # node-pty ships prebuilds for every platform; keep only what macOS needs.
+  - '!node_modules/node-pty/prebuilds/win32-*/**'
+  - '!node_modules/node-pty/{build,deps,src,scripts,typings,node-addon-api}/**'
+  - '!node_modules/node-pty/lib/**/*.{test.js,map}'
 extraResources:
   # Agent hook relay (src/main/hooks): found at process.resourcesPath/hooks when packaged.
   - from: resources/hooks
     to: hooks
+# node-pty is N-API: its per-arch prebuilds are ABI-stable, so skip @electron/rebuild. Rebuilding would
+# put a host-arch build/Release/pty.node (which node-pty prefers over prebuilds/) into the other arch's bundle.
+npmRebuild: false
+# Makes node-pty's spawn-helper executable before signing (build/after-pack.cjs).
+afterPack: build/after-pack.cjs
 asarUnpack:
   - node_modules/node-pty/**
 mac:
+  icon: build/icon.icns
+  # Chromium ships ~55 locale packs the app never uses (its UI copy is Chinese/English).
+  electronLanguages: [en, zh_CN, zh_TW]
+  # Same pattern for every target so the arm64 and x64 downloads are unambiguous.
+  artifactName: Terminal-Reborn-${version}-${arch}.${ext}
   category: public.app-category.developer-tools
   # Ad-hoc signature only (no Apple Developer ID yet). Users clear quarantine
   # once after download; see README. Switch to a Developer ID + notarize later.
