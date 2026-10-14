@@ -3,8 +3,8 @@
 一个为并行运行多个 CLI coding agent（Claude Code、Codex）而做的 macOS 终端。
 A macOS terminal for running many CLI coding agents in parallel.
 
-> 状态：开发早期（M0）。还不能日常使用。
-> Status: early development (M0). Not usable yet.
+> 状态：v0.1.0 首个公开版本，仅 macOS，尚未做 Apple 公证。
+> Status: v0.1.0, first public release. macOS only, not yet notarized.
 
 它保留 agent 原生的终端界面，并在其上补齐：
 
@@ -25,18 +25,34 @@ npm install
 npm run dev        # 启动开发版 / run the app with hot reload
 npm run check      # typecheck + lint + unit tests
 npm run test:e2e   # 构建并运行 Electron 冒烟测试 / build + Electron smoke test
+npm run dist       # 打包 dmg + zip（arm64 + x64）到 release/ / build installers into release/
 ```
 
 文档 / Docs：[PRD 与路线图](docs/PRD.md) · [产品简报](docs/product/product-brief.md) · [竞品调研](docs/research/2026-10-13-competitive-research.md) · [参与贡献](CONTRIBUTING.md)
 
-## 安装未签名版本 / Installing unsigned builds
+## 安装 / Install
 
-在有 Apple Developer ID 之前，发布的版本只有 ad-hoc 签名。下载后运行一次：
-Until releases are signed with a Developer ID, clear the quarantine flag once after download:
+**要求 / Requirements**：macOS 13 或更高（Apple 芯片或 Intel）；已安装并登录 [Claude Code](https://docs.claude.com/en/docs/claude-code) 和/或 [Codex](https://github.com/openai/codex) 命令行。
+macOS 13+ (Apple Silicon or Intel), with the Claude Code and/or Codex CLI installed and signed in.
+
+1. 到 [Releases](https://github.com/meloer101/terminal-reborn/releases) 下载：Apple 芯片选 `arm64`，Intel 选 `x64`；`.dmg` 或 `.zip` 任选。
+   Download from Releases: `arm64` for Apple Silicon, `x64` for Intel; either `.dmg` or `.zip`.
+2. 把 **Terminal Reborn** 拖进「应用程序」。
+   Drag **Terminal Reborn** into Applications.
+3. 在有 Apple Developer ID 之前，发布的版本只有 ad-hoc 签名，macOS 会因为下载隔离标记拒绝打开。首次打开前运行一次：
+   Until releases are signed with a Developer ID, macOS refuses to open the downloaded app because of its quarantine flag. Run this once before the first launch:
 
 ```bash
 xattr -cr "/Applications/Terminal Reborn.app"
 ```
+
+   也可以先尝试打开一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。
+   Alternatively, try to open it once, then click "Open Anyway" in System Settings → Privacy & Security.
+
+有新版本时应用会提示一次，点击通知打开发布页；它不会自动下载或安装，也没有任何遥测。
+When a newer release exists the app shows one notification that opens the release page; nothing is downloaded or installed automatically, and there is no telemetry.
+
+维护者发版流程见 [docs/releasing.md](docs/releasing.md)。 Maintainers: see [docs/releasing.md](docs/releasing.md).
 
 ## License
 
