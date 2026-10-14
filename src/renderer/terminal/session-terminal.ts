@@ -54,19 +54,49 @@ export class SessionTerminal {
       () => resize.dispose()
     )
 
+    await this.spawnProcess()
+  }
+
+  /** Spawns the PTY at the current size; false when it could not be started. */
+  private async spawnProcess(resumeAgentSessionId?: string): Promise<boolean> {
+    const pty = window.tr.pty
+    const id = this.sessionId
     const { cols, rows } = this.surface.fit()
     try {
-      await pty.spawn({ sessionId: id, cwd: this.cwd, agent: this.agent, cols, rows })
+      await pty.spawn({
+        sessionId: id,
+        cwd: this.cwd,
+        agent: this.agent,
+        cols,
+        rows,
+        ...(resumeAgentSessionId ? { resumeAgentSessionId } : {})
+      })
     } catch (error) {
       this.exited = true
       const message = error instanceof Error ? error.message : String(error)
       this.surface.write(dim(`[无法启动终端：${message}]`))
-      return
+      return false
     }
-    if (this.disposed) return
+    if (this.disposed) return false
     this.ready = true
     for (const data of this.queuedInput) pty.write(id, data)
     this.queuedInput = []
+    return true
+  }
+
+  /**
+   * Starts a fresh process in this terminal after the old one is gone (e.g. the pty-host died),
+   * keeping the scrollback. Resolves to whether the new process started.
+   */
+  async restart(resumeAgentSessionId?: string): Promise<boolean> {
+    if (this.disposed || !this.started) return false
+    this.exited = false
+    this.ready = false
+    this.queuedInput = []
+    // The dead process may have left the alternate screen, mouse reporting etc. switched on.
+    this.surface.write('\x1b[?1049l\x1b[!p')
+    this.surface.write(dim('[终端进程已重启]'))
+    return this.spawnProcess(resumeAgentSessionId)
   }
 
   private sendInput(data: string): void {

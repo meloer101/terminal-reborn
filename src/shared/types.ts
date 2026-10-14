@@ -50,4 +50,6 @@ export interface Session {
   /** Epoch ms. */
   startedAt: number
   lastActivityAt: number
+  /** The agent's own conversation id (hook `session_id`), used to resume after a restart. */
+  agentSessionId?: string
 }

@@ -1,7 +1,7 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
 import type { SessionId } from '@shared/types'
-import { getSurface } from '../terminal/registry'
+import { getSurface, onTerminalRestarted } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
 import { useWorkspace } from '../state/workspace'
 import { titleFromFirstPrompt } from '../state/workspace-model'
@@ -124,6 +124,7 @@ export function startStatusBridge(): () => void {
       message: prompt.kind === 'permission' ? prompt.summary : ''
     })
   )
+  const unsubscribeRestart = onTerminalRestarted((sessionId) => controller.handleRestart(sessionId))
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
   const onViewChange = (): void => controller.refreshViewing()
@@ -146,6 +147,7 @@ export function startStatusBridge(): () => void {
     unsubscribeStore()
     unsubscribeEvents()
     unsubscribeClick()
+    unsubscribeRestart()
     window.removeEventListener('focus', onViewChange)
     window.removeEventListener('blur', onViewChange)
     document.removeEventListener('visibilitychange', onViewChange)

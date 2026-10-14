@@ -2,6 +2,7 @@
 // The preload implements TrApi; main registers handlers for IPC channels.
 // Changing a signature here is a cross-track change — note it in the PR.
 
+import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { AgentKind, SessionId } from './types'
@@ -22,6 +23,8 @@ export interface PtySpawnOptions {
   env?: Record<string, string>
   cols: number
   rows: number
+  /** Agent conversation to resume (`claude --resume` / `codex resume`) instead of starting a new one. */
+  resumeAgentSessionId?: string
 }
 
 export interface PtyExit {
@@ -38,6 +41,11 @@ export interface PtyApi {
   ack(sessionId: SessionId, count: number): void
   onData(sessionId: SessionId, listener: (data: string) => void): Unsubscribe
   onExit(sessionId: SessionId, listener: (exit: PtyExit) => void): Unsubscribe
+  /**
+   * The pty-host process died and was restarted: these sessions lost their terminal process (each
+   * also got onExit with code -1). Respawn them with spawn() to recover.
+   */
+  onHostRestarted(listener: (sessionIds: SessionId[]) => void): Unsubscribe
 }
 
 export type ImageExtension = 'png' | 'jpg' | 'gif' | 'webp'
@@ -76,6 +84,8 @@ export interface UiApi {
   openSettings(): void
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
+  /** Native confirmation sheet; resolves to true when the user picked the confirm button. */
+  confirm(options: ConfirmOptions): Promise<boolean>
 }
 
 export interface SettingsApi {
@@ -97,6 +107,8 @@ export interface AppInfoApi {
   version: string
   /** Latest GitHub release if newer than the running version, else null. Never throws. */
   checkForUpdates(): Promise<UpdateInfo | null>
+  /** Live-work summary for the quit confirmation; send whenever the active-session count changes. */
+  reportActivity(summary: ActivitySummary): void
 }
 
 export interface AgentApi {
@@ -131,6 +143,8 @@ export const IPC = {
   ptyData: 'pty:data',
   /** main → renderer, payload { sessionId, exit } */
   ptyExit: 'pty:exit',
+  /** main → renderer, payload HostRestartedEvent */
+  ptyHostRestarted: 'pty:host-restarted',
   filesSaveTempImage: 'files:save-temp-image',
   uiPickFolder: 'ui:pick-folder',
   uiPopupMenu: 'ui:popup-menu',
@@ -147,11 +161,13 @@ export const IPC = {
   agentRespondPermission: 'agent:respond-permission',
   uiOpenSettings: 'ui:open-settings',
   uiRevealInFinder: 'ui:reveal-in-finder',
+  uiConfirm: 'ui:confirm',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   /** main → every window, payload AppSettings */
   settingsChanged: 'settings:changed',
   /** sync: returns the app version */
   appVersion: 'app:version',
-  appCheckForUpdates: 'app:check-for-updates'
+  appCheckForUpdates: 'app:check-for-updates',
+  appReportActivity: 'app:report-activity'
 } as const

@@ -66,6 +66,16 @@ describe('StatusController', () => {
     expect(b?.currentAction).toBe('读取 a.ts')
   })
 
+  it('revives a session whose process was started again in place', () => {
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    h.controller.handlePtyExit('b', -1)
+    expect(status(h, 'b')).toBe('error')
+    h.controller.handleRestart('b')
+    expect(status(h, 'b')).toBe('idle')
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    expect(status(h, 'b')).toBe('running')
+  })
+
   it('ignores events for unknown sessions', () => {
     h.controller.handleEvent('nope', { type: 'stop' })
     expect(h.notifications).toEqual([])
