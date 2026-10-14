@@ -1,0 +1,19 @@
+.preview {
+  padding: 18px var(--space-20);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--term-bg);
+  overflow: hidden;
+}
+
+.host {
+  /* Real height is set from the measured cell height; this is only the pre-measure size. */
+  height: 260px;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* The sample is sized to fit; never show a scrollbar over it. */
+.host :global(.xterm-viewport) {
+  scrollbar-width: none;
+}
