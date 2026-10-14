@@ -1,6 +1,8 @@
-// PLACEHOLDER — owned by the `appearance-runtime` track (docs/tasks/m3-appearance-runtime.md).
-// Renders nothing; applies AppSettings.appearance to the running window (theme, terminals, background).
+// Mounted by AppShell; renders nothing. Keeps the window in step with AppSettings.appearance.
+import { useEffect } from 'react'
+import { watchAppearance } from './runtime'
 
 export function AppearanceBridge() {
+  useEffect(() => watchAppearance(), [])
   return null
 }

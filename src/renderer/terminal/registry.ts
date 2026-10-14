@@ -3,16 +3,25 @@
 import type { SendIo } from '@shared/send-protocol'
 import type { AgentKind, SessionId } from '@shared/types'
 import { SessionTerminal } from './session-terminal'
-import type { TerminalSurface } from './surface'
-import type { XtermSurface } from './xterm-surface'
+import type { TerminalAppearance, TerminalSurface } from './surface'
+import type { SurfaceDebugInfo, XtermSurface } from './xterm-surface'
 
 const terminals = new Map<SessionId, SessionTerminal>()
+/** Latest appearance from settings; new terminals start with it, existing ones are updated in place. */
+let appearance: TerminalAppearance | null = null
+
+/** Applies the appearance to every live terminal and remembers it for terminals created later. */
+export function setTerminalAppearance(next: TerminalAppearance): void {
+  appearance = next
+  for (const terminal of terminals.values()) terminal.surface.setAppearance(next)
+}
 
 /** Creates the terminal for a session on first call; later calls return the same one. */
 export function ensureTerminal(sessionId: SessionId, cwd: string, agent: AgentKind = 'shell'): SessionTerminal {
   let terminal = terminals.get(sessionId)
   if (!terminal) {
     terminal = new SessionTerminal(sessionId, cwd, agent)
+    if (appearance) terminal.surface.setAppearance(appearance)
     terminals.set(sessionId, terminal)
   }
   return terminal
@@ -62,12 +71,14 @@ interface E2eGlobal {
   __trTerminals?: {
     readScreen(sessionId: SessionId, scrollbackLines?: number): string
     size(sessionId: SessionId): { cols: number; rows: number } | null
+    info(sessionId: SessionId): SurfaceDebugInfo | null
   }
 }
 const e2e = globalThis as unknown as E2eGlobal
 if (e2e.__TR_E2E__) {
   e2e.__trTerminals = {
     readScreen: (sessionId, scrollbackLines) => terminals.get(sessionId)?.surface.readScreen(scrollbackLines) ?? '',
-    size: (sessionId) => terminals.get(sessionId)?.surface.size ?? null
+    size: (sessionId) => terminals.get(sessionId)?.surface.size ?? null,
+    info: (sessionId) => terminals.get(sessionId)?.surface.debugInfo() ?? null
   }
 }

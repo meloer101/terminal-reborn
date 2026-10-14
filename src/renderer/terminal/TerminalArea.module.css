@@ -1,13 +1,13 @@
 .area {
   position: absolute;
   inset: 0;
-  background: var(--term-bg);
+  background: var(--tr-term-surface, var(--term-bg));
 }
 
 .pane {
   position: absolute;
   inset: 0;
-  background: var(--term-bg);
+  background: var(--tr-term-surface, var(--term-bg));
   user-select: text;
   cursor: text;
 }
@@ -29,5 +29,5 @@
 }
 
 .host :global(.xterm-viewport) {
-  background: var(--term-bg) !important;
+  background: var(--tr-term-surface, var(--term-bg)) !important;
 }

@@ -1,13 +1,27 @@
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
-import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument } from './appearance'
+import { whenAppearanceKnown } from './appearance-ready'
+import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { macKeyToBytes } from './keymap'
+import { findLigatureRanges } from './ligatures'
 import { readBufferText } from './screen-text'
 import type { Disposable, TerminalAppearance, TerminalSurface } from './surface'
+
+export interface SurfaceDebugInfo {
+  fontFamily: string
+  fontSize: number
+  lineHeight: number
+  allowTransparency: boolean
+  background: string
+  renderer: 'webgl' | 'dom'
+  ligatures: boolean
+  cols: number
+  rows: number
+}
 
 const SCROLLBACK_LINES = 10_000
 const FONT_LOAD_TIMEOUT_MS = 1500
@@ -22,6 +36,9 @@ export class XtermSurface implements TerminalSurface {
   private disposed = false
   private appearance: TerminalAppearance = { ...DEFAULT_APPEARANCE }
   private readonly themeObserver: MutationObserver
+  private ligatureJoinerId: number | null = null
+  /** Bumped per setAppearance so a slow font load never overwrites a newer change. */
+  private appearanceSeq = 0
   private openPromise: Promise<void> | null = null
   private container: HTMLElement | null = null
 
@@ -34,7 +51,8 @@ export class XtermSurface implements TerminalSurface {
       lineHeight: this.appearance.lineHeight,
       rescaleOverlappingGlyphs: true,
       cursorBlink: false,
-      theme: readThemeFromDocument()
+      allowTransparency: this.isTransparent(),
+      theme: this.buildTheme()
     })
     this.term.loadAddon(this.fitAddon)
     this.term.loadAddon(new Unicode11Addon())
@@ -69,9 +87,10 @@ export class XtermSurface implements TerminalSurface {
       return
     }
     this.container = container
-    this.openPromise = this.loadFonts().then(() => {
+    this.openPromise = whenAppearanceKnown().then(() => this.loadFonts()).then(() => {
       if (this.disposed || !this.container) return
       this.term.open(this.container)
+      this.syncLigatures()
       this.syncRenderer()
       this.fit()
       void document.fonts.ready.then(() => this.refreshGlyphs())
@@ -101,8 +120,11 @@ export class XtermSurface implements TerminalSurface {
 
   private syncRenderer(): void {
     if (this.disposed || !this.term.element) return
-    if (this.visible && !this.webgl && !this.webglUnavailable) this.loadWebgl()
-    else if (!this.visible && this.webgl) this.unloadWebgl()
+    // WebGL paints italic/dim/underlined cells with an opaque background when the surface is
+    // transparent (research §2.2, xterm #6116), so transparent terminals use the DOM renderer.
+    const wantWebgl = this.visible && !this.webglUnavailable && !this.isTransparent()
+    if (wantWebgl && !this.webgl) this.loadWebgl()
+    else if (!wantWebgl && this.webgl) this.unloadWebgl()
   }
 
   private loadWebgl(): void {
@@ -132,8 +154,35 @@ export class XtermSurface implements TerminalSurface {
   }
 
   private applyTheme(): void {
-    this.term.options.theme = readThemeFromDocument()
+    this.term.options.theme = this.buildTheme()
     this.term.clearTextureAtlas()
+  }
+
+  private get backgroundAlpha(): number {
+    return this.appearance.backgroundAlpha ?? 1
+  }
+
+  /** Transparent cells need allowTransparency (it disables subpixel AA, so only then). */
+  private isTransparent(): boolean {
+    return this.backgroundAlpha < 1
+  }
+
+  /** The document theme with the default background at the configured alpha. */
+  private buildTheme(): ITheme {
+    const theme = readThemeFromDocument()
+    if (!this.isTransparent() || !theme.background) return theme
+    return { ...theme, background: withAlpha(theme.background, this.backgroundAlpha) }
+  }
+
+  /** Registers (or removes) the ligature joiner; needs an opened terminal. */
+  private syncLigatures(): void {
+    if (this.disposed || !this.term.element) return
+    if (this.appearance.ligatures && this.ligatureJoinerId === null) {
+      this.ligatureJoinerId = this.term.registerCharacterJoiner(findLigatureRanges)
+    } else if (!this.appearance.ligatures && this.ligatureJoinerId !== null) {
+      this.term.deregisterCharacterJoiner(this.ligatureJoinerId)
+      this.ligatureJoinerId = null
+    }
   }
 
   private refreshGlyphs(): void {
@@ -190,13 +239,52 @@ export class XtermSurface implements TerminalSurface {
   }
 
   setAppearance(next: Partial<TerminalAppearance>): void {
-    this.appearance = { ...this.appearance, ...next }
-    const { fontSize, lineHeight } = this.appearance
-    this.term.options.fontFamily = buildFontStack(this.appearance)
-    this.term.options.fontSize = fontSize
-    this.term.options.lineHeight = lineHeight
-    this.term.clearTextureAtlas()
-    this.fit()
+    const prev = this.appearance
+    this.appearance = { ...prev, ...next }
+    const cur = this.appearance
+    const seq = ++this.appearanceSeq
+    const fontsChanged = cur.fontFamily !== prev.fontFamily || cur.cjkFontFamily !== prev.cjkFontFamily
+
+    if (!this.term.element) {
+      // Not opened yet: open() reads this.appearance, only the cheap options need setting.
+      this.term.options.fontSize = cur.fontSize
+      this.term.options.lineHeight = cur.lineHeight
+      this.term.options.fontFamily = buildFontStack(cur)
+      this.term.options.allowTransparency = this.isTransparent()
+      this.term.options.theme = this.buildTheme()
+      return
+    }
+
+    const apply = (): void => {
+      if (this.disposed || seq !== this.appearanceSeq) return
+      this.term.options.fontFamily = buildFontStack(cur)
+      this.term.options.fontSize = cur.fontSize
+      this.term.options.lineHeight = cur.lineHeight
+      this.term.options.allowTransparency = this.isTransparent()
+      this.term.options.theme = this.buildTheme()
+      this.syncLigatures()
+      this.syncRenderer()
+      // Glyph metrics changed: rebuild the atlas, then refit so cols/rows (and the PTY) follow.
+      this.term.clearTextureAtlas()
+      this.fit()
+    }
+    if (fontsChanged) void this.loadFonts().then(apply)
+    else apply()
+  }
+
+  /** Test/debug view of what the terminal is actually running with. */
+  debugInfo(): SurfaceDebugInfo {
+    return {
+      fontFamily: this.term.options.fontFamily ?? '',
+      fontSize: this.term.options.fontSize ?? 0,
+      lineHeight: this.term.options.lineHeight ?? 0,
+      allowTransparency: this.term.options.allowTransparency ?? false,
+      background: this.term.options.theme?.background ?? '',
+      renderer: this.webgl ? 'webgl' : 'dom',
+      ligatures: this.ligatureJoinerId !== null,
+      cols: this.term.cols,
+      rows: this.term.rows
+    }
   }
 
   dispose(): void {

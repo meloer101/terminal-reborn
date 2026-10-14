@@ -14,6 +14,11 @@ export interface TerminalAppearance {
   /** Multiple of the font size (xterm semantics); Figma Mono/Terminal 13px/20px is 20 / 13. */
   lineHeight: number
   ligatures: boolean
+  /**
+   * Alpha (0–1) of the default cell background; below 1 the surface turns transparent
+   * (`allowTransparency`). Optional, defaults to 1 (opaque).
+   */
+  backgroundAlpha?: number
 }
 
 export interface TerminalSurface extends Disposable {
