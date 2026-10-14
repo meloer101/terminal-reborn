@@ -60,4 +60,12 @@ describe('agentShellArgs', () => {
       `'codex' '-c' 'check_for_update_on_startup=false' '-c' 'projects={"/a b"={trust_level="trusted"}}'; exec '/bin/zsh' -l`
     )
   })
+
+  it('keeps codex hook overrides intact through the shell (TOML quotes and the single-quoted script path)', () => {
+    const override = `hooks.Stop=[{hooks=[{type="command",command="/bin/sh '/a b/tr-hook.sh' Stop codex"}]}]`
+    expect(agentShellArgs('codex', '/a', '/bin/zsh', { codexConfig: [override] })[3]).toBe(
+      `'codex' '-c' 'check_for_update_on_startup=false' '-c' 'projects={"/a"={trust_level="trusted"}}' '-c' ` +
+        `'hooks.Stop=[{hooks=[{type="command",command="/bin/sh '\\''/a b/tr-hook.sh'\\'' Stop codex"}]}]'; exec '/bin/zsh' -l`
+    )
+  })
 })

@@ -158,8 +158,9 @@ describe('normalizeHook · robustness', () => {
     expect(claude('PreToolUse', { hook_event_name: 'PreToolUse' }).events).toEqual([{ type: 'tool-start', tool: 'unknown', input: {} }])
   })
 
-  it('codex payloads are ignored until M3', () => {
-    expect(normalizeHook('codex', 'PreToolUse', fx.PreToolUse_Bash).events).toEqual([])
+  it('the agent decides which vocabulary applies (Codex is covered in codex-normalize.test.ts)', () => {
+    expect(normalizeHook('codex', 'SessionEnd', { reason: 'other' }).events).toEqual([])
+    expect(normalizeHook('claude', 'SessionEnd', { reason: 'other' }).events).toEqual([{ type: 'session-end', reason: 'other' }])
   })
 })
 

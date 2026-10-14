@@ -1,7 +1,8 @@
 // Raw agent hook payload -> normalized AgentEvent / PendingPrompt parts (PRD §3, F3).
 // Pure: no Electron, no I/O. Field names follow the Claude Code hooks reference and the payloads
-// captured in docs/spikes/hooks.md (see ./fixtures.ts). Codex hooks arrive in M3; `HookAgent` is
-// carried through so the server does not have to change then.
+// captured in docs/spikes/hooks.md (see ./fixtures.ts). Codex (0.142.5) payloads follow its hooks reference and
+// the captures in docs/spikes/codex.md (see ./codex-fixtures.ts); they are mapped onto Claude's tool vocabulary
+// (Bash, Edit/Write, AskUserQuestion) so the status, prompt-bar and permission code stays agent-agnostic.
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
 
 export interface PermissionDraft {
@@ -202,10 +203,86 @@ function normalizeClaude(event: string, payload: Rec): NormalizedHook {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Codex
+// ---------------------------------------------------------------------------------------------
+
+/** `*** Add File: x` / `*** Update File: x` / `*** Delete File: x` / `*** Move to: y` lines of an apply_patch body. */
+const PATCH_FILE = /^\*\*\* (Add|Update|Delete) File: (.+?)\s*$/gm
+
+/** Files an apply_patch body touches, in order, with whether every one of them is new. */
+export function parsePatchFiles(patch: string): { files: string[]; allNew: boolean } {
+  const files: string[] = []
+  let allNew = true
+  for (const match of patch.matchAll(PATCH_FILE)) {
+    const path = match[2]
+    if (!path) continue
+    files.push(path)
+    if (match[1] !== 'Add') allNew = false
+  }
+  return { files, allNew: files.length > 0 && allNew }
+}
+
+/**
+ * Codex's tool vocabulary in Claude's terms. Shell -> Bash `{command}`; apply_patch -> Edit / Write `{file_path, files}`
+ * (the patch text itself stays out: it can be huge and the status line only needs the file); request_user_input ->
+ * AskUserQuestion. The result must be identical for PreToolUse, PermissionRequest and PostToolUse of the same call,
+ * because prompts are matched to their tool-end by tool name + input.
+ */
+export function mapCodexTool(tool: string, rawInput: unknown): { tool: string; input: Rec } {
+  const input: Rec = isRec(rawInput) ? rawInput : typeof rawInput === 'string' ? { command: rawInput } : {}
+  switch (tool) {
+    case 'Bash': {
+      const command = str(input.command)
+      return { tool: 'Bash', input: command ? { command } : {} }
+    }
+    case 'apply_patch': {
+      const { files, allNew } = parsePatchFiles(str(input.command) ?? '')
+      const first = files[0]
+      return { tool: allNew ? 'Write' : 'Edit', input: first ? { file_path: first, files } : {} }
+    }
+    case 'request_user_input':
+      return { tool: 'AskUserQuestion', input }
+    default:
+      return { tool, input }
+  }
+}
+
+function normalizeCodex(event: string, payload: Rec): NormalizedHook {
+  const mapped = mapCodexTool(str(payload.tool_name) ?? 'unknown', payload.tool_input)
+
+  switch (event) {
+    case 'SessionStart':
+      return { events: [{ type: 'session-start' }], clears: 'none' }
+    case 'UserPromptSubmit':
+      return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
+    case 'PreToolUse': {
+      const result: NormalizedHook = { events: [{ type: 'tool-start', tool: mapped.tool, input: mapped.input }], clears: 'none' }
+      if (mapped.tool === 'AskUserQuestion') {
+        const questions = parseQuestions(mapped.input)
+        if (questions.length > 0) result.questions = questions
+      }
+      return result
+    }
+    // The payload has no success flag (tool_response is the tool's text output), so every PostToolUse is `ok`.
+    case 'PostToolUse':
+      return { events: [{ type: 'tool-end', tool: mapped.tool, input: mapped.input, ok: true }], clears: 'tool' }
+    case 'PermissionRequest':
+      // No `permission_suggestions`: Codex's "don't ask again" would persist a rule in ~/.codex, so there is no allow-always.
+      return {
+        events: [],
+        permission: { tool: mapped.tool, input: mapped.input, summary: summarizeToolUse(mapped.tool, mapped.input), suggestions: [] },
+        clears: 'none'
+      }
+    case 'Stop':
+      return { events: [{ type: 'stop' }], clears: 'all' }
+    default:
+      return NONE
+  }
+}
+
 /** Unknown events and non-object payloads normalize to nothing; they are never an error. */
 export function normalizeHook(agent: HookAgent, event: string, payload: unknown): NormalizedHook {
   if (!isRec(payload)) return NONE
-  // Codex hooks are M3; until then they yield nothing rather than being misread as Claude's.
-  if (agent !== 'claude') return NONE
-  return normalizeClaude(event, payload)
+  return agent === 'codex' ? normalizeCodex(event, payload) : normalizeClaude(event, payload)
 }

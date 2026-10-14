@@ -7,7 +7,7 @@
 //   session went away    -> empty body              (resolution 'session-ended')
 // An empty body is always safe: spike §4 showed Claude keeps its own dialog open while a hook is
 // pending and falls back to it when the hook says nothing.
-import type { PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
+import type { HookAgent, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
 
 export const PERMISSION_TIMEOUT_MS = 120_000
 
@@ -17,6 +17,8 @@ export interface PermissionHold {
   prompt: PermissionPrompt
   /** `permission_suggestions` from the request, returned as `updatedPermissions` on "allow always". */
   suggestions: unknown[]
+  /** Whose hook this is; decides the shape of the decision JSON. Defaults to Claude. */
+  agent?: HookAgent
   /** Completes the held HTTP response with this body ('' = no opinion). */
   release(body: string): void
 }
@@ -31,8 +33,19 @@ const realScheduler: Scheduler = {
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>)
 }
 
-/** The hook's stdout for a decision (Claude Code hooks reference, PermissionRequest output). */
-export function decisionBody(decision: PermissionDecision, suggestions: unknown[]): string {
+/**
+ * The hook's stdout for a decision (Claude Code / Codex hooks reference, PermissionRequest output).
+ * Codex accepts only `behavior` (+ `message` on deny): `interrupt` and `updatedPermissions` are "reserved and
+ * fail closed" there, and "allow always" is never offered for it (docs/spikes/codex.md §3).
+ */
+export function decisionBody(decision: PermissionDecision, suggestions: unknown[], agent: HookAgent = 'claude'): string {
+  if (agent === 'codex') {
+    const behavior =
+      decision === 'deny'
+        ? { behavior: 'deny', message: 'The user denied this request in Terminal Reborn.' }
+        : { behavior: 'allow' }
+    return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: behavior } })
+  }
   const behavior =
     decision === 'deny'
       ? { behavior: 'deny', message: 'The user denied this request in Terminal Reborn.', interrupt: false }
@@ -95,7 +108,7 @@ export class PermissionRegistry {
   respond(id: string, decision: PermissionDecision): boolean {
     const entry = this.entries.get(id)
     if (!entry) return false
-    this.finish(id, decisionBody(decision, entry.suggestions), 'gui')
+    this.finish(id, decisionBody(decision, entry.suggestions, entry.agent), 'gui')
     return true
   }
 

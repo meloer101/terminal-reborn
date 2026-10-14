@@ -9,19 +9,24 @@ import type { PermissionDecision } from '@shared/agent-events'
 import type { AgentKind } from '@shared/types'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { startHookServer, type HookServer } from './server'
+import { prepareCodexHookConfig } from './codex-probe'
 import { buildClaudeHookSettings } from './settings'
 
 export interface AgentLaunchHooks {
   /** TR_SESSION_ID / TR_HOOK_SOCK / TR_HOOK_TOKEN for the PTY environment. */
   env: Record<string, string>
   /** The `--settings` file for Claude. */
-  settingsPath: string
+  settingsPath?: string
+  /** `-c` override values for Codex (hook definitions + trust pins); empty when its hooks could not be prepared. */
+  codexConfig?: string[]
 }
 
 interface Runtime {
   bridge: HookBridge
   server: HookServer
   settingsPath: string
+  /** Codex's trust hashes are asked of the installed `codex` once per app run, on the first Codex launch. */
+  codexConfig?: Promise<string[]>
 }
 
 const owners = new Map<string, WebContents>()
@@ -85,19 +90,30 @@ export function registerHookHandlers(): void {
 }
 
 /**
- * Called by the pty layer before spawning an agent. Returns null when the agent has no hook
- * integration yet (Codex: M3) or the hook server is unavailable.
+ * Called by the pty layer before spawning an agent. Returns null for shells and when the hook server is
+ * unavailable. Claude gets a `--settings` file; Codex gets `-c` overrides (docs/spikes/codex.md).
  */
 export async function prepareAgentLaunch(sessionId: string, owner: WebContents, agent: AgentKind | undefined): Promise<AgentLaunchHooks | null> {
-  if (agent !== 'claude') return null
+  if (agent !== 'claude' && agent !== 'codex') return null
   const rt = await runtime
   if (!rt) return null
+  const env = { TR_SESSION_ID: sessionId, TR_HOOK_SOCK: rt.server.socketPath, TR_HOOK_TOKEN: rt.server.token }
+  if (agent === 'claude') {
+    owners.set(sessionId, owner)
+    rt.bridge.attach(sessionId)
+    return { env, settingsPath: rt.settingsPath }
+  }
+  rt.codexConfig ??= prepareCodexHookConfig(hookScriptPath(), process.env.SHELL || '/bin/zsh')
+  const codexConfig = await rt.codexConfig
+  // Without trusted hooks Codex would skip ours, so there is nothing to attach (status falls back to titles).
+  // A failed probe is not remembered: the next Codex launch asks again.
+  if (codexConfig.length === 0) {
+    rt.codexConfig = undefined
+    return null
+  }
   owners.set(sessionId, owner)
   rt.bridge.attach(sessionId)
-  return {
-    env: { TR_SESSION_ID: sessionId, TR_HOOK_SOCK: rt.server.socketPath, TR_HOOK_TOKEN: rt.server.token },
-    settingsPath: rt.settingsPath
-  }
+  return { env, codexConfig }
 }
 
 /** The session's PTY ended (exit, kill, host crash): release holds and withdraw its prompts. */

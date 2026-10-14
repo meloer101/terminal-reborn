@@ -114,7 +114,15 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       type: 'spawn',
       id,
       ...rest,
-      ...(hooks ? { env: { ...env, ...hooks.env }, claudeSettingsPath: hooks.settingsPath } : env ? { env } : {})
+      ...(hooks
+        ? {
+            env: { ...env, ...hooks.env },
+            ...(hooks.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
+            ...(hooks.codexConfig ? { codexConfig: hooks.codexConfig } : {})
+          }
+        : env
+          ? { env }
+          : {})
     })
   })
 }
