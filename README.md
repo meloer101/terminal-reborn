@@ -10,9 +10,8 @@ A macOS terminal for running many CLI coding agents in parallel.
 
 - **真正的输入栏**：可以选中删除、中文输入法安全、按会话保存草稿
 - **状态侧栏**：每个 agent 在做什么、哪个在等你，一眼可见；权限确认和选项一键作答
-- **Worktree 全链路**：一步开新任务，本地合并前预检冲突，冲突可以交给 agent 解决
-- **Git 图谱**：在提交图上标出每个 worktree 及其 agent 状态
 - **外观**：英文和中文字体分别设置，背景、主题、浅色模式
+- 规划中 / Planned：Worktree 全链路（一步开新任务、本地合并前预检冲突、冲突交给 agent 解决）、带 agent 状态的 Git 图谱。见 [路线图](docs/PRD.md#8-开发路线图)
 
 It keeps each agent's native TUI and adds a real text editor for prompts, an at-a-glance status sidebar with one-click answers, the full worktree lifecycle with local merge, a git graph annotated with agent status, and deep appearance customization with separate Latin/CJK fonts.
 
