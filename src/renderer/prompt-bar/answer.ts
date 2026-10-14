@@ -1,6 +1,7 @@
 // Delivers the user's answer: permission decisions go to main (which releases the blocked hook), question
 // answers become keystrokes on the session's serial send queue. Both remove the prompt optimistically.
 import type { PendingPrompt, PermissionDecision } from '@shared/agent-events'
+import { planCodexQuestionAnswer } from '@shared/codex-keys'
 import { planQuestionAnswer, type QuestionSelection } from '@shared/question-keys'
 import { runSteps } from '../session-io'
 import { useWorkspace } from '../state/workspace'
@@ -44,7 +45,10 @@ export async function answerQuestion(prompt: Question, questionIndex: number, se
   const store = usePromptStore.getState()
   record({ kind: 'question', id: prompt.id, questionIndex, selection })
   try {
-    const steps = planQuestionAnswer(question, selection, { index: questionIndex, total: prompt.questions.length })
+    // Codex's request_user_input has its own menu behaviour (no review screen, see docs/spikes/codex.md).
+    const kind = useWorkspace.getState().sessions.find((s) => s.id === prompt.sessionId)?.kind
+    const plan = kind === 'codex' ? planCodexQuestionAnswer : planQuestionAnswer
+    const steps = plan(question, selection, { index: questionIndex, total: prompt.questions.length })
     if (questionIndex >= prompt.questions.length - 1) store.resolve(prompt.id)
     else store.advanceQuestion(prompt.id)
     await runSteps(prompt.sessionId, steps)
