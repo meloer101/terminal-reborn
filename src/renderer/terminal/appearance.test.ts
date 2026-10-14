@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFontStack, buildXtermTheme, mixHex } from './appearance'
+import { buildFontStack, buildXtermTheme, mixHex, withAlpha } from './appearance'
 
 describe('buildFontStack', () => {
   it('quotes families and always includes a CJK family before monospace', () => {
@@ -50,5 +50,16 @@ describe('buildXtermTheme', () => {
     const theme = buildXtermTheme((name) => light[name] ?? '')
     expect(theme.black).toBe('#121212')
     expect(theme.white).not.toBe('#ffffff')
+  })
+})
+
+describe('withAlpha', () => {
+  it('appends an alpha byte and replaces an existing one', () => {
+    expect(withAlpha('#0a0a0a', 1)).toBe('#0a0a0aff')
+    expect(withAlpha('#0a0a0a', 0)).toBe('#0a0a0a00')
+    expect(withAlpha('#0a0a0aff', 0.5)).toBe('#0a0a0a80')
+  })
+  it('leaves non-hex colors alone', () => {
+    expect(withAlpha('rgb(1,2,3)', 0.5)).toBe('rgb(1,2,3)')
   })
 })

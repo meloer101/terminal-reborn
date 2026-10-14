@@ -18,13 +18,24 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* Opaque even when the shell behind it is see-through (sidebar vibrancy). */
+  background: var(--bg-app);
 }
 
 .terminal {
   flex: 1;
   min-height: 0;
   position: relative;
-  background: var(--term-bg);
+  /* Set by the appearance runtime: solid, gradient, or image + dim (src/renderer/appearance). */
+  background: var(--tr-terminal-backdrop, var(--term-bg));
+}
+
+/* Sidebar vibrancy: main sets the native vibrancy; the layers in front of it go see-through. */
+:global(html[data-vibrancy='on']),
+:global(html[data-vibrancy='on'] body),
+:global(html[data-vibrancy='on']) .shell,
+:global(html[data-vibrancy='on']) .sidebar {
+  background: transparent;
 }
 
 .panel {

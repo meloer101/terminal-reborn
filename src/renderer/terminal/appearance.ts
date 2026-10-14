@@ -96,3 +96,11 @@ export function readThemeFromDocument(): ITheme {
   const style = getComputedStyle(document.documentElement)
   return buildXtermTheme((name) => style.getPropertyValue(name).trim())
 }
+
+/** `#rrggbb` + alpha (0–1) → `#rrggbbaa`; anything that is not a 6-digit hex color is returned as is. */
+export function withAlpha(color: string, alpha: number): string {
+  const match = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(color.trim())
+  if (!match?.[1]) return color
+  const clamped = Math.min(1, Math.max(0, alpha))
+  return `#${match[1]}${Math.round(clamped * 255).toString(16).padStart(2, '0')}`
+}
