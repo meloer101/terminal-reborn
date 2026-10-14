@@ -1,7 +1,7 @@
 // Integration seam between UI features and live sessions.
 // The composer (and later quick-reply) calls these; they don't know about PTYs or send protocols.
 import { useEffect, useState } from 'react'
-import type { SessionId } from '@shared/types'
+import type { Session, SessionId } from '@shared/types'
 import { PASSTHROUGH_BYTES, type PassthroughKey } from '@shared/keys'
 import { detectBlockingDialog, planSend, type BlockingDialog, type SendStep } from '@shared/send-protocol'
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
@@ -39,7 +39,18 @@ export function runSteps(sessionId: SessionId, steps: readonly SendStep[]): Prom
   return sendQueued(queue, sessionId, steps, getSendIo(sessionId))
 }
 
+/**
+ * Whether an empty-composer pass-through key may reach the agent. Ctrl+C on an idle Codex prompt
+ * quits Codex (docs/spikes/codex.md §6), so it only goes through while a turn is running or waiting.
+ */
+export function passthroughAllowed(session: Pick<Session, 'kind' | 'status'>, key: PassthroughKey): boolean {
+  if (key !== 'ctrl-c' || session.kind !== 'codex') return true
+  return session.status === 'running' || session.status === 'needs_you'
+}
+
 export function sendPassthrough(sessionId: SessionId, key: PassthroughKey): void {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (session && !passthroughAllowed(session, key)) return
   window.tr.pty.write(sessionId, PASSTHROUGH_BYTES[key])
 }
 
