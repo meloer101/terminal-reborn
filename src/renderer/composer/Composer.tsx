@@ -19,6 +19,7 @@ import {
 import { ArrowUp, AtSign, Image as ImageIcon, Paperclip, Square } from 'lucide-react'
 import type { SessionId } from '@shared/types'
 import { BLOCKING_DIALOG_HINT, sendPassthrough, submitPrompt, useBlockingDialog } from '../session-io'
+import { AGENT_NAME, cardReplacesComposer, inputBlockedByPhase } from '../lifecycle/present'
 import { useActiveSession } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
 import { pathsInsertion, imageExtensionFor, pickPastedImage, restoreAfterFailure } from './attachments'
@@ -53,6 +54,9 @@ export function Composer() {
   const sessionId = active?.session.id ?? null
   const running = active?.session.status === 'running'
   const blocked = useBlockingDialog(sessionId) !== null
+  // The agent is not ready (starting, blocked, exited, not started): never type into the shell behind it.
+  const notReady = inputBlockedByPhase(active?.session)
+  const cardShown = cardReplacesComposer(active?.session)
 
   const [state, setState] = useState<EditorState>(() => ({
     sessionId,
@@ -101,7 +105,7 @@ export function Composer() {
 
   const submit = useCallback(async () => {
     const el = textareaRef.current
-    if (!sessionId || !el || sendingRef.current || blocked) return
+    if (!sessionId || !el || sendingRef.current || blocked || notReady) return
     const value = el.value
     if (value.trim().length === 0) return
     sendingRef.current = true
@@ -118,7 +122,7 @@ export function Composer() {
     } finally {
       sendingRef.current = false
     }
-  }, [sessionId, setText, blocked])
+  }, [sessionId, setText, blocked, notReady])
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!sessionId) return
@@ -160,7 +164,7 @@ export function Composer() {
 
   const insertPaths = (paths: string[]) => {
     const el = textareaRef.current
-    if (!el || paths.length === 0) return
+    if (!el || paths.length === 0 || notReady) return
     insertAtCaret(el, (before) => pathsInsertion(paths, before))
   }
 
@@ -208,8 +212,11 @@ export function Composer() {
     e.target.value = ''
   }
 
-  const canSend = sessionId !== null && !blocked && text.trim().length > 0
+  const canSend = sessionId !== null && !blocked && !notReady && text.trim().length > 0
   const visibleError = error && error.sessionId === sessionId ? error.message : null
+
+  // A lifecycle card (not started / blocked / exited) takes the composer's place; the draft stays in the store.
+  if (cardShown) return null
 
   return (
     <div
@@ -225,11 +232,17 @@ export function Composer() {
         className={styles.input}
         rows={1}
         value={text}
-        disabled={sessionId === null}
+        disabled={sessionId === null || notReady}
         spellCheck={false}
         aria-label="输入框"
         placeholder={
-          blocked ? BLOCKING_DIALOG_HINT : running ? '智能体运行中，↵ 发送会排队' : '输入任务或回复，↵ 发送，⇧↵ 换行'
+          notReady && active
+            ? `正在启动 ${AGENT_NAME[active.session.kind]}…`
+            : blocked
+              ? BLOCKING_DIALOG_HINT
+              : running
+                ? '智能体运行中，↵ 发送会排队'
+                : '输入任务或回复，↵ 发送，⇧↵ 换行'
         }
         onChange={onChange}
         onKeyDown={onKeyDown}

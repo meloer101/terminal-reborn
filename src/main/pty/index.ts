@@ -7,6 +7,7 @@ import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
 import type { HostEvent, HostRequest } from '../../pty-host/protocol'
 import { endAgentSession, prepareAgentLaunch } from '../hooks'
 import { isOrphanSpawn } from './late-spawn'
+import { assertCwdExists } from './preflight'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
@@ -127,6 +128,8 @@ function handleHostEvent(event: HostEvent): void {
 
 async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promise<{ pid: number }> {
   const id = options.sessionId
+  // A missing directory is refused rather than quietly replaced by the home directory (phase 2a · A8).
+  assertCwdExists(options.cwd)
   // Re-spawning an id (e.g. after a renderer reload) makes the host replace the old process.
   sessions.set(id, { owner })
 

@@ -1,5 +1,6 @@
 // Binds one XtermSurface to one PTY session through window.tr.pty.
 import type { AgentKind, SessionId } from '@shared/types'
+import { issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
 import { XtermSurface } from './xterm-surface'
 
 const ACK_BATCH_UNITS = 32 * 1024
@@ -82,6 +83,8 @@ export class SessionTerminal {
       this.exited = true
       const message = error instanceof Error ? error.message : String(error)
       this.surface.write(dim(`[无法启动终端：${message}]`))
+      // The lifecycle card says why (missing directory, spawn error) and the status moves to exited.
+      reportLaunchIssue(id, issueFromSpawnError(error))
       return false
     }
     if (this.disposed) return false

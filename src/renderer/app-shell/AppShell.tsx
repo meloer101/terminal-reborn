@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useWorkspace } from '../state/workspace'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
+import { LifecycleCard } from '../lifecycle/LifecycleCard'
 import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { TerminalArea } from '../terminal/TerminalArea'
@@ -37,6 +38,7 @@ export function AppShell() {
           <TerminalArea />
         </section>
         <EngineRestartedCard />
+        <LifecycleCard />
         <PromptBar />
         <Composer />
       </main>

@@ -49,3 +49,13 @@
   gap: var(--space-2);
   padding-left: var(--space-8);
 }
+
+/* Figma Screen 10 C "Hooks unavailable" 64:2357 — 16 alert icon, 6 gap, caption in tertiary text. */
+.hooks {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
