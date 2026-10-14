@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Terminal Reborn app icon. 1024 master on Apple's macOS template: 824 px body, 100 px margin.
+       Chroma-0 neutrals only; a prompt chevron and a cursor bar. Regenerate the .icns with scripts/make-icon.sh. -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="#0f0f0f"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3"/>
+  <path d="M357 390 L481 512 L357 634" fill="none" stroke="#f2f2f2" stroke-width="64" stroke-linecap="square" stroke-linejoin="miter"/>
+  <rect x="543" y="606" width="170" height="56" fill="#8a8a8a"/>
+</svg>
