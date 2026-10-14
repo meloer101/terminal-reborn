@@ -16,6 +16,8 @@ export interface PtySpawnOptions {
    * `command` is set; omitted or 'shell' gives a plain login shell.
    */
   agent?: AgentKind
+  /** Relaunch the agent into this earlier conversation (`claude --resume <id>` / `codex resume <id>`). */
+  resumeAgentSessionId?: string
   /** Defaults to the user's login shell. */
   command?: string
   args?: string[]
@@ -76,8 +78,33 @@ export interface UiApi {
   openSettings(): void
   /** ⌘, from the app menu: show the settings dialog. */
   onShowSettings(listener: () => void): Unsubscribe
+  /** Native confirmation sheet on this window. Resolves true when the confirm button is chosen. */
+  confirm(options: ConfirmOptions): Promise<boolean>
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
+}
+
+export interface ConfirmOptions {
+  message: string
+  detail?: string
+  /** Label of the confirming button, e.g. "关闭会话". Cancel is always "取消". */
+  confirmLabel: string
+  /** Style the confirm button as destructive. */
+  destructive?: boolean
+}
+
+/** What main needs to know about live sessions (e.g. to confirm quitting). Sent by the renderer on change. */
+export interface ActivitySummary {
+  /** Sessions that are running or waiting on the user. */
+  active: number
+}
+
+/** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
+export interface WorkspaceStoreApi {
+  /** Synchronous read at startup (null when nothing is stored yet). */
+  loadSync(): unknown
+  /** Debounced, atomic write in main. */
+  save(data: unknown): void
 }
 
 export interface SettingsApi {
@@ -99,6 +126,8 @@ export interface AppInfoApi {
   version: string
   /** Latest GitHub release if newer than the running version, else null. Never throws. */
   checkForUpdates(): Promise<UpdateInfo | null>
+  /** Keeps main informed about live sessions (quit confirmation). */
+  reportActivity(summary: ActivitySummary): void
 }
 
 export interface AgentApi {
@@ -121,6 +150,7 @@ export interface TrApi {
   agent: AgentApi
   settings: SettingsApi
   app: AppInfoApi
+  workspace: WorkspaceStoreApi
 }
 
 export const IPC = {
@@ -157,5 +187,10 @@ export const IPC = {
   settingsChanged: 'settings:changed',
   /** sync: returns the app version */
   appVersion: 'app:version',
-  appCheckForUpdates: 'app:check-for-updates'
+  appCheckForUpdates: 'app:check-for-updates',
+  appReportActivity: 'app:report-activity',
+  uiConfirm: 'ui:confirm',
+  /** sync */
+  workspaceLoad: 'workspace:load',
+  workspaceSave: 'workspace:save'
 } as const

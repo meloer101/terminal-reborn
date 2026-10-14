@@ -30,6 +30,26 @@ const text = (value: unknown, max: number): string => (typeof value === 'string'
 const liveNotifications = new Set<Notification>()
 
 export function registerUiHandlers(): void {
+  ipcMain.handle(IPC.uiConfirm, async (event, raw: unknown) => {
+    if (typeof raw !== 'object' || raw === null) return false
+    const o = raw as Record<string, unknown>
+    const message = text(o.message, 300)
+    const confirmLabel = text(o.confirmLabel, 40)
+    if (!message || !confirmLabel) return false
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      type: (o.destructive === true ? 'warning' : 'question') as 'warning' | 'question',
+      message,
+      detail: text(o.detail, 1000) || undefined,
+      buttons: [confirmLabel, '取消'],
+      defaultId: o.destructive === true ? 1 : 0,
+      cancelId: 1,
+      noLink: true
+    }
+    const result = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
+    return result.response === 0
+  })
+
   ipcMain.on(IPC.uiRevealInFinder, (_event, path: unknown) => {
     if (typeof path === 'string' && path.length <= 4096 && isAbsolute(path)) shell.showItemInFolder(path)
   })

@@ -50,4 +50,22 @@ export interface Session {
   /** Epoch ms. */
   startedAt: number
   lastActivityAt: number
+  /**
+   * The agent's own conversation id (Claude / Codex `session_id` from the SessionStart hook).
+   * Persisted; used to relaunch with `--resume` after an app restart (phase 2 · A2).
+   */
+  agentSessionId?: string
+  /** Where the agent process is in its life (transient, not persisted). See AgentPhase. */
+  phase?: AgentPhase
 }
+
+/**
+ * Agent process lifecycle, separate from the turn status (phase 2 · A2/A3/A6):
+ * - not-started: restored after an app restart, nothing spawned yet (resumes on first view)
+ * - starting: PTY spawned, waiting for the agent's SessionStart hook
+ * - ready: the agent is up
+ * - blocked: a first-run dialog or shell prompt is in the way (trust, update, rc-file prompt)
+ * - exited: the agent is gone; the PTY may still hold a plain shell — never send prompts there
+ * Shell sessions don't use phase.
+ */
+export type AgentPhase = 'not-started' | 'starting' | 'ready' | 'blocked' | 'exited'

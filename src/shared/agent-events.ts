@@ -5,7 +5,8 @@ import type { SessionId } from './types'
 export type HookAgent = 'claude' | 'codex'
 
 export type AgentEvent =
-  | { type: 'session-start' }
+  /** `agentSessionId` is the agent's conversation id (Claude/Codex `session_id`), for `--resume`. */
+  | { type: 'session-start'; agentSessionId?: string }
   | { type: 'prompt-submit'; prompt: string }
   /** PreToolUse. `input` is the tool's raw input object (file_path, command, pattern, …). */
   | { type: 'tool-start'; tool: string; input: Record<string, unknown> }

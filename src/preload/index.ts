@@ -67,6 +67,7 @@ const api: TrApi = {
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),
     openSettings: () => ipcRenderer.send(IPC.uiOpenSettings),
     onShowSettings: (listener) => listen(IPC.uiShowSettings, listener),
+    confirm: (options) => ipcRenderer.invoke(IPC.uiConfirm, options),
     revealInFinder: (path) => ipcRenderer.send(IPC.uiRevealInFinder, path)
   },
   agent: {
@@ -82,7 +83,12 @@ const api: TrApi = {
   },
   app: {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),
-    checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates)
+    checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
+    reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary)
+  },
+  workspace: {
+    loadSync: () => ipcRenderer.sendSync(IPC.workspaceLoad) as unknown,
+    save: (data) => ipcRenderer.send(IPC.workspaceSave, data)
   }
 }
 
