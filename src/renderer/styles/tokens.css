@@ -67,6 +67,8 @@
   --text-tertiary: #6b6b6b;
   --text-disabled: #474747;
   --text-inverse: #0a0a0a;
+  --scrim: #00000066;
+  --shadow-overlay: 0 16px 48px #00000080;
   --fill-primary: #ededed;
   --focus-ring: #5ea1ff;
   --status-working: #5ea1ff;
@@ -116,6 +118,8 @@
   --text-tertiary: #808080;
   --text-disabled: #c9c9c9;
   --text-inverse: #ffffff;
+  --scrim: #00000033;
+  --shadow-overlay: 0 16px 48px #00000024;
   --fill-primary: #121212;
   --focus-ring: #2f6fd6;
   --status-working: #2f6fd6;
