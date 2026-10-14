@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
+import { registerAppearanceEffects } from './appearance'
 import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
 import { registerPtyHandlers } from './pty'
@@ -22,6 +23,7 @@ function registerAppHandlers(): void {
 void app.whenReady().then(() => {
   registerAppHandlers()
   registerSettingsHandlers()
+  registerAppearanceEffects()
   registerFileHandlers()
   registerHookHandlers()
   registerPtyHandlers()
