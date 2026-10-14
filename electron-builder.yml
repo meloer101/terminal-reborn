@@ -6,6 +6,10 @@ directories:
 files:
   - out/**
   - package.json
+extraResources:
+  # Agent hook relay (src/main/hooks): found at process.resourcesPath/hooks when packaged.
+  - from: resources/hooks
+    to: hooks
 asarUnpack:
   - node_modules/node-pty/**
 mac:

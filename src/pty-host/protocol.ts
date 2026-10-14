@@ -9,6 +9,8 @@ export interface HostSpawnRequest {
   command?: string
   args?: string[]
   env?: Record<string, string>
+  /** Hooks-only settings file for `claude --settings` (set by main/hooks). */
+  claudeSettingsPath?: string
   cols: number
   rows: number
 }

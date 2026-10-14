@@ -13,6 +13,18 @@ describe('agentArgv', () => {
     expect(agentArgv('claude', '/tmp/x')).toEqual(['claude'])
   })
 
+  it('injects the hooks-only settings file for claude with --settings', () => {
+    expect(agentArgv('claude', '/tmp/x', { claudeSettingsPath: '/tmp/tr-hooks-ab/claude-settings.json' })).toEqual([
+      'claude',
+      '--settings',
+      '/tmp/tr-hooks-ab/claude-settings.json'
+    ])
+  })
+
+  it('does not pass claude settings to codex', () => {
+    expect(agentArgv('codex', '/tmp/x', { claudeSettingsPath: '/s.json' })).not.toContain('--settings')
+  })
+
   it('pre-trusts the codex directory per launch and skips the update prompt', () => {
     expect(agentArgv('codex', '/Users/m/code/acme')).toEqual([
       'codex',
@@ -35,6 +47,12 @@ describe('agentShellArgs', () => {
 
   it('runs the agent, then execs a login shell', () => {
     expect(agentShellArgs('claude', '/tmp', '/bin/zsh')).toEqual(['-l', '-i', '-c', "'claude'; exec '/bin/zsh' -l"])
+  })
+
+  it('quotes the settings path as one shell word, spaces and quotes included', () => {
+    expect(agentShellArgs('claude', '/tmp', '/bin/zsh', { claudeSettingsPath: "/var/it's here/s.json" })[3]).toBe(
+      `'claude' '--settings' '/var/it'\\''s here/s.json'; exec '/bin/zsh' -l`
+    )
   })
 
   it('quotes every codex argument as one shell word', () => {
