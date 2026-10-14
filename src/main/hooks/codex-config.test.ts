@@ -141,17 +141,22 @@ describe('prepareCodexHookConfig', () => {
   it('returns the hook overrides followed by the trust pin built from the probe', async () => {
     const hashes = sessionFlagHashes(listResult(ALL_KEYS))
     const probe = vi.fn().mockResolvedValue(hashes)
-    const config = await prepareCodexHookConfig(SCRIPT, '/bin/zsh', probe)
+    const prepared = await prepareCodexHookConfig(SCRIPT, '/bin/zsh', probe)
     expect(probe).toHaveBeenCalledWith(buildCodexHookOverrides(SCRIPT), '/bin/zsh')
+    expect(prepared.ok).toBe(true)
+    const config = prepared.ok ? prepared.config : []
     expect(config.slice(0, -1)).toEqual(buildCodexHookOverrides(SCRIPT))
     expect(config.at(-1)).toBe(buildCodexTrustOverride(hashes))
   })
 
-  it('degrades to no hooks (empty config) when the probe fails or is incomplete', async () => {
+  it('degrades to no hooks (not ok, with a reason) when the probe fails or is incomplete', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    expect(await prepareCodexHookConfig(SCRIPT, '/bin/zsh', () => Promise.reject(new Error('no codex')))).toEqual([])
-    expect(await prepareCodexHookConfig(SCRIPT, '/bin/zsh', () => Promise.resolve({}))).toEqual([])
-    expect(await prepareCodexHookConfig(SCRIPT, '/bin/zsh', () => Promise.resolve(sessionFlagHashes(listResult(ALL_KEYS.slice(2)))))).toEqual([])
+    expect(await prepareCodexHookConfig(SCRIPT, '/bin/zsh', () => Promise.reject(new Error('no codex')))).toMatchObject({ ok: false, reason: 'codex-probe-failed' })
+    expect(await prepareCodexHookConfig(SCRIPT, '/bin/zsh', () => Promise.resolve({}))).toMatchObject({ ok: false, reason: 'codex-probe-failed' })
+    expect(await prepareCodexHookConfig(SCRIPT, '/bin/zsh', () => Promise.resolve(sessionFlagHashes(listResult(ALL_KEYS.slice(2)))))).toMatchObject({
+      ok: false,
+      reason: 'codex-probe-failed'
+    })
     error.mockRestore()
   })
 })

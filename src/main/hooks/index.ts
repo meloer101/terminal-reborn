@@ -1,16 +1,18 @@
 // Electron glue for the hook bridge: owns the hook socket + generated settings file for this app run,
 // hands agent PTYs their env, and forwards bridge signals to the window that owns the session.
-import { app, ipcMain, type WebContents } from 'electron'
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+// Reliability (phase 2a): the socket lives under userData and is supervised (supervisor.ts); health and
+// per-session "no hooks" / "no SessionStart" signals reach the renderer on IPC.agentHooksHealth / agentSessionHooks.
+import { app, BrowserWindow, ipcMain, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
-import type { PermissionDecision } from '@shared/agent-events'
+import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
 import type { AgentKind } from '@shared/types'
 import { HookBridge, type BridgeEmitter } from './bridge'
-import { startHookServer, type HookServer } from './server'
-import { prepareCodexHookConfig } from './codex-probe'
+import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
+import { createHookDir, sweepStaleHookDirs } from './hook-dir'
 import { buildClaudeHookSettings } from './settings'
+import { StartWatchdog } from './start-watchdog'
+import { HookSupervisor } from './supervisor'
 
 export interface AgentLaunchHooks {
   /** TR_SESSION_ID / TR_HOOK_SOCK / TR_HOOK_TOKEN for the PTY environment. */
@@ -23,14 +25,14 @@ export interface AgentLaunchHooks {
 
 interface Runtime {
   bridge: HookBridge
-  server: HookServer
-  settingsPath: string
-  /** Codex's trust hashes are asked of the installed `codex` once per app run, on the first Codex launch. */
-  codexConfig?: Promise<string[]>
+  supervisor: HookSupervisor
+  /** Codex's trust hashes are asked of the installed `codex` once per app run (failures for a few minutes). */
+  codex: CodexConfigCache
 }
 
 const owners = new Map<string, WebContents>()
 let runtime: Promise<Runtime | null> | null = null
+let startFailure: HooksHealth = { ok: false, reason: 'server-unavailable', detail: 'hook server not started' }
 
 const DECISIONS: ReadonlySet<unknown> = new Set<PermissionDecision>(['allow-once', 'allow-always', 'deny'])
 
@@ -44,31 +46,70 @@ function ownerOf(sessionId: string): WebContents | null {
   return owner && !owner.isDestroyed() ? owner : null
 }
 
+function sendSessionSignal(owner: WebContents | null, signal: SessionHooksSignal): void {
+  if (owner && !owner.isDestroyed()) owner.send(IPC.agentSessionHooks, signal)
+}
+
+const watchdog = new StartWatchdog((sessionId, afterMs) => sendSessionSignal(ownerOf(sessionId), { sessionId, kind: 'start-timeout', afterMs }))
+
+function broadcastHealth(health: HooksHealth): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentHooksHealth, health)
+  }
+}
+
 const emitter: BridgeEmitter = {
-  event: (envelope) => ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope),
+  event: (envelope) => {
+    // Any hook traffic proves the hooks reach us; withdraw the "silent since launch" countdown.
+    watchdog.disarm(envelope.sessionId)
+    ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope)
+  },
   prompt: (prompt) => ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt),
   resolved: (resolution) => ownerOf(resolution.sessionId)?.send(IPC.agentPromptResolved, resolution),
   canDeliver: (sessionId) => ownerOf(sessionId) !== null
 }
 
+/** `TR_HOOKS_CHECK_MS` lets e2e fault-injection runs shorten the self-check interval. */
+function checkIntervalOverride(): { intervalMs?: number } {
+  const ms = Number(process.env.TR_HOOKS_CHECK_MS)
+  return Number.isFinite(ms) && ms >= 100 ? { intervalMs: ms } : {}
+}
+
 async function start(): Promise<Runtime | null> {
   try {
-    const dir = mkdtempSync(join(tmpdir(), 'tr-hooks-'))
+    const userData = app.getPath('userData')
+    const dir = createHookDir({ userData })
+    // Leftovers of earlier runs (including the old $TMPDIR/tr-hooks-* layout); never blocks startup.
+    void sweepStaleHookDirs({ userData, keep: dir }).then((removed) => {
+      if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
+    })
     const bridge = new HookBridge(emitter)
-    const server = await startHookServer((request) => bridge.handle(request), { socketDir: dir })
-    const settingsPath = join(dir, 'claude-settings.json')
-    writeFileSync(settingsPath, JSON.stringify(buildClaudeHookSettings(hookScriptPath()), null, 2), { mode: 0o600 })
-    chmodSync(settingsPath, 0o600)
-    return { bridge, server, settingsPath }
+    const supervisor = new HookSupervisor({
+      dir,
+      handler: (request) => bridge.handle(request),
+      settings: () => buildClaudeHookSettings(hookScriptPath()),
+      onHealth: broadcastHealth,
+      ...checkIntervalOverride()
+    })
+    // Never rejects; an unavailable server shows up in supervisor.health and is retried by the self-check.
+    await supervisor.start()
+    const codex = new CodexConfigCache(() => prepareCodexHookConfig(hookScriptPath(), process.env.SHELL || '/bin/zsh'))
+    return { bridge, supervisor, codex }
   } catch (error) {
     // Agents still work without hooks; the sidebar just falls back to its slower signals.
-    console.error('[hooks] could not start the hook server:', error)
+    console.error('[hooks] could not set up the hook server:', error)
+    startFailure = { ok: false, reason: 'server-unavailable', detail: error instanceof Error ? error.message : String(error) }
     return null
   }
 }
 
 export function registerHookHandlers(): void {
   runtime = start()
+
+  ipcMain.handle(IPC.agentGetHooksHealth, async (): Promise<HooksHealth> => {
+    const rt = await runtime
+    return rt ? rt.supervisor.health : startFailure
+  })
 
   ipcMain.on(IPC.agentRespondPermission, (event, promptId: unknown, decision: unknown) => {
     if (typeof promptId !== 'string' || promptId.length > 128 || !DECISIONS.has(decision)) return
@@ -85,39 +126,47 @@ export function registerHookHandlers(): void {
     const pending = runtime
     runtime = null
     owners.clear()
-    void pending?.then((rt) => rt?.server.close())
+    watchdog.clear()
+    void pending?.then((rt) => rt?.supervisor.stop())
   })
 }
 
 /**
- * Called by the pty layer before spawning an agent. Returns null for shells and when the hook server is
- * unavailable. Claude gets a `--settings` file; Codex gets `-c` overrides (docs/spikes/codex.md).
+ * Called by the pty layer before spawning an agent. Returns null for shells and when hooks are unavailable
+ * (then the owner gets a `SessionHooksSignal` of kind 'unavailable'). Claude gets a `--settings` file; Codex gets
+ * `-c` overrides (docs/spikes/codex.md).
  */
 export async function prepareAgentLaunch(sessionId: string, owner: WebContents, agent: AgentKind | undefined): Promise<AgentLaunchHooks | null> {
   if (agent !== 'claude' && agent !== 'codex') return null
   const rt = await runtime
-  if (!rt) return null
-  const env = { TR_SESSION_ID: sessionId, TR_HOOK_SOCK: rt.server.socketPath, TR_HOOK_TOKEN: rt.server.token }
+  // A cheap self-check per launch: an agent must not inherit a socket that is already gone.
+  const health = rt ? await rt.supervisor.check() : startFailure
+  if (!rt || !health.ok) {
+    sendSessionSignal(owner, { sessionId, kind: 'unavailable', reason: 'server-unavailable', ...(health.ok ? {} : { detail: health.detail }) })
+    return null
+  }
+  const env = { TR_SESSION_ID: sessionId, TR_HOOK_SOCK: rt.supervisor.socketPath, TR_HOOK_TOKEN: rt.supervisor.token }
   if (agent === 'claude') {
     owners.set(sessionId, owner)
     rt.bridge.attach(sessionId)
-    return { env, settingsPath: rt.settingsPath }
+    watchdog.arm(sessionId)
+    return { env, settingsPath: rt.supervisor.settingsPath }
   }
-  rt.codexConfig ??= prepareCodexHookConfig(hookScriptPath(), process.env.SHELL || '/bin/zsh')
-  const codexConfig = await rt.codexConfig
+  const codex = await rt.codex.get()
   // Without trusted hooks Codex would skip ours, so there is nothing to attach (status falls back to titles).
-  // A failed probe is not remembered: the next Codex launch asks again.
-  if (codexConfig.length === 0) {
-    rt.codexConfig = undefined
+  if (!codex.ok) {
+    sendSessionSignal(owner, { sessionId, kind: 'unavailable', reason: codex.reason, detail: codex.detail })
     return null
   }
   owners.set(sessionId, owner)
   rt.bridge.attach(sessionId)
-  return { env, codexConfig }
+  watchdog.arm(sessionId)
+  return { env, codexConfig: codex.config }
 }
 
 /** The session's PTY ended (exit, kill, host crash): release holds and withdraw its prompts. */
 export function endAgentSession(sessionId: string): void {
+  watchdog.disarm(sessionId)
   const owner = owners.get(sessionId)
   if (!owner || !runtime) return
   void runtime.then((rt) => {
