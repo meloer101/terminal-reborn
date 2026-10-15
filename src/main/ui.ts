@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, type Me
 import { isAbsolute } from 'node:path'
 import type { MenuEntry } from '@shared/ipc'
 import { IPC } from '@shared/ipc'
+import { scriptedMenuChoice } from './confirm'
 import { parseMenuEntries } from './menu-spec'
 
 function toTemplate(entries: MenuEntry[], choose: (id: string) => void): MenuItemConstructorOptions[] {
@@ -67,6 +68,8 @@ export function registerUiHandlers(): void {
 
   ipcMain.handle(IPC.uiPopupMenu, (event, raw: unknown) => {
     const entries = parseMenuEntries(raw)
+    const scripted = scriptedMenuChoice(entries)
+    if (scripted !== undefined) return scripted
     const win = BrowserWindow.fromWebContents(event.sender)
     return new Promise<string | null>((resolve) => {
       const menu = Menu.buildFromTemplate(toTemplate(entries, resolve))

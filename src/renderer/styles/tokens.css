@@ -26,6 +26,8 @@
   --titlebar-height: 44px;
   --panel-width-changes: 440px;
   --panel-width-graph: 560px;
+  /* Main never gets narrower; the right panel floats over it instead (B13). */
+  --main-min-width: 560px;
 
   /* Type */
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', sans-serif;

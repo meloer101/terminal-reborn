@@ -3,6 +3,7 @@
 // the emitter, so this is unit-tested with a fake one.
 import { randomUUID } from 'node:crypto'
 import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
+import { describeAllowAlways, type AllowAlwaysScope } from '@shared/permission-scope'
 import { normalizeHook } from './normalize'
 import { PermissionRegistry, type Scheduler } from './permission-registry'
 import { UnknownSessionError, type HookRequest } from './server'
@@ -105,6 +106,7 @@ export class HookBridge {
         input: draft.input,
         summary: draft.summary,
         canAllowAlways: draft.suggestions.length > 0,
+        ...allowAlwaysField(draft.suggestions),
         createdAt: at
       }
       return new Promise<string>((resolve) => {
@@ -116,4 +118,9 @@ export class HookBridge {
     }
     return ''
   }
+}
+
+function allowAlwaysField(suggestions: unknown[]): { allowAlways?: AllowAlwaysScope } {
+  const scope = describeAllowAlways(suggestions)
+  return scope ? { allowAlways: scope } : {}
 }

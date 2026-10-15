@@ -11,6 +11,7 @@ import {
   removeSessionPrompts,
   type PromptsBySession
 } from './model'
+import { promptOptionCount } from './present'
 
 export interface PromptError {
   promptId: string
@@ -94,4 +95,12 @@ export function usePendingCount(sessionId: SessionId | null): number {
 
 export function getPendingPrompts(sessionId: SessionId): readonly PendingPrompt[] {
   return selectPrompts(sessionId)(usePromptStore.getState())
+}
+
+/** Numbered options on the bar for this session (0 = no bar); the composer's placeholder says "按 1–N". */
+export function usePromptOptionCount(sessionId: SessionId | null): number {
+  return usePromptStore((s) => {
+    const current = selectPrompts(sessionId)(s)[0]
+    return current ? promptOptionCount(current, s.questionProgress[current.id] ?? 0) : 0
+  })
 }

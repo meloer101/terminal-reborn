@@ -22,6 +22,8 @@ import { BLOCKING_DIALOG_HINT, sendPassthrough, submitPrompt, useBlockingDialog 
 import { AGENT_NAME, cardReplacesComposer, inputBlockedByPhase } from '../lifecycle/present'
 import { useActiveSession } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
+import { replyPlaceholder } from '../prompt-bar/present'
+import { usePromptOptionCount } from '../prompt-bar/store'
 import { pathsInsertion, imageExtensionFor, pickPastedImage, restoreAfterFailure } from './attachments'
 import { decideKey, isFocusShortcut } from './composer-keys'
 import { drafts } from '../state/persistence'
@@ -57,6 +59,8 @@ export function Composer() {
   // The agent is not ready (starting, blocked, exited, not started): never type into the shell behind it.
   const notReady = inputBlockedByPhase(active?.session)
   const cardShown = cardReplacesComposer(active?.session)
+  // A prompt bar above: the composer answers it too (Figma 02 "回复 Claude，或按 1–3 直接选择").
+  const barOptions = usePromptOptionCount(sessionId)
 
   const [state, setState] = useState<EditorState>(() => ({
     sessionId,
@@ -217,6 +221,8 @@ export function Composer() {
 
   // A lifecycle card (not started / blocked / exited) takes the composer's place; the draft stays in the store.
   if (cardShown) return null
+  // No session: main shows the empty state instead (B10); a disabled box that looks usable invites typing.
+  if (!active) return null
 
   return (
     <div
@@ -240,7 +246,9 @@ export function Composer() {
             ? `正在启动 ${AGENT_NAME[active.session.kind]}…`
             : blocked
               ? BLOCKING_DIALOG_HINT
-              : running
+              : barOptions > 0 && active
+                ? replyPlaceholder(active.session.kind, barOptions)
+                : running
                 ? '智能体运行中，↵ 发送会排队'
                 : '输入任务或回复，↵ 发送，⇧↵ 换行'
         }

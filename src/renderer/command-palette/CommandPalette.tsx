@@ -11,6 +11,7 @@ import { decidePaletteKey } from './keys'
 import type { Range } from './match'
 import { closeCommandPalette, usePaletteOpen } from './palette-store'
 import { runEntry } from './run'
+import { RIGHT_PANEL_AVAILABLE } from '../panels/availability'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -72,7 +73,8 @@ function Sheet() {
       worktrees: s.worktrees,
       sessions: s.sessions,
       activeSessionId: s.activeSessionId,
-      rightPanel: s.rightPanel
+      rightPanel: s.rightPanel,
+      panelAvailable: RIGHT_PANEL_AVAILABLE
     }))
   )
   const [query, setQuery] = useState('')

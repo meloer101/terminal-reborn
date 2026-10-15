@@ -4,6 +4,18 @@ All notable changes to Terminal Reborn. Format: [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### No dead ends (phase 2b · P0) / 没有死角
+- With no session open, the main area shows how to start: 打开项目 ⌘O, recent folders, whether Claude Code / Codex are installed (with the install command), and folder drop. The composer is hidden until there is a session.
+  没有会话时，主区给出下一步：打开项目 ⌘O、最近项目、Claude Code / Codex 是否已安装（附安装命令）、拖入文件夹；没有会话时不再显示输入栏。
+- Permission options say what they allow: 允许 · 允许，本会话不再询问 pnpm prisma · 拒绝并说明…; denying puts the caret in the composer, whose hint becomes “回复 Claude，或按 1–3 直接选择”.
+  权限选项写明范围；拒绝后焦点回到输入栏，输入栏提示改为“回复 Claude，或按 1–3 直接选择”。
+- The session header’s … opens a real menu: 重命名… (or double-click the title), 在 Finder 中显示, 复制路径, 关闭会话.
+  标题栏“…”现在有菜单：重命名（也可双击标题）、在 Finder 中显示、复制路径、关闭会话。
+- Hidden until they have content: the right-panel toggle and its ⌘K action, and the 通用 / 终端 / Agent / 快捷键 settings panes.
+  尚未完成的入口先隐藏：右侧面板开关及其 ⌘K 操作、设置里的通用 / 终端 / Agent / 快捷键。
+- The main column never gets narrower than 560 px: when the right panel does not fit it floats over main, and it has a close button.
+  主区最小宽度 560 px；放不下时右侧面板浮在主区上方，面板也有关闭按钮。
+
 ## [0.1.1] - 2026-10-15
 
 Reliability release: agents no longer get lost to a click, a restart or a crash.

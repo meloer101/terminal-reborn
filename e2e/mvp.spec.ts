@@ -1,6 +1,6 @@
 // M2 / MVP acceptance against the real Claude CLI, driven only through the UI (PRD §8 M2).
 // Opt-in (calls the model, 3 short turns): TR_E2E_AGENTS=claude npm run test:e2e -- mvp
-// Flow: composer → Claude asks for Bash permission → sidebar shows 等你处理 → prompt bar 允许一次
+// Flow: composer → Claude asks for Bash permission → sidebar shows 等你处理 → prompt bar 允许
 //       → command runs → status leaves 等你处理; then an AskUserQuestion answered by clicking an option.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -78,7 +78,7 @@ test.describe('MVP: status + one-click answers with real Claude', () => {
     await app?.close()
   })
 
-  test('permission: sidebar shows 等你处理, 允许一次 in the prompt bar runs the command', async () => {
+  test('permission: sidebar shows 等你处理, 允许 in the prompt bar runs the command', async () => {
     const marker = `mvp-${Date.now()}`
     const file = `${LAB}/${marker}.txt`
     rmSync(file, { force: true })
@@ -92,7 +92,7 @@ test.describe('MVP: status + one-click answers with real Claude', () => {
     expect(existsSync(file)).toBe(false)
     await page.screenshot({ path: 'test-results/mvp-permission.png' })
 
-    await bar().getByRole('button', { name: '允许一次' }).click()
+    await bar().getByRole('button', { name: '允许', exact: true }).click()
 
     await expect.poll(() => existsSync(file), { timeout: 30_000 }).toBe(true)
     expect(readFileSync(file, 'utf8').trim()).toBe(marker)

@@ -1,5 +1,7 @@
 .shell {
+  position: relative;
   display: flex;
+  overflow: hidden;
   height: 100%;
   background: var(--bg-app);
 }
@@ -15,7 +17,7 @@
 
 .main {
   flex: 1;
-  min-width: 0;
+  min-width: var(--main-min-width);
   display: flex;
   flex-direction: column;
   /* Opaque even when the shell behind it is see-through (sidebar vibrancy). */
@@ -44,4 +46,15 @@
   flex-direction: column;
   background: var(--bg-panel);
   border-left: 1px solid var(--border-subtle);
+}
+
+/* Too narrow to dock (layout.ts): float over main's right edge, above the composer. */
+.panel[data-mode='overlay'] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  max-width: calc(100% - var(--space-40));
+  box-shadow: var(--shadow-overlay);
 }

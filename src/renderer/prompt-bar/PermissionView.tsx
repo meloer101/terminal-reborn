@@ -1,10 +1,10 @@
-import type { PendingPrompt } from '@shared/agent-events'
+import type { PendingPrompt, PermissionDecision } from '@shared/agent-events'
 import type { AgentKind } from '@shared/types'
 import { answerPermission } from './answer'
 import { BarHead } from './BarHead'
 import { OptionItem } from './OptionItem'
 import { permissionDetail, permissionOptions, permissionTitle } from './present'
-import { useDigitKeys } from './useDigitKeys'
+import { focusComposer, useDigitKeys } from './useDigitKeys'
 import styles from './PromptBar.module.css'
 
 export function PermissionView({
@@ -17,11 +17,16 @@ export function PermissionView({
   counter: string | null
 }) {
   const options = permissionOptions(prompt)
+  // 拒绝并说明…: the agent goes on without the tool; the composer is where the user says what to do instead.
+  const answer = (decision: PermissionDecision) => {
+    answerPermission(prompt, decision)
+    if (decision === 'deny') requestAnimationFrame(focusComposer)
+  }
 
   useDigitKeys((n) => {
     const option = options.find((o) => o.key === n)
     if (!option) return false
-    answerPermission(prompt, option.decision)
+    answer(option.decision)
     return true
   })
 
@@ -35,7 +40,7 @@ export function PermissionView({
             number={o.key}
             label={o.label}
             focused={o.key === 1}
-            onClick={() => answerPermission(prompt, o.decision)}
+            onClick={() => answer(o.decision)}
           />
         ))}
       </div>

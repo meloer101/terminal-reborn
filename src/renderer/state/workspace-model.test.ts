@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { sanitizeWorkspaceFile } from '@shared/workspace-file'
 import {
+  rememberRecentProject,
   addProject,
   addSession,
   closeSession,
@@ -86,7 +87,7 @@ describe('projectOfSession', () => {
 })
 
 describe('persistence', () => {
-  const ui = { sidebarCollapsed: true, rightPanel: 'changes' as const }
+  const ui = { sidebarCollapsed: true, rightPanel: 'changes' as const, recentProjects: ['/code/a'] }
 
   it('round-trips; agent sessions come back not-started, shells have no phase, startedAt is kept', () => {
     const data = withSessions('claude', 'shell') // s-3, s-4 (startedAt 1000)
@@ -105,6 +106,7 @@ describe('persistence', () => {
     expect(file.sidebarCollapsed).toBe(true)
     expect(file.rightPanel).toBe('changes')
     expect(file.drafts).toEqual({ 's-3': 'draft' })
+    expect(file.recentProjects).toEqual(['/code/a'])
     // Everything live is left out of the file.
     expect(JSON.stringify(file)).not.toMatch(/running|currentAction|phase|ready/)
 
@@ -135,7 +137,7 @@ describe('persistence', () => {
 })
 
 describe('persistedStateChanged', () => {
-  const ui = { sidebarCollapsed: false, rightPanel: null }
+  const ui = { sidebarCollapsed: false, rightPanel: null, recentProjects: [] as string[] }
   const base = { ...withSessions('claude'), ...ui }
 
   it('ignores live status and activity', () => {
@@ -151,7 +153,17 @@ describe('persistedStateChanged', () => {
     expect(persistedStateChanged({ ...base, activeSessionId: null }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, sidebarCollapsed: true }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, rightPanel: 'graph' }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, recentProjects: ['/x'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, projects: [...base.projects] }, base)).toBe(true)
+  })
+})
+
+describe('rememberRecentProject', () => {
+  it('moves the folder to the front without duplicates and keeps at most 8', () => {
+    expect(rememberRecentProject(['/a', '/b'], '/b')).toEqual(['/b', '/a'])
+    const same = ['/a', '/b']
+    expect(rememberRecentProject(same, '/a')).toBe(same)
+    expect(rememberRecentProject(Array.from({ length: 8 }, (_, i) => `/r${i}`), '/new')).toHaveLength(8)
   })
 })
 

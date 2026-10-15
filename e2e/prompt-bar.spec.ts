@@ -43,6 +43,7 @@ function permission(over: Record<string, unknown> = {}): Record<string, unknown>
     input: { command: 'pnpm prisma migrate dev --name session_cookie' },
     summary: '运行 pnpm prisma migrate dev',
     canAllowAlways: true,
+    allowAlways: { scope: 'session', rules: [{ tool: 'Bash', content: 'pnpm prisma:*' }], directories: [] },
     createdAt: Date.now(),
     ...over
   }
@@ -94,25 +95,50 @@ test('permission bar shows the request; screenshots in both themes', async () =>
   await expect(bar()).toBeVisible()
   await expect(bar()).toContainText('Claude 请求运行命令')
   await expect(bar()).toContainText('pnpm prisma migrate dev --name session_cookie')
-  await expect(bar().getByRole('button')).toHaveText(['1允许一次', '2总是允许', '3拒绝'])
+  // Figma 02 (16:178): the second option says what it allows and for how long.
+  await expect(bar().getByRole('button')).toHaveText(['1允许', '2允许，本会话不再询问 pnpm prisma', '3拒绝并说明…'])
+  // The composer answers the bar too.
+  await expect(composer()).toHaveAttribute('placeholder', '回复 Claude，或按 1–3 直接选择')
   for (const theme of ['dark', 'light'] as const) {
     await setTheme(theme)
     await page.waitForTimeout(300)
     await page.screenshot({ path: `test-results/prompt-bar-permission-${theme}.png` })
   }
   await setTheme('dark')
-  await bar().getByRole('button', { name: '允许一次' }).click()
+  await bar().getByRole('button', { name: '允许', exact: true }).click()
+  await expect(bar()).toHaveCount(0)
+  await expect(composer()).not.toHaveAttribute('placeholder', /直接选择/)
+})
+
+test('拒绝并说明… answers deny and puts the caret in the composer', async () => {
+  const p = permission()
+  await inject(p)
+  await focusTerminal()
+  await bar().getByRole('button', { name: '拒绝并说明…' }).click()
+  await expect(bar()).toHaveCount(0)
+  expect((await log()).at(-1)).toMatchObject({ id: p['id'], decision: 'deny' })
+  await expect(composer()).toBeFocused()
+})
+
+test('a project-wide rule says 本项目; an unknown rule still names its scope generically', async () => {
+  await inject(permission({ allowAlways: { scope: 'project', rules: [{ tool: 'Edit' }], directories: [] } }))
+  await expect(bar().getByRole('button').nth(1)).toHaveText('2允许，本项目不再询问文件修改')
+  await bar().getByRole('button', { name: '拒绝并说明…' }).click()
+  await expect(bar()).toHaveCount(0)
+  await inject(permission({ allowAlways: undefined }))
+  await expect(bar().getByRole('button').nth(1)).toHaveText('2允许，不再询问同类请求')
+  await bar().getByRole('button', { name: '拒绝并说明…' }).click()
   await expect(bar()).toHaveCount(0)
 })
 
 test('clicking a permission button reports the right decision', async () => {
   for (const [name, decision] of [
-    ['拒绝', 'deny'],
-    ['总是允许', 'allow-always']
+    ['拒绝并说明…', 'deny'],
+    ['允许，本会话不再询问 pnpm prisma', 'allow-always']
   ] as const) {
     const p = permission()
     await inject(p)
-    await bar().getByRole('button', { name }).click()
+    await bar().getByRole('button', { name, exact: true }).click()
     await expect(bar()).toHaveCount(0)
     expect((await log()).at(-1)).toMatchObject({ kind: 'permission', id: p['id'], decision })
   }
@@ -120,9 +146,10 @@ test('clicking a permission button reports the right decision', async () => {
   expect((await log())[0]).toMatchObject({ kind: 'permission', decision: 'allow-once' })
 })
 
-test('总是允许 is hidden when the agent offered no rule', async () => {
+test('allow-always is hidden when the agent offered no rule', async () => {
   await inject(permission({ canAllowAlways: false }))
-  await expect(bar().getByRole('button')).toHaveText(['1允许一次', '2拒绝'])
+  await expect(bar().getByRole('button')).toHaveText(['1允许', '2拒绝并说明…'])
+  await expect(composer()).toHaveAttribute('placeholder', '回复 Claude，或按 1–2 直接选择')
   await bar().getByRole('button', { name: /拒绝/ }).click()
   await expect(bar()).toHaveCount(0)
 })
