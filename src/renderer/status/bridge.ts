@@ -1,9 +1,8 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
-import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import type { SessionId } from '@shared/types'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
-import { clearLaunchIssue, reportLaunchIssue, useLaunchIssues } from '../lifecycle/launch-issues'
+import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
 import { launchKind, useWorkspace } from '../state/workspace'
@@ -76,21 +75,7 @@ export function startStatusBridge(): () => void {
         if (surface && attached?.surface !== surface) {
           attached?.dispose()
           const subscription = surface.onTitleChange((title) => controller.handleTitle(session.id, title))
-          // The launch script reports the agent's end (or a missing CLI) as an OSC marker (agent-launch.ts).
-          const markers = surface.onOsc(AGENT_MARKER_OSC, (payload) => {
-            const marker = parseAgentMarker(payload)
-            if (!marker) return
-            if (marker.type === 'missing') reportLaunchIssue(session.id, { kind: 'missing-cli' })
-            else if (marker.code !== 0) reportLaunchIssue(session.id, { kind: 'agent-exit', code: marker.code })
-            controller.handleMarker(session.id, marker)
-          })
-          titleSubscriptions.set(session.id, {
-            surface,
-            dispose: () => {
-              subscription.dispose()
-              markers.dispose()
-            }
-          })
+          titleSubscriptions.set(session.id, { surface, dispose: () => subscription.dispose() })
         }
         if (!outputSubscriptions.has(session.id)) {
           const entry: { unsubscribe(): void; timer: ReturnType<typeof setTimeout> | null } = {
@@ -185,6 +170,8 @@ export function startStatusBridge(): () => void {
       if (issue.kind === 'cwd-missing' || issue.kind === 'spawn-failed') controller.handleLaunchFailed(id)
     }
   })
+  // The agent's end / a missing CLI, reported by the terminal as soon as it sees the launch script's marker.
+  const unsubscribeMarkers = onAgentMarker((id, marker) => controller.handleMarker(id, marker))
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
   const onViewChange = (): void => controller.refreshViewing()
@@ -206,6 +193,7 @@ export function startStatusBridge(): () => void {
     unsubscribeSessionHooks()
     stopHooksHealth()
     unsubscribeIssues()
+    unsubscribeMarkers()
     clearTimeout(timer)
     unsubscribeStore()
     unsubscribeEvents()

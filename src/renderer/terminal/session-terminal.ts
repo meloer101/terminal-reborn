@@ -1,6 +1,7 @@
 // Binds one XtermSurface to one PTY session through window.tr.pty.
+import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import type { AgentKind, SessionId } from '@shared/types'
-import { issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
+import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
 import { XtermSurface } from './xterm-surface'
 
 const ACK_BATCH_UNITS = 32 * 1024
@@ -50,6 +51,12 @@ export class SessionTerminal {
 
     const input = this.surface.onInput((data) => this.sendInput(data))
     const resize = this.surface.onResize(({ cols, rows }) => pty.resize(id, cols, rows))
+    // The launch script reports the agent's end (or a missing CLI) as an OSC marker; listening here, before the
+    // spawn, means even an instant failure is seen (agent-launch.ts).
+    const markers = this.surface.onOsc(AGENT_MARKER_OSC, (payload) => {
+      const marker = parseAgentMarker(payload)
+      if (marker) emitAgentMarker(id, marker)
+    })
     this.cleanups.push(
       pty.onData(id, (data) => {
         this.surface.write(data, () => this.ack(data.length))
@@ -59,7 +66,8 @@ export class SessionTerminal {
         this.surface.write(dim(`[进程已退出，退出码 ${exitCode}]`))
       }),
       () => input.dispose(),
-      () => resize.dispose()
+      () => resize.dispose(),
+      () => markers.dispose()
     )
 
     await this.spawnProcess(this.resumeAgentSessionId)

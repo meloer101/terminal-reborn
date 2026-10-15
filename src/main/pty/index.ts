@@ -128,8 +128,8 @@ function handleHostEvent(event: HostEvent): void {
 
 async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promise<{ pid: number }> {
   const id = options.sessionId
-  // A missing directory is refused rather than quietly replaced by the home directory (phase 2a · A8).
-  assertCwdExists(options.cwd)
+  // An agent in a missing directory is refused rather than quietly started in the home directory (phase 2a · A8).
+  if (options.command === undefined && options.agent !== undefined && options.agent !== 'shell') assertCwdExists(options.cwd)
   // Re-spawning an id (e.g. after a renderer reload) makes the host replace the old process.
   sessions.set(id, { owner })
 

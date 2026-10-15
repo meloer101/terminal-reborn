@@ -140,7 +140,7 @@ test('self-heals a lost stop when the title shows the agent is idle', async () =
   await emit('s-graph', { type: 'prompt-submit', prompt: 'retry' })
   await expect(row('s-graph').getByRole('img', { name: '运行中' })).toBeVisible(WITHIN)
   await call('title', 's-graph', '✳ Claude Code')
-  await call('advance', 179_000)
+  await call('advance', 5_000)
   await expect(row('s-graph').getByRole('img', { name: '运行中' })).toBeVisible()
   await call('advance', 2_000)
   await expect(row('s-graph').getByRole('img', { name: '空闲' })).toBeVisible(WITHIN)

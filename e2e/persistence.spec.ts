@@ -85,12 +85,13 @@ test.describe('workspace persistence', () => {
     await expect.poll(() => readJson(workspaceFile).drafts?.['s-shell'], { timeout: 5000 }).toBe('草稿 A：别丢')
     await expect.poll(() => (existsSync(windowFile) ? readJson(windowFile).bounds : null), { timeout: 5000 }).toMatchObject({ width: 1100, height: 720 })
 
-    // Viewing the Claude session spawns it with --resume <saved id>.
+    // Viewing the Claude session only shows the not-started card (no spawn); 恢复对话 starts it with --resume <saved id>.
     await row('s-claude').click()
+    await expect(page.getByTestId('lifecycle-card')).toHaveAttribute('data-kind', 'not-started')
+    await page.waitForTimeout(1000)
+    expect(resumeRunning()).toBe(false)
+    await page.getByRole('button', { name: /恢复对话/ }).click()
     await expect.poll(resumeRunning, { timeout: 15_000 }).toBe(true)
-    await expect(composer()).toHaveValue('')
-    await composer().fill('草稿 B')
-    await expect.poll(() => readJson(workspaceFile).drafts?.['s-claude'], { timeout: 5000 }).toBe('草稿 B')
     await row('s-shell').click()
     await expect(composer()).toHaveValue('草稿 A：别丢')
     await expect.poll(() => readJson(workspaceFile).activeSessionId, { timeout: 5000 }).toBe('s-shell')
@@ -117,9 +118,10 @@ test.describe('workspace persistence', () => {
     // The Claude session came back not started: nothing was spawned for it.
     await page.waitForTimeout(1500)
     expect(resumeRunning()).toBe(false)
-    // Its draft is still there, and viewing it resumes the saved conversation.
+    // Viewing it offers to resume (card); choosing 恢复对话 resumes the saved conversation.
     await row('s-claude').click()
-    await expect(composer()).toHaveValue('草稿 B')
+    await expect(page.getByTestId('lifecycle-card')).toHaveAttribute('data-kind', 'not-started')
+    await page.getByRole('button', { name: /恢复对话/ }).click()
     await expect.poll(resumeRunning, { timeout: 15_000 }).toBe(true)
     await page.screenshot({ path: 'test-results/persistence-restored.png' })
     // startedAt did not reset.

@@ -1,6 +1,7 @@
 // Why a session's agent is not running, beyond what its phase says (phase 2a · A3/A8). The Exited card reads it
 // to say "claude 未安装" or "项目目录不存在" instead of a bare "已退出". Not persisted; cleared on every launch.
 import { create } from 'zustand'
+import type { AgentMarker } from '@shared/agent-launch'
 import type { SessionId } from '@shared/types'
 
 export type LaunchIssue =
@@ -22,6 +23,26 @@ export function reportLaunchIssue(sessionId: SessionId, issue: LaunchIssue): voi
 export function clearLaunchIssue(sessionId: SessionId): void {
   if (!useLaunchIssues.getState().issues[sessionId]) return
   useLaunchIssues.setState((s) => ({ issues: { ...s.issues, [sessionId]: undefined } }))
+}
+
+const markerListeners = new Set<(sessionId: SessionId, marker: AgentMarker) => void>()
+
+/** The launch script's marker for a session (agent exited / CLI missing), as it arrives from the terminal. */
+export function onAgentMarker(listener: (sessionId: SessionId, marker: AgentMarker) => void): () => void {
+  markerListeners.add(listener)
+  return () => {
+    markerListeners.delete(listener)
+  }
+}
+
+/**
+ * Called by the session's terminal the moment the marker is parsed (not by a poller: a missing CLI is reported
+ * within milliseconds of the spawn). Records what the card needs to say, then tells the status controller.
+ */
+export function emitAgentMarker(sessionId: SessionId, marker: AgentMarker): void {
+  if (marker.type === 'missing') reportLaunchIssue(sessionId, { kind: 'missing-cli' })
+  else if (marker.code !== 0) reportLaunchIssue(sessionId, { kind: 'agent-exit', code: marker.code })
+  for (const listener of [...markerListeners]) listener(sessionId, marker)
 }
 
 /** Error code main puts in front of a spawn failure message so the renderer can tell the cause (see main/pty). */

@@ -31,7 +31,8 @@ function useSessionFocus(sessionId: string | null, phase: string | undefined, ki
     const attempt = (): void => {
       if (!canStealFocus()) return
       let done = false
-      if (phase === 'starting' || phase === 'blocked' || kind === 'shell') done = focusTerminal(sessionId)
+      // No phase: a plain shell (or a stand-in for one), whose terminal is where the user types.
+      if (phase === undefined || phase === 'starting' || phase === 'blocked' || kind === 'shell') done = focusTerminal(sessionId)
       else if (phase === 'not-started' || phase === 'exited') {
         if (primary.current) {
           primary.current.focus()
