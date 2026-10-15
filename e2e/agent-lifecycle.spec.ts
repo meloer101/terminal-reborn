@@ -81,6 +81,8 @@ test.describe('agent lifecycle · fake claude', () => {
   const card = () => page.getByTestId('lifecycle-card')
   const row = (id: string) => page.locator(`[data-region="sidebar"] [data-session-id="${id}"]`)
   const mode = (value: string) => writeFileSync(modeFile, value)
+  const activeClass = () =>
+    page.evaluate(() => (globalThis as unknown as { document: { activeElement: { className?: string } | null } }).document.activeElement?.className ?? '')
   const addSession = (): Promise<string> =>
     page.evaluate((id) => (globalThis as unknown as Hooks).__trWorkspace.getState().addSession(id, 'claude') ?? '', projectId)
   const write = (id: string, data: string) => page.evaluate(([i, d]) => (globalThis as unknown as Hooks).tr.pty.write(i as string, d as string), [id, data])
@@ -138,12 +140,12 @@ test.describe('agent lifecycle · fake claude', () => {
     await expect(row(id)).toContainText('等你确认：信任此文件夹')
     await expect(row(id).getByRole('img', { name: '等你处理' })).toBeVisible()
     // B7: the terminal has the keyboard, so the keys the card names go to the dialog.
-    await expect.poll(() => page.evaluate(() => document.activeElement?.className ?? '')).toContain('xterm-helper-textarea')
+    await expect.poll(() => activeClass()).toContain('xterm-helper-textarea')
     await shot('blocked')
 
     await page.locator('[data-region="main"]').getByRole('heading').click() // take the focus away
     await card().getByRole('button', { name: '聚焦终端' }).click()
-    await expect.poll(() => page.evaluate(() => document.activeElement?.className ?? '')).toContain('xterm-helper-textarea')
+    await expect.poll(() => activeClass()).toContain('xterm-helper-textarea')
 
     await write(id, '\r')
     await expect(card()).toHaveCount(0, WITHIN)
