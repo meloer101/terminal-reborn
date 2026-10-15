@@ -31,6 +31,8 @@ function cleanEnv(userData: string): Record<string, string> {
   }
   env.TR_USER_DATA_DIR = userData
   env.TR_DISABLE_UPDATE_CHECK = '1' // no background network call from the test run
+  // Auto-answer native dialogs: the fixture workspace has running sessions, so quitting asks first.
+  env.TR_E2E_DIALOGS = '1'
   return env
 }
 

@@ -81,9 +81,14 @@ test.describe('workspace persistence', () => {
 
     // A draft, a window move, then a second session viewed: all of it reaches disk.
     await composer().fill('草稿 A：别丢')
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setBounds({ x: 80, y: 90, width: 1100, height: 720 }))
+    // The OS may clamp the requested size to the display (CI runners have small screens): compare with what it got.
+    const actual = await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows()[0]
+      win?.setBounds({ x: 80, y: 90, width: 1100, height: 720 })
+      return win?.getBounds()
+    })
     await expect.poll(() => readJson(workspaceFile).drafts?.['s-shell'], { timeout: 5000 }).toBe('草稿 A：别丢')
-    await expect.poll(() => (existsSync(windowFile) ? readJson(windowFile).bounds : null), { timeout: 5000 }).toMatchObject({ width: 1100, height: 720 })
+    await expect.poll(() => (existsSync(windowFile) ? readJson(windowFile).bounds : null), { timeout: 5000 }).toMatchObject({ width: actual?.width, height: actual?.height })
 
     // Viewing the Claude session only shows the not-started card (no spawn); 恢复对话 starts it with --resume <saved id>.
     await row('s-claude').click()
@@ -113,7 +118,9 @@ test.describe('workspace persistence', () => {
     await expect(composer()).toHaveValue('草稿 A：别丢')
 
     const bounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getBounds())
-    expect(bounds).toMatchObject({ x: 80, y: 90, width: 1100, height: 720 })
+    // Whatever the previous run saved (the OS may have clamped the requested size) comes back.
+    const saved = readJson(windowFile).bounds as { x: number; y: number; width: number; height: number }
+    expect(bounds).toMatchObject({ x: saved.x, y: saved.y, width: saved.width, height: saved.height })
 
     // The Claude session came back not started: nothing was spawned for it.
     await page.waitForTimeout(1500)
