@@ -1,6 +1,7 @@
 // Pure sidebar view-model: grouping, ordering and keyboard targets. No React, no store access.
 import type { Project, Session, SessionId, Worktree } from '@shared/types'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
+import { phaseLine } from '../lifecycle/present'
 
 export interface DiffStat {
   added: number
@@ -40,7 +41,7 @@ function toRow(session: Session, worktree: Worktree | undefined): SessionRowMode
   const removed = worktree?.removed ?? 0
   return {
     session,
-    secondary: session.currentAction ?? location,
+    secondary: phaseLine(session) ?? session.currentAction ?? location,
     attention: session.status === 'needs_you',
     stat: added + removed > 0 ? { added, removed } : null
   }

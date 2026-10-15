@@ -1,11 +1,11 @@
-import { Ellipsis, GitBranch, PanelLeft, PanelRight } from 'lucide-react'
+import { CircleAlert, Ellipsis, GitBranch, PanelLeft, PanelRight } from 'lucide-react'
 import { STATUS_LABEL } from '@shared/session-status'
+import { useHooksHealth } from '../lifecycle/hooks-health'
+import { AGENT_NAME, glyphStatus, phaseLabel } from '../lifecycle/present'
 import { useActiveSession, useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
 import styles from './SessionHeader.module.css'
-
-const AGENT_NAME = { claude: 'Claude Code', codex: 'Codex', shell: 'Shell' } as const
 
 /** Figma component `SessionHeader` (11:86). Doubles as the window drag region. */
 export function SessionHeader() {
@@ -14,6 +14,8 @@ export function SessionHeader() {
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar)
   const rightPanel = useWorkspace((s) => s.rightPanel)
   const setRightPanel = useWorkspace((s) => s.setRightPanel)
+  const hooks = useHooksHealth(active?.session.id ?? null)
+  const agentUp = active !== null && active.session.kind !== 'shell' && active.session.phase !== 'not-started' && active.session.phase !== 'exited'
 
   return (
     <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
@@ -32,9 +34,15 @@ export function SessionHeader() {
             </span>
           )}
           <span className={styles.spacer} />
+          {agentUp && hooks === 'unavailable' && (
+            <span className={styles.hooks} data-testid="hooks-unavailable" title="hooks 不可用，状态只能按终端标题判断">
+              <CircleAlert size={16} strokeWidth={1.75} />
+              状态仅按标题判断
+            </span>
+          )}
           <span className={styles.status}>
-            <StatusGlyph status={active.session.status} />
-            {AGENT_NAME[active.session.kind]} · {STATUS_LABEL[active.session.status]}
+            <StatusGlyph status={glyphStatus(active.session)} />
+            {AGENT_NAME[active.session.kind]} · {phaseLabel(active.session, STATUS_LABEL[active.session.status])}
           </span>
         </>
       )}

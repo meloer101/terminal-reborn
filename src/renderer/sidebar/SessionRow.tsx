@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef } from 'react'
+import { glyphStatus } from '../lifecycle/present'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { Elapsed } from './Elapsed'
 import { showsElapsed } from './format-elapsed'
@@ -45,7 +46,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
       }
     >
       <span className={styles.glyph}>
-        <StatusGlyph status={session.status} />
+        <StatusGlyph status={glyphStatus(session)} />
       </span>
       <span className={styles.main}>
         <span className={styles.title}>{session.title}</span>

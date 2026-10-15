@@ -1,15 +1,19 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
 import type { SessionId } from '@shared/types'
-import { getSurface, onTerminalRestarted } from '../terminal/registry'
+import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
+import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
+import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
-import { useWorkspace } from '../state/workspace'
+import { launchKind, useWorkspace } from '../state/workspace'
 import { titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
 
 const FAST_TICK_MS = 1_000
 const SLOW_TICK_MS = 15_000
+/** Output is parsed asynchronously: look at the screen a moment after it arrives. */
+const SCREEN_CHECK_MS = 200
 
 const e2e = (globalThis as { __TR_E2E__?: boolean }).__TR_E2E__ === true
 
@@ -28,6 +32,13 @@ export function startStatusBridge(): () => void {
     activeSessionId: () => useWorkspace.getState().activeSessionId,
     windowFocused: () => hook?.focused() ?? windowFocused(),
     patch: (id, patch) => useWorkspace.getState().patchSession(id, patch),
+    launchesAgent: (session) => launchKind(session) !== 'shell',
+    readScreen: (id) => readViewport(id),
+    setHooksSilent: (id, silent) => setHooksSilent(id, silent),
+    onLaunched: (id) => {
+      clearLaunchIssue(id)
+      resetHooksHealth(id)
+    },
     setActive: (id) => useWorkspace.getState().setActiveSession(id),
     setBadge: (count) => {
       hook?.record('badge', count)
@@ -43,6 +54,8 @@ export function startStatusBridge(): () => void {
 
   const exitSubscriptions = new Map<SessionId, () => void>()
   const titleSubscriptions = new Map<SessionId, { surface: TerminalSurface; dispose(): void }>()
+  /** Debounced "look at the screen" after output, for sessions whose state the screen can change. */
+  const outputSubscriptions = new Map<SessionId, { unsubscribe(): void; timer: ReturnType<typeof setTimeout> | null }>()
 
   /** Subscribes per-session sources for new sessions and drops them for closed ones. */
   function reconcileSources(): void {
@@ -64,6 +77,18 @@ export function startStatusBridge(): () => void {
           const subscription = surface.onTitleChange((title) => controller.handleTitle(session.id, title))
           titleSubscriptions.set(session.id, { surface, dispose: () => subscription.dispose() })
         }
+        if (!outputSubscriptions.has(session.id)) {
+          const entry: { unsubscribe(): void; timer: ReturnType<typeof setTimeout> | null } = {
+            timer: null,
+            unsubscribe: window.tr.pty.onData(session.id, () => {
+              entry.timer ??= setTimeout(() => {
+                entry.timer = null
+                controller.handleOutput(session.id)
+              }, SCREEN_CHECK_MS)
+            })
+          }
+          outputSubscriptions.set(session.id, entry)
+        }
       }
     }
     for (const [id, unsubscribe] of [...exitSubscriptions]) {
@@ -78,11 +103,18 @@ export function startStatusBridge(): () => void {
         titleSubscriptions.delete(id)
       }
     }
+    for (const [id, entry] of [...outputSubscriptions]) {
+      if (!live.has(id)) {
+        entry.unsubscribe()
+        if (entry.timer !== null) clearTimeout(entry.timer)
+        outputSubscriptions.delete(id)
+      }
+    }
   }
 
   /** Fast while a turn is running or a terminal's title is not hooked up yet; otherwise relaxed. */
   function tickInterval(): number {
-    if (controller.hasRunning()) return FAST_TICK_MS
+    if (controller.hasRunning() || controller.watchesScreens()) return FAST_TICK_MS
     const missingTitle = useWorkspace.getState().sessions.some((s) => s.kind !== 'shell' && !titleSubscriptions.has(s.id))
     return missingTitle ? FAST_TICK_MS : SLOW_TICK_MS
   }
@@ -125,6 +157,21 @@ export function startStatusBridge(): () => void {
     })
   )
   const unsubscribeRestart = onTerminalRestarted((sessionId) => controller.handleRestart(sessionId))
+  // Main's per-session hook signals: launched without hooks (chip), or silent after launch (maybe a dialog).
+  const unsubscribeSessionHooks = window.tr.agent.onSessionHooks((signal) => {
+    applySessionHooksSignal(signal)
+    if (signal.kind === 'start-timeout') controller.handleHooksSilent(signal.sessionId)
+  })
+  const stopHooksHealth = startHooksHealthTracking()
+  // A terminal that could not start (missing directory, spawn error) leaves the session exited.
+  const unsubscribeIssues = useLaunchIssues.subscribe((state, prev) => {
+    for (const [id, issue] of Object.entries(state.issues)) {
+      if (issue === prev.issues[id] || !issue) continue
+      if (issue.kind === 'cwd-missing' || issue.kind === 'spawn-failed') controller.handleLaunchFailed(id)
+    }
+  })
+  // The agent's end / a missing CLI, reported by the terminal as soon as it sees the launch script's marker.
+  const unsubscribeMarkers = onAgentMarker((id, marker) => controller.handleMarker(id, marker))
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
   const onViewChange = (): void => controller.refreshViewing()
@@ -143,6 +190,10 @@ export function startStatusBridge(): () => void {
 
   return () => {
     unsubscribePrompts()
+    unsubscribeSessionHooks()
+    stopHooksHealth()
+    unsubscribeIssues()
+    unsubscribeMarkers()
     clearTimeout(timer)
     unsubscribeStore()
     unsubscribeEvents()
@@ -153,6 +204,10 @@ export function startStatusBridge(): () => void {
     document.removeEventListener('visibilitychange', onViewChange)
     for (const unsubscribe of exitSubscriptions.values()) unsubscribe()
     for (const subscription of titleSubscriptions.values()) subscription.dispose()
+    for (const entry of outputSubscriptions.values()) {
+      entry.unsubscribe()
+      if (entry.timer !== null) clearTimeout(entry.timer)
+    }
     hook?.detach()
   }
 }

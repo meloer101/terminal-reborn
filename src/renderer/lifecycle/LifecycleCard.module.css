@@ -1,0 +1,101 @@
+/* Figma Screen 10 · Not started 64:2307 / Blocked 64:2318 / Exited 64:2333 — 16/12 padding, 12 gap, 14 glyph,
+   24px buttons. Same floating card as the composer; it takes the composer's place. */
+.card {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin: 0 var(--space-12) var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  -webkit-app-region: no-drag;
+}
+
+.glyph {
+  display: inline-flex;
+  flex: none;
+}
+
+.text {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-12);
+}
+
+.button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-caption-strong);
+  white-space: nowrap;
+  cursor: default;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.button:hover {
+  background: var(--bg-hover);
+}
+
+.button[data-primary='true'] {
+  border-color: transparent;
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.button[data-primary='true']:hover {
+  background: var(--fill-primary);
+  opacity: 0.88;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.button:disabled {
+  background: var(--bg-selected);
+  border-color: transparent;
+  color: var(--text-disabled);
+}
+
+.shortcut {
+  font: var(--text-mono-s);
+  opacity: 0.55;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentSessionIdPatch, hasStartChoice, planStart, shouldAutoStart } from './session-start-plan'
+import { AUTO_START_ON_VIEW, agentSessionIdPatch, hasStartChoice, planStart, shouldAutoStart } from './session-start-plan'
 
 const restored = { kind: 'claude' as const, phase: 'not-started' as const, agentSessionId: 'conv-1' }
 
@@ -31,13 +31,14 @@ describe('hasStartChoice / shouldAutoStart', () => {
     expect(hasStartChoice({ ...restored, kind: 'shell' })).toBe(false)
   })
 
-  it('starts on view by default, resuming', () => {
-    expect(shouldAutoStart(restored)).toBe(true)
+  it('waits for the user now that the not-started card owns the choice', () => {
+    expect(AUTO_START_ON_VIEW).toBe(false)
+    expect(shouldAutoStart(restored)).toBe(false)
   })
 
-  it('waits for the user when the UI owns the choice, but not when there is nothing to choose', () => {
-    expect(shouldAutoStart(restored, false)).toBe(false)
-    expect(shouldAutoStart({ ...restored, agentSessionId: undefined }, false)).toBe(true)
+  it('still starts by itself when there is nothing to choose, or when auto-start is on', () => {
+    expect(shouldAutoStart({ ...restored, agentSessionId: undefined })).toBe(true)
+    expect(shouldAutoStart(restored, true)).toBe(true)
   })
 
   it('never auto-starts a running, shell or missing session', () => {

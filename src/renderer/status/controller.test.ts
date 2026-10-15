@@ -220,10 +220,10 @@ describe('StatusController', () => {
   })
 
   describe('self-heal', () => {
-    it('heals a stuck running session after 3 minutes with an idle title', () => {
+    it('heals a turn that ended without a Stop (interrupt) once the title is idle and hooks are quiet', () => {
       h.controller.handleEvent('b', { type: 'prompt-submit', prompt: 'x' })
       h.controller.handleTitle('b', '✳ Claude Code')
-      h.clock.now += 179_000
+      h.clock.now += 5_000
       h.controller.tick()
       expect(status(h, 'b')).toBe('running')
       h.clock.now += 1_000
