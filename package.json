@@ -1,7 +1,7 @@
 {
   "name": "terminal-reborn",
   "productName": "Terminal Reborn",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A macOS terminal built for running many CLI coding agents in parallel",
   "license": "MIT",
   "repository": "github:meloer101/terminal-reborn",

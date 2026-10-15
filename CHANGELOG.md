@@ -4,6 +4,41 @@ All notable changes to Terminal Reborn. Format: [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-15
+
+Reliability release: agents no longer get lost to a click, a restart or a crash.
+可靠性版本：agent 不会再因为误点、重启或崩溃而丢失。
+
+### Sessions survive / 会话不再轻易丢失
+- Closing the window only hides it; agents keep running. ⌘Q asks first when sessions are running or waiting for you.
+  关闭窗口只是隐藏，agent 继续运行；有运行中或等你处理的会话时，⌘Q 会先确认。
+- After a restart, a Claude Code / Codex session resumes its previous conversation (`--resume`) the first time you open it.
+  重启后第一次打开会话时，用 `--resume` 接上原来的对话。
+- Closing a running session (now also ⌘W) or removing a project with running sessions asks first.
+  关闭运行中的会话（新增 ⌘W）或移除有运行中会话的项目前会确认。
+- If the terminal engine crashes it restarts automatically, and affected sessions offer 全部恢复.
+  终端进程崩溃后自动重启，受影响的会话可一键全部恢复。
+- Workspace, drafts and window position are saved by the app itself (migrated automatically).
+  工作区、草稿和窗口位置改由应用自己保存（自动迁移）。
+
+### Honest status / 状态更准确
+- New session states: 正在启动 / 未启动 · 点击恢复 / 等你确认：信任此文件夹 / 已退出, with cards that say what to do.
+  新增启动中、未启动、被首次弹窗挡住、已退出等状态，并给出下一步操作。
+- The composer is disabled when no agent is running, so text is never run as a shell command.
+  没有 agent 运行时输入栏停用，文字不会被当作 shell 命令执行。
+- `/clear` no longer freezes a session as 已退出; interrupted turns return to 空闲 within seconds.
+  `/clear` 后状态不再卡死；被中断的回合几秒内回到空闲。
+- Missing `claude` / `codex` command or a deleted project folder is reported with a hint instead of failing silently.
+  找不到 `claude` / `codex` 命令或项目目录被删除时会明确提示。
+- Hooks self-heal; when they are unavailable the header says status follows the terminal title.
+  hooks 会自愈；不可用时标题栏会提示状态仅按终端标题判断。
+
+### Also / 其他
+- Settings is a dialog in the main window; the sidebar opens projects (⌘O) and starts sessions from each project; the composer and prompt bar are floating cards.
+  设置改为主窗口内弹窗；侧栏可直接打开项目（⌘O）并在项目里新建会话；输入栏和选项条改为悬浮卡片。
+- Packaged builds no longer include Reload / Developer Tools.
+  正式版去掉了“重新加载 / 开发者工具”。
+
 ## [0.1.0] - 2026-10-14
 
 First public release. Unsigned (ad-hoc signature): see the README for the one-time `xattr -cr`.
@@ -49,5 +84,6 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.1
 [0.1.0]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.0
