@@ -110,6 +110,14 @@ test('keyboard: ↓ moves, Space previews, filter narrows, board shows the same 
   await expect(peek()).toBeVisible()
   await page.keyboard.press('Escape')
 
+  // Space on a focused group header folds the group instead of previewing.
+  await overview().locator('section[aria-label="空闲"] > button').focus()
+  await page.keyboard.press('Space')
+  await expect(overview().locator('section[aria-label="空闲"] > button')).toHaveAttribute('aria-expanded', 'false')
+  await expect(peek()).toBeHidden()
+  await page.keyboard.press('Space')
+  await expect(overview().locator('section[aria-label="空闲"] > button')).toHaveAttribute('aria-expanded', 'true')
+
   await overview().getByRole('searchbox', { name: '过滤会话' }).fill('p:terminal')
   await expect(overview().locator('[role="option"]')).toHaveCount(2)
   await overview().getByRole('searchbox', { name: '过滤会话' }).fill('')

@@ -75,6 +75,8 @@ export function Overview() {
       return
     }
     if (inText && !(e.target === filterRef.current && (e.key === 'ArrowDown' || e.key === 'Enter'))) return
+    // Space / ↵ on a group header, the view switch or a peek button keep their own meaning.
+    if ((e.key === ' ' || e.key === 'Enter') && (e.target as HTMLElement).closest('button') !== null) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       select(moveSelection(ids, selectedId, e.key === 'ArrowDown' ? 1 : -1))
