@@ -16,7 +16,8 @@
   color: var(--text-primary);
 }
 
-.button[data-active='true'] {
+.button[data-active='true'],
+.button[data-menu-open] {
   background: var(--bg-selected);
   color: var(--text-primary);
 }

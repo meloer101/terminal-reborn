@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
 import { openNewSessionMenu, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
+import type { MenuAnchor } from '../ui/menu'
 import { NavItem } from './NavItem'
 import { openCommandPalette } from '../command-palette'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
@@ -35,7 +36,7 @@ export function Sidebar() {
       }))
     )
   const listRef = useRef<HTMLDivElement>(null)
-  const onRowContextMenu = useCallback((id: string) => void openSessionContextMenu(id), [])
+  const onRowContextMenu = useCallback((id: string, anchor: MenuAnchor) => void openSessionContextMenu(id, anchor), [])
 
   const groups = useMemo(
     () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds }),
@@ -98,8 +99,8 @@ export function Sidebar() {
               collapsed={group.collapsed}
               attention={group.attention}
               onToggle={() => toggleProjectCollapsed(group.id)}
-              onNewSession={() => void openNewSessionMenu(group.id)}
-              onMenu={() => void openProjectMenu(group.id)}
+              onNewSession={(anchor) => void openNewSessionMenu(group.id, anchor)}
+              onMenu={(anchor) => void openProjectMenu(group.id, anchor)}
             />
             {group.rows.map((row) => (
               <SessionRow
@@ -112,7 +113,7 @@ export function Sidebar() {
               />
             ))}
             {!group.collapsed && group.sessionCount === 0 && (
-              <button type="button" className={styles.newSession} onClick={() => void openNewSessionMenu(group.id)}>
+              <button type="button" className={styles.newSession} aria-haspopup="menu" onClick={(e) => void openNewSessionMenu(group.id, e.currentTarget)}>
                 <Plus {...ICON} />
                 新建会话
               </button>

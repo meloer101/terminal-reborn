@@ -139,20 +139,17 @@ test.describe('first run and the session header', () => {
   })
 
   test('B11: the header … menu renames and closes the session', async () => {
-    await app.evaluate(() => {
-      ;(globalThis as unknown as { __trDialogs: { menuAnswers: string[] } }).__trDialogs.menuAnswers.push('rename')
-    })
     await page.getByRole('button', { name: '会话菜单' }).click()
+    const menu = page.getByRole('menu')
+    await expect(menu.getByRole('menuitem')).toHaveText(['重命名…', '在 Finder 中显示', '复制路径', '关闭会话⌘W'])
+    await menu.getByRole('menuitem', { name: '重命名…' }).click()
+    await expect(menu).toHaveCount(0)
     const field = page.getByRole('textbox', { name: '会话名称' })
     await expect(field).toBeFocused()
     await field.fill('迁移会话 cookie')
     await field.press('Enter')
     await expect(page.locator('[data-region="main"] h1')).toHaveText('迁移会话 cookie')
     await expect(page.locator('[data-region="sidebar"]')).toContainText('迁移会话 cookie')
-    const menus = await app.evaluate(
-      () => (globalThis as unknown as { __trDialogs: { menus: Array<Array<{ type: string; label?: string }>> } }).__trDialogs.menus
-    )
-    expect(menus.at(-1)?.filter((e) => e.type === 'item').map((e) => e.label)).toEqual(['重命名…', '在 Finder 中显示', '复制路径', '关闭会话'])
 
     // Esc cancels a rename.
     await page.locator('[data-region="main"] h1').dblclick()
@@ -162,10 +159,14 @@ test.describe('first run and the session header', () => {
     await page.keyboard.press('Escape')
     await expect(page.locator('[data-region="main"] h1')).toHaveText('迁移会话 cookie')
 
-    await app.evaluate(() => {
-      ;(globalThis as unknown as { __trDialogs: { menuAnswers: string[] } }).__trDialogs.menuAnswers.push('close')
-    })
+    // Esc dismisses the menu; then choose 关闭会话 from the keyboard.
     await page.getByRole('button', { name: '会话菜单' }).click()
+    await expect(page.getByRole('menu')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu')).toHaveCount(0)
+    await page.getByRole('button', { name: '会话菜单' }).click()
+    await page.keyboard.press('End')
+    await page.keyboard.press('Enter')
     // Every session closed: the empty state is back, now listing the project that is still open.
     await expect(page.getByTestId('empty-main')).toBeVisible()
   })

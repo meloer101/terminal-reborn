@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from 'react'
 import { glyphStatus } from '../lifecycle/present'
+import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { Elapsed } from './Elapsed'
 import { showsElapsed } from './format-elapsed'
@@ -12,7 +13,7 @@ interface Props {
   /** Roving tabindex: exactly one row in the list is reachable with Tab. */
   tabStop: boolean
   onSelect(id: string): void
-  onContextMenu?(id: string): void
+  onContextMenu?(id: string, anchor: MenuAnchor): void
 }
 
 /** Figma component `SessionRow` (11:51): 52px, glyph · title/activity · time/diff. */
@@ -41,7 +42,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
         ((e) => {
           e.preventDefault()
           onSelect(session.id)
-          onContextMenu(session.id)
+          onContextMenu(session.id, pointerAnchor(e))
         })
       }
     >

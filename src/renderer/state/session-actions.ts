@@ -1,6 +1,5 @@
 // User-facing workspace commands: opening projects and creating sessions in them (Figma 09).
-// Menus are native so they look and behave like the rest of macOS.
-import type { MenuEntry } from '@shared/ipc'
+// Menus are the app's own (ui/MenuHost.tsx), anchored to the control or pointer that opened them.
 import {
   closeSessionConfirmation,
   countActive,
@@ -8,6 +7,7 @@ import {
   removeProjectMenuLabel
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
+import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { useWorkspace } from './workspace'
 import { projectOfSession } from './workspace-model'
 
@@ -60,12 +60,12 @@ export async function openProjectInteractive(kind: AgentKind = 'claude'): Promis
 export const addProjectInteractive = openProjectInteractive
 
 /** The project header's ＋ and the empty project's 新建会话 row. */
-export async function openNewSessionMenu(projectId: ProjectId): Promise<void> {
-  await runNewSessionChoice(await window.tr.ui.popupMenu(kindItems(projectId, NEW_SESSION_LABEL)))
+export async function openNewSessionMenu(projectId: ProjectId, anchor: MenuAnchor): Promise<void> {
+  await runNewSessionChoice(await popupMenu(kindItems(projectId, NEW_SESSION_LABEL), anchor))
 }
 
 /** Right-click on a project header, or its … button. */
-export async function openProjectMenu(projectId: ProjectId): Promise<void> {
+export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor): Promise<void> {
   const state = useWorkspace.getState()
   const project = state.projects.find((p) => p.id === projectId)
   if (!project) return
@@ -79,7 +79,7 @@ export async function openProjectMenu(projectId: ProjectId): Promise<void> {
     { type: 'separator' },
     { type: 'item', id: 'remove', label: removeProjectMenuLabel(sessionCount) }
   ]
-  const choice = await window.tr.ui.popupMenu(entries)
+  const choice = await popupMenu(entries, anchor)
   if (choice === 'reveal') window.tr.ui.revealInFinder(project.rootPath)
   else if (choice === 'copy-path') void navigator.clipboard.writeText(project.rootPath).catch(() => {})
   else if (choice === 'remove') await removeProjectInteractive(projectId)
@@ -117,14 +117,14 @@ export async function quickNewSession(): Promise<void> {
   else await openProjectInteractive()
 }
 
-export async function openSessionContextMenu(sessionId: SessionId): Promise<void> {
+export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<void> {
   const state = useWorkspace.getState()
   const projectId = projectOfSession(state, sessionId)
   const entries: MenuEntry[] = [{ type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }]
   if (projectId) {
     entries.push({ type: 'separator' }, { type: 'submenu', label: '在此项目新建', items: kindItems(projectId, NEW_SESSION_LABEL) })
   }
-  const choice = await window.tr.ui.popupMenu(entries)
+  const choice = await popupMenu(entries, anchor)
   if (choice === 'close') await closeSessionInteractive(sessionId)
   else await runNewSessionChoice(choice)
 }
@@ -133,7 +133,7 @@ export async function openSessionContextMenu(sessionId: SessionId): Promise<void
  * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 关闭会话. Renaming is inline in the header,
  * so that choice is handed back to it.
  */
-export async function openSessionHeaderMenu(sessionId: SessionId): Promise<'rename' | null> {
+export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<'rename' | null> {
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === sessionId)
   if (!session) return null
@@ -146,7 +146,7 @@ export async function openSessionHeaderMenu(sessionId: SessionId): Promise<'rena
     { type: 'separator' },
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]
-  const choice = await window.tr.ui.popupMenu(entries)
+  const choice = await popupMenu(entries, anchor)
   if (choice === 'rename') return 'rename'
   if (choice === 'reveal' && path) window.tr.ui.revealInFinder(path)
   else if (choice === 'copy-path' && path) void navigator.clipboard.writeText(path).catch(() => {})

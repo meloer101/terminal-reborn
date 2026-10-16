@@ -1,29 +1,7 @@
-// Native pickers and menus the renderer cannot create itself.
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, type MenuItemConstructorOptions } from 'electron'
+// Native pickers and system services the renderer cannot reach itself.
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
 import { isAbsolute } from 'node:path'
-import type { MenuEntry } from '@shared/ipc'
 import { IPC } from '@shared/ipc'
-import { scriptedMenuChoice } from './confirm'
-import { parseMenuEntries } from './menu-spec'
-
-function toTemplate(entries: MenuEntry[], choose: (id: string) => void): MenuItemConstructorOptions[] {
-  return entries.map((entry) => {
-    switch (entry.type) {
-      case 'separator':
-        return { type: 'separator' }
-      case 'submenu':
-        return { label: entry.label, submenu: toTemplate(entry.items, choose) }
-      case 'item':
-        return {
-          label: entry.label,
-          enabled: entry.enabled ?? true,
-          click: () => choose(entry.id),
-          // Display only: the renderer owns the keyboard shortcut.
-          ...(entry.accelerator ? { accelerator: entry.accelerator, registerAccelerator: false } : {})
-        }
-    }
-  })
-}
 
 const text = (value: unknown, max: number): string => (typeof value === 'string' ? value.slice(0, max) : '')
 
@@ -64,18 +42,5 @@ export function registerUiHandlers(): void {
     const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>, buttonLabel: '添加项目' }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
-  })
-
-  ipcMain.handle(IPC.uiPopupMenu, (event, raw: unknown) => {
-    const entries = parseMenuEntries(raw)
-    const scripted = scriptedMenuChoice(entries)
-    if (scripted !== undefined) return scripted
-    const win = BrowserWindow.fromWebContents(event.sender)
-    return new Promise<string | null>((resolve) => {
-      const menu = Menu.buildFromTemplate(toTemplate(entries, resolve))
-      // The close callback and an item's click can arrive in either order; the first resolve wins,
-      // so give a click a moment to land before reporting a dismissal.
-      menu.popup({ ...(win ? { window: win } : {}), callback: () => setTimeout(() => resolve(null), 100) })
-    })
   })
 }

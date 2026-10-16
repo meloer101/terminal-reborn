@@ -63,7 +63,6 @@ const api: TrApi = {
   },
   ui: {
     pickFolder: () => ipcRenderer.invoke(IPC.uiPickFolder),
-    popupMenu: (entries) => ipcRenderer.invoke(IPC.uiPopupMenu, entries),
     setBadge: (count) => ipcRenderer.send(IPC.uiSetBadge, count),
     notify: (notification) => ipcRenderer.send(IPC.uiNotify, notification),
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),

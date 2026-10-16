@@ -66,23 +66,31 @@
 }
 
 .header:hover,
-.header:focus-within {
+.header:focus-within,
+.header[data-menu-open],
+.header:has([data-menu-open]) {
   padding: var(--space-4) var(--space-4) var(--space-4) var(--space-8);
   background: var(--bg-hover);
 }
 
 .header:hover .chevron,
-.header:focus-within .chevron {
+.header:focus-within .chevron,
+.header[data-menu-open] .chevron,
+.header:has([data-menu-open]) .chevron {
   color: var(--text-secondary);
 }
 
 .header:hover .count,
-.header:focus-within .count {
+.header:focus-within .count,
+.header[data-menu-open] .count,
+.header:has([data-menu-open]) .count {
   display: none;
 }
 
 .header:hover .actions,
-.header:focus-within .actions {
+.header:focus-within .actions,
+.header[data-menu-open] .actions,
+.header:has([data-menu-open]) .actions {
   display: inline-flex;
 }
 
@@ -99,7 +107,8 @@
   cursor: default;
 }
 
-.action:hover {
+.action:hover,
+.action[data-menu-open] {
   background: var(--bg-selected);
   color: var(--text-primary);
 }

@@ -79,9 +79,10 @@ export function SessionHeader() {
         {active && (
           <IconButton
             label="会话菜单"
-            onClick={() => {
+            aria-haspopup="menu"
+            onClick={(e) => {
               const id = active.session.id
-              void openSessionHeaderMenu(id).then((choice) => {
+              void openSessionHeaderMenu(id, e.currentTarget).then((choice) => {
                 if (choice === 'rename') setRenaming(id)
               })
             }}

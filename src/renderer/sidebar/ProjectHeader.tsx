@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, Ellipsis, Plus } from 'lucide-react'
-import type { MouseEvent } from 'react'
 import type { SessionStatus } from '@shared/types'
+import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './ProjectHeader.module.css'
 
@@ -14,10 +14,10 @@ interface Props {
   /** Shown on a collapsed header so a folded project can't hide a session that needs you. */
   attention: SessionStatus | null
   onToggle(): void
-  /** ＋ — new session in this project. */
-  onNewSession(): void
-  /** … and right-click — the project menu. */
-  onMenu(): void
+  /** ＋ — new session in this project; the menu drops down from `anchor`. */
+  onNewSession(anchor: MenuAnchor): void
+  /** … and right-click — the project menu, under the … or at the pointer. */
+  onMenu(anchor: MenuAnchor): void
 }
 
 /**
@@ -26,12 +26,14 @@ interface Props {
  * session rows are indented under the name. Hover / keyboard focus swaps the count for ＋ and ….
  */
 export function ProjectHeader({ name, count, collapsed, attention, onToggle, onNewSession, onMenu }: Props) {
-  const onContextMenu = (e: MouseEvent) => {
-    e.preventDefault()
-    onMenu()
-  }
   return (
-    <div className={styles.header} onContextMenu={onContextMenu}>
+    <div
+      className={styles.header}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onMenu(pointerAnchor(e))
+      }}
+    >
       <button
         type="button"
         className={styles.toggle}
@@ -49,10 +51,10 @@ export function ProjectHeader({ name, count, collapsed, attention, onToggle, onN
       )}
       {count > 0 && <span className={styles.count}>{count}</span>}
       <span className={styles.actions}>
-        <button type="button" className={styles.action} aria-label={`在 ${name} 新建会话`} title="新建会话" onClick={onNewSession}>
+        <button type="button" className={styles.action} aria-label={`在 ${name} 新建会话`} title="新建会话" aria-haspopup="menu" onClick={(e) => onNewSession(e.currentTarget)}>
           <Plus {...ICON} />
         </button>
-        <button type="button" className={styles.action} aria-label={`${name} 项目菜单`} title="项目菜单" onClick={onMenu}>
+        <button type="button" className={styles.action} aria-label={`${name} 项目菜单`} title="项目菜单" aria-haspopup="menu" onClick={(e) => onMenu(e.currentTarget)}>
           <Ellipsis {...ICON} />
         </button>
       </span>

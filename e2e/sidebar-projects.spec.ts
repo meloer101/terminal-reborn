@@ -1,5 +1,5 @@
-// Project and session entry points in the sidebar (Figma 09 · B–D). Native menus can't be driven
-// from Playwright, so this covers what is visible: hover actions, empty projects, the nav entry.
+// Project and session entry points in the sidebar (Figma 09 · B–D): hover actions, empty projects, the nav entry,
+// and the in-app menus behind ＋ / … / right-click.
 import { expect, test } from '@playwright/test'
 import { launchApp } from './launch'
 
@@ -34,6 +34,37 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   await expect(plus).toBeVisible()
   await expect(sidebar.getByRole('button', { name: 'acme-web 项目菜单' })).toBeVisible()
   await page.screenshot({ path: 'test-results/sidebar-projects-hover.png' })
+
+  // ＋ drops the agent menu under itself and keeps the header's actions up while it is open; Esc closes it.
+  await plus.click()
+  const menu = page.getByRole('menu')
+  await expect(menu.getByRole('menuitem')).toHaveText(['Claude Code⌘N', 'Codex', '终端'])
+  const plusBox = (await plus.boundingBox())!
+  const menuBox = (await menu.boundingBox())!
+  expect(menuBox.y).toBeGreaterThan(plusBox.y + plusBox.height)
+  await page.mouse.move(600, 600)
+  await expect(plus).toBeVisible()
+  await expect(plus).toHaveAttribute('aria-expanded', 'true')
+  await page.screenshot({ path: 'test-results/sidebar-projects-new-menu.png' })
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(plus).toHaveAttribute('aria-expanded', 'false')
+
+  // Right-clicking a session opens its menu at the pointer; hovering 在此项目新建 opens the submenu.
+  const cookie = sidebar.locator('[data-session-id="s-cookie"]')
+  await cookie.click({ button: 'right' })
+  await expect(menu.getByRole('menuitem')).toHaveText(['关闭会话⌘W', '在此项目新建'])
+  await menu.getByRole('menuitem', { name: '在此项目新建' }).hover()
+  const submenu = page.getByRole('menu', { name: '在此项目新建' })
+  await expect(submenu.getByRole('menuitem')).toHaveText(['Claude Code⌘N', 'Codex', '终端'])
+  await page.screenshot({ path: 'test-results/sidebar-session-context-menu.png' })
+  for (const theme of ['light', 'dark'] as const) {
+    await page.locator('html').evaluate((html, t) => html.setAttribute('data-theme', t), theme)
+    await page.screenshot({ path: `test-results/sidebar-session-context-menu-${theme}.png` })
+  }
+  // A press outside dismisses it without choosing anything.
+  await page.mouse.click(700, 400)
+  await expect(page.getByRole('menu')).toHaveCount(0)
 
   // Sessions stay under their project, whatever their status (PRD §3.3): the error session is in terminal-reborn.
   await expect(sidebar.locator('section[aria-label="terminal-reborn"] [data-session-id="s-graph"]')).toBeVisible()

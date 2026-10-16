@@ -59,24 +59,9 @@ export interface FilesApi {
   saveTempImage(data: ArrayBuffer, extension: ImageExtension): Promise<string>
 }
 
-/** A native context-menu entry. Clicking an item resolves `popup()` with its id. */
-export type MenuEntry =
-  | {
-      type: 'item'
-      id: string
-      label: string
-      enabled?: boolean
-      /** Shortcut shown next to the label (display only, e.g. 'CmdOrCtrl+N'); the renderer handles the key. */
-      accelerator?: string
-    }
-  | { type: 'submenu'; label: string; items: MenuEntry[] }
-  | { type: 'separator' }
-
 export interface UiApi {
   /** Native folder picker; resolves to an absolute path, or null when cancelled. */
   pickFolder(): Promise<string | null>
-  /** Native context menu at the cursor; resolves to the chosen item id, or null when dismissed. */
-  popupMenu(entries: MenuEntry[]): Promise<string | null>
   /** Dock badge; 0 clears it. */
   setBadge(count: number): void
   /** System notification. Clicking it focuses the window and fires onNotificationClick with `tag`. */
@@ -197,7 +182,6 @@ export const IPC = {
   ptyHostRestarted: 'pty:host-restarted',
   filesSaveTempImage: 'files:save-temp-image',
   uiPickFolder: 'ui:pick-folder',
-  uiPopupMenu: 'ui:popup-menu',
   uiSetBadge: 'ui:set-badge',
   uiNotify: 'ui:notify',
   /** main → renderer, payload tag */

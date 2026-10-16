@@ -1,0 +1,87 @@
+/* Context / dropdown menu (ui/MenuHost.tsx). Same surface as the settings select list: raised, hairline, --radius-md. */
+.panel {
+  position: fixed;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  max-width: 320px;
+  max-height: calc(100vh - 2 * var(--space-8));
+  padding: var(--space-4);
+  overflow-y: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
+  outline: none;
+  user-select: none;
+  -webkit-app-region: no-drag;
+  animation: menu-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}
+
+.item {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-sm);
+  font: var(--text-body);
+  cursor: default;
+}
+
+.item[data-active='true'] {
+  background: var(--bg-selected);
+}
+
+.item[aria-disabled='true'] {
+  color: var(--text-disabled);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut {
+  flex: none;
+  margin-left: var(--space-16);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.item[aria-disabled='true'] .shortcut {
+  color: var(--text-disabled);
+}
+
+.chevron {
+  display: flex;
+  flex: none;
+  margin-right: calc(-1 * var(--space-4));
+  margin-left: var(--space-16);
+  color: var(--text-tertiary);
+}
+
+.separator {
+  flex: none;
+  height: 1px;
+  margin: var(--space-4) calc(-1 * var(--space-4));
+  background: var(--border-subtle);
+}
