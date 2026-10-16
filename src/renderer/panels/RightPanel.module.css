@@ -1,11 +1,17 @@
-.tabs {
+.bar {
   flex: none;
   height: var(--titlebar-height);
   display: flex;
-  gap: var(--space-20);
-  padding: 0 var(--space-16);
+  align-items: stretch;
+  padding: 0 var(--space-8) 0 var(--space-16);
   border-bottom: 1px solid var(--border-subtle);
   -webkit-app-region: drag;
+}
+
+.tabs {
+  flex: 1;
+  display: flex;
+  gap: var(--space-20);
 }
 
 .tab {
@@ -21,4 +27,10 @@
 .tab[aria-selected='true'] {
   color: var(--text-primary);
   border-bottom-color: var(--fill-primary);
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
 }

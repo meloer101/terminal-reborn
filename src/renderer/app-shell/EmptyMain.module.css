@@ -1,0 +1,156 @@
+/* No Figma screen for an empty main area: the sidebar's empty-state vocabulary (Figma 09 · A), centred. */
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-40) var(--space-24);
+  overflow-y: auto;
+  background: var(--bg-app);
+}
+
+.empty[data-dragging='true'] {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--space-12));
+  border-radius: var(--radius-window);
+}
+
+.column {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-l);
+  letter-spacing: var(--tracking-title-l);
+  color: var(--text-primary);
+}
+
+.lead {
+  margin: var(--space-8) 0 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.primary {
+  margin-top: var(--space-20);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 32px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-body-strong);
+  cursor: default;
+}
+
+.primary:hover {
+  background: var(--bg-hover);
+}
+
+.primary:focus-visible,
+.row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.kbd {
+  margin-left: var(--space-4);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.section {
+  align-self: stretch;
+  margin-top: var(--space-32);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.heading {
+  margin: 0 0 var(--space-6);
+  font: var(--text-caption-strong);
+  color: var(--text-tertiary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  height: 30px;
+  padding: 0 var(--space-8);
+  margin: 0 calc(-1 * var(--space-8));
+  box-sizing: content-box;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: default;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.name {
+  flex: none;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+.path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 30px;
+}
+
+.agent .name {
+  width: 96px;
+}
+
+.state {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.command {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  user-select: text;
+}
+
+.hint {
+  margin: var(--space-24) 0 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}

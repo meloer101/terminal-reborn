@@ -32,3 +32,9 @@ export function phaseLabel(session: PhaseView, statusLabel: string): string {
   if (session.phase === 'not-started') return '未启动'
   return statusLabel
 }
+
+/** How to install an agent CLI that is not on the login shell's PATH (first-run screen). */
+export const INSTALL_HINT = {
+  claude: 'npm install -g @anthropic-ai/claude-code',
+  codex: 'npm install -g @openai/codex'
+} as const

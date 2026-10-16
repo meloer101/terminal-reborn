@@ -22,6 +22,27 @@
   text-overflow: ellipsis;
 }
 
+.titleInput {
+  min-width: 0;
+  width: 320px;
+  max-width: 50%;
+  height: 28px;
+  margin: 0 0 0 calc(-1 * var(--space-6));
+  padding: 0 var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font: var(--text-title-m);
+  letter-spacing: var(--tracking-title-m);
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.titleInput:focus-visible {
+  border-color: var(--focus-ring);
+}
+
 .branch {
   display: inline-flex;
   align-items: center;

@@ -1,6 +1,9 @@
 // Normalized agent signals (PRD §3, F2, F3). Claude Code hooks feed these in M2; Codex hooks in M3.
 // main/hooks turns raw hook payloads into these shapes; the renderer never sees raw hook JSON.
+import type { AllowAlwaysScope } from './permission-scope'
 import type { SessionId } from './types'
+
+export type { AllowAlwaysScope } from './permission-scope'
 
 export type HookAgent = 'claude' | 'codex'
 
@@ -54,6 +57,8 @@ export type PendingPrompt =
       summary: string
       /** The agent offered a rule the user can persist ("总是允许"). */
       canAllowAlways: boolean
+      /** What "总是允许" would allow (phase 2b · B12); absent when the suggestions could not be described. */
+      allowAlways?: AllowAlwaysScope
       createdAt: number
     }
   | {

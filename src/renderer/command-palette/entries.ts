@@ -44,6 +44,8 @@ export interface PaletteInput {
   activeSessionId: SessionId | null
   rightPanel: 'changes' | 'graph' | null
   mainView?: 'session' | 'overview'
+  /** The right panel has content (M4); until then its toggle is not offered (B11). */
+  panelAvailable: boolean
 }
 
 export interface RankedEntry {
@@ -103,7 +105,7 @@ function action(id: ActionId, title: string, icon: ActionIcon, keywords: string,
 }
 
 /** The project new sessions go to: the active session's project, else the first one. */
-export function currentProject(input: PaletteInput): Project | null {
+export function currentProject(input: Pick<PaletteInput, 'projects' | 'worktrees' | 'sessions' | 'activeSessionId'>): Project | null {
   const session = input.sessions.find((s) => s.id === input.activeSessionId)
   const worktree = input.worktrees.find((w) => w.id === session?.worktreeId)
   return input.projects.find((p) => p.id === worktree?.projectId) ?? input.projects[0] ?? null
@@ -123,7 +125,9 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
     action('add-project', '添加项目…', 'folder-plus', 'add project folder open'),
     action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
-    action('toggle-changes', input.rightPanel === 'changes' ? '关闭变更面板' : '打开变更面板', 'changes', 'changes diff panel'),
+    ...(input.panelAvailable
+      ? [action('toggle-changes', input.rightPanel === 'changes' ? '关闭变更面板' : '打开变更面板', 'changes', 'changes diff panel')]
+      : []),
     action('theme-system', '主题：跟随系统', 'monitor', 'theme system auto appearance'),
     action('theme-dark', '主题：深色', 'moon', 'theme dark appearance'),
     action('theme-light', '主题：浅色', 'sun', 'theme light appearance')

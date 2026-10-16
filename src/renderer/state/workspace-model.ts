@@ -1,7 +1,7 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree } from '@shared/types'
-import { WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
+import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
 export interface WorkspaceData {
   projects: Project[]
@@ -38,6 +38,12 @@ export function addProject(
     data: { ...data, projects: [...data.projects, project], worktrees: [...data.worktrees, worktree] },
     projectId: project.id
   }
+}
+
+/** Puts a folder at the front of the recently opened projects (first-run screen, B10). */
+export function rememberRecentProject(recent: readonly string[], rootPath: string): string[] {
+  if (recent[0] === rootPath) return recent as string[]
+  return [rootPath, ...recent.filter((p) => p !== rootPath)].slice(0, MAX_RECENT_PROJECTS)
 }
 
 /** Starts a session in the project's main checkout and selects it. */
@@ -98,6 +104,7 @@ export interface WorkspaceUi {
   sidebarCollapsed: boolean
   rightPanel: PersistedRightPanel | null
   collapsedProjectIds: ProjectId[]
+  recentProjects: readonly string[]
 }
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
@@ -126,6 +133,7 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
     sidebarCollapsed: ui.sidebarCollapsed,
     rightPanel: ui.rightPanel,
     collapsedProjectIds: ui.collapsedProjectIds.filter((id) => data.projects.some((p) => p.id === id)),
+    ...(ui.recentProjects.length > 0 ? { recentProjects: [...ui.recentProjects] } : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
     )
@@ -168,6 +176,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.sidebarCollapsed !== prev.sidebarCollapsed ||
     next.rightPanel !== prev.rightPanel ||
     next.collapsedProjectIds !== prev.collapsedProjectIds ||
+    next.recentProjects !== prev.recentProjects ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true

@@ -90,7 +90,8 @@ const api: TrApi = {
   app: {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),
     checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
-    reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary)
+    reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary),
+    detectAgents: () => ipcRenderer.invoke(IPC.appDetectAgents)
   },
   workspace: {
     loadSync: () => ipcRenderer.sendSync(IPC.workspaceLoad) as unknown,

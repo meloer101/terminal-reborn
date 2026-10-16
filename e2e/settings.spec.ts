@@ -91,8 +91,8 @@ test('about pane shows the version and checks for updates', async () => {
   await settings.getByRole('tab', { name: '关于' }).click()
   await expect(settings.getByTestId('app-version')).not.toBeEmpty()
   await expect(settings.getByRole('button', { name: '检查更新' })).toBeVisible()
-  await settings.getByRole('tab', { name: '终端' }).click()
-  await expect(settings.getByText('即将推出')).toBeVisible()
+  // Panes without content yet are not listed (B11): no 即将推出 dead ends.
+  await expect(settings.getByRole('tab')).toHaveText(['外观', '关于'])
   await app.close()
 })
 

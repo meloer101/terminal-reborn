@@ -121,6 +121,12 @@ export interface UpdateInfo {
   notes?: string
 }
 
+/** Whether each agent CLI is on the user's login-shell PATH (first-run screen, B10). */
+export interface AgentAvailability {
+  claude: boolean
+  codex: boolean
+}
+
 export interface AppInfoApi {
   /** package.json version of the running app. */
   version: string
@@ -128,6 +134,8 @@ export interface AppInfoApi {
   checkForUpdates(): Promise<UpdateInfo | null>
   /** Keeps main informed about live sessions (quit confirmation). */
   reportActivity(summary: ActivitySummary): void
+  /** Which agent CLIs are installed. Never throws (a failed check reports both as missing). */
+  detectAgents(): Promise<AgentAvailability>
 }
 
 export interface AgentApi {
@@ -205,6 +213,8 @@ export const IPC = {
   appVersion: 'app:version',
   appCheckForUpdates: 'app:check-for-updates',
   appReportActivity: 'app:report-activity',
+  /** invoke → AgentAvailability */
+  appDetectAgents: 'app:detect-agents',
   /** sync */
   workspaceLoad: 'workspace:load',
   workspaceSave: 'workspace:save'

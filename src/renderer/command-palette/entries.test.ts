@@ -34,6 +34,7 @@ const input = (over: Partial<PaletteInput> = {}): PaletteInput => ({
   sessions,
   activeSessionId: 'idle-main',
   rightPanel: null,
+  panelAvailable: true,
   ...over
 })
 
@@ -73,6 +74,10 @@ describe('buildEntries', () => {
       'action:theme-dark',
       'action:theme-light'
     ])
+  })
+
+  it('offers no panel toggle while the panel has no content (B11)', () => {
+    expect(buildActionEntries(input({ panelAvailable: false })).map((e) => e.id)).not.toContain('action:toggle-changes')
   })
 
   it('labels the changes toggle by panel state', () => {

@@ -12,12 +12,6 @@
   color: var(--text-primary);
 }
 
-.quiet {
-  margin: 0;
-  font: var(--text-body);
-  color: var(--text-tertiary);
-}
-
 .aboutRow {
   display: flex;
   align-items: center;

@@ -34,19 +34,26 @@ async function runNewSessionChoice(id: string | null): Promise<void> {
   if (match) useWorkspace.getState().addSession(match[1]!, match[2] as AgentKind)
 }
 
-/** "打开项目… ⌘O": pick a folder; a new project starts with a Claude Code session, a known one is selected. */
-export async function openProjectInteractive(): Promise<SessionId | null> {
-  const path = await window.tr.ui.pickFolder()
-  if (!path) return null
+/**
+ * Opens a folder as a project: a known one selects its latest session (or starts `kind` when it has none),
+ * a new one starts with a `kind` session. Used by ⌘O, the first-run screen's recent list and folder drop.
+ */
+export function openProjectPath(path: string, kind: AgentKind = 'claude'): SessionId | null {
   const state = useWorkspace.getState()
-  const known = state.projects.find((p) => p.rootPath === path)
-  if (known) {
-    const worktreeIds = new Set(state.worktrees.filter((w) => w.projectId === known.id).map((w) => w.id))
-    const latest = state.sessions.filter((s) => worktreeIds.has(s.worktreeId)).sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0]
-    if (latest) state.setActiveSession(latest.id)
-    return latest?.id ?? null
+  const projectId = state.addProject(path)
+  const worktreeIds = new Set(state.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))
+  const latest = state.sessions.filter((s) => worktreeIds.has(s.worktreeId)).sort((a, b) => b.lastActivityAt - a.lastActivityAt)[0]
+  if (latest) {
+    state.setActiveSession(latest.id)
+    return latest.id
   }
-  return state.addSession(state.addProject(path), 'claude')
+  return useWorkspace.getState().addSession(projectId, kind)
+}
+
+/** "打开项目… ⌘O": pick a folder, then openProjectPath. */
+export async function openProjectInteractive(kind: AgentKind = 'claude'): Promise<SessionId | null> {
+  const path = await window.tr.ui.pickFolder()
+  return path ? openProjectPath(path, kind) : null
 }
 
 /** @deprecated Use openProjectInteractive. Kept for the command palette. */
@@ -120,6 +127,41 @@ export async function openSessionContextMenu(sessionId: SessionId): Promise<void
   const choice = await window.tr.ui.popupMenu(entries)
   if (choice === 'close') await closeSessionInteractive(sessionId)
   else await runNewSessionChoice(choice)
+}
+
+/**
+ * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 关闭会话. Renaming is inline in the header,
+ * so that choice is handed back to it.
+ */
+export async function openSessionHeaderMenu(sessionId: SessionId): Promise<'rename' | null> {
+  const state = useWorkspace.getState()
+  const session = state.sessions.find((s) => s.id === sessionId)
+  if (!session) return null
+  const path = state.worktrees.find((w) => w.id === session.worktreeId)?.path
+  const entries: MenuEntry[] = [
+    { type: 'item', id: 'rename', label: '重命名…' },
+    { type: 'separator' },
+    { type: 'item', id: 'reveal', label: '在 Finder 中显示', enabled: path !== undefined },
+    { type: 'item', id: 'copy-path', label: '复制路径', enabled: path !== undefined },
+    { type: 'separator' },
+    { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
+  ]
+  const choice = await window.tr.ui.popupMenu(entries)
+  if (choice === 'rename') return 'rename'
+  if (choice === 'reveal' && path) window.tr.ui.revealInFinder(path)
+  else if (choice === 'copy-path' && path) void navigator.clipboard.writeText(path).catch(() => {})
+  else if (choice === 'close') await closeSessionInteractive(sessionId)
+  return null
+}
+
+const MAX_TITLE_CHARS = 200
+
+/** Renames a session; blank or unchanged input keeps the old title. */
+export function renameSession(sessionId: SessionId, input: string): void {
+  const title = [...input.replace(/\s+/g, ' ').trim()].slice(0, MAX_TITLE_CHARS).join('')
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (!session || title === '' || title === session.title) return
+  useWorkspace.getState().patchSession(sessionId, { title })
 }
 
 const plainCmd = (e: KeyboardEvent, key: string) =>

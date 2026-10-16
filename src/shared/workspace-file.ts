@@ -32,7 +32,11 @@ export interface WorkspaceFile {
   collapsedProjectIds: string[]
   /** Composer drafts by session id; only non-empty drafts of sessions that exist. */
   drafts: Record<string, string>
+  /** Folders opened as projects, most recent first (first-run screen, B10). Absent when empty. */
+  recentProjects?: string[]
 }
+
+export const MAX_RECENT_PROJECTS = 8
 
 /** Keys of the pre-2a renderer localStorage storage, read once for migration. */
 export const LEGACY_WORKSPACE_KEY = 'tr.workspace.v1'
@@ -121,6 +125,10 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     }
   }
 
+  const recentProjects = Array.isArray(value.recentProjects)
+    ? [...new Set(value.recentProjects.filter((p): p is string => isText(p) && p.startsWith('/')))].slice(0, MAX_RECENT_PROJECTS)
+    : []
+
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
   return {
     version: WORKSPACE_FILE_VERSION,
@@ -133,7 +141,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     collapsedProjectIds: Array.isArray(value.collapsedProjectIds)
       ? [...new Set(value.collapsedProjectIds.filter((id): id is string => isString(id) && projectIds.has(id)))]
       : [],
-    drafts
+    drafts,
+    ...(recentProjects.length > 0 ? { recentProjects } : {})
   }
 }
 

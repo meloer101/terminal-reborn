@@ -54,6 +54,7 @@ describe('HookBridge', () => {
       tool: 'Bash',
       summary: '运行 echo hooks-lab-ran > /work/project/ran.txt',
       canAllowAlways: true,
+      allowAlways: { scope: 'session', rules: [], directories: ['/work/project'] },
       createdAt: 1000
     })
     expect(bridge.respondPermission(prompt!.id, 'allow-once')).toBe(true)

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
 import { registerActivityHandlers } from './activity'
+import { registerAgentDetection } from './agents-installed'
 import { registerAppearanceEffects } from './appearance'
 import { registerConfirmHandlers } from './confirm'
 import { registerFileHandlers } from './files'
@@ -45,6 +46,7 @@ function start(): void {
 function boot(): void {
   registerAppHandlers()
   registerActivityHandlers()
+  registerAgentDetection()
   registerWorkspaceStore()
   registerConfirmHandlers()
   registerSettingsHandlers()

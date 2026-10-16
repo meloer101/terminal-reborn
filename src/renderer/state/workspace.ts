@@ -10,6 +10,7 @@ import {
   addSession,
   closeSession,
   persistedStateChanged,
+  rememberRecentProject,
   removedSessionIds,
   removeProject,
   restoreWorkspace,
@@ -30,6 +31,8 @@ interface WorkspaceState extends WorkspaceData {
   /** Projects folded in the sidebar. */
   collapsedProjectIds: ProjectId[]
   mainView: MainView
+  /** Folders opened as projects, most recent first (first-run screen). */
+  recentProjects: readonly string[]
 
   /** Selects a session and shows its terminal (leaves the overview). */
   setActiveSession(id: SessionId): void
@@ -74,6 +77,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   rightPanel: saved?.rightPanel ?? null,
   collapsedProjectIds: saved?.collapsedProjectIds ?? [],
   mainView: 'session',
+  recentProjects: saved?.recentProjects ?? [],
 
   setActiveSession: (id) => set({ activeSessionId: id, mainView: 'session' }),
   setMainView: (view) => set({ mainView: view }),
@@ -88,7 +92,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
 
   addProject(rootPath) {
     const result = addProject(pick(get()), rootPath)
-    set(result.data)
+    set({ ...result.data, recentProjects: rememberRecentProject(get().recentProjects, rootPath) })
     return result.projectId
   },
   removeProject: (id) => set(removeProject(pick(get()), id)),
@@ -116,11 +120,16 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
 // debounces and writes atomically; a closed session's draft goes with it.
 setSnapshotProvider(() => {
   const state = useWorkspace.getState()
-  return serializeWorkspace(pick(state), {
+  return serializeWorkspace(
+    pick(state),
+    {
       sidebarCollapsed: state.sidebarCollapsed,
       rightPanel: state.rightPanel,
-      collapsedProjectIds: state.collapsedProjectIds
-    }, drafts.snapshot())
+      collapsedProjectIds: state.collapsedProjectIds,
+      recentProjects: state.recentProjects
+    },
+    drafts.snapshot()
+  )
 })
 useWorkspace.subscribe((state, prev) => {
   if (!persistedStateChanged(state, prev)) return

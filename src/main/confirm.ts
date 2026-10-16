@@ -1,6 +1,6 @@
 // Native confirmation sheets (quit, close session, remove project).
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import { IPC } from '@shared/ipc'
+import { IPC, type MenuEntry } from '@shared/ipc'
 import type { ConfirmOptions } from '@shared/lifecycle'
 import { getActivity } from './activity'
 import { parseConfirmOptions } from './confirm-spec'
@@ -8,15 +8,26 @@ import { parseConfirmOptions } from './confirm-spec'
 /**
  * End-to-end seam, only created when the launcher sets TR_E2E_DIALOGS=1. Dialogs are recorded in
  * `requests` and answered with `answer` instead of popping a native sheet (which tests cannot click).
+ * Context menus likewise: recorded in `menus`, answered with the next queued `menuAnswers` id (null = dismissed).
  */
 interface DialogHook {
   requests: ConfirmOptions[]
   answer: boolean
+  menus: MenuEntry[][]
+  menuAnswers: (string | null)[]
   activity(): { active: number }
 }
 
-const hook: DialogHook | null = process.env.TR_E2E_DIALOGS === '1' ? { requests: [], answer: true, activity: getActivity } : null
+const hook: DialogHook | null =
+  process.env.TR_E2E_DIALOGS === '1' ? { requests: [], answer: true, menus: [], menuAnswers: [], activity: getActivity } : null
 if (hook) (globalThis as { __trDialogs?: DialogHook }).__trDialogs = hook
+
+/** End-to-end runs: the scripted answer to a context menu; undefined = show the real menu. */
+export function scriptedMenuChoice(entries: MenuEntry[]): string | null | undefined {
+  if (!hook) return undefined
+  hook.menus.push(entries)
+  return hook.menuAnswers.shift() ?? null
+}
 
 /** Shows the confirmation (as a sheet on `parent` when it is visible); true when the user confirmed. */
 export async function confirm(options: ConfirmOptions, parent?: BrowserWindow | null): Promise<boolean> {

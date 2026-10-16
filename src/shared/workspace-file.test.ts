@@ -113,6 +113,13 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.rightPanel).toBeNull()
     expect(file.collapsedProjectIds).toEqual([])
     expect(file.drafts).toEqual({})
+    expect(file.recentProjects).toBeUndefined()
+  })
+
+  it('keeps recent project folders: absolute, unique, at most 8', () => {
+    const recent = ['/a', 'relative', '/a', 7, '/b', ...Array.from({ length: 10 }, (_, i) => `/r${i}`)]
+    const file = sanitizeWorkspaceFile({ ...valid, recentProjects: recent }, 0) as WorkspaceFile
+    expect(file.recentProjects).toEqual(['/a', '/b', '/r0', '/r1', '/r2', '/r3', '/r4', '/r5'])
   })
 })
 
