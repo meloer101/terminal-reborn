@@ -11,7 +11,7 @@ import { buildPtyEnv, resolveCwd, resolveShell } from './env'
 import { FlowControl } from './flow-control'
 import { guarded, type Logger } from './guard'
 import { HeadlessMirror } from './headless-mirror'
-import type { HostEvent, HostRequest, HostSessionInfo, HostSpawnRequest } from './protocol'
+import type { HostEvent, HostRequest, HostScreen, HostSessionInfo, HostSpawnRequest } from './protocol'
 
 interface PtySession {
   proc: nodePty.IPty
@@ -37,6 +37,8 @@ export interface SessionHostOptions {
   mirror: boolean
   /** The set of live sessions changed (spawn, exit); the daemon decides when to go idle from it. */
   onSessionsChanged?: () => void
+  /** A session no client is attached to printed something (its screen changed unseen). */
+  onDetachedOutput?: (id: string) => void
   log?: Logger
 }
 
@@ -143,6 +145,12 @@ export class SessionHost {
     return this.live(id)?.attached === true
   }
 
+  /** The session's screen as its mirror has it (scrollback + screen, no modes); null without one. */
+  async screen(id: string): Promise<HostScreen | null> {
+    const mirror = this.sessions.get(id)?.mirror
+    return mirror ? (await mirror.capture()).screen : null
+  }
+
   /** Running processes. */
   get liveCount(): number {
     let count = 0
@@ -217,7 +225,10 @@ export class SessionHost {
       this.guard(`data ${request.id}`, () => {
         session.seq += data.length
         session.mirror?.write(data)
-        if (!session.attached) return
+        if (!session.attached) {
+          this.options.onDetachedOutput?.(request.id)
+          return
+        }
         session.batcher.append(data)
         if (session.flow.onOutput(data.length) && !session.paused) {
           session.paused = true

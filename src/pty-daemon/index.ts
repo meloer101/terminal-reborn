@@ -1,14 +1,16 @@
 // The pty daemon (docs/spikes/pty-daemon.md): a detached plain-Node process (the app binary with
 // ELECTRON_RUN_AS_NODE=1) that owns every PTY, so agents keep running when the app quits and a relaunch
 // reattaches to them. One app connects at a time over a token-checked Unix socket (./wire.ts).
-//   usage: pty-daemon.js --dir <userData>/daemon --socket <path>
+//   usage: pty-daemon.js --dir <userData>/daemon --socket <path>   (userData is the parent of --dir)
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { connect, createServer, type Server, type Socket } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { TerminalSnapshotFiles } from '../main/terminal-snapshot-file'
 import { guarded } from '../pty-host/guard'
 import type { HostEvent, HostRequest } from '../pty-host/protocol'
 import { ensureSpawnHelperExecutable, SessionHost } from '../pty-host/session-host'
+import { DiskSnapshots } from './disk-snapshots'
 import { DaemonHooks, type RelayReply } from './hooks'
 import { IdleTimer } from './idle'
 import {
@@ -26,6 +28,11 @@ import {
 
 /** No app connected and no process running for this long: nothing left to keep alive. */
 const IDLE_EXIT_MS = Number(process.env.TR_PTYD_IDLE_MS) >= 100 ? Number(process.env.TR_PTYD_IDLE_MS) : 10_000
+/** A detached session's screen goes to disk once its output has been quiet this long (§10). */
+const SNAPSHOT_QUIET_MS =
+  Number(process.env.TR_PTYD_SNAPSHOT_QUIET_MS) >= 100 ? Number(process.env.TR_PTYD_SNAPSHOT_QUIET_MS) : 30_000
+/** Exiting waits at most this long for pending screens to reach the disk. */
+const SNAPSHOT_FLUSH_MS = 1_000
 const HELLO_TIMEOUT_MS = 5_000
 /** A relayed hook the app does not answer in time is answered empty (the agent must never hang on us). */
 const HOOK_RELAY_TIMEOUT_MS = 10_000
@@ -73,6 +80,7 @@ function send(client: Client, message: DaemonMessage): void {
 const host = new SessionHost({
   mirror: true,
   emit: (event: HostEvent) => {
+    if (event.type === 'attached') snapshots.cancel(event.id)
     // A reattaching app gets the hook events it missed with the screen.
     const out: HostEvent = event.type === 'attached' ? { ...event, hooks: hooks.journal.take(event.id) } : event
     if (active) send(active, out)
@@ -81,7 +89,20 @@ const host = new SessionHost({
     hooks.journal.retain(new Set(host.list().map((s) => s.id)))
     idle.update()
   },
+  onDetachedOutput: (id) => snapshots.touch(id),
   log: (message, error) => log(message, error)
+})
+
+// The same files the app's main process writes (src/main/terminal-snapshots.ts) while it is attached.
+const snapshotFiles = new TerminalSnapshotFiles(join(dirname(dir), 'terminal-snapshots'))
+const snapshots = new DiskSnapshots(SNAPSHOT_QUIET_MS, {
+  capture: async (id) => {
+    const screen = await host.screen(id)
+    return screen ? { cols: screen.cols, rows: screen.rows, data: screen.data } : null
+  },
+  isAttached: (id) => host.isAttached(id),
+  save: (id, snapshot) => snapshotFiles.save(id, snapshot),
+  log: (...args) => log(...args)
 })
 
 let nextRid = 1
@@ -173,6 +194,8 @@ function onConnection(socket: Socket): void {
       active = null
       for (const rid of [...relays.keys()]) settleRelay(rid, { status: 200, body: '' })
       host.detachAll()
+      // The renderer saved on unload, unless the app crashed: write every screen once more from here.
+      for (const session of host.list()) if (!session.exit) snapshots.touch(session.id)
       log('app disconnected; sessions keep running:', host.liveCount)
       idle.update()
     }
@@ -214,8 +237,15 @@ function shutdown(reason: string, killSessions: boolean): void {
   if (shuttingDown) return
   shuttingDown = true
   log('shutting down:', reason, killSessions ? '(ending sessions)' : '')
-  if (killSessions) host.killAll()
   idle.stop()
+  // Screens changed since the app left go to disk first (logout's SIGTERM: the cold path after the reboot shows them).
+  const flushed = Promise.race([snapshots.flush(), new Promise((resolve) => setTimeout(resolve, SNAPSHOT_FLUSH_MS))])
+  void flushed.then(() => finishShutdown(killSessions))
+}
+
+function finishShutdown(killSessions: boolean): void {
+  snapshots.cancelAll()
+  if (killSessions) host.killAll()
   void hooks.stop()
   try {
     rmSync(join(dir, RECORD_FILE), { force: true })

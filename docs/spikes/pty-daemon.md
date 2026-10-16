@@ -265,6 +265,15 @@ snapshot of a session on 30 s of quiet while no client is attached, so the cold 
 screen even for agents that ran for hours with the app closed. Same file format; one writer at a time (client
 attached → renderer, else daemon).
 
+Implemented in `src/pty-daemon/disk-snapshots.ts`: `SessionHost` reports output of a session no client is attached
+to (`onDetachedOutput`); each such session gets a 30 s quiet timer (`TR_PTYD_SNAPSHOT_QUIET_MS` overrides it), and on
+expiry the daemon serializes the mirror (`HeadlessMirror.capture`, modes left out, same 2000 → 500 → 0 scrollback
+steps and 2 MB cap as the renderer) and writes `<userData>/terminal-snapshots/<id>.json` through the same
+`TerminalSnapshotFiles` (atomic tmp + rename) that main uses; userData is the parent of the daemon's `--dir`. An
+attach cancels the timer, and a screen captured while a client attached is dropped, so the renderer stays the only
+writer while attached. When the app disconnects every live session is marked once (covers a crashed app that never
+saved on unload), and exiting (SIGTERM at logout, idle exit, retirement) flushes pending screens first, bounded by 1 s.
+
 ## 11. Security
 
 Socket and token files 0600 in a 0700 dir owned by the user (checked with `lstat`, symlinks refused); token on every
@@ -313,9 +322,46 @@ socket under `<userData>/daemon/hooks`, relay, 64-entry journal replayed with or
 protocol versions are retired), §12 (unit tests, `e2e/pty-daemon.spec.ts`, other specs quit with
 `TR_KILL_SESSIONS_ON_QUIT=1`).
 
+§10 (daemon-side disk snapshots) shipped later the same day; see the end of §10.
+
 Not yet:
-- §10 daemon-side refresh of the disk snapshot while no app is attached (the renderer still saves on quiet output and
-  on unload, so a reboot shows the screen as of the last quit).
 - `pendingEscape` from §4 (an escape sequence cut in half at the attach point renders as text once).
-- Startup time and CPU numbers from §4's budget have not been measured on a long Claude session yet; the e2e
-  asserts first reattached frame < 1.5 s after the window loads.
+
+### 15.1 Packaged app with a real Claude session (2026-10-16)
+
+`npm run dist:dir` (electron-builder 26.15.3, Electron 44.7.1, arm64, ad-hoc signed with hardened runtime), driven by
+Playwright against `release/0.1.1/mac-arm64/Terminal Reborn.app` on a throwaway profile (`TR_USER_DATA_DIR`), Claude
+Code 2.1.302 in its full-screen TUI, 150×48. M-series Mac under background load (VM + XProtect scans; load 5–20).
+
+| Check | Result |
+|---|---|
+| `runAsNode` fuse (`@electron/fuses read`) | Enabled (electron-builder leaves it on) |
+| Daemon process | the app binary itself with `ELECTRON_RUN_AS_NODE=1` running `app.asar/out/main/pty-daemon.js`; started in 144–145 ms |
+| node-pty | `pty.node` mapped from `Contents/Resources/app.asar.unpacked/node_modules/node-pty/prebuilds/darwin-arm64/` (lsof); spawn-helper executable |
+| Session processes | the login shell is a child of the daemon, `claude` under it |
+| ⌘Q (`app.quit()`) | app gone in 0.2–0.3 s; shell, `claude` and daemon still alive, no dialog |
+| Turn finished while closed | the `Stop` hook was journaled; on relaunch it was replayed with its original timestamp and the session showed 空闲, not 运行中 |
+| §10 disk snapshot while closed | `terminal-snapshots/<id>.json` rewritten by the daemon 50.5 s after the quit (≈ 20 s of streaming + 30 s quiet), 150×48, alt-screen frame included, contains the answer that was printed after the quit |
+| Relaunch | same daemon pid, same shell pid, same `claude` pid; window in 0.3–0.6 s after launch |
+| First reattached frame | 68 ms and 140 ms (two runs) from navigation start to the frame showing the agent's last output (§1 target < 150 ms) |
+| Hooks after reattach | `prompt-submit` and `stop` of a new turn arrive live (relayed by the daemon), also after a renderer reload |
+
+CPU (cumulative `ps cputime` deltas):
+
+| Stream | Wall | Daemon | Renderer | Main | Daemon ÷ renderer |
+|---|---|---|---|---|---|
+| Claude printing 1–1500 (≈ 78 K chars to the renderer, full-screen TUI) | 21.8 s | 0.17 s (0.8 %) | 0.44 s (2.0 %) | 0.23 s | 0.39 |
+| same, first run | 21.5 s | 0.16 s (0.7 %) | 0.59 s (2.7 %) | 0.23 s | 0.27 |
+| shell `seq 1 3000000` (30.7 MB) | 3.2–4.1 s | 3.1–4.1 s | 1.0–1.4 s | 0.3–0.4 s | 2.9–3.0 |
+| same with `TR_PTY_DAEMON=0` (utilityProcess, no mirror) | 3.4 s | 3.4 s (host) | 1.45 s | 0.13 s | 2.3 |
+
+Reading: with a real agent the daemon is negligible (< 1 % of a core; `claude` itself used 11–14 %), but it is
+0.27–0.39 of the renderer, above §4's 30 % budget, because Claude's full-screen TUI sends little and the renderer has
+little to do. Under raw throughput the PTY owner is the bottleneck in both designs (CPU ≈ wall): reading the PTY and
+batching cost about as much with the utilityProcess as with the daemon. The mirror's own parse is ≈ 1 s per 34 MB
+(`@xterm/headless` benchmark, like the renderer's), and the socket framing adds ≈ 0.3 s in main. Not worth
+optimising before someone hits it (the mirror must stay current for a consistent attach cut, so the lever would be
+the PTY read / batch path, not the mirror).
+
+Gotcha found while testing: `pty.live()` is meant to be called once per page load (it detaches the page's sessions
+first, §6); a second call from the same page silently detaches them and drops further input until a reattach.

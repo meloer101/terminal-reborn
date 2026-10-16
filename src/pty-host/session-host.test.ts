@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { HostEvent } from './protocol'
 import { SessionHost } from './session-host'
 
-function harness(mirror = true) {
+function harness(mirror = true, onDetachedOutput?: (id: string) => void) {
   const events: HostEvent[] = []
   const waiters: Array<() => void> = []
   const host = new SessionHost({
@@ -12,6 +12,7 @@ function harness(mirror = true) {
       events.push(event)
       for (const wake of waiters.splice(0)) wake()
     },
+    ...(onDetachedOutput ? { onDetachedOutput } : {}),
     log: () => undefined
   })
   const waitFor = async <T extends HostEvent>(match: (event: HostEvent) => event is T, timeoutMs = 5000): Promise<T> => {
@@ -99,6 +100,23 @@ describe('SessionHost', () => {
     expect(attached.exit).toEqual({ exitCode: 3 })
     expect(attached.screen.data).toContain('bye')
     expect(host.list()).toEqual([])
+  })
+
+  it('reports output nobody sees, and serves the screen for the disk snapshot', async () => {
+    const unseen: string[] = []
+    const { host, events, waitFor } = harness(true, (id) => unseen.push(id))
+    cleanup = host
+    host.handle({ type: 'spawn', id: 's1', cwd: '/', command: '/bin/sh', args: ['-c', 'printf "seen\\n"; read x; printf "unseen-$x\\n"; sleep 30'], cols: 40, rows: 6 })
+    await waitFor(is('spawned'))
+    await expect.poll(() => output(events), { timeout: 5000 }).toContain('seen')
+    expect(unseen).toEqual([])
+
+    host.handle({ type: 'detach', id: 's1' })
+    host.handle({ type: 'write', id: 's1', data: 'Y\r' })
+    await expect.poll(() => unseen.length, { timeout: 5000 }).toBeGreaterThan(0)
+    expect(new Set(unseen)).toEqual(new Set(['s1']))
+    await expect.poll(async () => (await host.screen('s1'))?.data, { timeout: 5000 }).toContain('unseen-Y')
+    expect(await host.screen('nope')).toBeNull()
   })
 
   it('answers attach-miss without a mirror (the fallback host) or for an unknown id', async () => {
