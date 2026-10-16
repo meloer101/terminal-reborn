@@ -11,7 +11,7 @@ export interface TerminalAppearance {
   /** CJK fallback family, placed right after fontFamily in the stack. */
   cjkFontFamily: string
   fontSize: number
-  /** Multiple of the font size (xterm semantics); Figma Mono/Terminal 13px/20px is 20 / 13. */
+  /** Multiple of the font's natural line height (xterm semantics); 1 = a normal terminal. */
   lineHeight: number
   ligatures: boolean
   /**

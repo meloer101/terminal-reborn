@@ -46,7 +46,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     latinFont: 'JetBrains Mono Variable',
     cjkFont: 'PingFang SC',
     fontSize: 13,
-    lineHeight: Math.round((20 / 13) * 100) / 100,
+    // xterm multiplies the font's own line height: 1 is what a normal terminal shows. Taller rows stretch
+    // block-drawn art such as the Claude Code logo.
+    lineHeight: 1,
     ligatures: false,
     background: { kind: 'solid' },
     terminalOpacity: 1,

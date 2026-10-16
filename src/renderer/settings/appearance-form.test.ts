@@ -4,7 +4,7 @@ import { backgroundForKind, displayFamily, fileName, fontSizeOptions, formatPerc
 
 describe('previewCaption', () => {
   it('matches the Figma caption', () => {
-    expect(previewCaption(DEFAULT_SETTINGS.appearance)).toBe('JetBrains Mono 13 · PingFang SC · 行高 1.54')
+    expect(previewCaption(DEFAULT_SETTINGS.appearance)).toBe('JetBrains Mono 13 · PingFang SC · 行高 1.00')
     expect(previewCaption({ ...DEFAULT_SETTINGS.appearance, lineHeight: 1.4 })).toBe('JetBrains Mono 13 · PingFang SC · 行高 1.40')
   })
 })

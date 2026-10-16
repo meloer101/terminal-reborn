@@ -26,7 +26,7 @@ test('settings window edits appearance live and the preview follows', async () =
   const settings = await openSettings(app)
   const preview = settings.getByTestId('preview-terminal')
 
-  await expect(settings.getByTestId('preview-caption')).toHaveText('JetBrains Mono 13 · PingFang SC · 行高 1.54')
+  await expect(settings.getByTestId('preview-caption')).toHaveText('JetBrains Mono 13 · PingFang SC · 行高 1.00')
 
   // 字号: pick 15 from the menu.
   await settings.getByRole('combobox', { name: '字号' }).click()

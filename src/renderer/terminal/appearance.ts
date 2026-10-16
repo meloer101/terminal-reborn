@@ -2,12 +2,12 @@
 import type { ITheme } from '@xterm/xterm'
 import type { TerminalAppearance } from './surface'
 
-/** Figma style Mono/Terminal: 13px type on a 20px line. xterm's lineHeight is a multiplier. */
+/** 13px JetBrains Mono at its natural line height, like a normal terminal (xterm's lineHeight multiplies it). */
 export const DEFAULT_APPEARANCE: TerminalAppearance = {
   fontFamily: 'JetBrains Mono Variable',
   cjkFontFamily: 'PingFang SC',
   fontSize: 13,
-  lineHeight: 20 / 13,
+  lineHeight: 1,
   ligatures: false
 }
 

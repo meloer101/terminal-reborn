@@ -1,10 +1,16 @@
-/** Coalesces PTY output so IPC carries few, large messages under floods. */
+/**
+ * Coalesces PTY output so IPC carries few, large messages under floods — without adding latency to
+ * interactive output: the first chunk after a quiet spell goes out on the next turn of the event loop
+ * (a TUI redraw that arrives in several reads still travels together); only sustained output waits for
+ * the interval. A full-screen agent redraws on every scroll step, so this delay is felt directly.
+ */
 export const FLUSH_INTERVAL_MS = 8
 export const FLUSH_MAX_CHARS = 64 * 1024
 
 export class OutputBatcher {
   private buffer = ''
   private timer: ReturnType<typeof setTimeout> | null = null
+  private lastFlushAt = Number.NEGATIVE_INFINITY
 
   constructor(
     private readonly emit: (data: string) => void,
@@ -18,7 +24,8 @@ export class OutputBatcher {
     if (this.buffer.length >= this.maxChars) {
       this.flush()
     } else if (this.timer === null) {
-      this.timer = setTimeout(() => this.flush(), this.intervalMs)
+      const idle = Date.now() - this.lastFlushAt >= this.intervalMs
+      this.timer = setTimeout(() => this.flush(), idle ? 0 : this.intervalMs)
     }
   }
 
@@ -30,6 +37,7 @@ export class OutputBatcher {
     if (this.buffer.length === 0) return
     const data = this.buffer
     this.buffer = ''
+    this.lastFlushAt = Date.now()
     this.emit(data)
   }
 

@@ -19,6 +19,23 @@ describe('OutputBatcher', () => {
     expect(emit).toHaveBeenCalledWith('abc')
   })
 
+  it('sends the first chunk after a quiet spell at once; output that keeps coming waits for the interval', () => {
+    const emit = vi.fn()
+    const batcher = new OutputBatcher(emit, 8, 1024)
+    batcher.append('redraw')
+    vi.advanceTimersByTime(0)
+    expect(emit).toHaveBeenLastCalledWith('redraw')
+    batcher.append('more')
+    vi.advanceTimersByTime(7)
+    expect(emit).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1)
+    expect(emit).toHaveBeenLastCalledWith('more')
+    vi.advanceTimersByTime(20)
+    batcher.append('later')
+    vi.advanceTimersByTime(0)
+    expect(emit).toHaveBeenLastCalledWith('later')
+  })
+
   it('flushes immediately once the size limit is reached', () => {
     const emit = vi.fn()
     const batcher = new OutputBatcher(emit, 8, 10)
