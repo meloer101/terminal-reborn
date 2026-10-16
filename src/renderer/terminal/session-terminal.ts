@@ -6,6 +6,8 @@ import { XtermSurface } from './xterm-surface'
 
 const ACK_BATCH_UNITS = 32 * 1024
 const ACK_FLUSH_MS = 50
+/** The screen is saved once output has been quiet this long (never mid-redraw, so scrolling stays smooth). */
+const SNAPSHOT_QUIET_MS = 3000
 
 function dim(text: string): string {
   return `\r\n\x1b[2m${text}\x1b[0m\r\n`
@@ -24,9 +26,13 @@ export class SessionTerminal {
   private exited = false
   private disposed = false
   private queuedInput: string[] = []
+  private inputBuffer = ''
   private ackPending = 0
   private ackTimer: ReturnType<typeof setTimeout> | null = null
   private readonly cleanups: Array<() => void> = []
+  /** Output arrived since the last snapshot. */
+  private dirty = false
+  private snapshotTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     readonly sessionId: SessionId,
@@ -54,6 +60,10 @@ export class SessionTerminal {
     const id = this.sessionId
     await this.surface.whenOpen()
     if (this.disposed) return
+    // Paint the last screen right away; the process below takes a few seconds to draw anything.
+    const snapshot = window.tr.terminalSnapshots.loadSync(id)
+    if (snapshot) await this.surface.restore(snapshot)
+    if (this.disposed) return
 
     const input = this.surface.onInput((data) => this.sendInput(data))
     const resize = this.surface.onResize(({ cols, rows }) => pty.resize(id, cols, rows))
@@ -68,6 +78,7 @@ export class SessionTerminal {
     this.cleanups.push(
       pty.onData(id, (data) => {
         this.surface.write(data, () => this.ack(data.length))
+        this.markDirty()
       }),
       pty.onExit(id, ({ exitCode }) => {
         this.exited = true
@@ -134,8 +145,38 @@ export class SessionTerminal {
 
   private sendInput(data: string): void {
     if (this.exited) return
-    if (this.ready) window.tr.pty.write(this.sessionId, data)
-    else this.queuedInput.push(data)
+    if (!this.ready) {
+      this.queuedInput.push(data)
+      return
+    }
+    // Input produced in the same task (a burst of wheel reports, a paste split by xterm) goes out as one write,
+    // so a full-screen agent applies a scroll gesture in one redraw instead of replaying it report by report.
+    if (this.inputBuffer === '') queueMicrotask(() => this.flushInput())
+    this.inputBuffer += data
+  }
+
+  private flushInput(): void {
+    const data = this.inputBuffer
+    this.inputBuffer = ''
+    if (data && this.ready && !this.exited && !this.disposed) window.tr.pty.write(this.sessionId, data)
+  }
+
+  private markDirty(): void {
+    this.dirty = true
+    if (this.snapshotTimer !== null) clearTimeout(this.snapshotTimer)
+    this.snapshotTimer = setTimeout(() => {
+      this.snapshotTimer = null
+      requestIdleCallback(() => this.saveSnapshot(), { timeout: 2000 })
+    }, SNAPSHOT_QUIET_MS)
+  }
+
+  /** Saves what the terminal shows, if it changed since the last save. */
+  saveSnapshot(): void {
+    if (!this.dirty || this.disposed) return
+    const snapshot = this.surface.snapshot()
+    if (!snapshot) return
+    this.dirty = false
+    window.tr.terminalSnapshots.save(this.sessionId, snapshot)
   }
 
   /** Tells the PTY host how much output has been parsed so it can keep reading (flow control). */
@@ -153,10 +194,14 @@ export class SessionTerminal {
     this.ackPending = 0
   }
 
-  dispose(): void {
+  /** `forget`: the session itself is gone, so its saved screen goes too. */
+  dispose(forget = false): void {
     if (this.disposed) return
+    if (forget) window.tr.terminalSnapshots.remove(this.sessionId)
+    else this.saveSnapshot()
     this.disposed = true
     if (this.ackTimer !== null) clearTimeout(this.ackTimer)
+    if (this.snapshotTimer !== null) clearTimeout(this.snapshotTimer)
     for (const cleanup of this.cleanups) cleanup()
     if (this.started && !this.exited) window.tr.pty.kill(this.sessionId)
     this.surface.dispose()

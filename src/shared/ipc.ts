@@ -100,6 +100,22 @@ export interface WorkspaceStoreApi {
   save(data: unknown): void
 }
 
+/** What a terminal last showed, saved so a reopened session paints at once while its process starts again. */
+export interface TerminalSnapshot {
+  cols: number
+  rows: number
+  /** xterm SerializeAddon output (no modes). */
+  data: string
+}
+
+/** Main-owned terminal snapshots: `<userData>/terminal-snapshots/`. */
+export interface TerminalSnapshotApi {
+  /** Synchronous so the snapshot can be painted in the same frame the terminal opens (null when none). */
+  loadSync(sessionId: string): TerminalSnapshot | null
+  save(sessionId: string, snapshot: TerminalSnapshot): void
+  remove(sessionId: string): void
+}
+
 export interface SettingsApi {
   get(): Promise<AppSettings>
   /** Merges and persists; resolves to the sanitized result. Every window gets onChange. */
@@ -164,6 +180,7 @@ export interface TrApi {
   settings: SettingsApi
   app: AppInfoApi
   workspace: WorkspaceStoreApi
+  terminalSnapshots: TerminalSnapshotApi
 }
 
 export const IPC = {
@@ -217,5 +234,9 @@ export const IPC = {
   appDetectAgents: 'app:detect-agents',
   /** sync */
   workspaceLoad: 'workspace:load',
-  workspaceSave: 'workspace:save'
+  workspaceSave: 'workspace:save',
+  /** sync */
+  terminalSnapshotLoad: 'terminal-snapshot:load',
+  terminalSnapshotSave: 'terminal-snapshot:save',
+  terminalSnapshotRemove: 'terminal-snapshot:remove'
 } as const

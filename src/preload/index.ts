@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC, type PtyExit, type TrApi } from '@shared/ipc'
+import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import type { SessionId } from '@shared/types'
 
@@ -96,6 +96,11 @@ const api: TrApi = {
   workspace: {
     loadSync: () => ipcRenderer.sendSync(IPC.workspaceLoad) as unknown,
     save: (data) => ipcRenderer.send(IPC.workspaceSave, data)
+  },
+  terminalSnapshots: {
+    loadSync: (sessionId) => ipcRenderer.sendSync(IPC.terminalSnapshotLoad, sessionId) as TerminalSnapshot | null,
+    save: (sessionId, snapshot) => ipcRenderer.send(IPC.terminalSnapshotSave, sessionId, snapshot),
+    remove: (sessionId) => ipcRenderer.send(IPC.terminalSnapshotRemove, sessionId)
   }
 }
 

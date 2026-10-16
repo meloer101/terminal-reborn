@@ -86,21 +86,28 @@ export async function restartTerminal(sessionId: SessionId, resumeAgentSessionId
   return true
 }
 
-export function disposeTerminal(sessionId: SessionId): void {
-  terminals.get(sessionId)?.dispose()
+export function disposeTerminal(sessionId: SessionId, forget = false): void {
+  terminals.get(sessionId)?.dispose(forget)
   terminals.delete(sessionId)
 }
 
-/** Disposes terminals whose sessions no longer exist. */
+/** Disposes terminals whose sessions no longer exist, with their saved screens. */
 export function pruneTerminals(liveSessionIds: ReadonlySet<SessionId>): void {
   for (const id of [...terminals.keys()]) {
-    if (!liveSessionIds.has(id)) disposeTerminal(id)
+    if (!liveSessionIds.has(id)) disposeTerminal(id, true)
   }
 }
+
+// Quitting or reloading: save every terminal's screen so the next launch paints it at once.
+window.addEventListener('beforeunload', () => {
+  for (const terminal of terminals.values()) terminal.saveSnapshot()
+})
 
 // End-to-end tests read the screen through this hook; it only exists when they opt in.
 interface E2eGlobal {
   __TR_E2E__?: boolean
+  /** Screen reading only, with persistence left on (terminal-restore.spec.ts). */
+  __TR_TERMINAL_PROBE__?: boolean
   __trTerminals?: {
     readScreen(sessionId: SessionId, scrollbackLines?: number): string
     size(sessionId: SessionId): { cols: number; rows: number } | null
@@ -108,7 +115,7 @@ interface E2eGlobal {
   }
 }
 const e2e = globalThis as unknown as E2eGlobal
-if (e2e.__TR_E2E__) {
+if (e2e.__TR_E2E__ || e2e.__TR_TERMINAL_PROBE__) {
   e2e.__trTerminals = {
     readScreen: (sessionId, scrollbackLines) => terminals.get(sessionId)?.surface.readScreen(scrollbackLines) ?? '',
     size: (sessionId) => terminals.get(sessionId)?.surface.size ?? null,

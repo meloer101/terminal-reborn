@@ -5,7 +5,7 @@ Only MIT / Apache-2.0 / BSD sources may be adapted (see docs/PRD.md §6.5). Idea
 
 | Our file | Upstream | License |
 |---|---|---|
-| _(none yet)_ | | |
+| `src/renderer/terminal/tui-wheel.ts` | [stablyai/orca](https://github.com/stablyai/orca) `src/renderer/src/lib/pane-manager/pane-terminal-tui-wheel-reports.ts` @ `f2fb8ff9` (wheel → report count; the replay approach in `xterm-surface.ts` follows `pane-terminal-mouse-wheel.ts`) | MIT, Copyright (c) 2026 Lovecast Inc. |
 
 Bundled assets:
 

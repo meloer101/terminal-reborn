@@ -1,5 +1,6 @@
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -9,6 +10,9 @@ import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } 
 import { macKeyToBytes } from './keymap'
 import { findLigatureRanges } from './ligatures'
 import { readBufferText } from './screen-text'
+import { restorePayload, SNAPSHOT_MAX_CHARS, SNAPSHOT_SCROLLBACK_STEPS } from './snapshot-payload'
+import { createWheelState, wheelReportCount } from './tui-wheel'
+import type { TerminalSnapshot } from '@shared/ipc'
 import type { Disposable, TerminalAppearance, TerminalSurface } from './surface'
 
 export interface SurfaceDebugInfo {
@@ -24,6 +28,8 @@ export interface SurfaceDebugInfo {
 }
 
 const SCROLLBACK_LINES = 10_000
+/** Marks the one-row wheel events we dispatch ourselves, so the wheel handler lets xterm report them. */
+const REPLAYED_WHEEL = Symbol('replayed-wheel')
 const FONT_LOAD_TIMEOUT_MS = 1500
 
 export interface XtermSurfaceOptions {
@@ -43,6 +49,7 @@ const webglSurfaces = new Set<XtermSurface>()
 export class XtermSurface implements TerminalSurface {
   private readonly term: Terminal
   private readonly fitAddon = new FitAddon()
+  private readonly serializeAddon = new SerializeAddon()
   private webgl: WebglAddon | null = null
   private webglUnavailable = false
   private visible = true
@@ -69,10 +76,12 @@ export class XtermSurface implements TerminalSurface {
       theme: this.buildTheme()
     })
     this.term.loadAddon(this.fitAddon)
+    this.term.loadAddon(this.serializeAddon)
     this.term.loadAddon(new Unicode11Addon())
     this.term.unicode.activeVersion = '11'
     // Plain clicks open links through window.open, which main routes to the default browser.
     this.term.loadAddon(new WebLinksAddon((_event, uri) => window.open(uri, '_blank')))
+    this.attachTuiWheel()
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
       const bytes = macKeyToBytes(event)
@@ -85,6 +94,47 @@ export class XtermSurface implements TerminalSurface {
     // Re-theme when <html data-theme> flips (theme.ts also follows the system setting).
     this.themeObserver = new MutationObserver(() => this.applyTheme())
     this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  }
+
+  /**
+   * While a full-screen program has mouse tracking on, xterm sends at most one wheel report per wheel event and
+   * damps trackpad deltas, so the program scrolls a fraction of the gesture. Instead, work out how many rows the
+   * gesture covered (tui-wheel.ts) and let xterm report that many one-row wheel events, in one microtask so the
+   * reports reach the PTY as one write (SessionTerminal coalesces input).
+   */
+  private attachTuiWheel(): void {
+    const state = createWheelState()
+    let pending = 0
+    let pendingEvent: WheelEvent | null = null
+    let target: EventTarget | null = null
+    const drain = (): void => {
+      const event = pendingEvent
+      const count = pending
+      pending = 0
+      pendingEvent = null
+      if (!event || !target || this.disposed || this.term.modes.mouseTrackingMode === 'none') return
+      for (let i = 0; i < count; i++) target.dispatchEvent(oneRowWheel(event))
+    }
+    this.term.attachCustomWheelEventHandler((event) => {
+      if ((event as WheelEvent & { [REPLAYED_WHEEL]?: true })[REPLAYED_WHEEL]) return true
+      if (this.term.modes.mouseTrackingMode === 'none' || event.deltaY === 0 || event.shiftKey) return true
+      target = event.currentTarget ?? this.term.element ?? null
+      if (!target) return true
+      const reports = wheelReportCount(event, state, { cellHeight: this.cellHeight(), rows: this.term.rows })
+      if (reports > 0) {
+        if (pendingEvent && pendingEvent.deltaY < 0 !== event.deltaY < 0) pending = 0
+        if (pending === 0 && !pendingEvent) queueMicrotask(drain)
+        pending += reports
+        pendingEvent = event
+      }
+      return false
+    })
+  }
+
+  private cellHeight(): number | undefined {
+    const screen = this.term.element?.querySelector<HTMLElement>('.xterm-screen')
+    const height = screen?.getBoundingClientRect().height ?? 0
+    return height > 0 && this.term.rows > 0 ? height / this.term.rows : undefined
   }
 
   /** Resolves once the terminal is attached to the DOM and measured with its real font. */
@@ -229,6 +279,28 @@ export class XtermSurface implements TerminalSurface {
     this.fit()
   }
 
+  /** What the terminal shows now (plus scrollback), for painting a reopened session at once; null if unopened. */
+  snapshot(): TerminalSnapshot | null {
+    if (this.disposed || !this.term.element) return null
+    for (const scrollback of SNAPSHOT_SCROLLBACK_STEPS) {
+      const data = this.serializeAddon.serialize({ scrollback, excludeModes: true })
+      if (data.length <= SNAPSHOT_MAX_CHARS) return { cols: this.term.cols, rows: this.term.rows, data }
+    }
+    return null
+  }
+
+  /** Paints a saved snapshot at the size it was taken, then fits to the container; resolves once parsed. */
+  restore(snapshot: TerminalSnapshot): Promise<void> {
+    if (this.disposed || !this.term.element) return Promise.resolve()
+    if (snapshot.cols !== this.term.cols || snapshot.rows !== this.term.rows) this.term.resize(snapshot.cols, snapshot.rows)
+    return new Promise((resolve) => {
+      this.term.write(restorePayload(snapshot.data, snapshot.rows), () => {
+        this.fit()
+        resolve()
+      })
+    })
+  }
+
   write(data: string, callback?: () => void): void {
     this.term.write(data, callback)
   }
@@ -332,4 +404,26 @@ export class XtermSurface implements TerminalSurface {
     this.unloadWebgl()
     this.term.dispose()
   }
+}
+
+/** A copy of a wheel event that scrolls exactly one line, flagged so our own wheel handler passes it through. */
+function oneRowWheel(event: WheelEvent): WheelEvent {
+  const clone = new WheelEvent(event.type, {
+    bubbles: event.bubbles,
+    cancelable: event.cancelable,
+    composed: event.composed,
+    view: event.view,
+    screenX: event.screenX,
+    screenY: event.screenY,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    ctrlKey: event.ctrlKey,
+    altKey: event.altKey,
+    shiftKey: event.shiftKey,
+    metaKey: event.metaKey,
+    deltaY: event.deltaY < 0 ? -1 : 1,
+    deltaMode: WheelEvent.DOM_DELTA_LINE
+  })
+  Object.defineProperty(clone, REPLAYED_WHEEL, { value: true })
+  return clone
 }
