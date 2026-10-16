@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
+import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
 import styles from './TerminalArea.module.css'
 
@@ -16,16 +17,18 @@ interface PaneProps {
   active: boolean
   /** Restored from disk and not started yet: no terminal until startSession() (state/session-start.ts). */
   held: boolean
+  /** Its process kept running in the pty daemon: attach now, viewed or not (status and notifications need it). */
+  live: boolean
   /** Earlier conversation to continue; `generation` changes whenever the session is started again. */
   resumeAgentSessionId: string | undefined
   generation: number
 }
 
-function TerminalPane({ sessionId, cwd, agent, active, held, resumeAgentSessionId, generation }: PaneProps) {
+function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  // Spawn lazily: nothing is created until the session has been active once.
-  const [everActive, setEverActive] = useState(active)
-  if (active && !everActive) setEverActive(true)
+  // Spawn lazily: nothing is created until the session has been active once (a live process is attached at once).
+  const [everActive, setEverActive] = useState(active || live)
+  if ((active || live) && !everActive) setEverActive(true)
 
   useEffect(() => {
     const host = hostRef.current
@@ -152,6 +155,7 @@ export function TerminalArea() {
   )
 
   const requests = useStartRequests((s) => s.requests)
+  const live = useLiveSessions((s) => s.live)
   useSessionStartup()
   useFocusActiveTerminal(activeSessionId)
   useResyncOnWake(activeSessionId)
@@ -169,7 +173,8 @@ export function TerminalArea() {
           cwd={worktrees.find((w) => w.id === session.worktreeId)?.path ?? window.tr.homeDir}
           agent={launchKind(session)}
           active={session.id === activeSessionId}
-          held={session.phase === 'not-started'}
+          held={session.phase === 'not-started' && !live[session.id]}
+          live={live[session.id] !== undefined}
           resumeAgentSessionId={requests[session.id]?.resumeAgentSessionId}
           generation={requests[session.id]?.generation ?? 0}
         />

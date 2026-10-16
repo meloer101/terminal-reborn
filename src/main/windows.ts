@@ -5,7 +5,7 @@ import { IPC } from '@shared/ipc'
 import { viewMenuItems } from '@shared/lifecycle'
 import { clearActivity } from './activity'
 import { releaseSessionsOf } from './pty'
-import { isQuitting } from './quit'
+import { isQuitting, quitEndingSessions } from './quit'
 
 let mainWindow: BrowserWindow | null = null
 import { restoreBounds, saveBounds } from './window-state'
@@ -61,7 +61,8 @@ export function createMainWindow(): BrowserWindow {
       win.hide()
     }
   })
-  // A crashed renderer is reloaded; the workspace restores. Its terminals died with it, so release them.
+  // A crashed renderer is reloaded; the workspace restores. With the pty daemon its terminals keep running and the
+  // reloaded window reattaches them; with the fallback host they are killed.
   win.webContents.on('render-process-gone', (_event, details) => {
     console.error('[main] renderer process gone:', details.reason, details.exitCode)
     clearActivity(win.webContents)
@@ -109,7 +110,9 @@ export function installAppMenu(): void {
         { role: 'hideOthers' },
         { role: 'unhide' },
         { type: 'separator' },
-        { role: 'quit' }
+        // Sessions keep running in the pty daemon after ⌘Q; this one ends them too.
+        { role: 'quit' },
+        { label: '退出并结束所有会话…', accelerator: 'Alt+CmdOrCtrl+Q', click: () => quitEndingSessions(getMainWindow) }
       ]
     },
     { role: 'editMenu' },

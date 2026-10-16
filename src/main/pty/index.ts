@@ -1,16 +1,20 @@
-// Main-process side of the terminal: forks the pty-host utilityProcess and relays
-// renderer IPC <-> host messages. All payloads from the renderer are validated here.
-import { app, ipcMain, utilityProcess, type UtilityProcess, type WebContents } from 'electron'
+// Main-process side of the terminal. The PTYs live in the pty daemon (src/pty-daemon), a detached process that
+// outlives the app so agents keep running across quits and a relaunch reattaches (docs/spikes/pty-daemon.md).
+// When the daemon cannot be reached, the pty-host utilityProcess takes over for this run (sessions then end with
+// the app). Main relays renderer IPC <-> host messages and validates every renderer payload.
+import { app, ipcMain, utilityProcess, type WebContents } from 'electron'
 import { join } from 'node:path'
-import { IPC, type PtySpawnOptions } from '@shared/ipc'
+import { IPC, type LivePtySession, type PtyAttachResult, type PtySpawnOptions } from '@shared/ipc'
 import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
-import type { HostEvent, HostRequest } from '../../pty-host/protocol'
-import { endAgentSession, prepareAgentLaunch } from '../hooks'
+import type { HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
+import { adoptAgentSession, endAgentSession, handleRelayedHook, prepareAgentLaunch, setHookTarget } from '../hooks'
+import { daemonLocation, openDaemon } from './daemon-client'
 import { isOrphanSpawn } from './late-spawn'
 import { assertCwdExists } from './preflight'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
+const ATTACH_TIMEOUT_MS = 5_000
 /** Crashes older than this no longer count towards the restart backoff. */
 const CRASH_WINDOW_MS = 60_000
 
@@ -18,35 +22,124 @@ interface LiveSession {
   owner: WebContents
 }
 
-interface PendingSpawn {
-  resolve(result: { pid: number }): void
+interface Pending<T> {
+  resolve(result: T): void
   reject(error: Error): void
   timer: ReturnType<typeof setTimeout>
 }
 
-let host: UtilityProcess | null = null
+/** Where the PTYs are: the daemon (survives the app) or the fallback utilityProcess (dies with it). */
+interface HostLink {
+  readonly kind: 'daemon' | 'utility'
+  post(message: HostRequest): void
+  /** Daemon: disconnect, sessions keep running. Utility: kill it and every session. */
+  close(): void
+  /** Daemon only: ask it to exit, ending every session. */
+  shutdown?(): Promise<void>
+}
+
+let link: HostLink | null = null
+let linking: Promise<HostLink> | null = null
+/** Messages sent while no host is connected (it is starting or restarting). */
+let queued: HostRequest[] = []
+/** The daemon could not be reached at all: use the utilityProcess for the rest of this run. */
+let daemonUnavailable = process.env.TR_PTY_DAEMON === '0'
+/** Quit ends every session (the "退出并结束所有会话" menu item; e2e runs). Otherwise the daemon keeps them. */
+let endSessionsOnQuit = process.env.TR_KILL_SESSIONS_ON_QUIT === '1'
+let quitHandled = false
+
 const sessions = new Map<string, LiveSession>()
-const pending = new Map<string, PendingSpawn>()
+const pendingSpawns = new Map<string, Pending<{ pid: number }>>()
+const pendingAttaches = new Map<string, Pending<PtyAttachResult | null>>()
+const pendingLists: Array<(sessions: HostSessionInfo[]) => void> = []
 const watchedOwners = new WeakSet<WebContents>()
 let crashTimes: number[] = []
 let restartTimer: ReturnType<typeof setTimeout> | null = null
 
-function ensureHost(): UtilityProcess {
-  if (host) return host
+function forkUtility(): HostLink {
   const child = utilityProcess.fork(join(__dirname, 'pty-host.js'), [], { serviceName: 'terminal-reborn-pty-host' })
+  const self: HostLink = {
+    kind: 'utility',
+    post: (message) => child.postMessage(message),
+    close: () => {
+      child.postMessage({ type: 'killAll' } satisfies HostRequest)
+      child.kill()
+    }
+  }
   child.on('message', (event: HostEvent) => handleHostEvent(event))
   child.on('exit', (code) => {
-    if (host !== child) return
-    host = null
+    if (link !== self) return
     console.error(`[main] pty host exited unexpectedly (code ${code})`)
     handleHostCrash()
   })
-  host = child
-  return child
+  return self
+}
+
+async function connectDaemon(): Promise<HostLink> {
+  let self: HostLink | null = null
+  const connection = await openDaemon({
+    userData: app.getPath('userData'),
+    script: join(__dirname, 'pty-daemon.js'),
+    appVersion: app.getVersion(),
+    handlers: {
+      onEvent: (event) => handleHostEvent(event),
+      onHook: (hook) => handleRelayedHook(hook),
+      onLost: () => {
+        if (!self || link !== self) return
+        console.error('[main] lost the pty daemon')
+        handleHostCrash()
+      }
+    }
+  })
+  if (connection.hooks) setHookTarget({ ...connection.hooks, settingsDir: daemonLocation(app.getPath('userData')).dir })
+  else setHookTarget(null)
+  self = {
+    kind: 'daemon',
+    post: (message) => connection.post(message),
+    close: () => connection.close(),
+    shutdown: () => connection.shutdown(true)
+  }
+  return self
+}
+
+async function connectHost(): Promise<HostLink> {
+  if (!daemonUnavailable) {
+    try {
+      return await connectDaemon()
+    } catch (error) {
+      daemonUnavailable = true
+      console.error('[main] pty daemon unavailable; terminals will end with the app this run:', error)
+    }
+  }
+  setHookTarget(null)
+  return forkUtility()
+}
+
+function ensureHost(): Promise<HostLink> {
+  if (link) return Promise.resolve(link)
+  linking ??= connectHost().then((next) => {
+    link = next
+    linking = null
+    const backlog = queued
+    queued = []
+    for (const message of backlog) next.post(message)
+    return next
+  })
+  return linking
+}
+
+function send(message: HostRequest): void {
+  if (link) {
+    link.post(message)
+    return
+  }
+  queued.push(message)
+  void ensureHost()
 }
 
 /** The host died: every live terminal is gone with it. Tell each owner which sessions, and bring a host back. */
 function handleHostCrash(): void {
+  link = null
   const lostByOwner = new Map<WebContents, string[]>()
   for (const [id, session] of sessions) {
     endAgentSession(id)
@@ -54,23 +147,25 @@ function handleHostCrash(): void {
     lostByOwner.set(session.owner, [...(lostByOwner.get(session.owner) ?? []), id])
   }
   sessions.clear()
-  for (const [id, spawn] of pending) {
+  for (const [id, spawn] of pendingSpawns) {
     clearTimeout(spawn.timer)
     spawn.reject(new Error('pty host exited'))
-    pending.delete(id)
+    pendingSpawns.delete(id)
   }
+  for (const [id, attach] of pendingAttaches) {
+    clearTimeout(attach.timer)
+    attach.resolve(null)
+    pendingAttaches.delete(id)
+  }
+  for (const resolve of pendingLists.splice(0)) resolve([])
 
   const now = Date.now()
   crashTimes = [...crashTimes.filter((t) => now - t < CRASH_WINDOW_MS), now]
-  // Restart in the background (with backoff for a crash loop). A spawn arriving earlier forks it lazily.
+  // Restart in the background (with backoff for a crash loop). A spawn arriving earlier starts it lazily.
   if (restartTimer) clearTimeout(restartTimer)
   restartTimer = setTimeout(() => {
     restartTimer = null
-    try {
-      ensureHost()
-    } catch (error) {
-      console.error('[main] could not restart the pty host:', error)
-    }
+    ensureHost().catch((error: unknown) => console.error('[main] could not restart the pty host:', error))
   }, hostRestartDelay(crashTimes.length))
 
   for (const [owner, sessionIds] of lostByOwner) {
@@ -79,13 +174,17 @@ function handleHostCrash(): void {
   }
 }
 
-function send(message: HostRequest): void {
-  ensureHost().postMessage(message)
-}
-
 function notifyExit(owner: WebContents, sessionId: string, exitCode: number, signal?: number): void {
   if (owner.isDestroyed()) return
   owner.send(IPC.ptyExit, { sessionId, exit: { exitCode, ...(signal ? { signal } : {}) } })
+}
+
+function settle<T>(map: Map<string, Pending<T>>, id: string): Pending<T> | undefined {
+  const pending = map.get(id)
+  if (!pending) return undefined
+  clearTimeout(pending.timer)
+  map.delete(id)
+  return pending
 }
 
 function handleHostEvent(event: HostEvent): void {
@@ -93,26 +192,18 @@ function handleHostEvent(event: HostEvent): void {
     case 'spawned': {
       // Late news of a spawn main already gave up on: kill it rather than leave an invisible live process.
       if (isOrphanSpawn(sessions, event.id)) send({ type: 'kill', id: event.id })
-      const spawn = pending.get(event.id)
-      if (!spawn) break
-      clearTimeout(spawn.timer)
-      pending.delete(event.id)
-      spawn.resolve({ pid: event.pid })
+      settle(pendingSpawns, event.id)?.resolve({ pid: event.pid })
       break
     }
     case 'spawn-error': {
       sessions.delete(event.id)
       endAgentSession(event.id)
-      const spawn = pending.get(event.id)
-      if (!spawn) break
-      clearTimeout(spawn.timer)
-      pending.delete(event.id)
-      spawn.reject(new Error(event.message))
+      settle(pendingSpawns, event.id)?.reject(new Error(event.message))
       break
     }
     case 'data': {
       const session = sessions.get(event.id)
-      if (session && !session.owner.isDestroyed()) session.owner.send(IPC.ptyData, { sessionId: event.id, data: event.data })
+      if (session && !session.owner.isDestroyed()) session.owner.send(IPC.ptyData, { sessionId: event.id, data: event.data, seq: event.seq })
       break
     }
     case 'exit': {
@@ -123,7 +214,41 @@ function handleHostEvent(event: HostEvent): void {
       notifyExit(session.owner, event.id, event.exitCode, event.signal)
       break
     }
+    case 'attached': {
+      const pending = settle(pendingAttaches, event.id)
+      const session = sessions.get(event.id)
+      if (!pending || !session) {
+        // Nobody waits for it any more (timed out, window gone): leave it running, unwatched.
+        if (!event.exit) send({ type: 'detach', id: event.id })
+        break
+      }
+      if (event.exit) sessions.delete(event.id)
+      else if (event.agent === 'claude' || event.agent === 'codex') adoptAgentSession(event.id, session.owner, event.hooks)
+      pending.resolve({
+        pid: event.pid,
+        seq: event.seq,
+        screen: event.screen,
+        ...(event.exit ? { exit: event.exit } : {})
+      })
+      break
+    }
+    case 'attach-miss': {
+      sessions.delete(event.id)
+      settle(pendingAttaches, event.id)?.resolve(null)
+      break
+    }
+    case 'sessions': {
+      for (const resolve of pendingLists.splice(0)) resolve(event.sessions)
+      break
+    }
   }
+}
+
+/** Only string values: the app's environment as the base for new PTYs (the daemon's own may be days old). */
+function appEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
+  return env
 }
 
 async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promise<{ pid: number }> {
@@ -136,23 +261,25 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   // Agent sessions get their hook environment and the per-launch `--settings` file. Our TR_* keys
   // come last so the renderer cannot spoof them.
   const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent) : null
+  await ensureHost()
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      pending.delete(id)
+      pendingSpawns.delete(id)
       sessions.delete(id)
       endAgentSession(id)
       // The host handles messages in order, so this lands right after the spawn it is still working on.
       // If it somehow slips past, handleHostEvent kills the late process when it reports in.
-      if (host) send({ type: 'kill', id })
+      if (link) send({ type: 'kill', id })
       reject(new Error('timed out starting the terminal process'))
     }, SPAWN_TIMEOUT_MS)
-    pending.set(id, { resolve, reject, timer })
+    pendingSpawns.set(id, { resolve, reject, timer })
     const { sessionId: _sessionId, env, ...rest } = options
     send({
       type: 'spawn',
       id,
       ...rest,
+      baseEnv: appEnv(),
       ...(hooks
         ? {
             env: { ...env, ...hooks.env },
@@ -166,18 +293,66 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   })
 }
 
-/** Kills every terminal a window owns (its renderer crashed or the window is gone). */
-export function releaseSessionsOf(owner: WebContents): void {
-  killOwnedBy(owner)
+async function attachSession(owner: WebContents, id: string): Promise<PtyAttachResult | null> {
+  const host = await ensureHost()
+  if (host.kind !== 'daemon') return null
+  const current = sessions.get(id)
+  // Another live window drives it: not ours to take.
+  if (current && current.owner !== owner && !current.owner.isDestroyed()) return null
+  settle(pendingAttaches, id)?.resolve(null)
+  sessions.set(id, { owner })
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingAttaches.delete(id)
+      if (sessions.get(id)?.owner === owner) sessions.delete(id)
+      resolve(null)
+    }, ATTACH_TIMEOUT_MS)
+    pendingAttaches.set(id, { resolve, reject, timer })
+    send({ type: 'attach', id })
+  })
 }
 
-function killOwnedBy(owner: WebContents): void {
+/**
+ * Asked once by each renderer load. A reload keeps the same WebContents, so sessions it still "owns" belong to the
+ * page that is gone: detach them first, and they are listed for the new page to reattach.
+ */
+async function liveSessions(owner: WebContents): Promise<LivePtySession[]> {
+  const host = await ensureHost()
+  if (host.kind !== 'daemon') return []
+  releaseOwner(owner)
+  const listed = await new Promise<HostSessionInfo[]>((resolve) => {
+    pendingLists.push(resolve)
+    send({ type: 'list' })
+  })
+  return listed
+    .filter((s) => !sessions.has(s.id))
+    .map((s) => ({ sessionId: s.id, pid: s.pid, ...(s.agent ? { agent: s.agent } : {}), exited: s.exit !== undefined }))
+}
+
+/** A window is gone (closed, crashed, reloaded): with the daemon its sessions keep running for the next attach. */
+function releaseOwner(owner: WebContents): void {
+  const keep = link?.kind === 'daemon'
   for (const [id, session] of sessions) {
     if (session.owner !== owner) continue
     sessions.delete(id)
     endAgentSession(id)
-    send({ type: 'kill', id })
+    send(keep ? { type: 'detach', id } : { type: 'kill', id })
   }
+}
+
+/** A window's renderer is gone (crash): its terminals are detached (daemon) or killed (fallback host). */
+export function releaseSessionsOf(owner: WebContents): void {
+  releaseOwner(owner)
+}
+
+/** Whether quitting now leaves the sessions running (the pty daemon is in use and no "end sessions" quit was asked for). */
+export function quitKeepsSessions(): boolean {
+  return link?.kind === 'daemon' && !endSessionsOnQuit
+}
+
+/** The next quit ends every session (and the daemon) instead of leaving them running. */
+export function endSessionsOnNextQuit(): void {
+  endSessionsOnQuit = true
 }
 
 /** Only the window that spawned a session may drive it. */
@@ -186,15 +361,28 @@ function ownedSession(sender: WebContents, sessionIdRaw: unknown): string | null
   return sessions.get(id)?.owner === sender ? id : null
 }
 
+function watchOwner(owner: WebContents): void {
+  if (watchedOwners.has(owner)) return
+  watchedOwners.add(owner)
+  owner.once('destroyed', () => releaseOwner(owner))
+}
+
 export function registerPtyHandlers(): void {
+  // Connect (or launch) right away: the window's first attach should not wait for it.
+  ensureHost().catch((error: unknown) => console.error('[main] could not start the pty host:', error))
+
   ipcMain.handle(IPC.ptySpawn, (event, raw: unknown) => {
     const options = parseSpawnOptions(raw)
-    const owner = event.sender
-    if (!watchedOwners.has(owner)) {
-      watchedOwners.add(owner)
-      owner.once('destroyed', () => killOwnedBy(owner))
-    }
-    return spawnSession(owner, options)
+    watchOwner(event.sender)
+    return spawnSession(event.sender, options)
+  })
+
+  ipcMain.handle(IPC.ptyLive, (event) => liveSessions(event.sender))
+
+  ipcMain.handle(IPC.ptyAttach, (event, sessionId: unknown) => {
+    const id = parseSessionId(sessionId)
+    watchOwner(event.sender)
+    return attachSession(event.sender, id)
   })
 
   ipcMain.on(IPC.ptyWrite, (event, sessionId: unknown, data: unknown) => {
@@ -218,12 +406,24 @@ export function registerPtyHandlers(): void {
   })
 
   // `will-quit` (not `before-quit`): the quit guard may still cancel a quit after before-quit fired.
-  app.on('will-quit', () => {
+  app.on('will-quit', (event) => {
     if (restartTimer) clearTimeout(restartTimer)
-    if (!host) return
-    host.postMessage({ type: 'killAll' } satisfies HostRequest)
-    host.kill()
-    host = null
+    const current = link
+    if (!current || quitHandled) return
+    if (current.kind === 'daemon' && endSessionsOnQuit && current.shutdown) {
+      // Wait (briefly) for the daemon to end the sessions, so none outlives an explicit "end everything".
+      event.preventDefault()
+      quitHandled = true
+      void current.shutdown().finally(() => {
+        link = null
+        sessions.clear()
+        app.quit()
+      })
+      return
+    }
+    quitHandled = true
+    current.close()
+    link = null
     sessions.clear()
   })
 }

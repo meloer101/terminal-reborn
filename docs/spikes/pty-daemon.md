@@ -1,6 +1,6 @@
 # Design: detached PTY daemon (agents survive quit, relaunch reattaches)
 
-Status: **draft for approval** · 2026-10-16 · PRD §M6 "会话在应用重启后保留（PTY 守护进程 + `claude --resume`）"
+Status: **approved and implemented** (2026-10-16; §14 answered with the recommendations, see §15) · PRD §M6 "会话在应用重启后保留（PTY 守护进程 + `claude --resume`）"
 Reference: Orca (MIT) `src/main/daemon/*`, `src/renderer/src/components/terminal-pane/pty-connection/apply-reattach-payload.ts`.
 
 ## 1. Problem and goal
@@ -298,8 +298,24 @@ Files outside `pty-terminal` ownership that this touches (called out in commits)
 `src/main/quit.ts`, `src/main/menu-spec.ts`, `src/shared/lifecycle.ts`, `src/main/hooks/index.ts`,
 `src/renderer/state/session-start*.ts`, `electron.vite.config.ts`, `package.json`, `docs/PRD.md`.
 
-## 14. Decisions needed
+## 14. Decisions (2026-10-16)
 
-1. Quit: ⌘Q keeps agents running with no dialog, plus "退出并结束所有会话" (⌥⌘Q) — or do you want a setting
-   (default on) as well?
-2. Hooks: daemon owns the hook endpoint with a journal (§8, recommended) — or the smaller stable-path-in-main variant?
+1. Quit: ⌘Q keeps agents running with no dialog; "退出并结束所有会话…" (⌥⌘Q) ends them (confirmation while any is
+   active). No setting.
+2. Hooks: the daemon owns the hook endpoint and journals missed events (§8).
+
+## 15. What shipped, and what did not (yet)
+
+Shipped as designed: §3 (detached daemon, adopt/launch/fallback, versioned socket, token, `daemon.json`, log),
+§4 (HeadlessMirror with mode rehydration and a consistent cut), §5–6 (`pty.live` / `pty.attach`, all live sessions
+attached at boot, reload/crash detach instead of kill), §7 (quit semantics, idle exit after 10 s), §8 (daemon hook
+socket under `<userData>/daemon/hooks`, relay, 64-entry journal replayed with original timestamps), §9 (other
+protocol versions are retired), §12 (unit tests, `e2e/pty-daemon.spec.ts`, other specs quit with
+`TR_KILL_SESSIONS_ON_QUIT=1`).
+
+Not yet:
+- §10 daemon-side refresh of the disk snapshot while no app is attached (the renderer still saves on quiet output and
+  on unload, so a reboot shows the screen as of the last quit).
+- `pendingEscape` from §4 (an escape sequence cut in half at the attach point renders as text once).
+- Startup time and CPU numbers from §4's budget have not been measured on a long Claude session yet; the e2e
+  asserts first reattached frame < 1.5 s after the window loads.

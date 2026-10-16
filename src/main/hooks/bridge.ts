@@ -83,7 +83,7 @@ export class HookBridge {
     if (!this.sessions.has(sessionId)) throw new UnknownSessionError(sessionId)
 
     const normalized = normalizeHook(agent, event, request.payload)
-    const at = this.now()
+    const at = request.receivedAt ?? this.now()
     for (const e of normalized.events) this.emitter.event({ sessionId, agent, at, event: e })
 
     // The user answered in the TUI (or the turn moved on): withdraw what we were still showing.

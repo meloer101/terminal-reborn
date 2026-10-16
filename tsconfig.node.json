@@ -26,6 +26,7 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/pty-host/**/*.ts",
+    "src/pty-daemon/**/*.ts",
     "src/shared/**/*.ts"
   ]
 }
