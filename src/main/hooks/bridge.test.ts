@@ -4,7 +4,7 @@ import { HookBridge, type BridgeEmitter } from './bridge'
 import { claudeFixtures as fx } from './fixtures'
 import { type HookRequest, UnknownSessionError } from './server'
 
-function setup(canDeliver = true) {
+function setup(canDeliver = true, holdPermissions?: boolean) {
   const events: AgentEventEnvelope[] = []
   const prompts: PendingPrompt[] = []
   const resolutions: PromptResolution[] = []
@@ -14,7 +14,7 @@ function setup(canDeliver = true) {
     resolved: (r) => resolutions.push(r),
     canDeliver: () => canDeliver
   }
-  const bridge = new HookBridge(emitter, { now: () => 1000 })
+  const bridge = new HookBridge(emitter, { now: () => 1000, ...(holdPermissions === undefined ? {} : { holdPermissions }) })
   bridge.attach('s1')
   const req = (event: string, payload: unknown, sessionId = 's1', signal = new AbortController().signal): HookRequest => ({
     event,
@@ -60,6 +60,13 @@ describe('HookBridge', () => {
     await flush()
     expect(JSON.parse(body ?? '').hookSpecificOutput.decision).toEqual({ behavior: 'allow' })
     expect(resolutions).toEqual([{ id: prompt!.id, sessionId: 's1', by: 'gui' }])
+  })
+
+  it('without holds (the app since 10-16) announces the request and returns an empty body at once', async () => {
+    const { bridge, prompts, req } = setup(true, false)
+    expect(await bridge.handle(req('PermissionRequest', fx.PermissionRequest_Bash))).toBe('')
+    expect(prompts).toMatchObject([{ kind: 'permission', tool: 'Bash' }])
+    expect(bridge.pendingPermissions).toBe(0)
   })
 
   it('releases the hold with an empty body when the TUI prompt was answered (PostToolUse of the same call)', async () => {

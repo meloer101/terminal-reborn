@@ -1,5 +1,19 @@
 // Pure key decisions for the palette. The component extracts the facts from the event.
-import { isImeEvent, type KeyFacts } from '../composer/composer-keys'
+
+export interface KeyFacts {
+  key: string
+  keyCode: number
+  isComposing: boolean
+  shiftKey: boolean
+  metaKey: boolean
+  ctrlKey: boolean
+  altKey: boolean
+}
+
+/** IME safety: true while a composition is active or the event is the IME's own keydown. */
+export function isImeEvent(f: Pick<KeyFacts, 'isComposing' | 'keyCode' | 'key'>): boolean {
+  return f.isComposing || f.keyCode === 229 || f.key === 'Process'
+}
 
 export type PaletteKey = 'next' | 'prev' | 'run' | 'close' | 'toggle'
 

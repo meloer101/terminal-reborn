@@ -31,9 +31,10 @@ describe('hasStartChoice / shouldAutoStart', () => {
     expect(hasStartChoice({ ...restored, kind: 'shell' })).toBe(false)
   })
 
-  it('waits for the user now that the not-started card owns the choice', () => {
-    expect(AUTO_START_ON_VIEW).toBe(false)
-    expect(shouldAutoStart(restored)).toBe(false)
+  it('resumes a restored conversation by itself when the session is viewed', () => {
+    expect(AUTO_START_ON_VIEW).toBe(true)
+    expect(shouldAutoStart(restored)).toBe(true)
+    expect(shouldAutoStart(restored, false)).toBe(false)
   })
 
   it('still starts by itself when there is nothing to choose, or when auto-start is on', () => {

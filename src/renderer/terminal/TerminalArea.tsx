@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
-import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals } from './registry'
+import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
 import styles from './TerminalArea.module.css'
 
 interface PaneProps {
@@ -74,6 +74,78 @@ function TerminalPane({ sessionId, cwd, agent, active, held, resumeAgentSessionI
   )
 }
 
+/** Whether moving the keyboard focus now would take it from something the user is typing in. */
+function canStealFocus(): boolean {
+  if (document.querySelector('[role="dialog"][aria-modal="true"]')) return false
+  const active = document.activeElement
+  if (!active || active === document.body) return true
+  const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement).isContentEditable
+  return !typing || active.matches('.xterm-helper-textarea')
+}
+
+/** The keyboard follows the active session into its terminal (which appears a few frames after the session). */
+function useFocusActiveTerminal(sessionId: SessionId | null): void {
+  useEffect(() => {
+    if (!sessionId) return
+    let frame = 0
+    let tries = 0
+    let cancelled = false
+    const attempt = (): void => {
+      const surface = getXtermSurface(sessionId)
+      if (!surface) {
+        if (tries++ < 90) frame = requestAnimationFrame(attempt)
+        return
+      }
+      // xterm ignores focus() until it is open (fonts loaded, attached to the DOM).
+      void surface.whenOpen().then(() => {
+        if (!cancelled && canStealFocus()) surface.focus()
+      })
+    }
+    attempt()
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+    }
+  }, [sessionId])
+}
+
+/**
+ * Waking from sleep, refocusing the window or moving it to a screen with another pixel ratio can leave the
+ * visible terminal with stale glyphs or a grid the PTY does not know about: redraw it and resend its size.
+ */
+function useResyncOnWake(sessionId: SessionId | null): void {
+  useEffect(() => {
+    if (!sessionId) return
+    let frame = 0
+    const resync = (): void => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => resyncTerminal(sessionId))
+    }
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'visible') resync()
+    }
+    let ratio: MediaQueryList | null = null
+    const watchRatio = (): void => {
+      ratio?.removeEventListener('change', onRatio)
+      ratio = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+      ratio.addEventListener('change', onRatio)
+    }
+    function onRatio(): void {
+      watchRatio()
+      resync()
+    }
+    watchRatio()
+    window.addEventListener('focus', resync)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelAnimationFrame(frame)
+      ratio?.removeEventListener('change', onRatio)
+      window.removeEventListener('focus', resync)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [sessionId])
+}
+
 export function TerminalArea() {
   const { sessions, worktrees, activeSessionId } = useWorkspace(
     useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees, activeSessionId: s.activeSessionId }))
@@ -81,6 +153,8 @@ export function TerminalArea() {
 
   const requests = useStartRequests((s) => s.requests)
   useSessionStartup()
+  useFocusActiveTerminal(activeSessionId)
+  useResyncOnWake(activeSessionId)
 
   useEffect(() => {
     pruneTerminals(new Set(sessions.map((s) => s.id)))

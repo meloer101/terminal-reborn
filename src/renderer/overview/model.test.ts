@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { PendingPrompt } from '@shared/agent-events'
 import type { Project, Session, SessionStatus, Worktree } from '@shared/types'
 import { buildOverview, moveSelection, orderedIds, overviewSummary, parseFilter, tailLines } from './model'
 
@@ -20,27 +19,16 @@ function session(id: string, worktreeId: string, status: SessionStatus, minutesA
   return { id, worktreeId, kind: 'claude', title: id, status, startedAt: NOW - 30 * MIN, lastActivityAt: NOW - minutesAgo * MIN, ...extra }
 }
 
-const permission: PendingPrompt = {
-  kind: 'permission',
-  id: 'q1',
-  sessionId: 'ask',
-  tool: 'Bash',
-  input: {},
-  summary: '运行 pnpm prisma migrate dev',
-  canAllowAlways: true,
-  createdAt: 0
-}
-
 describe('buildOverview', () => {
   const sessions = [
     session('run', 'wa', 'running', 1, { currentAction: '编辑 a.ts' }),
-    session('ask', 'wa', 'needs_you', 3),
+    session('ask', 'wa', 'needs_you', 3, { currentAction: '等你确认：运行 pnpm prisma migrate dev' }),
     session('ask-new', 'wb', 'needs_you', 1),
     session('err', 'wb', 'error', 5, { currentAction: 'pnpm build 失败' }),
     session('done', 'wa', 'done_unread', 2),
     session('sh', 'wam', 'idle', 30, { kind: 'shell' })
   ]
-  const groups = buildOverview({ projects, worktrees, sessions, prompts: { ask: [permission] }, now: NOW })
+  const groups = buildOverview({ projects, worktrees, sessions, now: NOW })
 
   it('groups by what the session needs, most pressing first; exited only when present', () => {
     expect(groups.map((g) => [g.label, g.rows.map((r) => r.session.id)])).toEqual([
@@ -50,17 +38,17 @@ describe('buildOverview', () => {
       ['运行中', ['run']],
       ['空闲', ['sh']]
     ])
-    const withExited = buildOverview({ projects, worktrees, sessions: [session('x', 'wa', 'exited')], prompts: {}, now: NOW })
+    const withExited = buildOverview({ projects, worktrees, sessions: [session('x', 'wa', 'exited')], now: NOW })
     expect(withExited.at(-1)?.label).toBe('已退出')
   })
 
   it('describes each row: status text, place, summary, diff and time', () => {
     const ask = groups[0]?.rows[0]
     expect(ask).toMatchObject({
-      statusLabel: '等你确认',
+      statusLabel: '等你处理',
       tone: 'attention',
       where: 'acme-web › jacob/cookie',
-      summary: '运行 pnpm prisma migrate dev',
+      summary: '等你确认：运行 pnpm prisma migrate dev',
       stat: '+42 −18',
       time: '已等 3m'
     })
@@ -75,7 +63,6 @@ describe('buildOverview', () => {
       projects,
       worktrees,
       sessions: [session('s', 'wa', 'idle', 0, { phase: 'starting' }), session('r', 'wa', 'idle', 0, { phase: 'not-started' })],
-      prompts: {},
       now: NOW
     })
     expect(g.find((x) => x.key === 'running')?.rows[0]?.statusLabel).toBe('启动中')
@@ -84,7 +71,7 @@ describe('buildOverview', () => {
 
   it('filters by text, p: project and s: status, all tokens together', () => {
     const ids = (filter: string) =>
-      buildOverview({ projects, worktrees, sessions, prompts: { ask: [permission] }, now: NOW, filter }).flatMap((g) =>
+      buildOverview({ projects, worktrees, sessions, now: NOW, filter }).flatMap((g) =>
         g.rows.map((r) => r.session.id)
       )
     expect(ids('p:terminal')).toEqual(['ask-new', 'err'])
@@ -100,7 +87,6 @@ describe('navigation helpers', () => {
     projects,
     worktrees,
     sessions: [session('a', 'wa', 'needs_you'), session('b', 'wa', 'running'), session('c', 'wb', 'idle')],
-    prompts: {},
     now: NOW
   })
 

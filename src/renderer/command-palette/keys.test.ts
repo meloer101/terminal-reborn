@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { KeyFacts } from '../composer/composer-keys'
-import { decidePaletteKey, isPaletteShortcut } from './keys'
+import { decidePaletteKey, isImeEvent, isPaletteShortcut, type KeyFacts } from './keys'
 
 const key = (key: string, extra: Partial<KeyFacts> = {}): KeyFacts => ({
   key,
@@ -55,5 +54,14 @@ describe('decidePaletteKey', () => {
     ['escape while composing', key('Escape', { isComposing: true })]
   ])('ignores IME events: %s', (_name, facts) => {
     expect(decidePaletteKey(facts)).toBeNull()
+  })
+})
+
+describe('isImeEvent', () => {
+  it('covers all three signals', () => {
+    expect(isImeEvent({ isComposing: true, keyCode: 13, key: 'Enter' })).toBe(true)
+    expect(isImeEvent({ isComposing: false, keyCode: 229, key: 'Enter' })).toBe(true)
+    expect(isImeEvent({ isComposing: false, keyCode: 13, key: 'Process' })).toBe(true)
+    expect(isImeEvent({ isComposing: false, keyCode: 13, key: 'Enter' })).toBe(false)
   })
 })

@@ -64,12 +64,14 @@ test.describe('codex hooks', () => {
   const screen = () => page.evaluate((id) => (globalThis as unknown as Hooks).__trTerminals.readScreen(id, 5000), sessionId)
   const seen = () => page.evaluate(() => (globalThis as unknown as Hooks).__trSeen)
   const status = () => page.evaluate((id) => (globalThis as unknown as Hooks).__trStatus.state(id)?.status, sessionId)
-  const composer = () => page.getByRole('textbox', { name: '输入框' })
+  const write = (data: string) => page.evaluate(([id, d]) => (globalThis as unknown as Hooks).tr.pty.write(id as string, d as string), [sessionId, data])
   const permissionPrompts = async () => (await seen()).prompts.filter((p) => p.kind === 'permission')
 
+  /** Types the prompt into the terminal, then presses ↵ once the agent has drawn it, as a user would. */
   async function send(text: string): Promise<void> {
-    await composer().fill(text)
-    await composer().press('Enter')
+    await write(text)
+    await page.waitForTimeout(500)
+    await write('\r')
   }
 
   test.beforeAll(async () => {
@@ -114,7 +116,6 @@ test.describe('codex hooks', () => {
     expect(sessionId).not.toBe('')
     // Codex's prompt glyph. The first launch of a real config may also show MCP startup warnings.
     await expect.poll(screen, { timeout: 60_000, intervals: [500] }).toMatch(/›/)
-    await expect(composer()).toBeEnabled()
     await page.waitForTimeout(3000)
   })
 

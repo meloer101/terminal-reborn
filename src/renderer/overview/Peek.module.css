@@ -1,4 +1,4 @@
-/* Figma 11c — peek panel 520 wide: header 52 · terminal snapshot · prompt bar + one-line reply. */
+/* Figma 11c — peek panel 520 wide: header 52 · terminal snapshot. */
 .peek {
   flex: none;
   width: 520px;
@@ -73,7 +73,6 @@
   overflow: hidden;
   padding: var(--space-12) var(--space-16);
   border-top: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
   background: var(--term-bg);
   font: var(--text-mono-code);
   font-size: 11px;
@@ -87,42 +86,4 @@
   font: var(--text-caption);
   color: var(--text-tertiary);
   white-space: normal;
-}
-
-.dock {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  padding-top: var(--space-12);
-}
-
-.reply {
-  margin: 0 var(--space-12) var(--space-12);
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-window);
-  background: var(--bg-raised);
-}
-
-.reply textarea {
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  resize: none;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font: var(--text-composer);
-  color: var(--text-primary);
-}
-
-.reply textarea::placeholder {
-  color: var(--text-tertiary);
-}
-
-.error {
-  margin: 0 var(--space-12) var(--space-12);
-  font: var(--text-caption);
-  color: var(--status-error);
 }

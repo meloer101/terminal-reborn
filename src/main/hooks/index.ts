@@ -83,7 +83,8 @@ async function start(): Promise<Runtime | null> {
     void sweepStaleHookDirs({ userData, keep: dir }).then((removed) => {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
-    const bridge = new HookBridge(emitter)
+    // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
+    const bridge = new HookBridge(emitter, { holdPermissions: false })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => bridge.handle(request),

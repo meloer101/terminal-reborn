@@ -24,7 +24,16 @@ export class HookBridge {
 
   constructor(
     private readonly emitter: BridgeEmitter,
-    private readonly options: { now?: () => number; scheduler?: Scheduler; permissionTimeoutMs?: number } = {}
+    private readonly options: {
+      now?: () => number
+      scheduler?: Scheduler
+      permissionTimeoutMs?: number
+      /**
+       * Hold PermissionRequests for an in-app answer (PRD F3). Off in the app since 2026-10-16: the terminal
+       * is the whole UI, so the request is only announced (status "等你处理") and answered in the TUI.
+       */
+      holdPermissions?: boolean
+    } = {}
   ) {
     this.registry = new PermissionRegistry((resolution) => emitter.resolved(resolution), options.scheduler, options.permissionTimeoutMs)
   }
@@ -106,6 +115,11 @@ export class HookBridge {
         summary: draft.summary,
         canAllowAlways: draft.suggestions.length > 0,
         createdAt: at
+      }
+      if (this.options.holdPermissions === false) {
+        // Announce only; an empty body leaves the decision to the TUI's own dialog right away.
+        this.emitter.prompt(prompt)
+        return ''
       }
       return new Promise<string>((resolve) => {
         this.registry.add({ prompt, suggestions: draft.suggestions, agent, release: resolve })

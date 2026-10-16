@@ -11,6 +11,12 @@ function dim(text: string): string {
   return `\r\n\x1b[2m${text}\x1b[0m\r\n`
 }
 
+/** Said in the terminal when the agent's CLI is not on the login shell's PATH (the shell prompt follows). */
+const INSTALL_HINT: Record<Exclude<AgentKind, 'shell'>, string> = {
+  claude: '[没有找到 claude 命令 · 安装：npm install -g @anthropic-ai/claude-code]',
+  codex: '[没有找到 codex 命令 · 安装：npm install -g @openai/codex]'
+}
+
 export class SessionTerminal {
   readonly surface = new XtermSurface()
   private started = false
@@ -55,7 +61,9 @@ export class SessionTerminal {
     // spawn, means even an instant failure is seen (agent-launch.ts).
     const markers = this.surface.onOsc(AGENT_MARKER_OSC, (payload) => {
       const marker = parseAgentMarker(payload)
-      if (marker) emitAgentMarker(id, marker)
+      if (!marker) return
+      if (marker.type === 'missing' && this.agent !== 'shell') this.surface.write(dim(INSTALL_HINT[this.agent]))
+      emitAgentMarker(id, marker)
     })
     this.cleanups.push(
       pty.onData(id, (data) => {
@@ -89,10 +97,10 @@ export class SessionTerminal {
       })
     } catch (error) {
       this.exited = true
-      const message = error instanceof Error ? error.message : String(error)
-      this.surface.write(dim(`[无法启动终端：${message}]`))
-      // The lifecycle card says why (missing directory, spawn error) and the status moves to exited.
-      reportLaunchIssue(id, issueFromSpawnError(error))
+      const issue = issueFromSpawnError(error)
+      this.surface.write(dim(issue.kind === 'cwd-missing' ? `[项目目录不存在：${issue.path}]` : `[无法启动终端：${issue.kind === 'spawn-failed' ? issue.message : String(error)}]`))
+      // The status moves to exited (sidebar, header).
+      reportLaunchIssue(id, issue)
       return false
     }
     if (this.disposed) return false
@@ -115,6 +123,13 @@ export class SessionTerminal {
     this.surface.write('\x1b[?1049l\x1b[!p')
     this.surface.write(dim('[终端进程已重启]'))
     return this.spawnProcess(resumeAgentSessionId)
+  }
+
+  /** Redraws the terminal and tells the PTY its exact size again, so the program draws for the grid we show. */
+  resync(): void {
+    if (this.disposed) return
+    const { cols, rows } = this.surface.repaint()
+    if (this.ready && !this.exited) window.tr.pty.resize(this.sessionId, cols, rows)
   }
 
   private sendInput(data: string): void {

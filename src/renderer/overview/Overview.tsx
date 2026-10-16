@@ -1,12 +1,11 @@
 // Status overview (PRD F9 · Figma 11 列表 / 11b 看板 / 11c 预览). Replaces the terminal in the main area;
-// the terminals stay mounted behind it. Keyboard: ↑↓ move · Space preview · ↵ enter · 1–9 answer in the
-// preview · Esc closes the preview, then the overview.
+// the terminals stay mounted behind it. Keyboard: ↑↓ move · Space preview · ↵ enter · Esc closes the
+// preview, then the overview.
 import { useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent } from 'react'
 import { ChevronDown, ChevronRight, PanelLeft, Search } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'
 import type { SessionId } from '@shared/types'
-import { usePromptStore } from '../prompt-bar/store'
 import { subscribeClock } from '../sidebar/clock'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
@@ -36,15 +35,14 @@ export function Overview() {
       setMainView: s.setMainView
     }))
   )
-  const prompts = usePromptStore((s) => s.bySession)
   const now = useClockNow()
   const { view, collapsed, selectedId, peekId, filter, setView, toggleGroup, select, setPeek, setFilter } = useOverviewStore()
   const bodyRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
 
   const groups = useMemo(
-    () => buildOverview({ projects, worktrees, sessions, prompts, now, filter }),
-    [projects, worktrees, sessions, prompts, filter, now]
+    () => buildOverview({ projects, worktrees, sessions, now, filter }),
+    [projects, worktrees, sessions, filter, now]
   )
   const collapsedSet = useMemo(() => new Set(view === 'board' ? [] : collapsed), [collapsed, view])
   const ids = useMemo(() => orderedIds(groups, collapsedSet), [groups, collapsedSet])

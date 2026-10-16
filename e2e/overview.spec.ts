@@ -20,8 +20,6 @@ const setTheme = (theme: 'dark' | 'light') =>
   page.evaluate((t) => {
     ;(globalThis as unknown as { document: { documentElement: { dataset: Record<string, string> } } }).document.documentElement.dataset.theme = t
   }, theme)
-const inject = (prompt: Record<string, unknown>) =>
-  page.evaluate((p) => (globalThis as unknown as { __trPrompts: { inject(p: unknown): void } }).__trPrompts.inject(p), prompt)
 
 test.describe.configure({ mode: 'serial' })
 
@@ -35,7 +33,7 @@ test.beforeAll(async () => {
     globalThis.localStorage?.removeItem('tr.overview.v1')
   })
   await page.reload()
-  await page.waitForFunction(() => Boolean((globalThis as unknown as { __trPrompts?: unknown }).__trPrompts))
+  await page.waitForFunction(() => Boolean((globalThis as unknown as { __trStatus?: unknown }).__trStatus))
 })
 
 test.afterAll(async () => {
@@ -63,17 +61,7 @@ test('groups sessions by what they need, across projects', async () => {
   expect(labels).toEqual(['等你处理', '出错', '待审阅', '运行中', '空闲'])
 })
 
-test('a waiting permission shows up in place and can be answered from the preview', async () => {
-  await inject({
-    kind: 'permission',
-    id: 'ov-perm-1',
-    sessionId: 's-perf',
-    tool: 'Bash',
-    input: { command: 'pnpm prisma migrate dev' },
-    summary: '运行 pnpm prisma migrate dev',
-    canAllowAlways: false,
-    createdAt: Date.now()
-  })
+test('a waiting permission moves the session to 等你处理; the preview shows its terminal and leads into it', async () => {
   await page.evaluate(() =>
     (globalThis as unknown as { __trStatus: { emit(id: string, e: unknown): void } }).__trStatus.emit('s-perf', {
       type: 'notification',
@@ -82,13 +70,13 @@ test('a waiting permission shows up in place and can be answered from the previe
     })
   )
   await expect(group('等你处理').locator('[data-session-id="s-perf"]')).toBeVisible()
-  await expect(row('s-perf')).toContainText('等你确认')
-  await expect(row('s-perf')).toContainText('运行 pnpm prisma migrate dev')
+  await expect(row('s-perf')).toContainText('等你处理')
 
   await row('s-perf').click()
   await expect(peek()).toBeVisible()
   await expect(peek()).toContainText('结算页性能优化')
-  await expect(peek().locator('[data-region="prompt-bar"]')).toContainText('pnpm prisma migrate dev')
+  await expect(peek().getByTestId('peek-snapshot')).toBeVisible()
+  await expect(peek().getByRole('button', { name: /进入会话/ })).toBeVisible()
   for (const theme of ['dark', 'light'] as const) {
     await setTheme(theme)
     await page.waitForTimeout(120)

@@ -26,6 +26,19 @@ export interface SurfaceDebugInfo {
 const SCROLLBACK_LINES = 10_000
 const FONT_LOAD_TIMEOUT_MS = 1500
 
+export interface XtermSurfaceOptions {
+  /** false = always the DOM renderer (the settings preview, so it never shares the WebGL glyph atlas). */
+  webgl?: boolean
+}
+
+/**
+ * Surfaces currently drawing with WebGL. The addon shares one glyph atlas between terminals with
+ * the same font and colors, but `clearTextureAtlas()` only resets the caller's cell model: every
+ * other terminal on that atlas keeps texture coordinates into wiped pages and draws garbage on its
+ * next frame. So a clear always goes to all of them (see clearAtlas).
+ */
+const webglSurfaces = new Set<XtermSurface>()
+
 /** xterm.js implementation of TerminalSurface (docs/PRD.md §6.3). */
 export class XtermSurface implements TerminalSurface {
   private readonly term: Terminal
@@ -42,7 +55,8 @@ export class XtermSurface implements TerminalSurface {
   private openPromise: Promise<void> | null = null
   private container: HTMLElement | null = null
 
-  constructor() {
+  constructor(options: XtermSurfaceOptions = {}) {
+    this.webglUnavailable = options.webgl === false
     this.term = new Terminal({
       allowProposedApi: true, // unicode11 addon
       scrollback: SCROLLBACK_LINES,
@@ -113,9 +127,22 @@ export class XtermSurface implements TerminalSurface {
     this.syncRenderer()
     if (visible) {
       this.fit()
-      this.term.clearTextureAtlas()
+      this.clearAtlas()
       this.term.refresh(0, this.term.rows - 1)
     }
+  }
+
+  /**
+   * Re-measures and redraws from scratch. After the display sleeps or the window moves to a screen with another
+   * scale, the GPU may have dropped the glyph textures and the container may have changed size without a
+   * ResizeObserver tick, so the canvas shows stale rows; this puts the screen back in line with the buffer.
+   */
+  repaint(): { cols: number; rows: number } {
+    if (this.disposed || !this.term.element || !this.visible) return this.size
+    const size = this.fit()
+    this.clearAtlas()
+    this.term.refresh(0, this.term.rows - 1)
+    return size
   }
 
   private syncRenderer(): void {
@@ -137,6 +164,7 @@ export class XtermSurface implements TerminalSurface {
       })
       this.term.loadAddon(addon)
       this.webgl = addon
+      webglSurfaces.add(this)
     } catch {
       this.webglUnavailable = true
       this.webgl = null
@@ -146,6 +174,7 @@ export class XtermSurface implements TerminalSurface {
   private unloadWebgl(): void {
     const addon = this.webgl
     this.webgl = null
+    webglSurfaces.delete(this)
     try {
       addon?.dispose()
     } catch {
@@ -153,9 +182,18 @@ export class XtermSurface implements TerminalSurface {
     }
   }
 
+  /** Rebuilds glyphs; with WebGL, for every terminal that may share this one's atlas. */
+  private clearAtlas(): void {
+    if (!this.webgl) {
+      this.term.clearTextureAtlas()
+      return
+    }
+    for (const surface of webglSurfaces) surface.term.clearTextureAtlas()
+  }
+
   private applyTheme(): void {
     this.term.options.theme = this.buildTheme()
-    this.term.clearTextureAtlas()
+    this.clearAtlas()
   }
 
   private get backgroundAlpha(): number {
@@ -187,7 +225,7 @@ export class XtermSurface implements TerminalSurface {
 
   private refreshGlyphs(): void {
     if (this.disposed) return
-    this.term.clearTextureAtlas()
+    this.clearAtlas()
     this.fit()
   }
 
@@ -265,7 +303,7 @@ export class XtermSurface implements TerminalSurface {
       this.syncLigatures()
       this.syncRenderer()
       // Glyph metrics changed: rebuild the atlas, then refit so cols/rows (and the PTY) follow.
-      this.term.clearTextureAtlas()
+      this.clearAtlas()
       this.fit()
     }
     if (fontsChanged) void this.loadFonts().then(apply)

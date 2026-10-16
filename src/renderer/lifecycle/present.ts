@@ -1,4 +1,4 @@
-// How an agent phase reads in the sidebar, the header and the composer (Figma Screen 10). Pure.
+// How an agent phase reads in the sidebar and the header (Figma Screen 10). Pure.
 import { hasStartChoice } from '../state/session-start-plan'
 import type { AgentKind, Session, SessionStatus } from '@shared/types'
 
@@ -31,16 +31,4 @@ export function phaseLabel(session: PhaseView, statusLabel: string): string {
   if (session.phase === 'starting') return '启动中'
   if (session.phase === 'not-started') return '未启动'
   return statusLabel
-}
-
-/** The agent is not ready for input: the composer is off and must never type into the shell behind it. */
-export function inputBlockedByPhase(session: Pick<Session, 'phase'> | undefined): boolean {
-  return session?.phase !== undefined && session.phase !== 'ready'
-}
-
-/** Phases whose card replaces the composer (the starting phase keeps a disabled composer instead). */
-export function cardReplacesComposer(session: Pick<Session, 'kind' | 'phase' | 'agentSessionId'> | undefined): boolean {
-  if (!session) return false
-  if (session.phase === 'blocked' || session.phase === 'exited') return true
-  return session.phase === 'not-started' && hasStartChoice(session)
 }

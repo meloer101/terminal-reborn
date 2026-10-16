@@ -1,6 +1,4 @@
-// Module-level registry of live terminals, keyed by session id. Terminals outlive React
-// re-renders; the integrator wires the composer's send executor to getSendIo().
-import type { SendIo } from '@shared/send-protocol'
+// Module-level registry of live terminals, keyed by session id. Terminals outlive React re-renders.
 import type { AgentKind, SessionId } from '@shared/types'
 import { SessionTerminal } from './session-terminal'
 import type { TerminalAppearance, TerminalSurface } from './surface'
@@ -47,15 +45,9 @@ export function getXtermSurface(sessionId: SessionId): XtermSurface | undefined 
   return terminals.get(sessionId)?.surface
 }
 
-/**
- * What the send executor needs for a session. Safe to call before the terminal exists:
- * writes go straight to the PTY and readScreen() is empty until a surface is created.
- */
-export function getSendIo(sessionId: SessionId): SendIo {
-  return {
-    write: (data) => window.tr.pty.write(sessionId, data),
-    readScreen: () => terminals.get(sessionId)?.surface.readScreen(200) ?? ''
-  }
+/** Redraws a session's terminal and re-sends its size to the PTY (after sleep, a display change, refocus). */
+export function resyncTerminal(sessionId: SessionId): void {
+  terminals.get(sessionId)?.resync()
 }
 
 /**

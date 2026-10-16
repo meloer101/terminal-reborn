@@ -1,6 +1,5 @@
 // Pure overview model (PRD F9, Figma 11 / 11b / 11c): every session across projects, grouped by what it
 // needs from the user. The list and the board draw the same groups, so the two views never disagree.
-import type { PendingPrompt } from '@shared/agent-events'
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { formatElapsed } from '../sidebar/format-elapsed'
 import { glyphStatus, phaseLine } from '../lifecycle/present'
@@ -50,24 +49,17 @@ export interface OverviewInput {
   projects: Project[]
   worktrees: Worktree[]
   sessions: Session[]
-  /** Pending prompts by session (PromptBar store); the oldest one describes what the agent is waiting for. */
-  prompts: Readonly<Record<SessionId, readonly PendingPrompt[]>>
   now: number
   /** Free text plus `p:项目` / `s:状态` tokens, all of which must match. */
   filter?: string
 }
 
-function waitingLabel(prompt: PendingPrompt | undefined): string {
-  if (!prompt) return '等你处理'
-  return prompt.kind === 'permission' ? '等你确认' : '等你选择'
-}
-
-function statusLabel(session: Session, status: SessionStatus, prompt: PendingPrompt | undefined): string {
+function statusLabel(session: Session, status: SessionStatus): string {
   if (session.phase === 'starting') return '启动中'
   if (session.phase === 'not-started') return '未启动'
   switch (status) {
     case 'needs_you':
-      return waitingLabel(prompt)
+      return '等你处理'
     case 'done_unread':
       return '已完成'
     case 'error':
@@ -81,13 +73,8 @@ function statusLabel(session: Session, status: SessionStatus, prompt: PendingPro
   }
 }
 
-function promptSummary(prompt: PendingPrompt): string {
-  if (prompt.kind === 'permission') return prompt.summary
-  return prompt.questions[0]?.question ?? ''
-}
-
-function summaryOf(session: Session, worktree: Worktree | undefined, prompt: PendingPrompt | undefined): string {
-  if (session.status === 'needs_you' && prompt) return promptSummary(prompt)
+/** What it is doing or asking: the status track writes "等你确认：运行 …" into currentAction while it waits. */
+function summaryOf(session: Session, worktree: Worktree | undefined): string {
   const phase = phaseLine(session)
   if (phase) return phase
   if (session.currentAction) return session.currentAction
@@ -107,7 +94,7 @@ function toneOf(status: SessionStatus): OverviewTone {
   return 'plain'
 }
 
-function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, prompt: PendingPrompt | undefined, now: number): OverviewRow {
+function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, now: number): OverviewRow {
   const status = glyphStatus(session)
   const projectName = project?.name ?? ''
   const branch = worktree?.branch ?? ''
@@ -116,12 +103,12 @@ function toRow(session: Session, worktree: Worktree | undefined, project: Projec
   return {
     session,
     status,
-    statusLabel: statusLabel(session, status, prompt),
+    statusLabel: statusLabel(session, status),
     tone: toneOf(status),
     title: session.title,
     where: branch ? `${projectName} › ${branch}` : projectName,
     projectName,
-    summary: summaryOf(session, worktree, prompt),
+    summary: summaryOf(session, worktree),
     stat: added + removed > 0 ? `+${added} −${removed}` : '',
     time: timeOf(session, status, now)
   }
@@ -159,14 +146,14 @@ function matches(row: OverviewRow, groupLabel: string, f: FilterTokens): boolean
  * the list shows "0") except `exited`, which only appears when it has rows. Waiting sessions list the one
  * that has waited longest first; every other group lists the most recently active first.
  */
-export function buildOverview({ projects, worktrees, sessions, prompts, now, filter }: OverviewInput): OverviewGroup[] {
+export function buildOverview({ projects, worktrees, sessions, now, filter }: OverviewInput): OverviewGroup[] {
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
   const projectById = new Map(projects.map((p) => [p.id, p]))
   const f = parseFilter(filter)
   const byGroup = new Map<OverviewGroupKey, OverviewRow[]>(GROUP_ORDER.map((k) => [k, []]))
   for (const session of sessions) {
     const worktree = worktreeById.get(session.worktreeId)
-    const row = toRow(session, worktree, worktree && projectById.get(worktree.projectId), prompts[session.id]?.[0], now)
+    const row = toRow(session, worktree, worktree && projectById.get(worktree.projectId), now)
     if (!matches(row, GROUP_LABEL[row.status], f)) continue
     byGroup.get(row.status)?.push(row)
   }
