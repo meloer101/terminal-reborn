@@ -6,7 +6,7 @@
 //
 // xterm 6.0 turns one wheel event into at most one report, and damps small trackpad deltas by 0.3 first, so a
 // full-screen agent scrolls a fraction of the distance the fingers moved and feels sticky. Here a trackpad
-// scrolls one report per terminal row of physical distance (remainder carried), and a notched mouse wheel gets
+// sends reports in proportion to the rows of physical distance (remainder carried), and a notched mouse wheel gets
 // log-compressed distance plus a bonus for fast bursts.
 
 const DOM_DELTA_PIXEL = 0
@@ -21,10 +21,15 @@ const DISTANCE_GAIN = 1.6
 const MAX_COMPRESSED_ROWS = 6
 const BURST_FULL_INTERVAL_MS = 16
 const BURST_MAX_INTERVAL_MS = 45
-const BURST_MAX_BONUS_ROWS = 3
+const BURST_MAX_BONUS_ROWS = 2
 const BURST_RAMP_EVENTS = 4
 const MOMENTUM_TAIL_RATIO = 0.85
 const MAX_BURST_ROWS = 9
+/**
+ * Reports per row of trackpad distance. Below 1 because Claude Code roughly doubles the lines per report when
+ * reports arrive densely (measured: 10 reports in one burst → ~19 lines), which felt a little too fast at 1.
+ */
+const TRACKPAD_GAIN = 0.7
 
 export interface WheelInput {
   deltaY: number
@@ -122,8 +127,8 @@ export function wheelReportCount(event: WheelInput, state: WheelState, metrics: 
   state.direction = direction
 
   const rows = distanceRows(event, metrics)
-  // Trackpad: one report per row of physical distance, no cap, so momentum scrolling stays real-time.
-  const scaled = isDiscreteWheel(event) ? Math.min(MAX_BURST_ROWS, compress(rows) + burstBonus(event, state, rows)) : rows
+  // Trackpad: proportional to physical distance, no cap, so momentum scrolling stays real-time.
+  const scaled = isDiscreteWheel(event) ? Math.min(MAX_BURST_ROWS, compress(rows) + burstBonus(event, state, rows)) : rows * TRACKPAD_GAIN
   const total = state.pendingRows + scaled
   const reports = Math.trunc(total)
   state.pendingRows = total - reports

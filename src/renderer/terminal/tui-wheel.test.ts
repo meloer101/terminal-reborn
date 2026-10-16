@@ -4,23 +4,23 @@ import { createWheelState, isDiscreteWheel, wheelReportCount } from './tui-wheel
 const CELL = { cellHeight: 20, rows: 40 }
 
 describe('wheelReportCount', () => {
-  it('maps trackpad pixels 1:1 to rows and carries the remainder', () => {
+  it('maps trackpad pixels proportionally to rows and carries the remainder', () => {
     const state = createWheelState()
     // Small deltas that xterm alone would damp to almost nothing.
-    const counts = [8, 8, 8, 8, 8].map((deltaY) => wheelReportCount({ deltaY, deltaMode: 0 }, state, CELL))
-    expect(counts.reduce((a, b) => a + b, 0)).toBe(2) // 40px / 20px rows
-    expect(state.pendingRows).toBeCloseTo(0)
+    const counts = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8].map((deltaY) => wheelReportCount({ deltaY, deltaMode: 0 }, state, CELL))
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(2) // 80px / 20px rows × 0.7 = 2.8
+    expect(state.pendingRows).toBeCloseTo(0.8)
   })
 
   it('does not cap a fast trackpad flick', () => {
-    expect(wheelReportCount({ deltaY: 45, deltaMode: 0 }, createWheelState(), { cellHeight: 5 })).toBe(9)
+    expect(wheelReportCount({ deltaY: 45, deltaMode: 0 }, createWheelState(), { cellHeight: 5 })).toBe(6) // 9 rows × 0.7
   })
 
   it('drops carried distance when the direction reverses', () => {
     const state = createWheelState()
-    wheelReportCount({ deltaY: 15, deltaMode: 0 }, state, CELL)
-    expect(wheelReportCount({ deltaY: -15, deltaMode: 0 }, state, CELL)).toBe(0)
-    expect(wheelReportCount({ deltaY: -10, deltaMode: 0 }, state, CELL)).toBe(1)
+    wheelReportCount({ deltaY: 20, deltaMode: 0 }, state, CELL)
+    expect(wheelReportCount({ deltaY: -20, deltaMode: 0 }, state, CELL)).toBe(0) // 0.7 carried
+    expect(wheelReportCount({ deltaY: -10, deltaMode: 0 }, state, CELL)).toBe(1) // 0.7 + 0.35
   })
 
   it('gives a mouse-wheel notch at least one row, log-compressed', () => {
