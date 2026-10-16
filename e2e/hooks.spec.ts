@@ -55,11 +55,13 @@ test.describe('claude hooks bridge', () => {
 
   const screen = () => page.evaluate((id) => (globalThis as unknown as Hooks).__trTerminals.readScreen(id, 5000), sessionId)
   const seen = () => page.evaluate(() => (globalThis as unknown as Hooks).__trSeen)
-  const composer = () => page.getByRole('textbox', { name: '输入框' })
+  const write = (data: string) => page.evaluate(([id, d]) => (globalThis as unknown as Hooks).tr.pty.write(id as string, d as string), [sessionId, data])
 
+  /** Types the prompt into the terminal, then presses ↵ once the agent has drawn it, as a user would. */
   async function send(text: string): Promise<void> {
-    await composer().fill(text)
-    await composer().press('Enter')
+    await write(text)
+    await page.waitForTimeout(500)
+    await write('\r')
   }
 
   test.beforeAll(async () => {
@@ -90,7 +92,6 @@ test.describe('claude hooks bridge', () => {
       await page.evaluate((id) => (globalThis as unknown as Hooks).tr.pty.write(id, '\r'), sessionId)
       await expect.poll(screen, { timeout: 30_000, intervals: [500] }).toMatch(/\? for shortcuts|manual mode/)
     }
-    await expect(composer()).toBeEnabled()
     await page.waitForTimeout(1500)
   })
 

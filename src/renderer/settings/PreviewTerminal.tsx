@@ -45,7 +45,8 @@ export function PreviewTerminal({ appearance }: { appearance: PreviewAppearance 
   useEffect(() => {
     const el = host.current
     if (!el) return
-    const term = new XtermSurface()
+    // DOM renderer: a WebGL preview would share (and clear) the glyph atlas of the session terminals.
+    const term = new XtermSurface({ webgl: false })
     surface.current = term
     term.setAppearance(toSurface(latest.current))
     const resize = term.onResize(() => term.write(sampleScreen()))

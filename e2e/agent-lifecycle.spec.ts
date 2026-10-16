@@ -45,6 +45,7 @@ interface Hooks {
       patchSession(id: string, patch: Record<string, unknown>): void
     }
   }
+  __trTerminals: { readScreen(id: string, scrollbackLines?: number): string }
   __trStatus: {
     emit(id: string, event: AgentEvent): void
     advance(ms: number): void
@@ -77,8 +78,8 @@ test.describe('agent lifecycle · fake claude', () => {
   let page: Page
   let projectId = ''
 
-  const composer = () => page.getByRole('textbox', { name: '输入框' })
-  const card = () => page.getByTestId('lifecycle-card')
+  const screen = (id: string) => page.evaluate((i) => (globalThis as unknown as Hooks).__trTerminals.readScreen(i, 50), id)
+  const activeId = () => page.evaluate(() => (globalThis as unknown as { __trWorkspace: { getState(): { activeSessionId: string } } }).__trWorkspace.getState().activeSessionId)
   const row = (id: string) => page.locator(`[data-region="sidebar"] [data-session-id="${id}"]`)
   const mode = (value: string) => writeFileSync(modeFile, value)
   const activeClass = () =>
@@ -115,41 +116,30 @@ test.describe('agent lifecycle · fake claude', () => {
     await app?.close()
   })
 
-  test('starting: the composer is off with the starting hint until the agent draws its UI, then it takes the focus', async () => {
+  test('starting: the sidebar says so until the agent draws its UI; the terminal has the keyboard throughout', async () => {
     mode('slow')
     const id = await addSession()
-    await expect(composer()).toBeDisabled()
-    await expect(composer()).toHaveAttribute('placeholder', '正在启动 Claude Code…')
     await expect(row(id)).toContainText('正在启动 Claude Code…')
     await expect(row(id).getByRole('img', { name: '运行中' })).toBeVisible()
+    await expect.poll(() => activeClass()).toContain('xterm-helper-textarea')
     await shot('starting')
-    await expect(composer()).toBeEnabled(WITHIN)
-    await expect(composer()).toBeFocused()
-    await expect(row(id)).not.toContainText('正在启动')
+    await expect(row(id)).not.toContainText('正在启动', WITHIN)
+    await expect(page.getByRole('textbox', { name: '输入框' })).toHaveCount(0)
     await write(id, '/exit\r')
-    await expect(card()).toHaveAttribute('data-kind', 'exited', WITHIN)
+    await expect.poll(async () => (await stateOf(id))?.phase, WITHIN).toBe('exited')
   })
 
-  test('a trust dialog blocks: status 等你处理, card with the keys to press, composer replaced; answering releases it', async () => {
+  test('a trust dialog blocks: status 等你处理, the keys go straight to the terminal; answering releases it', async () => {
     mode('trust')
     const id = await addSession()
-    await expect(card()).toHaveAttribute('data-kind', 'blocked', WITHIN)
-    await expect(card()).toContainText('Claude Code 在等你确认是否信任此文件夹')
-    await expect(card()).toContainText('在终端里按 ↓ 再按 ↵ 选择 “Yes, I trust this folder”')
-    await expect(composer()).toHaveCount(0)
+    await expect.poll(async () => (await stateOf(id))?.phase, WITHIN).toBe('blocked')
     await expect(row(id)).toContainText('等你确认：信任此文件夹')
     await expect(row(id).getByRole('img', { name: '等你处理' })).toBeVisible()
-    // B7: the terminal has the keyboard, so the keys the card names go to the dialog.
     await expect.poll(() => activeClass()).toContain('xterm-helper-textarea')
     await shot('blocked')
 
-    await page.locator('[data-region="main"]').getByRole('heading').click() // take the focus away
-    await card().getByRole('button', { name: '聚焦终端' }).click()
-    await expect.poll(() => activeClass()).toContain('xterm-helper-textarea')
-
-    await write(id, '\r')
-    await expect(card()).toHaveCount(0, WITHIN)
-    await expect(composer()).toBeEnabled(WITHIN)
+    await page.keyboard.press('Enter')
+    await expect.poll(async () => (await stateOf(id))?.phase, WITHIN).toBe('ready')
     await expect.poll(async () => (await stateOf(id))?.status).toBe('idle')
   })
 
@@ -175,55 +165,39 @@ test.describe('agent lifecycle · fake claude', () => {
     await emit(id, { type: 'stop' })
   })
 
-  test('the agent exiting leaves an Exited card instead of a composer that would type into the shell; 重新启动 brings it back', async () => {
-    const id = await page.evaluate(() => (globalThis as unknown as { __trWorkspace: { getState(): { activeSessionId: string } } }).__trWorkspace.getState().activeSessionId)
+  test('the agent exiting leaves its login shell in the terminal, as in any terminal', async () => {
+    const id = await activeId()
     mode('ui')
     await write(id, '/exit\r')
-    await expect(card()).toHaveAttribute('data-kind', 'exited', WITHIN)
-    await expect(card()).toContainText('Claude Code 已退出')
-    await expect(card()).toContainText('终端里现在是普通 shell')
-    await expect(composer()).toHaveCount(0)
+    await expect.poll(async () => (await stateOf(id))?.phase, WITHIN).toBe('exited')
     await expect(row(id)).toContainText('Claude Code 已退出')
-    // No saved conversation id (the fake has no hooks): only one way back.
-    await expect(card().getByRole('button')).toHaveCount(1)
+    await write(id, 'echo tr-$((40+2))\r')
+    await expect.poll(() => screen(id), WITHIN).toContain('tr-42')
     await shot('exited')
-
-    await card().getByRole('button', { name: /重新启动/ }).click()
-    await expect(card()).toHaveCount(0, WITHIN)
-    await expect(composer()).toBeEnabled(WITHIN)
-    await expect.poll(async () => (await stateOf(id))?.phase).toBe('ready')
   })
 
-  test('not-started card (restored session with a saved conversation): resume or start fresh', async () => {
+  test('a restored session with a saved conversation resumes by itself when viewed', async () => {
     const id = await addSession()
-    await expect(composer()).toBeEnabled(WITHIN)
+    await expect.poll(async () => (await stateOf(id))?.phase, WITHIN).toBe('ready')
     await page.evaluate(([i]) => (globalThis as unknown as Hooks).__trWorkspace.getState().patchSession(i as string, { phase: 'not-started', agentSessionId: 'conv-1', title: 'Cookie 会话迁移' }), [id])
-    await expect(card()).toHaveAttribute('data-kind', 'not-started')
-    await expect(card()).toContainText('上次的对话还没有恢复')
-    await expect(card()).toContainText('将用 claude --resume 接上「Cookie 会话迁移」的原对话')
-    await expect(row(id)).toContainText('未启动 · 点击恢复上次对话')
-    await expect(card().getByRole('button', { name: '开始新对话' })).toBeVisible()
-    await expect(card().getByRole('button', { name: /恢复对话/ })).toBeFocused()
-    await shot('not-started')
+    await expect.poll(async () => (await stateOf(id))?.phase, WITHIN).toBe('ready')
+    await expect(page.getByTestId('lifecycle-card')).toHaveCount(0)
   })
 
-  test('a missing project directory is refused with a card, not started in the home directory', async () => {
+  test('a missing project directory is refused in the terminal, not started in the home directory', async () => {
     const gone = join(project, 'does-not-exist')
     const id = await page.evaluate((path) => {
       const ws = (globalThis as unknown as Hooks).__trWorkspace.getState()
       return ws.addSession(ws.addProject(path), 'claude') ?? ''
     }, gone)
-    await expect(card()).toHaveAttribute('data-kind', 'exited', WITHIN)
-    await expect(card()).toContainText('项目目录不存在')
-    await expect(card()).toContainText(gone)
-    await expect(composer()).toHaveCount(0)
+    await expect.poll(() => screen(id), WITHIN).toContain(`[项目目录不存在：${gone}]`)
     await expect(row(id)).toContainText('Claude Code 已退出')
     await shot('missing-directory')
   })
 })
 
 test.describe('agent lifecycle · CLI not installed', () => {
-  test('a missing claude command shows an install hint and no composer', async () => {
+  test('a missing claude command prints an install hint in the terminal', async () => {
     const { env, project } = setup()
     // The fake is not on PATH here: a bare system PATH has no `claude`.
     const app = await launchApp({ ...outerClaudeEnv(), ...env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', ZDOTDIR: mkdtempSync(join(tmpdir(), 'tr-e2e-zdot-')) })
@@ -234,14 +208,13 @@ test.describe('agent lifecycle · CLI not installed', () => {
       })
       await page.reload()
       await page.waitForFunction(() => Boolean((globalThis as unknown as { __trStatus?: unknown }).__trStatus))
-      await page.evaluate((root) => {
+      const id = await page.evaluate((root) => {
         const ws = (globalThis as unknown as Hooks).__trWorkspace.getState()
-        return ws.addSession(ws.addProject(root), 'claude')
+        return ws.addSession(ws.addProject(root), 'claude') ?? ''
       }, project)
-      const card = page.getByTestId('lifecycle-card')
-      await expect(card).toContainText('没有找到 claude 命令', WITHIN)
-      await expect(card).toContainText('npm install -g @anthropic-ai/claude-code')
-      await expect(page.getByRole('textbox', { name: '输入框' })).toHaveCount(0)
+      await expect
+        .poll(() => page.evaluate((i) => (globalThis as unknown as Hooks).__trTerminals.readScreen(i, 50), id), WITHIN)
+        .toContain('[没有找到 claude 命令 · 安装：npm install -g @anthropic-ai/claude-code]')
       mkdirSync(SHOTS, { recursive: true })
       await page.screenshot({ path: join(SHOTS, 'missing-cli-dark.png') })
     } finally {

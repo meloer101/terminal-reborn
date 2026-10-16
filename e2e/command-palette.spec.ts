@@ -128,8 +128,8 @@ test('Enter while an IME composition is active does nothing', async () => {
   await page.keyboard.press('Escape')
 })
 
-test('⌘K also works from the composer, and an action runs (theme)', async () => {
-  await page.keyboard.press('Meta+l') // focus the composer
+test('⌘K also works from the terminal, and an action runs (theme)', async () => {
+  await page.locator('[data-region="terminal"] [data-active="true"]').click() // focus the terminal
   await page.keyboard.press('Meta+k')
   await expect(palette()).toBeVisible()
   await paletteInput().fill('主题 浅色')

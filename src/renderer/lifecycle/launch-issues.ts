@@ -1,5 +1,5 @@
-// Why a session's agent is not running, beyond what its phase says (phase 2a · A3/A8). The Exited card reads it
-// to say "claude 未安装" or "项目目录不存在" instead of a bare "已退出". Not persisted; cleared on every launch.
+// Why a session's agent is not running, beyond what its phase says (phase 2a · A3/A8). The status bridge reads it;
+// the terminal itself prints the reason ("没有找到 claude 命令", "项目目录不存在"). Not persisted; cleared on every launch.
 import { create } from 'zustand'
 import type { AgentMarker } from '@shared/agent-launch'
 import type { SessionId } from '@shared/types'

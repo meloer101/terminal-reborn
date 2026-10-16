@@ -38,7 +38,6 @@ test.describe('workspace persistence', () => {
   let app: ElectronApplication
   let page: Page
 
-  const composer = () => page.getByRole('textbox', { name: '输入框' })
   const row = (id: string) => page.locator(`[data-region="sidebar"] [data-session-id="${id}"]`)
   const launch = async () => {
     app = await launchApp(outerClaudeEnv(), { userDataDir: profile })
@@ -79,26 +78,19 @@ test.describe('workspace persistence', () => {
     await page.waitForTimeout(1500)
     expect(resumeRunning()).toBe(false)
 
-    // A draft, a window move, then a second session viewed: all of it reaches disk.
-    await composer().fill('草稿 A：别丢')
+    // A window move, then a second session viewed: all of it reaches disk.
     // The OS may clamp the requested size to the display (CI runners have small screens): compare with what it got.
     const actual = await app.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0]
       win?.setBounds({ x: 80, y: 90, width: 1100, height: 720 })
       return win?.getBounds()
     })
-    await expect.poll(() => readJson(workspaceFile).drafts?.['s-shell'], { timeout: 5000 }).toBe('草稿 A：别丢')
     await expect.poll(() => (existsSync(windowFile) ? readJson(windowFile).bounds : null), { timeout: 5000 }).toMatchObject({ width: actual?.width, height: actual?.height })
 
-    // Viewing the Claude session only shows the not-started card (no spawn); 恢复对话 starts it with --resume <saved id>.
+    // Viewing the Claude session resumes it in its terminal with --resume <saved id>, like reopening a tab.
     await row('s-claude').click()
-    await expect(page.getByTestId('lifecycle-card')).toHaveAttribute('data-kind', 'not-started')
-    await page.waitForTimeout(1000)
-    expect(resumeRunning()).toBe(false)
-    await page.getByRole('button', { name: /恢复对话/ }).click()
     await expect.poll(resumeRunning, { timeout: 15_000 }).toBe(true)
     await row('s-shell').click()
-    await expect(composer()).toHaveValue('草稿 A：别丢')
     await expect.poll(() => readJson(workspaceFile).activeSessionId, { timeout: 5000 }).toBe('s-shell')
 
     const saved = readJson(workspaceFile)
@@ -109,13 +101,12 @@ test.describe('workspace persistence', () => {
     ])
   })
 
-  test('relaunch: workspace, drafts, active session and window bounds survive; agents are not auto-started', async () => {
+  test('relaunch: workspace, active session and window bounds survive; agents start only when viewed', async () => {
     await expect.poll(resumeRunning, { timeout: 15_000 }).toBe(false) // the previous run's agent is gone
     await launch()
     await expect(row('s-shell')).toContainText('Persisted shell')
     await expect(row('s-claude')).toContainText('Persisted Claude')
     await expect(page.locator('[data-session-id="s-shell"][data-active="true"]')).toBeVisible()
-    await expect(composer()).toHaveValue('草稿 A：别丢')
 
     const bounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getBounds())
     // Whatever the previous run saved (the OS may have clamped the requested size) comes back.
@@ -125,10 +116,8 @@ test.describe('workspace persistence', () => {
     // The Claude session came back not started: nothing was spawned for it.
     await page.waitForTimeout(1500)
     expect(resumeRunning()).toBe(false)
-    // Viewing it offers to resume (card); choosing 恢复对话 resumes the saved conversation.
+    // Viewing it resumes the saved conversation.
     await row('s-claude').click()
-    await expect(page.getByTestId('lifecycle-card')).toHaveAttribute('data-kind', 'not-started')
-    await page.getByRole('button', { name: /恢复对话/ }).click()
     await expect.poll(resumeRunning, { timeout: 15_000 }).toBe(true)
     await page.screenshot({ path: 'test-results/persistence-restored.png' })
     // startedAt did not reset.
@@ -163,7 +152,6 @@ test('first run migrates the old localStorage workspace once, then stops using i
   app = await launchApp(outerClaudeEnv(), { userDataDir: profile })
   page = await app.firstWindow()
   await expect(page.locator('[data-region="sidebar"] [data-session-id="ls"]')).toContainText('Legacy shell')
-  await expect(page.getByRole('textbox', { name: '输入框' })).toHaveValue('旧草稿')
   await expect.poll(() => (existsSync(file) ? readJson(file) : null), { timeout: 5000 }).toMatchObject({
     version: 2,
     activeSessionId: 'ls',

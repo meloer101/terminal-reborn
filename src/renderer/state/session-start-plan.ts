@@ -4,10 +4,10 @@ import type { Session } from '@shared/types'
 import type { SessionPatch } from './workspace'
 
 /**
- * While true, a not-started session starts (resuming its conversation) the moment it is viewed. The UI that
- * offers 恢复对话 / 开始新对话 sets this to false; sessions with no conversation to resume still start by themselves.
+ * While true, a not-started session starts (resuming its conversation) the moment it is viewed, like reopening a
+ * terminal tab. There is no 恢复对话 / 开始新对话 card: the terminal is the whole UI.
  */
-export const AUTO_START_ON_VIEW = false
+export const AUTO_START_ON_VIEW = true
 
 export interface StartOptions {
   /** Continue the saved conversation (when the session has one); false starts a fresh conversation. */
