@@ -1,22 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
-import { LIMITS, type AppearanceSettings, type BackgroundSetting } from '@shared/settings'
-import { Row, Section, Segmented, Select, Slider, ThemeSwatches, Toggle, ColorField, type SelectOption } from './controls'
-import {
-  BACKGROUND_OPTIONS,
-  DEFAULT_IMAGE_DIM,
-  THEME_OPTIONS,
-  backgroundForKind,
-  displayFamily,
-  fileName,
-  fontSizeOptions,
-  formatDegrees,
-  formatLineHeight,
-  formatPercent,
-  previewCaption,
-  type BackgroundKind,
-  type GradientBackground,
-  type ImageBackground
-} from './appearance-form'
+import { useMemo } from 'react'
+import { LIMITS, type AppearanceSettings } from '@shared/settings'
+import { Row, Section, Select, Slider, ThemeSwatches, Toggle, type SelectOption } from './controls'
+import { THEME_OPTIONS, displayFamily, fontSizeOptions, formatLineHeight, formatPercent, previewCaption } from './appearance-form'
 import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, withCurrent } from './fonts'
 import { useFontCatalog } from './local-fonts'
 import { PreviewTerminal } from './PreviewTerminal'
@@ -49,37 +34,6 @@ export function AppearancePane({
     () => fontSizeOptions(appearance.fontSize).map((size) => ({ value: String(size), label: String(size) })),
     [appearance.fontSize]
   )
-
-  const bg = appearance.background
-  // Choosing 图片 before a file exists changes nothing in settings; remember the pending choice
-  // only while the stored kind is the one it was made from.
-  const [pending, setPending] = useState<{ kind: BackgroundKind; from: BackgroundKind } | null>(null)
-  const mode: BackgroundKind = pending && pending.from === bg.kind ? pending.kind : bg.kind
-  const remembered = useRef<{ gradient?: GradientBackground; image?: ImageBackground }>({})
-  const fileInput = useRef<HTMLInputElement>(null)
-
-  const changeMode = (kind: BackgroundKind): void => {
-    if (bg.kind === 'gradient') remembered.current.gradient = bg
-    if (bg.kind === 'image') remembered.current.image = bg
-    const next = backgroundForKind(kind, bg, remembered.current)
-    if (next) {
-      setPending(null)
-      if (next !== bg) update({ background: next })
-    } else {
-      setPending({ kind, from: bg.kind })
-      fileInput.current?.click()
-    }
-  }
-
-  const pickImage = (file: File | undefined): void => {
-    if (!file) return
-    const path = window.tr.files.pathForFile(file)
-    if (path === '') return
-    const dim = remembered.current.image?.dim ?? DEFAULT_IMAGE_DIM
-    update({ background: { kind: 'image', path, dim } })
-  }
-
-  const setBackground = (next: BackgroundSetting): void => update({ background: next })
 
   return (
     <div className={styles.page}>
@@ -144,63 +98,6 @@ export function AppearancePane({
         </Section>
 
         <Section title="窗口">
-          <Row label="背景" id="background">
-            <Segmented label="背景" value={mode} options={BACKGROUND_OPTIONS} onChange={changeMode} />
-          </Row>
-          {bg.kind === 'gradient' && mode === 'gradient' && (
-            <>
-              <Row label="渐变颜色" id="gradientColors">
-                <div className={styles.colors}>
-                  <ColorField label="渐变起始颜色" value={bg.from} onCommit={(from) => setBackground({ ...bg, from })} />
-                  <ColorField label="渐变结束颜色" value={bg.to} onCommit={(to) => setBackground({ ...bg, to })} />
-                </div>
-              </Row>
-              <Row label="渐变角度" id="gradientAngle">
-                <Slider
-                  label="渐变角度"
-                  value={bg.angle}
-                  min={LIMITS.gradientAngle.min}
-                  max={LIMITS.gradientAngle.max}
-                  step={1}
-                  format={formatDegrees}
-                  onCommit={(angle) => setBackground({ ...bg, angle })}
-                />
-              </Row>
-            </>
-          )}
-          {mode === 'image' && (
-            <>
-              <Row label="背景图片" id="imageFile">
-                <button type="button" className={styles.fileButton} onClick={() => fileInput.current?.click()}>
-                  <span className={styles.fileName}>{bg.kind === 'image' ? fileName(bg.path) : '选择图片…'}</span>
-                </button>
-              </Row>
-              {bg.kind === 'image' && (
-                <Row label="暗化" id="imageDim">
-                  <Slider
-                    label="暗化"
-                    value={bg.dim}
-                    min={LIMITS.imageDim.min}
-                    max={LIMITS.imageDim.max}
-                    step={0.05}
-                    format={formatPercent}
-                    onCommit={(dim) => setBackground({ ...bg, dim })}
-                  />
-                </Row>
-              )}
-            </>
-          )}
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*"
-            hidden
-            data-testid="background-file"
-            onChange={(event) => {
-              pickImage(event.currentTarget.files?.[0])
-              event.currentTarget.value = ''
-            }}
-          />
           <Row label="终端不透明度" id="terminalOpacity">
             <Slider
               label="终端不透明度"

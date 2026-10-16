@@ -1,7 +1,7 @@
 # TerminalReborn PRD 与开发路线图
 
 > 版本 v1.2 · 2026-10-16（v1.1 同日 · v1.0 2026-10-13）· 状态：待评审
-> v1.2 变更（作者决定）：**终端就是全部界面**——取消 F1 输入栏和 F3 应用内作答（PromptBar），终端里不叠加任何控件；权限请求只用于标记“等你处理”，在 TUI 里作答；总览预览只读；终端默认行高 1（与普通终端一致）。
+> v1.2 变更（作者决定）：**终端就是全部界面**——取消 F1 输入栏和 F3 应用内作答（PromptBar），终端里不叠加任何控件；权限请求只用于标记“等你处理”，在 TUI 里作答；总览预览只读；终端默认行高 1（与普通终端一致）；终端底色只跟随浅色 / 深色主题，取消渐变 / 图片背景。
 > v1.1 变更：新增 §3.3 信息架构（侧栏层级规则，取消“等你处理”置顶队列）；F2 改写；新增 F9 状态总览（P0）与 F10–F16（来自 10-16 功能调研）；路线图插入 2b · 总览，M4 扩充脚本 / 端口 / 归档，PR·CI 只读状态从 M6 提前。
 > 关联：[产品简报](product/product-brief.md) · [竞品调研](research/2026-10-13-competitive-research.md) · [功能调研 10-16](research/2026-10-16-feature-research.md) · [UX 走查 10-15](acceptance/ux-review-2026-10-15.md) · [Figma 设计稿](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -160,7 +160,8 @@ Project（git 仓库根目录）
 ### F7 外观 · P0（主题 token）/ P1（设置页）· Figma 07 / 08
 - 深色和浅色两套主题，token 来自 Figma 变量（Color：bg / text / border / status / diff / term / lane；Layout：space / radius），导出为 CSS 变量。
 - **英文字体和中文字体分别设置**：xterm 的 `fontFamily` 为 `"<英文>", "<中文>", monospace`，开启 `rescaleOverlappingGlyphs`；字体加载完成后执行 `clearTextureAtlas()`。
-- 字号、行高、连字；背景（纯色 / 渐变 / 图片，采用 CSS background 语义）；终端不透明度；侧栏毛玻璃（`vibrancy: 'sidebar'`，终端区域保持不透明）。
+- 字号、行高、连字；终端不透明度；侧栏毛玻璃（`vibrancy: 'sidebar'`，终端区域保持不透明）。
+- **终端底色永远跟随主题**（v1.2）：浅色模式为白色，深色模式为近黑色，和普通终端一样。原有的“背景：纯色 / 渐变 / 图片”选项已取消，旧设置里的渐变 / 图片在读取时丢弃。原因：渐变颜色是固定值，不随主题变化，会出现浅色主题配深色渐变、文字看不清的情况；而且渐变 / 图片要求终端透明，会退回到较慢的 DOM 渲染器。
 - 设置页右侧实时预览；P2 支持导入 Ghostty / iTerm 主题。
 - **验收**：Figma 07 / 08 还原；修改设置后，所有终端在 100 ms 内生效，且不需要重启会话。
 

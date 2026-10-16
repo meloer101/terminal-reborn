@@ -1,10 +1,8 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import type { SettingsPatch } from '../src/shared/settings'
 import { launchApp } from './launch'
-import { decodePng, encodePng, type Raster } from './png'
+import { decodePng, type Raster } from './png'
 
 interface SurfaceInfo {
   fontFamily: string
@@ -27,7 +25,6 @@ const SHOTS = 'test-results'
 
 let app: ElectronApplication
 let page: Page
-let wallpaper: string
 
 const pane = (sessionId: string) => page.locator(`[data-region="terminal"] [data-session-id="${sessionId}"]`)
 const terminalRegion = () => page.locator('[data-region="terminal"]')
@@ -72,21 +69,6 @@ async function shoot(name: string): Promise<Raster> {
   return decodePng(png)
 }
 
-/**
- * Pixels equal to the opaque terminal color (or pure black): what a transparent WebGL canvas leaves
- * behind italic/dim/underlined cells. Over a gradient or image none should remain.
- */
-function opaqueCellPixels(raster: Raster, termBg: [number, number, number]): number {
-  let count = 0
-  const near = (a: number, b: number) => Math.abs(a - b) <= 3
-  for (let i = 0; i < raster.data.length; i += 4) {
-    const r = raster.data[i] ?? 0
-    const g = raster.data[i + 1] ?? 0
-    const b = raster.data[i + 2] ?? 0
-    if ((near(r, termBg[0]) && near(g, termBg[1]) && near(b, termBg[2])) || (r < 4 && g < 4 && b < 4)) count++
-  }
-  return count
-}
 const TERM_BG = { dark: [10, 10, 10], light: [255, 255, 255] } as const
 
 function pixel(raster: Raster, fx: number, fy: number): [number, number, number] {
@@ -101,16 +83,6 @@ test.setTimeout(90_000)
 
 test.beforeAll(async () => {
   mkdirSync(SHOTS, { recursive: true })
-  wallpaper = join(mkdtempSync(join(tmpdir(), 'tr-wall-')), '壁纸 (test).png')
-  // Diagonal blue→orange wallpaper with brighter stripes, so any black cell stands out.
-  writeFileSync(
-    wallpaper,
-    encodePng(640, 400, (x, y) => {
-      const t = (x / 640 + y / 400) / 2
-      const stripe = Math.floor((x + y) / 40) % 2 === 0 ? 24 : 0
-      return [Math.min(255, 40 + 190 * t + stripe), Math.min(255, 90 + 60 * (1 - t) + stripe), Math.min(255, 200 - 120 * t + stripe)]
-    })
-  )
   app = await launchApp()
   page = await app.firstWindow()
   await page.addInitScript(() => {
@@ -169,47 +141,19 @@ test('terminal opacity makes the surface transparent only when below 1', async (
 })
 
 for (const mode of ['dark', 'light'] as const) {
-  test(`gradient background renders behind the terminal (${mode})`, async () => {
-    await update({ appearance: { theme: mode, background: { kind: 'gradient', from: '#1d4f91', to: '#c2410c', angle: 135 } } })
+  test(`the terminal takes the theme's color: ${mode === 'light' ? 'white' : 'near-black'} in ${mode} mode`, async () => {
+    // A gradient saved by an older version is ignored: the terminal follows the theme (PRD v1.2).
+    await update({ appearance: { theme: mode, background: { kind: 'gradient', from: '#1f1f1f', to: '#050505', angle: 160 } } } as unknown as SettingsPatch)
     await expect.poll(theme).toBe(mode)
-    await expect
-      .poll(() => terminalRegion().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundImage))
-      .toContain('linear-gradient(135deg')
-    await expect.poll(async () => (await info(FIRST))?.allowTransparency).toBe(true)
-    expect((await info(FIRST))?.background).toBe('#' + (mode === 'dark' ? '0a0a0a' : 'ffffff') + '00')
-
+    await expect.poll(async () => (await info(FIRST))?.background.toLowerCase()).toBe(mode === 'dark' ? '#0a0a0a' : '#ffffff')
+    expect((await info(FIRST))?.allowTransparency).toBe(false)
+    await expect.poll(async () => (await info(FIRST))?.renderer).toBe('webgl')
     await run(FIRST, SAMPLE)
     await expect.poll(() => screen(FIRST), { timeout: 10_000 }).toMatch(/^ready-42$/m)
-    const raster = await shoot(`appearance-gradient-${mode}`)
-    expect((await info(FIRST))?.renderer).toBe('dom')
-    expect(opaqueCellPixels(raster, [...TERM_BG[mode]])).toBe(0)
-    // Far from any text the gradient shows through the (transparent) cells: it is not the flat terminal color.
-    const [r, , b] = pixel(raster, 0.97, 0.9)
-    expect(Math.abs(r - b)).toBeGreaterThan(30)
-  })
-
-  test(`image background with dim renders behind the terminal (${mode})`, async () => {
-    await update({ appearance: { theme: mode, background: { kind: 'image', path: wallpaper, dim: 0.35 } } })
-    await expect.poll(theme).toBe(mode)
-    await expect
-      .poll(() => terminalRegion().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundImage))
-      .toContain('url("file:///')
-    await run(FIRST, SAMPLE)
-    await expect.poll(() => screen(FIRST), { timeout: 10_000 }).toMatch(/^ready-42$/m)
-    const raster = await shoot(`appearance-image-${mode}`)
-    expect(opaqueCellPixels(raster, [...TERM_BG[mode]])).toBe(0)
-    const [r, , b] = pixel(raster, 0.97, 0.9)
-    expect(Math.abs(r - b)).toBeGreaterThan(20)
+    const raster = await shoot(`appearance-theme-${mode}`)
+    expect(pixel(raster, 0.97, 0.9)).toEqual([...TERM_BG[mode]])
   })
 }
-
-test('back to solid restores an opaque surface', async () => {
-  await update({ appearance: { theme: 'dark', background: { kind: 'solid' } } })
-  await expect.poll(async () => (await info(FIRST))?.allowTransparency).toBe(false)
-  expect((await info(FIRST))?.background.toLowerCase()).toBe('#0a0a0a')
-  await expect.poll(async () => (await info(FIRST))?.renderer).toBe('webgl')
-  await expect.poll(() => terminalRegion().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundImage)).toBe('none')
-})
 
 test('theme setting flips data-theme, including the system preference', async () => {
   await update({ appearance: { theme: 'light' } })

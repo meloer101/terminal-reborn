@@ -20,20 +20,10 @@ describe('sanitizeSettings', () => {
     expect(s.appearance.ligatures).toBe(false)
   })
 
-  it('validates backgrounds', () => {
-    expect(sanitizeSettings({ appearance: { background: { kind: 'gradient', from: '#000000', to: '#123abc', angle: 400 } } }).appearance.background).toEqual({
-      kind: 'gradient',
-      from: '#000000',
-      to: '#123abc',
-      angle: 360
-    })
-    expect(sanitizeSettings({ appearance: { background: { kind: 'gradient', from: 'red', to: '#123abc' } } }).appearance.background).toEqual({ kind: 'solid' })
-    expect(sanitizeSettings({ appearance: { background: { kind: 'image', path: 'relative.png' } } }).appearance.background).toEqual({ kind: 'solid' })
-    expect(sanitizeSettings({ appearance: { background: { kind: 'image', path: '/a/b.png' } } }).appearance.background).toEqual({
-      kind: 'image',
-      path: '/a/b.png',
-      dim: 0.4
-    })
+  it('drops the old gradient / image background: the terminal follows the theme (v1.2)', () => {
+    const s = sanitizeSettings({ appearance: { background: { kind: 'gradient', from: '#1f1f1f', to: '#050505', angle: 160 }, fontSize: 14 } })
+    expect(s.appearance).not.toHaveProperty('background')
+    expect(s.appearance.fontSize).toBe(14)
   })
 })
 

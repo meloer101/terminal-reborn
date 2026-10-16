@@ -4,14 +4,6 @@
 
 export type ThemePreference = 'system' | 'dark' | 'light'
 
-export type BackgroundSetting =
-  /** The theme's own terminal background. */
-  | { kind: 'solid' }
-  /** CSS linear-gradient between two hex colors. */
-  | { kind: 'gradient'; from: string; to: string; angle: number }
-  /** An image file behind the terminal, darkened/lightened by `dim` (0–1) for legibility. */
-  | { kind: 'image'; path: string; dim: number }
-
 export interface AppearanceSettings {
   theme: ThemePreference
   /** Latin monospace family for the terminal. */
@@ -23,7 +15,8 @@ export interface AppearanceSettings {
   /** Terminal line height as a multiple of fontSize (xterm semantics). */
   lineHeight: number
   ligatures: boolean
-  background: BackgroundSetting
+  // No background setting (PRD v1.2): the terminal always uses the theme's own color — white in light
+  // mode, near-black in dark — like a normal terminal. Old gradient / image values are dropped on load.
   /** Opacity of the terminal surface over the background, 0.5–1. */
   terminalOpacity: number
   /** macOS sidebar vibrancy (blur) behind the sidebar. */
@@ -50,7 +43,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     // block-drawn art such as the Claude Code logo.
     lineHeight: 1,
     ligatures: false,
-    background: { kind: 'solid' },
     terminalOpacity: 1,
     sidebarVibrancy: false
   }
@@ -60,13 +52,8 @@ export const LIMITS = {
   fontSize: { min: 9, max: 28 },
   lineHeight: { min: 1, max: 2.2 },
   terminalOpacity: { min: 0.5, max: 1 },
-  gradientAngle: { min: 0, max: 360 },
-  imageDim: { min: 0, max: 0.9 },
-  fontName: 120,
-  path: 4096
+  fontName: 120
 } as const
-
-const HEX = /^#[0-9a-f]{6}$/i
 
 function num(value: unknown, fallback: number, range: { min: number; max: number }): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
@@ -79,18 +66,6 @@ function str(value: unknown, fallback: string, max: number): string {
   return trimmed === '' || trimmed.length > max ? fallback : trimmed
 }
 
-function background(value: unknown): BackgroundSetting {
-  if (typeof value !== 'object' || value === null) return { kind: 'solid' }
-  const v = value as Record<string, unknown>
-  if (v.kind === 'gradient' && typeof v.from === 'string' && HEX.test(v.from) && typeof v.to === 'string' && HEX.test(v.to)) {
-    return { kind: 'gradient', from: v.from, to: v.to, angle: num(v.angle, 180, LIMITS.gradientAngle) }
-  }
-  if (v.kind === 'image' && typeof v.path === 'string' && v.path.startsWith('/') && v.path.length <= LIMITS.path) {
-    return { kind: 'image', path: v.path, dim: num(v.dim, 0.4, LIMITS.imageDim) }
-  }
-  return { kind: 'solid' }
-}
-
 function appearance(value: unknown): AppearanceSettings {
   const d = DEFAULT_SETTINGS.appearance
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
@@ -101,7 +76,6 @@ function appearance(value: unknown): AppearanceSettings {
     fontSize: Math.round(num(v.fontSize, d.fontSize, LIMITS.fontSize)),
     lineHeight: Math.round(num(v.lineHeight, d.lineHeight, LIMITS.lineHeight) * 100) / 100,
     ligatures: typeof v.ligatures === 'boolean' ? v.ligatures : d.ligatures,
-    background: background(v.background),
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
     sidebarVibrancy: typeof v.sidebarVibrancy === 'boolean' ? v.sidebarVibrancy : d.sidebarVibrancy
   }

@@ -52,9 +52,8 @@ test('settings window edits appearance live and the preview follows', async () =
   await settings.getByRole('switch', { name: '连字' }).click()
   await expect.poll(async () => (await readSettings(settings)).appearance.ligatures).toBe(true)
 
-  // 背景 → 渐变 reveals the colour and angle controls.
-  await settings.getByRole('radio', { name: '渐变' }).click()
-  await expect(settings.getByRole('slider', { name: '渐变角度' })).toBeVisible()
+  // No background picker: the terminal always takes the theme's color (PRD v1.2).
+  await expect(settings.getByRole('radio', { name: '渐变' })).toHaveCount(0)
 
   // Theme: 浅色 flips the settings window itself.
   await settings.getByRole('radio', { name: '浅色' }).click()
