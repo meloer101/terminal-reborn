@@ -1,7 +1,8 @@
 # TerminalReborn PRD 与开发路线图
 
-> 版本 v1.0 · 2026-10-13 · 状态：待评审
-> 关联：[产品简报](product/product-brief.md) · [竞品调研](research/2026-10-13-competitive-research.md) · [Figma 设计稿](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
+> 版本 v1.1 · 2026-10-16（v1.0 · 2026-10-13）· 状态：待评审
+> v1.1 变更：新增 §3.3 信息架构（侧栏层级规则，取消“等你处理”置顶队列）；F2 改写；新增 F9 状态总览（P0）与 F10–F16（来自 10-16 功能调研）；路线图插入 2b · 总览，M4 扩充脚本 / 端口 / 归档，PR·CI 只读状态从 M6 提前。
+> 关联：[产品简报](product/product-brief.md) · [竞品调研](research/2026-10-13-competitive-research.md) · [功能调研 10-16](research/2026-10-16-feature-research.md) · [UX 走查 10-15](acceptance/ux-review-2026-10-15.md) · [Figma 设计稿](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
 ## 1. 背景与目标
 
@@ -70,6 +71,28 @@ Project（git 仓库根目录）
 ### 3.2 当前动作
 由 `PreToolUse` 的 `tool_name` + `tool_input` 生成，例如 "编辑 auth.ts"、"运行 pnpm test"、"搜索 'useSession'"。没有 hook 时显示为空。
 
+### 3.3 信息架构：两种视图看同一批会话
+
+同一批会话有两种组织方式，各管一件事，互不混用：
+
+| 视图 | 回答的问题 | 组织方式 | 不做的事 |
+|---|---|---|---|
+| **侧栏** | 它在哪？ | 严格按归属：项目 › 会话。会话永远待在所属项目下面，不会因为状态变化而移动 | 不按状态重排，不把会话提到别的分组 |
+| **总览**（F9） | 现在该做什么？ | 跨项目，按状态分组：等你处理 → 出错 → 待审阅 → 运行中 → 空闲 → 已退出 | 不替代侧栏的位置导航 |
+
+**层级规则**：子级在视觉上永远不能比父级更醒目。（v1.0 的侧栏违反了这条：项目名用 12px 次要色，会话标题却是 13px 中粗主色。）
+
+| 层级 | 字号 / 字重 / 颜色 | 位置 |
+|---|---|---|
+| 项目（ProjectHeader） | 13px / 600 / `text-primary`（token `--text-body-heading`），左侧折叠箭头使用 `text-tertiary` | 行内边距左 8px，箭头 16px + 间距 4px |
+| 会话标题（SessionRow） | 13px / 400 / `text-primary` | 缩进 28px（`--indent-tree`），状态图形正好落在项目名首字下方 |
+| 会话第二行 | 12px / 400 / `text-secondary`（等你处理时用 `status-attention`） | 与标题左对齐 |
+| 元信息（时长、`+N −M`、数量） | 等宽 12px / `text-tertiary` | 右对齐 |
+
+- **Worktree 不单独占一层**：大多数 worktree 只有一个会话，所以分支名放在会话第二行（或悬停提示）里。只有同一个 worktree 下有 2 个以上会话时，才在会话之上加一行 worktree 小标题（M4 时再设计）。
+- **折叠**：项目可以折叠（点项目名或箭头），折叠状态会持久保存。折叠后，项目标题行显示其下最紧急的状态图形，所以折叠项目里有“等你处理”的会话也不会被漏掉。⌘1–9 跳过折叠项目中的会话；⌘J 不受折叠影响。
+- **“等你处理”的入口**改为三处：侧栏导航中的“总览”项显示需要处理的数量；⌘J 依次跳到需要处理的会话；Dock 角标和系统通知。原来置顶的“等你处理”分组已取消，因为它会让会话离开所属项目、在列表里跳来跳去（UX 走查 #7）。
+
 ## 4. 功能需求
 
 优先级：**P0** = MVP 必须有 · **P1** = v0.x 公开版本 · **P2** = v1.0 之前。
@@ -94,8 +117,9 @@ Project（git 仓库根目录）
 - **验收**：§1.3 的测试矩阵在 Claude 和 Codex 上全部通过；搜狗和系统拼音输入法下，选字时回车不会误发。
 
 ### F2 状态侧栏 · P0 · Figma 01 / 02（Sidebar、SessionRow、NavItem）
-- 项目 › worktree › 会话三级树；顶部"等你处理"队列。
-- 每行显示：StatusGlyph、任务标题（默认为首条 prompt，可重命名）、当前动作、`+N −M`、耗时。
+- 项目 › 会话两级树，层级规则见 §3.3；项目可折叠。不设置顶队列，跨项目的状态视图交给 F9 总览。
+- 每行显示：StatusGlyph、任务标题（默认为首条 prompt，可重命名）、当前动作、`+N −M`、耗时（等你处理时显示“已等 3m”，见 F10）。
+- 导航区：打开项目 ⌘O · 跳转到 ⌘K · 总览 ⌘⇧A（右侧显示需要处理的数量，形式为状态图形加数字）。
 - 系统通知：只在窗口失焦或该会话不可见时发送，点击后跳到对应会话。Dock 角标显示 `needsAttention` 的数量。
 - 快捷键：⌘1–9 切换会话，⌘J 跳到下一个需要处理的会话。
 - **验收**：Figma 01 / 02 的侧栏在深色和浅色模式下像素级还原；同时运行 10 个会话时，状态变化在 1 s 内反映到侧栏。
@@ -110,6 +134,7 @@ Project（git 仓库根目录）
 ### F4 Worktree 生命周期 · P1 · Figma 06（New task sheet）/ 05（Merge sheet）
 - 新建任务 ⌘N：选择项目和基线分支 → 输入任务描述 → 自动生成分支名（`<前缀>/<slug>`，中文标题回退为拼音或时间戳，可手动修改）→ 选择 agent → ↵。
 - 后台执行：`git fetch` → `git worktree add --no-track -b <branch> ~/.tr/worktrees/<repo>/<name> <base>` → 记录 `branch.<name>.base` → 按 `.worktreeinclude` 用 `cp -c`（APFS 写时复制）复制被忽略文件 → 在可见终端里运行 setup 脚本 → 启动 agent 并送入首条 prompt。
+- **脚本与端口**（v1.1 新增，参照 Conductor / Codex Local environments）：可以提交进仓库的 `.tr/settings.toml`，配置 `setup`、`run`、`archive` 三个脚本；会话头放一个 Run 按钮；按工作区分配端口段，注入 `TR_PORT`。
 - 本地合并：预检（落后基线的提交数、`git merge-tree --write-tree` 冲突检测、可选测试命令）→ 选择 merge `--no-ff` / squash / rebase + `--ff-only` → 可选"合并后删除 worktree（保留分支）"和"推送到 origin"。
 - 冲突处理：列出冲突文件和原因 →「交给 agent 解决」会自动生成说明（冲突类型、分支、文件列表、提醒设置 `GIT_EDITOR=true`）并发送到该会话；或者选择「中止」。能识别仓库处于 merge / rebase / cherry-pick 进行中的状态。
 - 清理：合并后提示删除；列出孤儿 worktree（P2：按 TTL 自动回收）。
@@ -140,9 +165,47 @@ Project（git 仓库根目录）
 - ⌘K 命令面板（会话、项目、操作）· ⌘, 设置 · ⌘\ 收起或展开侧栏 · ⌘⌥B 收起或展开右侧面板。
 - 键盘可以完成所有高频操作；支持减少动态效果；文字和状态的对比度达到 WCAG 2.2 AA。
 
+### F9 状态总览 · P0 · Figma 11 / 11b / 11c
+用户在一个页面里分诊所有 agent，不需要逐个切换会话。依据见调研 §2：Claude Code agent view、Superset Workspaces、Conductor、Vibe Kanban 等 8 家以上产品采用同一形态。
+- **入口**：主区的一个视图，与终端互斥，不是弹窗。打开方式：侧栏“总览”或 ⌘⇧A；Esc 或 Enter 进入会话后回到终端。
+- **列表（默认）**：跨项目按状态分组，顺序为 等你处理 → 出错 → 待审阅（`done_unread`）→ 运行中 → 空闲 → 已退出。已退出组默认折叠；分组的折叠状态会保存。分组标题只用文字、数量和细分隔线表达，不用色块。
+- **每行**：StatusGlyph + 状态文字 · 标题 · `项目 › 分支` · 摘要（运行中显示当前动作；等你处理显示问题或待确认的命令；出错显示错误摘要；其他状态显示最后一句回复）· `+N −M` · 时间（等你处理显示“已等 3m”，运行中显示本轮用时，其余显示“5m 前”）。后续接入：todo `3/7`（F12）、`ctx 62%`（F11）、PR `#123 ✓`（F16），数据未就绪时这几列留空，不占位。
+- **看板**：同一套分组画成列，列内仍是细线分隔的紧凑行，不画卡片。列表和看板的分组永远一致。
+- **预览（Space）**：右侧滑出预览面板，内容为该会话终端最后约 15 行的**文本快照**（从 xterm buffer 读取，不新建 WebGL 实例）。如果会话在等你处理，面板里直接显示 PromptBar 选项，可以就地作答（这一项实现了 F3 的“内联回复”）。面板底部有一个精简输入框，可以直接回复。
+- **键盘**：↑↓ 移动，Enter 进入会话，Space 预览，1–9 在预览中作答，⌘⇧A / Esc 返回。顶部过滤框支持文本、`p:项目`、`s:状态`。
+- **批量操作**（P1）：⇧ 或 ⌘ 多选后可以停止、关闭，或发送同一条消息（调研 #18：广播只放在这里）。
+- **验收**：Figma 11 / 11b / 11c 在深浅两套主题下还原；20 个会话时打开总览 < 100 ms；状态变化 1 s 内反映到行和分组；纯键盘可以完成“找到等你处理的会话 → 预览 → 作答”。
+
+### F10 等待时长与有内容的通知 · P0（随 2b）
+- 时间列的含义随状态切换：运行中显示本轮用时；等你处理显示“已等 3m”，超过 5 分钟后字重加粗，颜色不变；空闲 / 已完成显示“5m 前”。（合并 phase2 B5）
+- 通知：标题写“项目 · 会话”，正文写问题、待确认的命令或最后一句回复；多个会话同时完成时合并成一条。（合并 phase2 B6）
+
+### F11 上下文占用与额度 · P1
+- wrapper 在按次注入的 `--settings` 里加一条 statusLine 命令，把 Claude Code statusLine JSON 中的 `context_window.used_percentage` 和 `rate_limits.five_hour / seven_day` 转发给 HookServer。如果用户已经配置了自己的 statusLine，必须串联调用它并原样输出它的结果，不能覆盖。
+- 会话头显示 `ctx 62%`，超过 80% 时提示可以 `/compact`。额度显示在总览顶栏右侧，悬停可看重置时间。Codex 的接法待预研。
+
+### F12 todo 进度 · P1
+- 解析 PreToolUse 中 TodoWrite / Task* 的 `tool_input`，得出 `完成数 / 总数` 和当前项。侧栏行以文字或 1px 细进度线显示，总览显示 `3/7 · 当前项`。具体工具名需要先在 Claude 2.1.300 上实测。
+
+### F13 一键 AI 审阅 · P1
+- 变更面板和总览“待审阅”行提供“让 agent 审阅”：向该会话发送 `/code-review`（Claude）或 `/review`（Codex）。审阅结果留在 TUI 里，暂不解析回 diff。
+
+### F14 端口检测 · P1
+- 主进程低频扫描每个 PTY 子进程树正在监听的端口（`lsof`，按需开启），在会话行和总览中以小标签显示 `:5173`。点击在系统浏览器中打开，右键可以结束进程。内置浏览器为 P2。
+
+### F15 归档 · P1（随 M4）
+- 归档 = 停止 agent + 把 worktree 状态（含未提交的改动）存进私有 ref + 从侧栏隐藏。可以在⌘K“历史”中恢复，恢复时用 `--resume` 接上原对话。合并后可选自动归档。agent 运行中不允许归档。
+
+### F16 PR / CI 只读状态 · P1（从 M6 提前）
+- 检测到 `gh` 且已登录时，会话行和总览显示 `#123` 与 checks 状态（✓ / ✗ / 进行中）。CI 失败时提供“让 agent 修复”，由我们生成一条 prompt 发给该会话。创建和合并 PR 仍在 M6。
+
+### P2 储备（已验证，但排在后面）
+可编辑的消息队列（输入栏上方显示“已排队 2 条”）· 代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· best-of-N 竞赛（依赖 M4，在总览中比较）· Claude Remote Control 菜单入口（发送 `/remote-control`，需要实测）· 仓库级预设 prompt（`.tr/settings.toml`）· 内置预览浏览器 · 实时终端网格（最多 4 格）。
+
 ## 5. 设计规范
 
-- 唯一的设计来源是 Figma 文件中的 Foundations、Components、Screens 三页。屏幕节点：01 运行中 `14:2` · 02 等你处理 `16:178` · 03 变更审阅 `16:405` · 04 Git 图谱 `18:591` · 05 合并预检 `19:814` · 06 新任务 `19:940` · 07 设置·外观 `21:1223` · 08 浅色模式 `24:1790`。
+- 唯一的设计来源是 Figma 文件中的 Foundations、Components、Screens 三页。屏幕节点：01 运行中 `14:2` · 02 等你处理 `16:178` · 03 变更审阅 `16:405` · 04 Git 图谱 `18:591` · 05 合并预检 `19:814` · 06 新任务 `19:940` · 07 设置·外观 `21:1223` · 08 浅色模式 `24:1790` · 09 侧栏入口 `51:1460` · 10 会话生命周期 `64:2225` · 11 总览·列表 `71:2635` · 11b 总览·看板 `72:2918` · 11c 总览·预览 `72:2617`。
+- 侧栏层级以 Components 页的 `ProjectHeader`（Default / Hover / Collapsed）和 `SessionRow` 为准，规则见 §3.3。总览组件在 Components 页的 Overview 分区：`OverviewGroupHeader` `70:222` · `OverviewRow` `70:324` · `BoardRow` `70:608`；`NavItem` 新增 `Show count` / `Count` 属性。
 - 字体：UI 使用系统字体 SF Pro（Figma 中的 Instrument Sans 只是替身）；等宽字体默认 JetBrains Mono；中文默认思源黑体 SC / 苹方，并逐段显式指定。
 - 风格约束：零彩度中性色；颜色只用于表达状态；用排版、对齐和细分隔线建立层级；小圆角（3 / 5 / 窗口 10）；不使用卡片堆叠、渐变或装饰性小字。
 - 每个组件实现时，用 Figma MCP 的 `get_design_context` 读取对应节点，并配合 Code Connect 映射。
@@ -220,18 +283,24 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 签名、公证、自动更新跑通。
 - **完成标准**：Figma 07 / 08 还原；Claude 和 Codex 都通过 M1 / M2 的验收；发布 v0.1.0。
 
-### M4 · Worktree 全链路 + Diff 审阅（约 2.5 周）→ v0.2.0
-- F4 新建任务、`.worktreeinclude`、setup 脚本、合并预检、merge / squash / rebase、冲突交给 agent、清理。
-- F5 变更面板 + 行内评论发给 agent。
+### 2b · 日常体验 + 总览（约 1.5 周）→ v0.2.0（v1.1 插入）
+- phase2 计划的 B 类全部条目，加上 UX 走查 #11 / #12；§3.3 的侧栏层级修正；F9 总览（列表、看板、预览、就地作答）；F10。
+- **完成标准**：Figma 09 / 11 还原；UX 走查 P0 / P1 全部关闭。
+
+### M4 · Worktree 全链路 + Diff 审阅（约 3 周）→ v0.3.0
+- F4 新建任务、`.worktreeinclude`、setup / run / archive 脚本与 `TR_PORT`、合并预检、merge / squash / rebase、冲突交给 agent、清理。
+- F5 变更面板 + 行内评论发给 agent；F13 一键 AI 审阅；F15 归档。
+- 并行可做：F11 上下文与额度、F12 todo 进度、F14 端口检测（与 git 无关，可以单独成路）。
 - **完成标准**：Figma 03 / 05 / 06 还原；L1 / L4 / L5 完整跑通；git 相关操作有基于临时仓库的集成测试。
 
-### M5 · Git 图谱（约 1.5 周）→ v0.3.0
+### M5 · Git 图谱 + PR 状态（约 2 周）→ v0.4.0
 - F6 lane 算法、worktree / agent 标注、右键操作、虚拟化、Worktree 列表。
+- F16 PR / CI 只读状态。
 - **完成标准**：Figma 04 还原；5000 个提交的仓库性能达标。
 
 ### M6 · 深化（持续进行）→ v1.0
-- 会话在应用重启后保留（PTY 守护进程 + `claude --resume`）；侧栏内联回复；`@` 文件引用。
-- GitHub PR 流程（`gh`）；checkpoint；导入 Ghostty / iTerm 主题；多会话总览网格；孤儿 worktree 自动回收。
+- 会话在应用重启后保留（PTY 守护进程 + `claude --resume`）；`@` 文件引用。（侧栏内联回复已由 F9 预览实现）
+- GitHub PR 创建 / 合并流程（`gh`）；导入 Ghostty / iTerm 主题；孤儿 worktree 自动回收；“P2 储备”中的各项。
 - **v1.0 标准**：§1.3 的所有指标达标；没有 P0 / P1 缺陷。
 
 ### 里程碑与设计稿对照
@@ -246,6 +315,10 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 | 06 新任务 | M4 |
 | 07 设置·外观 | M3 |
 | 08 浅色模式 | M3（token 在 M0 就位） |
+| 09 侧栏 · 项目与会话入口 | 2b（§3.3 层级修正） |
+| 10 会话生命周期 | 2a |
+| 11 / 11b / 11c 总览（列表 / 看板 / 预览） | 2b |
+| 12 会话头：ctx % · todo · 端口 · PR（待设计） | M4 并行路 / M5 |
 
 ## 9. 风险与待定项
 
