@@ -35,9 +35,17 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   await expect(sidebar.getByRole('button', { name: 'acme-web 项目菜单' })).toBeVisible()
   await page.screenshot({ path: 'test-results/sidebar-projects-hover.png' })
 
-  // The 等你处理 queue header has no actions.
-  const queueHeader = sidebar.locator('section[aria-label="等你处理"] > div').first()
-  await queueHeader.hover()
-  await expect(queueHeader.getByRole('button')).toHaveCount(0)
+  // Sessions stay under their project, whatever their status (PRD §3.3): the error session is in terminal-reborn.
+  await expect(sidebar.locator('section[aria-label="terminal-reborn"] [data-session-id="s-graph"]')).toBeVisible()
+
+  // Folding a project hides its rows; the header keeps the count and shows the most urgent attention status.
+  const toggle = sidebar.getByRole('button', { name: 'acme-web', exact: true })
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(sidebar.locator('[data-session-id="s-cookie"]')).toHaveCount(0)
+  await expect(header.getByRole('img', { name: '已完成' })).toBeVisible()
+  await toggle.click()
+  await expect(sidebar.locator('[data-session-id="s-cookie"]')).toBeVisible()
   await app.close()
 })

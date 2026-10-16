@@ -1,11 +1,40 @@
-/* Figma ProjectHeader 50:1473 — 28px: padding 6/12, gap 6. Hover: bg-hover, padding 4/4/4/12, actions replace the count. */
+/*
+ * Figma ProjectHeader 50:1473 — 28px: padding 6/12/6/8, gap 4; chevron 16 · name (Body/Heading, primary) · count.
+ * Hover: bg-hover, padding 4/4/4/8, actions replace the count. Session rows indent to the name (28px).
+ */
 .header {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-4);
   height: 28px;
-  padding: var(--space-6) var(--space-12);
+  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-8);
   border-radius: var(--radius-md);
+}
+
+.toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.chevron {
+  flex: none;
+  display: flex;
+  color: var(--text-tertiary);
 }
 
 .name {
@@ -15,8 +44,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: var(--text-caption-strong);
-  color: var(--text-secondary);
+  font: var(--text-body-heading);
+  color: var(--text-primary);
+}
+
+.hint {
+  flex: none;
+  display: flex;
 }
 
 .count {
@@ -31,19 +65,24 @@
   gap: var(--space-2);
 }
 
-.header[data-actions='true']:hover,
-.header[data-actions='true']:focus-within {
-  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
+.header:hover,
+.header:focus-within {
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-8);
   background: var(--bg-hover);
 }
 
-.header[data-actions='true']:hover .count,
-.header[data-actions='true']:focus-within .count {
+.header:hover .chevron,
+.header:focus-within .chevron {
+  color: var(--text-secondary);
+}
+
+.header:hover .count,
+.header:focus-within .count {
   display: none;
 }
 
-.header[data-actions='true']:hover .actions,
-.header[data-actions='true']:focus-within .actions {
+.header:hover .actions,
+.header:focus-within .actions {
   display: inline-flex;
 }
 

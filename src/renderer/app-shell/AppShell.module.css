@@ -30,6 +30,19 @@
   background: var(--tr-terminal-backdrop, var(--term-bg));
 }
 
+/* Hidden while the overview is up; terminals keep running (and keep their scrollback) behind it. */
+.terminal[data-hidden='true'] {
+  display: none;
+}
+
+.sessionOnly {
+  display: contents;
+}
+
+.sessionOnly[data-hidden='true'] {
+  display: none;
+}
+
 /* Sidebar vibrancy: main sets the native vibrancy; the layers in front of it go see-through. */
 :global(html[data-vibrancy='on']),
 :global(html[data-vibrancy='on'] body),

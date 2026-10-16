@@ -11,12 +11,13 @@ export type ActionId =
   | 'new-shell'
   | 'add-project'
   | 'toggle-sidebar'
+  | 'toggle-overview'
   | 'toggle-changes'
   | 'theme-system'
   | 'theme-dark'
   | 'theme-light'
 
-export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'changes' | 'monitor' | 'moon' | 'sun'
+export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'changes' | 'monitor' | 'moon' | 'sun'
 
 export type PaletteTarget = { type: 'session'; sessionId: SessionId } | { type: 'action'; action: ActionId }
 
@@ -42,6 +43,7 @@ export interface PaletteInput {
   sessions: Session[]
   activeSessionId: SessionId | null
   rightPanel: 'changes' | 'graph' | null
+  mainView?: 'session' | 'overview'
 }
 
 export interface RankedEntry {
@@ -119,6 +121,7 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
   }
   entries.push(
     action('add-project', '添加项目…', 'folder-plus', 'add project folder open'),
+    action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
     action('toggle-changes', input.rightPanel === 'changes' ? '关闭变更面板' : '打开变更面板', 'changes', 'changes diff panel'),
     action('theme-system', '主题：跟随系统', 'monitor', 'theme system auto appearance'),

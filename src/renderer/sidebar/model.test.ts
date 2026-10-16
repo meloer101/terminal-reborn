@@ -36,7 +36,7 @@ describe('buildSidebarGroups', () => {
     expect(groups[2]).toMatchObject({ rows: [], sessionCount: 0 })
   })
 
-  it('hoists attention sessions into a top queue, most urgent first, without duplicating them', () => {
+  it('keeps every session under its own project, whatever its status', () => {
     const groups = buildSidebarGroups({
       projects,
       worktrees,
@@ -44,23 +44,23 @@ describe('buildSidebarGroups', () => {
         session('done', 'wa1', 'done_unread', 50),
         session('run', 'wa2', 'running', 100),
         session('err', 'wb1', 'error', 10),
-        session('ask-old', 'wam', 'needs_you', 5),
-        session('ask-new', 'wam', 'needs_you', 20)
+        session('ask', 'wam', 'needs_you', 5)
       ]
     })
-    expect(groups[0]).toMatchObject({ kind: 'attention', title: '等你处理' })
-    expect(groups[0]?.rows.map((r) => r.session.id)).toEqual(['ask-new', 'ask-old', 'err', 'done'])
-    const all = visibleSessionIds(groups)
-    expect(all).toHaveLength(5)
-    expect(new Set(all).size).toBe(5)
-    expect(groups.find((g) => g.id === 'pa')?.rows.map((r) => r.session.id)).toEqual(['run'])
-    // beta's only session is hoisted: the project stays (empty) but still counts that session
-    expect(groups.find((g) => g.id === 'pb')).toMatchObject({ rows: [], sessionCount: 1 })
+    expect(groups.map((g) => g.id)).toEqual(['pa', 'pb', 'pc'])
+    expect(groups[0]?.rows.map((r) => r.session.id)).toEqual(['done', 'run', 'ask'])
+    expect(groups[1]).toMatchObject({ rows: [{ session: { id: 'err' } }], sessionCount: 1 })
   })
 
-  it('shows no queue when nothing needs attention', () => {
-    const groups = buildSidebarGroups({ projects, worktrees, sessions: [session('s1', 'wa1', 'running')] })
-    expect(groups.some((g) => g.kind === 'attention')).toBe(false)
+  it('a collapsed project draws no rows but keeps its count and its most urgent attention status', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      collapsedProjectIds: ['pa'],
+      sessions: [session('done', 'wa1', 'done_unread', 50), session('ask', 'wam', 'needs_you', 5), session('run', 'wa2', 'running')]
+    })
+    expect(groups[0]).toMatchObject({ collapsed: true, rows: [], sessionCount: 3, attention: 'needs_you' })
+    expect(groups[1]).toMatchObject({ collapsed: false, attention: null })
   })
 
   it('derives secondary line, attention flag and diff stat', () => {
@@ -93,46 +93,47 @@ describe('buildSidebarGroups', () => {
 })
 
 describe('keyboard targets', () => {
-  const groups = buildSidebarGroups({
-    projects,
-    worktrees,
-    sessions: [
-      session('run1', 'wa1', 'running'),
-      session('run2', 'wb1', 'running'),
-      session('ask', 'wa2', 'needs_you'),
-      session('err', 'wam', 'error')
-    ]
-  })
-  // on-screen order: ask, err | run1 | run2
+  const sessions = [
+    session('run1', 'wa1', 'running'),
+    session('run2', 'wb1', 'running'),
+    session('ask', 'wa2', 'needs_you'),
+    session('err', 'wam', 'error')
+  ]
+  const groups = buildSidebarGroups({ projects, worktrees, sessions })
+  // on-screen order: alpha (run1, ask, err) | beta (run2)
   it('orders visible sessions as drawn', () => {
-    expect(visibleSessionIds(groups)).toEqual(['ask', 'err', 'run1', 'run2'])
+    expect(visibleSessionIds(groups)).toEqual(['run1', 'ask', 'err', 'run2'])
   })
 
   it('maps ⌘1–⌘9 to the nth visible session', () => {
-    expect(sessionForShortcut(groups, 1)).toBe('ask')
+    expect(sessionForShortcut(groups, 1)).toBe('run1')
     expect(sessionForShortcut(groups, 4)).toBe('run2')
     expect(sessionForShortcut(groups, 5)).toBeNull()
     expect(sessionForShortcut(groups, 0)).toBeNull()
     expect(sessionForShortcut(groups, 10)).toBeNull()
   })
 
-  it('cycles ⌘J through the attention queue', () => {
-    expect(nextAttentionSessionId(groups, 'run1')).toBe('ask')
-    expect(nextAttentionSessionId(groups, null)).toBe('ask')
-    expect(nextAttentionSessionId(groups, 'ask')).toBe('err')
-    expect(nextAttentionSessionId(groups, 'err')).toBe('ask')
+  it('skips the rows of a collapsed project for ⌘1–9', () => {
+    const folded = buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds: ['pa'] })
+    expect(sessionForShortcut(folded, 1)).toBe('run2')
+  })
+
+  it('cycles ⌘J through sessions needing attention, most urgent first, collapsed projects included', () => {
+    expect(nextAttentionSessionId(sessions, 'run1')).toBe('ask')
+    expect(nextAttentionSessionId(sessions, null)).toBe('ask')
+    expect(nextAttentionSessionId(sessions, 'ask')).toBe('err')
+    expect(nextAttentionSessionId(sessions, 'err')).toBe('ask')
   })
 
   it('has no ⌘J target without attention sessions', () => {
-    const quiet = buildSidebarGroups({ projects, worktrees, sessions: [session('r', 'wa1', 'running')] })
-    expect(nextAttentionSessionId(quiet, 'r')).toBeNull()
+    expect(nextAttentionSessionId([session('r', 'wa1', 'running')], 'r')).toBeNull()
   })
 
   it('moves with ↑/↓, clamped at the ends', () => {
-    expect(adjacentSessionId(groups, 'ask', 1)).toBe('err')
+    expect(adjacentSessionId(groups, 'run1', 1)).toBe('ask')
     expect(adjacentSessionId(groups, 'run2', 1)).toBe('run2')
-    expect(adjacentSessionId(groups, 'ask', -1)).toBe('ask')
-    expect(adjacentSessionId(groups, null, 1)).toBe('ask')
+    expect(adjacentSessionId(groups, 'run1', -1)).toBe('run1')
+    expect(adjacentSessionId(groups, null, 1)).toBe('run1')
     expect(adjacentSessionId(groups, null, -1)).toBe('run2')
     expect(adjacentSessionId([], 'x', 1)).toBeNull()
   })

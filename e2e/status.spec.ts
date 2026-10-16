@@ -57,7 +57,7 @@ test('reports the Dock badge for the sessions that need attention', async () => 
   await expect.poll(async () => (await calls()).badge.at(-1), WITHIN).toBe(2)
 })
 
-test('a background permission request moves the session into the queue, badges and notifies', async () => {
+test('a background permission request marks the session in place, badges and notifies', async () => {
   await emit('s-perf', { type: 'tool-start', tool: 'Bash', input: { command: 'pnpm test checkout' } })
   await expect(row('s-perf').getByRole('img', { name: '运行中' })).toBeVisible(WITHIN)
   await expect(row('s-perf')).toContainText('运行 pnpm test checkout', WITHIN)
@@ -66,7 +66,6 @@ test('a background permission request moves the session into the queue, badges a
   await expect(row('s-perf').getByRole('img', { name: '等你处理' })).toBeVisible(WITHIN)
   await expect(row('s-perf')).toHaveAttribute('data-attention', 'true', WITHIN)
   await expect(row('s-perf')).toContainText('等你确认：运行 pnpm test checkout', WITHIN)
-  await expect(page.getByText('等你处理', { exact: true }).first()).toBeVisible()
 
   const seen = await calls()
   expect(seen.badge.at(-1)).toBe(3)

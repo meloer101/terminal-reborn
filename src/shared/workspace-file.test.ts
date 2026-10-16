@@ -12,6 +12,7 @@ const valid = {
   activeSessionId: 's2',
   sidebarCollapsed: true,
   rightPanel: 'graph',
+  collapsedProjectIds: ['p1'],
   drafts: { s1: '草稿' }
 }
 
@@ -104,9 +105,13 @@ describe('sanitizeWorkspaceFile', () => {
   })
 
   it('defaults UI fields and drops empty drafts', () => {
-    const file = sanitizeWorkspaceFile({ ...valid, sidebarCollapsed: 'yes', rightPanel: 'bogus', drafts: { s1: '' } }, 0) as WorkspaceFile
+    const file = sanitizeWorkspaceFile(
+      { ...valid, sidebarCollapsed: 'yes', rightPanel: 'bogus', collapsedProjectIds: 'p1', drafts: { s1: '' } },
+      0
+    ) as WorkspaceFile
     expect(file.sidebarCollapsed).toBe(false)
     expect(file.rightPanel).toBeNull()
+    expect(file.collapsedProjectIds).toEqual([])
     expect(file.drafts).toEqual({})
   })
 })
@@ -129,6 +134,7 @@ describe('migrateLegacyWorkspace', () => {
       activeSessionId: 's1',
       sidebarCollapsed: false,
       rightPanel: null,
+      collapsedProjectIds: [],
       drafts: { s1: '未发送' }
     })
   })

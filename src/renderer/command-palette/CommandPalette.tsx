@@ -1,7 +1,7 @@
 // ⌘K command palette (PRD F8): jump to any session or run a common action. Renders nothing while
 // closed. Open/close state and the global ⌘K shortcut live in palette-store.ts.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { FileDiff, FolderPlus, Monitor, Moon, PanelLeft, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
+import { FileDiff, FolderPlus, LayoutList, Monitor, Moon, PanelLeft, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -18,6 +18,7 @@ const ACTION_ICONS: Record<ActionIcon, LucideIcon> = {
   plus: Plus,
   'folder-plus': FolderPlus,
   sidebar: PanelLeft,
+  overview: LayoutList,
   changes: FileDiff,
   monitor: Monitor,
   moon: Moon,
@@ -72,7 +73,8 @@ function Sheet() {
       worktrees: s.worktrees,
       sessions: s.sessions,
       activeSessionId: s.activeSessionId,
-      rightPanel: s.rightPanel
+      rightPanel: s.rightPanel,
+      mainView: s.mainView
     }))
   )
   const [query, setQuery] = useState('')

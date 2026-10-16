@@ -13,16 +13,18 @@ import { StatusBridge } from '../status/StatusBridge'
 import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { RightPanel } from '../panels/RightPanel'
+import { Overview } from '../overview/Overview'
 import styles from './AppShell.module.css'
 
 /**
  * Window layout (Figma Screens 01–08):
- *   sidebar 264 │ main: header 44 / terminal / composer │ right panel (changes 440 · graph 560)
+ *   sidebar 264 │ main: header 44 / terminal / composer — or the overview │ right panel (changes 440 · graph 560)
  * Each region is owned by one feature directory; this file only arranges them.
  */
 export function AppShell() {
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const rightPanel = useWorkspace((s) => s.rightPanel)
+  const overview = useWorkspace((s) => s.mainView === 'overview')
   useEffect(() => startActivityReporting(), [])
 
   return (
@@ -33,14 +35,17 @@ export function AppShell() {
         </aside>
       )}
       <main className={styles.main} data-region="main">
-        <SessionHeader />
-        <section className={styles.terminal} data-region="terminal">
+        {/* The overview (PRD F9) takes the main area; terminals and the composer stay mounted behind it. */}
+        {overview ? <Overview /> : <SessionHeader />}
+        <section className={styles.terminal} data-region="terminal" data-hidden={overview}>
           <TerminalArea />
         </section>
-        <EngineRestartedCard />
-        <LifecycleCard />
-        <PromptBar />
-        <Composer />
+        <div className={styles.sessionOnly} data-hidden={overview}>
+          <EngineRestartedCard />
+          <LifecycleCard />
+          <PromptBar />
+          <Composer />
+        </div>
       </main>
       {rightPanel && (
         <aside

@@ -28,6 +28,8 @@ export interface WorkspaceFile {
   activeSessionId: string | null
   sidebarCollapsed: boolean
   rightPanel: PersistedRightPanel | null
+  /** Projects folded in the sidebar (only ids of projects that exist). */
+  collapsedProjectIds: string[]
   /** Composer drafts by session id; only non-empty drafts of sessions that exist. */
   drafts: Record<string, string>
 }
@@ -128,6 +130,9 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     activeSessionId: active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null),
     sidebarCollapsed: value.sidebarCollapsed === true,
     rightPanel: value.rightPanel === 'changes' || value.rightPanel === 'graph' ? value.rightPanel : null,
+    collapsedProjectIds: Array.isArray(value.collapsedProjectIds)
+      ? [...new Set(value.collapsedProjectIds.filter((id): id is string => isString(id) && projectIds.has(id)))]
+      : [],
     drafts
   }
 }

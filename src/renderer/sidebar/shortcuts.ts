@@ -1,7 +1,7 @@
 // Sidebar keyboard shortcuts. `resolveShortcut` is pure; `installSidebarShortcuts` wires it to a window.
 import type { SessionId } from '@shared/types'
 
-export type ShortcutAction = { type: 'nth'; n: number } | { type: 'next-attention' }
+export type ShortcutAction = { type: 'nth'; n: number } | { type: 'next-attention' } | { type: 'toggle-overview' }
 
 export interface KeyLike {
   key: string
@@ -11,9 +11,10 @@ export interface KeyLike {
   shiftKey: boolean
 }
 
-/** ⌘1–⌘9 select the nth visible session; ⌘J jumps to the next one needing attention. */
+/** ⌘1–⌘9 select the nth visible session; ⌘J jumps to the next one needing attention; ⌘⇧A toggles the overview. */
 export function resolveShortcut(e: KeyLike): ShortcutAction | null {
-  if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return null
+  if (!e.metaKey || e.ctrlKey || e.altKey) return null
+  if (e.shiftKey) return e.key.toLowerCase() === 'a' ? { type: 'toggle-overview' } : null
   if (/^[1-9]$/.test(e.key)) return { type: 'nth', n: Number(e.key) }
   if (e.key.toLowerCase() === 'j') return { type: 'next-attention' }
   return null
@@ -22,6 +23,7 @@ export function resolveShortcut(e: KeyLike): ShortcutAction | null {
 export interface ShortcutHandlers {
   selectNth(n: number): SessionId | null
   selectNextAttention(): SessionId | null
+  toggleOverview(): void
 }
 
 /**
@@ -35,7 +37,8 @@ export function installSidebarShortcuts(target: Window, handlers: ShortcutHandle
     e.preventDefault()
     e.stopPropagation()
     if (action.type === 'nth') handlers.selectNth(action.n)
-    else handlers.selectNextAttention()
+    else if (action.type === 'next-attention') handlers.selectNextAttention()
+    else handlers.toggleOverview()
   }
   target.addEventListener('keydown', onKeyDown, true)
   return () => target.removeEventListener('keydown', onKeyDown, true)

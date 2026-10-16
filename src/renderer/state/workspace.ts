@@ -20,14 +20,23 @@ import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from '
 
 export type RightPanelTab = 'changes' | 'graph'
 
+/** What the main area shows: the active session's terminal, or the cross-project overview (PRD F9). */
+export type MainView = 'session' | 'overview'
+
 interface WorkspaceState extends WorkspaceData {
   sidebarCollapsed: boolean
   /** null = right panel closed */
   rightPanel: RightPanelTab | null
+  /** Projects folded in the sidebar. */
+  collapsedProjectIds: ProjectId[]
+  mainView: MainView
 
+  /** Selects a session and shows its terminal (leaves the overview). */
   setActiveSession(id: SessionId): void
+  setMainView(view: MainView): void
   toggleSidebar(): void
   setRightPanel(tab: RightPanelTab | null): void
+  toggleProjectCollapsed(id: ProjectId): void
   /** Adds (or finds) the project for a folder. */
   addProject(rootPath: string): ProjectId
   removeProject(id: ProjectId): void
@@ -63,10 +72,19 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   ...initialData(),
   sidebarCollapsed: saved?.sidebarCollapsed ?? false,
   rightPanel: saved?.rightPanel ?? null,
+  collapsedProjectIds: saved?.collapsedProjectIds ?? [],
+  mainView: 'session',
 
-  setActiveSession: (id) => set({ activeSessionId: id }),
+  setActiveSession: (id) => set({ activeSessionId: id, mainView: 'session' }),
+  setMainView: (view) => set({ mainView: view }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setRightPanel: (tab) => set({ rightPanel: tab }),
+  toggleProjectCollapsed: (id) =>
+    set((s) => ({
+      collapsedProjectIds: s.collapsedProjectIds.includes(id)
+        ? s.collapsedProjectIds.filter((x) => x !== id)
+        : [...s.collapsedProjectIds, id]
+    })),
 
   addProject(rootPath) {
     const result = addProject(pick(get()), rootPath)
@@ -98,7 +116,11 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
 // debounces and writes atomically; a closed session's draft goes with it.
 setSnapshotProvider(() => {
   const state = useWorkspace.getState()
-  return serializeWorkspace(pick(state), { sidebarCollapsed: state.sidebarCollapsed, rightPanel: state.rightPanel }, drafts.snapshot())
+  return serializeWorkspace(pick(state), {
+      sidebarCollapsed: state.sidebarCollapsed,
+      rightPanel: state.rightPanel,
+      collapsedProjectIds: state.collapsedProjectIds
+    }, drafts.snapshot())
 })
 useWorkspace.subscribe((state, prev) => {
   if (!persistedStateChanged(state, prev)) return

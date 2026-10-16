@@ -97,6 +97,7 @@ export function projectOfSession(data: WorkspaceData, sessionId: SessionId | nul
 export interface WorkspaceUi {
   sidebarCollapsed: boolean
   rightPanel: PersistedRightPanel | null
+  collapsedProjectIds: ProjectId[]
 }
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
@@ -124,6 +125,7 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
     rightPanel: ui.rightPanel,
+    collapsedProjectIds: ui.collapsedProjectIds.filter((id) => data.projects.some((p) => p.id === id)),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
     )
@@ -165,6 +167,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.activeSessionId !== prev.activeSessionId ||
     next.sidebarCollapsed !== prev.sidebarCollapsed ||
     next.rightPanel !== prev.rightPanel ||
+    next.collapsedProjectIds !== prev.collapsedProjectIds ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true

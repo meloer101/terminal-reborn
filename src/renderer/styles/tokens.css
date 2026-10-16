@@ -24,6 +24,8 @@
   /* Chrome dimensions (Screens 01–08) */
   --sidebar-width: 264px;
   --titlebar-height: 44px;
+  /* Sidebar tree: a session's glyph sits under its project's name (8 inset + 16 chevron + 4 gap). */
+  --indent-tree: 28px;
   --panel-width-changes: 440px;
   --panel-width-graph: 560px;
 
@@ -32,6 +34,7 @@
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'PingFang SC', 'Noto Sans SC', monospace;
   --text-title-l: 600 20px/28px var(--font-ui);
   --text-title-m: 600 15px/20px var(--font-ui);
+  --text-body-heading: 600 13px/18px var(--font-ui);
   --text-body-strong: 500 13px/18px var(--font-ui);
   --text-body: 400 13px/18px var(--font-ui);
   --text-composer: 400 14px/22px var(--font-ui);

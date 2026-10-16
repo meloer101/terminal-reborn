@@ -1,0 +1,128 @@
+/* Figma 11c — peek panel 520 wide: header 52 · terminal snapshot · prompt bar + one-line reply. */
+.peek {
+  flex: none;
+  width: 520px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.header {
+  flex: none;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0 var(--space-8) 0 var(--space-16);
+}
+
+.titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.title,
+.where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+.where {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.enter {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption-strong);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.enter:hover {
+  background: var(--bg-hover);
+}
+
+.enter:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.snapshot {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  padding: var(--space-12) var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--term-bg);
+  font: var(--text-mono-code);
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--term-fg);
+  white-space: pre;
+  user-select: text;
+}
+
+.none {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: normal;
+}
+
+.dock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--space-12);
+}
+
+.reply {
+  margin: 0 var(--space-12) var(--space-12);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+}
+
+.reply textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: var(--text-composer);
+  color: var(--text-primary);
+}
+
+.reply textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.error {
+  margin: 0 var(--space-12) var(--space-12);
+  font: var(--text-caption);
+  color: var(--status-error);
+}

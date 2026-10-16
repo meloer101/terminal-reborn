@@ -18,6 +18,11 @@
   color: var(--text-primary);
 }
 
+.item[data-selected='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
 .item:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
@@ -41,4 +46,13 @@
   flex: none;
   font: var(--text-mono-s);
   color: var(--text-tertiary);
+}
+
+.badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
 }

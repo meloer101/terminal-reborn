@@ -1,10 +1,13 @@
-/* Figma SessionRow 11:51 — 248×52, padding 8/12, gap 8; selected = --bg-selected; attention recolors the activity line only. */
+/*
+ * Figma SessionRow 11:51 — 248×52, padding 8/12/8/28, gap 8; selected = --bg-selected; attention recolors the activity line only.
+ * The 28px left inset puts the glyph under the project name: a session is a child of its project.
+ */
 .row {
   display: flex;
   align-items: flex-start;
   gap: var(--space-8);
   width: 100%;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--indent-tree);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -51,7 +54,7 @@
 }
 
 .title {
-  font: var(--text-body-strong);
+  font: var(--text-body);
   color: var(--text-primary);
 }
 

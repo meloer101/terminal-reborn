@@ -86,7 +86,7 @@ describe('projectOfSession', () => {
 })
 
 describe('persistence', () => {
-  const ui = { sidebarCollapsed: true, rightPanel: 'changes' as const }
+  const ui = { sidebarCollapsed: true, rightPanel: 'changes' as const, collapsedProjectIds: ['p-1', 'gone'] }
 
   it('round-trips; agent sessions come back not-started, shells have no phase, startedAt is kept', () => {
     const data = withSessions('claude', 'shell') // s-3, s-4 (startedAt 1000)
@@ -104,6 +104,7 @@ describe('persistence', () => {
     const file = serializeWorkspace(live, ui, { 's-3': 'draft' })
     expect(file.sidebarCollapsed).toBe(true)
     expect(file.rightPanel).toBe('changes')
+    expect(file.collapsedProjectIds).toEqual(['p-1'])
     expect(file.drafts).toEqual({ 's-3': 'draft' })
     // Everything live is left out of the file.
     expect(JSON.stringify(file)).not.toMatch(/running|currentAction|phase|ready/)
@@ -135,7 +136,7 @@ describe('persistence', () => {
 })
 
 describe('persistedStateChanged', () => {
-  const ui = { sidebarCollapsed: false, rightPanel: null }
+  const ui = { sidebarCollapsed: false, rightPanel: null, collapsedProjectIds: [] }
   const base = { ...withSessions('claude'), ...ui }
 
   it('ignores live status and activity', () => {
@@ -151,6 +152,7 @@ describe('persistedStateChanged', () => {
     expect(persistedStateChanged({ ...base, activeSessionId: null }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, sidebarCollapsed: true }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, rightPanel: 'graph' }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, collapsedProjectIds: ['p-1'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, projects: [...base.projects] }, base)).toBe(true)
   })
 })

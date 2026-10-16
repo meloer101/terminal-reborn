@@ -2,6 +2,7 @@
 // Shows the active session's oldest pending prompt; answering is a click, a digit key, or ⌥digit while the
 // composer holds text. Esc never dismisses (the agent is still waiting): it only returns focus to the composer.
 import { useEffect, type KeyboardEvent } from 'react'
+import type { Session } from '@shared/types'
 import { useActiveSession, useWorkspace } from '../state/workspace'
 import { PermissionView } from './PermissionView'
 import { queueLabel } from './present'
@@ -26,16 +27,25 @@ function usePromptSources(): void {
   }, [])
 }
 
+/** The bar above the composer: the active session's prompts. Always mounted so prompts keep arriving. */
 export function PromptBar() {
   usePromptSources()
   const active = useActiveSession()
-  const sessionId = active?.session.id ?? null
+  const overview = useWorkspace((s) => s.mainView === 'overview')
+  // In the overview, the peek panel shows the bar of the session being previewed instead.
+  if (!active || overview) return null
+  return <SessionPromptBar session={active.session} />
+}
+
+/** Oldest pending prompt of one session: under the terminal, and in the overview peek (PRD F9). */
+export function SessionPromptBar({ session }: { session: Pick<Session, 'id' | 'kind'> }) {
+  const sessionId = session.id
   const prompts = usePendingPrompts(sessionId)
   const progress = usePromptStore((s) => (prompts[0] ? (s.questionProgress[prompts[0].id] ?? 0) : 0))
   const error = usePromptStore((s) => s.error)
 
   const current = prompts[0]
-  if (!active || !current) return null
+  if (!current) return null
 
   const counter = queueLabel(prompts.length)
   const visibleError = error?.promptId === current.id ? error.message : null
@@ -57,7 +67,7 @@ export function PromptBar() {
       onKeyDown={onKeyDown}
     >
       {current.kind === 'permission' ? (
-        <PermissionView key={current.id} prompt={current} agent={active.session.kind} counter={counter} />
+        <PermissionView key={current.id} prompt={current} agent={session.kind} counter={counter} />
       ) : (
         <QuestionView
           key={`${current.id}:${Math.min(progress, current.questions.length - 1)}`}

@@ -1,0 +1,342 @@
+/* Figma 11 / 11b — overview header 44 · grouped list (40px rows) or board columns · optional peek on the right. */
+.overview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  flex: none;
+  height: var(--titlebar-height);
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 0 var(--space-12) 0 var(--space-16);
+  -webkit-app-region: drag;
+}
+
+.header[data-sidebar-collapsed='true'] {
+  padding-left: 80px;
+}
+
+.header > :is(button, label, span[role='radiogroup']) {
+  -webkit-app-region: no-drag;
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-m);
+  letter-spacing: var(--tracking-title-m);
+  white-space: nowrap;
+}
+
+.summary {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 220px;
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+}
+
+.filter:focus-within {
+  border-color: var(--border-strong);
+}
+
+.filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
+
+.filter input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.filter input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.switch {
+  display: inline-flex;
+  padding: 1px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.switch button {
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.switch button[data-selected='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.switch button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  container-type: inline-size;
+  padding: 0 var(--space-12) var(--space-24);
+  outline: none;
+}
+
+.empty {
+  margin: var(--space-24) var(--space-12);
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+/* ---- list ---- */
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-20) var(--space-16) var(--space-8) var(--space-12);
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.groupHeader:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.groupHeader h2,
+.columnHeader h2 {
+  margin: 0;
+  font: var(--text-body-heading);
+  color: var(--text-primary);
+}
+
+.chevron {
+  display: flex;
+  color: var(--text-tertiary);
+}
+
+.count {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  height: 40px;
+  padding: 0 var(--space-16);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: default;
+}
+
+.row:hover,
+.item:hover {
+  background: var(--bg-hover);
+}
+
+.row[data-selected='true'],
+.item[data-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.statusCell {
+  flex: none;
+  width: 96px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.statusLabel {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+[data-tone='attention'] .statusLabel,
+[data-tone='attention'] .itemSummary {
+  color: var(--status-attention);
+}
+
+[data-tone='error'] .statusLabel,
+[data-tone='error'] .itemSummary {
+  color: var(--status-error);
+}
+
+.rowTitle,
+.where,
+.summaryCell,
+.itemSummary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row .rowTitle {
+  flex: none;
+  width: 200px;
+}
+
+.rowTitle {
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.where {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.row .where {
+  flex: none;
+  width: 200px;
+}
+
+.summaryCell {
+  flex: 1;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.stat,
+.time {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.row .stat {
+  width: 72px;
+  text-align: right;
+}
+
+.row .time {
+  width: 64px;
+  text-align: right;
+}
+
+/* Narrow list (preview open, small window) — Figma 11c drops the place and diff columns first. */
+@container (max-width: 860px) {
+  .row .where,
+  .row .stat {
+    display: none;
+  }
+}
+
+@container (max-width: 560px) {
+  .row .summaryCell {
+    display: none;
+  }
+
+  .row .rowTitle {
+    flex: 1;
+    width: auto;
+  }
+}
+
+/* ---- board ---- */
+
+.board {
+  display: flex;
+  min-height: 100%;
+}
+
+.column {
+  flex: 1 1 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-12);
+}
+
+.column + .column {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-20) var(--space-8) var(--space-8);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12) var(--space-12);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.itemHead .rowTitle {
+  flex: 1;
+}
+
+.itemSummary {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

@@ -65,6 +65,9 @@ function runAction(action: ActionId): void {
     case 'toggle-sidebar':
       state.toggleSidebar()
       break
+    case 'toggle-overview':
+      state.setMainView(state.mainView === 'overview' ? 'session' : 'overview')
+      break
     case 'toggle-changes':
       state.setRightPanel(state.rightPanel === 'changes' ? null : 'changes')
       break

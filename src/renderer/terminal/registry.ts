@@ -58,6 +58,15 @@ export function getSendIo(sessionId: SessionId): SendIo {
   }
 }
 
+/**
+ * Plain-text tail of a session's terminal (screen plus a little scrollback) for read-only previews such as
+ * the overview peek. Null when the session's terminal was never created (it spawns on first view).
+ */
+export function readSnapshot(sessionId: SessionId, scrollbackLines = 40): string | null {
+  const terminal = terminals.get(sessionId)
+  return terminal ? terminal.surface.readScreen(scrollbackLines) : null
+}
+
 /** Only the visible viewport: for detecting full-screen dialogs that are on screen right now. */
 export function readViewport(sessionId: SessionId): string {
   return terminals.get(sessionId)?.surface.readScreen(0) ?? ''

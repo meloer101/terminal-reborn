@@ -28,6 +28,12 @@ describe('resolveShortcut', () => {
     expect(resolveShortcut(key('j', { altKey: true }))).toBeNull()
     expect(resolveShortcut(key('j', { ctrlKey: true }))).toBeNull()
   })
+  it('maps ⌘⇧A to the overview, and nothing else with ⇧', () => {
+    expect(resolveShortcut(key('A', { shiftKey: true }))).toEqual({ type: 'toggle-overview' })
+    expect(resolveShortcut(key('a', { shiftKey: true }))).toEqual({ type: 'toggle-overview' })
+    expect(resolveShortcut(key('a'))).toBeNull()
+    expect(resolveShortcut(key('A', { shiftKey: true, altKey: true }))).toBeNull()
+  })
   it('ignores other keys', () => {
     expect(resolveShortcut(key('k'))).toBeNull()
   })

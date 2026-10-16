@@ -12,6 +12,7 @@ const file = {
   activeSessionId: 's1',
   sidebarCollapsed: false,
   rightPanel: null,
+  collapsedProjectIds: [],
   drafts: { s1: 'hi' }
 }
 

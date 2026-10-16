@@ -1,5 +1,5 @@
 // Pure sidebar view-model: grouping, ordering and keyboard targets. No React, no store access.
-import type { Project, Session, SessionId, Worktree } from '@shared/types'
+import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { phaseLine } from '../lifecycle/present'
 
@@ -18,22 +18,23 @@ export interface SessionRowModel {
 }
 
 export interface SidebarGroup {
-  id: string
-  kind: 'attention' | 'project'
+  id: ProjectId
   title: string
+  /** Rows drawn under the header; empty while the project is collapsed. */
   rows: SessionRowModel[]
-  /** All sessions belonging to the group (for a project: including ones hoisted into the queue). */
+  /** All of the project's sessions, drawn or not. */
   sessionCount: number
+  collapsed: boolean
+  /** Most urgent status among sessions that need attention (null when none) — the hint on a collapsed header. */
+  attention: SessionStatus | null
 }
 
 export interface SidebarInput {
   projects: Project[]
   worktrees: Worktree[]
   sessions: Session[]
+  collapsedProjectIds?: readonly ProjectId[]
 }
-
-export const ATTENTION_GROUP_ID = 'attention'
-export const ATTENTION_GROUP_TITLE = '等你处理'
 
 function toRow(session: Session, worktree: Worktree | undefined): SessionRowModel {
   const location = worktree ? (worktree.isMain ? worktree.path : worktree.branch) : ''
@@ -48,34 +49,28 @@ function toRow(session: Session, worktree: Worktree | undefined): SessionRowMode
 }
 
 /**
- * Groups sessions for the sidebar.
- * - Sessions that need attention are hoisted into a top "等你处理" group, most urgent first,
- *   and are not repeated under their project.
- * - Projects keep store order; sessions within a project keep store order.
- * - Every project is listed, even with no rows, so it always offers "新建会话". A header's count is the number
- *   of rows under it; `sessionCount` counts all of the project's sessions, including ones hoisted to the queue.
+ * Groups sessions for the sidebar: strictly by place (PRD §3.3). A session always stays under its project,
+ * whatever its status — the cross-project, by-status view is the overview, not the sidebar.
+ * Projects keep store order and sessions keep store order within a project. Every project is listed, even
+ * with no sessions, so it always offers "新建会话". A collapsed project draws no rows; its header carries
+ * the most urgent attention status instead.
  */
-export function buildSidebarGroups({ projects, worktrees, sessions }: SidebarInput): SidebarGroup[] {
+export function buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds = [] }: SidebarInput): SidebarGroup[] {
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
-  const groups: SidebarGroup[] = []
-
-  const queue = sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency)
-  if (queue.length > 0) {
-    groups.push({
-      id: ATTENTION_GROUP_ID,
-      kind: 'attention',
-      title: ATTENTION_GROUP_TITLE,
-      rows: queue.map((s) => toRow(s, worktreeById.get(s.worktreeId))),
-      sessionCount: queue.length
-    })
-  }
-
-  for (const project of projects) {
+  const collapsed = new Set(collapsedProjectIds)
+  return projects.map((project) => {
     const own = sessions.filter((s) => worktreeById.get(s.worktreeId)?.projectId === project.id)
-    const rows = own.filter((s) => !needsAttention(s.status)).map((s) => toRow(s, worktreeById.get(s.worktreeId)))
-    groups.push({ id: project.id, kind: 'project', title: project.name, rows, sessionCount: own.length })
-  }
-  return groups
+    const urgent = own.filter((s) => needsAttention(s.status)).sort(compareByUrgency)[0]
+    const isCollapsed = collapsed.has(project.id)
+    return {
+      id: project.id,
+      title: project.name,
+      rows: isCollapsed ? [] : own.map((s) => toRow(s, worktreeById.get(s.worktreeId))),
+      sessionCount: own.length,
+      collapsed: isCollapsed,
+      attention: urgent?.status ?? null
+    }
+  })
 }
 
 /** Session ids in the order they appear on screen. */
@@ -89,9 +84,12 @@ export function sessionForShortcut(groups: SidebarGroup[], n: number): SessionId
   return visibleSessionIds(groups)[n - 1] ?? null
 }
 
-/** ⌘J: the next session needing attention after `activeId`, wrapping around. Null when none. */
-export function nextAttentionSessionId(groups: SidebarGroup[], activeId: SessionId | null): SessionId | null {
-  const queue = groups.filter((g) => g.kind === 'attention').flatMap((g) => g.rows.map((r) => r.session.id))
+/**
+ * ⌘J: the next session needing attention after `activeId`, most urgent first, wrapping around — across all
+ * projects, collapsed ones included. Null when none.
+ */
+export function nextAttentionSessionId(sessions: Session[], activeId: SessionId | null): SessionId | null {
+  const queue = sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency).map((s) => s.id)
   if (queue.length === 0) return null
   const at = activeId === null ? -1 : queue.indexOf(activeId)
   return queue[(at + 1) % queue.length] ?? null
