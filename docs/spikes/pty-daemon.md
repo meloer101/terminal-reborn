@@ -7,7 +7,7 @@ Reference: Orca (MIT) `src/main/daemon/*`, `src/renderer/src/components/terminal
 
 Today every PTY lives in an Electron `utilityProcess` (`src/pty-host/`), and `src/main/pty/index.ts` sends `killAll`
 at `will-quit`. Reopening the app therefore re-runs `claude --resume <id>` per session: login shell + ~2.4 s of
-Claude startup, and whatever the agent was doing is interrupted. Branch `claude/terminal-smooth` hides the wait by
+Claude startup, and whatever the agent was doing is interrupted. The snapshot restore from `claude/terminal-smooth` (now on `main`) hides the wait by
 painting a saved screen (~0.5 s to first text), but the process is still new.
 
 Goal: agent and shell processes keep running when the app quits (or its renderer reloads / crashes), and the next
@@ -128,7 +128,7 @@ from the same path, a stable tiny binary. Revisit when auto-update ships.
 Every PTY chunk is written to the session's batcher (to the client, if attached) **and** to a `@xterm/headless`
 `Terminal` (same cols/rows as the PTY, `scrollback` = the renderer's scrollback setting capped at 5000, Unicode 11
 widths like the renderer so CJK/emoji rows line up; `@xterm/headless` moves from devDependencies to dependencies,
-`@xterm/addon-serialize` is already a dependency on `claude/terminal-smooth`).
+`@xterm/addon-serialize` is already a dependency).
 
 `snapshot()` returns:
 
@@ -255,9 +255,9 @@ the app was closed shows the wrong status until the next event. Title heuristics
   snapshot to disk and `shutdown {killSessions: true}`, then cold-restores those sessions with `--resume`. One
   interruption per protocol bump, visible as the existing restore path. Protocol bumps should be rare.
 
-## 10. Snapshot restore on `claude/terminal-smooth`
+## 10. Snapshot restore (from `claude/terminal-smooth`, now on `main`)
 
-That branch is not on `main` yet; this work builds on it. Its pieces stay as the **cold path** (daemon gone: reboot,
+Its pieces stay as the **cold path** (daemon gone: reboot,
 logout, daemon crash, protocol retirement): `snapshot-payload.ts` (display-only, alt frame drawn into the normal
 buffer because the new process redraws), `terminal-snapshot-file.ts` / `terminal-snapshots.ts` (disk store), and the
 renderer's quiet-time saves. Change: the renderer also saves after a reattach, and the daemon refreshes the disk
@@ -303,4 +303,3 @@ Files outside `pty-terminal` ownership that this touches (called out in commits)
 1. Quit: ⌘Q keeps agents running with no dialog, plus "退出并结束所有会话" (⌥⌘Q) — or do you want a setting
    (default on) as well?
 2. Hooks: daemon owns the hook endpoint with a journal (§8, recommended) — or the smaller stable-path-in-main variant?
-3. Base branch: build on `claude/terminal-smooth` (recommended), or wait for it to merge into `main`.
