@@ -1,8 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <!-- Terminal Reborn app icon. 1024 master on Apple's macOS template: 824 px body, 100 px margin.
-       Chroma-0 neutrals only; a prompt chevron and a cursor bar. Regenerate the .icns with scripts/make-icon.sh. -->
+       Four session panes; three hold the hollow cursor of an unfocused terminal, one holds a solid cursor
+       in the status-attention amber (the agent that needs you). Hollow vs solid carries the meaning without color.
+       Source: Figma x6HGsLiMTk7fWDoKI5YkKh, page "Logo", component "Logo/D · 分屏 + 光标".
+       Regenerate the .icns with scripts/make-icon.sh. -->
   <rect x="100" y="100" width="824" height="824" rx="186" fill="#0f0f0f"/>
-  <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3"/>
-  <path d="M357 390 L481 512 L357 634" fill="none" stroke="#f2f2f2" stroke-width="64" stroke-linecap="square" stroke-linejoin="miter"/>
-  <rect x="543" y="606" width="170" height="56" fill="#8a8a8a"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="#2a2a2a" stroke-width="3"/>
+  <rect x="220" y="220" width="280" height="280" rx="36" fill="#1f1f1f"/>
+  <rect x="524" y="220" width="280" height="280" rx="36" fill="#1f1f1f"/>
+  <rect x="220" y="524" width="280" height="280" rx="36" fill="#1f1f1f"/>
+  <rect x="524" y="524" width="280" height="280" rx="36" fill="#2b2b2b"/>
+  <rect x="306" y="306" width="52" height="108" fill="none" stroke="#7a7a7a" stroke-width="20"/>
+  <rect x="610" y="306" width="52" height="108" fill="none" stroke="#7a7a7a" stroke-width="20"/>
+  <rect x="306" y="610" width="52" height="108" fill="none" stroke="#7a7a7a" stroke-width="20"/>
+  <rect x="600" y="600" width="72" height="128" fill="#ffb224"/>
 </svg>
