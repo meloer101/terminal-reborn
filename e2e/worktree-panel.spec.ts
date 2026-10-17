@@ -1,6 +1,7 @@
-// F17 right panel · Worktree view on a real repository: a main checkout plus two linked worktrees, one with a session
-// and uncommitted work, one already merged into main. Checks the rows, switching sessions, the selected row's details,
-// the delete guard and 可清理 › 清理. Screenshots in both themes go to test-results/right-panel/ (compare with Figma 13C).
+// F17 right panel · Worktree view on a real repository: a main checkout plus linked worktrees — one with a session and
+// uncommitted work, one merged into main without a session, one merged but still with a session, one detached with a
+// commit no branch has. Checks the rows and groups, switching sessions, the selected row's details, the delete guards
+// and that 可清理 › 清理 never touches a worktree with a session. Screenshots in both themes go to test-results/right-panel/ (compare with Figma 13C).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
@@ -15,14 +16,24 @@ interface DialogHook {
   answer: boolean
 }
 
-/** main · feature (1 commit ahead, 2 behind after the merge, one uncommitted line) · merged (merged into main with --no-ff, so main moved on). */
-function makeRepo(): { project: string; feature: string; merged: string } {
+/**
+ * main · feature (1 commit ahead, behind after the merges, one uncommitted line) · merged (merged with --no-ff, no
+ * session) · busy (merged, but a session works there) · detached (a commit that only it has).
+ */
+function makeRepo(): { project: string; feature: string; merged: string; busy: string; detached: string } {
   const base = mkdtempSync(join(tmpdir(), 'tr-e2e-worktrees-'))
   const project = join(base, 'demo')
   const feature = join(base, 'wt-feature')
   const merged = join(base, 'wt-merged')
+  const busy = join(base, 'wt-busy')
+  const detached = join(base, 'wt-detached')
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd })
+  const commitIn = (cwd: string, file: string) => {
+    writeFileSync(join(cwd, file), `export const x = '${file}'\n`)
+    git(cwd, 'add', '.')
+    git(cwd, 'commit', '-q', '-m', file)
+  }
   execFileSync('mkdir', ['-p', project])
   writeFileSync(join(project, 'README.md'), '# demo\n')
   git(project, 'init', '-q', '-b', 'main')
@@ -30,17 +41,21 @@ function makeRepo(): { project: string; feature: string; merged: string } {
   git(project, 'commit', '-q', '-m', 'init')
 
   git(project, 'worktree', 'add', '-q', '-b', 'jacob/feature', feature)
-  writeFileSync(join(feature, 'feature.ts'), 'export const feature = 1\n')
-  git(feature, 'add', '.')
-  git(feature, 'commit', '-q', '-m', 'feature')
+  commitIn(feature, 'feature.ts')
   writeFileSync(join(feature, 'README.md'), '# demo\nwork in progress\n')
 
-  git(project, 'worktree', 'add', '-q', '-b', 'jacob/merged', merged)
-  writeFileSync(join(merged, 'merged.ts'), 'export const merged = 1\n')
-  git(merged, 'add', '.')
-  git(merged, 'commit', '-q', '-m', 'merged work')
-  git(project, 'merge', '-q', '--no-ff', '-m', 'merge jacob/merged', 'jacob/merged')
-  return { project, feature, merged }
+  for (const [path, branch] of [
+    [merged, 'jacob/merged'],
+    [busy, 'jacob/busy']
+  ] as const) {
+    git(project, 'worktree', 'add', '-q', '-b', branch, path)
+    commitIn(path, `${branch.slice(6)}.ts`)
+    git(project, 'merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch)
+  }
+
+  git(project, 'worktree', 'add', '-q', '--detach', detached)
+  commitIn(detached, 'only-here.ts')
+  return { project, feature, merged, busy, detached }
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -55,8 +70,9 @@ test.describe('F17 right panel · Worktree', () => {
   const panel = () => page.locator('[data-region="panel"]')
   const working = () => panel().getByRole('list', { name: 'Worktree' })
   const cleanable = () => panel().getByRole('list', { name: '可清理' })
+  const idle = () => panel().getByRole('list', { name: '没有会话' })
   // Rows carry git's path: the tmp folder resolved (/var → /private/var), while the workspace keeps the unresolved one.
-  const real = new Map([repo.project, repo.feature, repo.merged].map((p) => [p, realpathSync(p)]))
+  const real = new Map([repo.project, repo.feature, repo.merged, repo.busy, repo.detached].map((p) => [p, realpathSync(p)]))
   const item = (path: string) => panel().locator(`li[data-path="${real.get(path) ?? path}"]`)
   const dialogs = () => app.evaluate(() => (globalThis as unknown as { __trDialogs: DialogHook }).__trDialogs.requests.map((r) => ({ ...r })))
   const setTheme = async (theme: 'dark' | 'light') => {
@@ -83,11 +99,13 @@ test.describe('F17 right panel · Worktree', () => {
         projects: [{ id: 'p1', name: 'demo', rootPath: repo.project }],
         worktrees: [
           { id: 'w-main', projectId: 'p1', branch: 'main', path: repo.project, isMain: true },
-          { id: 'w-feature', projectId: 'p1', branch: 'jacob/feature', path: repo.feature, isMain: false }
+          { id: 'w-feature', projectId: 'p1', branch: 'jacob/feature', path: repo.feature, isMain: false },
+          { id: 'w-busy', projectId: 'p1', branch: 'jacob/busy', path: repo.busy, isMain: false }
         ],
         sessions: [
           { id: 's-main', worktreeId: 'w-main', kind: 'shell', title: '主终端', startedAt: 1, lastActivityAt: 1 },
-          { id: 's-feature', worktreeId: 'w-feature', kind: 'shell', title: 'Cookie 会话迁移', startedAt: 2, lastActivityAt: 2 }
+          { id: 's-feature', worktreeId: 'w-feature', kind: 'shell', title: 'Cookie 会话迁移', startedAt: 2, lastActivityAt: 2 },
+          { id: 's-busy', worktreeId: 'w-busy', kind: 'shell', title: '还在看的', startedAt: 3, lastActivityAt: 3 }
         ],
         activeSessionId: 's-main',
         sidebarCollapsed: false,
@@ -110,7 +128,7 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(panel().getByRole('heading', { name: 'Worktree' })).toBeVisible()
     await expect(panel()).toContainText('demo')
 
-    await expect(working().locator(':scope > li')).toHaveCount(2)
+    await expect(working().locator(':scope > li')).toHaveCount(3)
     const main = item(repo.project)
     await expect(main).toContainText('main')
     await expect(main).toContainText('主目录 · 主终端 · 终端')
@@ -121,14 +139,21 @@ test.describe('F17 right panel · Worktree', () => {
     const feature = item(repo.feature)
     await expect(feature).toContainText('jacob/feature')
     await expect(feature).toContainText('+1 −0')
-    await expect(feature).toContainText('↑1 ↓2')
+    await expect(feature).toContainText('↑1 ↓4')
     await expect(feature).toContainText('Cookie 会话迁移 · 终端')
 
     await expect(panel().getByRole('heading', { name: '可清理' })).toBeVisible()
     await expect(cleanable().locator(':scope > li')).toHaveCount(1)
     await expect(item(repo.merged)).toContainText('jacob/merged')
     await expect(item(repo.merged)).toContainText('无会话 · 已合并到 main')
-    await expect(item(repo.merged)).toContainText('↑0 ↓1')
+    await expect(item(repo.merged)).toContainText('↑0 ↓3')
+    // Merged, but a session works there: it stays in the working list.
+    await expect(item(repo.busy)).toContainText('还在看的 · 终端 · 已合并到 main')
+    await expect(working().locator(`li[data-path="${real.get(repo.busy)}"]`)).toHaveCount(1)
+
+    await expect(panel().getByRole('heading', { name: '没有会话' })).toBeVisible()
+    await expect(idle().locator(':scope > li')).toHaveCount(1)
+    await expect(item(repo.detached)).toContainText('无会话')
   })
 
   test("clicking a row switches to its session and expands the details", async () => {
@@ -136,7 +161,7 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(page.locator('header h1')).toHaveText('Cookie 会话迁移')
     const feature = item(repo.feature)
     await expect(feature.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
-    await expect(feature).toContainText('基线main · 领先 1，落后 2')
+    await expect(feature).toContainText('基线main · 领先 1，落后 4')
     await expect(feature).toContainText('未提交README.md')
     await expect(feature.getByRole('button', { name: /合并到 main/ })).toHaveAttribute('aria-disabled', 'true')
     await shoot('13c-worktree')
@@ -156,7 +181,17 @@ test.describe('F17 right panel · Worktree', () => {
     expect(existsSync(repo.feature)).toBe(true)
   })
 
-  test('清理 asks once, listing the worktrees, then removes them', async () => {
+  test('deleting a detached worktree whose commit no branch has is refused', async () => {
+    await item(repo.detached).locator('button[aria-expanded]').click()
+    await expect(item(repo.detached)).toContainText('1 个提交不在分支上')
+    await item(repo.detached).getByRole('button', { name: '更多' }).click()
+    await page.getByRole('menuitem', { name: '删除 worktree…' }).click()
+    await expect(panel().getByRole('status')).toHaveText(/^不能删除 .+：有 1 个提交不在任何分支上，先给它建一个分支$/)
+    expect(await dialogs()).toEqual([])
+    expect(existsSync(repo.detached)).toBe(true)
+  })
+
+  test('清理 asks once, removes only the session-less merged worktree, never one with a session', async () => {
     await panel().getByRole('button', { name: '清理' }).click()
     await expect(panel().getByRole('status')).toHaveText('已清理 1 个 worktree')
     const asked = await dialogs()
@@ -165,7 +200,7 @@ test.describe('F17 right panel · Worktree', () => {
     expect(asked[0]!.detail).toContain('jacob/merged')
     expect(existsSync(repo.merged)).toBe(false)
     await expect(panel().getByRole('heading', { name: '可清理' })).toHaveCount(0)
-    await expect(working().locator(':scope > li')).toHaveCount(2)
+    await expect(working().locator(':scope > li')).toHaveCount(3)
     // The branch is kept.
     expect(execFileSync('git', ['branch', '--list', 'jacob/merged'], { cwd: repo.project }).toString()).toContain('jacob/merged')
   })

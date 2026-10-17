@@ -43,6 +43,20 @@ describe('WorkspaceFileStore', () => {
     expect(new WorkspaceFileStore(path).load()).toEqual({ ...file, drafts: { s1: 'second' } })
   })
 
+  it("knows the project roots of what was loaded or last saved (git IPC accepts only these)", () => {
+    const store = new WorkspaceFileStore(path)
+    expect(store.projectRoots()).toEqual([])
+    store.save(file)
+    expect(store.projectRoots()).toEqual(['/code/acme'])
+    store.save('junk')
+    expect(store.projectRoots()).toEqual(['/code/acme'])
+    store.flush()
+    expect(new WorkspaceFileStore(path).projectRoots()).toEqual([])
+    const reloaded = new WorkspaceFileStore(path)
+    reloaded.load()
+    expect(reloaded.projectRoots()).toEqual(['/code/acme'])
+  })
+
   it('flush writes immediately and cancels the timer', () => {
     const store = new WorkspaceFileStore(path)
     store.save(file)

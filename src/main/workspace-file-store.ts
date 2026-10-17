@@ -14,6 +14,8 @@ export interface WorkspaceFileStoreOptions {
 
 export class WorkspaceFileStore {
   private pending: WorkspaceFile | null = null
+  /** The last workspace loaded or accepted for saving: what the renderer currently has. */
+  private latest: WorkspaceFile | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   private readonly debounceMs: number
   private readonly now: () => number
@@ -45,6 +47,7 @@ export class WorkspaceFileStore {
     const file = sanitizeWorkspaceFile(value, this.now())
     // Unreadable or from an unknown version: keep a copy before the next save replaces it.
     if (!file) this.backup()
+    this.latest = file
     return file
   }
 
@@ -55,8 +58,14 @@ export class WorkspaceFileStore {
   save(raw: unknown): void {
     const file = sanitizeWorkspaceFile(raw, this.now())
     if (!file) return
+    this.latest = file
     this.pending = file
     this.timer ??= setTimeout(() => this.flush(), this.debounceMs)
+  }
+
+  /** Root folders of the workspace's projects (git IPC only acts on these). */
+  projectRoots(): string[] {
+    return this.latest?.projects.map((p) => p.rootPath) ?? []
   }
 
   /** Writes any pending data now (also used on quit). */

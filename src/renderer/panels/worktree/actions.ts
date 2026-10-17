@@ -1,14 +1,18 @@
 // Worktree view commands: switching to a worktree's session, the row's 更多 menu, delete and 清理. Every removal is
-// confirmed, refused for the main checkout / a live session / uncommitted changes (main re-checks the last one), and
-// only forced after a second confirmation when git itself says no.
+// confirmed and refused whenever work could be lost (see deleteBlocker; main checks again). `--force` is offered in a
+// second confirmation only for git's submodule refusal.
 import type { WorktreeRemoveResult } from '@shared/git-worktrees'
 import type { AgentKind, ProjectId } from '@shared/types'
 import { useWorkspace } from '../../state/workspace'
+import { disposeTerminal } from '../../terminal/registry'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
-import { cleanupPlan, deleteBlocker, tildePath, type WorktreeRow } from './model'
+import { cleanupPlan, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
 const KIND_LABEL: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
+
+/** Said in every delete confirmation: a plain `git worktree remove` takes ignored files with it. */
+const IGNORED_FILES_NOTE = '被 .gitignore 忽略的文件（如 .env、node_modules）也会一起删除。'
 
 /** Click on a row: show it expanded, and switch to its most urgent session (a worktree without one only expands). */
 export function selectRow(root: string, row: WorktreeRow): void {
@@ -27,28 +31,43 @@ function failureText(result: Exclude<WorktreeRemoveResult, { ok: true }>): strin
   switch (result.reason) {
     case 'dirty':
       return '有未提交的改动'
+    case 'unverified':
+      return '无法确认有没有会丢的改动或提交'
+    case 'unreachable-commits':
+      return `有 ${result.message ?? ''} 个提交不在任何分支上`
+    case 'busy':
+      return '正在变基'
+    case 'locked':
+      return '已被锁定'
     case 'main':
       return '主目录不能删除'
     case 'unknown':
       return '它已经不在 git worktree 列表里'
+    case 'submodules':
+      return '含有子模块'
     case 'git':
       return result.message ?? 'git 拒绝删除'
   }
 }
 
-/** Closes the (idle) sessions of a worktree whose folder is gone. */
-function closeSessionsOf(row: WorktreeRow): void {
-  const state = useWorkspace.getState()
-  for (const session of row.sessions) state.closeSession(session.id)
+/** The row's sessions as the store has them now (a dialog was open meanwhile). */
+function freshRow(row: WorktreeRow): WorktreeRow {
+  const ids = new Set(row.worktreeIds)
+  return { ...row, sessions: useWorkspace.getState().sessions.filter((s) => ids.has(s.worktreeId)) }
 }
 
-async function removeOne(root: string, row: WorktreeRow): Promise<WorktreeRemoveResult> {
-  const result = await window.tr.gitWorktrees.remove(root, row.info.path, false)
-  if (result.ok) closeSessionsOf(row)
+/** Ends the worktree's terminals before its folder goes, then removes it; the records go only once it is gone. */
+async function removeOne(root: string, row: WorktreeRow, force = false): Promise<WorktreeRemoveResult> {
+  for (const session of row.sessions) disposeTerminal(session.id, true)
+  const result = await window.tr.gitWorktrees.remove(root, row.info.path, force)
+  const state = useWorkspace.getState()
+  if (result.ok) state.forgetWorktrees(row.worktreeIds)
+  // Their terminals are gone either way (the confirmation said they close); the folder's record stays if it does.
+  else for (const session of row.sessions) state.closeSession(session.id)
   return result
 }
 
-/** 更多 › 删除 worktree…: guard → confirm → `git worktree remove` → (git refused) second confirm → `--force`. */
+/** 更多 › 删除 worktree…: guard → confirm → guard again → `git worktree remove` → (submodules) second confirm → `--force`. */
 export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, refresh: () => Promise<void>): Promise<void> {
   const blocker = deleteBlocker(row)
   if (blocker) {
@@ -58,25 +77,28 @@ export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, 
   const closing = row.sessions.length > 0 ? `这里的 ${row.sessions.length} 个会话会一起关闭。` : ''
   const confirmed = await window.tr.ui.confirm({
     message: `删除 worktree「${row.name}」？`,
-    detail: `会删除文件夹 ${tildePath(row.info.path, window.tr.homeDir)}，分支保留。${closing}`,
+    detail: `会删除文件夹 ${tildePath(row.openPath, window.tr.homeDir)}，${keptText(row.info)}。${IGNORED_FILES_NOTE}${closing}`,
     confirmLabel: '删除',
     destructive: true
   })
   if (!confirmed) return
+  const current = freshRow(row)
+  const late = deleteBlocker(current)
+  if (late) {
+    patchRoot(root, { notice: `不能删除 ${row.name}：${late}` })
+    return
+  }
   patchRoot(root, { busy: true, notice: null })
   try {
-    let result = await removeOne(root, row)
-    if (!result.ok && result.reason === 'git') {
+    let result = await removeOne(root, current)
+    if (!result.ok && result.reason === 'submodules') {
       const force = await window.tr.ui.confirm({
-        message: `git 拒绝删除「${row.name}」`,
-        detail: `${result.message ?? ''}\n\n没有未提交的改动。强制删除会连同其中被忽略的文件一起删掉。`,
+        message: `「${row.name}」含有子模块，git 不肯直接删除`,
+        detail: `已确认没有未提交的改动。强制删除会连同子模块的文件夹一起删掉。${IGNORED_FILES_NOTE}`,
         confirmLabel: '强制删除',
         destructive: true
       })
-      if (force) {
-        result = await window.tr.gitWorktrees.remove(root, row.info.path, true)
-        if (result.ok) closeSessionsOf(row)
-      }
+      if (force) result = await removeOne(root, current, true)
     }
     patchRoot(root, { notice: result.ok ? `已删除 ${row.name}` : `没有删除 ${row.name}：${failureText(result)}` })
   } catch {
@@ -87,7 +109,10 @@ export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, 
   }
 }
 
-/** 可清理 › 清理: one confirmation listing what goes (and what stays and why), then remove them one by one. */
+/**
+ * 可清理 › 清理: one confirmation listing what goes (and what stays and why), then remove them one by one. Rows with a
+ * session are never part of it (cleanupPlan), checked again after the dialog.
+ */
 export async function cleanUpInteractive(root: string, rows: readonly WorktreeRow[], refresh: () => Promise<void>): Promise<void> {
   const plan = cleanupPlan(rows)
   const skipped = plan.skip.map(({ row, reason }) => `${row.name}（${reason}）`)
@@ -95,10 +120,10 @@ export async function cleanUpInteractive(root: string, rows: readonly WorktreeRo
     patchRoot(root, { notice: skipped.length > 0 ? `没有可以清理的：${skipped.join('；')}` : '没有可以清理的 worktree' })
     return
   }
-  const listed = plan.remove.map((row) => `· ${row.name}  ${tildePath(row.info.path, window.tr.homeDir)}`).join('\n')
+  const listed = plan.remove.map((row) => `· ${row.name}  ${tildePath(row.openPath, window.tr.homeDir)}`).join('\n')
   const confirmed = await window.tr.ui.confirm({
     message: `清理 ${plan.remove.length} 个 worktree？`,
-    detail: `${listed}\n\n文件夹会被删除，分支保留。${skipped.length > 0 ? `\n跳过：${skipped.join('；')}` : ''}`,
+    detail: `${listed}\n\n文件夹会被删除，分支保留。${IGNORED_FILES_NOTE}${skipped.length > 0 ? `\n跳过：${skipped.join('；')}` : ''}`,
     confirmLabel: '清理',
     destructive: true
   })
@@ -108,7 +133,12 @@ export async function cleanUpInteractive(root: string, rows: readonly WorktreeRo
   let removed = 0
   try {
     for (const row of plan.remove) {
-      const result = await removeOne(root, row).catch((): WorktreeRemoveResult => ({ ok: false, reason: 'git', message: '出错了' }))
+      const current = freshRow(row)
+      if (current.sessions.length > 0) {
+        failed.push(`${row.name}（有会话）`)
+        continue
+      }
+      const result = await removeOne(root, current).catch((): WorktreeRemoveResult => ({ ok: false, reason: 'git', message: '出错了' }))
       if (result.ok) removed++
       else failed.push(`${row.name}（${failureText(result)}）`)
     }
@@ -135,7 +165,7 @@ export async function openRowMenu(
       {
         type: 'submenu',
         label: '在此新建会话',
-        items: kinds.map((kind) => ({ type: 'item', id: `new:${kind}`, label: KIND_LABEL[kind], enabled: !row.info.prunable }))
+        items: kinds.map((kind) => ({ type: 'item', id: `new:${kind}`, label: KIND_LABEL[kind], enabled: row.info.prunable === null }))
       },
       { type: 'item', id: 'copy-path', label: '复制路径' },
       { type: 'separator' },
@@ -143,7 +173,7 @@ export async function openRowMenu(
     ],
     anchor
   )
-  if (choice === 'copy-path') void navigator.clipboard.writeText(row.info.path).catch(() => {})
+  if (choice === 'copy-path') void navigator.clipboard.writeText(row.openPath).catch(() => {})
   else if (choice === 'delete') await deleteWorktreeInteractive(root, row, refresh)
   else if (choice?.startsWith('new:')) startSessionIn(projectId, row, choice.slice(4) as AgentKind)
 }

@@ -7,6 +7,7 @@ import {
   addSessionInWorktree,
   closeSession,
   EMPTY_WORKSPACE,
+  forgetWorktrees,
   persistedStateChanged,
   projectOfSession,
   removedSessionIds,
@@ -82,6 +83,19 @@ describe('addSessionInWorktree', () => {
 
   it('returns null for an unknown project', () => {
     expect(addSessionInWorktree(EMPTY_WORKSPACE, 'nope', { path: '/x', branch: 'x' }, 'claude', 0)).toBeNull()
+  })
+})
+
+describe('forgetWorktrees', () => {
+  it('drops linked worktree records with their sessions, never the main checkout', () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const linked = addSessionInWorktree(data, projectId, { path: '/wt/fix', branch: 'fix' }, 'claude', 0, makeId)!
+    const withMain = addSession(linked.data, projectId, 'shell', 0, makeId)!.data
+    const next = forgetWorktrees(withMain, ['w-3', 'w-2'])
+    expect(next.worktrees.map((w) => w.id)).toEqual(['w-2'])
+    expect(next.sessions.map((s) => s.worktreeId)).toEqual(['w-2'])
+    expect(forgetWorktrees(withMain, ['nope'])).toBe(withMain)
   })
 })
 

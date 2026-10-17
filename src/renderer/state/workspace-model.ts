@@ -107,6 +107,15 @@ export function closeSession(data: WorkspaceData, sessionId: SessionId): Workspa
   return { ...data, sessions, activeSessionId }
 }
 
+/** Forgets linked worktree records (their folder was deleted) and closes their sessions. Main checkouts stay. */
+export function forgetWorktrees(data: WorkspaceData, worktreeIds: readonly string[]): WorkspaceData {
+  const ids = new Set(data.worktrees.filter((w) => worktreeIds.includes(w.id) && !w.isMain).map((w) => w.id))
+  if (ids.size === 0) return data
+  let next: WorkspaceData = data
+  for (const s of data.sessions) if (ids.has(s.worktreeId)) next = closeSession(next, s.id)
+  return { ...next, worktrees: next.worktrees.filter((w) => !ids.has(w.id)) }
+}
+
 /** Removes a project with its worktrees and sessions. */
 export function removeProject(data: WorkspaceData, projectId: ProjectId): WorkspaceData {
   const worktreeIds = new Set(data.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))

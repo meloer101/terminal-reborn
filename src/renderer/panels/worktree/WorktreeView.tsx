@@ -1,22 +1,26 @@
 // Worktree view (PRD F17, Figma 13C `149:5973`): every git worktree of the active session's project with the status
-// of its sessions, uncommitted stats and ahead / behind; the selected row expands into details and actions, and
-// merged or session-less worktrees sit in 可清理. Refreshes on window focus and whenever the sessions change.
+// of its sessions, uncommitted stats and ahead / behind; the selected row expands into details and actions. Merged
+// worktrees without a session sit in 可清理 (one 清理 for all); other session-less ones in 没有会话 (one by one).
+// Refreshes on window focus, when git's worktree / branch files change, every POLL_MS while visible, and — only the
+// worktrees concerned — when their sessions change.
 import { Ellipsis, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { ProjectId, WorktreeId } from '@shared/types'
+import type { ProjectId, Session, WorktreeId } from '@shared/types'
 import { openNewSessionMenu } from '../../state/session-actions'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { PaneHeader } from '../PaneHeader'
 import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
-import { buildRows, detailLines, selectedRow, tildePath, type WorktreeRow } from './model'
+import { buildRows, detailLines, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
 import { patchRoot, refreshWorktrees, useWorktrees, worktreesOf } from './store'
 import styles from './WorktreeView.module.css'
 
 /** Session changes (new, closed, status) come in bursts; list once they settle. */
 const SESSION_REFRESH_DELAY_MS = 400
+/** Catches what no event reports (edits inside a worktree), only while the window is visible. */
+const POLL_MS = 20_000
 
 interface Props {
   projectId: ProjectId
@@ -24,6 +28,13 @@ interface Props {
   root: string
   projectName: string
   activeWorktreeId: WorktreeId | null
+}
+
+/** Per workspace worktree: its sessions and their states, to tell which worktrees a session change touched. */
+function sessionKeys(sessions: readonly Session[]): Map<WorktreeId, string> {
+  const keys = new Map<WorktreeId, string>()
+  for (const s of sessions) keys.set(s.worktreeId, `${keys.get(s.worktreeId) ?? ''}${s.id}:${s.status};`)
+  return keys
 }
 
 export function WorktreeView({ projectId, root, projectName, activeWorktreeId }: Props) {
@@ -36,25 +47,59 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
     })
   )
   const knownPaths = useMemo(() => worktrees.map((w) => w.path), [worktrees])
-  const refresh = useCallback(() => refreshWorktrees(root, knownPaths), [root, knownPaths])
+  const refresh = useCallback((only?: string[]) => refreshWorktrees(root, knownPaths, only), [root, knownPaths])
+  const refreshAll = useCallback(() => refresh(), [refresh])
 
-  // What makes the list stale: sessions opening, closing or changing state (an agent finishing a turn commits).
-  const sessionKey = sessions.map((s) => `${s.id}:${s.worktreeId}:${s.status}`).join('|')
+  const groups = useMemo(() => (state.listing ? buildRows(state.listing, worktrees, sessions) : null), [state.listing, worktrees, sessions])
+  // The session-change timer below maps worktree ids to rows when it fires, not when it was set.
+  const groupsRef = useRef<WorktreeGroups | null>(groups)
   useEffect(() => {
-    const timer = setTimeout(() => void refresh(), worktreesOf(root).listing === undefined ? 0 : SESSION_REFRESH_DELAY_MS)
+    groupsRef.current = groups
+  }, [groups])
+
+  // Sessions opening, closing or changing state (an agent finishing a turn commits): list those worktrees again.
+  const previousKeys = useRef<Map<WorktreeId, string> | null>(null)
+  const keys = useMemo(() => sessionKeys(sessions), [sessions])
+  useEffect(() => {
+    const before = previousKeys.current
+    previousKeys.current = keys
+    if (!before || worktreesOf(root).listing === undefined) {
+      void refresh()
+      return
+    }
+    const changed = [...new Set([...before.keys(), ...keys.keys()])].filter((id) => before.get(id) !== keys.get(id))
+    if (changed.length === 0) return
+    const timer = setTimeout(() => {
+      const rows = groupsRef.current ? [...groupsRef.current.working, ...groupsRef.current.cleanable, ...groupsRef.current.idle] : []
+      const paths = changed.map((id) => rows.find((r) => r.worktreeIds.includes(id))?.key)
+      // A worktree the listing does not know yet (a session in a new folder): list everything.
+      void (paths.every((p) => p !== undefined) ? refresh(paths as string[]) : refresh())
+    }, SESSION_REFRESH_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [root, refresh, sessionKey])
+  }, [root, refresh, keys])
+
   useEffect(() => {
-    const onFocus = () => void refresh()
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [refresh])
+    window.addEventListener('focus', refreshAll)
+    const offChanged = window.tr.gitWorktrees.onChanged((changedRoot) => {
+      if (changedRoot === root) void refreshAll()
+    })
+    window.tr.gitWorktrees.watch(root)
+    const poll = setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshAll()
+    }, POLL_MS)
+    return () => {
+      window.removeEventListener('focus', refreshAll)
+      offChanged()
+      window.tr.gitWorktrees.unwatch(root)
+      clearInterval(poll)
+    }
+  }, [root, refreshAll])
 
   // Switching sessions anywhere else moves the selection to the new session's worktree.
   useEffect(() => patchRoot(root, { picked: null }), [root, activeWorktreeId])
 
-  const groups = useMemo(() => (state.listing ? buildRows(state.listing, worktrees, sessions) : null), [state.listing, worktrees, sessions])
-  const selected = groups ? selectedRow([...groups.working, ...groups.cleanable], state.picked, activeWorktreeId) : null
+  const selected = groups ? selectedRow([...groups.working, ...groups.cleanable, ...groups.idle], state.picked, activeWorktreeId) : null
+  const rowProps = { projectId, root, refresh: refreshAll }
 
   const empty =
     state.listing === undefined ? '正在读取 worktree…' : state.listing === null ? (state.failed ? '无法读取 worktree' : '不是 git 仓库') : null
@@ -82,26 +127,39 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
         <div className={styles.body}>
           <ul className={styles.list} aria-label="Worktree">
             {groups.working.map((row) => (
-              <Row key={row.key} row={row} selected={row === selected} projectId={projectId} root={root} refresh={refresh} />
+              <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
             ))}
           </ul>
           {groups.cleanable.length > 0 && (
             <section aria-label="可清理">
               <div className={styles.groupHeader}>
                 <h3 className={styles.groupTitle}>可清理</h3>
-                <span className={styles.groupHint}>已合并或没有会话</span>
+                <span className={styles.groupHint}>已合并且没有会话</span>
                 <button
                   type="button"
                   className={styles.ghost}
                   disabled={state.busy}
-                  onClick={() => void cleanUpInteractive(root, groups.cleanable, refresh)}
+                  onClick={() => void cleanUpInteractive(root, groups.cleanable, refreshAll)}
                 >
                   清理
                 </button>
               </div>
               <ul className={styles.list} aria-label="可清理">
                 {groups.cleanable.map((row) => (
-                  <Row key={row.key} row={row} selected={row === selected} projectId={projectId} root={root} refresh={refresh} />
+                  <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
+                ))}
+              </ul>
+            </section>
+          )}
+          {groups.idle.length > 0 && (
+            <section aria-label="没有会话">
+              <div className={styles.groupHeader}>
+                <h3 className={styles.groupTitle}>没有会话</h3>
+                <span className={styles.groupHint}>未合并，不会被一键清理</span>
+              </div>
+              <ul className={styles.list} aria-label="没有会话">
+                {groups.idle.map((row) => (
+                  <Row key={row.key} row={row} selected={row === selected} {...rowProps} />
                 ))}
               </ul>
             </section>
@@ -159,8 +217,8 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
             <button
               type="button"
               className={styles.ghost}
-              disabled={info.prunable}
-              onClick={() => window.tr.worktree.reveal(info.path, '')}
+              disabled={info.prunable !== null}
+              onClick={() => window.tr.worktree.reveal(row.openPath, '')}
             >
               打开文件夹
             </button>

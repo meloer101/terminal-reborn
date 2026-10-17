@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { isMergedInto, parseAheadBehind, parseBaseConfig, parseNumstat, parseWorktreePorcelain, pickMainBranch } from './git-worktrees'
+import {
+  affectsWorktreeList,
+  classifyRemoveError,
+  hadOwnCommits,
+  isMergedInto,
+  mainWorktreeIndex,
+  parseAheadBehind,
+  parseBaseConfig,
+  parseForEachRefAheadBehind,
+  parseNumstat,
+  parseRebaseHeadName,
+  parseWorktreePorcelain,
+  pickMainBranch
+} from './git-worktrees'
 
 describe('parseWorktreePorcelain', () => {
   it('reads every attribute of every entry', () => {
@@ -23,10 +36,10 @@ describe('parseWorktreePorcelain', () => {
       ''
     ].join('\n')
     expect(parseWorktreePorcelain(out)).toEqual([
-      { path: '/repo', head: '1111111111111111111111111111111111111111', branch: 'main', bare: false, detached: false, locked: false, prunable: false },
-      { path: '/wt/feature x', head: '2222222222222222222222222222222222222222', branch: 'jacob/feature', bare: false, detached: false, locked: true, prunable: false },
-      { path: '/wt/detached', head: '3333333333333333333333333333333333333333', branch: null, bare: false, detached: true, locked: false, prunable: true },
-      { path: '/repo.git', head: null, branch: null, bare: true, detached: false, locked: false, prunable: false }
+      { path: '/repo', head: '1111111111111111111111111111111111111111', branch: 'main', bare: false, detached: false, locked: false, prunable: null },
+      { path: '/wt/feature x', head: '2222222222222222222222222222222222222222', branch: 'jacob/feature', bare: false, detached: false, locked: true, prunable: null },
+      { path: '/wt/detached', head: '3333333333333333333333333333333333333333', branch: null, bare: false, detached: true, locked: false, prunable: 'gitdir file points to non-existent location' },
+      { path: '/repo.git', head: null, branch: null, bare: true, detached: false, locked: false, prunable: null }
     ])
   })
 
@@ -61,17 +74,75 @@ describe('parseAheadBehind', () => {
 })
 
 describe('isMergedInto', () => {
-  it('needs nothing ahead and a base that moved past HEAD', () => {
-    expect(isMergedInto(0, 'a', 'b')).toBe(true)
-    expect(isMergedInto(1, 'a', 'b')).toBe(false)
+  it('needs nothing ahead and commits of its own', () => {
+    expect(isMergedInto(0, true)).toBe(true)
+    expect(isMergedInto(1, true)).toBe(false)
   })
 
-  it('does not count a worktree that sits on the base tip (just forked)', () => {
-    expect(isMergedInto(0, 'a', 'a')).toBe(false)
+  it('does not count a worktree that never committed (fresh, or the base moved on)', () => {
+    expect(isMergedInto(0, false)).toBe(false)
   })
 
   it('is false without a base', () => {
-    expect(isMergedInto(null, 'a', null)).toBe(false)
+    expect(isMergedInto(null, true)).toBe(false)
+  })
+})
+
+describe('hadOwnCommits', () => {
+  it('finds commits made on the branch in its reflog', () => {
+    expect(hadOwnCommits('commit: fix nav\nbranch: Created from HEAD\n')).toBe(true)
+    expect(hadOwnCommits('commit (amend): x\n')).toBe(true)
+    expect(hadOwnCommits('cherry-pick: y\n')).toBe(true)
+  })
+
+  it('ignores creation, fast-forwards and resets; an empty reflog proves nothing', () => {
+    expect(hadOwnCommits('merge main: Fast-forward\nreset: moving to main\nbranch: Created from HEAD\n')).toBe(false)
+    expect(hadOwnCommits('')).toBe(false)
+  })
+})
+
+describe('mainWorktreeIndex', () => {
+  it('is the first entry, unless that is a bare repository', () => {
+    expect(mainWorktreeIndex([{ bare: false }, { bare: false }])).toBe(0)
+    expect(mainWorktreeIndex([{ bare: true }, { bare: false }])).toBeNull()
+    expect(mainWorktreeIndex([])).toBeNull()
+  })
+})
+
+describe('parseForEachRefAheadBehind', () => {
+  it('reads "name\\0ahead behind" per branch', () => {
+    expect(parseForEachRefAheadBehind('main\u00000 0\njacob/x\u00003 1\n')).toEqual({ main: { ahead: 0, behind: 0 }, 'jacob/x': { ahead: 3, behind: 1 } })
+  })
+
+  it('rejects output from a git without the atom', () => {
+    expect(parseForEachRefAheadBehind('main\u0000%(ahead-behind:abc)\n')).toBeNull()
+  })
+})
+
+describe('parseRebaseHeadName', () => {
+  it('reads the branch a rebase works on', () => {
+    expect(parseRebaseHeadName('refs/heads/jacob/x\n')).toBe('jacob/x')
+    expect(parseRebaseHeadName('detached HEAD\n')).toBeNull()
+  })
+})
+
+describe('classifyRemoveError', () => {
+  it("recognises git's refusals; only submodules may be forced", () => {
+    expect(classifyRemoveError('fatal: working trees containing submodules cannot be moved or removed')).toBe('submodules')
+    expect(classifyRemoveError("fatal: '../x' contains modified or untracked files, use --force to delete it")).toBe('dirty')
+    expect(classifyRemoveError('fatal: cannot remove a locked working tree;')).toBe('locked')
+    expect(classifyRemoveError('fatal: detected dubious ownership in repository')).toBe('git')
+  })
+})
+
+describe('affectsWorktreeList', () => {
+  it('watches worktree entries, their HEADs, branch refs and packed-refs', () => {
+    for (const path of ['worktrees', 'worktrees/x', 'worktrees/x/HEAD', 'refs/heads/jacob/x', 'packed-refs', 'HEAD']) {
+      expect(affectsWorktreeList(path)).toBe(true)
+    }
+    for (const path of ['objects/ab/cdef', 'index', 'logs/HEAD', 'worktrees/x/index', 'refs/remotes/origin/main']) {
+      expect(affectsWorktreeList(path)).toBe(false)
+    }
   })
 })
 
