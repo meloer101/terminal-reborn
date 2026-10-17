@@ -1,13 +1,20 @@
 import { useMemo } from 'react'
-import { LIMITS, type AppearanceSettings } from '@shared/settings'
+import { DEFAULT_SETTINGS, LIMITS, type AppearanceSettings } from '@shared/settings'
 import { Row, Section, Select, Slider, ThemeSwatches, Toggle, type SelectOption } from './controls'
 import { THEME_OPTIONS, displayFamily, fontSizeOptions, formatLineHeight, formatPercent, previewCaption } from './appearance-form'
-import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, withCurrent } from './fonts'
+import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, groupCjkFamilies, withCurrent } from './fonts'
 import { useFontCatalog } from './local-fonts'
 import { PreviewTerminal } from './PreviewTerminal'
 import styles from './AppearancePane.module.css'
 
 const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
+
+/** What 恢复默认 resets: everything on this page except the theme, which has its own one-click choice. */
+const APPEARANCE_RESET_KEYS = (Object.keys(DEFAULT_SETTINGS.appearance) as (keyof AppearanceSettings)[]).filter((key) => key !== 'theme')
+
+function appearanceDefaults(): Partial<AppearanceSettings> {
+  return Object.fromEntries(APPEARANCE_RESET_KEYS.map((key) => [key, DEFAULT_SETTINGS.appearance[key]]))
+}
 
 function latinOption(family: string): SelectOption {
   const face = { fontFamily: cssFamily(family, 'monospace') }
@@ -29,7 +36,11 @@ export function AppearancePane({
 }) {
   const { catalog, access } = useFontCatalog()
   const latinOptions = useMemo(() => withCurrent(catalog.latin, appearance.latinFont).map(latinOption), [catalog.latin, appearance.latinFont])
-  const cjkOptions = useMemo(() => withCurrent(catalog.cjk, appearance.cjkFont).map(cjkOption), [catalog.cjk, appearance.cjkFont])
+  const cjkOptions = useMemo(
+    () => groupCjkFamilies(withCurrent(catalog.cjk, appearance.cjkFont)).map(({ family, group }) => ({ ...cjkOption(family), group })),
+    [catalog.cjk, appearance.cjkFont]
+  )
+  const isDefault = APPEARANCE_RESET_KEYS.every((key) => appearance[key] === DEFAULT_SETTINGS.appearance[key])
   const sizeOptions = useMemo<SelectOption[]>(
     () => fontSizeOptions(appearance.fontSize).map((size) => ({ value: String(size), label: String(size) })),
     [appearance.fontSize]
@@ -120,6 +131,13 @@ export function AppearancePane({
           </Row>
           <p className={styles.hint}>让 VoiceOver 朗读终端输出。会稍微增加渲染开销。</p>
         </Section>
+
+        <div className={styles.footer}>
+          <button type="button" className={styles.reset} disabled={isDefault} onClick={() => update(appearanceDefaults())}>
+            恢复默认
+          </button>
+          <span className={styles.footerHint}>字体、字号、行高、连字、窗口和辅助功能回到默认值；主题不变。</span>
+        </div>
       </div>
 
       <div className={styles.previewColumn}>

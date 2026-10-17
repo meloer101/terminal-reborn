@@ -41,21 +41,47 @@ export function uniqueFamilies(families: readonly string[]): string[] {
 }
 
 /**
- * Splits installed families into the two menus. `isMonospace` is an optional measured check
- * (canvas) for families whose name gives no hint; the bundled and default families are always
- * present and pinned first.
+ * Splits installed families into the two menus. `isMonospace` is the measured check (canvas): when it is
+ * available it alone decides, so proportional faces whose names sound like code fonts ("Fira Sans",
+ * "American Typewriter", "Geist") stay out of the English menu (B15); the name guess is only the fallback.
+ * The bundled and default families are always present and pinned first.
  */
 export function classifyFonts(families: readonly string[], isMonospace?: (family: string) => boolean): FontCatalog {
   const cjk: string[] = []
   const latin: string[] = []
+  const monospace = isMonospace ?? looksMonospace
   for (const family of uniqueFamilies(families)) {
     if (looksCjk(family)) cjk.push(family)
-    else if (looksMonospace(family) || isMonospace?.(family) === true) latin.push(family)
+    else if (monospace(family)) latin.push(family)
   }
   return {
     latin: pinFirst(latin, BUNDLED_LATIN_FONT),
     cjk: pinFirst(cjk, DEFAULT_CJK_FONT)
   }
+}
+
+export type CjkGroup = '简体中文' | '繁体中文' | '日文' | '韩文' | '其他'
+
+export const CJK_GROUP_ORDER: readonly CjkGroup[] = ['简体中文', '繁体中文', '日文', '韩文', '其他']
+
+const TRADITIONAL = /\b(tc|hk|hc)\b|繁|[體]|pmingliu|mingliu|dfkai|lihei|lisong|apple lisung/i
+const SIMPLIFIED = /\b(sc|gb)\b|简|[体]|pingfang|heiti|songti|kaiti|fangsong|yuanti|st(heiti|song|kaiti|fangsong|xihei)|microsoft ya ?hei|simsun|simhei|wenquanyi|lantinghei|思源/i
+const JAPANESE = /\bjp\b|hiragino (sans|mincho|kaku|maru)|osaka|meiryo|yu (gothic|mincho)|ms (p?gothic|p?mincho)|ヒラギノ|游/i
+const KOREAN = /\bkr\b|apple ?(sd )?gothic|applemyungjo|nanum|malgun|batang|gulim|dotum|한/i
+
+/** Which language a CJK family is drawn for, by name: the Chinese font menu is grouped by this (B15). */
+export function cjkGroup(family: string): CjkGroup {
+  if (TRADITIONAL.test(family)) return '繁体中文'
+  if (SIMPLIFIED.test(family)) return '简体中文'
+  if (JAPANESE.test(family)) return '日文'
+  if (KOREAN.test(family)) return '韩文'
+  return '其他'
+}
+
+/** The families in CJK_GROUP_ORDER, keeping their order (pinned default first) within each group. */
+export function groupCjkFamilies(families: readonly string[]): { family: string; group: CjkGroup }[] {
+  const tagged = families.map((family) => ({ family, group: cjkGroup(family) }))
+  return CJK_GROUP_ORDER.flatMap((group) => tagged.filter((entry) => entry.group === group))
 }
 
 function pinFirst(list: readonly string[], pinned: string): string[] {

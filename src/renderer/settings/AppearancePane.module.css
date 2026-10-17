@@ -85,3 +85,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 恢复默认 (B15): a quiet bordered button at the end of the form. */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-32);
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.reset {
+  flex: none;
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--text-body);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.reset:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.reset:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.reset:disabled {
+  color: var(--text-disabled);
+}
+
+.footerHint {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}

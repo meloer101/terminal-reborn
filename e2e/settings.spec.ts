@@ -121,3 +121,27 @@ test('settings is a dialog in the main window: sidebar, Esc, close button, and t
   await expect(dialog).toBeVisible()
   await app.close()
 })
+
+test('Chinese fonts are grouped by language; 恢复默认 resets everything but the theme', async () => {
+  const app = await launchApp()
+  const settings = await openSettings(app)
+  await settings.getByRole('radio', { name: '浅色' }).click()
+  await settings.getByRole('combobox', { name: '字号' }).click()
+  await settings.getByRole('option', { name: '16', exact: true }).click()
+  await expect.poll(async () => (await readSettings(settings)).appearance.fontSize).toBe(16)
+
+  await settings.getByRole('combobox', { name: '中文字体' }).click()
+  const listbox = settings.getByRole('listbox', { name: '中文字体' })
+  // The default family's group always exists; others depend on the fonts installed on this machine.
+  await expect(listbox.getByText('简体中文', { exact: true })).toBeVisible()
+  await settings.screenshot({ path: 'test-results/settings-cjk-groups.png' })
+  await settings.keyboard.press('Escape')
+
+  const reset = settings.getByRole('button', { name: '恢复默认' })
+  await reset.scrollIntoViewIfNeeded()
+  await reset.click()
+  await expect.poll(async () => (await readSettings(settings)).appearance.fontSize).toBe(13)
+  expect((await readSettings(settings)).appearance.theme).toBe('light')
+  await expect(reset).toBeDisabled()
+  await app.close()
+})

@@ -1,6 +1,6 @@
 // Form atoms for the settings window — Figma components Select (12:126), Slider (12:137),
 // Toggle (12:136), Segment (9:54) and ThemeSwatch (12:162).
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import styles from './controls.module.css'
 
@@ -221,6 +221,8 @@ export interface SelectOption {
   /** Right-aligned secondary text, e.g. a font sample. */
   sample?: string
   sampleStyle?: CSSProperties
+  /** Options with a group get a heading where the group changes; callers pass them already in group order. */
+  group?: string
 }
 
 export function Select({
@@ -375,27 +377,33 @@ export function Select({
           )}
           <div ref={list} id={listId} role="listbox" aria-label={label} tabIndex={-1} className={styles.menuList}>
             {filtered.map((option, index) => (
-              <div
-                key={option.value}
-                id={`${listId}-${index}`}
-                role="option"
-                aria-selected={option.value === value}
-                data-index={index}
-                data-active={index === active}
-                className={styles.option}
-                onPointerMove={() => setActive(index)}
-                onClick={() => choose(option.value)}
-              >
-                <span className={styles.optionCheck}>{option.value === value && <Check size={16} strokeWidth={1.75} aria-hidden />}</span>
-                <span className={styles.optionLabel} style={option.labelStyle}>
-                  {option.label}
-                </span>
-                {option.sample && (
-                  <span className={styles.optionSample} style={option.sampleStyle}>
-                    {option.sample}
-                  </span>
+              <Fragment key={option.value}>
+                {option.group && option.group !== filtered[index - 1]?.group && (
+                  <div className={styles.optionGroup} role="presentation">
+                    {option.group}
+                  </div>
                 )}
-              </div>
+                <div
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={option.value === value}
+                  data-index={index}
+                  data-active={index === active}
+                  className={styles.option}
+                  onPointerMove={() => setActive(index)}
+                  onClick={() => choose(option.value)}
+                >
+                  <span className={styles.optionCheck}>{option.value === value && <Check size={16} strokeWidth={1.75} aria-hidden />}</span>
+                  <span className={styles.optionLabel} style={option.labelStyle}>
+                    {option.label}
+                  </span>
+                  {option.sample && (
+                    <span className={styles.optionSample} style={option.sampleStyle}>
+                      {option.sample}
+                    </span>
+                  )}
+                </div>
+              </Fragment>
             ))}
             {filtered.length === 0 && !canUseTyped && <div className={styles.menuEmpty}>{emptyText}</div>}
           </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUNDLED_LATIN_FONT, classifyFonts, DEFAULT_CJK_FONT, looksCjk, looksMonospace, uniqueFamilies, withCurrent } from './fonts'
+import { BUNDLED_LATIN_FONT, cjkGroup, classifyFonts, DEFAULT_CJK_FONT, groupCjkFamilies, looksCjk, looksMonospace, uniqueFamilies, withCurrent } from './fonts'
 
 describe('looksMonospace', () => {
   it('recognises common terminal families', () => {
@@ -36,13 +36,38 @@ describe('classifyFonts', () => {
     expect(latin).toEqual([BUNDLED_LATIN_FONT, 'Fira Code', 'Menlo'])
     expect(cjk).toEqual([DEFAULT_CJK_FONT, 'Hiragino Sans GB'])
   })
-  it('uses the measured check for unknown names', () => {
-    const { latin } = classifyFonts(installed, (family) => family === 'Zapfino')
-    expect(latin).toContain('Zapfino')
-    expect(latin).not.toContain('Helvetica')
+  it('lets the measured check decide when there is one: a code-sounding proportional face stays out', () => {
+    const measured = (family: string) => ['Menlo', 'Zapfino'].includes(family)
+    const { latin } = classifyFonts([...installed, 'Fira Sans', 'American Typewriter'], measured)
+    expect(latin).toEqual([BUNDLED_LATIN_FONT, 'Menlo', 'Zapfino'])
   })
   it('still offers the defaults with an empty list', () => {
     expect(classifyFonts([])).toEqual({ latin: [BUNDLED_LATIN_FONT], cjk: [DEFAULT_CJK_FONT] })
+  })
+})
+
+describe('cjkGroup', () => {
+  it.each([
+    ['PingFang SC', '简体中文'],
+    ['Hiragino Sans GB', '简体中文'],
+    ['Songti SC', '简体中文'],
+    ['Source Han Sans SC', '简体中文'],
+    ['PingFang TC', '繁体中文'],
+    ['PingFang HK', '繁体中文'],
+    ['LiHei Pro', '繁体中文'],
+    ['Hiragino Sans', '日文'],
+    ['Hiragino Mincho ProN', '日文'],
+    ['Noto Sans JP', '日文'],
+    ['Apple SD Gothic Neo', '韩文'],
+    ['Noto Sans KR', '韩文'],
+    ['Noto Sans CJK', '其他']
+  ])('%s → %s', (family, group) => {
+    expect(cjkGroup(family)).toBe(group)
+  })
+
+  it('groups in a fixed order, keeping the pinned default first', () => {
+    const grouped = groupCjkFamilies(['PingFang SC', 'Hiragino Sans', 'PingFang TC', 'Songti SC'])
+    expect(grouped.map((g) => g.family)).toEqual(['PingFang SC', 'Songti SC', 'PingFang TC', 'Hiragino Sans'])
   })
 })
 
