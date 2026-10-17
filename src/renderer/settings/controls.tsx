@@ -110,12 +110,14 @@ export function Segmented<T extends string>({
   label: string
 }) {
   const refs = useRef(new Map<T, HTMLButtonElement>())
+  // Arrows move the focus only; Space / Enter choose. Every choice is saved at once, so an arrow press meant to
+  // scroll the page right after clicking an option must not switch it (B17: the theme turned dark that way).
   const move = (event: KeyboardEvent, delta: number): void => {
-    const index = options.findIndex((option) => option.value === value)
-    const next = options[(index + delta + options.length) % options.length]
+    const focused = options.findIndex((option) => refs.current.get(option.value) === document.activeElement)
+    const from = focused >= 0 ? focused : options.findIndex((option) => option.value === value)
+    const next = options[(from + delta + options.length) % options.length]
     if (!next) return
     event.preventDefault()
-    onChange(next.value)
     refs.current.get(next.value)?.focus()
   }
   return (
@@ -165,12 +167,14 @@ export function ThemeSwatches<T extends string>({
   label: string
 }) {
   const refs = useRef(new Map<T, HTMLButtonElement>())
+  // Arrows move the focus only; Space / Enter choose. Every choice is saved at once, so an arrow press meant to
+  // scroll the page right after clicking an option must not switch it (B17: the theme turned dark that way).
   const move = (event: KeyboardEvent, delta: number): void => {
-    const index = options.findIndex((option) => option.value === value)
-    const next = options[(index + delta + options.length) % options.length]
+    const focused = options.findIndex((option) => refs.current.get(option.value) === document.activeElement)
+    const from = focused >= 0 ? focused : options.findIndex((option) => option.value === value)
+    const next = options[(from + delta + options.length) % options.length]
     if (!next) return
     event.preventDefault()
-    onChange(next.value)
     refs.current.get(next.value)?.focus()
   }
   return (

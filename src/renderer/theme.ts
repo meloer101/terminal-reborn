@@ -7,7 +7,11 @@ import type { ThemePreference } from '@shared/settings'
 export type { ThemePreference }
 
 const BOOT_KEY = 'tr.theme.boot'
-/** The pre-settings storage key; migrated into settings once, then removed. */
+/**
+ * The pre-settings storage key. It is only deleted now, never read: localStorage is per origin, so the dev build
+ * (http://localhost) and the packaged app (file://) each kept their own old value while sharing one settings.json,
+ * and migrating it on launch wrote a stale "dark" into settings whenever the theme was 跟随系统 (B17).
+ */
 const LEGACY_KEY = 'tr.theme.v1'
 const query = window.matchMedia('(prefers-color-scheme: light)')
 
@@ -51,27 +55,15 @@ export function applyTheme(preference: ThemePreference): () => void {
   return () => {}
 }
 
-/** Moves a value saved by the old localStorage-only implementation into settings, once. */
-function migrateLegacy(settingsTheme: ThemePreference): void {
-  let legacy: string | null
-  try {
-    legacy = localStorage.getItem(LEGACY_KEY)
-    if (legacy !== null) localStorage.removeItem(LEGACY_KEY)
-  } catch {
-    return
-  }
-  // Only an explicit old choice counts, and never over a theme already chosen in settings.
-  if ((legacy === 'dark' || legacy === 'light') && settingsTheme === 'system') {
-    set(legacy)
-    void window.tr.settings.update({ appearance: { theme: legacy } }).catch(() => {})
-  }
-}
-
-/** Sets the theme synchronously from the boot mirror, then follows settings (and their changes). */
+/**
+ * Sets the theme synchronously from the boot mirror, then follows settings (and their changes). Only the user
+ * writes the theme (settings page, ⌘K): nothing here ever saves one.
+ */
 export function initTheme(): void {
   let boot: string | null = null
   try {
-    boot = localStorage.getItem(BOOT_KEY) ?? localStorage.getItem(LEGACY_KEY)
+    boot = localStorage.getItem(BOOT_KEY)
+    localStorage.removeItem(LEGACY_KEY)
   } catch {
     // Fall through to the default.
   }
@@ -81,9 +73,6 @@ export function initTheme(): void {
   window.tr.settings.onChange((settings) => set(settings.appearance.theme))
   void window.tr.settings
     .get()
-    .then((settings) => {
-      set(settings.appearance.theme)
-      migrateLegacy(settings.appearance.theme)
-    })
+    .then((settings) => set(settings.appearance.theme))
     .catch(() => {})
 }

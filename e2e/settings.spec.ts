@@ -145,3 +145,25 @@ test('Chinese fonts are grouped by language; 恢复默认 resets everything but 
   await expect(reset).toBeDisabled()
   await app.close()
 })
+
+test('the theme never changes by itself: no stale migration, arrows on the swatches only move focus (B17)', async () => {
+  const app = await launchApp()
+  const page = await app.firstWindow()
+  // An old localStorage-only choice from an earlier build must not be written into settings.
+  await page.evaluate(() => (globalThis as unknown as { localStorage: Storage }).localStorage.setItem('tr.theme.v1', 'dark'))
+  await page.reload()
+  await page.waitForSelector('[data-region="sidebar"]')
+  await page.waitForTimeout(300)
+  expect((await readSettings(page)).appearance.theme).toBe('system')
+
+  const settings = await openSettings(app)
+  await settings.getByRole('radio', { name: '跟随系统' }).click()
+  await settings.keyboard.press('ArrowDown')
+  await settings.keyboard.press('ArrowRight')
+  await settings.waitForTimeout(200)
+  expect((await readSettings(settings)).appearance.theme).toBe('system')
+  // Space on the focused swatch is a real choice.
+  await settings.keyboard.press('Space')
+  await expect.poll(async () => (await readSettings(settings)).appearance.theme).toBe('light')
+  await app.close()
+})

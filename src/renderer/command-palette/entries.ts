@@ -190,8 +190,9 @@ export function rankEntries(entries: readonly PaletteEntry[], query: string): Ra
   )
 }
 
-/** Moves the selection with wrap-around; with no results the index stays 0. */
+/** Moves the selection, stopping at both ends; with no results the index stays 0. */
 export function stepIndex(index: number, count: number, direction: 1 | -1): number {
   if (count <= 0) return 0
-  return (index + direction + count) % count
+  // Clamped, not wrapped: ↑ on the first row must not land on the theme actions at the end (B17).
+  return Math.min(count - 1, Math.max(0, index + direction))
 }

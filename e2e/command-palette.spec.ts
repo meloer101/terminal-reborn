@@ -118,8 +118,8 @@ test('↑/↓ move the selection and hover follows the mouse', async () => {
   await page.keyboard.press('ArrowDown')
   await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('ArrowUp')
-  await page.keyboard.press('ArrowUp') // wraps to the last entry
-  await expect(options.last()).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('ArrowUp') // stops at the first entry, never wraps to the theme actions at the end
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true')
   await options.nth(2).hover()
   await expect(options.nth(2)).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Escape')
