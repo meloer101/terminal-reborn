@@ -70,7 +70,7 @@ test('a background permission request marks the session in place, badges and not
   const seen = await calls()
   expect(seen.badge.at(-1)).toBe(3)
   expect(seen.notification.at(-1)).toEqual({
-    title: '结算页性能优化',
+    title: 'acme-web · 结算页性能优化',
     body: '等你处理 · 等你确认：运行 pnpm test checkout',
     tag: 's-perf'
   })
@@ -107,11 +107,12 @@ test('with the window unfocused, even the active session notifies and stays unre
   await select('s-cookie')
   await setFocused(false)
   const before = (await calls()).notification.length
-  await emit('s-cookie', { type: 'stop' })
+  await emit('s-cookie', { type: 'stop', message: '登录流程已经修好' })
   await expect(header()).toContainText('Claude Code · 已完成', WITHIN)
+  // Finished turns are announced a moment later, together with any that finish at the same time.
+  await expect.poll(async () => (await calls()).notification.length, { timeout: 3000 }).toBe(before + 1)
   const seen = await calls()
-  expect(seen.notification.length).toBe(before + 1)
-  expect(seen.notification.at(-1)).toMatchObject({ tag: 's-cookie', body: '已完成' })
+  expect(seen.notification.at(-1)).toMatchObject({ tag: 's-cookie', body: '已完成 · 登录流程已经修好' })
   expect(seen.badge.at(-1)).toBe(2)
 
   await setFocused(true)

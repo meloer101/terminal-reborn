@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Session, SessionStatus } from '@shared/types'
-import { StatusController, type StatusDeps } from './controller'
+import { OVERVIEW_TAG, StatusController, type StatusDeps } from './controller'
 
 const session = (id: string, status: SessionStatus = 'idle', kind: Session['kind'] = 'claude'): Session => ({
   id,
@@ -20,6 +20,10 @@ interface Harness {
   active: { id: string | null }
   focus: { value: boolean }
   clock: { now: number }
+  /** Callbacks scheduled with `later`; `flush()` runs them. */
+  timers: (() => void)[]
+  flush(): void
+  overviewOpened: number
 }
 
 function harness(initial: Session[], activeId: string | null = null): Harness {
@@ -30,6 +34,13 @@ function harness(initial: Session[], activeId: string | null = null): Harness {
     active: { id: activeId },
     focus: { value: true },
     clock: { now: 1_000_000 },
+    timers: [],
+    flush: () => {
+      const due = h.timers
+      h.timers = []
+      due.forEach((fn) => fn())
+    },
+    overviewOpened: 0,
     controller: undefined as unknown as StatusController
   }
   const deps: StatusDeps = {
@@ -44,7 +55,14 @@ function harness(initial: Session[], activeId: string | null = null): Harness {
       h.active.id = id
     },
     setBadge: (n) => h.badges.push(n),
-    notify: (n) => h.notifications.push(n)
+    notify: (n) => h.notifications.push(n),
+    projectName: (id) => (id === 'b' ? 'acme' : undefined),
+    openOverview: () => {
+      h.overviewOpened += 1
+    },
+    later: (fn) => {
+      h.timers.push(fn)
+    }
   }
   h.controller = new StatusController(deps)
   h.controller.sync()
@@ -92,16 +110,39 @@ describe('StatusController', () => {
     it('notifies for a background session that needs you, with the action in the body', () => {
       h.controller.handleEvent('b', { type: 'tool-start', tool: 'Bash', input: { command: 'pnpm test' } })
       h.controller.handleEvent('b', { type: 'notification', kind: 'permission', message: 'm' })
-      expect(h.notifications).toEqual([{ title: '任务 b', body: '等你处理 · 等你确认：运行 pnpm test', tag: 'b' }])
+      expect(h.notifications).toEqual([{ title: 'acme · 任务 b', body: '等你处理 · 等你确认：运行 pnpm test', tag: 'b' }])
     })
 
-    it('notifies on done_unread and error', () => {
+    it('notifies on done_unread (with the last reply, a moment later) and error', () => {
       h.controller.handleEvent('b', { type: 'prompt-submit', prompt: 'x' })
-      h.controller.handleEvent('b', { type: 'stop' })
+      h.controller.handleEvent('b', { type: 'stop', message: '全部测试通过' })
       expect(status(h, 'b')).toBe('done_unread')
+      expect(h.notifications).toEqual([])
+      h.flush()
       h.controller.handleEvent('b', { type: 'prompt-submit', prompt: 'y' })
       h.controller.handleEvent('b', { type: 'stop-failure', message: 'rate limited' })
-      expect(h.notifications.map((n) => n.body)).toEqual(['已完成', '出错 · rate limited'])
+      expect(h.notifications.map((n) => n.body)).toEqual(['已完成 · 全部测试通过', '出错 · rate limited'])
+    })
+
+    it('turns that finish together share one notification that opens the overview', () => {
+      h = harness([session('a'), session('b'), session('c')], 'a')
+      for (const id of ['b', 'c']) {
+        h.controller.handleEvent(id, { type: 'prompt-submit', prompt: 'x' })
+        h.controller.handleEvent(id, { type: 'stop' })
+      }
+      h.flush()
+      expect(h.notifications).toEqual([{ title: '2 个会话已完成', body: 'acme · 任务 b、任务 c', tag: OVERVIEW_TAG }])
+      h.controller.handleNotificationClick(OVERVIEW_TAG)
+      expect(h.overviewOpened).toBe(1)
+    })
+
+    it('drops a finished turn the user looked at before it was announced', () => {
+      h.controller.handleEvent('b', { type: 'prompt-submit', prompt: 'x' })
+      h.controller.handleEvent('b', { type: 'stop' })
+      h.active.id = 'b'
+      h.controller.refreshViewing()
+      h.flush()
+      expect(h.notifications).toEqual([])
     })
 
     it('never notifies for the active session while the window is focused', () => {
@@ -116,6 +157,7 @@ describe('StatusController', () => {
       h.controller.refreshViewing()
       h.controller.handleEvent('a', { type: 'stop' })
       expect(status(h, 'a')).toBe('done_unread')
+      h.flush()
       expect(h.notifications).toHaveLength(1)
       expect(h.notifications[0]?.tag).toBe('a')
     })

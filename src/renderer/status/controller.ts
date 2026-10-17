@@ -37,7 +37,18 @@ export interface StatusDeps {
   setHooksSilent?(id: SessionId, silent: boolean): void
   /** The session was (re)launched: stale launch problems from the previous run no longer apply. */
   onLaunched?(id: SessionId): void
+  /** Name of the project the session belongs to, for notification titles ("项目 · 会话"). */
+  projectName?(id: SessionId): string | undefined
+  /** A merged notification (OVERVIEW_TAG) was clicked. */
+  openOverview?(): void
+  /** Runs `fn` after `ms` (default setTimeout); injected so tests control time. */
+  later?(fn: () => void, ms: number): void
 }
+
+/** Tag of a notification that stands for several sessions: clicking it opens the overview. */
+export const OVERVIEW_TAG = 'overview'
+/** Turns that finish within this window share one notification (PRD F10). */
+export const DONE_COALESCE_MS = 1_000
 
 /** Statuses that interrupt the user when they are not already looking. */
 const NOTIFY_BODY: Partial<Record<SessionStatus, string>> = {
@@ -49,6 +60,8 @@ const NOTIFY_BODY: Partial<Record<SessionStatus, string>> = {
 export class StatusController {
   private readonly states = new Map<SessionId, SessionState>()
   private lastBadge = -1
+  /** Finished turns waiting to be announced together. */
+  private pendingDone: SessionId[] = []
 
   constructor(private readonly deps: StatusDeps) {}
 
@@ -185,9 +198,10 @@ export class StatusController {
     }
   }
 
-  /** A system notification was clicked: jump to its session. */
+  /** A system notification was clicked: jump to its session, or to the overview for a merged one. */
   handleNotificationClick(tag: string): void {
-    if (this.states.has(tag)) this.deps.setActive(tag)
+    if (tag === OVERVIEW_TAG) this.deps.openOverview?.()
+    else if (this.states.has(tag)) this.deps.setActive(tag)
   }
 
   private apply(id: SessionId, signal: Signal): void {
@@ -225,12 +239,48 @@ export class StatusController {
   }
 
   private maybeNotify(id: SessionId, state: SessionState): void {
-    const label = NOTIFY_BODY[state.status]
-    if (!label) return
+    if (!NOTIFY_BODY[state.status]) return
     // Never interrupt for the session the user is looking at.
-    if (this.deps.windowFocused() && this.deps.activeSessionId() === id) return
+    if (this.isLookedAt(id)) return
+    if (state.status !== 'done_unread') {
+      this.deps.notify(this.single(id, state))
+      return
+    }
+    // Several agents often finish together: wait a moment and announce them in one notification.
+    if (!this.pendingDone.includes(id)) this.pendingDone.push(id)
+    if (this.pendingDone.length === 1) (this.deps.later ?? defaultLater)(() => this.flushDone(), DONE_COALESCE_MS)
+  }
+
+  private flushDone(): void {
+    const ids = this.pendingDone.filter((id) => this.states.get(id)?.status === 'done_unread' && !this.isLookedAt(id))
+    this.pendingDone = []
+    const [first] = ids
+    if (!first) return
+    const state = this.states.get(first)
+    if (ids.length === 1 && state) {
+      this.deps.notify(this.single(first, state))
+      return
+    }
+    const titles = ids.map((id) => this.titleOf(id))
+    this.deps.notify({ title: `${ids.length} 个会话已完成`, body: titles.join('、'), tag: OVERVIEW_TAG })
+  }
+
+  private isLookedAt(id: SessionId): boolean {
+    return this.deps.windowFocused() && this.deps.activeSessionId() === id
+  }
+
+  /** "项目 · 会话" (PRD F10). */
+  private titleOf(id: SessionId): string {
     const title = this.deps.sessions().find((s) => s.id === id)?.title ?? ''
-    this.deps.notify({ title, body: state.currentAction ? `${label} · ${state.currentAction}` : label, tag: id })
+    const project = this.deps.projectName?.(id)
+    return project ? `${project} · ${title}` : title
+  }
+
+  /** Body: the question or command being asked, the error, or the last reply. */
+  private single(id: SessionId, state: SessionState): { title: string; body: string; tag: string } {
+    const label = NOTIFY_BODY[state.status] ?? ''
+    const detail = state.status === 'done_unread' ? state.lastReply : state.currentAction
+    return { title: this.titleOf(id), body: detail ? `${label} · ${detail}` : label, tag: id }
   }
 
   private updateBadge(): void {
@@ -239,6 +289,10 @@ export class StatusController {
     this.lastBadge = count
     this.deps.setBadge(count)
   }
+}
+
+function defaultLater(fn: () => void, ms: number): void {
+  setTimeout(fn, ms)
 }
 
 /** Whether the session's terminal screen can change its state right now. */

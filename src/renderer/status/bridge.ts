@@ -40,6 +40,12 @@ export function startStatusBridge(): () => void {
       resetHooksHealth(id)
     },
     setActive: (id) => useWorkspace.getState().setActiveSession(id),
+    projectName: (id) => {
+      const { sessions, worktrees, projects } = useWorkspace.getState()
+      const worktree = worktrees.find((w) => w.id === sessions.find((s) => s.id === id)?.worktreeId)
+      return projects.find((p) => p.id === worktree?.projectId)?.name
+    },
+    openOverview: () => useWorkspace.getState().setMainView('overview'),
     setBadge: (count) => {
       hook?.record('badge', count)
       ui.setBadge(count)
