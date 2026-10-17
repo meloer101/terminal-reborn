@@ -26,11 +26,11 @@ class Fanout<T> {
   }
 }
 
-const dataListeners = new Fanout<string>()
+const dataListeners = new Fanout<{ data: string; seq: number }>()
 const exitListeners = new Fanout<PtyExit>()
 
-ipcRenderer.on(IPC.ptyData, (_event, message: { sessionId: SessionId; data: string }) => {
-  dataListeners.emit(message.sessionId, message.data)
+ipcRenderer.on(IPC.ptyData, (_event, message: { sessionId: SessionId; data: string; seq: number }) => {
+  dataListeners.emit(message.sessionId, message)
 })
 ipcRenderer.on(IPC.ptyExit, (_event, message: { sessionId: SessionId; exit: PtyExit }) => {
   exitListeners.emit(message.sessionId, message.exit)
@@ -49,11 +49,13 @@ const api: TrApi = {
   homeDir: process.env.HOME ?? '/',
   pty: {
     spawn: (options) => ipcRenderer.invoke(IPC.ptySpawn, options),
+    live: () => ipcRenderer.invoke(IPC.ptyLive),
+    attach: (sessionId) => ipcRenderer.invoke(IPC.ptyAttach, sessionId),
     write: (sessionId, data) => ipcRenderer.send(IPC.ptyWrite, sessionId, data),
     resize: (sessionId, cols, rows) => ipcRenderer.send(IPC.ptyResize, sessionId, cols, rows),
     kill: (sessionId) => ipcRenderer.send(IPC.ptyKill, sessionId),
     ack: (sessionId, count) => ipcRenderer.send(IPC.ptyAck, sessionId, count),
-    onData: (sessionId, listener) => dataListeners.add(sessionId, listener),
+    onData: (sessionId, listener) => dataListeners.add(sessionId, ({ data, seq }) => listener(data, seq)),
     onExit: (sessionId, listener) => exitListeners.add(sessionId, listener),
     onHostRestarted: (listener) => listen<HostRestartedEvent>(IPC.ptyHostRestarted, (event) => listener(event.sessionIds))
   },

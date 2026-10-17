@@ -33,11 +33,23 @@ export type QuitDecision = 'quit' | 'confirm'
 
 /**
  * Whether quitting needs the user's say-so. The OS forcing a quit (logout / shutdown) is never
- * blocked: a dialog there would hang the logout.
+ * blocked: a dialog there would hang the logout. Nothing is interrupted when the sessions keep running in the
+ * pty daemon (`keepsSessions`), so that quit is not asked about either.
  */
-export function decideQuit(input: { active: number; forced: boolean }): QuitDecision {
-  if (input.forced) return 'quit'
+export function decideQuit(input: { active: number; forced: boolean; keepsSessions?: boolean }): QuitDecision {
+  if (input.forced || input.keepsSessions) return 'quit'
   return input.active > 0 ? 'confirm' : 'quit'
+}
+
+/** "退出并结束所有会话": asked only while something is running or waiting. */
+export function endSessionsQuitConfirmation(active: number): ConfirmOptions | null {
+  if (active <= 0) return null
+  return {
+    message: `有 ${active} 个会话正在运行或等你处理，结束后它们会中断。`,
+    confirmLabel: '结束并退出',
+    cancelLabel: '取消',
+    destructive: true
+  }
 }
 
 export function quitConfirmation(active: number): ConfirmOptions {

@@ -8,6 +8,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { SessionId } from '@shared/types'
+import { loadLiveSessions, useLiveSessions } from '../terminal/live-sessions'
 import { disposeTerminal, isTerminalAlive } from '../terminal/registry'
 import { agentSessionIdPatch, planStart, shouldAutoStart, type StartOptions } from './session-start-plan'
 import { useWorkspace } from './workspace'
@@ -76,12 +77,38 @@ export function useSessionStartup(): void {
     []
   )
 
+  // Sessions still running in the pty daemon are reattached, never started again: wait for that answer first.
+  const liveLoaded = useLiveSessions((s) => s.loaded)
+  useEffect(() => {
+    void loadLiveSessions().then(adoptLiveSessions)
+  }, [])
+
   const active = useWorkspace((s) => s.sessions.find((x) => x.id === s.activeSessionId))
-  const start = shouldAutoStart(active)
+  const start = liveLoaded && shouldAutoStart(active) && !useLiveSessions.getState().live[active?.id ?? '']
   const activeId = active?.id
   useEffect(() => {
     // Re-checked here: effects can run twice (StrictMode) and a start in between already moved the phase on.
     const current = useWorkspace.getState().sessions.find((s) => s.id === activeId)
     if (start && activeId && current?.phase === 'not-started') void startSession(activeId, { resume: true })
   }, [start, activeId])
+}
+
+/**
+ * Agents that kept running while the app was closed are `ready` (or `exited`, when they ended meanwhile) instead of
+ * `not-started`. A process whose session no longer exists in the workspace has no way to be seen or closed: end it.
+ */
+function adoptLiveSessions(): void {
+  const { live } = useLiveSessions.getState()
+  const workspace = useWorkspace.getState()
+  for (const info of Object.values(live)) {
+    const session = workspace.sessions.find((s) => s.id === info.sessionId)
+    if (!session) {
+      void window.tr.pty.attach(info.sessionId).then((attached) => {
+        if (attached && !attached.exit) window.tr.pty.kill(info.sessionId)
+      })
+      continue
+    }
+    if (session.phase !== 'not-started') continue
+    workspace.patchSession(session.id, info.exited ? { phase: 'exited', status: 'exited' } : { phase: 'ready' })
+  }
 }

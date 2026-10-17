@@ -7,9 +7,12 @@ import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
 import type { AgentKind } from '@shared/types'
+import type { HookJournalEntry } from '../../pty-host/protocol'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
+import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
 import { createHookDir, sweepStaleHookDirs } from './hook-dir'
+import { UnknownSessionError } from './server'
 import { buildClaudeHookSettings } from './settings'
 import { StartWatchdog } from './start-watchdog'
 import { HookSupervisor } from './supervisor'
@@ -23,9 +26,19 @@ export interface AgentLaunchHooks {
   codexConfig?: string[]
 }
 
+/** Where agents' hooks go: our own supervised server, or the pty daemon's socket (then hooks are relayed to us). */
+interface HookEndpoint {
+  readonly socketPath: string
+  readonly token: string
+  readonly settingsPath: string
+  readonly health: HooksHealth
+  check(): Promise<HooksHealth>
+  stop(): Promise<void>
+}
+
 interface Runtime {
   bridge: HookBridge
-  supervisor: HookSupervisor
+  supervisor: HookEndpoint
   /** Codex's trust hashes are asked of the installed `codex` once per app run (failures for a few minutes). */
   codex: CodexConfigCache
 }
@@ -75,7 +88,42 @@ function checkIntervalOverride(): { intervalMs?: number } {
   return Number.isFinite(ms) && ms >= 100 ? { intervalMs: ms } : {}
 }
 
+/** Settled by the pty layer once it knows whether the daemon serves the hook socket (null: we serve it ourselves). */
+let decideTarget: (target: DaemonHookTarget | null) => void = () => undefined
+const targetDecision = new Promise<DaemonHookTarget | null>((resolve) => {
+  decideTarget = resolve
+})
+/** Never wait longer than this for the pty layer: hooks then run on our own server. */
+const TARGET_DECISION_TIMEOUT_MS = 8000
+
+/** Called once by src/main/pty when its host is up: the daemon's hook socket, or null for the fallback host. */
+export function setHookTarget(target: DaemonHookTarget | null): void {
+  decideTarget(target)
+}
+
 async function start(): Promise<Runtime | null> {
+  const target = await Promise.race([
+    targetDecision,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), TARGET_DECISION_TIMEOUT_MS).unref())
+  ])
+  if (target) {
+    try {
+      const bridge = new HookBridge(emitter, { holdPermissions: false })
+      const supervisor = new DaemonHookEndpoint({
+        target,
+        settings: () => buildClaudeHookSettings(hookScriptPath()),
+        onHealth: broadcastHealth,
+        ...checkIntervalOverride()
+      })
+      await supervisor.start()
+      const codex = new CodexConfigCache(() => prepareCodexHookConfig(hookScriptPath(), process.env.SHELL || '/bin/zsh'))
+      return { bridge, supervisor, codex }
+    } catch (error) {
+      console.error('[hooks] could not use the pty daemon hook socket:', error)
+      startFailure = { ok: false, reason: 'server-unavailable', detail: error instanceof Error ? error.message : String(error) }
+      return null
+    }
+  }
   try {
     const userData = app.getPath('userData')
     const dir = createHookDir({ userData })
@@ -163,6 +211,42 @@ export async function prepareAgentLaunch(sessionId: string, owner: WebContents, 
   rt.bridge.attach(sessionId)
   watchdog.arm(sessionId)
   return { env, codexConfig: codex.config }
+}
+
+/**
+ * A window reattached to an agent that kept running in the pty daemon: route its hook events to that window again.
+ * No start watchdog: the agent started long ago.
+ */
+export function adoptAgentSession(sessionId: string, owner: WebContents, missed: readonly HookJournalEntry[] = []): void {
+  owners.set(sessionId, owner)
+  void runtime?.then(async (rt) => {
+    if (!rt) return
+    rt.bridge.attach(sessionId)
+    // What happened while the app was closed (a finished turn, a permission prompt) brings the status up to date.
+    const signal = new AbortController().signal
+    for (const entry of missed) {
+      await rt.bridge
+        .handle({ event: entry.event, sessionId, agent: entry.agent, payload: entry.payload ?? undefined, signal, receivedAt: entry.at })
+        .catch(() => undefined)
+    }
+  })
+}
+
+/** A hook the pty daemon relays from an agent of an attached session; answers like our own server would. */
+export async function handleRelayedHook(request: {
+  sessionId: string
+  event: string
+  agent: 'claude' | 'codex'
+  payload: unknown
+}): Promise<{ status: number; body: string }> {
+  const rt = await runtime
+  if (!rt) return { status: 404, body: '' }
+  try {
+    const body = await rt.bridge.handle({ ...request, payload: request.payload ?? undefined, signal: new AbortController().signal })
+    return { status: 200, body }
+  } catch (error) {
+    return { status: error instanceof UnknownSessionError ? 404 : 500, body: '' }
+  }
 }
 
 /** The session's PTY ended (exit, kill, host crash): release holds and withdraw its prompts. */

@@ -5,6 +5,7 @@ import {
   decideQuit,
   hostRestartDelay,
   quitConfirmation,
+  endSessionsQuitConfirmation,
   removeProjectConfirmation,
   removeProjectMenuLabel,
   viewMenuItems
@@ -26,6 +27,10 @@ describe('decideQuit', () => {
   })
   it('never blocks an OS-forced quit', () => {
     expect(decideQuit({ active: 3, forced: true })).toBe('quit')
+  })
+
+  it('does not ask when the sessions keep running in the pty daemon', () => {
+    expect(decideQuit({ active: 3, forced: false, keepsSessions: true })).toBe('quit')
   })
 })
 
@@ -66,5 +71,12 @@ describe('hostRestartDelay', () => {
     expect(hostRestartDelay(1)).toBe(500)
     expect(hostRestartDelay(2)).toBe(1000)
     expect(hostRestartDelay(20)).toBe(30_000)
+  })
+})
+
+describe('endSessionsQuitConfirmation', () => {
+  it('asks only while sessions are active', () => {
+    expect(endSessionsQuitConfirmation(0)).toBeNull()
+    expect(endSessionsQuitConfirmation(2)).toMatchObject({ confirmLabel: '结束并退出', destructive: true })
   })
 })

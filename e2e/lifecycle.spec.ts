@@ -1,4 +1,6 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { launchApp } from './launch'
 
 // Lifecycle: closing hides instead of killing, quitting and closing ask before destroying agents,
@@ -137,17 +139,20 @@ test('quitting with running sessions asks first and stays open when cancelled', 
   await setDialogAnswer(true)
 })
 
-test('a dead pty-host is restarted; the card recovers the lost sessions', async () => {
+test('a dead pty daemon is restarted; the card recovers the lost sessions', async () => {
   // Make sure the active session has a live terminal.
   const id = (await activeId()) ?? PERF
   await expect.poll(() => screen(id), { timeout: 20_000 }).not.toBe('')
 
-  const hostPid = () =>
-    app.evaluate(({ app: electronApp }) => {
-      const metric = electronApp.getAppMetrics().find((m) => m.type === 'Utility' && /pty-host/.test(`${m.serviceName ?? ''} ${m.name ?? ''}`))
-      return metric?.pid ?? null
-    })
-  const oldPid = await hostPid()
+  const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
+  const hostPid = (): number | null => {
+    try {
+      return (JSON.parse(readFileSync(join(userData, 'daemon', 'daemon.json'), 'utf8')) as { pid: number }).pid
+    } catch {
+      return null
+    }
+  }
+  const oldPid = hostPid()
   expect(oldPid).not.toBeNull()
   process.kill(oldPid as number, 'SIGKILL')
 
@@ -158,8 +163,8 @@ test('a dead pty-host is restarted; the card recovers the lost sessions', async 
   await page.screenshot({ path: 'test-results/lifecycle-engine-restarted.png' })
 
   // Main brought a new host up.
-  await expect.poll(async () => {
-    const pid = await hostPid()
+  await expect.poll(() => {
+    const pid = hostPid()
     return pid !== null && pid !== oldPid
   }).toBe(true)
 

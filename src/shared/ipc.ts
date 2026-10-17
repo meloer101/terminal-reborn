@@ -34,14 +34,49 @@ export interface PtyExit {
   signal?: number
 }
 
+/** A live session's screen from the pty daemon's mirror (docs/spikes/pty-daemon.md §4). */
+export interface PtyScreen {
+  /** xterm SerializeAddon output; an active alternate screen follows `\x1b[?1049h\x1b[H`. */
+  data: string
+  cols: number
+  rows: number
+  /** Escape sequences that restore the program's input modes (mouse reporting, bracketed paste, …). */
+  modes: string
+  title?: string
+}
+
+/** Reattaching to a process that kept running while the app was closed (or the window reloaded). */
+export interface PtyAttachResult {
+  pid: number
+  /** Output position the screen covers; onData chunks whose seq is not past it are already in the screen. */
+  seq: number
+  screen: PtyScreen
+  /** The process ended while detached: the screen is its last one. */
+  exit?: PtyExit
+}
+
+/** A session the pty daemon holds that no window has attached yet. */
+export interface LivePtySession {
+  sessionId: SessionId
+  pid: number
+  agent?: AgentKind
+  /** Ended while detached; attach() shows its last screen once. */
+  exited: boolean
+}
+
 export interface PtyApi {
   spawn(options: PtySpawnOptions): Promise<{ pid: number }>
+  /** Sessions still running in the pty daemon from before this window loaded (empty without the daemon). */
+  live(): Promise<LivePtySession[]>
+  /** Streams a live session to this window again; null when there is nothing to attach to (then spawn). */
+  attach(sessionId: SessionId): Promise<PtyAttachResult | null>
   write(sessionId: SessionId, data: string): void
   resize(sessionId: SessionId, cols: number, rows: number): void
   kill(sessionId: SessionId): void
   /** Flow control: tells the PTY host how many UTF-16 units of output the terminal has finished parsing. */
   ack(sessionId: SessionId, count: number): void
-  onData(sessionId: SessionId, listener: (data: string) => void): Unsubscribe
+  /** `seq`: the session's output position at the end of `data` (see PtyAttachResult.seq). */
+  onData(sessionId: SessionId, listener: (data: string, seq: number) => void): Unsubscribe
   onExit(sessionId: SessionId, listener: (exit: PtyExit) => void): Unsubscribe
   /**
    * The pty-host process died and was restarted: these sessions lost their terminal process (each
@@ -170,11 +205,15 @@ export interface TrApi {
 
 export const IPC = {
   ptySpawn: 'pty:spawn',
+  /** invoke → LivePtySession[] */
+  ptyLive: 'pty:live',
+  /** invoke(sessionId) → PtyAttachResult | null */
+  ptyAttach: 'pty:attach',
   ptyWrite: 'pty:write',
   ptyResize: 'pty:resize',
   ptyKill: 'pty:kill',
   ptyAck: 'pty:ack',
-  /** main → renderer, payload { sessionId, data } */
+  /** main → renderer, payload { sessionId, data, seq } */
   ptyData: 'pty:data',
   /** main → renderer, payload { sessionId, exit } */
   ptyExit: 'pty:exit',

@@ -10,9 +10,10 @@ import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } 
 import { macKeyToBytes } from './keymap'
 import { findLigatureRanges } from './ligatures'
 import { readBufferText } from './screen-text'
+import { reattachPayload } from './reattach-payload'
 import { restorePayload, SNAPSHOT_MAX_CHARS, SNAPSHOT_SCROLLBACK_STEPS } from './snapshot-payload'
 import { createWheelState, wheelReportCount } from './tui-wheel'
-import type { TerminalSnapshot } from '@shared/ipc'
+import type { PtyScreen, TerminalSnapshot } from '@shared/ipc'
 import type { Disposable, TerminalAppearance, TerminalSurface } from './surface'
 
 export interface SurfaceDebugInfo {
@@ -299,6 +300,16 @@ export class XtermSurface implements TerminalSurface {
         resolve()
       })
     })
+  }
+
+  /**
+   * Shows a live process's screen from the pty daemon, at the size it was captured (the PTY's size), with its modes.
+   * Does not fit: the caller fits once it listens for resizes, so the PTY learns the container's size.
+   */
+  reattach(screen: PtyScreen): Promise<void> {
+    if (this.disposed || !this.term.element) return Promise.resolve()
+    if (screen.cols !== this.term.cols || screen.rows !== this.term.rows) this.term.resize(screen.cols, screen.rows)
+    return new Promise((resolve) => this.term.write(reattachPayload(screen), resolve))
   }
 
   write(data: string, callback?: () => void): void {

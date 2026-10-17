@@ -2,6 +2,8 @@
 import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import type { AgentKind, SessionId } from '@shared/types'
 import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
+import { loadLiveSessions, takeReattach } from './live-sessions'
+import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
 
 const ACK_BATCH_UNITS = 32 * 1024
@@ -60,11 +62,31 @@ export class SessionTerminal {
     const id = this.sessionId
     await this.surface.whenOpen()
     if (this.disposed) return
+    // A process that kept running in the pty daemon (app quit, window reload) is reattached, never respawned.
+    await loadLiveSessions()
+    if (this.disposed) return
+    if (takeReattach(id) && (await this.reattach())) return
+    if (this.disposed) return
+
     // Paint the last screen right away; the process below takes a few seconds to draw anything.
     const snapshot = window.tr.terminalSnapshots.loadSync(id)
     if (snapshot) await this.surface.restore(snapshot)
     if (this.disposed) return
 
+    this.listen()
+    this.cleanups.push(
+      pty.onData(id, (data) => {
+        this.surface.write(data, () => this.ack(data.length))
+        this.markDirty()
+      })
+    )
+    await this.spawnProcess(this.resumeAgentSessionId)
+  }
+
+  /** Input, resize, exit and launch-marker listeners (output is wired by the caller). */
+  private listen(): void {
+    const pty = window.tr.pty
+    const id = this.sessionId
     const input = this.surface.onInput((data) => this.sendInput(data))
     const resize = this.surface.onResize(({ cols, rows }) => pty.resize(id, cols, rows))
     // The launch script reports the agent's end (or a missing CLI) as an OSC marker; listening here, before the
@@ -76,10 +98,6 @@ export class SessionTerminal {
       emitAgentMarker(id, marker)
     })
     this.cleanups.push(
-      pty.onData(id, (data) => {
-        this.surface.write(data, () => this.ack(data.length))
-        this.markDirty()
-      }),
       pty.onExit(id, ({ exitCode }) => {
         this.exited = true
         this.surface.write(dim(`[进程已退出，退出码 ${exitCode}]`))
@@ -88,8 +106,52 @@ export class SessionTerminal {
       () => resize.dispose(),
       () => markers.dispose()
     )
+  }
 
-    await this.spawnProcess(this.resumeAgentSessionId)
+  /**
+   * Shows the daemon's screen of the still-running process and continues its live output from exactly there.
+   * False when the daemon no longer has it (then the cold path spawns).
+   */
+  private async reattach(): Promise<boolean> {
+    const pty = window.tr.pty
+    const id = this.sessionId
+    // Output can arrive before the screen does; hold it, and drop what the screen already shows.
+    let covered: number | null = null
+    const held: Array<[string, number]> = []
+    const write = (data: string, seq: number): void => {
+      if (covered === null) {
+        held.push([data, seq])
+        return
+      }
+      const fresh = uncovered(data, seq, covered)
+      if (!fresh) return
+      this.surface.write(fresh, () => this.ack(fresh.length))
+      this.markDirty()
+    }
+    const offData = pty.onData(id, write)
+    const result = await pty.attach(id).catch(() => null)
+    if (!result || this.disposed) {
+      offData()
+      return false
+    }
+    this.cleanups.push(offData)
+    await this.surface.reattach(result.screen)
+    if (this.disposed) return true
+    covered = result.seq
+    for (const [data, seq] of held.splice(0)) write(data, seq)
+    this.dirty = true
+    if (result.exit) {
+      this.exited = true
+      this.surface.write(dim(`[进程已退出，退出码 ${result.exit.exitCode}]`))
+      return true
+    }
+    this.listen()
+    this.ready = true
+    for (const data of this.queuedInput) pty.write(id, data)
+    this.queuedInput = []
+    // Now that resizes reach the PTY: fit the container (a different size makes the program redraw for it).
+    this.surface.fit()
+    return true
   }
 
   /** Spawns the PTY at the current size; false when it could not be started. */

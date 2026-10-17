@@ -24,6 +24,8 @@ export interface HookRequest {
   payload: unknown
   /** Aborted when the hook process went away (agent exited / killed it) before we answered. */
   signal: AbortSignal
+  /** When the hook fired, if earlier than now (replayed from the pty daemon's journal). */
+  receivedAt?: number
 }
 
 /** Thrown by a handler to answer 404 (unknown session); the hook script then prints nothing. */
