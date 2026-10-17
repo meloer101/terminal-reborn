@@ -8,6 +8,7 @@ import { mockProjects, mockSessions, mockWorktrees } from './mock-data'
 import {
   addProject,
   addSession,
+  addSessionInWorktree,
   closeSession,
   persistedStateChanged,
   rememberRecentProject,
@@ -63,6 +64,8 @@ interface WorkspaceState extends WorkspaceData {
   removeProject(id: ProjectId): void
   /** Starts a session in the project and selects it; null if the project is gone. */
   addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
+  /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
+  addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string }, kind: AgentKind): SessionId | null
   closeSession(id: SessionId): void
   /** Live, non-persisted fields driven by agent signals (status track, M2). */
   patchSession(id: SessionId, patch: SessionPatch): void
@@ -141,6 +144,12 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     const result = addSession(pick(get()), projectId, kind, Date.now())
     if (!result) return null
     set(result.data)
+    return result.sessionId
+  },
+  addSessionInWorktree(projectId, target, kind) {
+    const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now())
+    if (!result) return null
+    set({ ...result.data, mainView: 'session', focusRequest: get().focusRequest + 1 })
     return result.sessionId
   },
   closeSession: (id) => set(closeSession(pick(get()), id)),

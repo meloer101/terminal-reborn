@@ -8,6 +8,7 @@ import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
+import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -141,6 +142,17 @@ export interface WorktreeFilesApi {
   onChanged(listener: (change: WorktreeChange) => void): Unsubscribe
 }
 
+/** A project's git worktrees for the right panel's Worktree view (PRD F17). `root` is the project's absolute path. */
+export interface GitWorktreesApi {
+  /**
+   * Every worktree of the repository with uncommitted stats and ahead / behind its base; null when `root` is not in a
+   * git repository. `knownPaths` (the workspace's worktree paths) come back resolved in `realPaths` for matching.
+   */
+  list(root: string, knownPaths: string[]): Promise<GitWorktreeListing | null>
+  /** `git worktree remove` (never the main checkout, never with uncommitted changes); `force` only after a second confirmation. */
+  remove(root: string, path: string, force: boolean): Promise<WorktreeRemoveResult>
+}
+
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
 export interface WorkspaceStoreApi {
   /** Synchronous read at startup (null when nothing is stored yet). */
@@ -233,6 +245,7 @@ export interface TrApi {
   workspace: WorkspaceStoreApi
   terminalSnapshots: TerminalSnapshotApi
   worktree: WorktreeFilesApi
+  gitWorktrees: GitWorktreesApi
 }
 
 export const IPC = {
@@ -307,5 +320,9 @@ export const IPC = {
   worktreeWatch: 'worktree:watch',
   worktreeUnwatch: 'worktree:unwatch',
   /** main → renderer, payload WorktreeChange */
-  worktreeChanged: 'worktree:changed'
+  worktreeChanged: 'worktree:changed',
+  /** invoke(root, knownPaths) → GitWorktreeListing | null */
+  gitWorktreesList: 'git-worktrees:list',
+  /** invoke(root, path, force) → WorktreeRemoveResult */
+  gitWorktreesRemove: 'git-worktrees:remove'
 } as const

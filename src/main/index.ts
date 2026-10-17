@@ -17,6 +17,7 @@ import { createMainWindow, getMainWindow, installAppMenu, showMainWindow, showSe
 import { registerTerminalSnapshots } from './terminal-snapshots'
 import { registerWorkspaceStore } from './workspace-store'
 import { registerWorktreeFileHandlers } from './worktree-files'
+import { registerGitWorktreeHandlers } from './git-worktrees'
 
 // Lets e2e runs use a throwaway profile instead of the user's real workspace and drafts.
 if (process.env.TR_USER_DATA_DIR) app.setPath('userData', process.env.TR_USER_DATA_DIR)
@@ -66,6 +67,7 @@ function boot(): void {
   registerAppearanceEffects()
   registerFileHandlers()
   registerWorktreeFileHandlers()
+  registerGitWorktreeHandlers()
   registerHookHandlers()
   registerPtyHandlers()
   registerUiHandlers()

@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
 import { FilesView } from './files/FilesView'
+import { WorktreeView } from './worktree/WorktreeView'
 import { PaneHeader } from './PaneHeader'
 import styles from './RightPanel.module.css'
 
@@ -11,7 +12,8 @@ export const PANEL_VIEW_LABEL: Record<PanelView, string> = { browser: '浏览器
 
 export function RightPanel({ view }: { view: PanelView }) {
   const active = useActiveSession()
-  const projectName = useWorkspace((s) => s.projects.find((p) => p.id === active?.worktree?.projectId)?.name ?? '')
+  const project = useWorkspace((s) => s.projects.find((p) => p.id === active?.worktree?.projectId))
+  const projectName = project?.name ?? ''
   const worktree = active?.worktree
   return (
     <>
@@ -19,6 +21,8 @@ export function RightPanel({ view }: { view: PanelView }) {
       <div className={styles.card} data-view={view} data-testid="right-panel">
         {view === 'files' && worktree && active ? (
           <FilesView key={worktree.path} root={worktree.path} sessionId={active.session.id} />
+        ) : view === 'worktree' && worktree && project ? (
+          <WorktreeView key={project.rootPath} projectId={project.id} root={project.rootPath} projectName={project.name} activeWorktreeId={worktree.id} />
         ) : (
           <>
             <PaneHeader title={PANEL_VIEW_LABEL[view]} context={view === 'browser' ? '' : projectName} />
