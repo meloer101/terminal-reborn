@@ -1,6 +1,6 @@
 import { CircleAlert, Ellipsis, GitBranch, PanelLeft, PanelRight } from 'lucide-react'
 import { useState, type KeyboardEvent } from 'react'
-import { STATUS_LABEL } from '@shared/session-status'
+import { compareByUrgency, needsAttention, STATUS_LABEL } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
 import { AGENT_NAME, glyphStatus, phaseLabel } from '../lifecycle/present'
 import { RIGHT_PANEL_AVAILABLE } from '../panels/availability'
@@ -15,6 +15,9 @@ export function SessionHeader() {
   const active = useActiveSession()
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar)
+  const waiting = useWorkspace((s) => s.sessions.filter((x) => needsAttention(x.status)).length)
+  const mostUrgent = useWorkspace((s) => s.sessions.filter((x) => needsAttention(x.status)).sort(compareByUrgency)[0]?.status)
+  const setMainView = useWorkspace((s) => s.setMainView)
   const rightPanel = useWorkspace((s) => s.rightPanel)
   const setRightPanel = useWorkspace((s) => s.setRightPanel)
   const hooks = useHooksHealth(active?.session.id ?? null)
@@ -28,6 +31,15 @@ export function SessionHeader() {
         <IconButton label="显示侧栏" onClick={toggleSidebar}>
           <PanelLeft size={16} strokeWidth={1.75} />
         </IconButton>
+      )}
+      {/* With the sidebar hidden nothing else says another session is waiting (B9). */}
+      {sidebarCollapsed && waiting > 0 && mostUrgent && (
+        <button type="button" className={styles.waiting} title="打开总览 · ⇧⌘A" onClick={() => setMainView('overview')}>
+          <span aria-hidden className={styles.waitingGlyph}>
+            <StatusGlyph status={mostUrgent} />
+          </span>
+          {waiting} 个会话需要你
+        </button>
       )}
       {active && (
         <>

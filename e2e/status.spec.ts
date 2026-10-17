@@ -163,6 +163,20 @@ test('clicking a notification activates its session', async () => {
   await expect(header()).toContainText('侧边栏状态聚合', WITHIN)
 })
 
+test('with the sidebar hidden, the header says how many sessions need you and opens the overview', async () => {
+  await page.getByRole('button', { name: '隐藏侧栏' }).click()
+  const hint = header().getByRole('button', { name: /个会话需要你/ })
+  await expect(hint).toBeVisible(WITHIN)
+  const badge = (await calls()).badge.at(-1)
+  await expect(hint).toHaveText(`${badge} 个会话需要你`)
+  await page.screenshot({ path: join(SHOTS, 'collapsed-waiting.png') })
+  await hint.click()
+  await expect(page.locator('[data-region="overview"]')).toBeVisible(WITHIN)
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '显示侧栏' }).first().click()
+  await expect(row('s-cookie')).toBeVisible(WITHIN)
+})
+
 test('screenshots: queue and header in both themes', async () => {
   // Fresh fixtures: earlier tests ended some sessions.
   await page.reload()
