@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
+import { useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
 import styles from './TerminalArea.module.css'
@@ -26,30 +27,33 @@ interface PaneProps {
 
 function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
-  // Spawn lazily: nothing is created until the session has been active once (a live process is attached at once).
+  // The overview may show this terminal in its own host for a while (borrow.ts).
+  const borrowedHost = useBorrowedTerminal((s) => (s.sessionId === sessionId ? s.host : null))
+  const shown = active || borrowedHost !== null
+  // Spawn lazily: nothing is created until the session has been shown once (a live process is attached at once).
   const [everActive, setEverActive] = useState(active || live)
-  if ((active || live) && !everActive) setEverActive(true)
+  if ((shown || live) && !everActive) setEverActive(true)
 
   useEffect(() => {
-    const host = hostRef.current
+    const host = borrowedHost ?? hostRef.current
     if (!everActive || held || !host) return
     ensureTerminal(sessionId, cwd, agent, resumeAgentSessionId).attach(host)
-  }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation])
+  }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation, borrowedHost])
 
-  // Refit + resize on show, and release the WebGL context while hidden.
+  // Refit + resize on show (and on moving between hosts), and release the WebGL context while hidden.
   useEffect(() => {
     if (!everActive) return
     const surface = getXtermSurface(sessionId)
-    if (!active) {
+    if (!shown) {
       surface?.setVisible(false)
       return
     }
     const frame = requestAnimationFrame(() => getXtermSurface(sessionId)?.setVisible(true))
     return () => cancelAnimationFrame(frame)
-  }, [active, everActive, sessionId])
+  }, [shown, everActive, sessionId, borrowedHost])
 
   useEffect(() => {
-    const host = hostRef.current
+    const host = borrowedHost ?? hostRef.current
     if (!everActive || !host) return
     let frame = 0
     const observer = new ResizeObserver(() => {
@@ -63,7 +67,7 @@ function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSe
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [everActive, sessionId])
+  }, [everActive, sessionId, borrowedHost])
 
   return (
     <div

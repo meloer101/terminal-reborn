@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Project, Session, SessionStatus, Worktree } from '@shared/types'
-import { buildOverview, moveSelection, orderedIds, overviewSummary, parseFilter, tailLines } from './model'
+import { buildOverview, clampTrayHeight, moveSelection, orderedIds, overviewSummary, parseFilter } from './model'
 
 const MIN = 60_000
 const NOW = 100 * MIN
@@ -47,15 +47,17 @@ describe('buildOverview', () => {
     expect(ask).toMatchObject({
       statusLabel: '等你处理',
       tone: 'attention',
+      card: 'attention',
       where: 'acme-web › jacob/cookie',
       summary: '等你确认：运行 pnpm prisma migrate dev',
       stat: '+42 −18',
       time: '已等 3m'
     })
     expect(groups[0]?.rows[1]).toMatchObject({ statusLabel: '等你处理', where: 'terminal-reborn › jacob/graph', stat: '' })
-    expect(groups[1]?.rows[0]).toMatchObject({ statusLabel: '出错', tone: 'error', summary: 'pnpm build 失败', time: '5m 前' })
-    expect(groups[3]?.rows[0]).toMatchObject({ statusLabel: '运行中', tone: 'plain', time: '30m' })
-    expect(groups[4]?.rows[0]).toMatchObject({ where: 'acme-web', summary: '终端 · /a' })
+    expect(groups[1]?.rows[0]).toMatchObject({ statusLabel: '出错', tone: 'error', card: 'error', summary: 'pnpm build 失败', time: '5m 前' })
+    expect(groups[3]?.rows[0]).toMatchObject({ statusLabel: '运行中', tone: 'plain', card: 'working', time: '30m' })
+    expect(groups[2]?.rows[0]?.card).toBe('review')
+    expect(groups[4]?.rows[0]).toMatchObject({ where: 'acme-web', summary: '终端 · /a', card: 'idle' })
   })
 
   it('a starting agent counts as running; a restored one is idle and says so', () => {
@@ -104,9 +106,15 @@ describe('navigation helpers', () => {
     expect(moveSelection([], 'a', 1)).toBeNull()
   })
 
-  it('summarises the header and tails a snapshot', () => {
+  it('summarises the header', () => {
     expect(overviewSummary([{ status: 'idle' }, { status: 'running' }], 0)).toBe('2 个会话')
     expect(overviewSummary([{ status: 'idle' }, { status: 'needs_you' }], 1)).toBe('2 个会话 · 1 个需要你')
-    expect(tailLines('1\n2\n3\n\n  \n', 2)).toBe('2\n3')
+  })
+
+  it('keeps the tray between 240 and 70% of the window', () => {
+    expect(clampTrayHeight(420, 900)).toBe(420)
+    expect(clampTrayHeight(100, 900)).toBe(240)
+    expect(clampTrayHeight(2000, 900)).toBe(630)
+    expect(clampTrayHeight(500, 300)).toBe(240)
   })
 })

@@ -1,0 +1,84 @@
+/* Figma 11v2-D — centered overlay over the whole window (sidebar included). */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: var(--overlay-scrim);
+  /* The titlebar drag regions underneath must not swallow clicks on the scrim. */
+  -webkit-app-region: no-drag;
+}
+
+.panel {
+  /* 1440×900 leaves 120 / 60 around it. */
+  width: min(calc(100vw - 240px), 1200px);
+  height: min(calc(100vh - 120px), 780px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--tr-term-surface, var(--term-bg));
+  box-shadow: var(--shadow-overlay);
+  outline: none;
+}
+
+.bar {
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 0 var(--space-16);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+}
+
+.bar > * {
+  flex: none;
+}
+
+.title {
+  font: var(--text-body-heading);
+  line-height: 20px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.where {
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.status {
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-default);
+}
+
+.terminal {
+  flex: 1;
+  min-height: 0;
+}

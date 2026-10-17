@@ -1,4 +1,4 @@
-// Pure overview model (PRD F9, Figma 11 / 11b / 11c): every session across projects, grouped by what it
+// Pure overview model (PRD F9, Figma 11 v2): every session across projects, grouped by what it
 // needs from the user. The list and the board draw the same groups, so the two views never disagree.
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { formatElapsed } from '../sidebar/format-elapsed'
@@ -22,12 +22,16 @@ export const GROUP_LABEL: Record<OverviewGroupKey, string> = {
 /** Color is only for the two states that pull the user in; everything else stays neutral. */
 export type OverviewTone = 'attention' | 'error' | 'plain'
 
+/** Board card fill (tokens `--card-<tone>`): one per group, exited shares idle's. */
+export type CardTone = 'attention' | 'error' | 'review' | 'working' | 'idle'
+
 export interface OverviewRow {
   session: Session
   /** Status shown as text next to the glyph (status is never color-only). */
   status: SessionStatus
   statusLabel: string
   tone: OverviewTone
+  card: CardTone
   title: string
   /** `project › branch`, or just the project for its main checkout. */
   where: string
@@ -94,6 +98,22 @@ function toneOf(status: SessionStatus): OverviewTone {
   return 'plain'
 }
 
+function cardOf(status: SessionStatus): CardTone {
+  switch (status) {
+    case 'needs_you':
+      return 'attention'
+    case 'error':
+      return 'error'
+    case 'done_unread':
+      return 'review'
+    case 'running':
+      return 'working'
+    case 'idle':
+    case 'exited':
+      return 'idle'
+  }
+}
+
 function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, now: number): OverviewRow {
   const status = glyphStatus(session)
   const projectName = project?.name ?? ''
@@ -105,6 +125,7 @@ function toRow(session: Session, worktree: Worktree | undefined, project: Projec
     status,
     statusLabel: statusLabel(session, status),
     tone: toneOf(status),
+    card: cardOf(status),
     title: session.title,
     where: branch ? `${projectName} › ${branch}` : projectName,
     projectName,
@@ -186,9 +207,10 @@ export function moveSelection(ids: readonly SessionId[], current: SessionId | nu
   return ids[Math.min(ids.length - 1, Math.max(0, at + direction))] ?? null
 }
 
-/** The last `lines` non-empty-tail lines of a terminal snapshot. */
-export function tailLines(text: string, lines: number): string {
-  const all = text.split('\n')
-  while (all.length > 0 && all[all.length - 1]?.trim() === '') all.pop()
-  return all.slice(-lines).join('\n')
+/** The in-place terminal in the list: 420 by default, draggable between 240 and 70% of the window. */
+export const TRAY_HEIGHT = { initial: 420, min: 240, maxShare: 0.7 } as const
+
+export function clampTrayHeight(height: number, viewportHeight: number): number {
+  const max = Math.max(TRAY_HEIGHT.min, Math.floor(viewportHeight * TRAY_HEIGHT.maxShare))
+  return Math.round(Math.min(max, Math.max(TRAY_HEIGHT.min, height)))
 }
