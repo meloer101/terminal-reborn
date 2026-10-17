@@ -4,8 +4,10 @@ import {
   rememberRecentProject,
   addProject,
   addSession,
+  addSessionInWorktree,
   closeSession,
   EMPTY_WORKSPACE,
+  forgetWorktrees,
   persistedStateChanged,
   projectOfSession,
   removedSessionIds,
@@ -54,6 +56,46 @@ describe('addSession', () => {
 
   it('returns null for an unknown project', () => {
     expect(addSession(EMPTY_WORKSPACE, 'nope', 'claude', 0)).toBeNull()
+  })
+})
+
+describe('addSessionInWorktree', () => {
+  it('registers the folder as a linked worktree once and starts the session there', () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const target = { path: '/wt/fix', branch: 'jacob/fix' }
+    const first = addSessionInWorktree(data, projectId, target, 'claude', 1000, makeId)!
+    expect(first.data.worktrees.at(-1)).toEqual({ id: 'w-3', projectId, branch: 'jacob/fix', path: '/wt/fix', isMain: false })
+    expect(first.data.sessions.at(-1)).toMatchObject({ id: first.sessionId, worktreeId: 'w-3', kind: 'claude' })
+    expect(first.data.activeSessionId).toBe(first.sessionId)
+    const second = addSessionInWorktree(first.data, projectId, target, 'shell', 2000, makeId)!
+    expect(second.data.worktrees).toHaveLength(2)
+    expect(second.data.sessions.at(-1)?.worktreeId).toBe('w-3')
+  })
+
+  it("reuses the main checkout's record for its own path", () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const result = addSessionInWorktree(data, projectId, { path: '/repo', branch: 'main' }, 'codex', 0, makeId)!
+    expect(result.data.worktrees).toHaveLength(1)
+    expect(result.data.sessions[0]?.worktreeId).toBe('w-2')
+  })
+
+  it('returns null for an unknown project', () => {
+    expect(addSessionInWorktree(EMPTY_WORKSPACE, 'nope', { path: '/x', branch: 'x' }, 'claude', 0)).toBeNull()
+  })
+})
+
+describe('forgetWorktrees', () => {
+  it('drops linked worktree records with their sessions, never the main checkout', () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const linked = addSessionInWorktree(data, projectId, { path: '/wt/fix', branch: 'fix' }, 'claude', 0, makeId)!
+    const withMain = addSession(linked.data, projectId, 'shell', 0, makeId)!.data
+    const next = forgetWorktrees(withMain, ['w-3', 'w-2'])
+    expect(next.worktrees.map((w) => w.id)).toEqual(['w-2'])
+    expect(next.sessions.map((s) => s.worktreeId)).toEqual(['w-2'])
+    expect(forgetWorktrees(withMain, ['nope'])).toBe(withMain)
   })
 })
 

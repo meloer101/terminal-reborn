@@ -56,6 +56,35 @@ export function addSession(
 ): { data: WorkspaceData; sessionId: SessionId } | null {
   const worktree = data.worktrees.find((w) => w.projectId === projectId && w.isMain)
   if (!worktree) return null
+  return startSessionIn(data, worktree, kind, now, makeId)
+}
+
+/**
+ * Starts a session in another worktree folder of the project (Worktree view · 在此新建会话) and selects it. The folder
+ * is registered as a (linked) worktree the first time; a path that is already known reuses its record.
+ */
+export function addSessionInWorktree(
+  data: WorkspaceData,
+  projectId: ProjectId,
+  target: { path: string; branch: string },
+  kind: AgentKind,
+  now: number,
+  makeId: MakeId = randomId
+): { data: WorkspaceData; sessionId: SessionId } | null {
+  if (!data.projects.some((p) => p.id === projectId)) return null
+  const known = data.worktrees.find((w) => w.projectId === projectId && w.path === target.path)
+  if (known) return startSessionIn(data, known, kind, now, makeId)
+  const worktree: Worktree = { id: makeId('w'), projectId, branch: target.branch, path: target.path, isMain: false }
+  return startSessionIn({ ...data, worktrees: [...data.worktrees, worktree] }, worktree, kind, now, makeId)
+}
+
+function startSessionIn(
+  data: WorkspaceData,
+  worktree: Worktree,
+  kind: AgentKind,
+  now: number,
+  makeId: MakeId
+): { data: WorkspaceData; sessionId: SessionId } {
   const session: Session = {
     id: makeId('s'),
     worktreeId: worktree.id,
@@ -76,6 +105,15 @@ export function closeSession(data: WorkspaceData, sessionId: SessionId): Workspa
   const activeSessionId =
     data.activeSessionId === sessionId ? (sessions[at]?.id ?? sessions[at - 1]?.id ?? null) : data.activeSessionId
   return { ...data, sessions, activeSessionId }
+}
+
+/** Forgets linked worktree records (their folder was deleted) and closes their sessions. Main checkouts stay. */
+export function forgetWorktrees(data: WorkspaceData, worktreeIds: readonly string[]): WorkspaceData {
+  const ids = new Set(data.worktrees.filter((w) => worktreeIds.includes(w.id) && !w.isMain).map((w) => w.id))
+  if (ids.size === 0) return data
+  let next: WorkspaceData = data
+  for (const s of data.sessions) if (ids.has(s.worktreeId)) next = closeSession(next, s.id)
+  return { ...next, worktrees: next.worktrees.filter((w) => !ids.has(w.id)) }
 }
 
 /** Removes a project with its worktrees and sessions. */

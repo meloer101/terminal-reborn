@@ -90,7 +90,7 @@
 - [x] F17 右侧栏外壳（2026-10-17）：浮层卡片、会话头四个切换图标、⌥⌘B 记住上次的视图、宽度可拖拽并保存（400–1200）、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 `--shadow-pane`；浏览器 / Git / Worktree 视图暂为占位
 - [x] F5 / F17 Git · 变更视图（2026-10-17，Figma 13B2）：未提交 / 已提交（对比基线；本地基线落后时对比 origin；在基线分支本身上对比 upstream）分组、领先 / 落后、展开单个文件的 unified diff（只渲染可见行；嵌套仓库、超大文件不展开）、文件变化时每秒最多刷新一次；e2e `git-panel.spec.ts`，主进程测试 `git-graph.test.ts`
 - [ ] F5 行内评论发给 agent、split 视图；“创建 PR”“合并到 main ⌘M”按钮暂为禁用（等 F16 / F4 本地合并）。还没测：1 万行 diff 实际滚动帧率（行已窗口化）
-- [ ] F17 Worktree 页签：列表、选中详情、可清理分组
+- [x] F17 Worktree 页签（2026-10-17）：`git worktree list` + 会话状态、未提交 `+N −M`、领先 / 落后，选中行展开详情和操作（打开文件夹 · 在此新建会话 · 复制路径 · 删除），可清理分组一键清理（只碰没有会话、已合并的）、没有会话分组逐个删除；删除在有改动、git 检查失败、分离 HEAD 有孤立提交、变基中、会话在跑时拒绝；监听 `.git` 变化 + 可见时轮询；e2e `worktree-panel.spec.ts`。以后：`worktree list -z`、lock 原因、squash / rebase 合并识别、删除时可选删分支（`branch -d`）、手动刷新和逐行错误、`core.fsmonitor=false`、我们 PTY 之外 cwd 在 worktree 里的进程。等 F4：+ 改成新建 worktree、“合并到 main…”接上；端口段等端口扫描
 - [x] F17 文件页签（2026-10-17）：按需加载的目录树 + git 状态、筛选和“有改动 N”、只读预览（行号 + 改动标记）、用默认编辑器打开、右键菜单、`fs.watch` 增量刷新；e2e `right-panel.spec.ts`。还没测：1 万文件仓库首屏 < 200 ms、切换会话 100 ms 内换内容
 - [ ] F13 一键 AI 审阅
 - [ ] F15 归档

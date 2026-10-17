@@ -3,12 +3,14 @@
 // feature's own store, not here — keeps parallel work from colliding on this file.
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentKind, ProjectId, Session, SessionId, Worktree } from '@shared/types'
+import type { AgentKind, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
 import { mockProjects, mockSessions, mockWorktrees } from './mock-data'
 import {
   addProject,
   addSession,
+  addSessionInWorktree,
   closeSession,
+  forgetWorktrees,
   persistedStateChanged,
   rememberRecentProject,
   removedSessionIds,
@@ -63,7 +65,11 @@ interface WorkspaceState extends WorkspaceData {
   removeProject(id: ProjectId): void
   /** Starts a session in the project and selects it; null if the project is gone. */
   addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
+  /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
+  addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string }, kind: AgentKind): SessionId | null
   closeSession(id: SessionId): void
+  /** Drops linked worktree records whose folder was deleted, with their sessions (Worktree view). */
+  forgetWorktrees(ids: WorktreeId[]): void
   /** Live, non-persisted fields driven by agent signals (status track, M2). */
   patchSession(id: SessionId, patch: SessionPatch): void
 }
@@ -143,7 +149,14 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     set(result.data)
     return result.sessionId
   },
+  addSessionInWorktree(projectId, target, kind) {
+    const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now())
+    if (!result) return null
+    set({ ...result.data, mainView: 'session', focusRequest: get().focusRequest + 1 })
+    return result.sessionId
+  },
   closeSession: (id) => set(closeSession(pick(get()), id)),
+  forgetWorktrees: (ids) => set(forgetWorktrees(pick(get()), ids)),
   patchSession: (id, patch) =>
     set((s) => {
       const index = s.sessions.findIndex((x) => x.id === id)

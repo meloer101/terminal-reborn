@@ -45,7 +45,7 @@ export function isInside(root: string, target: string): boolean {
 }
 
 /** Absolute, existing directory; throws otherwise. Resolves symlinks so containment checks compare real paths. */
-async function resolveRoot(root: unknown): Promise<string> {
+export async function resolveRoot(root: unknown): Promise<string> {
   if (typeof root !== 'string' || root.length > MAX_PATH || root.includes('\0') || !isAbsolute(root)) throw new Error('invalid worktree root')
   const real = await realpath(root)
   if (!(await stat(real)).isDirectory()) throw new Error('worktree root is not a directory')
@@ -61,7 +61,7 @@ async function resolveInside(realRoot: string, path: unknown): Promise<{ rel: st
   return { rel, abs }
 }
 
-function git(cwd: string, args: string[]): Promise<string> {
+export function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       'git',

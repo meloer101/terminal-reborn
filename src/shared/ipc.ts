@@ -9,6 +9,7 @@ import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
+import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -158,6 +159,26 @@ export interface GitGraphApi {
   fileDiff(request: GitFileDiffRequest): Promise<string>
 }
 
+/**
+ * A project's git worktrees for the right panel's Worktree view (PRD F17). `root` must be one of the workspace's
+ * project roots (main refuses anything else).
+ */
+export interface GitWorktreesApi {
+  /**
+   * Every worktree of the repository with uncommitted stats and ahead / behind its base; null when `root` is not in a
+   * git repository. `knownPaths` (the workspace's worktree paths) come back resolved in `realPaths` for matching.
+   * `only` (resolved paths) limits the per-worktree details to those; the others come back with `detailed: false`.
+   */
+  list(root: string, knownPaths: string[], only?: string[]): Promise<GitWorktreeListing | null>
+  /** `git worktree remove`, refused whenever work could be lost; `force` only after git's submodule refusal. */
+  remove(root: string, path: string, force: boolean): Promise<WorktreeRemoveResult>
+  /** Starts / stops watching the repository's worktrees and branches for this window; changes arrive through onChanged. */
+  watch(root: string): void
+  unwatch(root: string): void
+  /** The project at `root` gained, lost or moved a worktree or branch. */
+  onChanged(listener: (root: string) => void): Unsubscribe
+}
+
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
 export interface WorkspaceStoreApi {
   /** Synchronous read at startup (null when nothing is stored yet). */
@@ -251,6 +272,7 @@ export interface TrApi {
   terminalSnapshots: TerminalSnapshotApi
   worktree: WorktreeFilesApi
   git: GitGraphApi
+  gitWorktrees: GitWorktreesApi
 }
 
 export const IPC = {
@@ -331,5 +353,13 @@ export const IPC = {
   gitSignature: 'git:signature',
   gitFetch: 'git:fetch',
   gitChanges: 'git:changes',
-  gitFileDiff: 'git:file-diff'
+  gitFileDiff: 'git:file-diff',
+  /** invoke(root, knownPaths, only?) → GitWorktreeListing | null */
+  gitWorktreesList: 'git-worktrees:list',
+  /** invoke(root, path, force) → WorktreeRemoveResult */
+  gitWorktreesRemove: 'git-worktrees:remove',
+  gitWorktreesWatch: 'git-worktrees:watch',
+  gitWorktreesUnwatch: 'git-worktrees:unwatch',
+  /** main → renderer, payload root */
+  gitWorktreesChanged: 'git-worktrees:changed'
 } as const
