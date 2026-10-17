@@ -2,6 +2,7 @@
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
 import { SHORTCUTS } from '@shared/shortcuts'
+import type { PersistedRightPanel as PanelView } from '@shared/workspace-file'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
 import { matchFields, type MatchField, type Range } from './match'
 
@@ -14,12 +15,12 @@ export type ActionId =
   | 'open-project'
   | 'toggle-sidebar'
   | 'toggle-overview'
-  | 'toggle-changes'
+  | 'toggle-right-panel'
   | 'theme-system'
   | 'theme-dark'
   | 'theme-light'
 
-export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'changes' | 'monitor' | 'moon' | 'sun'
+export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun'
 
 export type PaletteTarget = { type: 'session'; sessionId: SessionId } | { type: 'action'; action: ActionId }
 
@@ -46,10 +47,8 @@ export interface PaletteInput {
   worktrees: Worktree[]
   sessions: Session[]
   activeSessionId: SessionId | null
-  rightPanel: 'changes' | 'graph' | null
+  rightPanel: PanelView | null
   mainView?: 'session' | 'overview'
-  /** The right panel has content (M4); until then its toggle is not offered (B11). */
-  panelAvailable: boolean
   /** Folded sidebar projects: their sessions are listed but have no ⌘1–⌘9. */
   collapsedProjectIds?: readonly ProjectId[]
 }
@@ -109,7 +108,7 @@ const ACTION_SHORTCUT: Partial<Record<ActionId, string>> = {
   'open-project': SHORTCUTS['open-project'],
   'toggle-overview': SHORTCUTS['toggle-overview'],
   'toggle-sidebar': SHORTCUTS['toggle-sidebar'],
-  'toggle-changes': SHORTCUTS['toggle-right-panel']
+  'toggle-right-panel': SHORTCUTS['toggle-right-panel']
 }
 
 function action(id: ActionId, title: string, icon: ActionIcon, keywords: string, subtitle = ''): PaletteEntry {
@@ -151,9 +150,7 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
     action('open-project', '打开项目…', 'folder-plus', 'open add project folder'),
     action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
-    ...(input.panelAvailable
-      ? [action('toggle-changes', input.rightPanel === 'changes' ? '关闭变更面板' : '打开变更面板', 'changes', 'changes diff panel')]
-      : []),
+    action('toggle-right-panel', input.rightPanel ? '关闭右侧栏' : '打开右侧栏', 'panel', 'right panel files git browser worktree 文件 youcelan'),
     action('theme-system', '主题：跟随系统', 'monitor', 'theme system auto appearance'),
     action('theme-dark', '主题：深色', 'moon', 'theme dark appearance'),
     action('theme-light', '主题：浅色', 'sun', 'theme light appearance')

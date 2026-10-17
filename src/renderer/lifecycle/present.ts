@@ -26,13 +26,6 @@ export function phaseLine(session: PhaseView & Pick<Session, 'agentSessionId'>):
   }
 }
 
-/** Header status text: `Claude Code · 启动中`. */
-export function phaseLabel(session: PhaseView, statusLabel: string): string {
-  if (session.phase === 'starting') return '启动中'
-  if (session.phase === 'not-started') return '未启动'
-  return statusLabel
-}
-
 /** How to install an agent CLI that is not on the login shell's PATH (first-run screen). */
 export const INSTALL_HINT = {
   claude: 'npm install -g @anthropic-ai/claude-code',

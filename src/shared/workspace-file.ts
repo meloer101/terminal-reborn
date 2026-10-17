@@ -5,7 +5,24 @@ import type { AgentKind, Project, Worktree } from './types'
 
 export const WORKSPACE_FILE_VERSION = 2
 
-export type PersistedRightPanel = 'changes' | 'graph'
+/** The right panel's views (PRD F17). Files written before F17 said 'changes' / 'graph'; both read as 'git'. */
+export type PersistedRightPanel = 'browser' | 'git' | 'worktree' | 'files'
+
+export const RIGHT_PANEL_VIEWS: readonly PersistedRightPanel[] = ['browser', 'git', 'worktree', 'files']
+
+/** Card width (F17): dragged by its left edge. */
+export const PANEL_WIDTH_DEFAULT = 480
+export const PANEL_WIDTH_MIN = 400
+export const PANEL_WIDTH_MAX = 1200
+
+export function sanitizeRightPanel(value: unknown): PersistedRightPanel | null {
+  if (value === 'changes' || value === 'graph') return 'git'
+  return RIGHT_PANEL_VIEWS.includes(value as PersistedRightPanel) ? (value as PersistedRightPanel) : null
+}
+
+export function clampPanelWidth(value: number): number {
+  return Math.round(Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, value)))
+}
 
 export interface PersistedSession {
   id: string
@@ -32,6 +49,10 @@ export interface WorkspaceFile {
   activeSessionId: string | null
   sidebarCollapsed: boolean
   rightPanel: PersistedRightPanel | null
+  /** The view ⌥⌘B reopens. Absent = files. */
+  lastRightPanel?: PersistedRightPanel
+  /** Card width in px. Absent = PANEL_WIDTH_DEFAULT. */
+  rightPanelWidth?: number
   /** Projects folded in the sidebar (only ids of projects that exist). */
   collapsedProjectIds: string[]
   /** Composer drafts by session id; only non-empty drafts of sessions that exist. */
@@ -137,6 +158,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     : []
 
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
+  const lastRightPanel = sanitizeRightPanel(value.lastRightPanel)
   return {
     version: WORKSPACE_FILE_VERSION,
     projects,
@@ -144,7 +166,11 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     sessions,
     activeSessionId: active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null),
     sidebarCollapsed: value.sidebarCollapsed === true,
-    rightPanel: value.rightPanel === 'changes' || value.rightPanel === 'graph' ? value.rightPanel : null,
+    rightPanel: sanitizeRightPanel(value.rightPanel),
+    ...(lastRightPanel ? { lastRightPanel } : {}),
+    ...(typeof value.rightPanelWidth === 'number' && Number.isFinite(value.rightPanelWidth)
+      ? { rightPanelWidth: clampPanelWidth(value.rightPanelWidth) }
+      : {}),
     collapsedProjectIds: Array.isArray(value.collapsedProjectIds)
       ? [...new Set(value.collapsedProjectIds.filter((id): id is string => isString(id) && projectIds.has(id)))]
       : [],

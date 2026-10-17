@@ -11,7 +11,7 @@ const valid = {
   ],
   activeSessionId: 's2',
   sidebarCollapsed: true,
-  rightPanel: 'graph',
+  rightPanel: 'git',
   collapsedProjectIds: ['p1'],
   drafts: { s1: '草稿' }
 }
@@ -114,6 +114,16 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.collapsedProjectIds).toEqual([])
     expect(file.drafts).toEqual({})
     expect(file.recentProjects).toBeUndefined()
+  })
+
+  it('reads the pre-F17 panel names as the Git view and keeps the last view and width', () => {
+    expect(sanitizeWorkspaceFile({ ...valid, rightPanel: 'changes' }, 0)!.rightPanel).toBe('git')
+    expect(sanitizeWorkspaceFile({ ...valid, rightPanel: 'graph' }, 0)!.rightPanel).toBe('git')
+    const file = sanitizeWorkspaceFile({ ...valid, rightPanel: null, lastRightPanel: 'files', rightPanelWidth: 523.4 }, 0)!
+    expect(file.lastRightPanel).toBe('files')
+    expect(file.rightPanelWidth).toBe(523)
+    expect(sanitizeWorkspaceFile({ ...valid, rightPanelWidth: 12 }, 0)!.rightPanelWidth).toBe(400)
+    expect(sanitizeWorkspaceFile({ ...valid, rightPanelWidth: 'wide', lastRightPanel: 'x' }, 0)).not.toHaveProperty('rightPanelWidth')
   })
 
   it('keeps recent project folders: absolute, unique, at most 8', () => {

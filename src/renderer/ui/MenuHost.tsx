@@ -165,6 +165,11 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
               onPointerMove={() => onRowPointerMove(index)}
               onClick={() => activate(index, false)}
             >
+              {entry.type === 'item' && entry.icon && (
+                <span className={styles.icon} aria-hidden>
+                  <entry.icon size={16} strokeWidth={1.75} />
+                </span>
+              )}
               <span className={styles.label}>{entry.label}</span>
               {entry.type === 'item' && entry.accelerator && (
                 <span className={styles.shortcut} aria-hidden>

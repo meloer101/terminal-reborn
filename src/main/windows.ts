@@ -179,6 +179,7 @@ export function installAppMenu(): void {
       label: '显示',
       submenu: [
         { label: '显示 / 隐藏侧栏', accelerator: SHORTCUTS['toggle-sidebar'], ...command('toggle-sidebar') },
+        { label: '显示 / 隐藏右侧栏', accelerator: SHORTCUTS['toggle-right-panel'], ...command('toggle-right-panel') },
         { type: 'separator' },
         { label: '放大', accelerator: SHORTCUTS['font-bigger'], click: () => stepFont('bigger') },
         // ⌘= is the unshifted key under ⌘+; it does the same, without a second visible item.

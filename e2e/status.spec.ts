@@ -76,12 +76,11 @@ test('a background permission request marks the session in place, badges and not
   })
 })
 
-test('the header follows the active session', async () => {
+test("the active session's row follows its status (the header no longer repeats it, F17)", async () => {
   await select('s-perf')
-  await expect(header()).toContainText('Codex · 等你处理', WITHIN)
+  await expect(row('s-perf').getByRole('img', { name: '等你处理' })).toBeVisible(WITHIN)
   // Answered in the TUI: the next tool event puts it back to running.
   await emit('s-perf', { type: 'tool-end', tool: 'Bash', input: {}, ok: true })
-  await expect(header()).toContainText('Codex · 运行中', WITHIN)
   await expect(row('s-perf').getByRole('img', { name: '运行中' })).toBeVisible(WITHIN)
   await expect.poll(async () => (await calls()).badge.at(-1), WITHIN).toBe(2)
 })
@@ -89,10 +88,10 @@ test('the header follows the active session', async () => {
 test('never notifies for the session being looked at', async () => {
   const before = (await calls()).notification.length
   await emit('s-perf', { type: 'notification', kind: 'question', message: 'q' })
-  await expect(header()).toContainText('Codex · 等你处理', WITHIN)
+  await expect(row('s-perf').getByRole('img', { name: '等你处理' })).toBeVisible(WITHIN)
   await emit('s-perf', { type: 'stop' })
   // Viewed + focused: a finished turn is already seen.
-  await expect(header()).toContainText('Codex · 空闲', WITHIN)
+  await expect(row('s-perf').getByRole('img', { name: '空闲' })).toBeVisible(WITHIN)
   expect((await calls()).notification.length).toBe(before)
 })
 
@@ -108,7 +107,7 @@ test('with the window unfocused, even the active session notifies and stays unre
   await setFocused(false)
   const before = (await calls()).notification.length
   await emit('s-cookie', { type: 'stop', message: '登录流程已经修好' })
-  await expect(header()).toContainText('Claude Code · 已完成', WITHIN)
+  await expect(row('s-cookie').getByRole('img', { name: '已完成' })).toBeVisible(WITHIN)
   // Finished turns are announced a moment later, together with any that finish at the same time.
   await expect.poll(async () => (await calls()).notification.length, { timeout: 3000 }).toBe(before + 1)
   const seen = await calls()
@@ -116,7 +115,7 @@ test('with the window unfocused, even the active session notifies and stays unre
   expect(seen.badge.at(-1)).toBe(2)
 
   await setFocused(true)
-  await expect(header()).toContainText('Claude Code · 空闲', WITHIN)
+  await expect(row('s-cookie').getByRole('img', { name: '空闲' })).toBeVisible(WITHIN)
   await expect.poll(async () => (await calls()).badge.at(-1), WITHIN).toBe(1)
 })
 

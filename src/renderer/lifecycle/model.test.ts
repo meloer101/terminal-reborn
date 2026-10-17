@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Session } from '@shared/types'
-import { glyphStatus, phaseLabel, phaseLine } from './present'
+import { glyphStatus, phaseLine } from './present'
 import { issueFromSpawnError } from './launch-issues'
 
 const session = (patch: Partial<Session> = {}): Session => ({
@@ -29,11 +29,6 @@ describe('presentation', () => {
     expect(phaseLine(session({ phase: 'exited', status: 'error' }))).toBeUndefined()
     expect(phaseLine(session({ phase: 'ready' }))).toBeUndefined()
     expect(phaseLine(session())).toBeUndefined()
-  })
-
-  it('header label', () => {
-    expect(phaseLabel(session({ phase: 'starting' }), '空闲')).toBe('启动中')
-    expect(phaseLabel(session({ phase: 'ready' }), '空闲')).toBe('空闲')
   })
 
 })

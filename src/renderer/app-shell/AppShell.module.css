@@ -54,14 +54,15 @@
 }
 
 .panel {
+  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  border-left: 1px solid var(--border-subtle);
+  /* The card (panels/RightPanel) sits 8 in from the window's top, right and bottom; its width is the user's. */
+  padding: var(--panel-inset) var(--panel-inset) var(--panel-inset) 0;
 }
 
-/* Too narrow to dock (layout.ts): float over main's right edge, above the composer. */
+/* Too narrow to dock (layout.ts): float over main's right edge. */
 .panel[data-mode='overlay'] {
   position: absolute;
   top: 0;
@@ -69,5 +70,4 @@
   bottom: 0;
   z-index: 10;
   max-width: calc(100% - var(--space-40));
-  box-shadow: var(--shadow-overlay);
 }

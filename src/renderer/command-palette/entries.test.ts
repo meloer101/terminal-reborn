@@ -34,7 +34,6 @@ const input = (over: Partial<PaletteInput> = {}): PaletteInput => ({
   sessions,
   activeSessionId: 'idle-main',
   rightPanel: null,
-  panelAvailable: true,
   ...over
 })
 
@@ -88,23 +87,19 @@ describe('buildEntries', () => {
       'action:open-project',
       'action:toggle-overview',
       'action:toggle-sidebar',
-      'action:toggle-changes',
+      'action:toggle-right-panel',
       'action:theme-system',
       'action:theme-dark',
       'action:theme-light'
     ])
   })
 
-  it('offers no panel toggle while the panel has no content (B11)', () => {
-    expect(buildActionEntries(input({ panelAvailable: false })).map((e) => e.id)).not.toContain('action:toggle-changes')
-  })
-
-  it('labels the changes toggle by panel state', () => {
-    const title = (rightPanel: 'changes' | 'graph' | null) =>
-      buildActionEntries(input({ rightPanel })).find((e) => e.id === 'action:toggle-changes')!.title
-    expect(title(null)).toBe('打开变更面板')
-    expect(title('graph')).toBe('打开变更面板')
-    expect(title('changes')).toBe('关闭变更面板')
+  it('labels the right panel toggle by panel state', () => {
+    const title = (rightPanel: 'files' | 'git' | null) =>
+      buildActionEntries(input({ rightPanel })).find((e) => e.id === 'action:toggle-right-panel')!.title
+    expect(title(null)).toBe('打开右侧栏')
+    expect(title('git')).toBe('关闭右侧栏')
+    expect(title('files')).toBe('关闭右侧栏')
   })
 })
 
@@ -127,7 +122,8 @@ describe('rankEntries', () => {
     ['主题 深色', 'action:theme-dark'],
     ['dark', 'action:theme-dark'],
     ['侧栏', 'action:toggle-sidebar'],
-    ['变更', 'action:toggle-changes'],
+    ['右侧栏', 'action:toggle-right-panel'],
+    ['文件', 'action:toggle-right-panel'],
     ['打开项目', 'action:open-project']
   ])('%j finds %s first', (query, first) => {
     expect(ids(query)[0]).toBe(first)

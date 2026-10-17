@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { MAIN_MIN_WIDTH, panelMode } from './layout'
+import { MAIN_MIN_WIDTH, PANEL_INSET, panelMode } from './layout'
 
 describe('panelMode', () => {
-  it('docks the panel while main keeps its minimum width', () => {
-    expect(panelMode(1440, true, 'changes')).toBe('docked') // 1440 − 264 − 440 = 736
-    expect(panelMode(264 + 440 + MAIN_MIN_WIDTH, true, 'changes')).toBe('docked')
-    expect(panelMode(1440, true, 'graph')).toBe('docked') // 616
+  it('docks when main keeps its minimum width', () => {
+    expect(panelMode(1440, true, 480)).toBe('docked') // 1440 − 264 − 488 = 688
+    expect(panelMode(264 + 480 + PANEL_INSET + MAIN_MIN_WIDTH, true, 480)).toBe('docked')
   })
 
-  it('floats the panel over main when docking would squeeze it (the 960×600 minimum window)', () => {
-    expect(panelMode(960, true, 'changes')).toBe('overlay')
-    expect(panelMode(960, true, 'graph')).toBe('overlay')
-    expect(panelMode(1300, true, 'graph')).toBe('overlay') // 1300 − 264 − 560 = 476
+  it('floats over main when docking would squeeze it', () => {
+    expect(panelMode(1200, true, 480)).toBe('overlay') // 448
+    expect(panelMode(1440, true, 700)).toBe('overlay') // 468
+    expect(panelMode(264 + 480 + PANEL_INSET + MAIN_MIN_WIDTH - 1, true, 480)).toBe('overlay')
   })
 
-  it('a hidden sidebar leaves room to dock', () => {
-    expect(panelMode(1100, false, 'changes')).toBe('docked')
-    expect(panelMode(1100, true, 'changes')).toBe('overlay')
+  it('counts the sidebar only when it is shown', () => {
+    expect(panelMode(1100, false, 480)).toBe('docked')
+    expect(panelMode(1100, true, 480)).toBe('overlay')
   })
 })
+

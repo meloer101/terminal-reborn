@@ -103,6 +103,8 @@ export function projectOfSession(data: WorkspaceData, sessionId: SessionId | nul
 export interface WorkspaceUi {
   sidebarCollapsed: boolean
   rightPanel: PersistedRightPanel | null
+  lastRightPanel: PersistedRightPanel
+  rightPanelWidth: number
   collapsedProjectIds: ProjectId[]
   recentProjects: readonly string[]
 }
@@ -134,6 +136,8 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
     rightPanel: ui.rightPanel,
+    lastRightPanel: ui.lastRightPanel,
+    rightPanelWidth: ui.rightPanelWidth,
     collapsedProjectIds: ui.collapsedProjectIds.filter((id) => data.projects.some((p) => p.id === id)),
     ...(ui.recentProjects.length > 0 ? { recentProjects: [...ui.recentProjects] } : {}),
     drafts: Object.fromEntries(
@@ -179,6 +183,8 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.activeSessionId !== prev.activeSessionId ||
     next.sidebarCollapsed !== prev.sidebarCollapsed ||
     next.rightPanel !== prev.rightPanel ||
+    next.lastRightPanel !== prev.lastRightPanel ||
+    next.rightPanelWidth !== prev.rightPanelWidth ||
     next.collapsedProjectIds !== prev.collapsedProjectIds ||
     next.recentProjects !== prev.recentProjects ||
     next.sessions.length !== prev.sessions.length

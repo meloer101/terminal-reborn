@@ -18,8 +18,10 @@ import {
   type WorkspaceData
 } from './workspace-model'
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
+import { clampPanelWidth, PANEL_WIDTH_DEFAULT, type PersistedRightPanel } from '@shared/workspace-file'
 
-export type RightPanelTab = 'changes' | 'graph'
+/** The right panel's views (PRD F17), switched by the icons in the session header. */
+export type PanelView = PersistedRightPanel
 
 /** What the main area shows: the active session's terminal, or the cross-project overview (PRD F9). */
 export type MainView = 'session' | 'overview'
@@ -27,7 +29,11 @@ export type MainView = 'session' | 'overview'
 interface WorkspaceState extends WorkspaceData {
   sidebarCollapsed: boolean
   /** null = right panel closed */
-  rightPanel: RightPanelTab | null
+  rightPanel: PanelView | null
+  /** The view ⌥⌘B reopens. */
+  lastRightPanel: PanelView
+  /** Card width in px (dragged by its left edge). */
+  rightPanelWidth: number
   /** Projects folded in the sidebar. */
   collapsedProjectIds: ProjectId[]
   mainView: MainView
@@ -45,7 +51,12 @@ interface WorkspaceState extends WorkspaceData {
   requestRename(): void
   setMainView(view: MainView): void
   toggleSidebar(): void
-  setRightPanel(tab: RightPanelTab | null): void
+  setRightPanel(view: PanelView | null): void
+  /** Header icon: opens that view, or closes the panel when it is the one showing. */
+  togglePanelView(view: PanelView): void
+  /** ⌥⌘B: closes the panel, or reopens the last view. */
+  toggleRightPanel(): void
+  setRightPanelWidth(width: number): void
   toggleProjectCollapsed(id: ProjectId): void
   /** Adds (or finds) the project for a folder. */
   addProject(rootPath: string): ProjectId
@@ -96,6 +107,8 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   ...initialData(),
   sidebarCollapsed: saved?.sidebarCollapsed ?? false,
   rightPanel: saved?.rightPanel ?? null,
+  lastRightPanel: saved?.rightPanel ?? saved?.lastRightPanel ?? 'files',
+  rightPanelWidth: saved?.rightPanelWidth ?? PANEL_WIDTH_DEFAULT,
   collapsedProjectIds: saved?.collapsedProjectIds ?? [],
   mainView: 'session',
   recentProjects: saved?.recentProjects ?? [],
@@ -107,7 +120,10 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   requestRename: () => set((s) => ({ renameRequest: s.renameRequest + 1 })),
   setMainView: (view) => set({ mainView: view }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-  setRightPanel: (tab) => set({ rightPanel: tab }),
+  setRightPanel: (view) => set((s) => ({ rightPanel: view, lastRightPanel: view ?? s.lastRightPanel })),
+  togglePanelView: (view) => get().setRightPanel(get().rightPanel === view ? null : view),
+  toggleRightPanel: () => get().setRightPanel(get().rightPanel ? null : get().lastRightPanel),
+  setRightPanelWidth: (width) => set({ rightPanelWidth: clampPanelWidth(width) }),
   toggleProjectCollapsed: (id) =>
     set((s) => ({
       collapsedProjectIds: s.collapsedProjectIds.includes(id)
@@ -150,6 +166,8 @@ setSnapshotProvider(() => {
     {
       sidebarCollapsed: state.sidebarCollapsed,
       rightPanel: state.rightPanel,
+      lastRightPanel: state.lastRightPanel,
+      rightPanelWidth: state.rightPanelWidth,
       collapsedProjectIds: state.collapsedProjectIds,
       recentProjects: state.recentProjects
     },

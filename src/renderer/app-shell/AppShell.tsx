@@ -12,7 +12,6 @@ import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { RightPanel } from '../panels/RightPanel'
 import { Overview } from '../overview/Overview'
-import { RIGHT_PANEL_AVAILABLE } from '../panels/availability'
 import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
 import './menu-commands'
@@ -27,7 +26,7 @@ const windowWidth = () => window.innerWidth
 
 /**
  * Window layout (Figma Screens 01–08):
- *   sidebar 264 │ main: header 44 / terminal — or the overview │ right panel (changes 440 · graph 560)
+ *   sidebar 264 │ main: header 44 / terminal — or the overview │ right panel card (F17, 480 by default, user-sized)
  * The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal.
  * Each region is owned by one feature directory; this file only arranges them.
  * Main never gets narrower than --main-min-width: when docking the panel would squeeze it, the panel floats
@@ -37,10 +36,12 @@ export function AppShell() {
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const overview = useWorkspace((s) => s.mainView === 'overview')
   const hasSession = useWorkspace((s) => s.sessions.some((x) => x.id === s.activeSessionId))
+  // The panel follows the active session's worktree, so it shows beside a session (not the overview or welcome page).
   const savedPanel = useWorkspace((s) => s.rightPanel)
-  const rightPanel = RIGHT_PANEL_AVAILABLE ? savedPanel : null
+  const rightPanel = hasSession && !overview ? savedPanel : null
+  const panelWidth = useWorkspace((s) => s.rightPanelWidth)
   const width = useSyncExternalStore(subscribeResize, windowWidth)
-  const mode = rightPanel ? panelMode(width, !sidebarCollapsed, rightPanel) : null
+  const mode = rightPanel ? panelMode(width, !sidebarCollapsed, panelWidth) : null
   useEffect(() => startActivityReporting(), [])
 
   return (
@@ -67,9 +68,9 @@ export function AppShell() {
           className={styles.panel}
           data-region="panel"
           data-mode={mode}
-          style={{ width: rightPanel === 'graph' ? 'var(--panel-width-graph)' : 'var(--panel-width-changes)' }}
+          style={{ width: `calc(${panelWidth}px + var(--panel-inset))` }}
         >
-          <RightPanel tab={rightPanel} />
+          <RightPanel view={rightPanel} />
         </aside>
       )}
       <CommandPalette />

@@ -1,0 +1,272 @@
+/* 文件 view — Figma 13D (149:6307) / 13F (151:7333) / 13G (151:7550). */
+
+/* Filter (149:6549): 8 side inset, 6 below; borderless bg/inset field with the 有改动 toggle inside. */
+.filterRow {
+  flex: none;
+  display: flex;
+  padding: 0 var(--space-8) var(--space-6);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 28px;
+  padding: 0 var(--space-4) 0 var(--space-8);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+.search:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.searchIcon {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-caption);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* Segment (9:52): 24 high, 12 side padding, radius-sm. */
+.segment {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.segment:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.segment[aria-pressed='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.segment:disabled {
+  color: var(--text-disabled);
+}
+
+.segment:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-16);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* Tree (149:6557): 2 top, 6 side inset. */
+.tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-6) var(--space-8);
+  outline: none;
+}
+
+/* FileTreeRow (130:259): 26 high, indent 8 + 16·depth (inline), 12 right, 4 gap, radius-md. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 26px;
+  padding-right: var(--space-12);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: default;
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row[aria-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.tree:focus-visible .row[aria-selected='true'] {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.chevron,
+.icon {
+  flex: none;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  /* The 2px "gap" frame after the icon. */
+  margin-left: var(--space-2);
+  overflow: hidden;
+  font: var(--text-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ignored entries (.gitignore) are dimmed but still open. */
+.row[data-ignored='true'] .name,
+.row[data-ignored='true'] .icon,
+.row[data-ignored='true'] .chevron {
+  color: var(--text-disabled);
+}
+
+/* Git letter: M → status/attention · A / U → diff/add-fg · D → diff/del-fg · "•" folders with changes. */
+.mark {
+  flex: none;
+  font: var(--text-mono-s);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mark[data-mark='M'],
+.mark[data-mark='•'] {
+  color: var(--status-attention);
+}
+
+.mark[data-mark='A'],
+.mark[data-mark='U'] {
+  color: var(--diff-add-fg);
+}
+
+.mark[data-mark='D'] {
+  color: var(--diff-del-fg);
+}
+
+/* Preview header (151:7377): 40 high, 6 side inset, 4 gap; path in mono, file name medium. */
+.previewHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--space-40);
+  padding: 0 var(--space-6);
+}
+
+.path {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  white-space: nowrap;
+}
+
+.pathDir {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  /* Long folders give way from the left, so the file name stays readable. */
+  direction: rtl;
+  text-align: left;
+}
+
+.pathName {
+  flex: none;
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+}
+
+.previewTools {
+  flex: none;
+  display: flex;
+  gap: var(--space-4);
+  /* The 6px frame between the letter and the tools. */
+  margin-left: var(--space-6);
+}
+
+/* Code (151:7399): 4 top; per line 2px change mark · number 34 right-aligned · 16 gap · Mono/Code 12/20. */
+.code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-top: var(--space-4);
+  outline: none;
+}
+
+.lines {
+  min-width: max-content;
+  padding-bottom: var(--space-8);
+}
+
+.line {
+  display: flex;
+  height: 20px;
+  font: var(--text-mono-code);
+}
+
+.changeMark {
+  flex: none;
+  width: var(--space-2);
+}
+
+.line[data-mark='add'] .changeMark {
+  background: var(--diff-add-fg);
+}
+
+.line[data-mark='mod'] .changeMark {
+  background: var(--status-attention);
+}
+
+.lineNo {
+  flex: none;
+  width: 34px;
+  color: var(--text-tertiary);
+  text-align: right;
+  user-select: none;
+}
+
+.lineText {
+  flex: 1;
+  padding: 0 var(--space-12) 0 var(--space-16);
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+.truncated {
+  /* Lines up with the code column. */
+  margin: var(--space-8) 0 0 calc(var(--space-2) + 34px + var(--space-16));
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}

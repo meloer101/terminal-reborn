@@ -87,7 +87,7 @@ describe('projectOfSession', () => {
 })
 
 describe('persistence', () => {
-  const ui = { sidebarCollapsed: true, rightPanel: 'changes' as const, collapsedProjectIds: ['p-1', 'gone'], recentProjects: ['/code/a'] }
+  const ui = { sidebarCollapsed: true, rightPanel: 'files' as const, lastRightPanel: 'files' as const, rightPanelWidth: 520, collapsedProjectIds: ['p-1', 'gone'], recentProjects: ['/code/a'] }
 
   it('round-trips; agent sessions come back not-started, shells have no phase, startedAt is kept', () => {
     const data = withSessions('claude', 'shell') // s-3, s-4 (startedAt 1000)
@@ -104,7 +104,9 @@ describe('persistence', () => {
     }
     const file = serializeWorkspace(live, ui, { 's-3': 'draft' })
     expect(file.sidebarCollapsed).toBe(true)
-    expect(file.rightPanel).toBe('changes')
+    expect(file.rightPanel).toBe('files')
+    expect(file.lastRightPanel).toBe('files')
+    expect(file.rightPanelWidth).toBe(520)
     expect(file.collapsedProjectIds).toEqual(['p-1'])
     expect(file.drafts).toEqual({ 's-3': 'draft' })
     expect(file.recentProjects).toEqual(['/code/a'])
@@ -138,7 +140,7 @@ describe('persistence', () => {
 })
 
 describe('persistedStateChanged', () => {
-  const ui = { sidebarCollapsed: false, rightPanel: null, collapsedProjectIds: [], recentProjects: [] as string[] }
+  const ui = { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 480, collapsedProjectIds: [], recentProjects: [] as string[] }
   const base = { ...withSessions('claude'), ...ui }
 
   it('ignores live status and activity', () => {
@@ -153,7 +155,9 @@ describe('persistedStateChanged', () => {
     expect(persistedStateChanged({ ...base, sessions: [{ ...first, agentSessionId: 'c' }] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, activeSessionId: null }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, sidebarCollapsed: true }, base)).toBe(true)
-    expect(persistedStateChanged({ ...base, rightPanel: 'graph' }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, rightPanel: 'git' }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, lastRightPanel: 'git' }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, rightPanelWidth: 500 }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, collapsedProjectIds: ['p-1'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, recentProjects: ['/x'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, projects: [...base.projects] }, base)).toBe(true)

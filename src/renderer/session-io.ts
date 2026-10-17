@@ -1,7 +1,7 @@
 // Integration seam between UI features and live agent sessions: typing a prompt into an agent's TUI with the
 // measured send protocol (PRD §6.9). Callers never touch PTYs or protocols.
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
-import { detectBlockingDialog, planSend } from '@shared/send-protocol'
+import { bracketedPaste, detectBlockingDialog, normalizeSendText, planSend } from '@shared/send-protocol'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from './state/workspace'
 import { getSendIo, readViewport } from './terminal/registry'
@@ -22,6 +22,16 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
     if (error instanceof SendTimeoutError) throw new Error('终端没有显示刚才的输入，没有按回车', { cause: error })
     throw error
   }
+}
+
+/**
+ * Puts `text` into the session's input line without pressing Enter (the 文件 view's 插入路径到终端, PRD F17):
+ * one bracketed paste, queued behind any send in flight (§6.9).
+ */
+export async function insertIntoTerminal(sessionId: SessionId, text: string): Promise<void> {
+  const body = normalizeSendText(text)
+  if (!body) return
+  await sendQueued(queue, sessionId, [{ type: 'write', data: bracketedPaste(body) }], getSendIo(sessionId))
 }
 
 const READY_TIMEOUT_MS = 30_000

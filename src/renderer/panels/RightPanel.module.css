@@ -1,36 +1,70 @@
-.bar {
-  flex: none;
-  height: var(--titlebar-height);
-  display: flex;
-  align-items: stretch;
-  padding: 0 var(--space-8) 0 var(--space-16);
-  border-bottom: 1px solid var(--border-subtle);
-  -webkit-app-region: drag;
-}
-
-.tabs {
+/* Right panel card — Figma 13 "Pane" (149:6532): bg/float, border/subtle hairline, Elevation/Pane, no dividers inside. */
+.card {
   flex: 1;
+  min-height: 0;
   display: flex;
-  gap: var(--space-20);
-}
-
-.tab {
-  padding: 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-tertiary);
-  font: var(--text-body-strong);
-  -webkit-app-region: no-drag;
-}
-
-.tab[aria-selected='true'] {
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-window);
+  background: var(--bg-float);
+  box-shadow: var(--shadow-pane);
   color: var(--text-primary);
-  border-bottom-color: var(--fill-primary);
 }
 
-.close {
-  display: inline-flex;
-  align-items: center;
+/* Left edge of the card: a 6px grab strip centred on it. */
+.resize {
+  position: absolute;
+  top: var(--panel-inset);
+  bottom: var(--panel-inset);
+  left: calc(-0.5 * var(--space-6));
+  z-index: 1;
+  width: var(--space-6);
+  cursor: col-resize;
   -webkit-app-region: no-drag;
+}
+
+/* Pane header (149:6533): 40 high, 14 left / 6 right, 8 gap. */
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--space-40);
+  padding: 0 var(--space-6) 0 calc(var(--space-12) + var(--space-2));
+}
+
+.title {
+  flex: none;
+  margin: 0;
+  font: var(--text-body-strong);
+  white-space: nowrap;
+}
+
+.context {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Views that are not built yet say so, quietly. */
+.placeholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-24);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-align: center;
 }

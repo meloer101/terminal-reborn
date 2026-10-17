@@ -2,18 +2,11 @@
 import type { MenuCommand } from '@shared/shortcuts'
 import { toggleCommandPalette } from '../command-palette/palette-store'
 import { toggleOverview } from '../overview/store'
-import { RIGHT_PANEL_AVAILABLE } from '../panels/availability'
 import { jumpToNextAttention } from '../sidebar/shortcuts-runtime'
 import { isKeyEcho, noteKeyCommand } from '../state/key-commands'
 import { closeActiveSession, openProjectInteractive, quickNewSession } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
 import { openTerminalSearch } from '../terminal/search-store'
-
-function toggleRightPanel(): void {
-  if (!RIGHT_PANEL_AVAILABLE) return
-  const { rightPanel, setRightPanel } = useWorkspace.getState()
-  setRightPanel(rightPanel ? null : 'changes')
-}
 
 const RUN: Record<MenuCommand, () => void> = {
   'new-session': () => void quickNewSession(),
@@ -25,7 +18,7 @@ const RUN: Record<MenuCommand, () => void> = {
   'next-attention': () => void jumpToNextAttention(),
   'rename-session': () => useWorkspace.getState().requestRename(),
   'toggle-sidebar': () => useWorkspace.getState().toggleSidebar(),
-  'toggle-right-panel': toggleRightPanel
+  'toggle-right-panel': () => useWorkspace.getState().toggleRightPanel()
 }
 
 export function runMenuCommand(command: MenuCommand): void {
@@ -36,7 +29,7 @@ export function runMenuCommand(command: MenuCommand): void {
 function keyCommand(e: KeyboardEvent): MenuCommand | null {
   if (!e.metaKey || e.ctrlKey || e.shiftKey) return null
   if (!e.altKey && e.code === 'Backslash') return 'toggle-sidebar'
-  if (e.altKey && e.code === 'KeyB' && RIGHT_PANEL_AVAILABLE) return 'toggle-right-panel'
+  if (e.altKey && e.code === 'KeyB') return 'toggle-right-panel'
   return null
 }
 

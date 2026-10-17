@@ -107,6 +107,18 @@ const api: TrApi = {
     loadSync: (sessionId) => ipcRenderer.sendSync(IPC.terminalSnapshotLoad, sessionId) as TerminalSnapshot | null,
     save: (sessionId, snapshot) => ipcRenderer.send(IPC.terminalSnapshotSave, sessionId, snapshot),
     remove: (sessionId) => ipcRenderer.send(IPC.terminalSnapshotRemove, sessionId)
+  },
+  worktree: {
+    listDir: (root, dir) => ipcRenderer.invoke(IPC.worktreeListDir, root, dir),
+    readFile: (root, path) => ipcRenderer.invoke(IPC.worktreeReadFile, root, path),
+    gitStatus: (root) => ipcRenderer.invoke(IPC.worktreeGitStatus, root),
+    lineMarks: (root, path) => ipcRenderer.invoke(IPC.worktreeLineMarks, root, path),
+    listFiles: (root) => ipcRenderer.invoke(IPC.worktreeListFiles, root),
+    open: (root, path) => ipcRenderer.invoke(IPC.worktreeOpen, root, path),
+    reveal: (root, path) => ipcRenderer.send(IPC.worktreeReveal, root, path),
+    watch: (root) => ipcRenderer.send(IPC.worktreeWatch, root),
+    unwatch: (root) => ipcRenderer.send(IPC.worktreeUnwatch, root),
+    onChanged: (listener) => listen(IPC.worktreeChanged, listener)
   }
 }
 

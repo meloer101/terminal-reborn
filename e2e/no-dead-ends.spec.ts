@@ -128,7 +128,8 @@ test.describe('first run and the session header', () => {
     await expect(empty.getByRole('button', { name: /打开项目/ })).toHaveCount(0)
     await expect(empty.getByTestId('install-agent')).toHaveCount(0)
     // The header controls that had nothing to do are gone.
-    await expect(page.getByRole('button', { name: '变更面板' })).toHaveCount(0)
+    // Without a session there is no worktree for the right panel to show.
+    await expect(page.getByRole('group', { name: '右侧栏' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '会话菜单' })).toHaveCount(0)
     await shootAll(app, page, 'f18-welcome-with-project', async () => {
       await expect(hints).toBeInViewport()
@@ -228,8 +229,7 @@ test.describe('B13: right panel at the minimum window', () => {
     app = await launchApp()
     page = await app.firstWindow()
     await page.addInitScript(() => {
-      ;(globalThis as unknown as { __TR_E2E__: boolean; __TR_PANEL__: boolean }).__TR_E2E__ = true
-      ;(globalThis as unknown as { __TR_PANEL__: boolean }).__TR_PANEL__ = true
+      ;(globalThis as unknown as { __TR_E2E__: boolean }).__TR_E2E__ = true
     })
     await page.reload()
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
@@ -241,22 +241,19 @@ test.describe('B13: right panel at the minimum window', () => {
 
   test('the panel docks when there is room, floats over main when there is not, and closes with ✕', async () => {
     const panel = page.locator('[data-region="panel"]')
-    await page.getByRole('button', { name: '变更面板' }).click()
+    await page.getByRole('button', { name: '文件', exact: true }).click()
     await expect(panel).toBeVisible()
     for (const [w, h] of SIZES) {
       await setSize(app, w, h)
       await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBeLessThanOrEqual(w)
       const width = await page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)
-      await expect(panel).toHaveAttribute('data-mode', width >= 264 + 440 + 560 ? 'docked' : 'overlay')
+      // The card is 480 wide and 8 in from the window edge (F17).
+      await expect(panel).toHaveAttribute('data-mode', width >= 264 + 480 + 8 + 560 ? 'docked' : 'overlay')
       expect(await mainWidth(page)).toBeGreaterThanOrEqual(560)
-      await expect(panel.getByRole('button', { name: '关闭面板' })).toBeInViewport()
+      await expect(panel.getByRole('button', { name: '关闭右侧栏' })).toBeInViewport()
     }
-    // Graph is wider: at 960 it floats too.
-    await panel.getByRole('tab', { name: '图谱' }).click()
-    await expect(panel).toHaveAttribute('data-mode', 'overlay')
-    await panel.getByRole('tab', { name: '变更' }).click()
     await shootAll(app, page, 'b13-panel')
-    await panel.getByRole('button', { name: '关闭面板' }).click()
+    await panel.getByRole('button', { name: '关闭右侧栏' }).click()
     await expect(panel).toHaveCount(0)
   })
 })

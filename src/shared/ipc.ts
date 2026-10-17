@@ -7,6 +7,7 @@ import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
+import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -115,6 +116,31 @@ export interface UiApi {
   confirm(options: ConfirmOptions): Promise<boolean>
 }
 
+/**
+ * A worktree's files for the right panel's 文件 view (PRD F17). `root` is the worktree's absolute path; every
+ * `path` is POSIX and relative to it ('' = the root). Main rejects anything that resolves outside the root.
+ */
+export interface WorktreeFilesApi {
+  /** One directory level, sorted (folders first); `.git` is left out. */
+  listDir(root: string, dir: string): Promise<DirEntry[]>
+  /** A read-only preview: text up to MAX_PREVIEW_BYTES, otherwise binary / too-large / missing. */
+  readFile(root: string, path: string): Promise<FilePreview>
+  /** `git status` of the worktree; null when it is not a git checkout. */
+  gitStatus(root: string): Promise<GitStatusSnapshot | null>
+  /** Lines of the file that differ from HEAD (empty when unknown). */
+  lineMarks(root: string, path: string): Promise<LineMarkRange[]>
+  /** Every file that is not ignored (tracked + untracked), for the filter; capped at MAX_LISTED_FILES. */
+  listFiles(root: string): Promise<string[]>
+  /** Opens in the default app (`shell.openPath`); resolves to '' or the system's error message. */
+  open(root: string, path: string): Promise<string>
+  /** Shows the item in Finder; '' opens the root folder itself. */
+  reveal(root: string, path: string): void
+  /** Starts / stops watching the worktree for this window; changes arrive through onChanged. */
+  watch(root: string): void
+  unwatch(root: string): void
+  onChanged(listener: (change: WorktreeChange) => void): Unsubscribe
+}
+
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
 export interface WorkspaceStoreApi {
   /** Synchronous read at startup (null when nothing is stored yet). */
@@ -206,6 +232,7 @@ export interface TrApi {
   app: AppInfoApi
   workspace: WorkspaceStoreApi
   terminalSnapshots: TerminalSnapshotApi
+  worktree: WorktreeFilesApi
 }
 
 export const IPC = {
@@ -269,5 +296,16 @@ export const IPC = {
   /** sync */
   terminalSnapshotLoad: 'terminal-snapshot:load',
   terminalSnapshotSave: 'terminal-snapshot:save',
-  terminalSnapshotRemove: 'terminal-snapshot:remove'
+  terminalSnapshotRemove: 'terminal-snapshot:remove',
+  worktreeListDir: 'worktree:list-dir',
+  worktreeReadFile: 'worktree:read-file',
+  worktreeGitStatus: 'worktree:git-status',
+  worktreeLineMarks: 'worktree:line-marks',
+  worktreeListFiles: 'worktree:list-files',
+  worktreeOpen: 'worktree:open',
+  worktreeReveal: 'worktree:reveal',
+  worktreeWatch: 'worktree:watch',
+  worktreeUnwatch: 'worktree:unwatch',
+  /** main → renderer, payload WorktreeChange */
+  worktreeChanged: 'worktree:changed'
 } as const
