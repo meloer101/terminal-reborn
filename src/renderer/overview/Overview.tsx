@@ -263,7 +263,9 @@ function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProp
       {trailing ?? (
         <>
           <span className={styles.stat}>{row.stat}</span>
-          <span className={styles.time}>{row.time}</span>
+          <span className={styles.time} data-emphasis={row.timeEmphasis}>
+            {row.time}
+          </span>
           <span className={styles.trailing} aria-hidden>
             <ChevronDown {...ICON} />
           </span>
@@ -378,7 +380,9 @@ function StatusCard({ row, selected, onClick }: RowProps) {
       <span className={styles.cardHead}>
         <StatusGlyph status={row.status} />
         <span className={styles.cardTitle}>{row.title}</span>
-        <span className={styles.cardMeta}>{row.time}</span>
+        <span className={styles.cardMeta} data-emphasis={row.timeEmphasis}>
+          {row.time}
+        </span>
       </span>
       {row.where && <span className={styles.cardWhere}>{row.where}</span>}
       {row.summary && <span className={styles.cardSummary}>{row.summary}</span>}

@@ -80,6 +80,14 @@ export interface SessionState {
   titleRun?: boolean
   /** Codex only: `needs_you` was inferred from the `Action Required` title (its own approval dialog is up). */
   titleAction?: boolean
+  /** One line of the agent's last reply (see replyLine); cleared when a new prompt starts a turn. */
+  lastReply?: string
+  /** Epoch ms the last turn finished (Stop). */
+  finishedAt?: number
+  /** Epoch ms `status` last changed. */
+  statusSince: number
+  /** Epoch ms the current turn began: `running` entered from anything but `needs_you`. */
+  turnStartedAt?: number
 }
 
 export function initialState(
@@ -91,6 +99,9 @@ export function initialState(
     viewing?: boolean
     lastActivityAt?: number
     phase?: AgentPhase
+    lastReply?: string
+    finishedAt?: number
+    statusSince?: number
   } = {}
 ): SessionState {
   const status = options.status ?? 'idle'
@@ -107,7 +118,10 @@ export function initialState(
     ...(kind !== 'shell' && options.phase ? { phase: options.phase } : {}),
     phaseSince: now,
     hooksSeen: false,
-    hooksSilent: false
+    hooksSilent: false,
+    ...(options.lastReply ? { lastReply: options.lastReply } : {}),
+    ...(options.finishedAt !== undefined ? { finishedAt: options.finishedAt } : {}),
+    statusSince: options.statusSince ?? options.lastActivityAt ?? now
   }
 }
 
@@ -122,6 +136,25 @@ function clip(text: string | undefined): string | undefined {
   const flat = text.replace(/\s+/g, ' ').trim()
   if (flat === '') return undefined
   return flat.length > MESSAGE_MAX_CHARS ? `${flat.slice(0, MESSAGE_MAX_CHARS)}…` : flat
+}
+
+/**
+ * The line of a reply worth showing in one row: its last non-empty line, without Markdown markers
+ * (headings, list bullets, quotes, emphasis), whitespace collapsed and clipped.
+ */
+export function replyLine(text: string | undefined): string | undefined {
+  if (!text) return undefined
+  const line = text
+    .split('\n')
+    .map((l) =>
+      l
+        .replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|>\s*|\d+[.)]\s+)/, '')
+        .replace(/(\*\*|__|`)/g, '')
+        .trim()
+    )
+    .filter((l) => l !== '' && !/^[-*_=`~]{3,}$/.test(l))
+    .pop()
+  return clip(line)
 }
 
 function running(state: SessionState, now: number, action: string | undefined): SessionState {
@@ -142,7 +175,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         : touched
 
     case 'prompt-submit':
-      return running(state, now, undefined)
+      return { ...running(state, now, undefined), lastReply: undefined }
 
     case 'tool-start': {
       const action = currentAction(event.tool, event.input)
@@ -165,7 +198,9 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         ...touched,
         status: state.viewing ? 'idle' : 'done_unread',
         currentAction: undefined,
-        toolAction: undefined
+        toolAction: undefined,
+        lastReply: replyLine(event.message),
+        finishedAt: now
       }
 
     case 'stop-failure': {
@@ -327,6 +362,14 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
 
 /** Next state for a signal at time `now` (epoch ms). Returns the same object when nothing changed. */
 export function reduce(state: SessionState, signal: Signal, now: number): SessionState {
+  const next = reduceSignal(state, signal, now)
+  if (next === state || next.status === state.status) return next
+  // Answering a question resumes the same turn; anything else entering `running` starts a new one.
+  const turn = next.status === 'running' && state.status !== 'needs_you' ? { turnStartedAt: now } : {}
+  return { ...next, statusSince: now, ...turn }
+}
+
+function reduceSignal(state: SessionState, signal: Signal, now: number): SessionState {
   if (signal.type === 'launch') return launched(state, now)
   if (state.ended) return state
   const agent = state.kind !== 'shell'

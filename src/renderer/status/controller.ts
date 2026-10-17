@@ -12,6 +12,10 @@ export interface StatusPatch {
   lastActivityAt: number
   /** Only present for agent sessions that track a phase. */
   phase?: AgentPhase
+  lastReply?: string
+  finishedAt?: number
+  statusSince?: number
+  turnStartedAt?: number
 }
 
 export interface StatusDeps {
@@ -82,7 +86,10 @@ export class StatusController {
             currentAction: session.currentAction,
             lastActivityAt: session.lastActivityAt,
             viewing: false,
-            ...(phase ? { phase } : {})
+            ...(phase ? { phase } : {}),
+            lastReply: session.lastReply,
+            finishedAt: session.finishedAt,
+            statusSince: session.statusSince
           })
         )
         // A new session carries no phase yet: it is starting now.
@@ -196,13 +203,21 @@ export class StatusController {
       next.status !== prev.status ||
       next.currentAction !== prev.currentAction ||
       next.lastActivityAt !== prev.lastActivityAt ||
-      next.phase !== prev.phase
+      next.phase !== prev.phase ||
+      next.lastReply !== prev.lastReply ||
+      next.finishedAt !== prev.finishedAt ||
+      next.statusSince !== prev.statusSince ||
+      next.turnStartedAt !== prev.turnStartedAt
     ) {
       this.deps.patch(id, {
         status: next.status,
         currentAction: next.currentAction,
         lastActivityAt: next.lastActivityAt,
-        ...(next.phase ? { phase: next.phase } : {})
+        ...(next.phase ? { phase: next.phase } : {}),
+        lastReply: next.lastReply,
+        finishedAt: next.finishedAt,
+        statusSince: next.statusSince,
+        turnStartedAt: next.turnStartedAt
       })
       if (next.status !== prev.status) this.maybeNotify(id, next)
       this.updateBadge()

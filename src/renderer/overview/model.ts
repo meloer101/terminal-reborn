@@ -1,7 +1,7 @@
 // Pure overview model (PRD F9, Figma 11 v2): every session across projects, grouped by what it
 // needs from the user. The list and the board draw the same groups, so the two views never disagree.
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
-import { formatElapsed } from '../sidebar/format-elapsed'
+import { sessionTime } from '../sidebar/format-elapsed'
 import { glyphStatus, phaseLine } from '../lifecycle/present'
 
 /** A group is a session status (after folding a starting agent into running). */
@@ -39,8 +39,10 @@ export interface OverviewRow {
   /** What it is doing, asking or reporting. */
   summary: string
   stat: string
-  /** "已等 3m" while waiting, elapsed while running, "5m 前" otherwise. */
+  /** "已等 3m" while waiting, this turn's time while running, "5m 前" otherwise (PRD F10). */
   time: string
+  /** Waited longer than five minutes: drawn heavier. */
+  timeEmphasis: boolean
 }
 
 export interface OverviewGroup {
@@ -82,14 +84,13 @@ function summaryOf(session: Session, worktree: Worktree | undefined): string {
   const phase = phaseLine(session)
   if (phase) return phase
   if (session.currentAction) return session.currentAction
+  if ((session.status === 'idle' || session.status === 'done_unread') && session.lastReply) return session.lastReply
   if (session.kind === 'shell' && worktree) return `终端 · ${worktree.path}`
   return ''
 }
 
-function timeOf(session: Session, status: SessionStatus, now: number): string {
-  if (status === 'needs_you') return `已等 ${formatElapsed(now - session.lastActivityAt)}`
-  if (status === 'running') return formatElapsed(now - session.startedAt)
-  return `${formatElapsed(now - session.lastActivityAt)} 前`
+function timeFields(time: { text: string; emphasis: boolean }): { time: string; timeEmphasis: boolean } {
+  return { time: time.text, timeEmphasis: time.emphasis }
 }
 
 function toneOf(status: SessionStatus): OverviewTone {
@@ -131,7 +132,7 @@ function toRow(session: Session, worktree: Worktree | undefined, project: Projec
     projectName,
     summary: summaryOf(session, worktree),
     stat: added + removed > 0 ? `+${added} −${removed}` : '',
-    time: timeOf(session, status, now)
+    ...timeFields(sessionTime(session, status, now))
   }
 }
 

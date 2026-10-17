@@ -20,7 +20,7 @@ describe('normalizeHook · codex lifecycle (real payloads)', () => {
   })
 
   it('Stop', () => {
-    expect(codex('Stop', fx.Stop)).toEqual({ events: [{ type: 'stop' }], clears: 'all' })
+    expect(codex('Stop', fx.Stop)).toEqual({ events: [{ type: 'stop', message: 'DONE' }], clears: 'all' })
   })
 
   it('events Codex 0.142.5 sends but the UI has no use for yield nothing', () => {

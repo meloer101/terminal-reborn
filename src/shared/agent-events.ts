@@ -17,7 +17,8 @@ export type AgentEvent =
   | { type: 'tool-end'; tool: string; input: Record<string, unknown>; ok: boolean }
   /** Notification hook, classified. 'permission' / 'question' mean the TUI is waiting on the user. */
   | { type: 'notification'; kind: 'permission' | 'question' | 'idle' | 'other'; message: string }
-  | { type: 'stop' }
+  /** `message` is the agent's last reply of the turn (Claude / Codex `last_assistant_message`), possibly truncated. */
+  | { type: 'stop'; message?: string }
   | { type: 'stop-failure'; message?: string }
   | { type: 'session-end'; reason?: string }
 

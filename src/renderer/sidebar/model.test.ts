@@ -79,6 +79,19 @@ describe('buildSidebarGroups', () => {
     expect(c).toMatchObject({ secondary: '/a', stat: null })
   })
 
+  it('a finished turn shows its last reply, marked while unread', () => {
+    const [group] = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [
+        session('u', 'wa1', 'done_unread', 0, { lastReply: '修好了登录' }),
+        session('n', 'wa2', 'done_unread'),
+        session('i', 'wam', 'idle', 0, { lastReply: '修好了登录' })
+      ]
+    })
+    expect(group?.rows.map((r) => r.secondary)).toEqual(['已完成 · 修好了登录', '已完成 · 未读', '修好了登录'])
+  })
+
   it('flags only needs_you as the attention variant', () => {
     const [group] = buildSidebarGroups({
       projects,

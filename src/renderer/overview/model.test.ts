@@ -60,6 +60,20 @@ describe('buildOverview', () => {
     expect(groups[4]?.rows[0]).toMatchObject({ where: 'acme-web', summary: '终端 · /a', card: 'idle' })
   })
 
+  it('a finished turn reports its last reply; a long wait is emphasised', () => {
+    const g = buildOverview({
+      projects,
+      worktrees,
+      sessions: [
+        session('d', 'wa', 'done_unread', 0, { lastReply: '修好了登录', finishedAt: NOW - 4 * MIN }),
+        session('w', 'wa', 'needs_you', 0, { statusSince: NOW - 6 * MIN })
+      ],
+      now: NOW
+    })
+    expect(g.find((x) => x.key === 'done_unread')?.rows[0]).toMatchObject({ summary: '修好了登录', time: '4m 前' })
+    expect(g.find((x) => x.key === 'needs_you')?.rows[0]).toMatchObject({ time: '已等 6m', timeEmphasis: true })
+  })
+
   it('a starting agent counts as running; a restored one is idle and says so', () => {
     const g = buildOverview({
       projects,

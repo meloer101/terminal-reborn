@@ -16,6 +16,10 @@ export interface PersistedSession {
   agentSessionId?: string
   startedAt: number
   lastActivityAt: number
+  /** One line of the agent's last reply, shown while the session is idle. */
+  lastReply?: string
+  /** Epoch ms the last turn finished. */
+  finishedAt?: number
 }
 
 export type PersistedWorktree = Pick<Worktree, 'id' | 'projectId' | 'branch' | 'path' | 'isMain'> & { baseBranch?: string }
@@ -45,6 +49,7 @@ export const LEGACY_DRAFTS_KEY = 'tr.composer.drafts.v1'
 const MAX_ITEMS = 500
 const MAX_TEXT = 4096
 const MAX_TITLE = 500
+const MAX_REPLY = 500
 const MAX_DRAFT = 200_000
 
 /** Agent conversation ids are UUID-like; this also keeps them safe as a shell word and as a CLI argument. */
@@ -112,7 +117,9 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           // A shell has no conversation to resume.
           ...(s.kind !== 'shell' && isSafeAgentSessionId(s.agentSessionId) ? { agentSessionId: s.agentSessionId } : {}),
           startedAt,
-          lastActivityAt: isTime(s.lastActivityAt) ? s.lastActivityAt : startedAt
+          lastActivityAt: isTime(s.lastActivityAt) ? s.lastActivityAt : startedAt,
+          ...(isText(s.lastReply, MAX_REPLY) && s.lastReply !== '' ? { lastReply: s.lastReply } : {}),
+          ...(isTime(s.finishedAt) ? { finishedAt: s.finishedAt } : {})
         }
       })
   )

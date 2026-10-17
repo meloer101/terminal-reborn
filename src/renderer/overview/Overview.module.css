@@ -478,6 +478,13 @@
   white-space: nowrap;
 }
 
+/* A wait over five minutes is heavier, never louder (PRD F10). */
+.time[data-emphasis='true'],
+.cardMeta[data-emphasis='true'] {
+  font: var(--text-mono-s-medium);
+  line-height: 20px;
+}
+
 .cardWhere {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -10,7 +10,10 @@ export interface DiffStat {
 
 export interface SessionRowModel {
   session: Session
-  /** Secondary line: the agent's current action, else where the session lives. */
+  /**
+   * Secondary line: the agent's lifecycle or current action; once a turn is over, its last reply
+   * (prefixed "已完成" while unread, so the state is never color-only); else where the session lives.
+   */
   secondary: string
   /** Only `needs_you` recolors the secondary line (Figma SessionRow `attention`). */
   attention: boolean
@@ -36,13 +39,20 @@ export interface SidebarInput {
   collapsedProjectIds?: readonly ProjectId[]
 }
 
+/** What a finished turn left: "已完成 · <reply>" while unread, the reply once seen. */
+function afterTurn(session: Session): string | undefined {
+  if (session.status === 'done_unread') return session.lastReply ? `已完成 · ${session.lastReply}` : '已完成 · 未读'
+  if (session.status === 'idle') return session.lastReply
+  return undefined
+}
+
 function toRow(session: Session, worktree: Worktree | undefined): SessionRowModel {
   const location = worktree ? (worktree.isMain ? worktree.path : worktree.branch) : ''
   const added = worktree?.added ?? 0
   const removed = worktree?.removed ?? 0
   return {
     session,
-    secondary: phaseLine(session) ?? session.currentAction ?? location,
+    secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? location,
     attention: session.status === 'needs_you',
     stat: added + removed > 0 ? { added, removed } : null
   }

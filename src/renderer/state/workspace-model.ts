@@ -120,14 +120,16 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
       isMain,
       ...(baseBranch ? { baseBranch } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, title, agentSessionId, startedAt, lastActivityAt }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, title, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt }) => ({
       id,
       worktreeId,
       kind,
       title,
       ...(agentSessionId ? { agentSessionId } : {}),
       startedAt,
-      lastActivityAt
+      lastActivityAt,
+      ...(lastReply ? { lastReply } : {}),
+      ...(finishedAt !== undefined ? { finishedAt } : {})
     })),
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
@@ -159,6 +161,8 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       startedAt: s.startedAt,
       lastActivityAt: s.lastActivityAt,
       ...(s.agentSessionId ? { agentSessionId: s.agentSessionId } : {}),
+      ...(s.lastReply ? { lastReply: s.lastReply } : {}),
+      ...(s.finishedAt !== undefined ? { finishedAt: s.finishedAt } : {}),
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
     activeSessionId: file.activeSessionId
@@ -183,7 +187,15 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
   }
   return next.sessions.some((s, i) => {
     const before = prev.sessions[i]
-    return !before || s.id !== before.id || s.title !== before.title || s.agentSessionId !== before.agentSessionId || s.worktreeId !== before.worktreeId
+    return (
+      !before ||
+      s.id !== before.id ||
+      s.title !== before.title ||
+      s.agentSessionId !== before.agentSessionId ||
+      s.worktreeId !== before.worktreeId ||
+      s.lastReply !== before.lastReply ||
+      s.finishedAt !== before.finishedAt
+    )
   })
 }
 

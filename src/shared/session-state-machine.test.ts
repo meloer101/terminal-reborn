@@ -4,6 +4,7 @@ import {
   CODEX_IDLE_HEAL_MS,
   initialState,
   reduce,
+  replyLine,
   CLAUDE_IDLE_HEAL_MS,
   type SessionState,
   type Signal
@@ -156,6 +157,57 @@ describe('timestamps', () => {
     s = reduce(s, { type: 'viewed' }, T0 + 6_000)
     s = reduce(s, { type: 'tick' }, T0 + 7_000)
     expect(s.lastEventAt).toBe(T0)
+  })
+})
+
+describe('turn and status times', () => {
+  it('statusSince moves only when the status changes', () => {
+    let s = reduce(make('idle'), promptSubmit, T0 + 1_000)
+    expect(s.statusSince).toBe(T0 + 1_000)
+    s = reduce(s, toolStart('Bash', { command: 'ls' }), T0 + 2_000)
+    expect(s.statusSince).toBe(T0 + 1_000)
+    s = reduce(s, notification('permission'), T0 + 3_000)
+    expect(s.statusSince).toBe(T0 + 3_000)
+    // An idle_prompt notification is activity, not a new wait.
+    s = reduce(s, notification('idle'), T0 + 60_000)
+    expect(s.statusSince).toBe(T0 + 3_000)
+  })
+
+  it('a turn starts on prompt-submit and survives answering a question', () => {
+    let s = reduce(make('idle'), promptSubmit, T0 + 1_000)
+    expect(s.turnStartedAt).toBe(T0 + 1_000)
+    s = reduce(s, notification('permission'), T0 + 2_000)
+    s = reduce(s, toolEnd(), T0 + 3_000)
+    expect(s.status).toBe('running')
+    expect(s.turnStartedAt).toBe(T0 + 1_000)
+  })
+
+  it('stop keeps the last reply line and the finish time; a new prompt clears the reply', () => {
+    let s = reduce(make('running'), ev({ type: 'stop', message: 'Done.\n\n## Summary\n- **Fixed** the `auth` bug' }), T0 + 4_000)
+    expect(s.lastReply).toBe('Fixed the auth bug')
+    expect(s.finishedAt).toBe(T0 + 4_000)
+    s = reduce(s, promptSubmit, T0 + 5_000)
+    expect(s.lastReply).toBeUndefined()
+    expect(s.finishedAt).toBe(T0 + 4_000)
+  })
+})
+
+describe('replyLine', () => {
+  it.each<[string | undefined, string | undefined]>([
+    [undefined, undefined],
+    ['', undefined],
+    ['OK', 'OK'],
+    ['First\nLast line  ', 'Last line'],
+    ['Text\n\n---\n', 'Text'],
+    ['1. step one\n2. **step two**', 'step two'],
+    ['> quoted', 'quoted'],
+    ['已经完成：修改了 3 个文件', '已经完成：修改了 3 个文件']
+  ])('%j → %j', (input, expected) => {
+    expect(replyLine(input)).toBe(expected)
+  })
+
+  it('clips long lines', () => {
+    expect(replyLine('x'.repeat(200))).toBe(`${'x'.repeat(80)}…`)
   })
 })
 

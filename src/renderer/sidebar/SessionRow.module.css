@@ -83,3 +83,8 @@
   display: block;
   min-height: 16px;
 }
+
+/* A long wait is heavier, not louder (PRD F10). */
+.metaLine[data-emphasis='true'] {
+  font: var(--text-mono-s-medium);
+}

@@ -152,6 +152,14 @@ const TUI_ONLY_PERMISSION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion
 
 const NONE: NormalizedHook = { events: [], clears: 'none' }
 
+/** Only the end of a long reply is ever shown (its last line), so the tail is all that crosses IPC. */
+const REPLY_TAIL_CHARS = 2_000
+
+function stopEvent(payload: Rec): AgentEvent {
+  const message = str(payload.last_assistant_message)
+  return message ? { type: 'stop', message: message.slice(-REPLY_TAIL_CHARS) } : { type: 'stop' }
+}
+
 /** SessionStart for both agents: carries the conversation id (`session_id`) that `--resume` needs after a restart. */
 function sessionStart(payload: Rec): AgentEvent {
   const id = str(payload.session_id)
@@ -196,7 +204,7 @@ function normalizeClaude(event: string, payload: Rec): NormalizedHook {
       }
     }
     case 'Stop':
-      return { events: [{ type: 'stop' }], clears: 'all' }
+      return { events: [stopEvent(payload)], clears: 'all' }
     case 'StopFailure': {
       const message = str(payload.last_assistant_message) ?? str(payload.error)
       return { events: [{ type: 'stop-failure', ...(message ? { message } : {}) }], clears: 'all' }
@@ -282,7 +290,7 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
         clears: 'none'
       }
     case 'Stop':
-      return { events: [{ type: 'stop' }], clears: 'all' }
+      return { events: [stopEvent(payload)], clears: 'all' }
     default:
       return NONE
   }

@@ -57,6 +57,14 @@ export interface Session {
   agentSessionId?: string
   /** Where the agent process is in its life (transient, not persisted). See AgentPhase. */
   phase?: AgentPhase
+  /** One line of the agent's last reply (the end of its last turn). Persisted. */
+  lastReply?: string
+  /** Epoch ms the last turn finished (Stop). Persisted. */
+  finishedAt?: number
+  /** Epoch ms the current status began ("已等 3m" counts from here). Transient. */
+  statusSince?: number
+  /** Epoch ms the current turn began (running time). Transient. */
+  turnStartedAt?: number
 }
 
 /**

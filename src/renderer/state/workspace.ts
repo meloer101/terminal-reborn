@@ -50,7 +50,21 @@ interface WorkspaceState extends WorkspaceData {
   patchSession(id: SessionId, patch: SessionPatch): void
 }
 
-export type SessionPatch = Partial<Pick<Session, 'status' | 'currentAction' | 'title' | 'lastActivityAt' | 'agentSessionId' | 'phase'>>
+export type SessionPatch = Partial<
+  Pick<
+    Session,
+    | 'status'
+    | 'currentAction'
+    | 'title'
+    | 'lastActivityAt'
+    | 'agentSessionId'
+    | 'phase'
+    | 'lastReply'
+    | 'finishedAt'
+    | 'statusSince'
+    | 'turnStartedAt'
+  >
+>
 
 // End-to-end tests opt in to the Figma 01 fixtures and never touch the saved workspace.
 const fixtures = (globalThis as { __TR_E2E__?: boolean }).__TR_E2E__ === true

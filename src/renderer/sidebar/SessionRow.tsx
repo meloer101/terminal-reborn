@@ -2,8 +2,8 @@ import { memo, useEffect, useRef } from 'react'
 import { glyphStatus } from '../lifecycle/present'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { Elapsed } from './Elapsed'
-import { showsElapsed } from './format-elapsed'
+import { showsTime } from './format-elapsed'
+import { SessionTimeLabel } from './SessionTimeLabel'
 import type { SessionRowModel } from './model'
 import styles from './SessionRow.module.css'
 
@@ -20,6 +20,7 @@ interface Props {
 export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onSelect, onContextMenu }: Props) {
   const { session, secondary, attention, stat } = row
   const ref = useRef<HTMLButtonElement>(null)
+  const status = glyphStatus(session)
 
   // Keep the selection visible when it changes from elsewhere (⌘1–9, ⌘J).
   useEffect(() => {
@@ -47,14 +48,18 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
       }
     >
       <span className={styles.glyph}>
-        <StatusGlyph status={glyphStatus(session)} />
+        <StatusGlyph status={status} />
       </span>
       <span className={styles.main}>
         <span className={styles.title}>{session.title}</span>
         <span className={styles.activity}>{secondary}</span>
       </span>
       <span className={styles.meta}>
-        <span className={styles.metaLine}>{showsElapsed(session.status) && <Elapsed since={session.startedAt} />}</span>
+        {showsTime(session, status) ? (
+          <SessionTimeLabel session={session} status={status} className={styles.metaLine} />
+        ) : (
+          <span className={styles.metaLine} />
+        )}
         <span className={styles.metaLine}>{stat && `+${stat.added} −${stat.removed}`}</span>
       </span>
     </button>
