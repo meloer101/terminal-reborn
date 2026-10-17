@@ -1,3 +1,4 @@
+/* Labels in primary text so the entries read solid (not greyed out); icon and shortcut carry the quieter tones. */
 .item {
   display: flex;
   align-items: center;
@@ -8,7 +9,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   text-align: left;
   cursor: default;
 }
@@ -31,6 +32,12 @@
 .icon {
   flex: none;
   display: flex;
+  color: var(--text-secondary);
+}
+
+.item:hover .icon,
+.item[data-selected='true'] .icon {
+  color: var(--text-primary);
 }
 
 .label {
