@@ -89,6 +89,8 @@ export class XtermSurface implements TerminalSurface {
       lineHeight: this.appearance.lineHeight,
       rescaleOverlappingGlyphs: true,
       cursorBlink: false,
+      // Agents' TUIs turn on mouse reporting, which takes plain drags; ⌥-drag still selects text there (B19).
+      macOptionClickForcesSelection: true,
       allowTransparency: this.isTransparent(),
       theme: this.buildTheme()
     })
