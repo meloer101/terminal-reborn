@@ -44,49 +44,12 @@
   padding: var(--space-8) var(--space-8) var(--space-12);
 }
 
-/* No Figma screen for an empty workspace: a quiet line and one text action. */
-/* Figma 09 · A — no projects yet. */
+/* Figma 14 · no projects yet: one quiet line; "打开项目…" is already in the nav above and on the welcome page. */
 .empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--space-12);
-}
-
-.empty p {
   margin: 0;
-}
-
-.emptyTitle {
-  font: var(--text-body-strong);
-  color: var(--text-secondary);
-}
-
-.emptyText {
+  padding: var(--space-6) var(--space-12);
   font: var(--text-caption);
   color: var(--text-tertiary);
-}
-
-.emptyAction {
-  margin-top: var(--space-4);
-  height: 24px;
-  padding: 0 var(--space-8);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font: var(--text-caption-strong);
-  color: var(--text-primary);
-  cursor: default;
-}
-
-.emptyAction:hover {
-  background: var(--bg-hover);
-}
-
-.emptyAction:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 
 /* Figma NewSessionRow 50:1474 — under a project with no sessions. */

@@ -123,13 +123,7 @@ export function Sidebar() {
           </section>
         ))}
         {groups.length === 0 && (
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>还没有项目</p>
-            <p className={styles.emptyText}>打开一个代码仓库或文件夹，就能在里面启动 Claude Code、Codex 或终端。</p>
-            <button type="button" className={styles.emptyAction} onClick={() => void openProjectInteractive()}>
-              打开项目…
-            </button>
-          </div>
+          <p className={styles.empty}>还没有项目</p>
         )}
       </div>
       <div className={styles.footer}>

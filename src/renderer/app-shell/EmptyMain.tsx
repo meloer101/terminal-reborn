@@ -1,21 +1,28 @@
-// Main area without a session (phase 2b · B10): first run, or every session closed. One clear next step —
-// open a project — plus recent folders, which agent CLIs are installed, and folder drop. No Figma screen yet;
-// built from the sidebar's empty state (Figma 09 · A) vocabulary: quiet text, hairlines, one bordered action.
+// Welcome page: the main area when no session is selected (PRD F18 · Figma 14). A greeting, one short line and one
+// next step. The sidebar already carries navigation and projects, so nothing here repeats it; the agent install
+// block appears only when neither supported agent is installed.
 import { useEffect, useState, type DragEvent } from 'react'
-import { Copy, FolderOpen } from 'lucide-react'
+import { Copy } from 'lucide-react'
 import type { AgentAvailability } from '@shared/ipc'
 import type { AgentKind } from '@shared/types'
-import { INSTALL_HINT } from '../lifecycle/present'
+import { SHORTCUTS } from '@shared/shortcuts'
 import { openProjectInteractive, openProjectPath } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
-import { recentFolders, tildePath } from './empty-main'
+import { StatusGlyph } from '../ui/StatusGlyph'
+import { formatAccelerator } from '../ui/menu-model'
+import { greeting, INSTALLABLE_AGENTS, needsAgentInstall, pickQuote } from './empty-main'
 import styles from './EmptyMain.module.css'
 
-const AGENTS: { kind: Exclude<AgentKind, 'shell'>; name: string }[] = [
-  { kind: 'claude', name: 'Claude Code' },
-  { kind: 'codex', name: 'Codex' }
-]
+/** Picked once per launch, so the line does not change every time the page reappears. */
+const QUOTE = pickQuote()
+
+const HINTS = [
+  [SHORTCUTS['command-palette'], '跳转到'],
+  [SHORTCUTS['toggle-overview'], '总览'],
+  [SHORTCUTS['next-attention'], '下一个等你处理'],
+  [SHORTCUTS['open-project'], '打开项目']
+] as const
 
 function useAgentAvailability(): AgentAvailability | null {
   const [agents, setAgents] = useState<AgentAvailability | null>(null)
@@ -32,6 +39,21 @@ function useAgentAvailability(): AgentAvailability | null {
   return agents
 }
 
+function useUserName(): string {
+  const [name, setName] = useState('')
+  useEffect(() => {
+    let live = true
+    window.tr.app
+      .userName()
+      .then((result) => live && setName(result))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  return name
+}
+
 /** The folder in a drop, if the first dropped item is one. */
 function droppedFolder(e: DragEvent): string | null {
   const item = Array.from(e.dataTransfer.items).find((i) => i.kind === 'file')
@@ -42,15 +64,46 @@ function droppedFolder(e: DragEvent): string | null {
   return path.length > 0 ? path : null
 }
 
+function InstallAgent() {
+  const [selected, setSelected] = useState(INSTALLABLE_AGENTS[0]!)
+  return (
+    <section className={styles.install} aria-label="安装 agent" data-testid="install-agent">
+      <p className={styles.installMessage}>
+        <StatusGlyph status="needs_you" />
+        还没有装任何 agent，选一个装上：
+      </p>
+      <div className={styles.picker} role="radiogroup" aria-label="选择 agent">
+        {INSTALLABLE_AGENTS.map((agent) => (
+          <button
+            key={agent.id}
+            type="button"
+            role="radio"
+            aria-checked={agent.id === selected.id}
+            className={styles.choice}
+            onClick={() => setSelected(agent)}
+          >
+            {agent.name}
+          </button>
+        ))}
+      </div>
+      <div className={styles.command}>
+        <code>{selected.command}</code>
+        <IconButton label={`复制 ${selected.name} 安装命令`} onClick={() => void navigator.clipboard.writeText(selected.command).catch(() => {})}>
+          <Copy size={16} strokeWidth={1.75} />
+        </IconButton>
+      </div>
+    </section>
+  )
+}
+
 export function EmptyMain() {
-  const projects = useWorkspace((s) => s.projects)
-  const recent = useWorkspace((s) => s.recentProjects)
+  const hasProjects = useWorkspace((s) => s.projects.length > 0)
   const agents = useAgentAvailability()
+  const name = useUserName()
   const [dragging, setDragging] = useState(false)
 
   // New sessions start the installed agent: Claude Code, else Codex.
   const kind: AgentKind = agents && !agents.claude && agents.codex ? 'codex' : 'claude'
-  const folders = recentFolders(recent, projects)
 
   const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
   const onDragOver = (e: DragEvent) => {
@@ -76,60 +129,41 @@ export function EmptyMain() {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
-      <div className={styles.column}>
-        <h2 className={styles.title}>打开一个项目开始</h2>
-        <p className={styles.lead}>选择一个代码仓库或文件夹，在里面运行 Claude Code、Codex 或终端。</p>
-        <button type="button" className={styles.primary} onClick={() => void openProjectInteractive(kind)}>
-          <FolderOpen size={16} strokeWidth={1.75} aria-hidden />
-          <span>打开项目…</span>
-          <kbd className={styles.kbd}>⌘O</kbd>
-        </button>
+      <div className={styles.welcome}>
+        <h2 className={styles.greeting}>
+          <span className={styles.mark} aria-hidden />
+          {greeting(new Date().getHours(), name)}
+        </h2>
+        <p className={styles.quote}>
+          {dragging ? (
+            <span className={styles.dropLine}>松开就打开这个文件夹</span>
+          ) : (
+            <>
+              {QUOTE.text}
+              {QUOTE.by && <span className={styles.by}>— {QUOTE.by}</span>}
+            </>
+          )}
+        </p>
 
-        {folders.length > 0 && (
-          <section className={styles.section} aria-labelledby="empty-recent">
-            <h3 className={styles.heading} id="empty-recent">
-              最近项目
-            </h3>
-            <ul className={styles.list}>
-              {folders.map((f) => (
-                <li key={f.path}>
-                  <button type="button" className={styles.row} title={f.path} onClick={() => openProjectPath(f.path, kind)}>
-                    <span className={styles.name}>{f.name}</span>
-                    <span className={styles.path}>{tildePath(f.path, window.tr.homeDir)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section className={styles.section} aria-labelledby="empty-agents">
-          <h3 className={styles.heading} id="empty-agents">
-            智能体
-          </h3>
-          <ul className={styles.list}>
-            {AGENTS.map(({ kind: agent, name }) => (
-              <li key={agent} className={styles.agent} data-agent={agent} data-installed={agents ? agents[agent] : undefined}>
-                <span className={styles.name}>{name}</span>
-                {agents === null ? (
-                  <span className={styles.state}>检测中…</span>
-                ) : agents[agent] ? (
-                  <span className={styles.state}>已安装</span>
-                ) : (
-                  <>
-                    <span className={styles.state}>未安装</span>
-                    <code className={styles.command}>{INSTALL_HINT[agent]}</code>
-                    <IconButton label={`复制 ${name} 安装命令`} onClick={() => void navigator.clipboard.writeText(INSTALL_HINT[agent]).catch(() => {})}>
-                      <Copy size={16} strokeWidth={1.75} />
-                    </IconButton>
-                  </>
-                )}
+        {hasProjects ? (
+          <ul className={styles.hints} aria-label="快捷键">
+            {HINTS.map(([accelerator, label]) => (
+              <li key={label}>
+                <kbd className={styles.key}>{formatAccelerator(accelerator)}</kbd>
+                {label}
               </li>
             ))}
           </ul>
-        </section>
+        ) : (
+          <div className={styles.next}>
+            <button type="button" className={styles.open} onClick={() => void openProjectInteractive(kind)}>
+              打开项目…<kbd className={styles.kbd}>{formatAccelerator(SHORTCUTS['open-project'])}</kbd>
+            </button>
+            <span className={styles.dropHint}>或把文件夹拖进窗口</span>
+          </div>
+        )}
 
-        <p className={styles.hint}>也可以把文件夹拖到这里打开。</p>
+        {needsAgentInstall(agents) && <InstallAgent />}
       </div>
     </div>
   )

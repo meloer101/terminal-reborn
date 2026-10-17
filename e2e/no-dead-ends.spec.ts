@@ -1,5 +1,6 @@
 // Phase 2b P0 (docs/ROADMAP.md, 2b): every place the user can click has a next step.
-//  - B10 first run: main shows a centred empty state (open project, recent folders, installed agents), no composer.
+//  - B10 / F18 welcome page: a greeting, one line and one next step (shortcuts once a project exists); the agent
+//    picker only when no agent is installed.
 //  - B11 dead controls: no panel toggle, the header … is a real menu (rename, close), settings lists only real panes.
 //  - B13 layout: at the 960×600 minimum the right panel floats over main instead of squeezing it; it has ✕.
 // Screenshots of each state in both themes at 1440×900 and 960×600 go to test-results/no-dead-ends/.
@@ -32,15 +33,17 @@ function outerClaudeEnv(): Record<string, undefined> {
   return strip
 }
 
-function fakeAgentEnv(): { env: Record<string, string | undefined>; project: string; profile: string } {
+function fakeAgentEnv(withClaude = true): { env: Record<string, string | undefined>; project: string; profile: string } {
   const root = mkdtempSync(join(tmpdir(), 'tr-e2e-dead-ends-'))
   const bin = join(root, 'bin')
   const zdot = join(root, 'zdot')
   const project = join(root, 'acme-web')
   const profile = join(root, 'profile')
   for (const dir of [bin, zdot, project, profile]) mkdirSync(dir)
-  writeFileSync(join(bin, 'claude'), FAKE_CLAUDE)
-  chmodSync(join(bin, 'claude'), 0o755)
+  if (withClaude) {
+    writeFileSync(join(bin, 'claude'), FAKE_CLAUDE)
+    chmodSync(join(bin, 'claude'), 0o755)
+  }
   // A fixed PATH: claude is installed, codex is not, whatever the machine has.
   writeFileSync(join(zdot, '.zshrc'), `export PATH="${bin}:/usr/bin:/bin"\n`)
   return { env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh' }, project, profile }
@@ -91,13 +94,13 @@ test.describe('first run and the session header', () => {
   let page: Page
 
   test.beforeAll(async () => {
-    // A workspace that remembers one folder but has no projects or sessions left.
+    // A workspace with one project and no sessions.
     writeFileSync(
       join(profile, 'workspace.json'),
       JSON.stringify({
         version: 2,
-        projects: [],
-        worktrees: [],
+        projects: [{ id: 'p1', name: basename(project), rootPath: project }],
+        worktrees: [{ id: 'w1', projectId: 'p1', branch: '', path: project, isMain: true }],
         sessions: [],
         activeSessionId: null,
         sidebarCollapsed: false,
@@ -114,27 +117,28 @@ test.describe('first run and the session header', () => {
     await app.close()
   })
 
-  test('B10: empty main offers open project, recent folders and agent status', async () => {
+  test('F18: the welcome page greets and offers shortcuts once a project exists', async () => {
     const empty = page.getByTestId('empty-main')
     await expect(empty).toBeVisible()
-    await expect(empty.getByRole('button', { name: /打开项目… ⌘O/ })).toBeVisible()
-    await expect(empty.getByRole('button', { name: new RegExp(basename(project)) })).toBeVisible()
-    await expect(empty.locator('[data-agent="claude"]')).toContainText('已安装')
-    await expect(empty.locator('[data-agent="codex"]')).toContainText('未安装')
-    await expect(empty.locator('[data-agent="codex"]')).toContainText('npm install -g @openai/codex')
-    await expect(empty).toContainText('也可以把文件夹拖到这里打开')
+    await expect(empty.getByRole('heading', { level: 2 })).toHaveText(/^(早上好|中午好|下午好|晚上好|夜深了)/)
+    const hints = empty.getByRole('list', { name: '快捷键' })
+    await expect(hints).toContainText('⌘K')
+    await expect(hints).toContainText('下一个等你处理')
+    // A project exists: no open-project button, no project list; claude is installed, so no install block.
+    await expect(empty.getByRole('button', { name: /打开项目/ })).toHaveCount(0)
+    await expect(empty.getByTestId('install-agent')).toHaveCount(0)
     // The header controls that had nothing to do are gone.
     await expect(page.getByRole('button', { name: '变更面板' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '会话菜单' })).toHaveCount(0)
-    await shootAll(app, page, 'b10-first-run', async () => {
-      await expect(empty.getByRole('button', { name: /打开项目… ⌘O/ })).toBeInViewport()
+    await shootAll(app, page, 'f18-welcome-with-project', async () => {
+      await expect(hints).toBeInViewport()
     })
   })
 
-  test('B10: a recent folder opens as a project with a Claude session', async () => {
-    await page.getByTestId('empty-main').getByRole('button', { name: new RegExp(basename(project)) }).click()
+  test('F18: a Claude session starts from the project in the sidebar', async () => {
+    await page.locator('[data-region="sidebar"]').getByRole('button', { name: '新建会话' }).click()
+    await page.getByRole('menu').getByRole('menuitem', { name: /Claude Code/ }).click()
     await expect(page.getByTestId('empty-main')).toHaveCount(0)
-    await expect(page.locator('[data-region="sidebar"]')).toContainText(basename(project))
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
   })
 
@@ -167,8 +171,40 @@ test.describe('first run and the session header', () => {
     await page.getByRole('button', { name: '会话菜单' }).click()
     await page.keyboard.press('End')
     await page.keyboard.press('Enter')
-    // Every session closed: the empty state is back, now listing the project that is still open.
+    // Every session closed: the welcome page is back.
     await expect(page.getByTestId('empty-main')).toBeVisible()
+  })
+})
+
+test.describe('first run without any agent', () => {
+  const { env, profile } = fakeAgentEnv(false)
+  let app: ElectronApplication
+  let page: Page
+
+  test.beforeAll(async () => {
+    app = await launchApp(env, { userDataDir: profile })
+    page = await app.firstWindow()
+  })
+
+  test.afterAll(async () => {
+    await app.close()
+  })
+
+  test('F18: open project is the one next step, and the picker switches the install command', async () => {
+    const empty = page.getByTestId('empty-main')
+    await expect(empty.getByRole('button', { name: /打开项目… ⌘O/ })).toBeVisible()
+    await expect(empty).toContainText('或把文件夹拖进窗口')
+    await expect(page.locator('[data-region="sidebar"]')).toContainText('还没有项目')
+    const install = empty.getByTestId('install-agent')
+    await expect(install).toBeVisible({ timeout: 10_000 })
+    await expect(install.getByRole('radio', { name: 'Claude Code' })).toHaveAttribute('aria-checked', 'true')
+    await expect(install.locator('code')).toHaveText('npm i -g @anthropic-ai/claude-code')
+    await install.getByRole('radio', { name: 'Codex' }).click()
+    await expect(install.locator('code')).toHaveText('npm i -g @openai/codex')
+    await expect(install.getByRole('button', { name: '复制 Codex 安装命令' })).toBeVisible()
+    await shootAll(app, page, 'f18-welcome-no-agent', async () => {
+      await expect(install).toBeInViewport()
+    })
   })
 })
 

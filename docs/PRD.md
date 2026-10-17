@@ -222,14 +222,14 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 
 ### F18 欢迎页 · P1 · Figma 14（Section `159:7315`）
 没有选中会话时（第一次打开、关掉所有会话、或有项目但没选会话）主区显示的页面。侧栏已经有导航和项目，这里**不重复**侧栏的信息：不放项目列表、不放“打开项目”的说明段落、agent 正常时不显示“已安装”。
-- **问候**：Logo/Mark（只有轨道、填 `text/primary`，随主题变黑 / 白）+ “下午好，<名字>”（Display 28/36）。时段：5–11 早上好 · 11–13 中午好 · 13–18 下午好 · 18–23 晚上好 · 23–5 夜深了；名字取 macOS 账户全名，取不到就只说“下午好”。
+- **问候**：Logo/Mark（只有轨道、填 `text/primary`，随主题变黑 / 白）+ “下午好，<名字>”（Display 28/36）。时段：5–11 早上好 · 11–13 中午好 · 13–18 下午好 · 18–23 晚上好 · 23–5 夜深了；名字取 macOS 账户全名（`id -F`，主进程经 `app.userName()` 提供），取不到就只说“下午好”。
 - **一句话**：问候下面一行二级色，带出处时出处用三级色。每次启动随机取一句，同一次运行内不变。句库放在代码里，只收短句：经典编程格言（注明出处，如 Kent Beck、Dijkstra、Knuth）和我们自己写的（如“让 agent 去写，你来决定写什么。”）。
 - **下一步**（按状态只出现一种）：没有项目 → “打开项目… ⌘O”（唯一一个按钮）+“或把文件夹拖进窗口”；有项目 → 一行快捷键提示（⌘K 跳转到 · ⌘⇧A 总览 · ⌘J 下一个等你处理 · ⌘O 打开项目），不放按钮。
-- **一个 agent 都没装时才出现安装块**（14C）：Attention 图形 +“还没有装任何 agent，选一个装上：”，下面是无边框分段选择 Claude Code（默认）· Codex · Cursor · Gemini · Grok，再下面是 `bg/inset` 底的命令框 + 复制按钮，命令随选择切换：Claude Code `npm i -g @anthropic-ai/claude-code` · Codex `npm i -g @openai/codex` · Cursor `curl https://cursor.com/install -fsS | bash` · Gemini `npm i -g @google/gemini-cli` · Grok（官方 CLI 的安装方式待确认）。只要装了其中任何一个就不显示。
+- **Claude Code 和 Codex 都没装时才出现安装块**（14C）：Attention 图形 +“还没有装任何 agent，选一个装上：”，下面是无边框分段选择 Claude Code（默认）· Codex · Cursor · Gemini · Grok，再下面是 `bg/inset` 底的命令框 + 复制按钮，命令随选择切换：Claude Code `npm i -g @anthropic-ai/claude-code` · Codex `npm i -g @openai/codex` · Cursor `curl https://cursor.com/install -fsS | bash` · Gemini `npm i -g @google/gemini-cli` · Grok `curl -fsSL https://x.ai/cli/install.sh | bash`（Grok Build CLI；以 x.ai/cli 为准）。装了 Claude Code 或 Codex 就不显示（其他 agent 还不在检测范围内）。
   - 注意：目前只有 Claude Code 和 Codex 有 hooks 适配（§6.6、§6.7）；Cursor / Gemini / Grok 在适配之前按普通终端会话运行，状态只能靠标题判断。
-- **拖入文件夹**：主区出现内缩 12、圆角 10 的虚线框（`border/strong`，`bg/selected` 底），那句话换成“松开就打开 <文件夹名>”（14D）。
+- **拖入文件夹**：主区出现内缩 12、圆角 10 的虚线框（`border/strong`，`bg/selected` 底），那句话换成“松开就打开这个文件夹”（拖动过程中拿不到文件夹名）（14D）。
 - **侧栏空状态**：没有项目时只显示一行三级色“还没有项目”，不再放说明和按钮（导航里已有“打开项目… ⌘O”）。
-- 间距：图形与问候 14；问候 → 一句话 10；一句话 → 下一步 40；下一步 → 安装块 32，块内 12。一句话带出处时去掉句末“。”，出处与句子隔 10。整体垂直居中、略偏上（底部多留 96）；新增文字样式 `Display`（Instrument Sans Medium 28/36，中文 Noto Sans SC Medium）。
+- 间距：图形与问候 12；问候 → 一句话 12；一句话 → 下一步 40；下一步 → 安装块 32，块内 12。一句话带出处时去掉句末“。”，出处与句子隔 10。整体垂直居中、略偏上（底部多留 96）；新增文字样式 `Display`（Instrument Sans Medium 28/36，中文 Noto Sans SC Medium）。
 
 ### P2 储备（已验证，但排在后面）
 代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· best-of-N 竞赛（依赖 F4，在总览中比较）· Claude Remote Control 菜单入口（发送 `/remote-control`，需要实测）· 仓库级预设 prompt（`.tr/settings.toml`）· 实时终端网格（最多 4 格）· `@` 文件引用 · GitHub PR 创建 / 合并。

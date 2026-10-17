@@ -175,6 +175,8 @@ export interface AppInfoApi {
   reportActivity(summary: ActivitySummary): void
   /** Which agent CLIs are installed. Never throws (a failed check reports both as missing). */
   detectAgents(): Promise<AgentAvailability>
+  /** The account's full name for the welcome greeting (PRD F18); '' when unknown. Never throws. */
+  userName(): Promise<string>
 }
 
 export interface AgentApi {
@@ -260,6 +262,7 @@ export const IPC = {
   appReportActivity: 'app:report-activity',
   /** invoke → AgentAvailability */
   appDetectAgents: 'app:detect-agents',
+  appUserName: 'app:user-name',
   /** sync */
   workspaceLoad: 'workspace:load',
   workspaceSave: 'workspace:save',
