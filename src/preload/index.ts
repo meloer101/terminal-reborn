@@ -3,6 +3,7 @@ import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ip
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
 import type { SessionId } from '@shared/types'
+import { browserApi } from './browser'
 
 // One ipcRenderer listener per channel, fanned out by session id. Per-session listeners
 // would trip Node's MaxListeners warning once a dozen terminals are open.
@@ -119,7 +120,8 @@ const api: TrApi = {
     watch: (root) => ipcRenderer.send(IPC.worktreeWatch, root),
     unwatch: (root) => ipcRenderer.send(IPC.worktreeUnwatch, root),
     onChanged: (listener) => listen(IPC.worktreeChanged, listener)
-  }
+  },
+  browser: browserApi
 }
 
 contextBridge.exposeInMainWorld('tr', api)

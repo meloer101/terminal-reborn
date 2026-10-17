@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
 import { registerActivityHandlers } from './activity'
 import { registerAgentDetection } from './agents-installed'
+import { registerBrowserHandlers } from './browser'
 import { registerUserName } from './user-name'
 import { registerAppearanceEffects } from './appearance'
 import { registerConfirmHandlers } from './confirm'
@@ -66,6 +67,7 @@ function boot(): void {
   registerAppearanceEffects()
   registerFileHandlers()
   registerWorktreeFileHandlers()
+  registerBrowserHandlers()
   registerHookHandlers()
   registerPtyHandlers()
   registerUiHandlers()

@@ -1,0 +1,50 @@
+// What the 浏览器 view shows for a page state (Figma 13A / 13E). Pure, so the rules are unit-tested.
+import type { AgentKind } from '@shared/types'
+import type { BrowserPageState, ConsoleSummary, ListeningPort } from '@shared/browser'
+
+export type WellContent = 'empty' | 'error' | 'page'
+
+export interface BrowserLayout {
+  /** The ports row (端口 · tags · mobile toggle). */
+  ports: boolean
+  /** The console row at the bottom. */
+  console: boolean
+  well: WellContent
+}
+
+/** 13E (nothing opened) has neither row unless ports were found; an open page has both. */
+export function browserLayout(page: BrowserPageState | undefined, ports: readonly ListeningPort[]): BrowserLayout {
+  if (!page?.url) return { ports: ports.length > 0, console: false, well: 'empty' }
+  return { ports: true, console: !page.loadError, well: page.loadError ? 'error' : 'page' }
+}
+
+/** The empty state's second line: what to do next. */
+export function emptyHint(ports: readonly ListeningPort[]): string {
+  return ports.length > 0 ? '点一下上面的端口就能打开，或在地址栏输入地址。' : '运行 dev server 后，检测到的端口会出现在这里，点一下就能打开。'
+}
+
+export interface ConsoleLine {
+  /** Shown with an error StatusGlyph in the error color. */
+  errors: string | null
+  /** Tertiary text after the errors (or alone). */
+  rest: string
+}
+
+/** "2 个错误" · "· 1 个警告"; "控制台没有错误" when quiet; "正在载入…" while loading with nothing to report. */
+export function consoleLine(summary: ConsoleSummary, loading: boolean): ConsoleLine {
+  const warnings = summary.warnings > 0 ? `${summary.warnings} 个警告` : ''
+  if (summary.errors > 0) return { errors: `${summary.errors} 个错误`, rest: warnings ? `· ${warnings}` : '' }
+  if (warnings) return { errors: null, rest: warnings }
+  return { errors: null, rest: loading ? '正在载入…' : '控制台没有错误' }
+}
+
+/** "发给 Claude" / "发给 Codex"; null for a plain shell, which has no agent to send to. */
+export function sendLabel(kind: AgentKind): string | null {
+  if (kind === 'shell') return null
+  return `发给 ${kind === 'codex' ? 'Codex' : 'Claude'}`
+}
+
+/** `:5173 vite` */
+export function portText(port: ListeningPort): string {
+  return port.label ? `:${port.port} ${port.label}` : `:${port.port}`
+}
