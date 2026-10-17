@@ -8,6 +8,7 @@ import {
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
+import { noteKeyCommand } from './key-commands'
 import { useWorkspace } from './workspace'
 import { projectOfSession } from './workspace-model'
 
@@ -175,17 +176,12 @@ export async function closeActiveSession(): Promise<void> {
 
 // Capture phase so ⌘N / ⌘O / ⌘W work while the terminal or composer has focus.
 const onKeyDown = (e: KeyboardEvent) => {
-  const action = plainCmd(e, 'n')
-    ? quickNewSession
-    : plainCmd(e, 'o')
-      ? openProjectInteractive
-      : plainCmd(e, 'w')
-        ? closeActiveSession
-        : null
-  if (!action) return
+  const command = plainCmd(e, 'n') ? 'new-session' : plainCmd(e, 'o') ? 'open-project' : plainCmd(e, 'w') ? 'close-session' : null
+  if (!command) return
   e.preventDefault()
   e.stopPropagation()
-  void action()
+  noteKeyCommand(command)
+  void (command === 'new-session' ? quickNewSession() : command === 'open-project' ? openProjectInteractive() : closeActiveSession())
 }
 window.addEventListener('keydown', onKeyDown, true)
 if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener('keydown', onKeyDown, true))

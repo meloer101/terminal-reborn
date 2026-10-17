@@ -1,6 +1,7 @@
 // Pure palette model: what can be jumped to or run, and in which order. No React, no store access.
 import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
 import { compareByUrgency, STATUS_LABEL } from '@shared/session-status'
+import { SHORTCUTS } from '@shared/shortcuts'
 import { matchFields, type MatchField, type Range } from './match'
 
 export type PaletteSection = 'sessions' | 'actions'
@@ -34,6 +35,8 @@ export interface PaletteEntry {
   icon?: ActionIcon
   /** Session needs the user: recolors the subtitle like the sidebar row. */
   attention?: boolean
+  /** Electron accelerator of the same command outside the palette, drawn at the row's end. */
+  shortcut?: string
   fields: MatchField[]
 }
 
@@ -88,7 +91,17 @@ export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
     })
 }
 
+/** The shortcut that runs the same command without the palette (@shared/shortcuts). */
+const ACTION_SHORTCUT: Partial<Record<ActionId, string>> = {
+  'new-claude': SHORTCUTS['new-session'],
+  'add-project': SHORTCUTS['open-project'],
+  'toggle-overview': SHORTCUTS['toggle-overview'],
+  'toggle-sidebar': SHORTCUTS['toggle-sidebar'],
+  'toggle-changes': SHORTCUTS['toggle-right-panel']
+}
+
 function action(id: ActionId, title: string, icon: ActionIcon, keywords: string, subtitle = ''): PaletteEntry {
+  const shortcut = ACTION_SHORTCUT[id]
   return {
     id: `action:${id}`,
     section: 'actions',
@@ -96,6 +109,7 @@ function action(id: ActionId, title: string, icon: ActionIcon, keywords: string,
     title,
     subtitle,
     icon,
+    ...(shortcut ? { shortcut } : {}),
     fields: [
       { key: 'title', text: title, weight: 3 },
       { key: 'subtitle', text: subtitle, weight: 1.5 },

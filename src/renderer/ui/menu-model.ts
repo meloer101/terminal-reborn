@@ -79,6 +79,9 @@ const MODIFIERS: Record<string, { symbol: string; order: number }> = {
   commandorcontrol: { symbol: '⌘', order: 3 }
 }
 
+/** Electron key names drawn as the symbol on the key. */
+const KEY_SYMBOL: Record<string, string> = { plus: '+', enter: '↵', return: '↵', escape: 'esc', backspace: '⌫', delete: '⌦' }
+
 /** 'CmdOrCtrl+Shift+A' → '⇧⌘A', in macOS modifier order (⌃⌥⇧⌘). */
 export function formatAccelerator(accelerator: string): string {
   const parts = accelerator.split('+')
@@ -88,7 +91,7 @@ export function formatAccelerator(accelerator: string): string {
     .filter((mod) => mod !== undefined)
     .sort((a, b) => a.order - b.order)
     .map((mod) => mod.symbol)
-  return mods.join('') + (key.length === 1 ? key.toUpperCase() : key)
+  return mods.join('') + (KEY_SYMBOL[key.toLowerCase()] ?? (key.length === 1 ? key.toUpperCase() : key))
 }
 
 /** Items and submenus that can be activated (separators and disabled items are skipped). */

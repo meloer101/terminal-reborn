@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
+import { isMenuCommand } from '@shared/shortcuts'
 import type { SessionId } from '@shared/types'
 
 // One ipcRenderer listener per channel, fanned out by session id. Per-session listeners
@@ -70,6 +71,9 @@ const api: TrApi = {
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),
     openSettings: () => ipcRenderer.send(IPC.uiOpenSettings),
     onShowSettings: (listener) => listen(IPC.uiShowSettings, listener),
+    onMenuCommand: (listener) => listen(IPC.uiMenuCommand, (command: unknown) => {
+      if (isMenuCommand(command)) listener(command)
+    }),
     confirm: (options) => ipcRenderer.invoke(IPC.uiConfirm, options),
     revealInFinder: (path) => ipcRenderer.send(IPC.uiRevealInFinder, path)
   },

@@ -1,5 +1,5 @@
 import { CircleAlert, Ellipsis, GitBranch, PanelLeft, PanelRight } from 'lucide-react'
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { compareByUrgency, needsAttention, STATUS_LABEL } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
 import { AGENT_NAME, glyphStatus, phaseLabel } from '../lifecycle/present'
@@ -9,6 +9,8 @@ import { useActiveSession, useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
 import styles from './SessionHeader.module.css'
+import { formatAccelerator } from '../ui/menu-model'
+import { SHORTCUTS } from '@shared/shortcuts'
 
 /** Figma component `SessionHeader` (11:86). Doubles as the window drag region. */
 export function SessionHeader() {
@@ -23,12 +25,20 @@ export function SessionHeader() {
   const hooks = useHooksHealth(active?.session.id ?? null)
   // Inline rename from the … menu: the session being renamed (so switching sessions ends it).
   const [renaming, setRenaming] = useState<string | null>(null)
+  // 会话 › 重命名会话 in the app menu: each new request starts renaming the active session.
+  useEffect(
+    () =>
+      useWorkspace.subscribe((next, prev) => {
+        if (next.renameRequest !== prev.renameRequest && next.activeSessionId) setRenaming(next.activeSessionId)
+      }),
+    []
+  )
   const agentUp = active !== null && active.session.kind !== 'shell' && active.session.phase !== 'not-started' && active.session.phase !== 'exited'
 
   return (
     <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
       {sidebarCollapsed && (
-        <IconButton label="显示侧栏" onClick={toggleSidebar}>
+        <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft size={16} strokeWidth={1.75} />
         </IconButton>
       )}

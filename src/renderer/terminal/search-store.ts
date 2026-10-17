@@ -1,6 +1,7 @@
 // Find in the active terminal (B18): whether the find bar is open, and ⌘F to open it.
 import { create } from 'zustand'
 import { useWorkspace } from '../state/workspace'
+import { noteKeyCommand } from '../state/key-commands'
 import { isFindShortcut } from './find'
 
 interface TerminalSearchState {
@@ -29,6 +30,7 @@ const onKeyDown = (e: KeyboardEvent): void => {
   if (!openTerminalSearch()) return
   e.preventDefault()
   e.stopPropagation()
+  noteKeyCommand('find')
 }
 window.addEventListener('keydown', onKeyDown, true)
 if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener('keydown', onKeyDown, true))

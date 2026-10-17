@@ -16,6 +16,8 @@ import { SessionRow } from './SessionRow'
 import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
 import './shortcuts-runtime'
 import styles from './Sidebar.module.css'
+import { formatAccelerator } from '../ui/menu-model'
+import { SHORTCUTS } from '@shared/shortcuts'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -66,19 +68,19 @@ export function Sidebar() {
       <div className={styles.titlebar}>
         {/* Native traffic lights (hiddenInset, x=16 y=16) sit over this gap. */}
         <div className={styles.trafficLights} aria-hidden />
-        <IconButton label="隐藏侧栏" onClick={toggleSidebar}>
+        <IconButton label="隐藏侧栏" title={`隐藏侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft {...ICON} />
         </IconButton>
       </div>
       <nav className={styles.nav} aria-label="导航">
-        <NavItem icon={<Folder {...ICON} />} label="打开项目…" shortcut="⌘O" onClick={() => void openProjectInteractive()} />
-        <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut="⌘K" onClick={openCommandPalette} />
+        <NavItem icon={<Folder {...ICON} />} label="打开项目…" shortcut={formatAccelerator(SHORTCUTS['open-project'])} onClick={() => void openProjectInteractive()} />
+        <NavItem icon={<Search {...ICON} />} label="跳转到…" shortcut={formatAccelerator(SHORTCUTS['command-palette'])} onClick={openCommandPalette} />
         <NavItem
           icon={<LayoutList {...ICON} />}
           label="总览"
-          shortcut="⌘⇧A"
+          shortcut={formatAccelerator(SHORTCUTS['toggle-overview'])}
           selected={overview}
-          title={waiting.length > 0 ? `${waiting.length} 个会话需要你 · ⌘⇧A` : '总览 · ⌘⇧A'}
+          title={waiting.length > 0 ? `${waiting.length} 个会话需要你 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}` : `总览 · ${formatAccelerator(SHORTCUTS['toggle-overview'])}`}
           badge={
             waiting[0] && (
               <>
@@ -131,7 +133,7 @@ export function Sidebar() {
         )}
       </div>
       <div className={styles.footer}>
-        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut="⌘," onClick={openSettings} />
+        <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={openSettings} />
       </div>
     </>
   )

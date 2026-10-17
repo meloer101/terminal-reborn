@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import { FileDiff, FolderPlus, LayoutList, Monitor, Moon, PanelLeft, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
+import { formatAccelerator } from '../ui/menu-model'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './CommandPalette.module.css'
 import { buildEntries, rankEntries, stepIndex, type ActionIcon, type PaletteSection, type RankedEntry } from './entries'
@@ -197,6 +198,7 @@ function Sheet() {
                   <span className={styles.subtitle}>
                     <Highlight text={entry.subtitle} ranges={subtitleRanges(item)} />
                   </span>
+                  {entry.shortcut && <kbd className={styles.shortcut}>{formatAccelerator(entry.shortcut)}</kbd>}
                 </div>
               </div>
             )

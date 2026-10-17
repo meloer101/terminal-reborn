@@ -130,6 +130,13 @@
   color: var(--status-attention);
 }
 
+/* The same command's shortcut outside the palette. */
+.shortcut {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
 /* Matched characters: weight only, so highlighting never reads as a second color. */
 .hit {
   font-weight: 600;

@@ -5,6 +5,7 @@
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
+import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
@@ -106,6 +107,8 @@ export interface UiApi {
   openSettings(): void
   /** ⌘, from the app menu: show the settings dialog. */
   onShowSettings(listener: () => void): Unsubscribe
+  /** A command picked in the app menu (or its shortcut, when the menu took the key). */
+  onMenuCommand(listener: (command: MenuCommand) => void): Unsubscribe
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
   /** Native confirmation sheet; resolves to true when the user picked the confirm button. */
@@ -241,6 +244,8 @@ export const IPC = {
   uiOpenSettings: 'ui:open-settings',
   /** main → renderer: show the settings dialog */
   uiShowSettings: 'ui:show-settings',
+  /** main → renderer, payload MenuCommand */
+  uiMenuCommand: 'ui:menu-command',
   uiRevealInFinder: 'ui:reveal-in-finder',
   uiConfirm: 'ui:confirm',
   settingsGet: 'settings:get',

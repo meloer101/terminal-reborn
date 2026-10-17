@@ -14,6 +14,7 @@ import { Overview } from '../overview/Overview'
 import { RIGHT_PANEL_AVAILABLE } from '../panels/availability'
 import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
+import './menu-commands'
 import { panelMode } from './layout'
 import styles from './AppShell.module.css'
 

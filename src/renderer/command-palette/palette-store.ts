@@ -1,6 +1,7 @@
 // Module-level open/closed store for the palette, plus the global ⌘K shortcut. Lives outside
 // React so the sidebar's "跳转到…" row can call openCommandPalette() without prop plumbing.
 import { create } from 'zustand'
+import { noteKeyCommand } from '../state/key-commands'
 import { isPaletteShortcut } from './keys'
 
 export const usePaletteOpen = create<{ open: boolean }>()(() => ({ open: false }))
@@ -45,6 +46,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (!isPaletteShortcut(e)) return
   e.preventDefault()
   e.stopPropagation()
+  noteKeyCommand('command-palette')
   toggleCommandPalette()
 }
 window.addEventListener('keydown', onKeyDown, true)

@@ -24,6 +24,8 @@ import {
 import { SessionOverlay } from './SessionOverlay'
 import { enterSession, useOverviewStore, type OverviewView } from './store'
 import styles from './Overview.module.css'
+import { formatAccelerator } from '../ui/menu-model'
+import { SHORTCUTS } from '@shared/shortcuts'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -122,7 +124,7 @@ export function Overview() {
     <div className={styles.overview} data-region="overview" onKeyDown={onKeyDown}>
       <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
         {sidebarCollapsed && (
-          <IconButton label="显示侧栏" onClick={toggleSidebar}>
+          <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
             <PanelLeft {...ICON} />
           </IconButton>
         )}
