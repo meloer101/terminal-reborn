@@ -97,8 +97,8 @@
 - 可以并行（与 git 无关）：
   - [ ] F11 上下文占用与额度
   - [ ] F12 todo 进度
-  - [ ] F14 端口检测
-  - [ ] F17 浏览器页签（`WebContentsView`、端口条、移动端视口、控制台错误发给 agent）
+  - [ ] F14 端口检测 — 主进程最小版本已有（2026-10-17，`src/main/browser/ports.ts`：`ps` + `lsof` 查会话 PTY 进程树的监听端口，只在浏览器页签打开时每 3 秒扫一次）；会话行和总览的端口标签、⌥ 点击、右键结束进程还没做
+  - [x] F17 浏览器页签（2026-10-17）：`WebContentsView`（每个 worktree 一个 `persist:tr-browser:<哈希>` 分区、无 preload、只允许 http(s)、新窗口要有用户操作）、每个 worktree 一个页面并记住 URL、地址框（纯数字 = localhost 端口）、worktree 内所有会话的端口条、375 手机视口、控制台错误 / 警告计数和“发给 Claude”（只放进输入行，不按回车）、页面里的应用快捷键和右键菜单、空状态 13E；菜单和对话框打开时用截图代替页面；e2e `browser-panel.spec.ts`。以后再做：截图闪烁 / MutationObserver 范围、本机自签名证书、缩放后的坐标、隐藏时暂停端口扫描、端口出现后自动刷新、闲置页面回收、触摸和移动端 UA、按 cwd 找后台服务的端口
 
 ### M5 · Git 图谱 + PR 状态 → v0.4.0
 完成标准：Figma 04 还原；5000 个提交的仓库首屏 < 300 ms。

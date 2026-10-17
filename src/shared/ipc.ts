@@ -3,6 +3,7 @@
 // Changing a signature here is a cross-track change — note it in the PR.
 
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
+import type { BrowserApi } from './browser'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
@@ -273,6 +274,8 @@ export interface TrApi {
   worktree: WorktreeFilesApi
   git: GitGraphApi
   gitWorktrees: GitWorktreesApi
+  /** The right panel's built-in browser and the session ports it lists (PRD F17 / F14); channels in BROWSER_IPC. */
+  browser: BrowserApi
 }
 
 export const IPC = {

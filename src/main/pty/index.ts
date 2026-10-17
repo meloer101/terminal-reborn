@@ -20,6 +20,8 @@ const CRASH_WINDOW_MS = 60_000
 
 interface LiveSession {
   owner: WebContents
+  /** The PTY's root process (shell or agent), once spawned or attached. */
+  pid?: number
 }
 
 interface Pending<T> {
@@ -192,6 +194,8 @@ function handleHostEvent(event: HostEvent): void {
     case 'spawned': {
       // Late news of a spawn main already gave up on: kill it rather than leave an invisible live process.
       if (shouldKillLateSpawn(sessions, event.id, link?.kind === 'daemon')) send({ type: 'kill', id: event.id })
+      const spawned = sessions.get(event.id)
+      if (spawned) spawned.pid = event.pid
       settle(pendingSpawns, event.id)?.resolve({ pid: event.pid })
       break
     }
@@ -222,6 +226,7 @@ function handleHostEvent(event: HostEvent): void {
         if (!event.exit) send({ type: 'detach', id: event.id })
         break
       }
+      session.pid = event.pid
       if (event.exit) sessions.delete(event.id)
       else if (event.agent === 'claude' || event.agent === 'codex') adoptAgentSession(event.id, session.owner, event.hooks)
       pending.resolve({
@@ -358,6 +363,12 @@ export function quitKeepsSessions(): boolean {
 /** The next quit ends every session (and the daemon) instead of leaving them running. */
 export function endSessionsOnNextQuit(): void {
   endSessionsOnQuit = true
+}
+
+/** The PTY root process of a live session `owner` drives (port detection, PRD F14); undefined otherwise. */
+export function sessionPid(owner: WebContents, sessionId: string): number | undefined {
+  const session = sessions.get(sessionId)
+  return session?.owner === owner ? session.pid : undefined
 }
 
 /** Only the window that spawned a session may drive it. */

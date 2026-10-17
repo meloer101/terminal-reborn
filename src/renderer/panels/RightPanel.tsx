@@ -3,6 +3,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
+import { BrowserView } from './browser/BrowserView'
 import { FilesView } from './files/FilesView'
 import { GitView } from './git/GitView'
 import { WorktreeView } from './worktree/WorktreeView'
@@ -26,6 +27,8 @@ export function RightPanel({ view }: { view: PanelView }) {
           <GitView key={worktree.path} worktree={worktree} />
         ) : view === 'worktree' && worktree && project ? (
           <WorktreeView key={project.rootPath} projectId={project.id} root={project.rootPath} projectName={project.name} activeWorktreeId={worktree.id} />
+        ) : view === 'browser' && worktree && active ? (
+          <BrowserView key={worktree.path} worktree={worktree.path} sessionId={active.session.id} kind={active.session.kind} />
         ) : (
           <>
             <PaneHeader title={PANEL_VIEW_LABEL[view]} context={view === 'browser' ? '' : projectName} />

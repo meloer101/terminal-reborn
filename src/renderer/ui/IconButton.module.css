@@ -21,3 +21,8 @@
   background: var(--bg-selected);
   color: var(--text-primary);
 }
+
+.button:disabled {
+  background: transparent;
+  color: var(--text-disabled);
+}

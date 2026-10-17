@@ -1,0 +1,264 @@
+/* 浏览器 view — Figma 13A (147:7040) / 13E (151:7248); toolbar = BrowserBar (130:283). No dividers inside the card. */
+
+/* Pane header (147:7041): 40 high, the bar takes the row, × at 6 from the right. */
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: var(--space-40);
+  padding-right: var(--space-6);
+}
+
+/* BrowserBar: 8 side padding, 2 between the icons. */
+.bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-8);
+}
+
+/* URL (130:296): borderless bg/inset field, 26 high, 8 side padding, globe · host · path. */
+.address {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 26px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  cursor: text;
+  -webkit-app-region: no-drag;
+}
+
+.address:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.globe {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.addressInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-mono-s);
+  outline: none;
+}
+
+.addressInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Not editing: the input's own text is hidden under host (primary) + path (tertiary). */
+.address[data-editing='false'] .addressInput {
+  color: transparent;
+}
+
+.addressText {
+  position: absolute;
+  inset: 0 var(--space-8) 0 calc(var(--space-8) + 16px + var(--space-6));
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.host {
+  flex: none;
+  color: var(--text-primary);
+}
+
+.path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+}
+
+.gap {
+  flex: none;
+  width: var(--space-4);
+}
+
+/* Ports (147:7072): 32 high, 14 left / 6 right, 4 between. Also carries notices. */
+.row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--space-32);
+  padding: 0 var(--space-6) 0 calc(var(--space-12) + var(--space-2));
+}
+
+.rowLabel {
+  flex: none;
+  margin-right: var(--space-2);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* PortTag (78:123): borderless, 20 high, 6 side padding; the open one has bg/selected. */
+.port {
+  flex: none;
+  height: var(--space-20);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.port:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.port[data-selected='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.noticeText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Viewport well (147:7083): 8 side inset; the page sits in a bg/inset rounded area. */
+.wellArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--space-8);
+}
+
+.well {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+/* Mobile (375 viewport): the page is a 375-wide frame centered with 12 above and below. */
+.well[data-mobile='true'] {
+  padding: var(--space-12) 0;
+}
+
+.page {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.well[data-mobile='true'] .page {
+  align-self: center;
+  border-radius: var(--radius-sm);
+}
+
+.snapshot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Empty state (151:7259): centered globe · line · hint, no background. */
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-12) var(--space-24);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.emptyHint {
+  margin: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* Console (147:7117): 40 high, 14 left / 6 right, 6 between. */
+.console {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: var(--space-40);
+  padding: 0 var(--space-6) 0 calc(var(--space-12) + var(--space-2));
+}
+
+.errors {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--status-error);
+}
+
+.consoleRest {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* Button · Ghost · S (9:33): 24 high, 8 side padding, secondary text. */
+.ghost {
+  flex: none;
+  height: var(--space-24);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.ghost:disabled {
+  color: var(--text-tertiary);
+}
