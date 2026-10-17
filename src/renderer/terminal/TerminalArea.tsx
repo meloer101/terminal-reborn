@@ -90,8 +90,14 @@ function canStealFocus(): boolean {
   return !typing || active.matches('.xterm-helper-textarea')
 }
 
-/** The keyboard follows the active session into its terminal (which appears a few frames after the session). */
-function useFocusActiveTerminal(sessionId: SessionId | null): void {
+/** How long to wait for a terminal to exist: a restored agent spawns only after the daemon listing (~10 s at 60 fps). */
+const FOCUS_WAIT_FRAMES = 600
+
+/**
+ * The keyboard follows the active session into its terminal (B7) — on every selection or explicit request
+ * (`focusRequest`), not only when the active id changes. The terminal can appear frames or seconds later.
+ */
+function useFocusActiveTerminal(sessionId: SessionId | null, request: number): void {
   useEffect(() => {
     if (!sessionId) return
     let frame = 0
@@ -100,7 +106,7 @@ function useFocusActiveTerminal(sessionId: SessionId | null): void {
     const attempt = (): void => {
       const surface = getXtermSurface(sessionId)
       if (!surface) {
-        if (tries++ < 90) frame = requestAnimationFrame(attempt)
+        if (tries++ < FOCUS_WAIT_FRAMES) frame = requestAnimationFrame(attempt)
         return
       }
       // xterm ignores focus() until it is open (fonts loaded, attached to the DOM).
@@ -108,12 +114,13 @@ function useFocusActiveTerminal(sessionId: SessionId | null): void {
         if (!cancelled && canStealFocus()) surface.focus()
       })
     }
-    attempt()
+    // Never within the event that asked: the keypress / keyup of an ↵ that picked the session must not reach xterm.
+    frame = requestAnimationFrame(attempt)
     return () => {
       cancelled = true
       cancelAnimationFrame(frame)
     }
-  }, [sessionId])
+  }, [sessionId, request])
 }
 
 /**
@@ -161,7 +168,8 @@ export function TerminalArea() {
   const requests = useStartRequests((s) => s.requests)
   const live = useLiveSessions((s) => s.live)
   useSessionStartup()
-  useFocusActiveTerminal(activeSessionId)
+  const focusRequest = useWorkspace((s) => s.focusRequest)
+  useFocusActiveTerminal(activeSessionId, focusRequest)
   useResyncOnWake(activeSessionId)
 
   useEffect(() => {

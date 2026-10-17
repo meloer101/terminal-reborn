@@ -33,9 +33,13 @@ interface WorkspaceState extends WorkspaceData {
   mainView: MainView
   /** Folders opened as projects, most recent first (first-run screen). */
   recentProjects: readonly string[]
+  /** Bumped whenever the keyboard should go to the active session's terminal (B7), even if it is already active. */
+  focusRequest: number
 
-  /** Selects a session and shows its terminal (leaves the overview). */
+  /** Selects a session, shows its terminal (leaves the overview) and gives that terminal the keyboard. */
   setActiveSession(id: SessionId): void
+  /** Gives the active session's terminal the keyboard once it can take it. */
+  requestTerminalFocus(): void
   setMainView(view: MainView): void
   toggleSidebar(): void
   setRightPanel(tab: RightPanelTab | null): void
@@ -92,8 +96,10 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   collapsedProjectIds: saved?.collapsedProjectIds ?? [],
   mainView: 'session',
   recentProjects: saved?.recentProjects ?? [],
+  focusRequest: 0,
 
-  setActiveSession: (id) => set({ activeSessionId: id, mainView: 'session' }),
+  setActiveSession: (id) => set((s) => ({ activeSessionId: id, mainView: 'session', focusRequest: s.focusRequest + 1 })),
+  requestTerminalFocus: () => set((s) => ({ focusRequest: s.focusRequest + 1 })),
   setMainView: (view) => set({ mainView: view }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setRightPanel: (tab) => set({ rightPanel: tab }),

@@ -22,11 +22,12 @@ export function openCommandPalette(): void {
 /**
  * Closes the palette and puts focus back where it was. Focus moves on the next frame, not
  * synchronously: when ↵ closes the palette, the keypress/keyup that follow the keydown must
- * not land on the terminal (xterm would send a stray carriage return).
+ * not land on the terminal (xterm would send a stray carriage return). `restoreFocus: false`
+ * when the chosen entry moves the keyboard itself (a session's terminal).
  */
-export function closeCommandPalette(): void {
+export function closeCommandPalette({ restoreFocus = true }: { restoreFocus?: boolean } = {}): void {
   if (!isCommandPaletteOpen()) return
-  const target = restoreTo
+  const target = restoreFocus ? restoreTo : null
   restoreTo = null
   usePaletteOpen.setState({ open: false })
   requestAnimationFrame(() => {

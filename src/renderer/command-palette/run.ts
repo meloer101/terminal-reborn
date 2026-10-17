@@ -1,9 +1,8 @@
 // Executes a palette entry against the real stores. Kept apart from the pure model so
 // entries.ts stays free of side effects.
-import type { AgentKind, SessionId } from '@shared/types'
+import type { AgentKind } from '@shared/types'
 import { addProjectInteractive } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
-import { getSurface } from '../terminal/registry'
 import { applyTheme, type ThemePreference } from '../theme'
 import { closeCommandPalette } from './palette-store'
 import { currentProject, type ActionId, type PaletteEntry } from './entries'
@@ -25,24 +24,6 @@ let disposeTheme: (() => void) | null = null
 function setTheme(preference: ThemePreference): void {
   disposeTheme?.()
   disposeTheme = applyTheme(preference)
-}
-
-/**
- * After the active session changes, the previous focus target is usually a hidden terminal.
- * If nothing ended up focused, hand focus to the new session's terminal (created lazily on
- * first view, hence the short wait).
- */
-function focusTerminalWhenIdle(sessionId: SessionId): void {
-  let frames = 0
-  const tick = () => {
-    const active = document.activeElement
-    if (active && active !== document.body && active.isConnected) return // focus restored elsewhere (e.g. composer)
-    const surface = getSurface(sessionId)
-    if (surface) surface.focus()
-    else if (++frames < 30) requestAnimationFrame(tick)
-  }
-  // Two frames: the first is the palette's own focus restore.
-  requestAnimationFrame(() => requestAnimationFrame(tick))
 }
 
 function runAction(action: ActionId): void {
@@ -75,10 +56,10 @@ function runAction(action: ActionId): void {
 }
 
 export function runEntry(entry: PaletteEntry): void {
-  closeCommandPalette()
-  const before = useWorkspace.getState().activeSessionId
-  if (entry.target.type === 'session') useWorkspace.getState().setActiveSession(entry.target.sessionId)
-  else runAction(entry.target.action)
-  const after = useWorkspace.getState().activeSessionId
-  if (after && after !== before) focusTerminalWhenIdle(after)
+  const target = entry.target
+  // Picking a session or starting one hands the keyboard to its terminal (B7); other actions give it back.
+  const toTerminal = target.type === 'session' || NEW_KIND[target.action] !== undefined
+  closeCommandPalette({ restoreFocus: !toTerminal })
+  if (target.type === 'session') useWorkspace.getState().setActiveSession(target.sessionId)
+  else runAction(target.action)
 }

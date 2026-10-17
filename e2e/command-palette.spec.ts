@@ -100,6 +100,13 @@ test('typing filters (CJK) and ↵ switches the active session', async () => {
   await expect.poll(focusedPane).toBe(SECOND)
 })
 
+test('choosing the session that is already active still hands the keyboard to its terminal', async () => {
+  await sidebarRow(SECOND).focus()
+  await expect.poll(focusedPane).toBe(null)
+  await sidebarRow(SECOND).click()
+  await expect.poll(focusedPane).toBe(SECOND)
+})
+
 test('↑/↓ move the selection and hover follows the mouse', async () => {
   // Keep the pointer off the list: Chromium replays a mouse move when rows appear under a resting pointer,
   // which would select that row before the keyboard checks below.
