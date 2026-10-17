@@ -1,4 +1,5 @@
 // Module-level registry of live terminals, keyed by session id. Terminals outlive React re-renders.
+import type { SendIo } from '@shared/send-protocol'
 import type { AgentKind, SessionId } from '@shared/types'
 import { SessionTerminal } from './session-terminal'
 import type { TerminalAppearance, TerminalSurface } from './surface'
@@ -57,6 +58,17 @@ export function resyncTerminal(sessionId: SessionId): void {
 export function readSnapshot(sessionId: SessionId, scrollbackLines = 40): string | null {
   const terminal = terminals.get(sessionId)
   return terminal ? terminal.surface.readScreen(scrollbackLines) : null
+}
+
+/**
+ * What the send executor needs for a session. Safe to call before the terminal exists:
+ * writes go straight to the PTY and readScreen() is empty until a surface is created.
+ */
+export function getSendIo(sessionId: SessionId): SendIo {
+  return {
+    write: (data) => window.tr.pty.write(sessionId, data),
+    readScreen: () => terminals.get(sessionId)?.surface.readScreen(200) ?? ''
+  }
 }
 
 /** Only the visible viewport: for detecting full-screen dialogs that are on screen right now. */

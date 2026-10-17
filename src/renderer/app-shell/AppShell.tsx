@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { useWorkspace } from '../state/workspace'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
+import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
 import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { TerminalArea } from '../terminal/TerminalArea'
@@ -58,6 +59,7 @@ export function AppShell() {
         </section>
         <div className={styles.sessionOnly} data-hidden={overview}>
           <EngineRestartedCard />
+          <SessionErrorBar />
         </div>
       </main>
       {rightPanel && (
