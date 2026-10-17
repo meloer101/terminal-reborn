@@ -1,0 +1,444 @@
+/* Git view — Figma 13B 图谱 (154:6938) / 13H light (155:8584) / 13B2 变更 (147:7240). No dividers inside the card. */
+
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* View row (154:6945): 10 left / 14 right, 6 below, segments 2 apart. */
+.viewRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 calc(var(--space-12) + var(--space-2)) var(--space-6) calc(var(--space-8) + var(--space-2));
+}
+
+.segments {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Segment (9:50 / 9:52), borderless here: 24 high, 12 side padding, radius-sm. */
+.segment {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.segment:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.segment[aria-selected='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.segment:focus-visible,
+.filter:focus-visible,
+.fileRow:focus-visible,
+.pill:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Branch filter (154:7140): caption secondary + chevron, 2 apart. */
+.filter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  padding: 0 0 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.filter:hover,
+.filter[data-menu-open] {
+  color: var(--text-primary);
+}
+
+.aheadBehind {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.notice {
+  flex: none;
+  margin: 0;
+  padding: 0 calc(var(--space-12) + var(--space-2)) var(--space-6);
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-24);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* --- 图谱 ------------------------------------------------------------------------------------------------------- */
+
+.graph {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.graphCanvas {
+  position: relative;
+}
+
+/* Commit row (155:7168): 28 high; the selected background (155:7114) sits 6 in from each side. */
+.commit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 28px;
+}
+
+.commit::before {
+  content: '';
+  position: absolute;
+  inset: 0 var(--space-6);
+  border-radius: var(--radius-md);
+}
+
+.commit:hover::before {
+  background: var(--bg-hover);
+}
+
+.commit[data-head]::before {
+  background: var(--bg-selected);
+}
+
+.lanes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+/* Commit text (155:7168): pills · subject · age, 6 apart, 14 from the right edge. */
+.commitText {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  padding-right: calc(var(--space-12) + var(--space-2));
+  overflow: hidden;
+}
+
+.headCheck {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subject[data-head] {
+  color: var(--text-primary);
+}
+
+.age {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* GraphRef (153:210): 20 high, radius-sm, 5 / 7 padding, icon 14 + 4; stroke and icon in the lane colour. */
+.pill {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: 50%;
+  height: 20px;
+  padding: 0 calc(var(--space-8) - 1px) 0 calc(var(--space-6) - 1px);
+  border: 1px solid var(--pill-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.pill[data-kind='remote'] {
+  border-style: dashed;
+}
+
+.pill[data-kind='tag'] {
+  padding: 0 calc(var(--space-8) - 1px);
+  border-color: var(--border-default);
+  color: var(--text-tertiary);
+}
+
+button.pill:hover {
+  background: var(--bg-hover);
+}
+
+.pillIcon {
+  flex: none;
+  color: var(--pill-color);
+}
+
+.pillName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loadingMore {
+  margin: 0;
+  padding: var(--space-8) 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* --- 变更 ------------------------------------------------------------------------------------------------------- */
+
+.files {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Group header (147:7372): 12 above, 4 below, 14 sides, 6 apart. */
+.groupHeader {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  padding: var(--space-12) calc(var(--space-12) + var(--space-2)) var(--space-4);
+  white-space: nowrap;
+}
+
+.groupTitle {
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.groupMeta {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+}
+
+/* FileRow (12:79 / 12:85): 8 vertical, 12 left / 16 right, 8 apart; open = bg/hover. */
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-8) var(--space-16) var(--space-8) var(--space-12);
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.fileRow:hover,
+.fileRow[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.fileChevron {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.filePath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.added,
+.removed,
+.binary {
+  flex: none;
+  font: var(--text-mono-s);
+  white-space: nowrap;
+}
+
+.added {
+  color: var(--diff-add-fg);
+}
+
+.removed {
+  color: var(--diff-del-fg);
+}
+
+.binary {
+  color: var(--text-tertiary);
+}
+
+.diff {
+  font: var(--text-mono-code);
+}
+
+/* DiffLine (12:91): 20 high; gutters 36 each, right-aligned; marker 20. */
+.diffLine {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  color: var(--term-fg);
+}
+
+.diffLine[data-kind='hunk'] {
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+}
+
+.diffLine[data-kind='add'] {
+  background: var(--diff-add-bg);
+}
+
+.diffLine[data-kind='del'] {
+  background: var(--diff-del-bg);
+}
+
+.gutter {
+  flex: none;
+  width: 36px;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
+.marker {
+  flex: none;
+  width: 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.diffLine[data-kind='add'] .marker {
+  color: var(--diff-add-fg);
+}
+
+.diffLine[data-kind='del'] .marker {
+  color: var(--diff-del-fg);
+}
+
+.code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.diffNote {
+  margin: 0;
+  padding: var(--space-4) var(--space-16) var(--space-8) var(--space-40);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* Footer (147:7378): 10 vertical, 14 left / 10 right; Ghost + the view's one Primary. */
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2))
+    calc(var(--space-12) + var(--space-2));
+}
+
+.ghostButton,
+.primaryButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--text-body-strong);
+  white-space: nowrap;
+}
+
+.ghostButton {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ghostButton:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.ghostButton:disabled {
+  color: var(--text-disabled);
+}
+
+.primaryButton {
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.primaryButton:disabled {
+  background: var(--bg-selected);
+  color: var(--text-disabled);
+}
+
+.shortcut {
+  font: var(--text-mono-s);
+  opacity: 0.55;
+}

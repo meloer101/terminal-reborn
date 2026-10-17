@@ -1,6 +1,6 @@
 # TerminalReborn PRD
 
-> 版本 v1.7 · 2026-10-17 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.8 · 2026-10-17 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.8 | 2026-10-17 | F6 / F17 Git 实现时定下的细节：图谱里默认分支固定在最左列；“全部分支”不含 stash；变更视图的标题行上下文是分支名，右侧显示领先 / 落后；在基线分支本身上“已提交”对比它的 upstream；虚拟化改为固定行高的窗口化渲染（不引入 `@tanstack/react-virtual`） |
 | v1.7 | 2026-10-17 | F17 实现时定下的细节：右侧栏只在有选中会话时显示（总览和欢迎页不显示）；宽度 400–1200；文件视图的筛选搜索整个 worktree（不只已展开的目录），“更多”是刷新 · 全部折叠；右键菜单项带快捷键（↵ · ⌘↵ · ⌘⇧R · ⌘⇧I · ⌘⌥C）；“显示”菜单加“显示 / 隐藏右侧栏” |
 | v1.6 | 2026-10-17 | 新增 F18 欢迎页：没有选中会话时主区只放问候、一句话和一个下一步（Figma 14），不再重复侧栏已有的信息 |
 | v1.5 | 2026-10-17 | 新增 F17 右侧栏：浮在窗口上的一层，浏览器 · Git · Worktree · 文件四个视图，由会话头的图标切换（Figma 13）；内置浏览器从 P2 提前；F6 图谱是 Git 视图的默认内容、F5 变更是第二个视图，F6 的 Worktree 列表移到 Worktree 视图 |
@@ -150,9 +151,9 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **验收**：Figma 03 还原；1 万行 diff 滚动流畅。
 
 ### F6 Git 图谱 · P1 · Figma 04（Panel · 图谱）
-- 自研 lane 算法（`src/shared/git-graph/lanes.ts`，O(n·lanes)，支持增量分页）；每行用 SVG 绘制，`@tanstack/react-virtual` 做虚拟化。
+- 自研 lane 算法（`src/shared/git-graph/lanes.ts`，O(n·lanes)，支持增量分页，每页 200 个提交）；默认分支（main / master / origin/HEAD）固定在第 0 列；每行用 SVG 绘制，行高固定，只渲染可见的行。
 - 在提交行上标出每个 worktree 的 HEAD，以及对应 agent 的 StatusGlyph，点击跳到该会话。
-- 筛选：全部分支 / 仅 worktree。
+- 筛选：全部分支（本地 + 远程分支、tag、各 worktree 的 HEAD；不含 stash）/ 仅 worktree（只看各 worktree HEAD 能到达的提交）。
 - 右键菜单：切换到会话 · 合并到基线 · 基于基线 rebase · 复制 SHA · 新建 worktree · 删除 worktree。
 - 图谱是右侧栏 Git 视图的默认内容（F17，Figma 13B）；原先图谱下方的 Worktree 列表移到 Worktree 视图。
 - **验收**：Figma 04 还原；5000 个提交的仓库首屏 < 300 ms。

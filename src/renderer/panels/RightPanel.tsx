@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
 import { FilesView } from './files/FilesView'
+import { GitView } from './git/GitView'
 import { PaneHeader } from './PaneHeader'
 import styles from './RightPanel.module.css'
 
@@ -19,6 +20,8 @@ export function RightPanel({ view }: { view: PanelView }) {
       <div className={styles.card} data-view={view} data-testid="right-panel">
         {view === 'files' && worktree && active ? (
           <FilesView key={worktree.path} root={worktree.path} sessionId={active.session.id} />
+        ) : view === 'git' && worktree ? (
+          <GitView key={worktree.path} worktree={worktree} />
         ) : (
           <>
             <PaneHeader title={PANEL_VIEW_LABEL[view]} context={view === 'browser' ? '' : projectName} />

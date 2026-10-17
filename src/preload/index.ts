@@ -119,6 +119,13 @@ const api: TrApi = {
     watch: (root) => ipcRenderer.send(IPC.worktreeWatch, root),
     unwatch: (root) => ipcRenderer.send(IPC.worktreeUnwatch, root),
     onChanged: (listener) => listen(IPC.worktreeChanged, listener)
+  },
+  git: {
+    log: (request) => ipcRenderer.invoke(IPC.gitLog, request),
+    signature: (root) => ipcRenderer.invoke(IPC.gitSignature, root),
+    fetch: (root) => ipcRenderer.invoke(IPC.gitFetch, root),
+    changes: (root, base) => ipcRenderer.invoke(IPC.gitChanges, root, base),
+    fileDiff: (request) => ipcRenderer.invoke(IPC.gitFileDiff, request)
   }
 }
 

@@ -105,7 +105,7 @@ test.describe('F17 right panel · 文件', () => {
     await expect(switcher.getByRole('button')).toHaveText(['', '', '', ''])
     await switcher.getByRole('button', { name: 'Git' }).click()
     await expect(panel()).toBeVisible()
-    await expect(panel()).toContainText('Git 视图还在开发中')
+    await expect(panel().getByRole('tab', { name: '图谱' })).toBeVisible()
     await expect(switcher.getByRole('button', { name: 'Git' })).toHaveAttribute('aria-pressed', 'true')
 
     await switcher.getByRole('button', { name: '文件' }).click()

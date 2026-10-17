@@ -8,6 +8,7 @@ import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
+import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -141,6 +142,20 @@ export interface WorktreeFilesApi {
   onChanged(listener: (change: WorktreeChange) => void): Unsubscribe
 }
 
+/** The right panel's Git view (PRD F6 / F17 Git · 图谱 + 变更). `root` is any worktree of the repo. */
+export interface GitGraphApi {
+  /** One page of the commit graph plus refs and worktrees; null when `root` is not in a git repo. */
+  log(request: GitLogRequest): Promise<GitLogPage | null>
+  /** Cheap fingerprint of every ref and worktree HEAD; when it changes, reload the graph. '' when not a repo. */
+  signature(root: string): Promise<string>
+  /** `git fetch --all --prune` (never prompts); resolves to '' or git's error message. */
+  fetch(root: string): Promise<string>
+  /** Uncommitted and committed (vs `base`) files of the worktree; null when not a repo. */
+  changes(root: string, base?: string): Promise<GitChanges | null>
+  /** Unified diff text of one file. */
+  fileDiff(request: GitFileDiffRequest): Promise<string>
+}
+
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
 export interface WorkspaceStoreApi {
   /** Synchronous read at startup (null when nothing is stored yet). */
@@ -233,6 +248,7 @@ export interface TrApi {
   workspace: WorkspaceStoreApi
   terminalSnapshots: TerminalSnapshotApi
   worktree: WorktreeFilesApi
+  git: GitGraphApi
 }
 
 export const IPC = {
@@ -307,5 +323,10 @@ export const IPC = {
   worktreeWatch: 'worktree:watch',
   worktreeUnwatch: 'worktree:unwatch',
   /** main → renderer, payload WorktreeChange */
-  worktreeChanged: 'worktree:changed'
+  worktreeChanged: 'worktree:changed',
+  gitLog: 'git:log',
+  gitSignature: 'git:signature',
+  gitFetch: 'git:fetch',
+  gitChanges: 'git:changes',
+  gitFileDiff: 'git:file-diff'
 } as const
