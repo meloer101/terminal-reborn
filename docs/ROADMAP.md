@@ -86,17 +86,21 @@
 - [ ] F4 新建任务 ⌘N：分支、worktree、`.worktreeinclude`、setup 脚本、首条 prompt
 - [ ] F4 `.tr/settings.toml` 的 setup / run / archive 脚本、Run 按钮、`TR_PORT`
 - [ ] F4 本地合并：预检、merge / squash / rebase、冲突交给 agent、合并后清理
-- [ ] F5 变更面板 + 行内评论发给 agent
+- [ ] F17 右侧栏外壳：浮层卡片、会话头四个切换图标、宽度可拖拽并保存、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 pane 阴影（Figma 13 v2，设计待作者确认）
+- [ ] F5 变更面板 + 行内评论发给 agent（放进右侧栏 Git 的“变更”视图，Figma 13B2）
+- [ ] F17 Worktree 页签：列表、选中详情、可清理分组
+- [ ] F17 文件页签：目录树 + git 状态、只读预览、用默认编辑器打开、右键菜单
 - [ ] F13 一键 AI 审阅
 - [ ] F15 归档
 - 可以并行（与 git 无关）：
   - [ ] F11 上下文占用与额度
   - [ ] F12 todo 进度
   - [ ] F14 端口检测
+  - [ ] F17 浏览器页签（`WebContentsView`、端口条、移动端视口、控制台错误发给 agent）
 
 ### M5 · Git 图谱 + PR 状态 → v0.4.0
 完成标准：Figma 04 还原；5000 个提交的仓库首屏 < 300 ms。
-- [ ] F6 lane 算法、worktree 和 agent 标注、右键操作、虚拟化、Worktree 列表
+- [ ] F6 lane 算法、worktree 和 agent 标注、右键操作、虚拟化（作为右侧栏 Git 的默认视图，Figma 13B；Worktree 列表已移到 F17）
 - [ ] F16 PR / CI 只读状态
 
 ### M6 · 深化（持续）→ v1.0
@@ -171,3 +175,4 @@
 | 10 会话生命周期 | 2a | 已还原（卡片在 v1.2 去掉） |
 | 11 v2 总览 | 2b | 已实现，待验收 |
 | 12 会话头：ctx % · todo · 端口 · PR | M4 并行 / M5 | 待设计 |
+| 13 右侧栏：浏览器 · Git · Worktree · 文件 | M4 | 已设计，待作者确认 |

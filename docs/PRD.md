@@ -1,6 +1,6 @@
 # TerminalReborn PRD
 
-> 版本 v1.3 · 2026-10-17 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.5 · 2026-10-17 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.5 | 2026-10-17 | 新增 F17 右侧栏：浮在窗口上的一层，浏览器 · Git · Worktree · 文件四个视图，由会话头的图标切换（Figma 13）；内置浏览器从 P2 提前；F6 图谱是 Git 视图的默认内容、F5 变更是第二个视图，F6 的 Worktree 列表移到 Worktree 视图 |
 | v1.4 | 2026-10-17 | F8：菜单中文化，⌘+ / ⌘- / ⌘0 调终端字号，快捷键集中定义；⌘F 查找条是终端上唯一的叠加控件（按需出现） |
 | v1.3 | 2026-10-17 | 路线图和进度移到 ROADMAP；产品简报里的核心链路并入 §2；spike 的实测结论并入 §6.6–§6.9；其余文档删除 |
 | v1.2 | 2026-10-16 | **终端就是全部界面**：取消 F1 输入栏和 F3 应用内作答（PromptBar），终端里不叠加任何控件；权限请求只用来标记“等你处理”，在 TUI 里作答；终端默认行高 1；终端底色只跟随浅色 / 深色主题，取消渐变 / 图片背景。PTY 守护进程：⌘Q 后 agent 继续运行（F8） |
@@ -140,8 +141,8 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - 清理：合并后提示删除；列出孤儿 worktree（P2：按 TTL 自动回收）。
 - **验收**：在测试仓库上完成 L1 / L4 / L5 全流程；合并失败时仓库能回到干净状态。
 
-### F5 Diff 审阅 · P1 · Figma 03（Panel · 变更）
-- 右侧面板“变更”页：对比基线的文件列表、汇总 `+N −M`，支持 unified / split 视图（`@pierre/diffs`）。
+### F5 Diff 审阅 · P1 · Figma 03（Panel · 变更）/ 13B
+- 右侧栏 Git 页签的“变更”视图（F17）：对比基线的文件列表、汇总 `+N −M`，支持 unified / split 视图（`@pierre/diffs`）。
 - 行内评论：多条评论可以合并为一条 prompt，一键发给该会话的 agent。
 - 底部操作：发送评论 · 放弃 · 合并到 main。
 - **验收**：Figma 03 还原；1 万行 diff 滚动流畅。
@@ -151,7 +152,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - 在提交行上标出每个 worktree 的 HEAD，以及对应 agent 的 StatusGlyph，点击跳到该会话。
 - 筛选：全部分支 / 仅 worktree。
 - 右键菜单：切换到会话 · 合并到基线 · 基于基线 rebase · 复制 SHA · 新建 worktree · 删除 worktree。
-- 下方的 Worktree 列表：名称、路径、↑↓、更多操作。
+- 图谱是右侧栏 Git 视图的默认内容（F17，Figma 13B）；原先图谱下方的 Worktree 列表移到 Worktree 视图。
 - **验收**：Figma 04 还原；5000 个提交的仓库首屏 < 300 ms。
 
 ### F7 外观 · P0（主题 token）/ P1（设置页）· Figma 07 / 08
@@ -196,7 +197,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - 变更面板和总览“待审阅”行提供“让 agent 审阅”：向该会话发送 `/code-review`（Claude）或 `/review`（Codex）。审阅结果留在 TUI 里，暂不解析回 diff。
 
 ### F14 端口检测 · P1
-- 主进程低频扫描每个 PTY 子进程树正在监听的端口（`lsof`，按需开启），在会话行和总览中以小标签显示 `:5173`。点击在系统浏览器中打开，右键可以结束进程。内置浏览器为 P2。
+- 主进程低频扫描每个 PTY 子进程树正在监听的端口（`lsof`，按需开启），在会话行和总览中以小标签显示 `:5173`。点击在右侧栏的浏览器页签中打开（F17），⌥ 点击用系统浏览器打开，右键可以结束进程。
 
 ### F15 归档 · P1
 - 归档 = 停止 agent + 把 worktree 状态（含未提交的改动）存进私有 ref + 从侧栏隐藏。可以在 ⌘K“历史”中恢复，恢复时用 `--resume` 接上原对话。合并后可选自动归档。agent 运行中不允许归档。
@@ -204,12 +205,26 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 ### F16 PR / CI 只读状态 · P1
 - 检测到 `gh` 且已登录时，会话行和总览显示 `#123` 与 checks 状态（✓ / ✗ / 进行中）。CI 失败时提供“让 agent 修复”，由我们生成一条 prompt 发给该会话。创建和合并 PR 是后续工作。
 
+### F17 右侧栏 · P1 · Figma 13（Section `134:5521`）
+右侧栏是终端旁边、浮在窗口上的一层辅助视图（形态参考 Claude Code 桌面版的终端面板），不承载对 agent 的输入（终端仍是全部输入面）。内容永远跟随**当前会话所在的 worktree**；切换会话时各页签一起切换。
+- **外壳**：一张浮起的卡片，上 / 右 / 下内缩 8，宽 480（拖左边缘调宽，最小 400，宽度会保存），圆角 10，`bg/float` 底 + 1px `border/subtle` 描边 + `Elevation/Pane` 阴影。卡片内部**不用分割线**，层次只靠间距、字号和 `bg/hover` / `bg/inset` 底色；每个视图最多一个实心主按钮，其余用无边框的 Ghost 按钮或图标。
+- **切换**：没有页签栏。会话头右侧四个图标（地球 = 浏览器 · git-branch = Git · git-fork = Worktree · 文件夹 = 文件），当前视图的图标为 Active 底色；再点一次收起。⌘⌥B 开关（记住上次的视图）。卡片顶部 40 高：标题 · 上下文（等宽三级色）· 少量图标 · ×。主区放不下时沿用浮层规则（B13）。会话头里重复的 agent 状态文字去掉（侧栏已显示）。
+- **浏览器**（13A / 13E）：卡片顶部就是工具栏 = 后退 · 前进 · 刷新 · 无边框地址框（host 用主色、路径用三级色）· 用系统浏览器打开 · ×。下面一行列出本会话监听的端口（无边框的 PortTag，选中的带 `bg/selected` 底，点一下打开），右侧手机图标切换 375 视口（移动端模拟）。网页放在内缩 8 的 `bg/inset` 圆角区域里。底部：错误、警告数（StatusGlyph + 文字）和 Ghost 按钮“发给 Claude”——按 §6.9 的发送规则把错误文本发给当前会话。还没有端口时显示空状态（13E），不自动打开任何页面。
+  - 技术：主进程里的 `WebContentsView`，独立 session 分区 `persist:tr-browser`，无 preload，`contextIsolation` + `sandbox` 开启，页面拿不到 `window.tr`；只允许 `http(s)`；控制台来自 `console-message` 事件；移动端视口用 `enableDeviceEmulation`。
+- **Git · 图谱**（13B / 13H，默认视图）：标题行“Git · 项目名”+ 拉取（fetch）· 更多 · ×；下面是无边框分段“图谱 / 变更 N”和“全部分支 ⌄”筛选。提交图（F6）：每行 28 高；lane 间距 17，线宽 2，分叉 / 合并用半径 8 的圆角转弯；颜色取 `lane/main`、`lane/1…5`（main 用中性灰）；提交点 8，当前 HEAD 点 10，点外圈 2px `bg/float` 让线条断开。行内：✓（当前 worktree 的 HEAD）· ref 胶囊（`GraphRef`：本地分支实线 + 分支图标，远程分支虚线 + 地球图标，worktree 实线 + 该 worktree 里会话的 StatusGlyph，tag 中性色；描边和图标取所在 lane 的颜色）· 提交说明（当前 HEAD 主色，其余二级色）· 时间。当前 HEAD 行有 `bg/selected` 底。点 worktree 胶囊切到那个会话；右键菜单同 F6。
+- **Git · 变更**（13B2）：分支行下面按 **未提交**（agent 还没提交的工作区改动）和 **已提交**（对比基线）分组，文件行和 diff 沿用 F5；底部只有 Ghost“创建 PR”和主按钮“合并到 main ⌘M”（“发回 Claude 修改”由行内评论的“发给 Claude”承担）。
+- **Worktree**（13C）：当前项目的全部 worktree（`git worktree list --porcelain`），每行：StatusGlyph（其中最紧急的会话）· 名称 · 未提交 `+N −M` · 领先 / 落后，第二行是会话名和 agent，第三行是路径。点一行切到那个会话；选中行展开详情（分支、基线、未提交文件、端口段）和操作（Ghost）：打开文件夹 · 合并到 main…（F4）· 更多（在此新建会话、删除等）。“可清理”分组收纳已合并或没有会话的 worktree，可以一键清理（F4）。标题行的 + 即“新建 ⌘N”（F4）。
+- **文件**（13D / 13F）：当前 worktree 的目录树，目录按需加载；git 状态用字母（M / A / D / U）加颜色，含改动的目录显示 “•”，被 `.gitignore` 忽略的项变暗但仍可展开。标题行：文件 · 根目录名 · 在 Finder 中打开 · 更多；下面是无边框的 `bg/inset` 筛选框，框内右侧是“有改动 N”开关。
+  - 打开：双击 = 应用内只读预览（13F，行号 + 改动标记，Esc / ← 返回）；⌘↵ = 用系统默认编辑器打开（`shell.openPath`）。右键：预览 · 用默认编辑器打开 · 在 Finder 中显示 · 插入路径到终端（把 `@相对路径 ` 写进当前会话的输入行，规则同 §6.9）· 复制相对路径。
+  - 主进程校验所有路径都在该 worktree 根目录之内；文件变化用 `fs.watch` 增量刷新。
+- **验收**：Figma 13 在深浅两套主题下还原；切换会话时右侧栏 100 ms 内换成新 worktree 的内容；1 万个文件的仓库首屏目录树 < 200 ms；浏览器页面无法访问 `window.tr` 和 Node。
+
 ### P2 储备（已验证，但排在后面）
-代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· best-of-N 竞赛（依赖 F4，在总览中比较）· Claude Remote Control 菜单入口（发送 `/remote-control`，需要实测）· 仓库级预设 prompt（`.tr/settings.toml`）· 内置预览浏览器 · 实时终端网格（最多 4 格）· `@` 文件引用 · GitHub PR 创建 / 合并。
+代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· best-of-N 竞赛（依赖 F4，在总览中比较）· Claude Remote Control 菜单入口（发送 `/remote-control`，需要实测）· 仓库级预设 prompt（`.tr/settings.toml`）· 实时终端网格（最多 4 格）· `@` 文件引用 · GitHub PR 创建 / 合并。
 
 ## 5. 设计规范
 
-- 唯一的设计来源是 Figma 文件中的 Foundations、Components、Screens 三页。屏幕节点：01 运行中 `14:2` · 02 等你处理 `16:178` · 03 变更审阅 `16:405` · 04 Git 图谱 `18:591` · 05 合并预检 `19:814` · 06 新任务 `19:940` · 07 设置·外观 `21:1223` · 08 浅色模式 `24:1790` · 09 侧栏入口 `51:1460` · 10 会话生命周期 `64:2225` · 11 v2 总览（Section `106:3639`；深色 A 列表收起 `106:3640` · B 列表原地展开 `106:4038` · C 看板色块 `108:4091` · D 看板浮层 `108:4366`；浅色 `108:5704` / `108:5757` / `108:5814` / `108:5866`；状态色块卡片与交互说明 `110:5348`；组件 OverviewGroupHeader v2 `104:145` · OverviewRow v2 `104:191` · StatusCard `104:286` · SessionOverlayBar `104:287`）。旧版 11 / 11b / 11c（`71:2635` / `72:2918` / `72:2617`）已被 v2 取代。
+- 唯一的设计来源是 Figma 文件中的 Foundations、Components、Screens 三页。屏幕节点：01 运行中 `14:2` · 02 等你处理 `16:178` · 03 变更审阅 `16:405` · 04 Git 图谱 `18:591` · 05 合并预检 `19:814` · 06 新任务 `19:940` · 07 设置·外观 `21:1223` · 08 浅色模式 `24:1790` · 09 侧栏入口 `51:1460` · 10 会话生命周期 `64:2225` · 11 v2 总览（Section `106:3639`；深色 A 列表收起 `106:3640` · B 列表原地展开 `106:4038` · C 看板色块 `108:4091` · D 看板浮层 `108:4366`；浅色 `108:5704` / `108:5757` / `108:5814` / `108:5866`；状态色块卡片与交互说明 `110:5348`；组件 OverviewGroupHeader v2 `104:145` · OverviewRow v2 `104:191` · StatusCard `104:286` · SessionOverlayBar `104:287`）。旧版 11 / 11b / 11c（`71:2635` / `72:2918` / `72:2617`）已被 v2 取代。13 右侧栏 v2 浮层（Section `134:5521`；A 浏览器 `147:6926` · B Git 图谱 `154:6902` · B2 Git 变更 `147:7126` · H Git 图谱浅色 `155:8584` · C Worktree `149:5973` · D 文件 `149:6307`；E 浏览器空状态 `151:7248` · F 文件预览 `151:7333` · G 文件浅色 `151:7550`；组件 FileTreeRow `130:259` · WorktreeRow `130:282` · BrowserBar `130:283` · GraphRef `153:210`，新图标在 Components 页 Section `130:152`；新增 token `bg/float`（深色 gray/900、浅色 gray/0）和效果样式 `Elevation/Pane`）。
 - 侧栏层级以 Components 页的 `ProjectHeader`（Default / Hover / Collapsed）和 `SessionRow` 为准，规则见 §3.3。总览组件在 Components 页的 Overview 分区：`OverviewGroupHeader` `70:222` · `OverviewRow` `70:324` · `BoardRow` `70:608`；`NavItem` 新增 `Show count` / `Count` 属性。
 - 字体：UI 使用系统字体 SF Pro（Figma 中的 Instrument Sans 只是替身）；等宽字体默认 JetBrains Mono；中文默认思源黑体 SC / 苹方，并逐段显式指定。
 - 风格约束：零彩度中性色；颜色只用于表达状态；用排版、对齐和细分隔线建立层级；小圆角（3 / 5 / 窗口 10）；不使用卡片堆叠、渐变或装饰性小字。
