@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  isSafeRefName,
-  mergeChanges,
+  isBaseRef,
+  isValidRefName,
   parseLeftRight,
   parseLog,
-  parseNameStatus,
-  parseNumstat,
+  parseRawNumstat,
   parseRefs,
   parseWorktreeList,
   pickTrunk,
@@ -29,6 +28,11 @@ describe('parseLog', () => {
     expect(parseLog('')).toEqual([])
     expect(parseLog('not a commit\x1e')).toEqual([])
     expect(parseLog(`${A}\x1f\x1f1\x1f作者\x1f修复 · 中文说明\x1e`)[0]?.subject).toBe('修复 · 中文说明')
+  })
+
+  it('ignores lines config adds before a record (log.showSignature)', () => {
+    const out = `No signature\n${A}\x1f${B}\x1f2\x1fx\x1fsigned?\x1e\ngpg: Signature made …\ngpg: Good signature\n${B}\x1f\x1f1\x1fx\x1froot\x1e\n`
+    expect(parseLog(out).map((c) => c.hash)).toEqual([A, B])
   })
 })
 
@@ -95,35 +99,67 @@ describe('pickTrunk', () => {
     expect(pickTrunk(refs, 'refs/remotes/origin/develop')).toEqual({ name: 'develop', hash: B })
     expect(pickTrunk(refs.slice(1), 'refs/remotes/origin/develop')).toEqual({ name: 'origin/develop', hash: C })
   })
+  it('falls back to origin/main or origin/master when origin/HEAD is not set', () => {
+    expect(pickTrunk([...refs, { name: 'origin/master', kind: 'remote', hash: A }], null)).toEqual({ name: 'origin/master', hash: A })
+  })
   it('gives up without a default branch', () => {
     expect(pickTrunk(refs, null)).toBeNull()
   })
 })
 
-describe('isSafeRefName', () => {
-  it('accepts branch names and rejects options and ranges', () => {
-    expect(isSafeRefName('main')).toBe(true)
-    expect(isSafeRefName('jacob/mobile-nav_2.1')).toBe(true)
-    expect(isSafeRefName('origin/main')).toBe(true)
-    expect(isSafeRefName('--output=/tmp/x')).toBe(false)
-    expect(isSafeRefName('-x')).toBe(false)
-    expect(isSafeRefName('a..b')).toBe(false)
-    expect(isSafeRefName('a b')).toBe(false)
-    expect(isSafeRefName('')).toBe(false)
-    expect(isSafeRefName(42)).toBe(false)
+describe('isValidRefName', () => {
+  it('accepts what git accepts, unicode included', () => {
+    for (const name of ['main', 'jacob/mobile-nav_2.1', 'origin/main', 'feature/登录', 'fix#12', 'a+b', 'v1.0-rc', 'x@y']) {
+      expect(isValidRefName(name), name).toBe(true)
+    }
+  })
+  it('rejects options, ranges and what check-ref-format refuses', () => {
+    for (const name of ['', '-x', '--output=/tmp/x', 'a..b', 'a b', 'a~1', 'a^', 'a:b', 'a?', 'a*', 'a[', 'a\\b', 'a@{1}', '@', '/a', 'a/', 'a//b', 'a.', '.a', 'a/.b', 'a.lock', 'a/b.lock/c', 'a\x01', 'x'.repeat(256)]) {
+      expect(isValidRefName(name), JSON.stringify(name)).toBe(false)
+    }
+    expect(isValidRefName(42)).toBe(false)
+  })
+  it('accepts full base refs only under refs/heads and refs/remotes', () => {
+    expect(isBaseRef('refs/heads/feature/登录')).toBe(true)
+    expect(isBaseRef('refs/remotes/origin/main')).toBe(true)
+    expect(isBaseRef('refs/tags/v1')).toBe(false)
+    expect(isBaseRef('main')).toBe(false)
+    expect(isBaseRef('refs/heads/a..b')).toBe(false)
+    expect(isBaseRef('refs/heads/')).toBe(false)
   })
 })
 
 describe('changes', () => {
-  it('joins name-status and numstat, renames and binaries included', () => {
-    const status = parseNameStatus('A\0n.txt\0D\0y.txt\0R070\0x.txt\0z.txt\0M\0src/a.ts\0')
-    const numstat = parseNumstat('1\t0\tn.txt\x000\t1\ty.txt\x001\t0\t\0x.txt\0z.txt\0-\t-\tsrc/a.ts\0')
-    expect(mergeChanges(status, numstat)).toEqual([
+  it('reads one --raw --numstat -z diff: status, renames, binaries', () => {
+    const out = [
+      ':000000 100644 0000000 3e75765 A',
+      'n.txt',
+      ':100644 000000 45b983b 0000000 D',
+      'y.txt',
+      ':100644 100644 0fdf397 28c54b7 R070',
+      'x.txt',
+      'z.txt',
+      ':100644 100644 1111111 2222222 M',
+      'src/a.png',
+      ':100644 100644 1111111 2222222 M',
+      'app/[id]/page.tsx',
+      '1\t0\tn.txt',
+      '0\t1\ty.txt',
+      '1\t0\t',
+      'x.txt',
+      'z.txt',
+      '-\t-\tsrc/a.png',
+      '3\t2\tapp/[id]/page.tsx',
+      ''
+    ].join('\0')
+    expect(parseRawNumstat(out)).toEqual([
+      { path: 'app/[id]/page.tsx', status: 'M', added: 3, removed: 2 },
       { path: 'n.txt', status: 'A', added: 1, removed: 0 },
-      { path: 'src/a.ts', status: 'M', added: null, removed: null },
+      { path: 'src/a.png', status: 'M', added: null, removed: null },
       { path: 'y.txt', status: 'D', added: 0, removed: 1 },
       { path: 'z.txt', oldPath: 'x.txt', status: 'R', added: 1, removed: 0 }
     ])
+    expect(parseRawNumstat('')).toEqual([])
   })
 
   it('reads ahead / behind', () => {

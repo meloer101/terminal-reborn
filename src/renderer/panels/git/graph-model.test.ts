@@ -20,23 +20,44 @@ describe('geometry', () => {
   })
 
   it('draws straight lines, a fork turning into the node and a merge turning down', () => {
-    const paths = rowPaths({ col: 0, through: [2], incoming: [0, 1], outgoing: [0, 3], width: 4 })
+    const paths = rowPaths({
+      col: 0,
+      color: 0,
+      through: [{ from: 2, to: 2, color: 3 }],
+      incoming: [
+        { col: 0, color: 0 },
+        { col: 1, color: 1 }
+      ],
+      outgoing: [
+        { col: 0, color: 0 },
+        { col: 3, color: 4 }
+      ],
+      width: 4
+    })
     expect(paths).toEqual([
-      { d: 'M52 0V28', col: 2 },
-      { d: 'M18 0V14', col: 0 },
+      { d: 'M52 0V28', color: 3 },
+      { d: 'M18 0V14', color: 0 },
       // From column 1 down, radius-8 turn left into the node at mid-row.
-      { d: 'M35 0V6A8 8 0 0 1 27 14H18', col: 1 },
-      { d: 'M18 14V28', col: 0 },
+      { d: 'M35 0V6A8 8 0 0 1 27 14H18', color: 1 },
+      { d: 'M18 14V28', color: 0 },
       // Out to the right, radius-8 turn down column 3.
-      { d: 'M18 14H61A8 8 0 0 1 69 22V28', col: 3 }
+      { d: 'M18 14H61A8 8 0 0 1 69 22V28', color: 4 }
     ])
   })
 
-  it('turns the other way for lines on the left of the node', () => {
-    const paths = rowPaths({ col: 2, through: [], incoming: [0], outgoing: [1], width: 3 })
+  it('turns the other way for lines on the left of the node, and eases a sliding lane across the row', () => {
+    const paths = rowPaths({
+      col: 2,
+      color: 2,
+      through: [{ from: 4, to: 3, color: 5 }],
+      incoming: [{ col: 0, color: 0 }],
+      outgoing: [{ col: 1, color: 2 }],
+      width: 5
+    })
     expect(paths).toEqual([
-      { d: 'M18 0V6A8 8 0 0 0 26 14H52', col: 0 },
-      { d: 'M52 14H43A8 8 0 0 0 35 22V28', col: 1 }
+      { d: 'M86 0C86 14 69 14 69 28', color: 5 },
+      { d: 'M18 0V6A8 8 0 0 0 26 14H52', color: 0 },
+      { d: 'M52 14H43A8 8 0 0 0 35 22V28', color: 2 }
     ])
   })
 })

@@ -1,31 +1,40 @@
 // Git · 变更 (PRD F17 13B2 / F5): the worktree's files grouped 未提交 (working tree) and 已提交 (vs the base branch),
-// each expandable to a unified diff. Inline review comments and merging come later (F5 comments, F4 merge).
+// each expandable to a unified diff. Every row has a fixed height, so long diffs render only the visible window.
+// Inline review comments and merging come later (F5 comments, F4 merge).
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useMemo, useRef } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
-import { changeKey, toggleFile, type ChangeGroup, type DiffState, type RootGit } from './store'
+import { changeItems, itemHeight, type ChangeItem } from './changes-model'
+import { toggleFile, type RootGit } from './store'
+import { offsetsOf, useViewport, visibleRange } from './virtual'
 import styles from './GitView.module.css'
 
 const STATUS_LABEL: Record<GitFileChange['status'], string> = { M: '已修改', A: '新增', D: '已删除', R: '重命名', U: '冲突' }
+/** Items rendered beyond each edge of the viewport. */
+const OVERSCAN = 20
 
 export function ChangesView({ root, git }: { root: string; git: RootGit }) {
   const changes = git.changes
-  if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
-  if (changes === null) return <p className={styles.empty}>不是 git 仓库</p>
+  const scroller = useRef<HTMLDivElement>(null)
+  const items = useMemo(() => (changes ? changeItems(changes, git.expanded, git.diffs) : []), [changes, git.expanded, git.diffs])
+  const offsets = useMemo(() => offsetsOf(items.map(itemHeight)), [items])
+  const viewport = useViewport(scroller, Boolean(changes))
 
-  const commitMeta = changes.base ? `${changes.ahead} 个提交 · 对比 ${changes.base}` : '没有可对比的基线分支'
-  const mergeTarget = changes.base ?? 'main'
+  if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
+  if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
+
+  const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
+  const rendered = []
+  for (let i = first; i < last; i++) {
+    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} item={items[i]!} top={offsets[i]!} />)
+  }
   return (
     <>
-      <div className={styles.files} role="list" aria-label="改动的文件">
-        <GroupHeader title="未提交" meta={changes.uncommitted.length > 0 ? `${changes.uncommitted.length} 个文件` : '没有改动'} />
-        {changes.uncommitted.map((change) => (
-          <FileEntry key={change.path} root={root} git={git} group="uncommitted" change={change} />
-        ))}
-        <GroupHeader title="已提交" meta={commitMeta} />
-        {changes.committed.map((change) => (
-          <FileEntry key={change.path} root={root} git={git} group="committed" change={change} />
-        ))}
+      <div ref={scroller} className={styles.files} role="list" aria-label="改动的文件">
+        <div className={styles.filesCanvas} style={{ height: offsets[items.length] }}>
+          {rendered}
+        </div>
       </div>
       <div className={styles.footer}>
         <span className={styles.spacer} />
@@ -34,7 +43,7 @@ export function ChangesView({ root, git }: { root: string; git: RootGit }) {
           创建 PR
         </button>
         <button type="button" className={styles.primaryButton} disabled title="即将支持：合并在 F4 本地合并完成后可用">
-          合并到 {mergeTarget}
+          合并到 {changes.base ?? 'main'}
           <span className={styles.shortcut}>⌘M</span>
         </button>
       </div>
@@ -42,66 +51,75 @@ export function ChangesView({ root, git }: { root: string; git: RootGit }) {
   )
 }
 
-function GroupHeader({ title, meta }: { title: string; meta: string }) {
-  return (
-    <div className={styles.groupHeader} role="presentation">
-      <span className={styles.groupTitle}>{title}</span>
-      <span className={styles.groupMeta}>{meta}</span>
-    </div>
-  )
+function itemKey(item: ChangeItem, index: number): string {
+  if (item.kind === 'group') return `group:${item.title}`
+  if (item.kind === 'file') return `file:${item.key}`
+  return `${item.kind}:${item.key}:${index}`
 }
 
-function FileEntry({ root, git, group, change }: { root: string; git: RootGit; group: ChangeGroup; change: GitFileChange }) {
-  const key = changeKey(group, change.path)
-  const open = git.expanded.has(key)
-  const Chevron = open ? ChevronDown : ChevronRight
-  return (
-    <div role="listitem" data-path={change.path} data-group={group}>
-      <button
-        type="button"
-        className={styles.fileRow}
-        aria-expanded={open}
-        title={`${STATUS_LABEL[change.status]}${change.untracked ? '（未跟踪）' : ''}${change.oldPath ? ` · 原 ${change.oldPath}` : ''}`}
-        onClick={() => toggleFile(root, key)}
-      >
-        <Chevron size={16} strokeWidth={1.75} className={styles.fileChevron} />
-        <span className={styles.filePath}>{change.path}</span>
-        {change.added === null ? (
-          <span className={styles.binary}>二进制</span>
-        ) : (
-          <>
-            <span className={styles.added}>+{change.added}</span>
-            <span className={styles.removed}>−{change.removed ?? 0}</span>
-          </>
-        )}
-      </button>
-      {open && <FileDiff state={git.diffs[key]} />}
-    </div>
-  )
+function Item({ root, item, top }: { root: string; item: ChangeItem; top: number }) {
+  const style = { top }
+  switch (item.kind) {
+    case 'group':
+      return (
+        <div className={styles.groupHeader} style={style} role="presentation">
+          <span className={styles.groupTitle}>{item.title}</span>
+          <span className={styles.groupMeta}>{item.meta}</span>
+        </div>
+      )
+    case 'file': {
+      const { change, open } = item
+      const Chevron = open ? ChevronDown : ChevronRight
+      return (
+        <div role="listitem" className={styles.fileItem} style={style} data-path={change.path} data-group={item.group}>
+          <button
+            type="button"
+            className={styles.fileRow}
+            aria-expanded={open}
+            title={`${STATUS_LABEL[change.status]}${change.untracked ? '（未跟踪）' : ''}${change.oldPath ? ` · 原 ${change.oldPath}` : ''}`}
+            onClick={() => toggleFile(root, item.key)}
+          >
+            <Chevron size={16} strokeWidth={1.75} className={styles.fileChevron} />
+            <span className={styles.filePath}>{change.path}</span>
+            <FileCounts change={change} />
+          </button>
+        </div>
+      )
+    }
+    case 'diff':
+      return <DiffLine row={item.row} top={top} owner={item.key} />
+    case 'note':
+      return (
+        <p className={styles.diffNote} style={style} data-owner={item.key}>
+          {item.text}
+          {item.open && (
+            <button type="button" className={styles.noteAction} onClick={() => void window.tr.worktree.open(root, item.open!)}>
+              用默认编辑器打开
+            </button>
+          )}
+        </p>
+      )
+  }
 }
 
-function FileDiff({ state }: { state: DiffState | undefined }) {
-  if (!state || state.kind === 'loading') return <p className={styles.diffNote}>正在读取 diff…</p>
-  if (state.kind === 'error') return <p className={styles.diffNote}>无法读取 diff</p>
-  const { rows, binary, truncated } = state.diff
-  if (binary) return <p className={styles.diffNote}>二进制文件，不显示 diff</p>
-  if (rows.length === 0) return <p className={styles.diffNote}>没有文本改动</p>
+function FileCounts({ change }: { change: GitFileChange }) {
+  if (change.nested) return <span className={styles.binary}>嵌套仓库</span>
+  if (change.tooLarge) return <span className={styles.binary}>文件太大</span>
+  if (change.added === null) return <span className={styles.binary}>二进制</span>
   return (
-    <div className={styles.diff}>
-      {rows.map((row, i) => (
-        <DiffLine key={i} row={row} />
-      ))}
-      {truncated > 0 && <p className={styles.diffNote}>还有 {truncated} 行没有显示</p>}
-    </div>
+    <>
+      <span className={styles.added}>+{change.added}</span>
+      <span className={styles.removed}>−{change.removed ?? 0}</span>
+    </>
   )
 }
 
 const MARKER: Record<DiffRow['kind'], string> = { hunk: '', context: '', add: '+', del: '−' }
 
 /** Figma DiffLine (12:91): old · new gutters, marker, code. */
-function DiffLine({ row }: { row: DiffRow }) {
+function DiffLine({ row, top, owner }: { row: DiffRow; top: number; owner: string }) {
   return (
-    <div className={styles.diffLine} data-kind={row.kind}>
+    <div className={styles.diffLine} style={{ top }} data-kind={row.kind} data-owner={owner}>
       <span className={styles.gutter}>{row.old ?? ''}</span>
       <span className={styles.gutter}>{row.new ?? ''}</span>
       <span className={styles.marker}>{MARKER[row.kind]}</span>

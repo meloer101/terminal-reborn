@@ -5,13 +5,30 @@ import { initialLaneState, layoutRows, type GraphCommitInput, type GraphRow } fr
 const c = (hash: string, ...parents: string[]): GraphCommitInput => ({ hash, parents })
 
 const cols = (rows: GraphRow[]) => rows.map((r) => r.col)
+const inCols = (row: GraphRow) => row.incoming.map((l) => l.col)
+const outCols = (row: GraphRow) => row.outgoing.map((l) => l.col)
+const moves = (row: GraphRow) => row.through.map((t) => [t.from, t.to])
 
-/** Lines leaving the bottom of each row must be exactly the lines entering the top of the next one. */
+/**
+ * Lines leaving the bottom of each row must be exactly the lines entering the top of the next one, with the same
+ * colour, and no column may hold two lines at once.
+ */
 function expectContinuous(rows: GraphRow[]): void {
   for (let i = 0; i + 1 < rows.length; i++) {
-    const bottom = new Set([...rows[i]!.through, ...rows[i]!.outgoing])
-    const top = new Set([...rows[i + 1]!.through, ...rows[i + 1]!.incoming])
+    const bottom = new Map<number, number>()
+    for (const t of rows[i]!.through) bottom.set(t.to, t.color)
+    for (const o of rows[i]!.outgoing) {
+      const seen = bottom.get(o.col)
+      if (seen !== undefined) expect(seen, `row ${i} merges into a lane of another colour`).toBe(o.color)
+      bottom.set(o.col, o.color)
+    }
+    const top = new Map<number, number>()
+    for (const t of rows[i + 1]!.through) top.set(t.from, t.color)
+    for (const l of rows[i + 1]!.incoming) top.set(l.col, l.color)
     expect([...top].sort(), `row ${i} → ${i + 1}`).toEqual([...bottom].sort())
+    // Compacted: the columns in use at a row boundary are 0…n-1 (column 0 may be the reserved trunk).
+    const used = [...bottom.keys()].sort((a, b) => a - b)
+    expect(used.every((col, k) => col === k || col === k + 1), `row ${i} leaves a gap: ${used}`).toBe(true)
   }
 }
 
@@ -19,80 +36,82 @@ describe('layoutRows', () => {
   it('draws a linear history in one column', () => {
     const { rows } = layoutRows([c('c', 'b'), c('b', 'a'), c('a')], initialLaneState())
     expect(rows).toEqual([
-      { col: 0, through: [], incoming: [], outgoing: [0], width: 1 },
-      { col: 0, through: [], incoming: [0], outgoing: [0], width: 1 },
-      { col: 0, through: [], incoming: [0], outgoing: [], width: 1 }
+      { col: 0, color: 1, through: [], incoming: [], outgoing: [{ col: 0, color: 1 }], width: 1 },
+      { col: 0, color: 1, through: [], incoming: [{ col: 0, color: 1 }], outgoing: [{ col: 0, color: 1 }], width: 1 },
+      { col: 0, color: 1, through: [], incoming: [{ col: 0, color: 1 }], outgoing: [], width: 1 }
     ])
   })
 
   it('forks: a branch line turns into its parent node at the parent row', () => {
-    // main: m2 → base; feature: f1 → base
     const { rows } = layoutRows([c('f1', 'base'), c('m2', 'base'), c('base')], initialLaneState())
     expect(cols(rows)).toEqual([0, 1, 0])
-    expect(rows[1]).toMatchObject({ through: [0], incoming: [], outgoing: [1] })
-    expect(rows[2]).toMatchObject({ col: 0, incoming: [0, 1], outgoing: [] })
+    expect(rows[1]).toMatchObject({ incoming: [], outgoing: [{ col: 1 }] })
+    expect(moves(rows[1]!)).toEqual([[0, 0]])
+    expect(inCols(rows[2]!)).toEqual([0, 1])
     expectContinuous(rows)
   })
 
-  it('keeps the trunk in column 0 even when a branch is newer', () => {
+  it('keeps the trunk in column 0 and in the trunk colour even when a branch is newer', () => {
     const { rows } = layoutRows([c('f1', 'base'), c('m2', 'base'), c('base')], initialLaneState('m2'))
     expect(cols(rows)).toEqual([1, 0, 0])
+    expect(rows.map((r) => r.color)).toEqual([1, 0, 0])
     // Nothing is drawn in the reserved column above the trunk tip.
-    expect(rows[0]).toMatchObject({ through: [], incoming: [], outgoing: [1], width: 2 })
-    expect(rows[1]).toMatchObject({ col: 0, through: [1], incoming: [], outgoing: [0] })
-    expect(rows[2]).toMatchObject({ col: 0, incoming: [0, 1] })
+    expect(rows[0]).toMatchObject({ through: [], incoming: [], outgoing: [{ col: 1, color: 1 }], width: 2 })
+    expect(rows[1]).toMatchObject({ incoming: [], outgoing: [{ col: 0, color: 0 }] })
+    expect(inCols(rows[2]!)).toEqual([0, 1])
     expectContinuous(rows)
   })
 
-  it('merges: the second parent leaves the merge row sideways and runs down its own column', () => {
-    // M merges feature (f2 → f1 → base) into main (m1 → base)
+  it('merges: the second parent leaves sideways in a new colour and runs down its own column', () => {
     const commits = [c('M', 'm1', 'f2'), c('f2', 'f1'), c('m1', 'base'), c('f1', 'base'), c('base')]
     const { rows } = layoutRows(commits, initialLaneState('M'))
     expect(cols(rows)).toEqual([0, 1, 0, 1, 0])
-    expect(rows[0]).toMatchObject({ incoming: [], outgoing: [0, 1] })
-    expect(rows[1]).toMatchObject({ through: [0], incoming: [1], outgoing: [1] })
-    expect(rows[4]).toMatchObject({ incoming: [0, 1], outgoing: [] })
+    expect(rows[0]!.outgoing).toEqual([
+      { col: 0, color: 0 },
+      { col: 1, color: 1 }
+    ])
+    expect(rows[1]).toMatchObject({ color: 1, incoming: [{ col: 1, color: 1 }] })
+    expect(inCols(rows[4]!)).toEqual([0, 1])
     expectContinuous(rows)
   })
 
   it('reuses an existing lane when the merged parent is already expected', () => {
-    // Both a branch tip and the merge point at p.
     const commits = [c('t', 'p'), c('M', 'm', 'p'), c('p', 'root'), c('m', 'root'), c('root')]
     const { rows } = layoutRows(commits, initialLaneState())
     expect(cols(rows)).toEqual([0, 1, 0, 1, 0])
-    expect(rows[1]!.outgoing).toEqual([1, 0])
+    expect(outCols(rows[1]!)).toEqual([1, 0])
+    expect(rows[1]!.outgoing[1]!.color).toBe(rows[0]!.color)
     expectContinuous(rows)
   })
 
   it('lays out an octopus merge with one new column per extra parent', () => {
     const commits = [c('O', 'a', 'b', 'c'), c('c', 'r'), c('b', 'r'), c('a', 'r'), c('r')]
     const { rows } = layoutRows(commits, initialLaneState())
-    expect(rows[0]).toMatchObject({ col: 0, outgoing: [0, 1, 2], width: 3 })
+    expect(rows[0]).toMatchObject({ col: 0, width: 3 })
+    expect(outCols(rows[0]!)).toEqual([0, 1, 2])
+    expect(new Set(rows[0]!.outgoing.map((o) => o.color)).size).toBe(3)
     expect(cols(rows)).toEqual([0, 2, 1, 0, 0])
-    expect(rows[4]).toMatchObject({ incoming: [0, 1, 2] })
+    expect(inCols(rows[4]!)).toEqual([0, 1, 2])
     expectContinuous(rows)
   })
 
-  it('frees a column when its branch ends and reuses it for the next one', () => {
-    // f joins main at b; g starts later and takes the freed column 1.
-    const commits = [c('f', 'b'), c('a', 'b'), c('b', 'x'), c('g', 'x'), c('x', 'y'), c('y')]
-    const { rows, state } = layoutRows(commits, initialLaneState('a'))
-    expect(cols(rows)).toEqual([1, 0, 0, 1, 0, 0])
-    expect(rows[2]!.width).toBe(2)
-    expect(rows[5]!.width).toBe(1)
+  it('compacts: when a branch ends, the lanes to its right slide left in that row and keep their colour', () => {
+    // a (col 1) joins main at r; b (col 2) keeps going and moves to column 1 in r's row.
+    const commits = [c('b', 'b0'), c('a', 'r'), c('m', 'r'), c('r', 'x'), c('b0', 'x'), c('x')]
+    const { rows, state } = layoutRows(commits, initialLaneState('m'))
+    expect(cols(rows)).toEqual([1, 2, 0, 0, 1, 0])
+    const r = rows[3]!
+    expect(inCols(r)).toEqual([0, 2])
+    expect(r.through).toEqual([{ from: 1, to: 1, color: 1 }])
+    // b's lane was column 1 all along here (a was to its right), so check the slide in a case where it is not:
+    const slide = layoutRows([c('a', 'r'), c('b', 'b0'), c('m', 'r'), c('r', 'x'), c('b0', 'x'), c('x')], initialLaneState('m'))
+    const row = slide.rows[3]!
+    expect(inCols(row)).toEqual([0, 1])
+    expect(row.through).toEqual([{ from: 2, to: 1, color: 2 }])
+    expect(slide.rows[4]).toMatchObject({ col: 1, color: 2 })
+    expectContinuous(slide.rows)
+    expectContinuous(rows)
     expect(state.lanes).toEqual([])
-    expectContinuous(rows)
-  })
-
-  it('merging the trunk tip in from above starts the trunk line at the merge', () => {
-    // A branch merged main (m) into itself before m shows up in topo order.
-    const commits = [c('B', 'f', 'm'), c('f', 'r'), c('m', 'r'), c('r')]
-    const { rows } = layoutRows(commits, initialLaneState('m'))
-    expect(cols(rows)).toEqual([1, 1, 0, 0])
-    expect(rows[0]).toMatchObject({ outgoing: [1, 0] })
-    expect(rows[1]).toMatchObject({ through: [0] })
-    expect(rows[2]).toMatchObject({ incoming: [0] })
-    expectContinuous(rows)
   })
 
   it('handles many parallel branches without losing a line', () => {
@@ -100,7 +119,17 @@ describe('layoutRows', () => {
     const { rows } = layoutRows([...tips, c('root')], initialLaneState())
     expect(cols(rows)).toEqual([...Array.from({ length: 12 }, (_, i) => i), 0])
     expect(rows[11]!.width).toBe(12)
-    expect(rows[12]!.incoming).toEqual(Array.from({ length: 12 }, (_, i) => i))
+    expect(inCols(rows[12]!)).toEqual(Array.from({ length: 12 }, (_, i) => i))
+    expectContinuous(rows)
+  })
+
+  it('stays narrow when old branches have ended', () => {
+    // Ten short-lived branches one after another: the graph never needs more than two columns.
+    const commits: GraphCommitInput[] = []
+    for (let i = 0; i < 10; i++) commits.push(c(`f${i}`, `m${i}`), c(`m${i}`, `m${i + 1}`))
+    commits.push(c('m10'))
+    const { rows } = layoutRows(commits, initialLaneState('m0'))
+    expect(Math.max(...rows.map((r) => r.width))).toBe(2)
     expectContinuous(rows)
   })
 
@@ -134,15 +163,15 @@ describe('layoutRows', () => {
 
   it('leaves lines open at the end of a page for parents that come later', () => {
     const { rows, state } = layoutRows([c('M', 'a', 'b')], initialLaneState())
-    expect(rows[0]!.outgoing).toEqual([0, 1])
-    expect(state.lanes).toEqual(['a', 'b'])
+    expect(outCols(rows[0]!)).toEqual([0, 1])
+    expect(state.lanes.map((l) => l?.hash)).toEqual(['a', 'b'])
   })
 
   it('stays continuous on a random history', () => {
     // Deterministic pseudo-random DAG in topo order (children before parents).
     let seed = 7
-    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31)
-    const n = 300
+    const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
+    const n = 400
     const commits: GraphCommitInput[] = []
     for (let i = 0; i < n; i++) {
       const parents: string[] = []

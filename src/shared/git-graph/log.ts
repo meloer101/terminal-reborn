@@ -4,6 +4,8 @@
 /** Commits per `git log` page. */
 export const GRAPH_PAGE_SIZE = 200
 export const GRAPH_MAX_PAGE_SIZE = 500
+/** A reload asks for everything that was loaded (so scrolling deep survives refs moving), up to this many. */
+export const GRAPH_MAX_RELOAD = 20_000
 
 /** `git log --format` fields: hash, parents, committer time, author, subject — unit / record separated. */
 export const LOG_FORMAT = '%H%x1f%P%x1f%ct%x1f%an%x1f%s%x1e'
@@ -47,6 +49,8 @@ export interface GitLogRequest {
   skip: number
   limit: number
   scope: GitLogScope
+  /** Include remote-tracking branches (全部分支 only; 隐藏远程分支 turns it off). */
+  remotes: boolean
   /** Workspace worktree paths to resolve (symlinks), so the renderer can match them to `worktrees`. */
   known: string[]
 }
@@ -69,7 +73,8 @@ export interface GitLogPage {
 export function parseLog(out: string): GitCommit[] {
   const commits: GitCommit[] = []
   for (const record of out.split('\x1e')) {
-    const line = record.replace(/^\n+/, '')
+    // Config can put other lines before a record (log.showSignature prints "No signature"); the record is the last.
+    const line = record.split('\n').findLast((l) => l.includes('\x1f'))
     if (!line) continue
     const [hash = '', parents = '', time = '0', author = '', subject = ''] = line.split('\x1f')
     if (!/^[0-9a-f]{7,64}$/.test(hash)) continue
@@ -121,7 +126,7 @@ export function parseWorktreeList(out: string): GitWorktreeEntry[] {
   return entries
 }
 
-/** The default branch: local main / master, else whatever origin/HEAD names, else nothing. */
+/** The default branch: local main / master, else whatever origin/HEAD names, else origin/main / master. */
 export function pickTrunk(refs: readonly GitRef[], originHead: string | null): { name: string; hash: string } | null {
   for (const name of ['main', 'master']) {
     const ref = refs.find((r) => r.kind === 'local' && r.name === name)
@@ -134,12 +139,35 @@ export function pickTrunk(refs: readonly GitRef[], originHead: string | null): {
     const ref = local ?? remote
     if (ref) return { name: ref.name, hash: ref.hash }
   }
+  for (const name of ['origin/main', 'origin/master']) {
+    const ref = refs.find((r) => r.kind === 'remote' && r.name === name)
+    if (ref) return { name: ref.name, hash: ref.hash }
+  }
   return null
 }
 
-/** A branch / ref the renderer may pass as a diff base: plain names only, never an option. */
-export function isSafeRefName(name: unknown): name is string {
-  return typeof name === 'string' && name.length > 0 && name.length <= 255 && /^[A-Za-z0-9_][A-Za-z0-9._/@-]*$/.test(name) && !name.includes('..')
+/**
+ * A branch name git itself would accept (`git check-ref-format --branch` rules), unicode included — and never one
+ * that could be read as an option. Main still passes them as `refs/heads/<name>` / `refs/remotes/<name>`.
+ */
+export function isValidRefName(name: unknown): name is string {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 255) return false
+  if (name === '@' || name.startsWith('-') || name.startsWith('/') || name.endsWith('/') || name.endsWith('.')) return false
+  if (name.includes('..') || name.includes('@{') || name.includes('//')) return false
+  // Control characters and space, then ~ ^ : ? * [ \
+  for (let i = 0; i < name.length; i++) {
+    const code = name.charCodeAt(i)
+    if (code <= 0x20 || code === 0x7f) return false
+  }
+  if (/[~^:?*[\\]/.test(name)) return false
+  return name.split('/').every((part) => !part.startsWith('.') && !part.endsWith('.lock'))
+}
+
+/** A full branch ref main may diff against: `refs/heads/<name>` or `refs/remotes/<name>`. */
+export function isBaseRef(ref: unknown): ref is string {
+  if (typeof ref !== 'string') return false
+  const match = /^refs\/(?:heads|remotes)\/(.+)$/.exec(ref)
+  return match !== null && isValidRefName(match[1])
 }
 
 // --- 变更 (F5) ---------------------------------------------------------------------------------------------------
@@ -151,22 +179,30 @@ export interface GitFileChange {
   /** Where a rename came from. */
   oldPath?: string
   status: GitChangeStatus
-  /** Line counts; null for binary files. */
+  /** Line counts; null for binary files (and nested repos / files too large to count). */
   added: number | null
   removed: number | null
   /** 未提交 only: a file git does not track yet. */
   untracked?: boolean
+  /** 未提交 only: an untracked folder that is a git repo of its own (`ls-files` lists it as `dir/`). */
+  nested?: boolean
+  /** 未提交 only: an untracked file too large to count or diff. */
+  tooLarge?: boolean
 }
 
 export interface GitChanges {
   branch: string | null
-  /** The branch compared against for 已提交; null when there is none (or this is it). */
+  /** The branch compared against for 已提交 (`main`, `origin/main`); null when there is none (or this is it). */
   base: string | null
+  /** Its full ref, for fileDiff. */
+  baseRef: string | null
   /** Commits on HEAD that the base does not have, and the other way round. */
   ahead: number
   behind: number
   /** Working tree + index vs HEAD, untracked files included. */
   uncommitted: GitFileChange[]
+  /** Untracked files left out of `uncommitted` past the cap. */
+  untrackedOmitted: number
   /** `base...HEAD`: what this branch committed since it left the base. */
   committed: GitFileChange[]
 }
@@ -178,65 +214,55 @@ export interface GitFileDiffRequest {
   path: string
   oldPath?: string
   scope: GitDiffScope
-  /** For `committed`. */
-  base?: string
+  /** For `committed`: GitChanges.baseRef. */
+  baseRef?: string
   /** For `uncommitted`: a file git does not track yet. */
   untracked?: boolean
 }
 
-/** `git diff --name-status -z` → status by path (renames keyed by the new path). */
-export function parseNameStatus(out: string): Map<string, { status: GitChangeStatus; oldPath?: string }> {
-  const result = new Map<string, { status: GitChangeStatus; oldPath?: string }>()
-  const fields = out.split('\0')
-  for (let i = 0; i < fields.length; i++) {
-    const code = fields[i]
-    if (!code) continue
-    const letter = code[0]
-    if (letter === 'R' || letter === 'C') {
-      const oldPath = fields[++i] ?? ''
-      const path = fields[++i] ?? ''
-      if (path) result.set(path, letter === 'R' ? { status: 'R', oldPath } : { status: 'A' })
-    } else {
-      const path = fields[++i] ?? ''
-      if (!path) continue
-      const status: GitChangeStatus = letter === 'A' ? 'A' : letter === 'D' ? 'D' : letter === 'U' ? 'U' : 'M'
-      result.set(path, { status })
-    }
-  }
-  return result
-}
+const STATUS_OF: Record<string, GitChangeStatus> = { A: 'A', D: 'D', U: 'U', R: 'R', C: 'A' }
 
-/** `git diff --numstat -z` → line counts by path (renames keyed by the new path; `-` = binary). */
-export function parseNumstat(out: string): Map<string, { added: number | null; removed: number | null }> {
-  const result = new Map<string, { added: number | null; removed: number | null }>()
-  const fields = out.split('\0')
+/**
+ * One `git diff -M --raw --numstat -z` → files with status and line counts (renames keyed by the new path, `-` counts
+ * = binary). Raw entries come first (`:mode mode sha sha X\0path\0`, two paths for R / C), then numstat entries.
+ */
+export function parseRawNumstat(out: string): GitFileChange[] {
+  const status = new Map<string, { status: GitChangeStatus; oldPath?: string }>()
+  const counts = new Map<string, { added: number | null; removed: number | null }>()
   const num = (s: string) => (s === '-' ? null : Number(s) || 0)
+  const fields = out.split('\0')
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i]
     if (!field) continue
+    if (field.startsWith(':')) {
+      const letter = field.slice(field.lastIndexOf(' ') + 1)[0] ?? 'M'
+      if (letter === 'R' || letter === 'C') {
+        const oldPath = fields[++i] ?? ''
+        const path = fields[++i] ?? ''
+        if (path) status.set(path, letter === 'R' ? { status: 'R', oldPath } : { status: 'A' })
+      } else {
+        const path = fields[++i] ?? ''
+        if (path) status.set(path, { status: STATUS_OF[letter] ?? 'M' })
+      }
+      continue
+    }
     const [added = '0', removed = '0', path = ''] = field.split('\t')
-    if (path) result.set(path, { added: num(added), removed: num(removed) })
+    if (path) counts.set(path, { added: num(added), removed: num(removed) })
     else {
-      // Rename: the paths follow as two more fields.
+      // Rename: the two paths follow as fields of their own.
       i += 2
       const newPath = fields[i]
-      if (newPath) result.set(newPath, { added: num(added), removed: num(removed) })
+      if (newPath) counts.set(newPath, { added: num(added), removed: num(removed) })
     }
   }
-  return result
-}
-
-export function mergeChanges(
-  status: Map<string, { status: GitChangeStatus; oldPath?: string }>,
-  numstat: Map<string, { added: number | null; removed: number | null }>
-): GitFileChange[] {
   const changes: GitFileChange[] = []
   for (const [path, entry] of status) {
-    const counts = numstat.get(path) ?? { added: 0, removed: 0 }
-    changes.push({ path, ...(entry.oldPath ? { oldPath: entry.oldPath } : {}), status: entry.status, ...counts })
+    changes.push({ path, ...(entry.oldPath ? { oldPath: entry.oldPath } : {}), status: entry.status, ...(counts.get(path) ?? { added: 0, removed: 0 }) })
   }
-  return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  return changes.sort(byPath)
 }
+
+export const byPath = (a: { path: string }, b: { path: string }): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
 
 /** `git rev-list --left-right --count base...HEAD` → behind (left) and ahead (right). */
 export function parseLeftRight(out: string): { ahead: number; behind: number } {

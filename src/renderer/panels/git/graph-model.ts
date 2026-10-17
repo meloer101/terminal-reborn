@@ -21,9 +21,9 @@ const MID = ROW_HEIGHT / 2
 
 export const laneX = (col: number): number => LANE_X0 + col * LANE_GAP
 
-/** Column 0 is the trunk (neutral); the rest cycle through lane/1…5. */
-export function laneColor(col: number): string {
-  return col === 0 ? 'var(--lane-main)' : `var(--lane-${((col - 1) % 5) + 1})`
+/** Lane colour 0 is the trunk (neutral); 1…5 are lane/1…5. */
+export function laneColor(color: number): string {
+  return color === 0 ? 'var(--lane-main)' : `var(--lane-${((color - 1) % 5) + 1})`
 }
 
 /** Where commit text starts for a graph `columns` wide. */
@@ -31,8 +31,8 @@ export const textLeft = (columns: number): number => laneX(Math.max(1, Math.min(
 
 export interface LinePath {
   d: string
-  /** Column whose colour the line takes (where its vertical run is). */
-  col: number
+  /** Lane colour (0 = trunk). */
+  color: number
 }
 
 /** SVG paths for one row, in row coordinates (0…ROW_HEIGHT). */
@@ -40,26 +40,31 @@ export function rowPaths(row: GraphRow): LinePath[] {
   const paths: LinePath[] = []
   const xc = laneX(row.col)
   const r = TURN_RADIUS
-  for (const col of row.through) paths.push({ d: `M${laneX(col)} 0V${ROW_HEIGHT}`, col })
-  for (const col of row.incoming) {
+  for (const { from, to, color } of row.through) {
+    const x0 = laneX(from)
+    const x1 = laneX(to)
+    // A lane sliding left (a branch to its left ended in this row) eases across the row.
+    paths.push({ d: x0 === x1 ? `M${x0} 0V${ROW_HEIGHT}` : `M${x0} 0C${x0} ${MID} ${x1} ${MID} ${x1} ${ROW_HEIGHT}`, color })
+  }
+  for (const { col, color } of row.incoming) {
     if (col === row.col) {
-      paths.push({ d: `M${xc} 0V${MID}`, col })
+      paths.push({ d: `M${xc} 0V${MID}`, color })
       continue
     }
     // Down the branch's column, then a turn into the node.
     const x = laneX(col)
     const dir = Math.sign(xc - x)
-    paths.push({ d: `M${x} 0V${MID - r}A${r} ${r} 0 0 ${dir > 0 ? 0 : 1} ${x + dir * r} ${MID}H${xc}`, col })
+    paths.push({ d: `M${x} 0V${MID - r}A${r} ${r} 0 0 ${dir > 0 ? 0 : 1} ${x + dir * r} ${MID}H${xc}`, color })
   }
-  for (const col of row.outgoing) {
+  for (const { col, color } of row.outgoing) {
     if (col === row.col) {
-      paths.push({ d: `M${xc} ${MID}V${ROW_HEIGHT}`, col })
+      paths.push({ d: `M${xc} ${MID}V${ROW_HEIGHT}`, color })
       continue
     }
     // Out of the node sideways, then a turn down the parent's column.
     const x = laneX(col)
     const dir = Math.sign(x - xc)
-    paths.push({ d: `M${xc} ${MID}H${x - dir * r}A${r} ${r} 0 0 ${dir > 0 ? 1 : 0} ${x} ${MID + r}V${ROW_HEIGHT}`, col })
+    paths.push({ d: `M${xc} ${MID}H${x - dir * r}A${r} ${r} 0 0 ${dir > 0 ? 1 : 0} ${x} ${MID + r}V${ROW_HEIGHT}`, color })
   }
   return paths
 }

@@ -1,33 +1,34 @@
 // The right panel's Git view (PRD F6 / F17 Git · 图谱 + 变更): commit graph pages, refs and worktrees, fetch, and the
-// worktree's uncommitted / committed changes with per-file diffs. Every payload from the renderer is validated here;
-// paths stay inside the worktree, refs must be plain names, and git never gets an argument that could be an option.
+// worktree's uncommitted / committed changes with per-file diffs. Every payload from the renderer is validated here:
+// paths stay inside the worktree (symlinks resolved), refs are full `refs/heads|remotes/…` names, pathspecs are
+// literal, and git never gets an argument that could be read as an option.
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { open, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { access, constants, open, realpath, stat } from 'node:fs/promises'
+import { delimiter, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
 import {
-  GRAPH_MAX_PAGE_SIZE,
-  isSafeRefName,
+  byPath,
+  GRAPH_MAX_RELOAD,
+  isBaseRef,
+  isValidRefName,
   LOG_FORMAT,
-  mergeChanges,
   parseLeftRight,
   parseLog,
-  parseNameStatus,
-  parseNumstat,
+  parseRawNumstat,
   parseRefs,
   parseWorktreeList,
   pickTrunk,
   REF_FORMAT,
   type GitChanges,
   type GitFileChange,
-  type GitFileDiffRequest,
   type GitLogPage,
-  type GitLogScope
+  type GitLogScope,
+  type GitRef
 } from '@shared/git-graph/log'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
-import { normalizeRelative } from './worktree-files'
+import { isInside, normalizeRelative } from './worktree-files'
 
 const GIT_TIMEOUT_MS = 15_000
 const FETCH_TIMEOUT_MS = 60_000
@@ -35,35 +36,32 @@ const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const MAX_PATH = 4096
 const MAX_KNOWN_PATHS = 1000
 const MAX_SKIP = 1_000_000
-/** Untracked files listed in 未提交 at most. */
-const MAX_UNTRACKED = 1000
+/** Untracked files listed in 未提交 at most (the rest is counted). */
+export const MAX_UNTRACKED = 1000
+/** Untracked files read at once to count their lines. */
+const COUNT_CONCURRENCY = 16
 /** git's empty tree: what an unborn branch is compared against. */
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+/** Finder launches apps with a minimal PATH. */
+const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
+const searchPath = () => [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH]
 
-class GitError extends Error {
-  constructor(
-    message: string,
-    readonly exitCode: number | null
-  ) {
-    super(message)
-  }
-}
-
-function git(cwd: string, args: string[], options: { timeout?: number; okCodes?: number[]; env?: Record<string, string> } = {}): Promise<string> {
+function run(command: string, cwd: string, args: string[], options: { timeout?: number; okCodes?: number[]; env?: Record<string, string> } = {}): Promise<string> {
   const okCodes = options.okCodes ?? [0]
   return new Promise((resolve, reject) => {
     execFile(
-      'git',
+      command,
       args,
       {
         cwd,
         timeout: options.timeout ?? GIT_TIMEOUT_MS,
         maxBuffer: GIT_MAX_BUFFER,
-        // Never take the index lock (agents run git in the same worktree); Finder launches with a minimal PATH.
         env: {
           ...process.env,
+          // Never take the index lock (agents run git in the same worktree); paths are paths, never globs.
           GIT_OPTIONAL_LOCKS: '0',
-          PATH: `${process.env.PATH ?? ''}:/opt/homebrew/bin:/usr/local/bin:/usr/bin`,
+          GIT_LITERAL_PATHSPECS: '1',
+          PATH: searchPath().join(delimiter),
           ...options.env
         }
       },
@@ -71,13 +69,46 @@ function git(cwd: string, args: string[], options: { timeout?: number; okCodes?:
         if (!error) return resolve(stdout)
         const code = typeof error.code === 'number' ? error.code : null
         if (code !== null && okCodes.includes(code)) return resolve(stdout)
-        reject(new GitError(String(stderr || error.message).trim(), code))
+        reject(new Error(String(stderr || error.message).trim() || `git exited with ${code}`))
       }
     )
   })
 }
 
+const git = (cwd: string, args: string[], options?: Parameters<typeof run>[3]) => run('git', cwd, args, options)
 const gitOrEmpty = (cwd: string, args: string[]) => git(cwd, args).catch(() => '')
+
+// --- is there a git at all ----------------------------------------------------------------------------------------
+
+let probe: Promise<boolean> | null = null
+
+/**
+ * Whether a working git is installed. Checked once: on a Mac without the Command Line Tools, /usr/bin/git is a stub
+ * that pops the install dialog on every call, so it is never run until xcode-select says the tools are there.
+ */
+export function gitAvailable(): Promise<boolean> {
+  probe ??= (async () => {
+    let found: string | null = null
+    for (const dir of searchPath()) {
+      const candidate = join(dir, 'git')
+      if (await access(candidate, constants.X_OK).then(() => true, () => false)) {
+        found = candidate
+        break
+      }
+    }
+    if (!found) return false
+    if (process.platform === 'darwin' && found === '/usr/bin/git') {
+      const tools = await run('/usr/bin/xcode-select', '/', ['-p']).then(() => true, () => false)
+      if (!tools) return false
+    }
+    return run(found, '/', ['--version']).then(() => true, () => false)
+  })()
+  return probe
+}
+
+async function requireGit(): Promise<void> {
+  if (!(await gitAvailable())) throw new Error('git not found')
+}
 
 function isPathLike(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_PATH && !value.includes('\0') && isAbsolute(value)
@@ -86,10 +117,12 @@ function isPathLike(value: unknown): value is string {
 /** The worktree's top level (real path), or null when `root` is not inside a git work tree. Throws on bad input. */
 async function topLevel(root: unknown): Promise<string | null> {
   if (!isPathLike(root)) throw new Error('invalid worktree root')
+  await requireGit()
   const real = await realpath(root)
   if (!(await stat(real)).isDirectory()) throw new Error('worktree root is not a directory')
   try {
-    return (await git(real, ['rev-parse', '--show-toplevel'])).trim() || null
+    const top = (await git(real, ['rev-parse', '--show-toplevel'])).trim()
+    return top ? await realOrSame(top) : null
   } catch {
     return null
   }
@@ -102,7 +135,7 @@ async function realOrSame(path: string): Promise<string> {
 // --- graph ------------------------------------------------------------------------------------------------------
 
 interface RepoRefs {
-  refs: ReturnType<typeof parseRefs>
+  refs: GitRef[]
   worktrees: ReturnType<typeof parseWorktreeList>
   originHead: string | null
   signature: string
@@ -118,43 +151,69 @@ async function readRefs(cwd: string): Promise<RepoRefs> {
   return { refs: parseRefs(refsOut), worktrees: parseWorktreeList(worktreesOut), originHead: originHead.trim() || null, signature }
 }
 
-function parseLogRequest(request: unknown): { root: string; skip: number; limit: number; scope: GitLogScope; known: string[] } {
-  if (typeof request !== 'object' || request === null) throw new Error('invalid request')
-  const { root, skip, limit, scope, known } = request as Record<string, unknown>
-  if (!isPathLike(root)) throw new Error('invalid worktree root')
-  if (!Number.isInteger(skip) || (skip as number) < 0 || (skip as number) > MAX_SKIP) throw new Error('invalid skip')
-  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > GRAPH_MAX_PAGE_SIZE) throw new Error('invalid limit')
-  if (scope !== 'all' && scope !== 'worktrees') throw new Error('invalid scope')
-  if (!Array.isArray(known) || known.length > MAX_KNOWN_PATHS || !known.every(isPathLike)) throw new Error('invalid known paths')
-  return { root, skip: skip as number, limit: limit as number, scope, known: known as string[] }
+interface LogRequest {
+  root: string
+  skip: number
+  limit: number
+  scope: GitLogScope
+  remotes: boolean
+  known: string[]
 }
 
-async function logPage(request: unknown): Promise<GitLogPage | null> {
-  const { root, skip, limit, scope, known } = parseLogRequest(request)
+function parseLogRequest(request: unknown): LogRequest {
+  if (typeof request !== 'object' || request === null) throw new Error('invalid request')
+  const { root, skip, limit, scope, remotes, known } = request as Record<string, unknown>
+  if (!isPathLike(root)) throw new Error('invalid worktree root')
+  if (!Number.isInteger(skip) || (skip as number) < 0 || (skip as number) > MAX_SKIP) throw new Error('invalid skip')
+  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > GRAPH_MAX_RELOAD) throw new Error('invalid limit')
+  if (scope !== 'all' && scope !== 'worktrees') throw new Error('invalid scope')
+  if (typeof remotes !== 'boolean') throw new Error('invalid remotes')
+  if (!Array.isArray(known) || known.length > MAX_KNOWN_PATHS || !known.every(isPathLike)) throw new Error('invalid known paths')
+  return { root, skip: skip as number, limit: limit as number, scope, remotes, known: known as string[] }
+}
+
+export async function logPage(request: unknown): Promise<GitLogPage | null> {
+  const { root, skip, limit, scope, remotes, known } = parseLogRequest(request)
   const cwd = await topLevel(root)
   if (!cwd) return null
-  const [{ refs, worktrees: listed, originHead, signature }, head] = await Promise.all([
+  const [{ refs: allRefs, worktrees: listed, originHead, signature }, head] = await Promise.all([
     readRefs(cwd),
     gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])
   ])
+  const refs = remotes || scope === 'worktrees' ? allRefs : allRefs.filter((r) => r.kind !== 'remote')
   const worktrees = await Promise.all(listed.map(async (w) => ({ ...w, path: await realOrSame(w.path) })))
   const realPaths: Record<string, string> = {}
   for (const path of new Set(known)) realPaths[path] = await realOrSame(path)
 
   // Worktree HEADs count as tips too (a detached HEAD is not on any branch).
   const heads = [...new Set(worktrees.map((w) => w.head).filter((h): h is string => h !== null))]
-  let trunk = pickTrunk(refs, originHead)
+  let trunk = pickTrunk(allRefs, originHead)
   let revs: string[]
-  if (scope === 'all') revs = ['--branches', '--remotes', '--tags', ...heads]
-  else {
+  if (scope === 'all') {
+    revs = ['--branches', '--tags', ...(remotes ? ['--remotes'] : []), ...heads]
+    // A remote trunk is not in the log when remotes are hidden; reserving column 0 for it would leave a gap.
+    if (trunk && !refs.some((r) => r.hash === trunk!.hash) && !heads.includes(trunk.hash)) trunk = null
+  } else {
     revs = heads
     // Only what the worktrees reach: the main checkout's HEAD is the trunk there.
     const main = worktrees[0]
     trunk = main?.head ? { name: main.branch ?? 'HEAD', hash: main.head } : null
   }
-  let commits = revs.length === 0 ? [] : parseLog(
-    await git(cwd, ['log', '--topo-order', `--format=${LOG_FORMAT}`, `--skip=${skip}`, `--max-count=${limit + 1}`, ...revs, '--'])
-  )
+  let commits =
+    revs.length === 0
+      ? []
+      : parseLog(
+          await git(cwd, [
+            'log',
+            '--no-show-signature',
+            '--topo-order',
+            `--format=${LOG_FORMAT}`,
+            `--skip=${skip}`,
+            `--max-count=${limit + 1}`,
+            ...revs,
+            '--'
+          ])
+        )
   const hasMore = commits.length > limit
   if (hasMore) commits = commits.slice(0, limit)
   return { commits, hasMore, refs, worktrees, head: head.trim() || null, trunk, realPaths, signature }
@@ -165,13 +224,24 @@ async function signature(root: unknown): Promise<string> {
   return cwd ? (await readRefs(cwd)).signature : ''
 }
 
+/**
+ * ssh for fetch, never prompting: the user's own command (GIT_SSH_COMMAND, core.sshCommand) with BatchMode added,
+ * so multi-account keys and agents keep working. GIT_SSH (a program, not a command line) is left alone.
+ */
+export function sshCommandFor(env: NodeJS.ProcessEnv, coreSshCommand: string): string | null {
+  if (env.GIT_SSH_COMMAND) return `${env.GIT_SSH_COMMAND} -o BatchMode=yes`
+  if (coreSshCommand) return `${coreSshCommand} -o BatchMode=yes`
+  if (env.GIT_SSH) return null
+  return 'ssh -o BatchMode=yes'
+}
+
 async function fetchAll(root: unknown): Promise<string> {
   const cwd = await topLevel(root)
   if (!cwd) return '不是 git 仓库'
   try {
-    // Never wait on a password prompt nobody can see.
     const env: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' }
-    if (!process.env.GIT_SSH_COMMAND) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
+    const ssh = sshCommandFor(process.env, (await gitOrEmpty(cwd, ['config', '--get', 'core.sshCommand'])).trim())
+    if (ssh) env.GIT_SSH_COMMAND = ssh
     await git(cwd, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env })
     return ''
   } catch (error) {
@@ -181,11 +251,12 @@ async function fetchAll(root: unknown): Promise<string> {
 
 // --- changes ----------------------------------------------------------------------------------------------------
 
-/** Line count of an untracked file (null when binary or too large to read). */
-async function countLines(abs: string): Promise<number | null> {
+/** Line count of an untracked file; `large` past the preview cap, null when binary or unreadable. */
+async function countLines(abs: string): Promise<number | null | 'large'> {
   try {
     const info = await stat(abs)
-    if (!info.isFile() || info.size > MAX_PREVIEW_BYTES) return null
+    if (!info.isFile()) return null
+    if (info.size > MAX_PREVIEW_BYTES) return 'large'
     const handle = await open(abs, 'r')
     try {
       const buffer = Buffer.alloc(info.size)
@@ -204,20 +275,61 @@ async function countLines(abs: string): Promise<number | null> {
   }
 }
 
-async function diffFiles(cwd: string, range: string): Promise<GitFileChange[]> {
-  const [names, counts] = await Promise.all([
-    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--name-status', '-z', range, '--']),
-    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--numstat', '-z', range, '--'])
-  ])
-  return mergeChanges(parseNameStatus(names), parseNumstat(counts))
+async function untrackedChange(cwd: string, entry: string): Promise<GitFileChange> {
+  // `ls-files --others` lists a folder that is a repo of its own as `dir/`, not its files.
+  if (entry.endsWith('/')) return { path: entry.slice(0, -1), status: 'A', added: null, removed: null, untracked: true, nested: true }
+  const lines = await countLines(join(cwd, entry))
+  if (lines === 'large') return { path: entry, status: 'A', added: null, removed: null, untracked: true, tooLarge: true }
+  return { path: entry, status: 'A', added: lines, removed: lines === null ? null : 0, untracked: true }
 }
 
-async function resolvesToCommit(cwd: string, ref: string): Promise<boolean> {
-  return (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])).trim() !== ''
+async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await fn(items[index]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }
 
-async function changes(root: unknown, base: unknown): Promise<GitChanges | null> {
-  if (base !== undefined && base !== null && !isSafeRefName(base)) throw new Error('invalid base')
+const listUntracked = async (cwd: string, path?: string) =>
+  (await git(cwd, ['ls-files', '--others', '--exclude-standard', '-z', '--', ...(path ? [path] : [])])).split('\0').filter(Boolean)
+
+/** The full ref of a branch name (local first), or null. */
+function refFor(name: string, refs: readonly GitRef[]): string | null {
+  if (refs.some((r) => r.kind === 'local' && r.name === name)) return `refs/heads/${name}`
+  if (refs.some((r) => r.kind === 'remote' && r.name === name)) return `refs/remotes/${name}`
+  return null
+}
+
+const shortName = (ref: string) => ref.replace(/^refs\/(heads|remotes)\//, '')
+
+/**
+ * The base to compare 已提交 against: the session's base branch, else the default branch, else (on that branch
+ * itself) its upstream. A local base that is behind its origin counterpart is replaced by the remote one. Bases
+ * that do not exist, are this branch, or share no history with HEAD are skipped.
+ */
+async function pickBase(cwd: string, branch: string | null, candidates: (string | null)[], refs: readonly GitRef[]): Promise<string | null> {
+  for (const name of candidates) {
+    if (!name || name === branch || !isValidRefName(name)) continue
+    let ref = refFor(name, refs)
+    if (!ref) continue
+    const local = refs.find((r) => r.kind === 'local' && r.name === name)
+    const upstream = refs.find((r) => r.kind === 'remote' && r.name === `origin/${name}`)
+    if (local && upstream && local.hash !== upstream.hash && `origin/${name}` !== branch) {
+      const remote = `refs/remotes/origin/${name}`
+      if (await git(cwd, ['merge-base', '--is-ancestor', ref, remote]).then(() => true, () => false)) ref = remote
+    }
+    if (await git(cwd, ['merge-base', ref, 'HEAD']).then(() => true, () => false)) return ref
+  }
+  return null
+}
+
+export async function changes(root: unknown, base: unknown): Promise<GitChanges | null> {
   const cwd = await topLevel(root)
   if (!cwd) return null
   const [branchOut, headOut, refsOut, originHead, upstream] = await Promise.all([
@@ -229,56 +341,57 @@ async function changes(root: unknown, base: unknown): Promise<GitChanges | null>
   ])
   const branch = branchOut.trim() || null
   const hasHead = headOut.trim() !== ''
+  const refs = parseRefs(refsOut)
 
-  // 未提交: index + working tree vs HEAD, then the untracked files.
-  const uncommitted = await diffFiles(cwd, hasHead ? 'HEAD' : EMPTY_TREE)
-  const untracked = (await git(cwd, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean)
-  for (const path of untracked.slice(0, MAX_UNTRACKED)) {
-    const lines = await countLines(join(cwd, path))
-    uncommitted.push({ path, status: 'A', added: lines, removed: lines === null ? null : 0, untracked: true })
-  }
-  uncommitted.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-
-  // 已提交: against the session's base branch, else the default branch; on that branch itself, its upstream.
-  const candidates = [
-    typeof base === 'string' ? base : null,
-    pickTrunk(parseRefs(refsOut), originHead.trim() || null)?.name ?? null,
-    upstream.trim() || null
-  ]
-  let against: string | null = null
-  if (hasHead) {
-    for (const candidate of candidates) {
-      if (!candidate || candidate === branch || !isSafeRefName(candidate)) continue
-      if (await resolvesToCommit(cwd, candidate)) {
-        against = candidate
-        break
-      }
-    }
-  }
-  if (!against) return { branch, base: null, ahead: 0, behind: 0, uncommitted, committed: [] }
-  const [counts, committed] = await Promise.all([
-    git(cwd, ['rev-list', '--left-right', '--count', `${against}...HEAD`, '--']),
-    diffFiles(cwd, `${against}...HEAD`)
+  // 未提交: one diff of index + working tree vs HEAD, then the untracked files.
+  const [diffOut, untracked] = await Promise.all([
+    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--numstat', '-z', hasHead ? 'HEAD' : EMPTY_TREE, '--']),
+    listUntracked(cwd)
   ])
-  return { branch, base: against, ...parseLeftRight(counts), uncommitted, committed }
+  const uncommitted = [
+    ...parseRawNumstat(diffOut),
+    ...(await mapLimited(untracked.slice(0, MAX_UNTRACKED), COUNT_CONCURRENCY, (entry) => untrackedChange(cwd, entry)))
+  ].sort(byPath)
+  const untrackedOmitted = Math.max(0, untracked.length - MAX_UNTRACKED)
+
+  const candidates = [isValidRefName(base) ? base : null, pickTrunk(refs, originHead.trim() || null)?.name ?? null, upstream.trim() || null]
+  const baseRef = hasHead ? await pickBase(cwd, branch, candidates, refs) : null
+  if (!baseRef) return { branch, base: null, baseRef: null, ahead: 0, behind: 0, uncommitted, untrackedOmitted, committed: [] }
+  const [counts, committedOut] = await Promise.all([
+    git(cwd, ['rev-list', '--left-right', '--count', `${baseRef}...HEAD`, '--']),
+    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--numstat', '-z', `${baseRef}...HEAD`, '--'])
+  ])
+  return {
+    branch,
+    base: shortName(baseRef),
+    baseRef,
+    ...parseLeftRight(counts),
+    uncommitted,
+    untrackedOmitted,
+    committed: parseRawNumstat(committedOut)
+  }
 }
 
-async function fileDiff(request: unknown): Promise<string> {
+export async function fileDiff(request: unknown): Promise<string> {
   if (typeof request !== 'object' || request === null) throw new Error('invalid request')
-  const { root, path, oldPath, scope, base, untracked } = request as Partial<Record<keyof GitFileDiffRequest, unknown>>
+  const { root, path, oldPath, scope, baseRef, untracked } = request as Record<string, unknown>
   const rel = normalizeRelative(path)
   if (!rel) throw new Error('invalid path')
   const old = oldPath === undefined ? null : normalizeRelative(oldPath)
   if (old === '') throw new Error('invalid path')
   if (scope !== 'uncommitted' && scope !== 'committed') throw new Error('invalid scope')
-  if (scope === 'committed' && !isSafeRefName(base)) throw new Error('invalid base')
+  if (scope === 'committed' && !isBaseRef(baseRef)) throw new Error('invalid base')
   const cwd = await topLevel(root)
   if (!cwd) return ''
   const paths = old && old !== rel ? [old, rel] : [rel]
   const flags = ['diff', '--no-color', '--no-ext-diff', '-M']
-  if (scope === 'committed') return git(cwd, [...flags, `${base as string}...HEAD`, '--', ...paths])
+  if (scope === 'committed') return git(cwd, [...flags, `${baseRef as string}...HEAD`, '--', ...paths])
   if (untracked === true) {
-    // --no-index exits 1 when the files differ, which is the point.
+    // --no-index reads any path it is given: only an untracked file git lists, really inside the worktree.
+    if (!(await listUntracked(cwd, rel)).includes(rel)) throw new Error('not an untracked file')
+    const abs = await realpath(join(cwd, rel))
+    if (!isInside(cwd, abs) || !(await stat(abs)).isFile()) throw new Error('path outside the worktree')
+    // Exits 1 when the files differ, which is the point.
     return git(cwd, ['diff', '--no-color', '--no-ext-diff', '--no-index', '--', '/dev/null', rel], { okCodes: [0, 1] })
   }
   const hasHead = (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).trim() !== ''
@@ -286,6 +399,7 @@ async function fileDiff(request: unknown): Promise<string> {
 }
 
 export function registerGitGraphHandlers(): void {
+  ipcMain.handle(IPC.gitAvailable, () => gitAvailable())
   ipcMain.handle(IPC.gitLog, (_event, request: unknown) => logPage(request))
   ipcMain.handle(IPC.gitSignature, (_event, root: unknown) => signature(root).catch(() => ''))
   ipcMain.handle(IPC.gitFetch, (_event, root: unknown) => fetchAll(root))

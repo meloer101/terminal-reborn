@@ -8,7 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| v1.8 | 2026-10-17 | F6 / F17 Git 实现时定下的细节：图谱里默认分支固定在最左列；“全部分支”不含 stash；变更视图的标题行上下文是分支名，右侧显示领先 / 落后；在基线分支本身上“已提交”对比它的 upstream；虚拟化改为固定行高的窗口化渲染（不引入 `@tanstack/react-virtual`） |
+| v1.8 | 2026-10-17 | F6 / F17 Git 实现时定下的细节：图谱里默认分支固定在最左列；“全部分支”不含 stash；变更视图的标题行上下文是分支名，右侧显示领先 / 落后；在基线分支本身上“已提交”对比它的 upstream；虚拟化改为固定行高的窗口化渲染（不引入 `@tanstack/react-virtual`）；评审后补充：lane 每行向左收拢（分支结束后右侧的线斜移到空出的列，颜色跟着线走），文字列按首页宽度固定；筛选菜单加“隐藏远程分支”；“已提交”的本地基线落后于 origin 时改对比 origin；变更视图里嵌套仓库、超大文件不显示 diff（超大文件可用编辑器打开），未跟踪文件最多列 1000 个；没有 git 时显示提示、不再调用 git |
 | v1.7 | 2026-10-17 | F17 实现时定下的细节：右侧栏只在有选中会话时显示（总览和欢迎页不显示）；宽度 400–1200；文件视图的筛选搜索整个 worktree（不只已展开的目录），“更多”是刷新 · 全部折叠；右键菜单项带快捷键（↵ · ⌘↵ · ⌘⇧R · ⌘⇧I · ⌘⌥C）；“显示”菜单加“显示 / 隐藏右侧栏” |
 | v1.6 | 2026-10-17 | 新增 F18 欢迎页：没有选中会话时主区只放问候、一句话和一个下一步（Figma 14），不再重复侧栏已有的信息 |
 | v1.5 | 2026-10-17 | 新增 F17 右侧栏：浮在窗口上的一层，浏览器 · Git · Worktree · 文件四个视图，由会话头的图标切换（Figma 13）；内置浏览器从 P2 提前；F6 图谱是 Git 视图的默认内容、F5 变更是第二个视图，F6 的 Worktree 列表移到 Worktree 视图 |
@@ -151,9 +151,9 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **验收**：Figma 03 还原；1 万行 diff 滚动流畅。
 
 ### F6 Git 图谱 · P1 · Figma 04（Panel · 图谱）
-- 自研 lane 算法（`src/shared/git-graph/lanes.ts`，O(n·lanes)，支持增量分页，每页 200 个提交）；默认分支（main / master / origin/HEAD）固定在第 0 列；每行用 SVG 绘制，行高固定，只渲染可见的行。
+- 自研 lane 算法（`src/shared/git-graph/lanes.ts`，O(n·lanes)，支持增量分页，每页 200 个提交）；默认分支（main / master / origin/HEAD，再退到 origin/main / master）固定在第 0 列；分支结束后右侧的 lane 在同一行里斜移收拢，线的颜色跟着 lane 走；文字列按第一页的宽度对齐；每行用 SVG 绘制，行高固定，只渲染可见的行；refs 变化时按已加载的数量整体重载并保持滚动位置。实测（5001 个提交、无 commit-graph 文件）：打开 Git 视图到首屏 75–111 ms，滚到最早的提交约 2 s。
 - 在提交行上标出每个 worktree 的 HEAD，以及对应 agent 的 StatusGlyph，点击跳到该会话。
-- 筛选：全部分支（本地 + 远程分支、tag、各 worktree 的 HEAD；不含 stash）/ 仅 worktree（只看各 worktree HEAD 能到达的提交）。
+- 筛选：全部分支（本地 + 远程分支、tag、各 worktree 的 HEAD；不含 stash）/ 仅 worktree（只看各 worktree HEAD 能到达的提交）；另有“隐藏远程分支”开关，给有大量 `origin/*` 的仓库用。
 - 右键菜单：切换到会话 · 合并到基线 · 基于基线 rebase · 复制 SHA · 新建 worktree · 删除 worktree。
 - 图谱是右侧栏 Git 视图的默认内容（F17，Figma 13B）；原先图谱下方的 Worktree 列表移到 Worktree 视图。
 - **验收**：Figma 04 还原；5000 个提交的仓库首屏 < 300 ms。
@@ -215,7 +215,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **浏览器**（13A / 13E）：卡片顶部就是工具栏 = 后退 · 前进 · 刷新 · 无边框地址框（host 用主色、路径用三级色）· 用系统浏览器打开 · ×。下面一行列出本会话监听的端口（无边框的 PortTag，选中的带 `bg/selected` 底，点一下打开），右侧手机图标切换 375 视口（移动端模拟）。网页放在内缩 8 的 `bg/inset` 圆角区域里。底部：错误、警告数（StatusGlyph + 文字）和 Ghost 按钮“发给 Claude”——按 §6.9 的发送规则把错误文本发给当前会话。还没有端口时显示空状态（13E），不自动打开任何页面。
   - 技术：主进程里的 `WebContentsView`，独立 session 分区 `persist:tr-browser`，无 preload，`contextIsolation` + `sandbox` 开启，页面拿不到 `window.tr`；只允许 `http(s)`；控制台来自 `console-message` 事件；移动端视口用 `enableDeviceEmulation`。
 - **Git · 图谱**（13B / 13H，默认视图）：标题行“Git · 项目名”+ 拉取（fetch）· 更多 · ×；下面是无边框分段“图谱 / 变更 N”和“全部分支 ⌄”筛选。提交图（F6）：每行 28 高；lane 间距 17，线宽 2，分叉 / 合并用半径 8 的圆角转弯；颜色取 `lane/main`、`lane/1…5`（main 用中性灰）；提交点 8，当前 HEAD 点 10，点外圈 2px `bg/float` 让线条断开。行内：✓（当前 worktree 的 HEAD）· ref 胶囊（`GraphRef`：本地分支实线 + 分支图标，远程分支虚线 + 地球图标，worktree 实线 + 该 worktree 里会话的 StatusGlyph，tag 中性色；描边和图标取所在 lane 的颜色）· 提交说明（当前 HEAD 主色，其余二级色）· 时间。当前 HEAD 行有 `bg/selected` 底。点 worktree 胶囊切到那个会话；右键菜单同 F6。
-- **Git · 变更**（13B2）：分支行下面按 **未提交**（agent 还没提交的工作区改动）和 **已提交**（对比基线）分组，文件行和 diff 沿用 F5；底部只有 Ghost“创建 PR”和主按钮“合并到 main ⌘M”（“发回 Claude 修改”由行内评论的“发给 Claude”承担）。
+- **Git · 变更**（13B2）：分支行下面按 **未提交**（agent 还没提交的工作区改动）和 **已提交**（对比基线）分组，文件行和 diff 沿用 F5；底部只有 Ghost“创建 PR”和主按钮“合并到 main ⌘M”（“发回 Claude 修改”由行内评论的“发给 Claude”承担）。 未提交里：嵌套的 git 仓库显示为一行“嵌套仓库”、不展开 diff；超过 1 MB 的未跟踪文件或改动超过 2 万行的文件不显示 diff，给“用默认编辑器打开”；未跟踪文件最多列 1000 个，其余显示“还有 N 个”。已提交的基线：会话的基线分支 → 默认分支 → 本分支的 upstream；本地基线落后 origin 时对比 origin；和 HEAD 没有共同历史的基线跳过。文件变化时最多每秒刷新一次。
 - **Worktree**（13C）：当前项目的全部 worktree（`git worktree list --porcelain`），每行：StatusGlyph（其中最紧急的会话）· 名称 · 未提交 `+N −M` · 领先 / 落后，第二行是会话名和 agent，第三行是路径。点一行切到那个会话；选中行展开详情（分支、基线、未提交文件、端口段）和操作（Ghost）：打开文件夹 · 合并到 main…（F4）· 更多（在此新建会话、删除等）。“可清理”分组收纳已合并或没有会话的 worktree，可以一键清理（F4）。标题行的 + 即“新建 ⌘N”（F4）。
 - **文件**（13D / 13F）：当前 worktree 的目录树，目录按需加载；git 状态用字母（M / A / D / U）加颜色，含改动的目录显示 “•”，被 `.gitignore` 忽略的项变暗但仍可展开。标题行：文件 · 根目录名 · 在 Finder 中打开 · 更多；下面是无边框的 `bg/inset` 筛选框，框内右侧是“有改动 N”开关。
   - 打开：双击 = 应用内只读预览（13F，行号 + 改动标记，Esc / ← 返回）；⌘↵ = 用系统默认编辑器打开（`shell.openPath`）。右键：预览 · 用默认编辑器打开 · 在 Finder 中显示 · 插入路径到终端（把 `@相对路径 ` 写进当前会话的输入行，规则同 §6.9）· 复制相对路径。

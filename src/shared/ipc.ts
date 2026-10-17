@@ -144,13 +144,15 @@ export interface WorktreeFilesApi {
 
 /** The right panel's Git view (PRD F6 / F17 Git · 图谱 + 变更). `root` is any worktree of the repo. */
 export interface GitGraphApi {
+  /** Whether a working git is installed (checked once; never runs the macOS install-prompt stub). */
+  available(): Promise<boolean>
   /** One page of the commit graph plus refs and worktrees; null when `root` is not in a git repo. */
   log(request: GitLogRequest): Promise<GitLogPage | null>
   /** Cheap fingerprint of every ref and worktree HEAD; when it changes, reload the graph. '' when not a repo. */
   signature(root: string): Promise<string>
   /** `git fetch --all --prune` (never prompts); resolves to '' or git's error message. */
   fetch(root: string): Promise<string>
-  /** Uncommitted and committed (vs `base`) files of the worktree; null when not a repo. */
+  /** Uncommitted and committed (vs `base`, a branch name) files of the worktree; null when not a repo. Rejects with git's message. */
   changes(root: string, base?: string): Promise<GitChanges | null>
   /** Unified diff text of one file. */
   fileDiff(request: GitFileDiffRequest): Promise<string>
@@ -324,6 +326,7 @@ export const IPC = {
   worktreeUnwatch: 'worktree:unwatch',
   /** main → renderer, payload WorktreeChange */
   worktreeChanged: 'worktree:changed',
+  gitAvailable: 'git:available',
   gitLog: 'git:log',
   gitSignature: 'git:signature',
   gitFetch: 'git:fetch',

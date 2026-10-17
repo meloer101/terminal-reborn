@@ -253,8 +253,23 @@ button.pill:hover {
   overscroll-behavior: contain;
 }
 
+/* Every 变更 row is absolutely placed at a known offset (changes-model ITEM_HEIGHT), so only the window renders. */
+.filesCanvas {
+  position: relative;
+}
+
+.groupHeader,
+.fileItem,
+.diffLine,
+.diffNote {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
 /* Group header (147:7372): 12 above, 4 below, 14 sides, 6 apart. */
 .groupHeader {
+  height: 32px;
   display: flex;
   align-items: baseline;
   gap: var(--space-6);
@@ -277,6 +292,7 @@ button.pill:hover {
 
 /* FileRow (12:79 / 12:85): 8 vertical, 12 left / 16 right, 8 apart; open = bg/hover. */
 .fileRow {
+  height: 32px;
   display: flex;
   align-items: center;
   gap: var(--space-8);
@@ -327,15 +343,12 @@ button.pill:hover {
   color: var(--text-tertiary);
 }
 
-.diff {
-  font: var(--text-mono-code);
-}
-
 /* DiffLine (12:91): 20 high; gutters 36 each, right-aligned; marker 20. */
 .diffLine {
   display: flex;
   align-items: center;
   height: 20px;
+  font: var(--text-mono-code);
   color: var(--term-fg);
 }
 
@@ -383,10 +396,31 @@ button.pill:hover {
 }
 
 .diffNote {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
   margin: 0;
   padding: var(--space-4) var(--space-16) var(--space-8) var(--space-40);
+  overflow: hidden;
   font: var(--text-caption);
   color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.noteAction {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.noteAction:hover {
+  color: var(--text-primary);
 }
 
 /* Footer (147:7378): 10 vertical, 14 left / 10 right; Ghost + the view's one Primary. */

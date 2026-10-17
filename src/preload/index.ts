@@ -121,6 +121,7 @@ const api: TrApi = {
     onChanged: (listener) => listen(IPC.worktreeChanged, listener)
   },
   git: {
+    available: () => ipcRenderer.invoke(IPC.gitAvailable),
     log: (request) => ipcRenderer.invoke(IPC.gitLog, request),
     signature: (root) => ipcRenderer.invoke(IPC.gitSignature, root),
     fetch: (root) => ipcRenderer.invoke(IPC.gitFetch, root),

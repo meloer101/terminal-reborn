@@ -88,8 +88,8 @@
 - [ ] F4 `.tr/settings.toml` 的 setup / run / archive 脚本、Run 按钮、`TR_PORT`
 - [ ] F4 本地合并：预检、merge / squash / rebase、冲突交给 agent、合并后清理
 - [x] F17 右侧栏外壳（2026-10-17）：浮层卡片、会话头四个切换图标、⌥⌘B 记住上次的视图、宽度可拖拽并保存（400–1200）、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 `--shadow-pane`；浏览器 / Git / Worktree 视图暂为占位
-- [x] F5 / F17 Git · 变更视图（2026-10-17，Figma 13B2）：未提交 / 已提交（对比基线；在基线分支本身上对比 upstream）分组、领先 / 落后、展开单个文件的 unified diff（每个文件最多 5000 行）、随文件变化刷新；e2e `git-panel.spec.ts`
-- [ ] F5 行内评论发给 agent、split 视图；“创建 PR”“合并到 main ⌘M”按钮暂为禁用（等 F16 / F4 本地合并）。还没测：1 万行 diff 滚动流畅
+- [x] F5 / F17 Git · 变更视图（2026-10-17，Figma 13B2）：未提交 / 已提交（对比基线；本地基线落后时对比 origin；在基线分支本身上对比 upstream）分组、领先 / 落后、展开单个文件的 unified diff（只渲染可见行；嵌套仓库、超大文件不展开）、文件变化时每秒最多刷新一次；e2e `git-panel.spec.ts`，主进程测试 `git-graph.test.ts`
+- [ ] F5 行内评论发给 agent、split 视图；“创建 PR”“合并到 main ⌘M”按钮暂为禁用（等 F16 / F4 本地合并）。还没测：1 万行 diff 实际滚动帧率（行已窗口化）
 - [ ] F17 Worktree 页签：列表、选中详情、可清理分组
 - [x] F17 文件页签（2026-10-17）：按需加载的目录树 + git 状态、筛选和“有改动 N”、只读预览（行号 + 改动标记）、用默认编辑器打开、右键菜单、`fs.watch` 增量刷新；e2e `right-panel.spec.ts`。还没测：1 万文件仓库首屏 < 200 ms、切换会话 100 ms 内换内容
 - [ ] F13 一键 AI 审阅
@@ -102,8 +102,9 @@
 
 ### M5 · Git 图谱 + PR 状态 → v0.4.0
 完成标准：Figma 04 还原；5000 个提交的仓库首屏 < 300 ms。
-- [x] F6 / F17 Git · 图谱（2026-10-17，Figma 13B / 13H）：lane 算法 `src/shared/git-graph/lanes.ts`（增量分页、默认分支固定在第 0 列）、GraphRef 胶囊（本地 / 远程 / worktree + StatusGlyph / tag）、✓ 当前 HEAD、点 worktree 胶囊切会话、全部分支 / 仅 worktree、只渲染可见行、拉取（fetch）、ref 变化自动刷新（文件监听 + 4 s 指纹轮询）；右键菜单有切换到会话 · 复制 SHA · 复制提交说明；e2e `git-panel.spec.ts`
-- [ ] F6 右键：合并到基线 · 基于基线 rebase · 新建 worktree · 删除 worktree（等 F4）。还没测：5000 个提交的仓库首屏 < 300 ms
+- [x] F6 / F17 Git · 图谱（2026-10-17，Figma 13B / 13H）：lane 算法 `src/shared/git-graph/lanes.ts`（增量分页、默认分支固定在第 0 列、每行向左收拢）、GraphRef 胶囊（本地 / 远程 / worktree + StatusGlyph / tag）、✓ 当前 HEAD、点 worktree 胶囊切会话、全部分支 / 仅 worktree / 隐藏远程分支、只渲染可见行、拉取（fetch，沿用用户的 ssh 配置）、ref 变化自动刷新并保持滚动位置；右键菜单有切换到会话 · 复制 SHA · 复制提交说明；e2e `git-panel.spec.ts`。5000 个提交首屏实测 75–111 ms（`git-panel-perf.spec.ts`）
+- [ ] F6 右键：合并到基线 · 基于基线 rebase · 新建 worktree · 删除 worktree（等 F4）
+- [ ] F6 / F17 Git 后续：每个 worktree 的未提交行 / 脏标记、点提交看详情、聚焦分支高亮、同一仓库的多个 worktree 共用图谱状态、`--no-textconv` 等仓库配置隔离、旧版 git 的 `-z` 兼容、分支 + 未提交合并 diff
 - [ ] F16 PR / CI 只读状态
 
 ### M6 · 深化（持续）→ v1.0

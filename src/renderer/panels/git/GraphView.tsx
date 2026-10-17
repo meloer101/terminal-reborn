@@ -1,7 +1,7 @@
 // The commit graph (PRD F6, Figma 13B / 13H): one 28px row per commit — lanes drawn as SVG, ✓ on the active worktree's
 // HEAD, GraphRef pills, subject and age. Rows have a fixed height, so only the visible window is rendered.
 import { Check, GitBranch, Globe } from 'lucide-react'
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent } from 'react'
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type MouseEvent } from 'react'
 import type { GraphRow } from '@shared/git-graph/lanes'
 import type { GitCommit } from '@shared/git-graph/log'
 import { subscribeClock } from '../../sidebar/clock'
@@ -24,6 +24,7 @@ import {
   type SessionsByPath
 } from './graph-model'
 import { loadMore, type RootGit } from './store'
+import { useViewport } from './virtual'
 import styles from './GitView.module.css'
 
 /** Rows rendered above and below the visible window. */
@@ -37,34 +38,30 @@ const currentMinute = () => Math.floor(Date.now() / 60_000)
 export function GraphView({ root, git, sessions }: { root: string; git: RootGit; sessions: SessionsByPath }) {
   const graph = git.graph
   const scroller = useRef<HTMLDivElement>(null)
-  const [viewport, setViewport] = useState({ top: 0, height: 0 })
-  const now = useSyncExternalStore(subscribeClock, currentMinute) * 60_000
   const ready = graph !== undefined && graph !== null
+  const viewport = useViewport(scroller, ready)
+  const now = useSyncExternalStore(subscribeClock, currentMinute) * 60_000
   const pills = useMemo(
     () => (graph ? buildPills(graph.meta.refs, graph.meta.worktrees, sessions) : new Map<string, GraphPill[]>()),
     [graph, sessions]
   )
 
-  useLayoutEffect(() => {
-    const element = scroller.current
-    if (!element) return
-    const measure = () => setViewport({ top: element.scrollTop, height: element.clientHeight })
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ready])
-
-  // First paint of a repo: bring the active worktree's HEAD into view when it is further down.
+  // Keep the commit at the top of the view in place when the graph reloads (new commits arrive above it).
+  const anchor = useRef<{ hash: string; offset: number } | null>(null)
   const scrolledFor = useRef<string | null>(null)
   useLayoutEffect(() => {
     const element = scroller.current
-    if (!graph || !element || scrolledFor.current === root) return
-    scrolledFor.current = root
-    const index = graph.commits.findIndex((c) => c.hash === graph.meta.head)
-    if (index < 0) return
-    const y = index * ROW_HEIGHT
-    if (y + ROW_HEIGHT > element.clientHeight) element.scrollTop = Math.max(0, y - element.clientHeight / 3)
+    if (!graph || !element) return
+    if (scrolledFor.current !== root) {
+      // First paint of a repo: bring the active worktree's HEAD into view when it is further down.
+      scrolledFor.current = root
+      const index = graph.commits.findIndex((c) => c.hash === graph.meta.head)
+      const y = index * ROW_HEIGHT
+      if (index >= 0 && y + ROW_HEIGHT > element.clientHeight) element.scrollTop = Math.max(0, y - element.clientHeight / 3)
+    } else if (anchor.current && element.scrollTop > 0) {
+      const index = graph.commits.findIndex((c) => c.hash === anchor.current!.hash)
+      if (index >= 0) element.scrollTop = index * ROW_HEIGHT + anchor.current.offset
+    }
   }, [graph, root])
 
   const count = graph?.commits.length ?? 0
@@ -72,24 +69,32 @@ export function GraphView({ root, git, sessions }: { root: string; git: RootGit;
   const last = Math.min(count, Math.ceil((viewport.top + viewport.height) / ROW_HEIGHT) + OVERSCAN)
 
   useEffect(() => {
+    if (!graph) return
+    const top = Math.min(count - 1, Math.floor(viewport.top / ROW_HEIGHT))
+    const commit = graph.commits[top]
+    anchor.current = commit ? { hash: commit.hash, offset: viewport.top - top * ROW_HEIGHT } : null
+  }, [graph, viewport.top, count])
+
+  useEffect(() => {
     if (graph?.hasMore && last >= count - PREFETCH_ROWS) void loadMore(root)
   }, [graph, last, count, root])
 
   if (graph === undefined) return <p className={styles.empty}>正在读取提交…</p>
-  if (graph === null) return <p className={styles.empty}>{git.graphError ? '无法读取 git 历史' : '不是 git 仓库'}</p>
+  if (graph === null) return <p className={styles.empty}>{git.graphError ? `无法读取 git 历史：${git.graphError}` : '不是 git 仓库'}</p>
   if (count === 0) return <p className={styles.empty}>还没有提交</p>
 
-  const columns = graph.columns
-  const left = textLeft(columns)
   const rows = []
   for (let i = first; i < last; i++) {
     const commit = graph.commits[i]!
+    const row = graph.rows[i]!
+    // The text column follows the first page's width; a wider row further down pushes only its own text.
+    const left = textLeft(Math.max(graph.columns, row.width))
     rows.push(
       <CommitRow
         key={commit.hash}
         index={i}
         commit={commit}
-        row={graph.rows[i]!}
+        row={row}
         head={commit.hash === graph.meta.head}
         pills={pills.get(commit.hash)}
         age={commitAge(now, commit.time)}
@@ -100,13 +105,7 @@ export function GraphView({ root, git, sessions }: { root: string; git: RootGit;
   }
 
   return (
-    <div
-      ref={scroller}
-      className={styles.graph}
-      role="list"
-      aria-label="提交"
-      onScroll={(e) => setViewport({ top: e.currentTarget.scrollTop, height: e.currentTarget.clientHeight })}
-    >
+    <div ref={scroller} className={styles.graph} role="list" aria-label="提交">
       <div className={styles.graphCanvas} style={{ height: count * ROW_HEIGHT }}>
         {rows}
       </div>
@@ -128,7 +127,7 @@ interface RowProps {
 
 const CommitRow = memo(function CommitRow({ index, commit, row, head, pills, age, graphWidth, textLeft }: RowProps) {
   const setActiveSession = useWorkspace((s) => s.setActiveSession)
-  const color = laneColor(row.col)
+  const color = laneColor(row.color)
   const sessionPill = pills?.find((p) => p.kind === 'worktree' && p.sessionId)
 
   const onContextMenu = (e: MouseEvent<HTMLDivElement>) => {
@@ -187,10 +186,10 @@ function Lanes({ row, head, width }: { row: GraphRow; head: boolean; width: numb
       </mask>
       <g mask={`url(#${mask})`} fill="none" strokeWidth={LINE_WIDTH}>
         {rowPaths(row).map((path, i) => (
-          <path key={i} d={path.d} stroke={laneColor(path.col)} />
+          <path key={i} d={path.d} stroke={laneColor(path.color)} />
         ))}
       </g>
-      <circle data-node cx={x} cy={ROW_HEIGHT / 2} r={radius} fill={laneColor(row.col)} />
+      <circle data-node cx={x} cy={ROW_HEIGHT / 2} r={radius} fill={laneColor(row.color)} />
     </svg>
   )
 }
