@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_CONSOLE, type BrowserPageState } from '@shared/browser'
-import { browserLayout, consoleLine, emptyHint, portText, sendLabel } from './view-model'
+import { browserLayout, consoleLine, emptyHint, isOpenPort, portText, sendLabel } from './view-model'
 
 const page = (patch: Partial<BrowserPageState> = {}): BrowserPageState => ({
   worktree: '/w',
@@ -14,7 +14,7 @@ const page = (patch: Partial<BrowserPageState> = {}): BrowserPageState => ({
   console: EMPTY_CONSOLE,
   ...patch
 })
-const vite = { port: 5173, pid: 1, label: 'vite' }
+const vite = { port: 5173, pid: 1, host: 'localhost', label: 'vite' }
 
 describe('browserLayout', () => {
   it('shows the bare empty state (13E) when nothing is open and no port is known', () => {
@@ -49,13 +49,25 @@ describe('labels', () => {
   it('names the agent the errors go to', () => {
     expect(sendLabel('claude')).toBe('发给 Claude')
     expect(sendLabel('codex')).toBe('发给 Codex')
-    expect(sendLabel('shell')).toBeNull()
+    expect(sendLabel('shell')).toBe('发到终端')
   })
 
   it('formats port tags and the empty hint', () => {
     expect(portText(vite)).toBe(':5173 vite')
-    expect(portText({ port: 8000, pid: 2, label: '' })).toBe(':8000')
+    expect(portText({ port: 8000, pid: 2, host: 'localhost', label: '' })).toBe(':8000')
     expect(emptyHint([])).toContain('dev server')
     expect(emptyHint([vite])).toContain('端口')
+  })
+})
+
+describe('isOpenPort', () => {
+  it('matches the page by host and port', () => {
+    expect(isOpenPort(vite, 'http://localhost:5173/menu')).toBe(true)
+    expect(isOpenPort(vite, 'http://127.0.0.1:5173/')).toBe(true)
+    expect(isOpenPort(vite, 'http://localhost:5174/')).toBe(false)
+    const lan = { port: 3000, pid: 1, host: '192.168.1.5', label: '' }
+    expect(isOpenPort(lan, 'http://192.168.1.5:3000/')).toBe(true)
+    expect(isOpenPort(lan, 'http://localhost:3000/')).toBe(false)
+    expect(isOpenPort(vite, '')).toBe(false)
   })
 })

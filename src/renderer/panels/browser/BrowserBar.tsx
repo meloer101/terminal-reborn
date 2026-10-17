@@ -1,7 +1,7 @@
 // BrowserBar (Figma 130:283): back · forward · reload · borderless address field · open in the system browser.
 // The address shows the host in the primary color and the path in tertiary; focused, it is a plain text field.
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw } from 'lucide-react'
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { parseAddress, splitUrl, type BrowserPageState } from '@shared/browser'
 import { IconButton } from '../../ui/IconButton'
 import { ClosePanelButton } from '../PaneHeader'
@@ -23,6 +23,15 @@ export function BrowserBar({
   const editing = draft !== null
   const { host, path } = splitUrl(url)
   const browser = window.tr.browser
+
+  // ⌘L in the page (main hands the keyboard back to the app first).
+  useEffect(
+    () =>
+      window.tr.browser.onFocusAddress((target) => {
+        if (target === worktree) input.current?.focus()
+      }),
+    [worktree]
+  )
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return

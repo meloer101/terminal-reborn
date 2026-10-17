@@ -1,27 +1,47 @@
 // 浏览器 view (PRD F17, Figma 13A / 13E): a page per worktree for checking what the agents' dev servers serve.
-// Toolbar on top, the session's listening ports below it, the page in a bg/inset well, console counts at the bottom.
-// Mounted with key = worktree, so local state (a notice) never carries over to another worktree.
+// Toolbar on top, the worktree's listening ports below it, the page in a bg/inset well, console counts at the bottom.
+// Mounted with key = worktree.
 import { Globe, Smartphone } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { formatErrorsForAgent, localPortOf, type ListeningPort } from '@shared/browser'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { formatErrorsForAgent, mergePorts, portUrl, type ListeningPort } from '@shared/browser'
 import type { AgentKind, SessionId } from '@shared/types'
-import { submitPrompt } from '../../session-io'
+import { insertIntoTerminal } from '../../session-io'
+import { useWorkspace } from '../../state/workspace'
+import { getSurface } from '../../terminal/registry'
 import { IconButton } from '../../ui/IconButton'
+import { popupMenu } from '../../ui/menu'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { BrowserBar } from './BrowserBar'
 import { usePageSlot } from './page-slot'
-import { listenForBrowser, loadPage, useBrowser } from './store'
-import { browserLayout, consoleLine, emptyHint, portText, sendLabel } from './view-model'
+import { listenForBrowser, loadPage, setNotice, useBrowser } from './store'
+import { browserLayout, consoleLine, emptyHint, isOpenPort, portText, sendLabel } from './view-model'
 import styles from './BrowserView.module.css'
 
 /** Mirrors MOBILE_WIDTH in main (src/main/browser/host.ts). */
 const MOBILE_WIDTH = 375
 const NO_PORTS: ListeningPort[] = []
 
+/** Every session in the active session's worktree: a dev server may run in a shell next to the agent. */
+function useWorktreeSessions(sessionId: SessionId): SessionId[] {
+  return useWorkspace(
+    useShallow((s) => {
+      const worktreeId = s.sessions.find((x) => x.id === sessionId)?.worktreeId
+      return s.sessions.filter((x) => x.id === sessionId || (worktreeId !== undefined && x.worktreeId === worktreeId)).map((x) => x.id)
+    })
+  )
+}
+
+function useWorktreePorts(sessionIds: SessionId[]): ListeningPort[] {
+  const lists = useBrowser(useShallow((s) => sessionIds.map((id) => s.ports[id] ?? NO_PORTS)))
+  return useMemo(() => mergePorts(lists), [lists])
+}
+
 export function BrowserView({ worktree, sessionId, kind }: { worktree: string; sessionId: SessionId; kind: AgentKind }) {
   const page = useBrowser((s) => s.pages[worktree])
-  const ports = useBrowser((s) => s.ports[sessionId]) ?? NO_PORTS
-  const [notice, setNotice] = useState<string | null>(null)
+  const notice = useBrowser((s) => s.notices[worktree] ?? null)
+  const sessionIds = useWorktreeSessions(sessionId)
+  const ports = useWorktreePorts(sessionIds)
   const slot = useRef<HTMLDivElement>(null)
   const layout = browserLayout(page, ports)
   const mobile = page?.mobile ?? false
@@ -32,24 +52,31 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
     void loadPage(worktree)
   }, [worktree])
 
+  const watchKey = sessionIds.join(' ')
   useEffect(() => {
-    window.tr.browser.watchPorts(sessionId)
-    return () => window.tr.browser.unwatchPorts(sessionId)
-  }, [sessionId])
+    const ids = watchKey.split(' ').filter(Boolean)
+    for (const id of ids) window.tr.browser.watchPorts(id)
+    return () => {
+      for (const id of ids) window.tr.browser.unwatchPorts(id)
+    }
+  }, [watchKey])
 
-  const current = page ? localPortOf(page.url) : null
-  const open = (port: number) => {
-    setNotice(null)
-    window.tr.browser.navigate(worktree, `http://localhost:${port}/`)
+  usePageContextMenu(worktree, slot)
+
+  const open = (port: ListeningPort) => {
+    setNotice(worktree, null)
+    window.tr.browser.navigate(worktree, portUrl(port))
   }
 
   return (
     <>
-      <BrowserBar worktree={worktree} page={page} onError={setNotice} />
+      <BrowserBar worktree={worktree} page={page} onError={(message) => setNotice(worktree, message)} />
       {notice ? (
         <div className={styles.row} role="alert">
           <StatusGlyph status="error" />
-          <span className={styles.noticeText}>{notice}</span>
+          <span className={styles.noticeText} title={notice}>
+            {notice}
+          </span>
         </div>
       ) : (
         layout.ports && (
@@ -60,9 +87,9 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
                 key={p.port}
                 type="button"
                 className={styles.port}
-                data-selected={p.port === current}
-                title={`打开 http://localhost:${p.port}`}
-                onClick={() => open(p.port)}
+                data-selected={page ? isOpenPort(p, page.url) : false}
+                title={`打开 ${portUrl(p)}`}
+                onClick={() => open(p)}
               >
                 {portText(p)}
               </button>
@@ -112,22 +139,39 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
           </div>
         )}
       </div>
-      {layout.console && page && <ConsoleRow worktree={worktree} sessionId={sessionId} kind={kind} onNotice={setNotice} />}
+      {layout.console && page && <ConsoleRow worktree={worktree} sessionId={sessionId} kind={kind} />}
     </>
   )
 }
 
-function ConsoleRow({
-  worktree,
-  sessionId,
-  kind,
-  onNotice
-}: {
-  worktree: string
-  sessionId: SessionId
-  kind: AgentKind
-  onNotice: (message: string | null) => void
-}) {
+/** Right-click in the page: main reports it, the app draws the menu (so it matches every other menu here). */
+function usePageContextMenu(worktree: string, slot: RefObject<HTMLDivElement | null>): void {
+  useEffect(
+    () =>
+      window.tr.browser.onContextMenu((menu) => {
+        const rect = slot.current?.getBoundingClientRect()
+        if (menu.worktree !== worktree || !rect) return
+        const at = { x: menu.x, y: menu.y }
+        void popupMenu(
+          [
+            { type: 'item', id: 'back', label: '后退', enabled: menu.canGoBack, accelerator: 'CmdOrCtrl+[' },
+            { type: 'item', id: 'reload', label: '刷新', accelerator: 'CmdOrCtrl+R' },
+            { type: 'separator' },
+            { type: 'item', id: 'copy', label: '复制', enabled: menu.canCopy, accelerator: 'CmdOrCtrl+C' },
+            { type: 'item', id: 'paste', label: '粘贴', enabled: menu.canPaste, accelerator: 'CmdOrCtrl+V' },
+            { type: 'separator' },
+            { type: 'item', id: 'inspect', label: '检查元素' }
+          ],
+          { x: rect.left + menu.x, y: rect.top + menu.y }
+        ).then((id) => {
+          if (id === 'back' || id === 'reload' || id === 'copy' || id === 'paste' || id === 'inspect') window.tr.browser.pageCommand(worktree, id, at)
+        })
+      }),
+    [worktree, slot]
+  )
+}
+
+function ConsoleRow({ worktree, sessionId, kind }: { worktree: string; sessionId: SessionId; kind: AgentKind }) {
   const page = useBrowser((s) => s.pages[worktree])
   const [sent, setSent] = useState(false)
   useEffect(() => {
@@ -137,13 +181,16 @@ function ConsoleRow({
   }, [sent])
   if (!page) return null
   const line = consoleLine(page.console, page.loading)
-  const label = sendLabel(kind)
 
+  // The errors are page-controlled text going to an agent that runs tools: it goes into the input line, quoted,
+  // and the user reads it and presses Enter themselves.
   const send = () => {
-    const text = formatErrorsForAgent(page.console, page.url)
-    submitPrompt(sessionId, text).then(
-      () => setSent(true),
-      (error: unknown) => onNotice(error instanceof Error ? error.message : '没有发出去')
+    insertIntoTerminal(sessionId, formatErrorsForAgent(page.console, page.url)).then(
+      () => {
+        setSent(true)
+        getSurface(sessionId)?.focus()
+      },
+      (error: unknown) => setNotice(worktree, error instanceof Error ? error.message : '没有放进终端')
     )
   }
 
@@ -157,9 +204,9 @@ function ConsoleRow({
       )}
       {line.rest && <span className={styles.consoleRest}>{line.rest}</span>}
       <span className={styles.spacer} />
-      {label && page.console.errors > 0 && (
-        <button type="button" className={styles.ghost} onClick={send} disabled={sent}>
-          {sent ? '已发送' : label}
+      {page.console.errors > 0 && (
+        <button type="button" className={styles.ghost} onClick={send} disabled={sent} title="把错误放进终端的输入行，确认后按回车发送">
+          {sent ? '已放进输入行' : sendLabel(kind)}
         </button>
       )}
     </div>

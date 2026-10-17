@@ -1,6 +1,6 @@
 // Renderer payloads for the built-in browser (PRD F17), checked before main acts on them. No Electron imports.
 import { isAbsolute } from 'node:path'
-import { isAllowedUrl, MAX_URL_LENGTH, type BrowserBounds } from '@shared/browser'
+import { isAllowedUrl, MAX_URL_LENGTH, PAGE_COMMANDS, type BrowserBounds, type PageCommand } from '@shared/browser'
 
 const MAX_PATH = 4096
 const MAX_SIDE = 16_384
@@ -35,4 +35,15 @@ export function parseBounds(value: unknown): BrowserBounds {
 export function parseBoolean(value: unknown): boolean {
   if (typeof value !== 'boolean') throw new Error('invalid flag')
   return value
+}
+
+export function parsePageCommand(value: unknown): PageCommand {
+  if (!(PAGE_COMMANDS as readonly unknown[]).includes(value)) throw new Error('invalid page command')
+  return value as PageCommand
+}
+
+/** A point in the page (CSS px), clamped like bounds. */
+export function parsePoint(value: unknown): { x: number; y: number } {
+  const { x, y } = parseBounds({ ...(typeof value === 'object' && value !== null ? value : {}), width: 0, height: 0 })
+  return { x, y }
 }

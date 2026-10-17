@@ -3,24 +3,16 @@
 // The rest of F14 (tags in the sidebar / overview, ⌥-click, ending the process) is not built yet.
 import { execFile } from 'node:child_process'
 import type { WebContents } from 'electron'
-import { BROWSER_IPC, parseLsofListen, parsePs, portsChanged, processTree, serverLabel, type ListeningPort, type SessionPorts } from '@shared/browser'
+import { BROWSER_IPC, parseLsofListen, parsePs, processTree, serverLabel, type SessionPorts } from '@shared/browser'
 import { sessionPid } from '../pty'
+import { PortWatches, type PortWatch } from './port-watches'
 
 const POLL_MS = 3_000
 const RUN_TIMEOUT_MS = 5_000
 
-interface Watch {
-  owner: WebContents
-  sessionId: string
-  /** Watchers in this window (a view may mount twice). */
-  count: number
-  last: ListeningPort[] | null
-}
-
-const watches = new Map<string, Watch>()
+const watches = new PortWatches<WebContents>()
 let timer: ReturnType<typeof setTimeout> | null = null
 let polling = false
-const watchedOwners = new WeakSet<WebContents>()
 
 /** stdout of a system tool; lsof exits 1 when it finds nothing, which is not an error here. */
 function run(file: string, args: string[]): Promise<string> {
@@ -30,10 +22,10 @@ function run(file: string, args: string[]): Promise<string> {
 }
 
 async function poll(): Promise<void> {
-  const live = [...watches.values()].filter((w) => !w.owner.isDestroyed())
+  const live = watches.all().filter((w) => !w.owner.isDestroyed())
   if (live.length === 0) return
   const processes = parsePs(await run('/bin/ps', ['-A', '-o', 'pid=,ppid=,args=']))
-  const trees = new Map<Watch, Map<number, string>>()
+  const trees = new Map<PortWatch<WebContents>, Map<number, string>>()
   const allPids = new Set<number>()
   for (const watch of live) {
     const root = sessionPid(watch.owner, watch.sessionId)
@@ -46,8 +38,8 @@ async function poll(): Promise<void> {
   for (const watch of live) {
     const tree = trees.get(watch) ?? new Map<number, string>()
     const ports = listening.filter((l) => tree.has(l.pid)).map((l) => ({ ...l, label: serverLabel(tree.get(l.pid) ?? '') }))
-    if (watch.last !== null && !portsChanged(watch.last, ports)) continue
-    watch.last = ports
+    // A watch dropped while scanning (its window reloaded) must not report.
+    if (!watches.all().includes(watch) || !watches.update(watch, ports)) continue
     if (!watch.owner.isDestroyed()) watch.owner.send(BROWSER_IPC.ports, { sessionId: watch.sessionId, ports } satisfies SessionPorts)
   }
 }
@@ -66,23 +58,30 @@ function schedule(delay: number): void {
   }, delay)
 }
 
-const keyOf = (owner: WebContents, sessionId: string) => `${owner.id}:${sessionId}`
+function stopIfIdle(): void {
+  if (watches.size === 0 && timer) {
+    clearTimeout(timer)
+    timer = null
+  }
+}
+
+/** The window's watchers are gone (closed, crashed, or its page reloaded): stop scanning for them. */
+function forget(owner: WebContents): void {
+  watches.dropOwner(owner)
+  stopIfIdle()
+}
+
+const hooked = new WeakSet<WebContents>()
 
 export function watchPorts(owner: WebContents, sessionId: string): void {
-  const key = keyOf(owner, sessionId)
-  const existing = watches.get(key)
-  if (existing) {
-    existing.count++
-    // A new watcher needs the current list even if it has not changed.
-    existing.last = null
-  } else {
-    watches.set(key, { owner, sessionId, count: 1, last: null })
-    if (!watchedOwners.has(owner)) {
-      watchedOwners.add(owner)
-      owner.once('destroyed', () => {
-        for (const [k, w] of watches) if (w.owner === owner) watches.delete(k)
-      })
-    }
+  watches.add(owner, sessionId)
+  if (!hooked.has(owner)) {
+    hooked.add(owner)
+    owner.on('destroyed', () => forget(owner))
+    owner.on('render-process-gone', () => forget(owner))
+    owner.on('did-start-navigation', (details) => {
+      if (details.isMainFrame && !details.isSameDocument) forget(owner)
+    })
   }
   // Scan soon rather than after a full interval.
   if (timer) clearTimeout(timer)
@@ -91,12 +90,6 @@ export function watchPorts(owner: WebContents, sessionId: string): void {
 }
 
 export function unwatchPorts(owner: WebContents, sessionId: string): void {
-  const key = keyOf(owner, sessionId)
-  const watch = watches.get(key)
-  if (!watch) return
-  if (--watch.count <= 0) watches.delete(key)
-  if (watches.size === 0 && timer) {
-    clearTimeout(timer)
-    timer = null
-  }
+  watches.remove(owner, sessionId)
+  stopIfIdle()
 }

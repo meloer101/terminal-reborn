@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MAX_REMEMBERED, RememberedPages, sanitizeRemembered } from './remembered'
-import { parseBoolean, parseBounds, parseUrl, parseWorktree } from './validate'
+import { partitionFor, PARTITION_PREFIX } from './partition'
+import { parseBoolean, parseBounds, parsePageCommand, parsePoint, parseUrl, parseWorktree } from './validate'
 
 describe('browser payload validation', () => {
   it('accepts only absolute worktree paths', () => {
@@ -19,6 +20,19 @@ describe('browser payload validation', () => {
   it('rounds and clamps bounds, refuses non-numbers', () => {
     expect(parseBounds({ x: 10.4, y: -3, width: 480.6, height: 1e9 })).toEqual({ x: 10, y: 0, width: 481, height: 16_384 })
     for (const bad of [null, {}, { x: 0, y: 0, width: 'a', height: 1 }, { x: NaN, y: 0, width: 1, height: 1 }]) expect(() => parseBounds(bad)).toThrow()
+  })
+
+  it('accepts only known page commands and numeric points', () => {
+    expect(parsePageCommand('inspect')).toBe('inspect')
+    for (const bad of ['eval', 'executeJavaScript', 1, null]) expect(() => parsePageCommand(bad)).toThrow()
+    expect(parsePoint({ x: 12.6, y: 3 })).toEqual({ x: 13, y: 3 })
+    for (const bad of [null, { x: 'a', y: 1 }, {}]) expect(() => parsePoint(bad)).toThrow()
+  })
+
+  it('gives every worktree its own stable partition', () => {
+    expect(partitionFor('/a/repo')).toBe(partitionFor('/a/repo'))
+    expect(partitionFor('/a/repo')).not.toBe(partitionFor('/a/repo-2'))
+    expect(partitionFor('/a/repo')).toMatch(new RegExp(`^${PARTITION_PREFIX}[0-9a-f]{16}$`))
   })
 
   it('accepts only booleans as flags', () => {
