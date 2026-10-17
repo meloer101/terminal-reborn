@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
 import { registerActivityHandlers } from './activity'
@@ -44,7 +45,14 @@ function start(): void {
   void app.whenReady().then(boot)
 }
 
+// Packaged builds get the icon from build/icon.icns; `npm run dev` runs the stock Electron binary, so set it here.
+function useAppIconInDev(): void {
+  if (app.isPackaged || process.platform !== 'darwin') return
+  app.dock?.setIcon(join(app.getAppPath(), 'build', 'icon.png'))
+}
+
 function boot(): void {
+  useAppIconInDev()
   registerAppHandlers()
   registerActivityHandlers()
   registerAgentDetection()
