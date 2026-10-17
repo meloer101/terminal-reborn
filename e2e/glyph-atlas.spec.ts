@@ -7,8 +7,11 @@ import { launchApp } from './launch'
 import { decodePng } from './png'
 
 const SESSION = 's-cookie'
-/** Rows at the top of the screen that hold the sample and must not change. */
-const SAMPLE_ROWS = 5
+/**
+ * Rows at the top of the screen that hold the printed sample and must not change. The shell prompt follows on
+ * the next row with a one-line prompt (zsh's default, as on CI), and `echo after-settings` is typed there.
+ */
+const SAMPLE_ROWS = 4
 
 interface Hook {
   readScreen(sessionId: string, scrollbackLines?: number): string
