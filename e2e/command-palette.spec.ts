@@ -62,14 +62,15 @@ test('⌘K opens while the terminal has focus; Esc closes and restores that focu
   await expect.poll(focusedPane).toBe(FIRST)
 })
 
-test('empty query lists sessions by urgency, then actions; screenshots in both themes', async () => {
+test('empty query lists sessions in sidebar order, then actions; screenshots in both themes', async () => {
   await page.keyboard.press('Meta+k')
   await expect(palette()).toBeVisible()
   const options = palette().getByRole('option')
-  // Fixture order: error, done_unread, running (by recency), idle; then actions.
-  await expect(options.first()).toContainText('Git 图谱布局算法')
+  // Sidebar order: the first project's sessions in store order; each shows its ⌘n.
+  await expect(options.first()).toContainText('Cookie 会话迁移')
+  await expect(options.first()).toContainText('⌘1')
   await expect(palette().getByText('操作', { exact: true })).toBeVisible()
-  await expect(palette().getByRole('option', { name: /新建 Claude 会话/ })).toBeVisible()
+  await expect(palette().getByRole('option', { name: /新建 Claude Code 会话/ })).toBeVisible()
   await expect(palette().getByRole('option', { name: /主题：浅色/ })).toBeVisible()
 
   for (const theme of ['dark', 'light'] as const) {

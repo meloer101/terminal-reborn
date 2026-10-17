@@ -39,7 +39,7 @@ export function registerUiHandlers(): void {
 
   ipcMain.handle(IPC.uiPickFolder, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>, buttonLabel: '添加项目' }
+    const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>, buttonLabel: '打开项目' }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })

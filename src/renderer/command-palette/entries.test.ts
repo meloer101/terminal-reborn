@@ -42,10 +42,29 @@ const ids = (query: string, over: Partial<PaletteInput> = {}) =>
   rankEntries(buildEntries(input(over)), query).map((r) => r.entry.id)
 
 describe('buildEntries', () => {
-  it('lists sessions by urgency, then actions', () => {
+  it('lists sessions in sidebar order (project, then store order), then actions', () => {
     const all = buildEntries(input()).map((e) => e.id)
-    expect(all.slice(0, 4)).toEqual(['session:needs', 'session:running-new', 'session:running-old', 'session:idle-main'])
+    expect(all.slice(0, 4)).toEqual(['session:idle-main', 'session:running-old', 'session:needs', 'session:running-new'])
     expect(all[4]).toBe('action:new-claude')
+  })
+
+  it('numbers the rows the sidebar shows with ⌘1–⌘9; folded projects keep their sessions but no number', () => {
+    const shortcuts = (over: Partial<PaletteInput>) =>
+      buildEntries(input(over))
+        .filter((e) => e.section === 'sessions')
+        .map((e) => [e.id, e.shortcut])
+    expect(shortcuts({})).toEqual([
+      ['session:idle-main', 'CmdOrCtrl+1'],
+      ['session:running-old', 'CmdOrCtrl+2'],
+      ['session:needs', 'CmdOrCtrl+3'],
+      ['session:running-new', 'CmdOrCtrl+4']
+    ])
+    expect(shortcuts({ collapsedProjectIds: ['p1'] })).toEqual([
+      ['session:idle-main', undefined],
+      ['session:running-old', undefined],
+      ['session:needs', undefined],
+      ['session:running-new', 'CmdOrCtrl+1']
+    ])
   })
 
   it('shows "project · current action" for sessions and falls back to the branch', () => {
@@ -59,14 +78,14 @@ describe('buildEntries', () => {
   it('targets the active session’s project for new sessions', () => {
     const titles = buildActionEntries(input({ activeSessionId: 'running-new' })).filter((e) => e.id.startsWith('action:new-'))
     expect(titles.map((e) => e.subtitle)).toEqual(['terminal-reborn', 'terminal-reborn', 'terminal-reborn'])
-    expect(titles.map((e) => e.title)).toEqual(['新建 Claude 会话', '新建 Codex 会话', '新建 Shell 会话'])
+    expect(titles.map((e) => e.title)).toEqual(['新建 Claude Code 会话', '新建 Codex 会话', '新建终端'])
   })
 
   it('falls back to the first project, and omits new-session actions without any project', () => {
     expect(currentProject(input({ activeSessionId: null }))?.id).toBe('p1')
     const none = buildActionEntries(input({ projects: [], worktrees: [], sessions: [], activeSessionId: null }))
     expect(none.map((e) => e.id)).toEqual([
-      'action:add-project',
+      'action:open-project',
       'action:toggle-overview',
       'action:toggle-sidebar',
       'action:toggle-changes',
@@ -90,8 +109,8 @@ describe('buildEntries', () => {
 })
 
 describe('rankEntries', () => {
-  it('keeps everything in urgency order for an empty query', () => {
-    expect(ids('').slice(0, 4)).toEqual(['session:needs', 'session:running-new', 'session:running-old', 'session:idle-main'])
+  it('keeps everything in sidebar order for an empty query', () => {
+    expect(ids('').slice(0, 4)).toEqual(['session:idle-main', 'session:running-old', 'session:needs', 'session:running-new'])
     expect(ids('')).toHaveLength(buildEntries(input()).length)
   })
 
@@ -109,7 +128,7 @@ describe('rankEntries', () => {
     ['dark', 'action:theme-dark'],
     ['侧栏', 'action:toggle-sidebar'],
     ['变更', 'action:toggle-changes'],
-    ['添加', 'action:add-project']
+    ['打开项目', 'action:open-project']
   ])('%j finds %s first', (query, first) => {
     expect(ids(query)[0]).toBe(first)
   })
@@ -123,8 +142,8 @@ describe('rankEntries', () => {
   })
 
   it('ranks the better match first inside a section', () => {
-    // "acme" is the project of three sessions but only the title field of none: all tie, urgency decides.
-    expect(ids('acme').filter((id) => id.startsWith('session:'))).toEqual(['session:needs', 'session:running-old', 'session:idle-main'])
+    // "acme" is the project of three sessions but only the title field of none: all tie, sidebar order decides.
+    expect(ids('acme').filter((id) => id.startsWith('session:'))).toEqual(['session:idle-main', 'session:running-old', 'session:needs'])
     // "main": title match beats the branch/word match elsewhere.
     expect(ids('main')[0]).toBe('session:idle-main')
   })

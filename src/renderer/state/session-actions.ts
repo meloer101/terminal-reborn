@@ -57,9 +57,6 @@ export async function openProjectInteractive(kind: AgentKind = 'claude'): Promis
   return path ? openProjectPath(path, kind) : null
 }
 
-/** @deprecated Use openProjectInteractive. Kept for the command palette. */
-export const addProjectInteractive = openProjectInteractive
-
 /** The project header's ＋ and the empty project's 新建会话 row. */
 export async function openNewSessionMenu(projectId: ProjectId, anchor: MenuAnchor): Promise<void> {
   await runNewSessionChoice(await popupMenu(kindItems(projectId, NEW_SESSION_LABEL), anchor))

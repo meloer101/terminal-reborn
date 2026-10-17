@@ -1,7 +1,7 @@
 // Executes a palette entry against the real stores. Kept apart from the pure model so
 // entries.ts stays free of side effects.
 import type { AgentKind } from '@shared/types'
-import { addProjectInteractive } from '../state/session-actions'
+import { openProjectInteractive } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
 import { applyTheme, type ThemePreference } from '../theme'
 import { closeCommandPalette } from './palette-store'
@@ -40,8 +40,8 @@ function runAction(action: ActionId): void {
     return
   }
   switch (action) {
-    case 'add-project':
-      void addProjectInteractive()
+    case 'open-project':
+      void openProjectInteractive()
       break
     case 'toggle-sidebar':
       state.toggleSidebar()

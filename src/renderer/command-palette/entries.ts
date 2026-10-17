@@ -1,7 +1,8 @@
 // Pure palette model: what can be jumped to or run, and in which order. No React, no store access.
-import type { Project, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
-import { compareByUrgency, STATUS_LABEL } from '@shared/session-status'
+import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
+import { STATUS_LABEL } from '@shared/session-status'
 import { SHORTCUTS } from '@shared/shortcuts'
+import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
 import { matchFields, type MatchField, type Range } from './match'
 
 export type PaletteSection = 'sessions' | 'actions'
@@ -10,7 +11,7 @@ export type ActionId =
   | 'new-claude'
   | 'new-codex'
   | 'new-shell'
-  | 'add-project'
+  | 'open-project'
   | 'toggle-sidebar'
   | 'toggle-overview'
   | 'toggle-changes'
@@ -49,6 +50,8 @@ export interface PaletteInput {
   mainView?: 'session' | 'overview'
   /** The right panel has content (M4); until then its toggle is not offered (B11). */
   panelAvailable: boolean
+  /** Folded sidebar projects: their sessions are listed but have no ⌘1–⌘9. */
+  collapsedProjectIds?: readonly ProjectId[]
 }
 
 export interface RankedEntry {
@@ -58,16 +61,24 @@ export interface RankedEntry {
   ranges: Record<string, Range[]>
 }
 
-const KIND_LABEL = { claude: 'Claude', codex: 'Codex', shell: 'Shell' } as const
+const KIND_LABEL = { claude: 'Claude Code', codex: 'Codex', shell: '终端' } as const
 
-/** Sessions most urgent first (same order as the sidebar queue). */
+/**
+ * Sessions in sidebar order — project by project, store order within each, folded projects included (B16) — so the
+ * list reads the same as the sidebar. The first nine rows the sidebar shows carry their ⌘1–⌘9.
+ */
 export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
   const projectById = new Map(input.projects.map((p) => [p.id, p]))
   const worktreeById = new Map(input.worktrees.map((w) => [w.id, w]))
-  return input.sessions
-    .slice()
-    .sort(compareByUrgency)
+  const ordered = buildSidebarGroups({ projects: input.projects, worktrees: input.worktrees, sessions: input.sessions }).flatMap(
+    (group) => group.rows.map((row) => row.session)
+  )
+  const numbered = visibleSessionIds(
+    buildSidebarGroups({ ...input, collapsedProjectIds: input.collapsedProjectIds ?? [] })
+  ).slice(0, 9)
+  return ordered
     .map((session): PaletteEntry => {
+      const n = numbered.indexOf(session.id)
       const worktree = worktreeById.get(session.worktreeId)
       const projectName = (worktree && projectById.get(worktree.projectId)?.name) ?? ''
       const detail = session.currentAction ?? worktree?.branch ?? ''
@@ -79,6 +90,7 @@ export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
         subtitle: [projectName, detail].filter(Boolean).join(' · '),
         status: session.status,
         attention: session.status === 'needs_you',
+        ...(n >= 0 ? { shortcut: `CmdOrCtrl+${n + 1}` } : {}),
         fields: [
           { key: 'title', text: session.title, weight: 3 },
           { key: 'project', text: projectName, weight: 2 },
@@ -94,7 +106,7 @@ export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
 /** The shortcut that runs the same command without the palette (@shared/shortcuts). */
 const ACTION_SHORTCUT: Partial<Record<ActionId, string>> = {
   'new-claude': SHORTCUTS['new-session'],
-  'add-project': SHORTCUTS['open-project'],
+  'open-project': SHORTCUTS['open-project'],
   'toggle-overview': SHORTCUTS['toggle-overview'],
   'toggle-sidebar': SHORTCUTS['toggle-sidebar'],
   'toggle-changes': SHORTCUTS['toggle-right-panel']
@@ -130,13 +142,13 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
   const entries: PaletteEntry[] = []
   if (project) {
     entries.push(
-      action('new-claude', '新建 Claude 会话', 'plus', 'new claude code session', project.name),
+      action('new-claude', '新建 Claude Code 会话', 'plus', 'new claude code session', project.name),
       action('new-codex', '新建 Codex 会话', 'plus', 'new codex session', project.name),
-      action('new-shell', '新建 Shell 会话', 'plus', 'new shell terminal session', project.name)
+      action('new-shell', '新建终端', 'plus', 'new shell terminal session zhongduan', project.name)
     )
   }
   entries.push(
-    action('add-project', '添加项目…', 'folder-plus', 'add project folder open'),
+    action('open-project', '打开项目…', 'folder-plus', 'open add project folder'),
     action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
     ...(input.panelAvailable

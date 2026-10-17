@@ -2,7 +2,7 @@
 import { hasStartChoice } from '../state/session-start-plan'
 import type { AgentKind, Session, SessionStatus } from '@shared/types'
 
-export const AGENT_NAME: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: 'Shell' }
+export const AGENT_NAME: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
 
 type PhaseView = Pick<Session, 'kind' | 'status' | 'phase'>
 
