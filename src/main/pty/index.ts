@@ -9,7 +9,7 @@ import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
 import type { HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
 import { adoptAgentSession, endAgentSession, handleRelayedHook, prepareAgentLaunch, setHookTarget } from '../hooks'
 import { daemonLocation, openDaemon } from './daemon-client'
-import { isOrphanSpawn } from './late-spawn'
+import { shouldKillLateSpawn } from './late-spawn'
 import { assertCwdExists } from './preflight'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
 
@@ -191,7 +191,7 @@ function handleHostEvent(event: HostEvent): void {
   switch (event.type) {
     case 'spawned': {
       // Late news of a spawn main already gave up on: kill it rather than leave an invisible live process.
-      if (isOrphanSpawn(sessions, event.id)) send({ type: 'kill', id: event.id })
+      if (shouldKillLateSpawn(sessions, event.id, link?.kind === 'daemon')) send({ type: 'kill', id: event.id })
       settle(pendingSpawns, event.id)?.resolve({ pid: event.pid })
       break
     }
@@ -262,6 +262,11 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   // come last so the renderer cannot spoof them.
   const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent) : null
   await ensureHost()
+  // The window went away (reload, close) while we were getting ready: starting the process now would orphan it.
+  if (sessions.get(id)?.owner !== owner) {
+    if (hooks) endAgentSession(id)
+    throw new Error('the window went away before the terminal process started')
+  }
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {

@@ -101,6 +101,9 @@ test('typing filters (CJK) and ↵ switches the active session', async () => {
 })
 
 test('↑/↓ move the selection and hover follows the mouse', async () => {
+  // Keep the pointer off the list: Chromium replays a mouse move when rows appear under a resting pointer,
+  // which would select that row before the keyboard checks below.
+  await page.mouse.move(4, (page.viewportSize()?.height ?? 600) - 4)
   await page.keyboard.press('Meta+k')
   const options = palette().getByRole('option')
   await expect(options.first()).toHaveAttribute('aria-selected', 'true')

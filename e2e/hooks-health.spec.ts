@@ -32,7 +32,10 @@ async function selfHeals(socket: string, settings: string, page: Awaited<ReturnT
   rmSync(settings)
   await expect.poll(() => accepts(socket), { timeout: 10_000, intervals: [200] }).toBe(true)
   await expect.poll(() => existsSync(settings), { timeout: 10_000 }).toBe(true)
-  expect(await page.evaluate(() => (globalThis as unknown as { tr: TrApi }).tr.agent.getHooksHealth())).toEqual({ ok: true })
+  // Health is re-checked on a timer (TR_HOOKS_CHECK_MS), so it may still report the removal for a tick.
+  await expect
+    .poll(() => page.evaluate(() => (globalThis as unknown as { tr: TrApi }).tr.agent.getHooksHealth()), { timeout: 10_000 })
+    .toEqual({ ok: true })
 }
 
 const health = (page: Awaited<ReturnType<ElectronApplication['firstWindow']>>) =>
@@ -42,7 +45,7 @@ test('with the pty daemon, the hook socket is the daemon\'s (stable across app r
   app = await launchApp({ TR_HOOKS_CHECK_MS: '300' })
   const page = await app.firstWindow()
   const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
-  expect(await health(page)).toEqual({ ok: true })
+  await expect.poll(() => health(page), { timeout: 10_000 }).toEqual({ ok: true })
   // No per-run directory: agents that outlive this run keep a socket that stays put.
   expect(existsSync(join(userData, 'hooks'))).toBe(false)
   await selfHeals(join(userData, 'daemon', 'hooks', 'hook.sock'), join(userData, 'daemon', 'claude-settings.json'), page)
@@ -52,7 +55,7 @@ test('without the daemon, hooks live under userData/hooks/<pid>, report healthy,
   app = await launchApp({ TR_HOOKS_CHECK_MS: '300', TR_PTY_DAEMON: '0' })
   const page = await app.firstWindow()
   const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
-  expect(await health(page)).toEqual({ ok: true })
+  await expect.poll(() => health(page), { timeout: 10_000 }).toEqual({ ok: true })
   const runs = readdirSync(join(userData, 'hooks'))
   expect(runs).toHaveLength(1)
   const dir = join(userData, 'hooks', runs[0]!)

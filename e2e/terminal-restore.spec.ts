@@ -60,6 +60,8 @@ test.describe('terminal snapshots', () => {
   test('the screen is saved on quit and painted right away on the next launch', async () => {
     await launch()
     await page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"]`).click()
+    // zsh drops keys typed before its line editor is up; wait for the prompt.
+    await expect.poll(async () => (await screen()).trim().length, { timeout: 10_000 }).toBeGreaterThan(0)
     await page.keyboard.type(`echo RESTORE-MARK-$((6*7))`)
     await page.keyboard.press('Enter')
     await expect.poll(screen).toContain(MARK)
