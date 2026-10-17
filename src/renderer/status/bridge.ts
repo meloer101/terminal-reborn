@@ -148,7 +148,7 @@ export function startStatusBridge(): () => void {
     controller.handleEvent(sessionId, event)
   })
   // A PermissionRequest / AskUserQuestion prompt is the authoritative "needs you" signal: Claude's own
-  // Notification(permission_prompt) lags ~6 s behind it (docs/spikes/hooks.md).
+  // Notification(permission_prompt) lags ~6 s behind it (PRD §6.6).
   const unsubscribePrompts = window.tr.agent.onPrompt((prompt) =>
     controller.handleEvent(prompt.sessionId, {
       type: 'notification',

@@ -1,4 +1,4 @@
-// macOS line-editing shortcuts that terminals expect (PRD F1 key mappings).
+// macOS line-editing shortcuts that terminals expect (PRD §4 F1).
 
 export interface KeyLike {
   key: string

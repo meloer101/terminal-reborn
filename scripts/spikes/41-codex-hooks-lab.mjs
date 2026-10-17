@@ -1,5 +1,5 @@
 /* eslint-disable no-undef, no-control-regex */
-// Codex hooks spike (docs/spikes/codex.md): run the real Codex CLI in /tmp/tr-codex-lab with hooks injected
+// Codex hooks spike (PRD §6.7): run the real Codex CLI in /tmp/tr-codex-lab with hooks injected
 // per launch (`-c hooks.<Event>=[…]` + `-c hooks.state=…trusted_hash`), a capture server on a Unix socket and the
 // production relay script. Nothing is written to ~/.codex.
 //   node scripts/spikes/41-codex-hooks-lab.mjs <scenario>
@@ -182,7 +182,7 @@ const SCENARIOS = {
     snap('screen after act')
     console.log('stop seen:', await waitStop(Number(process.env.STOP_WAIT ?? 60000)))
   },
-  // Ctrl+C on an empty prompt (docs/spikes/codex.md Q6): does one press quit Codex?
+  // Ctrl+C on an empty prompt (PRD §6.7): does one press quit Codex?
   async ctrlc() {
     for (let i = 0; i < 100 && /MCP servers/.test(c.visible()); i++) await sleep(100)
     c.write('\x03')

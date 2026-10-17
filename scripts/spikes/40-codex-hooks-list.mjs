@@ -1,5 +1,5 @@
 /* eslint-disable no-undef */
-// Spike (docs/spikes/codex.md): ask `codex app-server` which hooks it sees for a cwd and what their
+// Spike (PRD §6.7): ask `codex app-server` which hooks it sees for a cwd and what their
 // trust status / current hash is. Extra argv are forwarded to `codex app-server` (e.g. -c overrides).
 //   node scripts/spikes/40-codex-hooks-list.mjs -c 'hooks.Stop=[...]'
 import { spawn } from 'node:child_process'

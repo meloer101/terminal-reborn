@@ -1,4 +1,4 @@
-// Real Codex CLI 0.142.5 hook payloads captured with scripts/spikes/41-codex-hooks-lab.mjs (docs/spikes/codex.md),
+// Real Codex CLI 0.142.5 hook payloads captured with scripts/spikes/41-codex-hooks-lab.mjs (PRD §6.7),
 // scrubbed of personal paths and ids (`transcript_path` is dropped, ids are fixed, the lab directory is /work/project).
 // The CLI, its TUI, sandbox/approval logic and hook delivery were real; the model behind it was the scripted local
 // stand-in scripts/spikes/codex-mock-provider.mjs because the user's provider answered 503 for every model.

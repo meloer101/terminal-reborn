@@ -21,7 +21,7 @@ const TITLE_SETTLE_MS = 2_000
 const MESSAGE_MAX_CHARS = 80
 /**
  * Codex has no Interrupt / failure hook in 0.142.5: after Esc, Ctrl+C or a failed model request there is no
- * Stop. A turn whose title went idle and that has been silent this long is over (docs/spikes/codex.md §5).
+ * Stop. A turn whose title went idle and that has been silent this long is over (PRD §6.7).
  */
 export const CODEX_IDLE_HEAL_MS = 4_000
 
@@ -284,7 +284,7 @@ function healCodex(state: SessionState, now: number): SessionState {
 }
 
 /**
- * Codex title rules (docs/spikes/codex.md §5): braille spinner = busy, `Action Required` = its own dialog is up,
+ * Codex title rules (PRD §6.7): braille spinner = busy, `Action Required` = its own dialog is up,
  * any other title = idle. Hooks stay authoritative; the title only fills their gaps (startup spinner, interrupts,
  * the TUI dialog after a hook hold timed out).
  */

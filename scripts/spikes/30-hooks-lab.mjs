@@ -1,5 +1,5 @@
 /* eslint-disable no-undef */
-// Hooks spike (docs/spikes/hooks.md): run the real Claude CLI in /tmp/tr-hooks-lab with hooks injected
+// Hooks spike (PRD §6.6): run the real Claude CLI in /tmp/tr-hooks-lab with hooks injected
 // per launch via `--settings`, a capture server on a Unix socket, and the production hook script.
 //   node scripts/spikes/30-hooks-lab.mjs <scenario>
 // Scenarios: ok | bash-empty | bash-allow | bash-hold | ask | tool-fail | ...  (see SCENARIOS)

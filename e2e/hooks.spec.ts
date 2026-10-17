@@ -1,4 +1,4 @@
-// Claude Code hooks bridge against the real CLI, inside the app (PRD §4 F3, docs/spikes/hooks.md).
+// Claude Code hooks bridge against the real CLI, inside the app (PRD §4 F3, PRD §6.6).
 // Opt-in (it calls the model, 2 short turns): TR_E2E_AGENTS=claude npm run test:e2e -- hooks
 // A Bash permission is raised in a fixed, already-trusted lab directory (one trust entry in ~/.claude.json,
 // ever); the lab's .claude/settings.local.json pins the permission mode to "default" so Claude asks.

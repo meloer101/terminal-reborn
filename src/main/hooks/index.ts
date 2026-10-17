@@ -183,7 +183,7 @@ export function registerHookHandlers(): void {
 /**
  * Called by the pty layer before spawning an agent. Returns null for shells and when hooks are unavailable
  * (then the owner gets a `SessionHooksSignal` of kind 'unavailable'). Claude gets a `--settings` file; Codex gets
- * `-c` overrides (docs/spikes/codex.md).
+ * `-c` overrides (PRD §6.7).
  */
 export async function prepareAgentLaunch(sessionId: string, owner: WebContents, agent: AgentKind | undefined): Promise<AgentLaunchHooks | null> {
   if (agent !== 'claude' && agent !== 'codex') return null

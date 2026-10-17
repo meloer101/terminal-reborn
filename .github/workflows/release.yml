@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.1.0 (see docs/releasing.md). Builds unsigned (ad-hoc) dmg + zip for arm64 and x64
+# Push a tag like v0.1.0 (see CONTRIBUTING.md). Builds unsigned (ad-hoc) dmg + zip for arm64 and x64
 # and attaches them to a DRAFT GitHub Release; a human publishes it after a look. No secrets are used
 # beyond the workflow's own GITHUB_TOKEN.
 on:

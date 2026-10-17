@@ -1,4 +1,4 @@
-// Real Claude Code 2.1.299 hook payloads captured with scripts/spikes/30-hooks-lab.mjs (docs/spikes/hooks.md),
+// Real Claude Code 2.1.299 hook payloads captured with scripts/spikes/30-hooks-lab.mjs (PRD §6.6),
 // scrubbed of personal paths and ids. `transcript_path` / `scratchpad_dir` are dropped (unused).
 // Notification_permission reuses the idle capture's envelope with the message string observed in a separate run.
 export const claudeFixtures = {

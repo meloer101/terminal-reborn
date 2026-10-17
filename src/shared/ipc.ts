@@ -34,7 +34,7 @@ export interface PtyExit {
   signal?: number
 }
 
-/** A live session's screen from the pty daemon's mirror (docs/spikes/pty-daemon.md §4). */
+/** A live session's screen from the pty daemon's mirror (PRD §6.8). */
 export interface PtyScreen {
   /** xterm SerializeAddon output; an active alternate screen follows `\x1b[?1049h\x1b[H`. */
   data: string

@@ -1,4 +1,4 @@
-// Codex parity inside the app (PRD §4 F2/F3, docs/spikes/codex.md): per-launch hooks reach the status machine,
+// Codex parity inside the app (PRD §4 F2/F3, PRD §6.7): per-launch hooks reach the status machine,
 // and a shell approval is answered from the prompt bar's API (window.tr.agent.respondPermission).
 // Opt-in because it needs the `codex` CLI on the login shell's PATH: TR_E2E_AGENTS=codex npm run test:e2e -- codex
 //

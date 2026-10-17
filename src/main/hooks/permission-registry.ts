@@ -36,7 +36,7 @@ const realScheduler: Scheduler = {
 /**
  * The hook's stdout for a decision (Claude Code / Codex hooks reference, PermissionRequest output).
  * Codex accepts only `behavior` (+ `message` on deny): `interrupt` and `updatedPermissions` are "reserved and
- * fail closed" there, and "allow always" is never offered for it (docs/spikes/codex.md §3).
+ * fail closed" there, and "allow always" is never offered for it (PRD §6.7).
  */
 export function decisionBody(decision: PermissionDecision, suggestions: unknown[], agent: HookAgent = 'claude'): string {
   if (agent === 'codex') {

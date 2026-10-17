@@ -2,9 +2,11 @@
 
 macOS terminal for running many CLI coding agents (Claude Code, Codex) in parallel. Electron + xterm.js + node-pty + React 19 + zustand, built with electron-vite.
 
-- Product spec and roadmap: `docs/PRD.md` (read the section your task points to before coding).
+- Product spec: `docs/PRD.md` — what the product should become (read the section your task points to before coding). Measured CLI / daemon behaviour is in PRD §6.6–§6.9.
+- Progress: `docs/ROADMAP.md` — what is done, in progress and not started.
 - Design source of truth: Figma `x6HGsLiMTk7fWDoKI5YkKh` — screen node IDs are in PRD §5. Use the Figma MCP (`get_design_context` / `get_screenshot`) on the exact node you are implementing.
-- Task briefs for parallel work: `docs/tasks/`.
+
+**These are the only two docs.** When a product decision changes, edit `docs/PRD.md` and add a line to its 变更记录. When you finish, add or drop work, tick or move it in `docs/ROADMAP.md` and bump its date, in the same commit as the code. Do not create task briefs, plans, acceptance records, spikes or research files; put a short brief in the session or PR instead, and fold new measured findings into PRD §6.
 
 ## Commands
 
@@ -35,7 +37,7 @@ In a fresh worktree run `npm install` first.
 | `src/renderer/command-palette/` | ⌘K (M2) | `command-palette` |
 | `src/renderer/settings/` | Settings dialog UI (M3; a sheet over the main window) | `settings-ui` |
 | `src/renderer/appearance/`, `src/main/appearance.ts`, `src/renderer/theme.ts` | Applying appearance settings (M3) | `appearance-runtime` |
-| `src/main/hooks/` (Codex parts), `docs/spikes/codex.md` | Codex hooks/approvals (M3) | `codex-adapter` |
+| `src/main/hooks/` (Codex parts) | Codex hooks/approvals (M3) | `codex-adapter` |
 | `build/`, `electron-builder.yml`, `.github/workflows/release.yml`, `src/main/updates.ts` | Packaging, icon, update check (M3) | `release` |
 
 Stay inside the directories your task owns. If you truly need a change elsewhere, keep it minimal and say so in the commit message — don't refactor shared files.

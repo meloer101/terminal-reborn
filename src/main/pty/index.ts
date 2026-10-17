@@ -1,5 +1,5 @@
 // Main-process side of the terminal. The PTYs live in the pty daemon (src/pty-daemon), a detached process that
-// outlives the app so agents keep running across quits and a relaunch reattaches (docs/spikes/pty-daemon.md).
+// outlives the app so agents keep running across quits and a relaunch reattaches (PRD §6.8).
 // When the daemon cannot be reached, the pty-host utilityProcess takes over for this run (sessions then end with
 // the app). Main relays renderer IPC <-> host messages and validates every renderer payload.
 import { app, ipcMain, utilityProcess, type WebContents } from 'electron'

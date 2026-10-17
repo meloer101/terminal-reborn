@@ -1,4 +1,4 @@
-// Per-launch Codex hooks (PRD §6.2, docs/spikes/codex.md §2-3). Codex has no `--settings <file>`; what it has is
+// Per-launch Codex hooks (PRD §6.2, PRD §6.7). Codex has no `--settings <file>`; what it has is
 // `-c key=value` config overrides, and hooks supplied that way come from the "session flags" layer:
 //
 //   -c 'hooks.PreToolUse=[{hooks=[{type="command",command="…",timeout=10}]}]'      (one per event)
@@ -22,7 +22,7 @@ const DEFAULT_TIMEOUT_S = 10
 
 /**
  * `sh <script>` instead of executing the script directly, so a lost executable bit cannot silently disable
- * every hook (same reasoning as the Claude settings, docs/spikes/hooks.md §1).
+ * every hook (same reasoning as the Claude settings, PRD §6.6).
  */
 export function codexHookCommand(scriptPath: string, event: CodexHookEvent): string {
   return `/bin/sh ${shellQuote(scriptPath)} ${event} codex`

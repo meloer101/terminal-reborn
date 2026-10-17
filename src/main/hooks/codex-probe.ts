@@ -1,4 +1,4 @@
-// Asks the installed Codex for the trust hash of our per-launch hook definitions (docs/spikes/codex.md §3):
+// Asks the installed Codex for the trust hash of our per-launch hook definitions (PRD §6.7):
 // `codex app-server` speaks JSON-RPC over stdio, and its `hooks/list` reports every hook it would load for a
 // directory together with `currentHash`. We start it with the same `-c hooks.<Event>=…` overrides the real
 // launch will use, take the hashes of the `sessionFlags` entries, and pin exactly those with `hooks.state`.

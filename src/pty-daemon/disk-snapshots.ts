@@ -1,6 +1,6 @@
 // Keeps the cold-path disk snapshots (`<userData>/terminal-snapshots/<id>.json`, see src/main/terminal-snapshots.ts)
 // current while no app is attached, so a reboot after hours of an agent running with the app closed still paints
-// its latest screen (docs/spikes/pty-daemon.md §10). One writer at a time: the renderer saves while a client is
+// its latest screen (PRD §6.8). One writer at a time: the renderer saves while a client is
 // attached to the session, this writes only for detached sessions, after their output has been quiet a while.
 import type { TerminalSnapshot } from '@shared/ipc'
 

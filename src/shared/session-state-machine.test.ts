@@ -279,7 +279,7 @@ describe('referential stability', () => {
   })
 })
 
-// Codex titles (docs/spikes/codex.md §5): braille spinner = busy, `Action Required` = its own dialog, anything else = idle.
+// Codex titles (PRD §6.7): braille spinner = busy, `Action Required` = its own dialog, anything else = idle.
 describe('codex titles', () => {
   const codex = (status: SessionStatus, action?: string) => make(status, { kind: 'codex', action })
   const title = (t: string): Signal => ({ type: 'title', title: t })

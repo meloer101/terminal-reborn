@@ -37,7 +37,7 @@ export interface HostScreen {
   title?: string
 }
 
-/** A hook event the pty daemon answered itself because no app was attached to the session (docs/spikes/pty-daemon.md §8). */
+/** A hook event the pty daemon answered itself because no app was attached to the session (PRD §6.8). */
 export interface HookJournalEntry {
   event: string
   agent: 'claude' | 'codex'

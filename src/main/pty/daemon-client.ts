@@ -1,4 +1,4 @@
-// Finds, adopts or launches the pty daemon (src/pty-daemon, docs/spikes/pty-daemon.md §3.3) and speaks its socket
+// Finds, adopts or launches the pty daemon (src/pty-daemon, PRD §6.8) and speaks its socket
 // protocol. Adopt-if-alive: a daemon answering on this profile's socket is reused with all its sessions; only a
 // socket that provably has nobody behind it (ENOENT / ECONNREFUSED) leads to launching a new one.
 import { spawn } from 'node:child_process'

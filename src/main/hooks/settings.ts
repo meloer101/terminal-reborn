@@ -1,6 +1,6 @@
 // The hooks-only settings file handed to Claude with `--settings <file>` (PRD §6.2). Generated once
 // per app run; the user's own settings (and Orca's / plugins' hooks) are untouched and keep running,
-// because Claude merges hook arrays across settings sources (docs/spikes/hooks.md §1).
+// because Claude merges hook arrays across settings sources (PRD §6.6).
 import { shellQuote } from '@shared/agent-launch'
 
 /** The Claude hook events the app listens to. */

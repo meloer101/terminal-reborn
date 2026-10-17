@@ -1,4 +1,4 @@
-// Phase 2b P0 (docs/acceptance/ux-review-2026-10-15.md §2): every place the user can click has a next step.
+// Phase 2b P0 (docs/ROADMAP.md, 2b): every place the user can click has a next step.
 //  - B10 first run: main shows a centred empty state (open project, recent folders, installed agents), no composer.
 //  - B11 dead controls: no panel toggle, the header … is a real menu (rename, close), settings lists only real panes.
 //  - B13 layout: at the 960×600 minimum the right panel floats over main instead of squeezing it; it has ✕.

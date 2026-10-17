@@ -1,5 +1,5 @@
-// How composer text gets into an agent's TUI. See docs/PRD.md §4 F1.
-// Evidence for every constant below: docs/spikes/send-protocol.md (Claude Code 2.1.296, Codex 0.142.5).
+// How composer text gets into an agent's TUI. See docs/PRD.md §6.9.
+// Evidence for every constant below: PRD §6.9 (Claude Code 2.1.296, Codex 0.142.5).
 // Pure and synchronous: this file only decides WHAT to write; send-executor.ts performs it.
 
 import type { AgentKind } from './types'

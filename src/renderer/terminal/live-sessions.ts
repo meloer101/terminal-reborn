@@ -1,6 +1,6 @@
 // Sessions whose processes kept running in the pty daemon while this window was not there (the app was quit, or
 // the window reloaded). Asked once at startup; each such session's terminal reattaches instead of spawning, and
-// nothing is resumed or restarted on top of a process that is still alive (docs/spikes/pty-daemon.md §6).
+// nothing is resumed or restarted on top of a process that is still alive (PRD §6.8).
 import { create } from 'zustand'
 import type { LivePtySession } from '@shared/ipc'
 import type { SessionId } from '@shared/types'

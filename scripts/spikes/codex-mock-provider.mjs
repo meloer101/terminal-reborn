@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 // A tiny local "Responses API" for driving the REAL Codex CLI without a working model provider
-// (docs/spikes/codex.md: the user's provider answered 503 for every model). Codex is pointed at it per
+// (PRD §6.7: the user's provider answered 503 for every model). Codex is pointed at it per
 // launch with -c (nothing is written to ~/.codex); the model's behaviour is scripted from the prompt:
 //   "RUN: <shell command>"  -> the model calls the shell tool once with that command, then says DONE
 //   "REPLY: <text>"         -> the model answers <text>

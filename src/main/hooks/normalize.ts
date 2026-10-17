@@ -1,7 +1,7 @@
 // Raw agent hook payload -> normalized AgentEvent / PendingPrompt parts (PRD §3, F3).
 // Pure: no Electron, no I/O. Field names follow the Claude Code hooks reference and the payloads
-// captured in docs/spikes/hooks.md (see ./fixtures.ts). Codex (0.142.5) payloads follow its hooks reference and
-// the captures in docs/spikes/codex.md (see ./codex-fixtures.ts); they are mapped onto Claude's tool vocabulary
+// captured in PRD §6.6 (see ./fixtures.ts). Codex (0.142.5) payloads follow its hooks reference and
+// the captures in PRD §6.7 (see ./codex-fixtures.ts); they are mapped onto Claude's tool vocabulary
 // (Bash, Edit/Write, AskUserQuestion) so the status, prompt-bar and permission code stays agent-agnostic.
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'

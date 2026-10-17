@@ -1,4 +1,4 @@
-// The hook endpoint when the pty daemon serves the hook socket (docs/spikes/pty-daemon.md §8): the socket and its
+// The hook endpoint when the pty daemon serves the hook socket (PRD §6.8): the socket and its
 // token belong to the daemon and outlive app runs; the app only keeps the Claude `--settings` file next to them
 // (a stable path, so agents launched by an earlier run keep finding it) and checks that the socket answers.
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'

@@ -1,4 +1,4 @@
-// The daemon's hook endpoint (docs/spikes/pty-daemon.md §8). Agents keep TR_HOOK_SOCK / TR_HOOK_TOKEN for life, so
+// The daemon's hook endpoint (PRD §6.8). Agents keep TR_HOOK_SOCK / TR_HOOK_TOKEN for life, so
 // the socket lives with the daemon (stable path, persisted token) rather than with an app run. A hook for a session
 // the app is attached to is relayed to the app, which turns it into events (src/main/hooks); otherwise it is answered
 // at once (the agent is never slowed) and kept in the session's journal for the next attach.

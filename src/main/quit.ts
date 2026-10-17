@@ -1,5 +1,5 @@
 // Quit policy: ⌘Q, the app menu, the Dock menu and logout all arrive as `before-quit`. With the pty daemon the
-// sessions keep running and nothing is asked (docs/spikes/pty-daemon.md §7). Without it (fallback host), running or
+// sessions keep running and nothing is asked (PRD §6.8). Without it (fallback host), running or
 // waiting sessions hold the first quit back until the user confirms; the OS forcing a quit never is.
 // "退出并结束所有会话" (⌥⌘Q) ends every session, after a confirmation while any is active.
 import { app, powerMonitor, type BrowserWindow } from 'electron'

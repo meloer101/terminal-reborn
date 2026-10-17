@@ -1,4 +1,4 @@
-// Main-side appearance effects (docs/tasks/m3-appearance-runtime.md): native theme, window
+// Main-side appearance effects (PRD §4 F7): native theme, window
 // background color (no flash of the wrong color) and sidebar vibrancy for every window.
 import { app, BrowserWindow, nativeTheme } from 'electron'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'

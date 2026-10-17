@@ -1,4 +1,4 @@
-// The pty daemon (docs/spikes/pty-daemon.md): a detached plain-Node process (the app binary with
+// The pty daemon (PRD §6.8): a detached plain-Node process (the app binary with
 // ELECTRON_RUN_AS_NODE=1) that owns every PTY, so agents keep running when the app quits and a relaunch
 // reattaches to them. One app connects at a time over a token-checked Unix socket (./wire.ts).
 //   usage: pty-daemon.js --dir <userData>/daemon --socket <path>   (userData is the parent of --dir)

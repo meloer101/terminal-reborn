@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 // Throwaway spike harness: run a real CLI in a PTY, mirror it in @xterm/headless,
-// and expose the rendered screen. Not shipped; see docs/spikes/send-protocol.md.
+// and expose the rendered screen. Not shipped; see PRD §6.9.
 import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'

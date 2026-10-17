@@ -11,7 +11,7 @@ A macOS terminal for running many CLI coding agents in parallel.
 - **真正的输入栏**：可以选中删除、中文输入法安全、按会话保存草稿
 - **状态侧栏**：每个 agent 在做什么、哪个在等你，一眼可见；权限确认和选项一键作答
 - **外观**：英文和中文字体分别设置，背景、主题、浅色模式
-- 规划中 / Planned：Worktree 全链路（一步开新任务、本地合并前预检冲突、冲突交给 agent 解决）、带 agent 状态的 Git 图谱。见 [路线图](docs/PRD.md#8-开发路线图)
+- 规划中 / Planned：Worktree 全链路（一步开新任务、本地合并前预检冲突、冲突交给 agent 解决）、带 agent 状态的 Git 图谱。见 [路线图](docs/ROADMAP.md)
 
 It keeps each agent's native TUI and adds a real text editor for prompts, an at-a-glance status sidebar with one-click answers, the full worktree lifecycle with local merge, a git graph annotated with agent status, and deep appearance customization with separate Latin/CJK fonts.
 
@@ -27,7 +27,7 @@ npm run test:e2e   # 构建并运行 Electron 冒烟测试 / build + Electron sm
 npm run dist       # 打包 dmg + zip（arm64 + x64）到 release/ / build installers into release/
 ```
 
-文档 / Docs：[PRD 与路线图](docs/PRD.md) · [产品简报](docs/product/product-brief.md) · [竞品调研](docs/research/2026-10-13-competitive-research.md) · [参与贡献](CONTRIBUTING.md)
+文档 / Docs：[PRD（产品要做成什么样）](docs/PRD.md) · [路线图与进度](docs/ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
 ## 安装 / Install
 
@@ -51,7 +51,7 @@ xattr -cr "/Applications/Terminal Reborn.app"
 有新版本时应用会提示一次，点击通知打开发布页；它不会自动下载或安装，也没有任何遥测。
 When a newer release exists the app shows one notification that opens the release page; nothing is downloaded or installed automatically, and there is no telemetry.
 
-维护者发版流程见 [docs/releasing.md](docs/releasing.md)。 Maintainers: see [docs/releasing.md](docs/releasing.md).
+维护者发版流程见 [CONTRIBUTING](CONTRIBUTING.md#维护者发版)。 Maintainers: see [CONTRIBUTING](CONTRIBUTING.md#维护者发版).
 
 ## License
 
