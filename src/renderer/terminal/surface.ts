@@ -19,6 +19,8 @@ export interface TerminalAppearance {
    * (`allowTransparency`). Optional, defaults to 1 (opaque).
    */
   backgroundAlpha?: number
+  /** xterm's screen reader mode: an accessible, live-announced copy of the output (B18). */
+  screenReader?: boolean
 }
 
 export interface TerminalSurface extends Disposable {

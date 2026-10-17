@@ -12,8 +12,10 @@ describe('toTerminalAppearance', () => {
       fontSize: 16,
       lineHeight: 1.4,
       ligatures: true,
-      backgroundAlpha: 1
+      backgroundAlpha: 1,
+      screenReader: false
     })
+    expect(toTerminalAppearance({ ...base, screenReader: true }).screenReader).toBe(true)
   })
 })
 

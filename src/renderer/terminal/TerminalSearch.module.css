@@ -1,0 +1,41 @@
+/* Find bar (B18): floats at the terminal's top right, above the scrollbar. */
+.bar {
+  position: absolute;
+  top: var(--space-8);
+  right: var(--space-16);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  cursor: default;
+  user-select: none;
+}
+
+.input {
+  width: 200px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-body);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.count {
+  min-width: 48px;
+  padding-right: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  text-align: right;
+  white-space: nowrap;
+}

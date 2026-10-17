@@ -21,7 +21,8 @@ export function toTerminalAppearance(a: AppearanceSettings): TerminalAppearance 
     fontSize: a.fontSize,
     lineHeight: a.lineHeight,
     ligatures: a.ligatures,
-    backgroundAlpha: terminalBackgroundAlpha(a)
+    backgroundAlpha: terminalBackgroundAlpha(a),
+    screenReader: a.screenReader
   }
 }
 

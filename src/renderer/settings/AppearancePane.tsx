@@ -113,6 +113,13 @@ export function AppearancePane({
             <Toggle label="侧栏毛玻璃" checked={appearance.sidebarVibrancy} onChange={(sidebarVibrancy) => update({ sidebarVibrancy })} />
           </Row>
         </Section>
+
+        <Section title="辅助功能">
+          <Row label="读屏模式" id="screenReader">
+            <Toggle label="读屏模式" checked={appearance.screenReader} onChange={(screenReader) => update({ screenReader })} />
+          </Row>
+          <p className={styles.hint}>让 VoiceOver 朗读终端输出。会稍微增加渲染开销。</p>
+        </Section>
       </div>
 
       <div className={styles.previewColumn}>

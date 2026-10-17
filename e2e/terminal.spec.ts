@@ -4,6 +4,7 @@ import { launchApp } from './launch'
 interface Hook {
   readScreen(sessionId: string, scrollbackLines?: number): string
   size(sessionId: string): { cols: number; rows: number } | null
+  info(sessionId: string): { renderer: 'webgl' | 'dom' } | null
 }
 const FIRST = 's-cookie'
 const SECOND = 's-perf'
@@ -105,6 +106,58 @@ test('resizing the window reflows the terminal', async () => {
   await run(FIRST, 'clear; echo cols-$(tput cols)')
   const cols = (await size(FIRST))?.cols
   await expect.poll(() => screen(FIRST), { timeout: 10_000 }).toMatch(new RegExp(`^cols-${cols}$`, 'm'))
+})
+
+test('⌘F finds in the terminal: count, case, ↵ steps, Esc returns the keyboard', async () => {
+  await run(FIRST, "clear; printf 'needle one\\nNeedle two\\nneedle three\\n'; echo find-ready")
+  await expect.poll(() => screen(FIRST), { timeout: 10_000 }).toMatch(/^find-ready$/m)
+
+  await page.keyboard.press('Meta+f')
+  const bar = page.getByTestId('terminal-search')
+  const input = bar.getByRole('textbox', { name: '在终端中查找' })
+  await expect(input).toBeFocused()
+  await input.fill('needle')
+  // `clear` wiped the command line, so only the three printed lines match.
+  await expect(bar).toContainText(/\/3$/)
+  await bar.getByRole('button', { name: '区分大小写' }).click()
+  await expect(bar).toContainText(/\/2$/)
+  const first = await bar.textContent()
+  await input.press('Enter')
+  await expect(bar).toContainText(/\/2$/)
+  expect(await bar.textContent()).not.toBe(first)
+  await input.fill('no-such-text')
+  await expect(bar).toContainText('无结果')
+  for (const theme of ['dark', 'light'] as const) {
+    // Match colors are read when searching, so switch the theme first.
+    await setTheme(theme)
+    await input.fill('')
+    await input.fill('needle')
+    await page.waitForTimeout(200)
+    await page.screenshot({ path: `test-results/terminal-find-${theme}.png` })
+  }
+  await setTheme('dark')
+
+  await input.press('Escape')
+  await expect(bar).toHaveCount(0)
+  await expect(page.locator(`[data-region="terminal"] [data-session-id="${FIRST}"] .xterm-helper-textarea`)).toBeFocused()
+})
+
+test('a lost WebGL context falls back to the DOM renderer and comes back when the terminal is shown again', async () => {
+  const renderer = () =>
+    page.evaluate((id) => (globalThis as unknown as { __trTerminals: Hook }).__trTerminals.info(id)?.renderer, FIRST)
+  test.skip((await renderer()) !== 'webgl', 'no WebGL in this environment')
+  await page.evaluate((id) => {
+    type Canvas = { getContext(t: string): { getExtension(n: string): { loseContext(): void } | null } | null }
+    const doc = (globalThis as unknown as { document: { querySelectorAll(s: string): Iterable<Canvas> } }).document
+    // Only the WebGL addon's canvas has a webgl2 context; asking a 2d canvas for one returns null.
+    for (const canvas of doc.querySelectorAll(`[data-region="terminal"] [data-session-id="${id}"] canvas`)) {
+      canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext()
+    }
+  }, FIRST)
+  await expect.poll(renderer).toBe('dom')
+  await page.getByText('结算页性能优化').click()
+  await page.getByText('Cookie 会话迁移').first().click()
+  await expect.poll(renderer).toBe('webgl')
 })
 
 test('a 10 MB flood does not freeze the UI', async () => {

@@ -9,6 +9,8 @@ import { launchKind, useWorkspace } from '../state/workspace'
 import { useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
+import { closeTerminalSearch } from './search-store'
+import { TerminalSearch } from './TerminalSearch'
 import styles from './TerminalArea.module.css'
 
 interface PaneProps {
@@ -176,6 +178,9 @@ export function TerminalArea() {
     pruneTerminals(new Set(sessions.map((s) => s.id)))
   }, [sessions])
 
+  // A find belongs to one terminal's buffer.
+  useEffect(() => closeTerminalSearch(), [activeSessionId])
+
   return (
     <div className={styles.area}>
       {sessions.map((session) => (
@@ -191,6 +196,7 @@ export function TerminalArea() {
           generation={requests[session.id]?.generation ?? 0}
         />
       ))}
+      {activeSessionId && <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon, type ISearchOptions, type ISearchResultChangeEvent } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -32,6 +33,16 @@ const SCROLLBACK_LINES = 10_000
 /** Marks the one-row wheel events we dispatch ourselves, so the wheel handler lets xterm report them. */
 const REPLAYED_WHEEL = Symbol('replayed-wheel')
 const FONT_LOAD_TIMEOUT_MS = 1500
+/** A terminal whose WebGL context is lost this often stays on the DOM renderer for good. */
+const WEBGL_MAX_LOSSES = 3
+
+export interface FindOptions {
+  caseSensitive: boolean
+  /** previous = towards older output (up), next = towards newer output (down). */
+  direction: 'previous' | 'next'
+  /** Typing: grow the current match instead of jumping past it. */
+  incremental?: boolean
+}
 
 export interface XtermSurfaceOptions {
   /** false = always the DOM renderer (the settings preview, so it never shares the WebGL glyph atlas). */
@@ -53,6 +64,11 @@ export class XtermSurface implements TerminalSurface {
   private readonly serializeAddon = new SerializeAddon()
   private webgl: WebglAddon | null = null
   private webglUnavailable = false
+  /** The WebGL context was lost: DOM renderer until the terminal is shown again (B18). */
+  private webglLost = false
+  private webglLosses = 0
+  private readonly searchAddon = new SearchAddon({ highlightLimit: 1000 })
+  private findCaseSensitive = false
   private visible = true
   private disposed = false
   private appearance: TerminalAppearance = { ...DEFAULT_APPEARANCE }
@@ -78,6 +94,7 @@ export class XtermSurface implements TerminalSurface {
     })
     this.term.loadAddon(this.fitAddon)
     this.term.loadAddon(this.serializeAddon)
+    this.term.loadAddon(this.searchAddon)
     this.term.loadAddon(new Unicode11Addon())
     this.term.unicode.activeVersion = '11'
     // Plain clicks open links through window.open, which main routes to the default browser.
@@ -175,6 +192,8 @@ export class XtermSurface implements TerminalSurface {
    */
   setVisible(visible: boolean): void {
     this.visible = visible
+    // A context lost while drawing (GPU reset, too many contexts) gets another chance when the terminal is shown.
+    if (visible) this.webglLost = false
     this.syncRenderer()
     if (visible) {
       this.fit()
@@ -200,7 +219,7 @@ export class XtermSurface implements TerminalSurface {
     if (this.disposed || !this.term.element) return
     // WebGL paints italic/dim/underlined cells with an opaque background when the surface is
     // transparent (research §2.2, xterm #6116), so transparent terminals use the DOM renderer.
-    const wantWebgl = this.visible && !this.webglUnavailable && !this.isTransparent()
+    const wantWebgl = this.visible && !this.webglUnavailable && !this.webglLost && !this.isTransparent()
     if (wantWebgl && !this.webgl) this.loadWebgl()
     else if (!wantWebgl && this.webgl) this.unloadWebgl()
   }
@@ -209,8 +228,11 @@ export class XtermSurface implements TerminalSurface {
     try {
       const addon = new WebglAddon()
       addon.onContextLoss(() => {
-        // Per-terminal fallback: this terminal drops to the DOM renderer, others keep WebGL.
-        this.webglUnavailable = true
+        // Per-terminal fallback: this terminal drops to the DOM renderer (others keep WebGL) and retries when it is
+        // next shown; after repeated losses it stays on the DOM renderer.
+        this.webglLosses += 1
+        if (this.webglLosses >= WEBGL_MAX_LOSSES) this.webglUnavailable = true
+        else this.webglLost = true
         this.unloadWebgl()
       })
       this.term.loadAddon(addon)
@@ -373,6 +395,7 @@ export class XtermSurface implements TerminalSurface {
       this.term.options.fontFamily = buildFontStack(cur)
       this.term.options.allowTransparency = this.isTransparent()
       this.term.options.theme = this.buildTheme()
+      this.term.options.screenReaderMode = cur.screenReader === true
       return
     }
 
@@ -383,6 +406,7 @@ export class XtermSurface implements TerminalSurface {
       this.term.options.lineHeight = cur.lineHeight
       this.term.options.allowTransparency = this.isTransparent()
       this.term.options.theme = this.buildTheme()
+      this.term.options.screenReaderMode = cur.screenReader === true
       this.syncLigatures()
       this.syncRenderer()
       // Glyph metrics changed: rebuild the atlas, then refit so cols/rows (and the PTY) follow.
@@ -391,6 +415,40 @@ export class XtermSurface implements TerminalSurface {
     }
     if (fontsChanged) void this.loadFonts().then(apply)
     else apply()
+  }
+
+  /** Finds `query` in the buffer and scrolls to it, highlighting every match (B18). Returns whether it matched. */
+  find(query: string, options: FindOptions): boolean {
+    if (query === '') {
+      this.searchAddon.clearDecorations()
+      return false
+    }
+    // The addon only recounts matches when the query changes, not when the case option does.
+    if (this.findCaseSensitive !== options.caseSensitive) this.searchAddon.clearDecorations()
+    this.findCaseSensitive = options.caseSensitive
+    const style = getComputedStyle(document.documentElement)
+    const color = (name: string): string => style.getPropertyValue(name).trim()
+    const search: ISearchOptions = {
+      caseSensitive: options.caseSensitive,
+      incremental: options.incremental ?? false,
+      decorations: {
+        matchBackground: color('--term-find-match'),
+        activeMatchBackground: color('--term-find-active'),
+        matchOverviewRuler: color('--term-find-match'),
+        activeMatchColorOverviewRuler: color('--term-find-active')
+      }
+    }
+    return options.direction === 'next' ? this.searchAddon.findNext(query, search) : this.searchAddon.findPrevious(query, search)
+  }
+
+  /** Match position and count of the last find (resultIndex -1 when there are too many to count). */
+  onFindResults(listener: (results: ISearchResultChangeEvent) => void): Disposable {
+    return this.searchAddon.onDidChangeResults(listener)
+  }
+
+  clearFind(): void {
+    this.searchAddon.clearDecorations()
+    this.term.clearSelection()
   }
 
   /** Test/debug view of what the terminal is actually running with. */

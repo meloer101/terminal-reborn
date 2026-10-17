@@ -21,6 +21,8 @@ export interface AppearanceSettings {
   terminalOpacity: number
   /** macOS sidebar vibrancy (blur) behind the sidebar. */
   sidebarVibrancy: boolean
+  /** Terminal screen reader mode (VoiceOver reads the output). */
+  screenReader: boolean
 }
 
 export interface AppSettings {
@@ -44,7 +46,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     lineHeight: 1,
     ligatures: false,
     terminalOpacity: 1,
-    sidebarVibrancy: false
+    sidebarVibrancy: false,
+    screenReader: false
   }
 }
 
@@ -77,7 +80,8 @@ function appearance(value: unknown): AppearanceSettings {
     lineHeight: Math.round(num(v.lineHeight, d.lineHeight, LIMITS.lineHeight) * 100) / 100,
     ligatures: typeof v.ligatures === 'boolean' ? v.ligatures : d.ligatures,
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
-    sidebarVibrancy: typeof v.sidebarVibrancy === 'boolean' ? v.sidebarVibrancy : d.sidebarVibrancy
+    sidebarVibrancy: typeof v.sidebarVibrancy === 'boolean' ? v.sidebarVibrancy : d.sidebarVibrancy,
+    screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader
   }
 }
 
