@@ -20,6 +20,10 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* In the drag region macOS takes the double-click (window zoom) and it never reaches the page, so the title is
+     not draggable; the space after it still is. Playwright's CDP clicks skip the region, so e2e cannot see this. */
+  -webkit-app-region: no-drag;
+  cursor: default;
 }
 
 .titleInput {
