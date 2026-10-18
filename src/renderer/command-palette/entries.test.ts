@@ -44,7 +44,7 @@ describe('buildEntries', () => {
   it('lists sessions in sidebar order (project, then store order), then actions', () => {
     const all = buildEntries(input()).map((e) => e.id)
     expect(all.slice(0, 4)).toEqual(['session:idle-main', 'session:running-old', 'session:needs', 'session:running-new'])
-    expect(all[4]).toBe('action:new-claude')
+    expect(all[4]).toBe('action:new-session')
   })
 
   it('numbers the rows the sidebar shows with ⌘1–⌘9; folded projects keep their sessions but no number', () => {
@@ -76,8 +76,9 @@ describe('buildEntries', () => {
 
   it('targets the active session’s project for new sessions', () => {
     const titles = buildActionEntries(input({ activeSessionId: 'running-new' })).filter((e) => e.id.startsWith('action:new-'))
-    expect(titles.map((e) => e.subtitle)).toEqual(['terminal-reborn', 'terminal-reborn', 'terminal-reborn'])
-    expect(titles.map((e) => e.title)).toEqual(['新建 Claude Code 会话', '新建 Codex 会话', '新建终端'])
+    expect(titles.map((e) => e.subtitle)).toEqual(['terminal-reborn', 'terminal-reborn', 'terminal-reborn', 'terminal-reborn'])
+    expect(titles.map((e) => e.title)).toEqual(['新建会话…', '新建 Claude Code 会话', '新建 Codex 会话', '新建终端'])
+    expect(titles[0]!.shortcut).toBe('CmdOrCtrl+N')
   })
 
   it('falls back to the first project, and omits new-session actions without any project', () => {

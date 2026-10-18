@@ -9,6 +9,7 @@ import { matchFields, type MatchField, type Range } from './match'
 export type PaletteSection = 'sessions' | 'actions'
 
 export type ActionId =
+  | 'new-session'
   | 'new-claude'
   | 'new-codex'
   | 'new-shell'
@@ -104,7 +105,7 @@ export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
 
 /** The shortcut that runs the same command without the palette (@shared/shortcuts). */
 const ACTION_SHORTCUT: Partial<Record<ActionId, string>> = {
-  'new-claude': SHORTCUTS['new-session'],
+  'new-session': SHORTCUTS['new-session'],
   'open-project': SHORTCUTS['open-project'],
   'toggle-overview': SHORTCUTS['toggle-overview'],
   'toggle-sidebar': SHORTCUTS['toggle-sidebar'],
@@ -141,6 +142,7 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
   const entries: PaletteEntry[] = []
   if (project) {
     entries.push(
+      action('new-session', '新建会话…', 'plus', 'new session worktree branch xinjian huihua', project.name),
       action('new-claude', '新建 Claude Code 会话', 'plus', 'new claude code session', project.name),
       action('new-codex', '新建 Codex 会话', 'plus', 'new codex session', project.name),
       action('new-shell', '新建终端', 'plus', 'new shell terminal session zhongduan', project.name)

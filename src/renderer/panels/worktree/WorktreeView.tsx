@@ -7,7 +7,7 @@ import { Ellipsis, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { ProjectId, Session, WorktreeId } from '@shared/types'
-import { openNewSessionMenu } from '../../state/session-actions'
+import { newSessionInProject } from '../../state/session-actions'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
 import { StatusGlyph } from '../../ui/StatusGlyph'
@@ -110,8 +110,8 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
         <IconButton
           label="新建会话"
           title="新建会话 · ⌘N"
-          aria-haspopup="menu"
-          onClick={(e) => void openNewSessionMenu(projectId, e.currentTarget)}
+          aria-haspopup="dialog"
+          onClick={() => newSessionInProject(projectId)}
         >
           <Plus size={16} strokeWidth={1.75} />
         </IconButton>

@@ -20,6 +20,12 @@
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-window: 10px;
+  /* Glass overlays (PRD §5, Figma 15): sheet 16 · its menus 12 · their primary button 8. */
+  --radius-sheet: 16px;
+  --radius-popover: 12px;
+  --radius-button-glass: 8px;
+  --glass-scrim-blur: 4px;
+  --glass-blur: 28px;
 
   /* Chrome dimensions (Screens 01–08) */
   --sidebar-width: 264px;
@@ -131,6 +137,19 @@
   --card-idle-meta: #bebebe;
   /* Behind the overview's session overlay (Figma overlay/scrim); covers the whole window. */
   --overlay-scrim: #00000099;
+  /* Solid menus over a sheet when transparency is reduced (Figma bg/popover = gray/750). */
+  --bg-popover: #222222;
+  /* Glass overlay material (PRD §5 浮层玻璃材质): the new-session sheet and its menus. */
+  --glass-scrim: #00000073;
+  --glass-sheet: #1717178c;
+  --glass-menu: #212121b8;
+  --glass-highlight: inset 0 1px 0 #ffffff14;
+  --glass-segment-selected: #ffffff24;
+  --glass-primary-bg: #ffffff29;
+  --glass-primary-fg: #ededed;
+  --shadow-glass: 0 24px 64px #0000008c, 0 4px 12px #00000059;
+  --shadow-glass-menu: 0 16px 40px #00000080;
+  --shadow-glass-button: 0 2px 8px #00000059;
 }
 
 /* Light — applied via data-theme (see renderer/theme.ts), which follows the system by default */
@@ -204,4 +223,15 @@
   --card-idle-hover: #e9e9e9;
   --card-idle-meta: #5b5b5b;
   --overlay-scrim: #00000047;
+  --bg-popover: #ffffff;
+  --glass-scrim: #ffffff59;
+  --glass-sheet: #ffffff99;
+  --glass-menu: #ffffffb8;
+  --glass-highlight: inset 0 1px 0 #ffffffb3;
+  --glass-segment-selected: #ffffffe6;
+  --glass-primary-bg: #121212c7;
+  --glass-primary-fg: #ffffff;
+  --shadow-glass: 0 24px 64px #00000029, 0 4px 12px #00000014;
+  --shadow-glass-menu: 0 16px 40px #00000024;
+  --shadow-glass-button: 0 2px 8px #0000002e;
 }

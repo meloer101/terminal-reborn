@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, type KeyboardEvent } from 'react'
 import { Folder, LayoutList, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
-import { openNewSessionMenu, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
+import { newSessionInProject, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
 import type { MenuAnchor } from '../ui/menu'
 import { NavItem } from './NavItem'
@@ -101,7 +101,7 @@ export function Sidebar() {
               collapsed={group.collapsed}
               attention={group.attention}
               onToggle={() => toggleProjectCollapsed(group.id)}
-              onNewSession={(anchor) => void openNewSessionMenu(group.id, anchor)}
+              onNewSession={() => newSessionInProject(group.id)}
               onMenu={(anchor) => void openProjectMenu(group.id, anchor)}
             />
             {group.rows.map((row) => (
@@ -115,7 +115,7 @@ export function Sidebar() {
               />
             ))}
             {!group.collapsed && group.sessionCount === 0 && (
-              <button type="button" className={styles.newSession} aria-haspopup="menu" onClick={(e) => void openNewSessionMenu(group.id, e.currentTarget)}>
+              <button type="button" className={styles.newSession} aria-haspopup="dialog" onClick={() => newSessionInProject(group.id)}>
                 <Plus {...ICON} />
                 新建会话
               </button>

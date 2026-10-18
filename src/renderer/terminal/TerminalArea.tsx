@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId } from '@shared/types'
+import { useWorktreeCreations } from '../new-session/creation'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
 import { useBorrowedTerminal } from './borrow'
@@ -169,6 +170,8 @@ export function TerminalArea() {
 
   const requests = useStartRequests((s) => s.requests)
   const live = useLiveSessions((s) => s.live)
+  // A session whose new worktree is still being created (or failed) has no folder to start in yet (PRD F4).
+  const waitingForWorktree = useWorktreeCreations((s) => s.held)
   useSessionStartup()
   const focusRequest = useWorkspace((s) => s.focusRequest)
   useFocusActiveTerminal(activeSessionId, focusRequest)
@@ -190,7 +193,7 @@ export function TerminalArea() {
           cwd={worktrees.find((w) => w.id === session.worktreeId)?.path ?? window.tr.homeDir}
           agent={launchKind(session)}
           active={session.id === activeSessionId}
-          held={session.phase === 'not-started' && !live[session.id]}
+          held={(session.phase === 'not-started' && !live[session.id]) || waitingForWorktree[session.id] !== undefined}
           live={live[session.id] !== undefined}
           resumeAgentSessionId={requests[session.id]?.resumeAgentSessionId}
           generation={requests[session.id]?.generation ?? 0}

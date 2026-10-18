@@ -11,6 +11,7 @@ import type { AgentKind, SessionId } from './types'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
+import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -178,6 +179,10 @@ export interface GitWorktreesApi {
   unwatch(root: string): void
   /** The project at `root` gained, lost or moved a worktree or branch. */
   onChanged(listener: (root: string) => void): Unsubscribe
+  /** What the new-session sheet needs about the project at `root` (PRD F4); `repo: false` outside a git repository. */
+  newSessionInfo(root: string): Promise<NewSessionInfo>
+  /** Fetches, then `git worktree add` on a new branch and copies the `.worktreeinclude` files (PRD F4). */
+  create(request: WorktreeCreateRequest): Promise<WorktreeCreateResult>
 }
 
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
@@ -364,5 +369,9 @@ export const IPC = {
   gitWorktreesWatch: 'git-worktrees:watch',
   gitWorktreesUnwatch: 'git-worktrees:unwatch',
   /** main → renderer, payload root */
-  gitWorktreesChanged: 'git-worktrees:changed'
+  gitWorktreesChanged: 'git-worktrees:changed',
+  /** invoke(root) → NewSessionInfo */
+  gitWorktreesNewSessionInfo: 'git-worktrees:new-session-info',
+  /** invoke(WorktreeCreateRequest) → WorktreeCreateResult */
+  gitWorktreesCreate: 'git-worktrees:create'
 } as const

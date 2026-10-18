@@ -13,6 +13,8 @@ export type LaunchIssue =
   | { kind: 'spawn-failed'; message: string }
   /** The agent process ended on its own with this exit code. */
   | { kind: 'agent-exit'; code: number }
+  /** The new-session sheet's worktree could not be created (PRD F4); nothing was started. */
+  | { kind: 'worktree-failed'; message: string }
 
 export const useLaunchIssues = create<{ issues: Record<SessionId, LaunchIssue | undefined> }>(() => ({ issues: {} }))
 
