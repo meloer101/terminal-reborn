@@ -1,4 +1,4 @@
-# Terminal Reborn — agent guide
+# Wavi — agent guide
 
 macOS terminal for running many CLI coding agents (Claude Code, Codex) in parallel. Electron + xterm.js + node-pty + React 19 + zustand, built with electron-vite.
 
@@ -11,7 +11,8 @@ macOS terminal for running many CLI coding agents (Claude Code, Codex) in parall
 ## Commands
 
 ```bash
-npm run dev        # app with hot reload
+npm run dev        # app with hot reload (own "Wavi Dev" profile, never the installed app's)
+npm run app:install  # /Applications/Wavi.app linked to this checkout; `npm run build` updates it
 npm run check      # typecheck + lint + vitest — must pass before every commit
 npm run test:e2e   # build + Playwright Electron smoke test
 ```

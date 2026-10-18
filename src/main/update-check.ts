@@ -105,7 +105,7 @@ export async function checkLatestRelease(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetchImpl(releasesApiUrl(repo), {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'terminal-reborn-update-check' },
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'wavi-update-check' },
       signal: controller.signal
     })
     if (!response.ok) return null

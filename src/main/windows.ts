@@ -8,6 +8,7 @@ import { clearActivity } from './activity'
 import { releaseSessionsOf } from './pty'
 import { isQuitting, quitEndingSessions } from './quit'
 import { getSettings, updateSettings } from './settings'
+import { isDeveloperBuild } from './source-checkout'
 
 let mainWindow: BrowserWindow | null = null
 import { restoreBounds, saveBounds } from './window-state'
@@ -45,7 +46,7 @@ function load(win: BrowserWindow): void {
 export function createMainWindow(): BrowserWindow {
   const min = { minWidth: 960, minHeight: 600 }
   const restored = restoreBounds({ width: 1440, height: 900 }, min)
-  const win = new BrowserWindow({ ...baseOptions(), ...restored.options, ...min, title: 'Terminal Reborn' })
+  const win = new BrowserWindow({ ...baseOptions(), ...restored.options, ...min, title: app.name })
   saveBounds(win, restored)
   mainWindow = win
   win.on('closed', () => {
@@ -96,7 +97,7 @@ export function showMainWindow(): BrowserWindow {
   return win
 }
 
-/** Dev builds only (packaged builds have neither). */
+/** Dev runs and the linked app only (release builds have neither). */
 const DEV_ITEM_LABEL: Record<'reload' | 'toggleDevTools', string> = { reload: '重新载入', toggleDevTools: '开发者工具' }
 
 /** Sends a menu command to the window it was picked in (or the main window); the renderer runs it. */
@@ -119,7 +120,7 @@ function stepFont(step: FontSizeStep): void {
  * the Edit menu); font size is a setting, changed here.
  */
 export function installAppMenu(): void {
-  const devItems: MenuItemConstructorOptions[] = viewMenuItems(app.isPackaged)
+  const devItems: MenuItemConstructorOptions[] = viewMenuItems(!isDeveloperBuild())
     .filter((item) => item !== 'togglefullscreen')
     .map((item) => (item === 'separator' ? { type: 'separator' } : { role: item, label: DEV_ITEM_LABEL[item] }))
   const template: MenuItemConstructorOptions[] = [

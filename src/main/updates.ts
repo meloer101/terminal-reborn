@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { IPC, type UpdateInfo } from '@shared/ipc'
+import { isDeveloperBuild } from './source-checkout'
 import { checkLatestRelease, parseRepository, type FetchLike, type Repo } from './update-check'
 
 const FIRST_CHECK_DELAY_MS = 10_000
@@ -57,7 +58,7 @@ function notify(update: UpdateInfo): void {
   notified = update.version
   void rememberNotified(update.version)
   const notification = new Notification({
-    title: `Terminal Reborn ${update.version} 已发布`,
+    title: `${app.name} ${update.version} 已发布`,
     body: '点击查看更新内容并下载。',
     silent: true
   })
@@ -75,8 +76,8 @@ async function checkAndNotify(): Promise<void> {
 export function registerUpdateHandlers(): void {
   ipcMain.handle(IPC.appCheckForUpdates, () => checkForUpdates())
 
-  // Only packaged builds poll in the background; dev runs and e2e never touch the network.
-  if (!app.isPackaged || process.env.TR_DISABLE_UPDATE_CHECK) return
+  // Only release builds poll in the background; dev runs, the linked app and e2e never touch the network.
+  if (isDeveloperBuild() || process.env.TR_DISABLE_UPDATE_CHECK) return
   setTimeout(() => {
     void checkAndNotify()
     setInterval(() => void checkAndNotify(), CHECK_INTERVAL_MS).unref()

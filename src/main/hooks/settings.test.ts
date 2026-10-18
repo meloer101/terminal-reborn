@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildClaudeHookSettings, CLAUDE_HOOK_EVENTS, hookCommand } from './settings'
 
-const script = '/Applications/Terminal Reborn.app/Contents/Resources/hooks/tr-hook.sh'
+const script = '/Applications/Wavi.app/Contents/Resources/hooks/tr-hook.sh'
 
 describe('buildClaudeHookSettings', () => {
   const settings = buildClaudeHookSettings(script)

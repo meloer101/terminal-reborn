@@ -10,8 +10,8 @@ import { join } from 'node:path'
 
 const version = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version
 const appBundle =
-  process.env.TR_PACKAGED_APP ?? join('release', version, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Terminal Reborn.app')
-const executable = join(appBundle, 'Contents', 'MacOS', 'Terminal Reborn')
+  process.env.TR_PACKAGED_APP ?? join('release', version, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Wavi.app')
+const executable = join(appBundle, 'Contents', 'MacOS', 'Wavi')
 const LAB = '/tmp/tr-hooks-lab'
 
 interface Hooks {
@@ -79,7 +79,7 @@ test.afterAll(async () => {
 const screen = (id: string) => page.evaluate((s) => (globalThis as unknown as Hooks).__trTerminals.readScreen(s, 2000), id)
 
 test('is the packaged build with the right version and resources', async () => {
-  await expect(page).toHaveTitle('Terminal Reborn')
+  await expect(page).toHaveTitle('Wavi')
   const info = await app.evaluate(({ app: electronApp }) => ({
     packaged: electronApp.isPackaged,
     version: electronApp.getVersion(),

@@ -59,7 +59,7 @@ let crashTimes: number[] = []
 let restartTimer: ReturnType<typeof setTimeout> | null = null
 
 function forkUtility(): HostLink {
-  const child = utilityProcess.fork(join(__dirname, 'pty-host.js'), [], { serviceName: 'terminal-reborn-pty-host' })
+  const child = utilityProcess.fork(join(__dirname, 'pty-host.js'), [], { serviceName: 'wavi-pty-host' })
   const self: HostLink = {
     kind: 'utility',
     post: (message) => child.postMessage(message),

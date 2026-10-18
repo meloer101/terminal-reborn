@@ -16,7 +16,7 @@ export function AboutPane() {
     <div className={styles.page}>
       <h1 className={styles.title}>关于</h1>
       <div className={styles.aboutRow}>
-        <span className={styles.aboutName}>Terminal Reborn</span>
+        <span className={styles.aboutName}>Wavi</span>
         <span className={styles.version} data-testid="app-version">
           {window.tr.app.version}
         </span>

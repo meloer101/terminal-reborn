@@ -1,6 +1,6 @@
-# TerminalReborn PRD
+# Wavi PRD
 
-> 版本 v1.10 · 2026-10-17 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.11 · 2026-10-18 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.11 | 2026-10-18 | 产品改名 **Wavi**（appId `dev.wavi.app`，`TERM_PROGRAM=Wavi`）；旧的 “Terminal Reborn” 配置目录在没有守护进程或实例在用时自动改名迁移；`npm run dev` 用独立的 “Wavi Dev” 配置；新增 `npm run app:install`：装进「应用程序」的 Wavi.app 直接运行本仓库的 `out/`，构建后界面自动重新载入、主进程更新时提示重启（§7） |
 | v1.10 | 2026-10-17 | F17 浏览器实现时定下的细节：每个 worktree 一个页面和一个独立的 session 分区，记住 URL 和手机视口（重启后恢复，但从不自动打开新页面）；“发给 Claude”只把错误作为引用放进输入行、不按回车；页面只能在用户刚操作后打开外部网站；地址框只认 http(s)，纯数字 = `http://localhost:<端口>`；打不开时在页面区说明原因；菜单和对话框打开时页面暂时换成截图；控制台计数随页面重新载入清零；F14 先在主进程做了浏览器用的最小版本 |
 | v1.9 | 2026-10-17 | F17 Worktree 视图实现时定下的细节（含开源对照评审后的修正）：名称用分支名（分离时用短提交号）；基线取 `branch.<name>.base`、没有就取 origin 的默认分支 / main / master；“已合并”要求分支自己提交过（reflog），刚建、没提交的标“无新提交”；一键清理只碰没有会话的 worktree，未合并的无会话 worktree 单独成组、只能逐个删；任何 git 检查失败都按“不能删”处理，`--force` 只用于子模块；F4 之前标题行 + 打开现有的新建会话菜单，“合并到 main…”置灰；端口段等端口扫描做好再显示 |
 | v1.8 | 2026-10-17 | F6 / F17 Git 实现时定下的细节：图谱里默认分支固定在最左列；“全部分支”不含 stash；变更视图的标题行上下文是分支名，右侧显示领先 / 落后；在基线分支本身上“已提交”对比它的 upstream；虚拟化改为固定行高的窗口化渲染（不引入 `@tanstack/react-virtual`）；评审后补充：lane 每行向左收拢（分支结束后右侧的线斜移到空出的列，颜色跟着线走），文字列按首页宽度固定；筛选菜单加“隐藏远程分支”；“已提交”的本地基线落后于 origin 时改对比 origin；变更视图里嵌套仓库、超大文件不显示 diff（超大文件可用编辑器打开），未跟踪文件最多列 1000 个；没有 git 时显示提示、不再调用 git |
@@ -45,7 +46,7 @@
 | 会话不丢失 | 关窗口、⌘Q、重启应用都不中断 agent；重启电脑后能接上原对话 |
 | 合并闭环 | 从会话完成 → 审阅 → 本地合并 → 清理 worktree，全程不离开应用 |
 | 性能 | 冷启动 ≤ 2 s；10 个活跃会话时输入延迟 < 16 ms；常驻内存 < 1.5 GB |
-| 作者自用 | 作者日常完全用 TerminalReborn 代替 Terminal / Orca |
+| 作者自用 | 作者日常完全用 Wavi 代替 Terminal / Orca |
 
 ### 1.4 非目标（v1.0 之前不做）
 - 用自绘聊天 GUI 替代 agent 的 TUI（headless / stream-json 路线）
@@ -255,7 +256,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 ### 6.1 进程模型
 ```
 Main（Electron 主进程）
- ├─ 工作区、设置、窗口状态：原子写入的 JSON（~/Library/Application Support/TerminalReborn）
+ ├─ 工作区、设置、窗口状态：原子写入的 JSON（~/Library/Application Support/Wavi；`npm run dev` 用 Wavi Dev）
  ├─ HookBridge：规范化 hook 事件 → 状态机 → 通过 IPC 推送给 renderer
  ├─ GitService：调用 git CLI 子进程（不用 libgit2）
  └─ WorktreeService / Notifications / Dock badge
@@ -347,5 +348,6 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 许可证：**MIT**（与主要借鉴来源兼容）。仓库公开，包含 README（中英文）、CONTRIBUTING，以及第三方许可证清单 `THIRD_PARTY_NOTICES.md`。
 - CI（GitHub Actions）：typecheck · ESLint · Vitest · Playwright（`_electron`）冒烟测试 · electron-builder 打包。
 - 发布：推 `v*` tag 后流水线构建 arm64 和 x64 的 dmg + zip，生成 GitHub Release 草稿；应用每 24 h 检查一次新版本并提示。目前是 ad-hoc 签名，Developer ID 签名、公证和自动更新需要作者的 Apple Developer 账号。发版步骤见 [CONTRIBUTING](../CONTRIBUTING.md)。
+- 本机自用安装：`npm run app:install` 构建一个“链接版” Wavi.app 放进「应用程序」——只有 Electron 和几行入口，运行本仓库的 `out/`（入口通过 `TR_SOURCE_ROOT` 告诉主进程）。它像正式版一样常驻 Dock、重启后还在；更新只需 `npm run build` 或开着 `npm run build:watch`：renderer 变了自动重新载入（有守护进程时，否则先问），main / preload 变了提示重启（会话由守护进程接回）。链接版保留开发菜单、不检查新版本；挪动或删除仓库后失效，改版本号后重跑一次。`npm run dev` 用单独的 “Wavi Dev” 配置，不会抢正式配置的单实例锁和守护进程。
 - 隐私：默认不收集任何遥测数据；崩溃上报为可选项，需用户主动开启。
 - 版本：遵循 SemVer，维护 CHANGELOG。

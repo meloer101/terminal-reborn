@@ -20,7 +20,7 @@ The product must feel like a confident instrument, not a toy.
 
 ## Anti-references
 
-- Orca, Superset, Emdash, Conductor: the generic "dark sidebar + terminal + diff panel" agent-IDE look. The first TerminalReborn draft resembled Orca too closely.
+- Orca, Superset, Emdash, Conductor: the generic "dark sidebar + terminal + diff panel" agent-IDE look. The first Wavi draft (then called Terminal Reborn) resembled Orca too closely.
 - AI-SaaS defaults: purple/blue gradients, glassmorphism, card grids, tiny uppercase eyebrows, neon-on-black "hacker" terminals.
 - Over-decorated dev tools where the theme fights the content.
 

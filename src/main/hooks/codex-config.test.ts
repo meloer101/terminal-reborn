@@ -11,7 +11,7 @@ import {
 } from './codex-config'
 import { prepareCodexHookConfig, requestHooksList } from './codex-probe'
 
-const SCRIPT = '/Applications/Terminal Reborn.app/Contents/Resources/hooks/tr-hook.sh'
+const SCRIPT = '/Applications/Wavi.app/Contents/Resources/hooks/tr-hook.sh'
 const hash = (n: number) => `sha256:${n.toString(16).padStart(64, '0')}`
 
 /** A `hooks/list` result as Codex 0.142.5 answers it (trimmed), with the user's own hooks mixed in. */
@@ -120,7 +120,7 @@ describe('requestHooksList', () => {
     const result = await requestHooksList(server.input, server.output, '/tmp/probe', 1000)
     expect(sessionFlagHashes(result)).toHaveProperty([ALL_KEYS[0]!])
     expect(server.received).toEqual([
-      { id: 1, method: 'initialize', params: { clientInfo: { name: 'terminal-reborn', version: '0' } } },
+      { id: 1, method: 'initialize', params: { clientInfo: { name: 'wavi', version: '0' } } },
       { method: 'initialized' },
       { id: 2, method: 'hooks/list', params: { cwds: ['/tmp/probe'] } }
     ])

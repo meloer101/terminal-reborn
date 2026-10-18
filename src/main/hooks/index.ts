@@ -16,6 +16,7 @@ import { UnknownSessionError } from './server'
 import { buildClaudeHookSettings } from './settings'
 import { StartWatchdog } from './start-watchdog'
 import { HookSupervisor } from './supervisor'
+import { sourceRoot } from '../source-checkout'
 
 export interface AgentLaunchHooks {
   /** TR_SESSION_ID / TR_HOOK_SOCK / TR_HOOK_TOKEN for the PTY environment. */
@@ -49,8 +50,10 @@ let startFailure: HooksHealth = { ok: false, reason: 'server-unavailable', detai
 
 const DECISIONS: ReadonlySet<unknown> = new Set<PermissionDecision>(['allow-once', 'allow-always', 'deny'])
 
-/** `resources/hooks/tr-hook.sh`: next to the app in dev, in Contents/Resources/hooks when packaged. */
+/** `resources/hooks/tr-hook.sh`: in the checkout in dev and in the linked app, in Contents/Resources/hooks when packaged. */
 export function hookScriptPath(): string {
+  const checkout = sourceRoot()
+  if (checkout) return join(checkout, 'resources', 'hooks', 'tr-hook.sh')
   return app.isPackaged ? join(process.resourcesPath, 'hooks', 'tr-hook.sh') : join(app.getAppPath(), 'resources', 'hooks', 'tr-hook.sh')
 }
 

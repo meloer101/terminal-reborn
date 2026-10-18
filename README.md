@@ -1,4 +1,4 @@
-# Terminal Reborn
+# Wavi
 
 一个为并行运行多个 CLI coding agent（Claude Code、Codex）而做的 macOS 终端。
 A macOS terminal for running many CLI coding agents in parallel.
@@ -21,7 +21,9 @@ It keeps each agent's native TUI and adds a real text editor for prompts, an at-
 
 ```bash
 npm install
-npm run dev        # 启动开发版 / run the app with hot reload
+npm run dev        # 启动开发版（独立的 Wavi Dev 配置）/ run the app with hot reload (own "Wavi Dev" profile)
+npm run app:install  # 把链接到本仓库的 Wavi.app 装进「应用程序」/ install a Wavi.app that runs this checkout
+npm run build:watch  # 改代码后自动构建，已安装的 Wavi 随之刷新 / rebuild on save; the installed app follows
 npm run check      # typecheck + lint + unit tests
 npm run test:e2e   # 构建并运行 Electron 冒烟测试 / build + Electron smoke test
 npm run dist       # 打包 dmg + zip（arm64 + x64）到 release/ / build installers into release/
@@ -36,13 +38,13 @@ macOS 13+ (Apple Silicon or Intel), with the Claude Code and/or Codex CLI instal
 
 1. 到 [Releases](https://github.com/meloer101/terminal-reborn/releases) 下载：Apple 芯片选 `arm64`，Intel 选 `x64`；`.dmg` 或 `.zip` 任选。
    Download from Releases: `arm64` for Apple Silicon, `x64` for Intel; either `.dmg` or `.zip`.
-2. 把 **Terminal Reborn** 拖进「应用程序」。
-   Drag **Terminal Reborn** into Applications.
+2. 把 **Wavi** 拖进「应用程序」。
+   Drag **Wavi** into Applications.
 3. 在有 Apple Developer ID 之前，发布的版本只有 ad-hoc 签名，macOS 会因为下载隔离标记拒绝打开。首次打开前运行一次：
    Until releases are signed with a Developer ID, macOS refuses to open the downloaded app because of its quarantine flag. Run this once before the first launch:
 
 ```bash
-xattr -cr "/Applications/Terminal Reborn.app"
+xattr -cr "/Applications/Wavi.app"
 ```
 
    也可以先尝试打开一次，再到「系统设置 → 隐私与安全性」点「仍要打开」。
