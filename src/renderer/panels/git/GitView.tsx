@@ -177,7 +177,7 @@ function GitPane({ worktree }: { worktree: Worktree }) {
           拉取失败：{git.fetchError.split('\n')[0]}
         </p>
       )}
-      {onGraph ? <GraphView root={root} git={git} sessions={sessions} /> : <ChangesView root={root} git={git} />}
+      {onGraph ? <GraphView root={root} git={git} sessions={sessions} /> : <ChangesView root={root} git={git} worktree={worktree} />}
     </>
   )
 }

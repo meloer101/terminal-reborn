@@ -1,20 +1,13 @@
 import { useState } from 'react'
 import type { SessionId } from '@shared/types'
-import { submitPrompt, whenAgentReady } from '../session-io'
+import { submitPrompt } from '../session-io'
 import { startSession } from '../state/session-start'
 import { useActiveSession, useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { ensureAgentUp } from './agent-up'
 import { CONTINUE_PROMPT, errorNextSteps, fixPrompt, type RetryKind } from './error-next-steps'
 import { useLaunchIssues } from './launch-issues'
 import styles from './SessionErrorBar.module.css'
-
-/** Starts the agent again (on its conversation) when it is not running, then waits until it can take a prompt. */
-async function ensureAgentUp(sessionId: SessionId): Promise<void> {
-  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  if (session?.phase !== 'exited' && session?.phase !== 'not-started') return
-  await startSession(sessionId, { resume: true })
-  await whenAgentReady(sessionId)
-}
 
 async function askToFix(sessionId: SessionId, summary: string): Promise<void> {
   await ensureAgentUp(sessionId)

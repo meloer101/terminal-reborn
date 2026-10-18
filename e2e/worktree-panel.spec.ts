@@ -163,7 +163,7 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(feature.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
     await expect(feature).toContainText('基线main · 领先 1，落后 4')
     await expect(feature).toContainText('未提交README.md')
-    await expect(feature.getByRole('button', { name: /合并到 main/ })).toHaveAttribute('aria-disabled', 'true')
+    await expect(feature.getByRole('button', { name: /合并到 main/ })).toBeEnabled()
     await shoot('13c-worktree')
 
     // A worktree without a session only expands; the active session stays.

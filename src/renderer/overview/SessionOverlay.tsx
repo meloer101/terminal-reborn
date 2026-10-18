@@ -5,7 +5,9 @@ import { X } from 'lucide-react'
 import { IconButton } from '../ui/IconButton'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
+import { ReviewButton } from '../review/ReviewButton'
 import { EnterButton } from './EnterButton'
+import enterStyles from './EnterButton.module.css'
 import type { OverviewRow } from './model'
 import { enterSession } from './store'
 import styles from './SessionOverlay.module.css'
@@ -52,6 +54,7 @@ export function SessionOverlay({ row, onClose }: { row: OverviewRow; onClose(): 
             {[row.statusLabel, row.time].filter(Boolean).join(' · ')}
           </span>
           <span className={styles.divider} aria-hidden />
+          {row.session.status === 'done_unread' && <ReviewButton sessionId={id} className={enterStyles.enter} />}
           <EnterButton sessionId={id} />
           <IconButton label="关闭" onClick={onClose}>
             <X size={16} strokeWidth={1.75} />

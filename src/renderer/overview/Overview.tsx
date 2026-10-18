@@ -13,6 +13,8 @@ import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { EnterButton } from './EnterButton'
+import { ReviewButton } from '../review/ReviewButton'
+import enterStyles from './EnterButton.module.css'
 import {
   buildOverview,
   clampTrayHeight,
@@ -320,6 +322,7 @@ function ExpandedRow({ row, selected, onClick, onCollapse }: RowProps & { onColl
         expanded
         trailing={
           <span className={styles.trailingExpanded}>
+            {row.session.status === 'done_unread' && <ReviewButton sessionId={row.session.id} className={enterStyles.enter} />}
             <EnterButton sessionId={row.session.id} />
             <button
               type="button"
