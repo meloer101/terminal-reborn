@@ -189,9 +189,11 @@ test.describe('F4 merge sheet · F13 review', () => {
     // Put into the input line, not sent: the text arrives without an Enter after it until the user presses one.
     await expect.poll(logged, WITHIN).toContain('完成后告诉我。')
     await page.waitForTimeout(500)
+    // eslint-disable-next-line no-control-regex -- the bracketed-paste end marker
     expect(logged().endsWith('完成后告诉我。') || /完成后告诉我。\x1b\[201~$/.test(logged())).toBe(true)
     expect(logged()).toContain('GIT_EDITOR=true git merge main')
     await page.keyboard.press('Enter')
+    // eslint-disable-next-line no-control-regex -- the bracketed-paste end marker
     await expect.poll(logged, WITHIN).toMatch(/完成后告诉我。(\x1b\[201~)?<ENTER>\n$/)
     expect(repo.git(repo.project, 'rev-parse', 'main').trim()).toBe(before)
   })
