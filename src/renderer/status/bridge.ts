@@ -6,7 +6,7 @@ import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/l
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
 import { launchKind, useWorkspace } from '../state/workspace'
-import { titleFromFirstPrompt } from '../state/workspace-model'
+import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
 
@@ -146,10 +146,17 @@ export function startStatusBridge(): () => void {
   })
   const unsubscribeEvents = window.tr.agent.onEvent((envelope) => {
     const { sessionId, event } = envelope
+    if (event.type === 'agent-title') {
+      // A name, not activity: it never touches status.
+      const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+      const patch = session && titleFromAgent(session, event.title)
+      if (patch) useWorkspace.getState().patchSession(sessionId, patch)
+      return
+    }
     if (event.type === 'prompt-submit') {
       const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
       const title = session && titleFromFirstPrompt(session, event.prompt)
-      if (title) useWorkspace.getState().patchSession(sessionId, { title })
+      if (title) useWorkspace.getState().patchSession(sessionId, { title, titleSource: 'prompt' })
     }
     controller.handleEvent(sessionId, event)
   })

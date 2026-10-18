@@ -12,6 +12,7 @@ import {
   bracketedPaste,
   detectBlockingDialog,
   echoNeedles,
+  inputLineText,
   isBareSlashCommand,
   isSlashText,
   normalizeSendText,
@@ -313,6 +314,18 @@ describe('planSend', () => {
 describe('bracketedPaste', () => {
   it('wraps in the CSI 200/201 markers', () => {
     expect(bracketedPaste('x')).toBe('\x1b[200~x\x1b[201~')
+  })
+})
+
+describe('inputLineText', () => {
+  it('pastes with the markers when the program took bracketed paste', () => {
+    expect(inputLineText('a\nb', true)).toBe('\x1b[200~a\nb\x1b[201~')
+  })
+
+  it('is one line without newlines or tabs when it did not, so nothing is submitted', () => {
+    const data = inputLineText('head：\n> rm -rf x\n> b\tc', false)
+    expect(data).toBe('head： > rm -rf x > b c')
+    for (const ch of ['\n', '\r', '\t', '\x1b']) expect(data).not.toContain(ch)
   })
 })
 

@@ -38,12 +38,17 @@ export interface Worktree {
   removed?: number
 }
 
+/** prompt = cut from the first prompt · agent = the agent's own title · user = renamed in Wavi. Precedence user > agent > prompt. */
+export type TitleSource = 'prompt' | 'agent' | 'user'
+
 export interface Session {
   id: SessionId
   worktreeId: WorktreeId
   kind: AgentKind
-  /** Task title; defaults to the first prompt. */
+  /** Task title: the agent's own name for the conversation, else the first prompt (PRD F2). */
   title: string
+  /** Where `title` came from; a user rename is never replaced. Absent = the default name or a title saved before this existed. */
+  titleSource?: TitleSource
   status: SessionStatus
   /** Human-readable current action, e.g. "编辑 src/auth/session.ts". */
   currentAction?: string

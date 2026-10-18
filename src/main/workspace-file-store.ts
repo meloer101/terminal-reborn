@@ -30,8 +30,13 @@ export class WorkspaceFileStore {
     this.log = options.log ?? ((message, error) => console.error(`[workspace] ${message}`, error ?? ''))
   }
 
-  /** The stored workspace, or null when there is none (first run) or it cannot be used. */
+  /**
+   * The stored workspace, or null when there is none (first run) or it cannot be used. A save still waiting for the
+   * debounce is written first: a renderer reloading right after a change must get that change back, not the file
+   * from before it.
+   */
   load(): WorkspaceFile | null {
+    this.flush()
     let text: string
     try {
       text = readFileSync(this.path, 'utf8')

@@ -71,6 +71,11 @@ export function getSendIo(sessionId: SessionId): SendIo {
   }
 }
 
+/** Whether the session's program takes bracketed paste; false until its terminal exists (the safe answer). */
+export function acceptsBracketedPaste(sessionId: SessionId): boolean {
+  return terminals.get(sessionId)?.surface.bracketedPasteMode() ?? false
+}
+
 /** Only the visible viewport: for detecting full-screen dialogs that are on screen right now. */
 export function readViewport(sessionId: SessionId): string {
   return terminals.get(sessionId)?.surface.readScreen(0) ?? ''

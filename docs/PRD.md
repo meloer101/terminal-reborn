@@ -8,6 +8,8 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.15 | 2026-10-18 | F9 总览列表去掉所有分隔线：分组标题改为 32 高、12/500 次要色，分组间距 16；列表不再显示数量为 0 的分组（看板不变）；Figma 组件 OverviewGroupHeader `104:145` 和 11 v2 的 A / B 列表（深浅）已同步
+| v1.14 | 2026-10-18 | F2 会话标题改为**用 agent 自己起的名字**：Claude Code、Codex 都已在用户自己的额度上用小模型给对话起名，Wavi 只读回来，不自己调模型、不需要 API key。首条 prompt 只是占位，几秒后被替换；在 Wavi 里重命名过的永远不被覆盖（优先级：Wavi 重命名 > agent 标题 > 首条 prompt）；agent 里的 /rename 会跟过来。实测见 §6.6、§6.7。Codex 0.163 以前、其他 agent 和终端会话没有 agent 标题，保留首条 prompt |
 | v1.13 | 2026-10-18 | F4 新建会话面板实现时定下的细节：分支名前缀取 git `user.name` 的第一个词，没有就用登录名；“已在 worktree 里”只标在其他 worktree 里检出的分支（主目录的分支照常作为基线）；远程分支在本地有同名分支时不再列出；本地基线只是落后 upstream 时，新分支从刚 fetch 的 upstream 开始；工作目录的选择记在 workspace.json；创建失败时会话下方写原因、不启动终端；setup 脚本等 `.tr/settings.toml` 一起做；项目右键菜单改为“新建会话… ⌘N”，⌘K 加“新建会话…” |
 | v1.12 | 2026-10-18 | F4 “新建任务”改为**新建会话**面板（Figma 15，取代 06）：不再写任务描述，创建后进入会话自己发第一句话；“工作目录”二选一（新 worktree / 当前目录），按项目记住上次的选择，第一次默认新 worktree；⌘N 和项目标题的 ＋ 打开面板，会话右键 / Worktree 视图的“在此新建会话”不弹面板；分支名不再从任务生成。§5：浮层改用玻璃材质（轻模糊背景 + 半透明面板 + 阴影），面板里的控件去掉边框只留色块；Figma 组件 Select、Segment 已去掉边框，新增 token `bg/popover` |
 | v1.11 | 2026-10-18 | 产品改名 **Wavi**（appId `dev.wavi.app`，`TERM_PROGRAM=Wavi`）；旧的 “Terminal Reborn” 配置目录在没有守护进程或实例在用时自动改名迁移；`npm run dev` 用独立的 “Wavi Dev” 配置；新增 `npm run app:install`：装进「应用程序」的 Wavi.app 直接运行本仓库的 `out/`，构建后界面自动重新载入、主进程更新时提示重启（§7） |
@@ -131,7 +133,8 @@ Project（git 仓库根目录）
 
 ### F2 状态侧栏 · P0 · Figma 01 / 02（Sidebar、SessionRow、NavItem）
 - 项目 › 会话两级树，层级规则见 §3.3；项目可折叠。跨项目的状态视图交给 F9 总览。
-- 每行显示：StatusGlyph、任务标题（默认为首条 prompt，可重命名）、当前动作、`+N −M`、耗时（等你处理时显示“已等 3m”，见 F10）。
+- 每行显示：StatusGlyph、会话标题、当前动作、`+N −M`、耗时（等你处理时显示“已等 3m”，见 F10）。
+- **会话标题**：用 agent 自己给对话起的名字（Claude `ai-title`，Codex `thread_name`，见 §6.6、§6.7），Wavi 不自己调模型。首条 prompt（第一行，40 字）先占位；agent 起名后替换，agent 里 /rename 也跟着变。在 Wavi 里重命名后永远不再被替换。优先级：Wavi 重命名 > agent 标题 > 首条 prompt。没有 agent 标题的（Codex 0.163 以前、其他 agent、终端）保留首条 prompt。
 - 导航区：打开项目 ⌘O · 跳转到 ⌘K · 总览 ⌘⇧A（右侧显示需要处理的数量，形式为状态图形加数字）。
 - 系统通知：只在窗口失焦或该会话不可见时发送，点击后跳到对应会话。Dock 角标显示 `needsAttention` 的数量。
 - 快捷键：⌘1–9 切换会话，⌘J 跳到下一个需要处理的会话。
@@ -188,7 +191,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 ### F9 状态总览 · P0 · Figma 11 v2（Section `106:3639`）
 用户在一个页面里分诊所有 agent，不需要逐个切换会话（Claude Code agent view、Superset Workspaces、Conductor、Vibe Kanban 等产品都采用这一形态）。
 - **入口**：主区的一个视图，与终端互斥，不是弹窗。打开方式：侧栏“总览”或 ⌘⇧A；Esc 或 Enter 进入会话后回到终端。
-- **列表（默认）**：跨项目按状态分组，顺序为 等你处理 → 出错 → 待审阅（`done_unread`）→ 运行中 → 空闲 → 已退出。已退出组默认折叠；分组的折叠状态会保存。分组标题只用文字、数量和细分隔线表达，不用色块。分组标题行和会话行都高 40，行内所有文字行高 20、严格垂直居中；分组之间用 12 的间距隔开。
+- **列表（默认）**：跨项目按状态分组，顺序为 等你处理 → 出错 → 待审阅（`done_unread`）→ 运行中 → 空闲 → 已退出。已退出组默认折叠；分组的折叠状态会保存。**列表里没有分隔线**：分组只靠留白和字号区分——分组标题高 32，12/500 次要色文字 + 数量，不用色块、不画线；会话行高 40，行内所有文字行高 20、严格垂直居中；分组之间用 16 的间距隔开。没有会话的分组在列表里不显示（看板仍保留每一列）。
 - **每行**：StatusGlyph + 状态文字 · 标题 · `项目 › 分支` · 摘要（运行中显示当前动作；等你处理显示问题或待确认的命令；出错显示错误摘要；其他状态显示最后一句回复）· `+N −M` · 时间（等你处理显示“已等 3m”，运行中显示本轮用时，其余显示“5m 前”）· 悬停显示 ⌄。后续接入：todo `3/7`（F12）、`ctx 62%`（F11）、PR `#123 ✓`（F16），数据未就绪时这几列留空，不占位。
 - **列表 · 原地展开（点行 / Space）**：在该行下方展开这个会话**完整、可交互的终端**——就是主区里同一个 xterm、同一个 PTY，搬到总览里显示，不新建进程，也不是快照。同一时间只展开一行，上方的行不动，下方的行顺延。托盘 `bg/hover` 底、圆角 5、内边距 4；终端默认高 420，拖托盘底边可调到 240 – 窗口高度 70%（会保存）。展开行隐藏 `+N −M` 和时间，换成“进入会话 ↵”和 ⌃。会话状态变化时托盘跟着它移到新分组，不会收起。收起：再点一次行、点 ⌃，或 Esc。
 - **看板**：同一套分组画成列，列内是无描边的状态色块卡片（`card/<状态>` 底色，次要文字用同色相的 `card/<状态>-meta`，悬停换 `-hover`）；状态同时由 StatusGlyph 形状和列标题表达，不只靠颜色。列表和看板的分组永远一致。
@@ -323,6 +326,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 用户默认的 auto 模式下，无害的 Bash 不会触发 PermissionRequest。
 - PostToolUse 带完整的工具输出（可能几 MB），服务端上限 32 MB。
 - 延迟：每个 hook 15–25 ms（SessionStart 冷启动约 75 ms）；UserPromptSubmit 在回车写入约 75 ms 后到达。`SessionEnd` 的 hooks 一共只有 1.5 s。
+- **会话标题**（2.1.302，2026-10-18，`30-hooks-lab.mjs title`）：hook payload 里**没有**标题字段，只有 `transcript_path`。Claude 在第一条 prompt 后约 4 s、和回复并行，用小模型生成标题，写进 transcript：`{"type":"ai-title","aiTitle":"…"}`；/rename 写 `{"type":"custom-title","customTitle":"…"}`，显示规则是 `customTitle ?? aiTitle`。两种条目每一轮都会在文件尾部重新追加一遍，所以只读文件尾部（4 MB）就够。标题之后不会随对话变化。本机 80 个会话里 74 个在第一条回复之前就有了 ai-title。Wavi 在 SessionStart（含 --resume）、Stop 时读，第一条 prompt 后 3 / 8 / 20 s 再读；只接受 `~/.claude/projects`（或 `$CLAUDE_CONFIG_DIR/projects`）下的 `.jsonl`。
 
 ### 6.7 实测结论 · Codex（0.142.5，2026-10-14）
 脚本 `scripts/spikes/40-codex-hooks-list.mjs`、`41-codex-hooks-lab.mjs`、`codex-mock-provider.mjs`（本地模拟模型）；payload 在 `src/main/hooks/codex-fixtures.ts`。当时第三方模型服务一直返回 503，所以依赖真实模型的行为没有验证。
@@ -336,6 +340,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 空 prompt 下按一次 Ctrl+C 就开始退出；运行中 Ctrl+C 和 Esc 都只是中断回合。
 - 工具映射到 Claude 的词汇：shell → `Bash {command}`；`apply_patch` → `Write` / `Edit`；`request_user_input` → `AskUserQuestion`。PostToolUse 的 `tool_response` 是纯字符串，没有退出码。
 - 延迟：UserPromptSubmit 在回车约 100 ms 后到达，PermissionRequest 比 PreToolUse 晚约 21 ms。
+- **会话标题**（2026-10-18，`41-codex-hooks-lab.mjs title` + 本地模拟模型）：0.142.5 的 TUI 不会自动起名，只有 Codex 桌面版会。**0.163.0** 的 TUI 在第一轮 Stop 后约 60 ms 发一个结构化输出请求（`{title}`，≤ 36 字，用用户的语言）；没登录 ChatGPT 时发给会话当前的模型服务商。结果追加到 `$CODEX_HOME/session_index.jsonl`：`{"id":<session_id>,"thread_name":"…","updated_at":"…"}`，**`id` 就是 hook payload 里的 `session_id`**；同一 id 以最后一行为准（改名会再追加一行）。终端标题同时变成 `<标题> | <目录>`，不以 spinner 开头，状态规则照常按空闲处理。Hook payload 里没有标题字段。Wavi 在 Stop 后 0 / 2 / 6 / 15 / 30 s、SessionStart 和 UserPromptSubmit 时读这个文件，只读不写。用户的模型服务商不可用时（本机第三方服务一直 503）就没有标题，保留首条 prompt。注意：0.163 第一次启动会弹“Meet GPT-6 Sol”，并在 `~/.codex/config.toml` 的 `[tui.model_availability_nux]` 里给计数加一，这是 Codex 自己的行为。
 
 ### 6.8 PTY 守护进程（2026-10-16 实现）
 参考 Orca（MIT）的 `src/main/daemon/*`，只取核心形态，不要 launchd。e2e：`e2e/pty-daemon.spec.ts`；其余 e2e 用 `TR_KILL_SESSIONS_ON_QUIT=1` 退出，不留守护进程。

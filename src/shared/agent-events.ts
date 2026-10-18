@@ -21,6 +21,8 @@ export type AgentEvent =
   | { type: 'stop'; message?: string }
   | { type: 'stop-failure'; message?: string }
   | { type: 'session-end'; reason?: string }
+  /** The agent's own name for the conversation (Claude `ai-title` / `custom-title`, Codex `thread_name`), read by main. Not a hook. */
+  | { type: 'agent-title'; title: string }
 
 export interface AgentEventEnvelope {
   sessionId: SessionId

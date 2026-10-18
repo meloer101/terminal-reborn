@@ -14,6 +14,7 @@ import {
   removeProject,
   restoreWorkspace,
   serializeWorkspace,
+  titleFromAgent,
   titleFromFirstPrompt,
   type MakeId,
   type WorkspaceData
@@ -175,6 +176,19 @@ describe('persistence', () => {
     expect(restoreWorkspace(null)).toEqual(EMPTY_WORKSPACE)
   })
 
+  it('keeps where a title came from across a restart', () => {
+    const data = withSessions('claude')
+    const named = { ...data, sessions: data.sessions.map((s) => ({ ...s, title: '会话自动标题', titleSource: 'agent' as const })) }
+    const file = serializeWorkspace(named, ui, {})
+    expect(file.sessions[0]?.titleSource).toBe('agent')
+    const restored = restoreWorkspace(sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0))
+    expect(restored.sessions[0]).toMatchObject({ title: '会话自动标题', titleSource: 'agent' })
+    // An unknown source in the file is dropped, not trusted.
+    const tampered = JSON.parse(JSON.stringify(file)) as { sessions: Array<Record<string, unknown>> }
+    tampered.sessions[0]!.titleSource = 'admin'
+    expect(sanitizeWorkspaceFile(tampered, 0)?.sessions[0]).not.toHaveProperty('titleSource')
+  })
+
   it('a conversation id replaced later (after /clear) is what gets saved', () => {
     const data = withSessions('codex')
     const replaced = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'second' })) }
@@ -237,5 +251,30 @@ describe('titleFromFirstPrompt', () => {
   it('keeps a title the session already has and ignores slash commands', () => {
     expect(titleFromFirstPrompt({ kind: 'claude', title: '结算页性能优化' }, 'hello')).toBeNull()
     expect(titleFromFirstPrompt(fresh, '/model')).toBeNull()
+  })
+  it('never replaces a title that has a source, even one equal to the default name', () => {
+    expect(titleFromFirstPrompt({ ...fresh, titleSource: 'user' }, 'hello')).toBeNull()
+    expect(titleFromFirstPrompt({ ...fresh, titleSource: 'agent' }, 'hello')).toBeNull()
+  })
+})
+
+describe('titleFromAgent', () => {
+  it('replaces the default name and the first-prompt placeholder', () => {
+    expect(titleFromAgent({ kind: 'claude', title: 'Claude Code' }, 'AI×Web3 产品灵感')).toEqual({ title: 'AI×Web3 产品灵感', titleSource: 'agent' })
+    expect(titleFromAgent({ kind: 'codex', title: '我现在想看看AI*web3 这个方向…', titleSource: 'prompt' }, '梳理会话标题思路')).toEqual({
+      title: '梳理会话标题思路',
+      titleSource: 'agent'
+    })
+  })
+  it('follows a later rename made inside the agent', () => {
+    expect(titleFromAgent({ kind: 'claude', title: '旧标题', titleSource: 'agent' }, '新标题')).toEqual({ title: '新标题', titleSource: 'agent' })
+    expect(titleFromAgent({ kind: 'claude', title: '新标题', titleSource: 'agent' }, '新标题')).toBeNull()
+  })
+  it('upgrades a title saved before sources existed', () => {
+    expect(titleFromAgent({ kind: 'claude', title: '我现在想看看AI*web3 这个方向' }, 'AI×Web3 产品灵感')).toEqual({ title: 'AI×Web3 产品灵感', titleSource: 'agent' })
+  })
+  it('never replaces a rename made in Wavi, and never names a shell', () => {
+    expect(titleFromAgent({ kind: 'claude', title: '我的名字', titleSource: 'user' }, 'AI 标题')).toBeNull()
+    expect(titleFromAgent({ kind: 'shell', title: '终端' }, 'AI 标题')).toBeNull()
   })
 })

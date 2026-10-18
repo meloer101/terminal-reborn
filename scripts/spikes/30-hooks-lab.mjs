@@ -133,6 +133,14 @@ const SCENARIOS = {
     await prompt('Reply with only the word OK.')
     console.log('stop seen:', await waitStop())
   },
+  // Session title (PRD §6.6): two turns; compare hook payload keys with the transcript's ai-title entries.
+  async title() {
+    await prompt(process.env.PROMPT ?? '我想给终端应用的会话自动起标题，先只回复“收到”两个字，不要做别的。')
+    console.log('stop 1 seen:', await waitStop())
+    await prompt('再回复一次“好”。')
+    console.log('stop 2 seen:', await waitStop())
+    await sleep(3000)
+  },
   // a Bash call that needs permission; server answers per PERM_MODE
   async bash() {
     await prompt(process.env.PROMPT ?? 'Use the Bash tool to run exactly: echo hooks-lab-ran > /tmp/tr-hooks-lab/ran.txt   Then reply DONE.')

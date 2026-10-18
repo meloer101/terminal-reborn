@@ -7,6 +7,7 @@
 //   "CALL: <tool> <json>"   -> the model calls <tool> (function or custom/freeform) with that input, then says DONE
 //   "HANG: ..."             -> the response stream never finishes (a busy turn until the user interrupts)
 //   anything else           -> "OK"
+//   a json_schema request   -> {"title": $MOCK_TITLE} (the thread-title helper, PRD §6.7)
 // Only the CLI side is real (TUI, sandbox/approval logic, hooks); the model is fake.
 import { createServer } from 'node:http'
 
@@ -82,7 +83,13 @@ export async function startMockProvider({ onRequest } = {}) {
         sse(res, 'response.output_item.added', { output_index: 0, item })
         sse(res, 'response.output_item.done', { output_index: 0, item })
       } else {
-        const text = afterTool ? 'DONE' : (/^REPLY:\s*([\s\S]+)$/.exec(prompt)?.[1] ?? 'OK')
+        // Structured-output requests (the TUI's thread-title helper) get a schema-shaped answer.
+        const structured = body.text?.format?.type === 'json_schema'
+        const text = structured
+          ? JSON.stringify({ title: process.env.MOCK_TITLE ?? '梳理会话标题思路' })
+          : afterTool
+            ? 'DONE'
+            : (/^REPLY:\s*([\s\S]+)$/.exec(prompt)?.[1] ?? 'OK')
         const itemId = `msg_${counter}`
         const message = { type: 'message', role: 'assistant', id: itemId, content: [{ type: 'output_text', text }] }
         sse(res, 'response.output_item.added', { output_index: 0, item: { ...message, content: [] } })

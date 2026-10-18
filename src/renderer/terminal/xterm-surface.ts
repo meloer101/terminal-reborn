@@ -368,6 +368,10 @@ export class XtermSurface implements TerminalSurface {
     this.term.focus()
   }
 
+  bracketedPasteMode(): boolean {
+    return this.term.modes.bracketedPasteMode
+  }
+
   readScreen(scrollbackLines = 0): string {
     return readBufferText(this.term.buffer.active, this.term.rows, scrollbackLines)
   }

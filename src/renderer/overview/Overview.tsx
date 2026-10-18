@@ -157,7 +157,8 @@ export function Overview() {
         {sessions.length === 0 ? (
           <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
         ) : view === 'list' ? (
-          groups.map((g) => (
+          // Empty groups are left out of the list (a stack of "0" headers is noise); the board keeps every column.
+          groups.filter((g) => g.rows.length > 0).map((g) => (
             <ListGroup
               key={g.key}
               group={g}
