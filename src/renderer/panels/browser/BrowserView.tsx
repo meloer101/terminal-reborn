@@ -1,7 +1,7 @@
 // 浏览器 view (PRD F17, Figma 13A / 13E): a page per worktree for checking what the agents' dev servers serve.
 // Toolbar on top, the worktree's listening ports below it, the page in a bg/inset well, console counts at the bottom.
 // Mounted with key = worktree.
-import { Globe, Smartphone } from 'lucide-react'
+import { Globe } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { formatErrorsForAgent, mergePorts, portUrl, type ListeningPort } from '@shared/browser'
@@ -9,7 +9,6 @@ import type { AgentKind, SessionId } from '@shared/types'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { getSurface } from '../../terminal/registry'
-import { IconButton } from '../../ui/IconButton'
 import { popupMenu } from '../../ui/menu'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { BrowserBar } from './BrowserBar'
@@ -94,17 +93,6 @@ export function BrowserView({ worktree, sessionId, kind }: { worktree: string; s
                 {portText(p)}
               </button>
             ))}
-            <span className={styles.spacer} />
-            {page?.url && (
-              <IconButton
-                label={mobile ? '退出手机视口' : '手机视口 375'}
-                active={mobile}
-                aria-pressed={mobile}
-                onClick={() => window.tr.browser.setMobile(worktree, !mobile)}
-              >
-                <Smartphone size={16} strokeWidth={1.75} />
-              </IconButton>
-            )}
           </div>
         )
       )}

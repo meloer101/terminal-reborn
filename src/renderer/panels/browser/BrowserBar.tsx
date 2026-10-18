@@ -1,6 +1,7 @@
-// BrowserBar (Figma 130:283): back · forward · reload · borderless address field · open in the system browser.
+// BrowserBar (Figma 130:283): back · forward · reload · borderless address field · phone viewport · open in the
+// system browser.
 // The address shows the host in the primary color and the path in tertiary; focused, it is a plain text field.
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw, Smartphone } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { parseAddress, splitUrl, type BrowserPageState } from '@shared/browser'
 import { IconButton } from '../../ui/IconButton'
@@ -18,6 +19,7 @@ export function BrowserBar({
   onError: (message: string | null) => void
 }) {
   const url = page?.url ?? ''
+  const mobile = page?.mobile ?? false
   const [draft, setDraft] = useState<string | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const editing = draft !== null
@@ -94,6 +96,15 @@ export function BrowserBar({
           )}
         </label>
         <span className={styles.gap} />
+        <IconButton
+          label={mobile ? '退出手机视口' : '手机视口 375'}
+          active={mobile}
+          aria-pressed={mobile}
+          disabled={!url}
+          onClick={() => browser.setMobile(worktree, !mobile)}
+        >
+          <Smartphone size={16} strokeWidth={1.75} />
+        </IconButton>
         <IconButton label="用系统浏览器打开" disabled={!url} onClick={() => browser.openExternal(worktree)}>
           <ExternalLink size={16} strokeWidth={1.75} />
         </IconButton>

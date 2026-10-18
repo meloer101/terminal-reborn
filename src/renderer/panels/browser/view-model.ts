@@ -5,17 +5,18 @@ import { localPortOf, portUrl, type BrowserPageState, type ConsoleSummary, type 
 export type WellContent = 'empty' | 'error' | 'page'
 
 export interface BrowserLayout {
-  /** The ports row (端口 · tags · mobile toggle). */
+  /** The ports row (端口 · tags): only when a port was found. */
   ports: boolean
   /** The console row at the bottom. */
   console: boolean
   well: WellContent
 }
 
-/** 13E (nothing opened) has neither row unless ports were found; an open page has both. */
+/** The ports row only when ports were found; the console row once a page loaded. */
 export function browserLayout(page: BrowserPageState | undefined, ports: readonly ListeningPort[]): BrowserLayout {
-  if (!page?.url) return { ports: ports.length > 0, console: false, well: 'empty' }
-  return { ports: true, console: !page.loadError, well: page.loadError ? 'error' : 'page' }
+  const hasPorts = ports.length > 0
+  if (!page?.url) return { ports: hasPorts, console: false, well: 'empty' }
+  return { ports: hasPorts, console: !page.loadError, well: page.loadError ? 'error' : 'page' }
 }
 
 /** The empty state's second line: what to do next. */

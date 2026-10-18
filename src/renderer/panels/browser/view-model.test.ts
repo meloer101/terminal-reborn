@@ -26,8 +26,9 @@ describe('browserLayout', () => {
     expect(browserLayout(page({ url: '' }), [vite])).toEqual({ ports: true, console: false, well: 'empty' })
   })
 
-  it('shows the page with both rows, or the load error without the console', () => {
-    expect(browserLayout(page(), [])).toEqual({ ports: true, console: true, well: 'page' })
+  it('shows the page with the console row, the ports row only with ports, and the load error without the console', () => {
+    expect(browserLayout(page(), [])).toEqual({ ports: false, console: true, well: 'page' })
+    expect(browserLayout(page(), [vite])).toEqual({ ports: true, console: true, well: 'page' })
     expect(browserLayout(page({ loadError: 'x' }), [vite])).toEqual({ ports: true, console: false, well: 'error' })
   })
 })
