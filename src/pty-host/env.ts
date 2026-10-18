@@ -11,10 +11,27 @@ const STRIPPED = new Set([
   'CLAUDECODE'
 ])
 
+/**
+ * The app was started from inside a Claude Code session (a shell or tool call there sets CLAUDECODE): everything that
+ * session put in the environment describes it, not the user. Passed on, a `claude` in a terminal here believes it is
+ * that session's child (no transcript, the outer session's messaging socket). Only then are its markers dropped, so
+ * `CLAUDE_CODE_*` settings a user exports in an ordinary terminal still reach their agents. CLAUDE_CONFIG_DIR is
+ * the user's choice of config either way.
+ */
+function isOuterClaudeSessionVar(key: string, value: string): boolean {
+  if (key === 'CLAUDE_CONFIG_DIR') return false
+  if (key.startsWith('CLAUDE_')) return true
+  // Claude Code's tool shells set these for themselves; a user's terminal must not inherit them.
+  return key === 'AI_AGENT' || key === 'BAGGAGE' || (key === 'GIT_EDITOR' && value === 'true')
+}
+
 export function buildPtyEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = {}
+  const insideClaude = base.CLAUDECODE !== undefined
   for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined && !STRIPPED.has(key)) env[key] = value
+    if (value === undefined || STRIPPED.has(key)) continue
+    if (insideClaude && isOuterClaudeSessionVar(key, value)) continue
+    env[key] = value
   }
   Object.assign(env, extra)
 

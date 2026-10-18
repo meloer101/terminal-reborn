@@ -97,6 +97,35 @@ describe('buildPtyEnv', () => {
     expect(env.CLAUDECODE).toBeUndefined()
     expect(env.HOME).toBe('/h')
   })
+
+  it('drops the outer session when the app was started from inside Claude Code', () => {
+    const env = buildPtyEnv(
+      {
+        CLAUDECODE: '1',
+        CLAUDE_CODE_CHILD_SESSION: '1',
+        CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/s',
+        CLAUDE_AGENT_SDK_VERSION: '1',
+        CLAUDE_PID: '42',
+        AI_AGENT: 'claude-code',
+        BAGGAGE: 'sentry-environment=production',
+        GIT_EDITOR: 'true',
+        CLAUDE_CONFIG_DIR: '/h/.claude-work',
+        HOME: '/h'
+      },
+      { CLAUDE_CODE_FROM_LAUNCH: 'kept' }
+    )
+    expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE'))).toEqual(['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_FROM_LAUNCH'])
+    expect(env.AI_AGENT).toBeUndefined()
+    expect(env.BAGGAGE).toBeUndefined()
+    expect(env.GIT_EDITOR).toBeUndefined()
+    expect(env.HOME).toBe('/h')
+  })
+
+  it("keeps a user's own Claude Code settings when the app was not started from inside Claude Code", () => {
+    const env = buildPtyEnv({ CLAUDE_CODE_USE_BEDROCK: '1', GIT_EDITOR: 'vim' })
+    expect(env.CLAUDE_CODE_USE_BEDROCK).toBe('1')
+    expect(env.GIT_EDITOR).toBe('vim')
+  })
 })
 
 describe('resolveCwd', () => {
