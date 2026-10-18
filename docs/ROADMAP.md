@@ -93,7 +93,7 @@
 - [x] Select 和分段按钮去掉边框，只用色块（2026-10-18，`settings/controls` 和新建会话面板）
 - [x] 分段按钮共用 `ui/Segmented`，选中色块用弹簧曲线滑到新选项、宽度跟着变（2026-10-18；新建会话、总览列表 / 看板、Git 图谱 / 变更、安装 agent 选择；tokens `--motion-spring` / `--motion-duration-slide`；首次显示和尺寸变化不动画，“减少动态效果”时直接跳）
 - [ ] F4 `.tr/settings.toml` 的 setup / run / archive 脚本、Run 按钮、`TR_PORT`
-- [x] F4 本地合并（2026-10-18，Figma 05，PRD v1.21）：合并面板 ⇧⌘M（变更视图、Worktree 详情、“会话”菜单）；预检 = 领先 / 落后、`merge-tree --write-tree` 冲突检测、未提交改动、基线 upstream 未拉取、merge / rebase 进行中、基线目录的冲突改动；Squash（默认）/ Merge / Rebase，内存里建提交，基线最后一步前移（`merge --ff-only` 或 CAS `update-ref`），失败不留半截；可选合并后删除 worktree（保留分支，会话一起关闭）和推送到 origin；冲突时“交给 Claude / Codex 解决”；主进程测试 `git-merge.test.ts`（临时仓库），e2e `merge-sheet.spec.ts`（05A–05C 两种主题截图）。以后：可选测试命令（随 `.tr/settings.toml`）、图谱右键合并、合并后自动归档（F15）
+- [x] F4 本地合并（2026-10-18，Figma 05，PRD v1.21）：合并面板 ⇧⌘M（变更视图、Worktree 详情、“会话”菜单）；预检 = 领先 / 落后、`merge-tree --write-tree` 冲突检测、未提交改动、基线 upstream 未拉取、merge / rebase 进行中、基线目录的冲突改动；Squash（默认）/ Merge / Rebase，内存里建提交，基线最后一步前移（`merge --ff-only` 或 CAS `update-ref`），失败不留半截；可选合并后删除 worktree（保留分支，会话一起关闭）和推送到 origin；冲突时“交给 Claude / Codex 解决”（只放进输入行、由用户按回车，PRD v1.22）；主进程测试 `git-merge.test.ts`（临时仓库），e2e `merge-sheet.spec.ts`（05A–05C 两种主题截图）。以后：可选测试命令（随 `.tr/settings.toml`）、图谱右键合并、合并后自动归档（F15）
 - [x] F17 右侧栏外壳（2026-10-17）：浮层卡片、会话头四个切换图标、⌥⌘B 记住上次的视图、宽度可拖拽并保存（400–1200）、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 `--shadow-pane`；浏览器 / Git / Worktree 视图暂为占位
 - [x] F5 / F17 Git · 变更视图（2026-10-17，Figma 13B2）：未提交 / 已提交（对比基线；本地基线落后时对比 origin；在基线分支本身上对比 upstream）分组、领先 / 落后、展开单个文件的 unified diff（只渲染可见行；嵌套仓库、超大文件不展开）、文件变化时每秒最多刷新一次；e2e `git-panel.spec.ts`，主进程测试 `git-graph.test.ts`
 - [ ] F5 行内评论发给 agent、split 视图；“创建 PR”按钮暂为禁用（等 F16）。还没测：1 万行 diff 实际滚动帧率（行已窗口化）

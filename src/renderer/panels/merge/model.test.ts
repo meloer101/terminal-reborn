@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, methodOptions, removeBlocker, resultLines } from './model'
+import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, removeBlocker, resultLines } from './model'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
   branch: 'jacob/nav',
@@ -78,6 +78,14 @@ describe('texts', () => {
     expect(prompt).not.toContain('\n')
     expect(prompt).toContain('src/nav.css（两边都改了同一处）、b.ts（一边修改、一边删除）')
     expect(prompt).toContain('GIT_EDITOR=true git merge main')
+  })
+
+  it('the conflict prompt stays under the paste-placeholder threshold, counting the files it drops', () => {
+    const conflicts = Array.from({ length: 30 }, (_, i) => ({ path: `src/components/very/deeply/nested/folder/file-${i}.tsx`, type: 'content' }))
+    const prompt = conflictPrompt(check({ conflicts }))
+    expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS)
+    expect(prompt).toContain('等 30 个文件')
+    expect(prompt).toContain('file-0.tsx')
   })
 
   it('result lines: commit, push, removal', () => {
