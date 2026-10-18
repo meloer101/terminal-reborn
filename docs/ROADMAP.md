@@ -84,8 +84,11 @@
 ## 未开始
 
 ### M4 · Worktree 全链路 + Diff 审阅 → v0.3.0
-完成标准：Figma 03 / 05 / 06 还原；L1 / L4 / L5 完整跑通；git 操作有基于临时仓库的集成测试。
-- [ ] F4 新建任务 ⌘N：分支、worktree、`.worktreeinclude`、setup 脚本、首条 prompt
+完成标准：Figma 03 / 05 / 15 还原；L1 / L4 / L5 完整跑通；git 操作有基于临时仓库的集成测试。
+- [ ] F4 新建会话面板 ⌘N（Figma 15，PRD v1.12）：项目 · 工作目录（新 worktree / 当前目录，按项目记住）· 基于（可搜索，已在 worktree 里的分支改为在那里开）· 智能体 · 高级（分支名 · 文件夹 · 准备）；不写任务、不送首条 prompt；非 git 文件夹和分支名重复的提示；项目标题 ＋ 预选项目
+- [ ] F4 新 worktree 的后台创建：fetch、`worktree add`、`.worktreeinclude`、在终端里跑 setup，侧栏先显示正在启动
+- [ ] 浮层玻璃材质（PRD §5）：先用在新建会话面板和它的下拉菜单，“降低透明度”时回退实心；tokens.css 加 `--bg-popover`
+- [ ] Select 和分段按钮去掉边框，只用色块（Figma 组件已改，`settings/controls` 等代码还没跟上）
 - [ ] F4 `.tr/settings.toml` 的 setup / run / archive 脚本、Run 按钮、`TR_PORT`
 - [ ] F4 本地合并：预检、merge / squash / rebase、冲突交给 agent、合并后清理
 - [x] F17 右侧栏外壳（2026-10-17）：浮层卡片、会话头四个切换图标、⌥⌘B 记住上次的视图、宽度可拖拽并保存（400–1200）、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 `--shadow-pane`；浏览器 / Git / Worktree 视图暂为占位
@@ -174,7 +177,7 @@
 | 03 变更审阅 | M4 | 未开始 |
 | 04 Git 图谱 | M5 | 未开始 |
 | 05 合并预检 · 冲突 | M4 | 未开始 |
-| 06 新任务 | M4 | 未开始 |
+| 06 新任务 | M4 | 已被 15 取代 |
 | 07 设置 · 外观 | M3 | 已还原 |
 | 08 浅色模式 | M3 | 已还原 |
 | 09 侧栏 · 项目与会话入口 | 2b | 已还原 |
@@ -182,3 +185,4 @@
 | 11 v2 总览 | 2b | 已实现，待验收 |
 | 12 会话头：ctx % · todo · 端口 · PR | M4 并行 / M5 | 待设计 |
 | 13 右侧栏：浏览器 · Git · Worktree · 文件 | M4 | 已设计，待作者确认 |
+| 15 新建会话（⌘N，玻璃材质） | M4 | 已设计，作者已确认（2026-10-18） |
