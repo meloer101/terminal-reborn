@@ -20,7 +20,7 @@
   padding-left: 80px;
 }
 
-.header > :is(button, label, span[role='radiogroup']) {
+.header > :is(button, label, [role='radiogroup']) {
   -webkit-app-region: no-drag;
 }
 
@@ -73,34 +73,6 @@
 
 .filter input::-webkit-search-cancel-button {
   display: none;
-}
-
-.switch {
-  display: inline-flex;
-  padding: 1px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-}
-
-.switch button {
-  height: 24px;
-  padding: 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font: var(--text-caption-strong);
-  color: var(--text-secondary);
-  cursor: default;
-}
-
-.switch button[data-selected='true'] {
-  background: var(--bg-selected);
-  color: var(--text-primary);
-}
-
-.switch button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
 }
 
 .body {

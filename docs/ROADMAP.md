@@ -89,6 +89,7 @@
 - [x] F4 新 worktree 的后台创建（2026-10-18）：fetch、`worktree add --no-track -b`（本地基线只是落后 upstream 时从 upstream 开）、`branch.<name>.base`、按 `.worktreeinclude` 复制被忽略的文件（APFS 克隆）；会话先出现、终端等文件夹建好再启动，失败时在会话下方说明；主进程测试 `worktree-create.test.ts`。setup 脚本跟下面 `.tr/settings.toml` 一项一起做
 - [x] 浮层玻璃材质（2026-10-18，PRD §5）：新建会话面板和它的下拉菜单，“降低透明度”时回退实心；tokens.css 加 `--bg-popover` 和 `--glass-*`、`--radius-sheet / popover / button-glass`
 - [x] Select 和分段按钮去掉边框，只用色块（2026-10-18，`settings/controls` 和新建会话面板）
+- [x] 分段按钮共用 `ui/Segmented`，选中色块用弹簧曲线滑到新选项、宽度跟着变（2026-10-18；新建会话、总览列表 / 看板、Git 图谱 / 变更、安装 agent 选择；tokens `--motion-spring` / `--motion-duration-slide`；首次显示和尺寸变化不动画，“减少动态效果”时直接跳）
 - [ ] F4 `.tr/settings.toml` 的 setup / run / archive 脚本、Run 按钮、`TR_PORT`
 - [ ] F4 本地合并：预检、merge / squash / rebase、冲突交给 agent、合并后清理
 - [x] F17 右侧栏外壳（2026-10-17）：浮层卡片、会话头四个切换图标、⌥⌘B 记住上次的视图、宽度可拖拽并保存（400–1200）、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 `--shadow-pane`；浏览器 / Git / Worktree 视图暂为占位

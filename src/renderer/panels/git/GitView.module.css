@@ -19,35 +19,6 @@
   padding: 0 calc(var(--space-12) + var(--space-2)) var(--space-6) calc(var(--space-8) + var(--space-2));
 }
 
-.segments {
-  display: flex;
-  gap: var(--space-2);
-}
-
-/* Segment (9:50 / 9:52), borderless here: 24 high, 12 side padding, radius-sm. */
-.segment {
-  flex: none;
-  height: 24px;
-  padding: 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font: var(--text-caption);
-  white-space: nowrap;
-}
-
-.segment:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.segment[aria-selected='true'] {
-  background: var(--bg-selected);
-  color: var(--text-primary);
-}
-
-.segment:focus-visible,
 .filter:focus-visible,
 .fileRow:focus-visible,
 .pill:focus-visible {

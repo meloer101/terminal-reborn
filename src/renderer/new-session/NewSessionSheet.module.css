@@ -138,42 +138,6 @@
   white-space: nowrap;
 }
 
-/* Segment: the group is a fill, the chosen option a lighter glass chip. */
-.segmented {
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--bg-selected);
-}
-
-.segment {
-  display: grid;
-  place-items: center;
-  height: 24px;
-  padding: 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font: var(--text-caption);
-  color: var(--text-secondary);
-  white-space: nowrap;
-  cursor: default;
-}
-
-.segment:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.segment[aria-checked='true'] {
-  background: var(--glass-segment-selected);
-  color: var(--text-primary);
-}
-
-.segment:disabled {
-  opacity: 0.4;
-}
-
 /* 高级: collapsed it shows the branch name; the chevron says which way it goes. */
 .advanced {
   display: flex;
@@ -307,7 +271,6 @@
 }
 
 .select:focus-visible,
-.segment:focus-visible,
 .advanced:focus-visible,
 .cancel:focus-visible,
 .primary:focus-visible {

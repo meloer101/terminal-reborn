@@ -76,7 +76,6 @@
 }
 
 .toggle:focus-visible,
-.segment:focus-visible,
 .swatch:focus-visible .swatchPreview,
 .select:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -136,39 +135,6 @@
   color: var(--text-secondary);
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-/* Segmented ------------------------------------------------------------- */
-
-/* Borderless (Figma Segment, PRD v1.12): the group is a fill, the chosen option a lighter chip. */
-.segmented {
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--bg-selected);
-}
-
-.segment {
-  display: grid;
-  place-items: center;
-  height: 24px;
-  padding: 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font: var(--text-caption);
-  color: var(--text-secondary);
-  cursor: default;
-}
-
-.segment:hover {
-  color: var(--text-primary);
-}
-
-.segment[aria-checked='true'] {
-  background: var(--glass-segment-selected);
-  color: var(--text-primary);
 }
 
 /* ThemeSwatch ----------------------------------------------------------- */

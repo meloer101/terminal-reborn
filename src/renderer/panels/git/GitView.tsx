@@ -10,6 +10,7 @@ import { glyphStatus } from '../../lifecycle/present'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
 import { popupMenu } from '../../ui/menu'
+import { Segmented } from '../../ui/Segmented'
 import { PaneHeader } from '../PaneHeader'
 import { ChangesView } from './ChangesView'
 import { GraphView } from './GraphView'
@@ -128,14 +129,17 @@ function GitPane({ worktree }: { worktree: Worktree }) {
         </IconButton>
       </PaneHeader>
       <div className={styles.viewRow}>
-        <div role="tablist" aria-label="Git 视图" className={styles.segments}>
-          <button type="button" role="tab" aria-selected={onGraph} className={styles.segment} onClick={() => setTab(root, 'graph')}>
-            图谱
-          </button>
-          <button type="button" role="tab" aria-selected={!onGraph} className={styles.segment} onClick={() => setTab(root, 'changes')}>
-            变更{changeCount === null ? '' : ` ${changeCount}`}
-          </button>
-        </div>
+        <Segmented
+          label="Git 视图"
+          variant="plain"
+          semantics="tab"
+          value={onGraph ? 'graph' : 'changes'}
+          options={[
+            { value: 'graph', label: '图谱' },
+            { value: 'changes', label: `变更${changeCount === null ? '' : ` ${changeCount}`}` }
+          ]}
+          onChange={(tab) => setTab(root, tab)}
+        />
         <span className={styles.spacer} />
         {onGraph ? (
           <button

@@ -1,0 +1,104 @@
+/* Segmented control. The options are transparent; one thumb behind them is the highlight and slides between them. */
+
+.group {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* fill (Figma Segment, PRD v1.12): the group is a fill, the chosen option a lighter glass chip. */
+.group[data-variant='fill'] {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+}
+
+/* outline: a hairline group, the chosen option a selected fill. */
+.group[data-variant='outline'] {
+  display: inline-flex;
+  gap: 0;
+  padding: 1px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+/* Holds the thumb under the options. Grouped variants clip it, so the overshoot never pokes out of the group. */
+.track {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.group:is([data-variant='fill'], [data-variant='outline']) > .track {
+  overflow: hidden;
+}
+
+.thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-selected);
+  transition:
+    transform var(--motion-duration-slide) var(--motion-spring),
+    width var(--motion-duration-slide) var(--motion-spring),
+    height var(--motion-duration-slide) var(--motion-spring);
+}
+
+.group[data-variant='fill'] .thumb {
+  background: var(--glass-segment-selected);
+}
+
+.option {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: grid;
+  place-items: center;
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: default;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.group[data-variant='outline'] > .option {
+  font: var(--text-caption-strong);
+}
+
+.option:hover:not(:disabled),
+.option[data-selected='true'] {
+  color: var(--text-primary);
+}
+
+/* plain has no group chrome, so an unchosen option shows it can be clicked. */
+.group[data-variant='plain'] > .option:hover:not(:disabled):not([data-selected='true']) {
+  background: var(--bg-hover);
+}
+
+.option:disabled {
+  opacity: 0.4;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.group:is([data-variant='outline'], [data-variant='plain']) > .option:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb {
+    transition: none;
+  }
+}

@@ -9,6 +9,7 @@ import { SHORTCUTS } from '@shared/shortcuts'
 import { openProjectInteractive, openProjectPath } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
+import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { formatAccelerator } from '../ui/menu-model'
 import { greeting, INSTALLABLE_AGENTS, needsAgentInstall, pickQuote } from './empty-main'
@@ -72,20 +73,14 @@ function InstallAgent() {
         <StatusGlyph status="needs_you" />
         还没有装任何 agent，选一个装上：
       </p>
-      <div className={styles.picker} role="radiogroup" aria-label="选择 agent">
-        {INSTALLABLE_AGENTS.map((agent) => (
-          <button
-            key={agent.id}
-            type="button"
-            role="radio"
-            aria-checked={agent.id === selected.id}
-            className={styles.choice}
-            onClick={() => setSelected(agent)}
-          >
-            {agent.name}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        label="选择 agent"
+        variant="plain"
+        className={styles.picker}
+        value={selected.id}
+        options={INSTALLABLE_AGENTS.map((agent) => ({ value: agent.id, label: agent.name }))}
+        onChange={(id) => setSelected(INSTALLABLE_AGENTS.find((agent) => agent.id === id) ?? selected)}
+      />
       <div className={styles.command}>
         <code>{selected.command}</code>
         <IconButton label={`复制 ${selected.name} 安装命令`} onClick={() => void navigator.clipboard.writeText(selected.command).catch(() => {})}>

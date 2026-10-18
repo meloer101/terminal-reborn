@@ -1,5 +1,5 @@
 // Form atoms for the settings window — Figma components Select (12:126), Slider (12:137),
-// Toggle (12:136), Segment (9:54) and ThemeSwatch (12:162).
+// Toggle (12:136) and ThemeSwatch (12:162); Segment (9:54) is the shared ui/Segmented.
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import styles from './controls.module.css'
@@ -92,61 +92,6 @@ export function Slider({
         onChange={(event) => push(Number(event.currentTarget.value))}
       />
       <output className={styles.sliderValue}>{format(shown)}</output>
-    </div>
-  )
-}
-
-/* ---------- Segmented (radiogroup) ---------- */
-
-export function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-  label
-}: {
-  value: T
-  options: ReadonlyArray<{ value: T; label: string }>
-  onChange: (value: T) => void
-  label: string
-}) {
-  const refs = useRef(new Map<T, HTMLButtonElement>())
-  // Arrows move the focus only; Space / Enter choose. Every choice is saved at once, so an arrow press meant to
-  // scroll the page right after clicking an option must not switch it (B17: the theme turned dark that way).
-  const move = (event: KeyboardEvent, delta: number): void => {
-    const focused = options.findIndex((option) => refs.current.get(option.value) === document.activeElement)
-    const from = focused >= 0 ? focused : options.findIndex((option) => option.value === value)
-    const next = options[(from + delta + options.length) % options.length]
-    if (!next) return
-    event.preventDefault()
-    refs.current.get(next.value)?.focus()
-  }
-  return (
-    <div
-      className={styles.segmented}
-      role="radiogroup"
-      aria-label={label}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') move(event, 1)
-        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') move(event, -1)
-      }}
-    >
-      {options.map((option) => (
-        <button
-          key={option.value}
-          ref={(node) => {
-            if (node) refs.current.set(option.value, node)
-            else refs.current.delete(option.value)
-          }}
-          type="button"
-          role="radio"
-          aria-checked={option.value === value}
-          tabIndex={option.value === value ? 0 : -1}
-          className={styles.segment}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
     </div>
   )
 }

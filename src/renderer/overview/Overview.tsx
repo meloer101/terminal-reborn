@@ -9,6 +9,7 @@ import type { SessionId } from '@shared/types'
 import { subscribeClock } from '../sidebar/clock'
 import { useWorkspace } from '../state/workspace'
 import { IconButton } from '../ui/IconButton'
+import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { EnterButton } from './EnterButton'
@@ -183,15 +184,14 @@ export function Overview() {
   )
 }
 
+const VIEWS = [
+  { value: 'list', label: '列表' },
+  { value: 'board', label: '看板' }
+] as const
+
 function ViewSwitch({ view, onChange }: { view: OverviewView; onChange(view: OverviewView): void }) {
   return (
-    <span className={styles.switch} role="radiogroup" aria-label="视图">
-      {(['list', 'board'] as const).map((v) => (
-        <button key={v} type="button" role="radio" aria-checked={view === v} data-selected={view === v} onClick={() => onChange(v)}>
-          {v === 'list' ? '列表' : '看板'}
-        </button>
-      ))}
-    </span>
+    <Segmented label="视图" variant="outline" value={view} options={VIEWS} onChange={onChange} />
   )
 }
 

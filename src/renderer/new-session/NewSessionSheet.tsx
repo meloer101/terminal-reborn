@@ -14,6 +14,7 @@ import {
 } from '@shared/new-session'
 import type { AgentKind, ProjectId } from '@shared/types'
 import { Toggle } from '../settings/controls'
+import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
 import { runCreatePlan } from './creation'
 import { branchProblemText, folderFor, isElsewhere, planCreate, prepareText, selectedBase, tilde } from './model'
@@ -384,59 +385,5 @@ function SelectButton({
       <span className={styles.selectValue}>{value}</span>
       <ChevronDown {...ICON} />
     </button>
-  )
-}
-
-/** Borderless segmented radio group (Figma Segment). Arrow keys move the choice; nothing here is saved until 创建. */
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange
-}: {
-  label: string
-  value: T
-  options: ReadonlyArray<{ value: T; label: string; disabled?: boolean }>
-  onChange: (value: T) => void
-}) {
-  const refs = useRef(new Map<T, HTMLButtonElement>())
-  const move = (event: KeyboardEvent, delta: number): void => {
-    const enabled = options.filter((o) => !o.disabled)
-    const from = enabled.findIndex((o) => o.value === value)
-    const next = enabled[(from + delta + enabled.length) % enabled.length]
-    if (!next) return
-    event.preventDefault()
-    onChange(next.value)
-    refs.current.get(next.value)?.focus()
-  }
-  return (
-    <div
-      className={styles.segmented}
-      role="radiogroup"
-      aria-label={label}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') move(event, 1)
-        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') move(event, -1)
-      }}
-    >
-      {options.map((option) => (
-        <button
-          key={option.value}
-          ref={(node) => {
-            if (node) refs.current.set(option.value, node)
-            else refs.current.delete(option.value)
-          }}
-          type="button"
-          role="radio"
-          aria-checked={option.value === value}
-          tabIndex={option.value === value ? 0 : -1}
-          disabled={option.disabled}
-          className={styles.segment}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
   )
 }
