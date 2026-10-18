@@ -447,3 +447,150 @@ button.pill:hover {
   font: var(--text-mono-s);
   opacity: 0.55;
 }
+
+/* Inline review comments (F5, Figma 03) ------------------------------------------------------------------------ */
+
+/* ＋ over the old-line gutter, shown while the line is hovered or the button has focus. */
+.diffLine {
+  --comment-add-size: 18px;
+}
+
+.commentAdd {
+  position: absolute;
+  top: 1px;
+  left: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: var(--comment-add-size);
+  height: var(--comment-add-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+  opacity: 0;
+}
+
+.diffLine:hover .commentAdd,
+.commentAdd:focus-visible {
+  opacity: 1;
+}
+
+.commentAdd:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.diffLine[data-marked='true'] {
+  box-shadow: inset 2px 0 0 var(--text-secondary);
+}
+
+.fileComments {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+}
+
+.comment,
+.editor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-8) var(--space-12) var(--space-8) calc(var(--space-12) + var(--space-2));
+  background: var(--bg-inset);
+}
+
+.comment {
+  height: 68px;
+  gap: var(--space-2);
+}
+
+.commentHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 16px;
+}
+
+.commentWhere {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.commentIcon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  opacity: 0;
+}
+
+.comment:hover .commentIcon,
+.commentIcon:focus-visible {
+  opacity: 1;
+}
+
+.commentIcon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.commentText {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-body);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.editor {
+  height: 124px;
+  gap: var(--space-8);
+}
+
+.editorText {
+  height: 72px;
+  padding: var(--space-6) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  resize: none;
+  outline: none;
+  user-select: text;
+}
+
+.editorText:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.editorText::placeholder {
+  color: var(--text-tertiary);
+}
+
+.editorButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+}
+
+.commentSave {
+  composes: primaryButton;
+}

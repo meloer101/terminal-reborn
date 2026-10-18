@@ -93,8 +93,8 @@
   --fill-primary: #ededed;
   --focus-ring: #5ea1ff;
   --status-working: #5ea1ff;
-  --status-attention: #ffb224;
-  --status-attention-bg: #ffb2241f;
+  --status-attention: #ff5fb0;
+  --status-attention-bg: #ff5fb01f;
   --status-done: #3dd68c;
   --status-error: #ff5c5c;
   --status-idle: #6b6b6b;
@@ -123,9 +123,9 @@
   --lane-4: #ffb224;
   --lane-5: #6ccfd6;
   /* Overview board cards (Figma card/*): borderless status fills; -meta is secondary text on them. */
-  --card-attention: #312204;
-  --card-attention-hover: #392805;
-  --card-attention-meta: #d9b97e;
+  --card-attention: #371a27;
+  --card-attention-hover: #401f2e;
+  --card-attention-meta: #e9a8c3;
   --card-error: #3a1b19;
   --card-error-hover: #431f1d;
   --card-error-meta: #f0a9a2;
@@ -181,8 +181,8 @@
   --fill-primary: #121212;
   --focus-ring: #2f6fd6;
   --status-working: #2f6fd6;
-  --status-attention: #b86e00;
-  --status-attention-bg: #ffb2241f;
+  --status-attention: #c0237a;
+  --status-attention-bg: #ff5fb01f;
   --status-done: #1e8e5a;
   --status-error: #d23b3b;
   --status-idle: #808080;
@@ -210,9 +210,9 @@
   --lane-3: #1e8e5a;
   --lane-4: #b86e00;
   --lane-5: #1e8c93;
-  --card-attention: #fdefdb;
-  --card-attention-hover: #f7e7d0;
-  --card-attention-meta: #795200;
+  --card-attention: #ffe9f3;
+  --card-attention-hover: #fde0ec;
+  --card-attention-meta: #834160;
   --card-error: #ffeae7;
   --card-error-hover: #ffe1de;
   --card-error-meta: #8a423d;

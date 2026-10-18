@@ -21,6 +21,13 @@ describe('sanitizeWorkspaceFile', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 999)).toEqual(valid)
   })
 
+  it('keeps review comments of worktrees that exist (F5)', () => {
+    const note = { id: 'c1', group: 'committed', path: 'src/a.ts', side: 'new', line: 3, endLine: 4, code: 'x', text: '改一下', createdAt: 5 }
+    const file = sanitizeWorkspaceFile({ ...structuredClone(valid), reviewComments: { '/code/acme': [note], '/elsewhere': [note] } }, 0)
+    expect(file?.reviewComments).toEqual({ '/code/acme': [note] })
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), reviewComments: { '/elsewhere': [note] } }, 0)).not.toHaveProperty('reviewComments')
+  })
+
   it('rejects anything that is not a version-2 object', () => {
     expect(sanitizeWorkspaceFile(null, 0)).toBeNull()
     expect(sanitizeWorkspaceFile([], 0)).toBeNull()

@@ -18,6 +18,11 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-require-imports': 'off' }
   },
   {
+    // Static website (plain browser JS, GSAP from a CDN).
+    files: ['site/**'],
+    languageOptions: { globals: globals.browser }
+  },
+  {
     files: ['src/renderer/**'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },

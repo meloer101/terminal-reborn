@@ -1,15 +1,19 @@
 // Pure parts of Git · 变更 (PRD F17 13B2 / F5): which diffs are worth fetching, and the flat list of fixed-height rows
-// (group headers, files, diff lines, notes) the view renders through a window.
+// (group headers, files, diff lines, notes, review comments and the comment editor) the view renders through a window.
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
+import type { CommentSide, ReviewComment } from '@shared/review-comments'
 
 export type ChangeGroup = 'uncommitted' | 'committed'
 
 /** Files with more changed lines than this are not diffed in the panel (open them in an editor instead). */
 export const MAX_DIFF_LINES = 20_000
 
-/** Figma 13B2 heights: group header 12 + 16 + 4, file row 8 + 16 + 8, DiffLine 20, a note line 4 + 16 + 8. */
-export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, note: 28 } as const
+/**
+ * Figma 13B2 heights: group header 12 + 16 + 4, file row 8 + 16 + 8, DiffLine 20, a note line 4 + 16 + 8. Figma 03:
+ * a saved comment 8 + 16 (location) + 2 × 18 (text, clamped) + 8; the editor 8 + 72 (text) + 8 + 28 (buttons) + 8.
+ */
+export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, note: 28, comment: 68, editor: 124 } as const
 
 export const changeKey = (group: ChangeGroup, path: string): string => `${group}:${path}`
 
@@ -36,10 +40,21 @@ export function changedSince(before: GitFileChange | undefined, after: GitFileCh
 
 export type DiffView = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; rows: DiffRow[]; binary: boolean; truncated: number }
 
+/** The comment being written, as the list needs it: where it goes and which saved comment (if any) it replaces. */
+export interface DraftPlace {
+  id: string | null
+  group: ChangeGroup
+  path: string
+  side: CommentSide
+  endLine: number
+}
+
 export type ChangeItem =
   | { kind: 'group'; title: string; meta: string }
-  | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean }
-  | { kind: 'diff'; key: string; row: DiffRow }
+  | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number }
+  | { kind: 'diff'; key: string; group: ChangeGroup; path: string; row: DiffRow }
+  | { kind: 'comment'; key: string; comment: ReviewComment }
+  | { kind: 'editor'; key: string }
   /** `open`: offer to open the file in the default editor. */
   | { kind: 'note'; key: string; text: string; open?: string }
 
@@ -49,13 +64,38 @@ const NO_DIFF_TEXT: Record<NoDiffReason, string> = {
   binary: '二进制文件，不显示 diff'
 }
 
-export function changeItems(changes: GitChanges, expanded: ReadonlySet<string>, diffs: Readonly<Record<string, DiffView>>): ChangeItem[] {
+/** The line a comment on this diff row is anchored to; null for hunk headers. */
+export function rowAnchor(row: DiffRow): { side: CommentSide; line: number } | null {
+  if (row.kind === 'hunk') return null
+  if (row.kind === 'del') return row.old === null ? null : { side: 'old', line: row.old }
+  return row.new === null ? null : { side: 'new', line: row.new }
+}
+
+/** The text of the diff rows of one side between two lines (the code a comment quotes). */
+export function codeBetween(rows: readonly DiffRow[], side: CommentSide, from: number, to: number): string[] {
+  return rows
+    .filter((row) => {
+      const anchor = rowAnchor(row)
+      return anchor !== null && anchor.side === side && anchor.line >= from && anchor.line <= to
+    })
+    .map((row) => row.text)
+}
+
+export function changeItems(
+  changes: GitChanges,
+  expanded: ReadonlySet<string>,
+  diffs: Readonly<Record<string, DiffView>>,
+  comments: readonly ReviewComment[] = [],
+  draft: DraftPlace | null = null
+): ChangeItem[] {
   const items: ChangeItem[] = []
   const files = (group: ChangeGroup, list: GitFileChange[]) => {
     for (const change of list) {
       const key = changeKey(group, change.path)
       const open = expanded.has(key)
-      items.push({ kind: 'file', group, change, key, open })
+      const own = comments.filter((c) => c.group === group && c.path === change.path)
+      const draftHere = draft && draft.group === group && draft.path === change.path ? draft : null
+      items.push({ kind: 'file', group, change, key, open, comments: own.length })
       if (!open) continue
       const reason = noDiffReason(change)
       if (reason) {
@@ -68,7 +108,28 @@ export function changeItems(changes: GitChanges, expanded: ReadonlySet<string>, 
       else if (diff.binary) items.push({ kind: 'note', key, text: NO_DIFF_TEXT.binary })
       else if (diff.rows.length === 0) items.push({ kind: 'note', key, text: '没有文本改动' })
       else {
-        for (const row of diff.rows) items.push({ kind: 'diff', key, row })
+        const placed = new Set<string>()
+        let draftPlaced = false
+        const commentItem = (comment: ReviewComment) => {
+          placed.add(comment.id)
+          if (draftHere?.id === comment.id) {
+            draftPlaced = true
+            items.push({ kind: 'editor', key })
+          } else items.push({ kind: 'comment', key, comment })
+        }
+        for (const row of diff.rows) {
+          items.push({ kind: 'diff', key, group, path: change.path, row })
+          const anchor = rowAnchor(row)
+          if (!anchor) continue
+          for (const comment of own) if (comment.side === anchor.side && comment.endLine === anchor.line) commentItem(comment)
+          if (draftHere && draftHere.id === null && draftHere.side === anchor.side && draftHere.endLine === anchor.line) {
+            draftPlaced = true
+            items.push({ kind: 'editor', key })
+          }
+        }
+        // Comments whose line is no longer in the diff (the file changed since) still count; they go last.
+        for (const comment of own) if (!placed.has(comment.id)) commentItem(comment)
+        if (draftHere && !draftPlaced) items.push({ kind: 'editor', key })
         if (diff.truncated > 0) items.push({ kind: 'note', key, text: `还有 ${diff.truncated} 行没有显示`, open: change.path })
       }
     }
