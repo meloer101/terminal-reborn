@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { classifyChange, isInside, normalizeRelative } from './worktree-files'
+import { classifyChange, isInside, normalizeRelative, resolveFileLinks } from './worktree-files'
 
 describe('normalizeRelative', () => {
   it('accepts plain relative paths and the root', () => {
@@ -46,5 +49,35 @@ describe('classifyChange', () => {
     expect(classifyChange('.git/refs/heads/main')).toEqual({ dir: '', git: true })
     expect(classifyChange('.git/objects/ab/cdef')).toBeNull()
     expect(classifyChange('.git/logs/HEAD')).toBeNull()
+  })
+})
+
+describe('resolveFileLinks', () => {
+  const outside = mkdtempSync(join(tmpdir(), 'tr-links-out-'))
+  writeFileSync(join(outside, 'secret.txt'), 'x')
+  const root = mkdtempSync(join(tmpdir(), 'tr-links-'))
+  mkdirSync(join(root, 'src'))
+  writeFileSync(join(root, 'src', 'app.ts'), 'x')
+  writeFileSync(join(root, 'README.md'), 'x')
+  symlinkSync(join(outside, 'secret.txt'), join(root, 'escape.txt'))
+
+  it('keeps existing files inside the worktree, as relative paths', async () => {
+    expect(await resolveFileLinks(root, ['src/app.ts', './README.md', 'src/../README.md'])).toEqual(['src/app.ts', 'README.md', 'README.md'])
+  })
+
+  it('accepts absolute paths inside the root, under its real path too', async () => {
+    expect(await resolveFileLinks(root, [join(root, 'src', 'app.ts'), join(realpathSync(root), 'README.md')])).toEqual(['src/app.ts', 'README.md'])
+  })
+
+  it('refuses folders, missing files, paths outside and symlinks leading out', async () => {
+    expect(
+      await resolveFileLinks(root, ['src', 'nope.ts', '../x.ts', join(outside, 'secret.txt'), 'escape.txt', '/etc/hosts', '', 42])
+    ).toEqual([null, null, null, null, null, null, null, null])
+  })
+
+  it('rejects a bad payload', async () => {
+    await expect(resolveFileLinks(root, 'src/app.ts')).rejects.toThrow()
+    await expect(resolveFileLinks(root, Array.from({ length: 65 }, () => 'a.ts'))).rejects.toThrow()
+    await expect(resolveFileLinks('relative/root', ['a.ts'])).rejects.toThrow()
   })
 })

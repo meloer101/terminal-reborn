@@ -29,6 +29,8 @@ interface Props {
 
 export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
   const revision = useFiles((s) => s.roots[root]?.previewRevision ?? 0)
+  const targetLine = useFiles((s) => s.roots[root]?.previewLine ?? null)
+  const request = useFiles((s) => s.roots[root]?.previewRequest ?? 0)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
   const body = useRef<HTMLDivElement>(null)
@@ -57,6 +59,14 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
     () => (loaded?.preview.kind === 'text' ? previewLines(loaded.preview.text, letter === 'U' ? 'all-added' : loaded.marks) : null),
     [loaded, letter]
   )
+
+  // A `path:line` link: centre that line once the text is in, once per request (not again when the file reloads).
+  const scrolledFor = useRef<number | null>(null)
+  useEffect(() => {
+    if (!lines || targetLine === null || scrolledFor.current === request) return
+    scrolledFor.current = request
+    body.current?.querySelector(`[data-line="${targetLine}"]`)?.scrollIntoView({ block: 'center' })
+  }, [lines, targetLine, request])
 
   const back = () => {
     reveal(root, path)
@@ -126,7 +136,13 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
           lines && (
             <div className={styles.lines}>
               {lines.rows.map((line) => (
-                <div key={line.number} className={styles.line} data-mark={line.mark ?? undefined}>
+                <div
+                  key={line.number}
+                  className={styles.line}
+                  data-line={line.number}
+                  data-mark={line.mark ?? undefined}
+                  data-target={line.number === targetLine || undefined}
+                >
                   <span className={styles.changeMark} aria-label={line.mark ? MARK_LABEL[line.mark] : undefined} />
                   <span className={styles.lineNo}>{line.number}</span>
                   <span className={styles.lineText}>{line.text}</span>

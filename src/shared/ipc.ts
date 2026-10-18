@@ -135,6 +135,11 @@ export interface WorktreeFilesApi {
   lineMarks(root: string, path: string): Promise<LineMarkRange[]>
   /** Every file that is not ignored (tracked + untracked), for the filter; capped at MAX_LISTED_FILES. */
   listFiles(root: string): Promise<string[]>
+  /**
+   * Paths printed in a session's terminal (relative to the root, or absolute): for each, its relative path when it
+   * is an existing file inside the worktree, else null. At most 64 per call.
+   */
+  resolveLinks(root: string, paths: readonly string[]): Promise<(string | null)[]>
   /** Opens in the default app (`shell.openPath`); resolves to '' or the system's error message. */
   open(root: string, path: string): Promise<string>
   /** Shows the item in Finder; '' opens the root folder itself. */
@@ -350,6 +355,8 @@ export const IPC = {
   worktreeGitStatus: 'worktree:git-status',
   worktreeLineMarks: 'worktree:line-marks',
   worktreeListFiles: 'worktree:list-files',
+  /** invoke(root, paths) → (string | null)[] */
+  worktreeResolveLinks: 'worktree:resolve-links',
   worktreeOpen: 'worktree:open',
   worktreeReveal: 'worktree:reveal',
   worktreeWatch: 'worktree:watch',

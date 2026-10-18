@@ -1,4 +1,4 @@
-import { Terminal, type ITheme } from '@xterm/xterm'
+import { Terminal, type IBufferRange, type ILink, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions, type ISearchResultChangeEvent } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
@@ -10,7 +10,8 @@ import { whenAppearanceKnown } from './appearance-ready'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { macKeyToBytes } from './keymap'
 import { findLigatureRanges } from './ligatures'
-import { linkHint, type TerminalLink } from './links'
+import { cellText, findPathCandidates, type Cell } from './file-links'
+import { linkHint, type LinkRef, type PathResolver, type TerminalLink } from './links'
 import { readBufferText } from './screen-text'
 import { reattachPayload } from './reattach-payload'
 import { restorePayload, SNAPSHOT_MAX_CHARS, SNAPSHOT_SCROLLBACK_STEPS } from './snapshot-payload'
@@ -58,6 +59,9 @@ export interface XtermSurfaceOptions {
  */
 const webglSurfaces = new Set<XtermSurface>()
 
+/** A soft-wrapped line is searched for paths at most this many rows above (and twice this many in all). */
+const WRAPPED_ROWS_MAX = 16
+
 /** xterm.js implementation of TerminalSurface (docs/PRD.md §6.3). */
 export class XtermSurface implements TerminalSurface {
   private readonly term: Terminal
@@ -81,7 +85,9 @@ export class XtermSurface implements TerminalSurface {
   private container: HTMLElement | null = null
   private readonly linkListeners = new Set<(link: TerminalLink) => void>()
   /** The link under the pointer, so a right-click on it opens the link menu. */
-  private hoveredLink: string | null = null
+  private hoveredLink: LinkRef | null = null
+  /** Which printed paths are files of the session; without one, paths are not links. */
+  private pathResolver: PathResolver | null = null
 
   constructor(options: XtermSurfaceOptions = {}) {
     this.webglUnavailable = options.webgl === false
@@ -99,8 +105,8 @@ export class XtermSurface implements TerminalSurface {
       theme: this.buildTheme(),
       // OSC 8 hyperlinks: same rules as plain-text URLs (PRD F17).
       linkHandler: {
-        activate: (event, uri) => this.activateLink(event, uri),
-        hover: (_event, uri) => this.hoverLink(uri),
+        activate: (event, uri) => this.activateUrl(event, uri),
+        hover: (_event, uri) => this.hoverLink({ kind: 'url', url: uri }),
         leave: () => this.leaveLink(),
         allowNonHttpProtocols: false
       }
@@ -111,11 +117,13 @@ export class XtermSurface implements TerminalSurface {
     this.term.loadAddon(new Unicode11Addon())
     this.term.unicode.activeVersion = '11'
     this.term.loadAddon(
-      new WebLinksAddon((event, uri) => this.activateLink(event, uri), {
-        hover: (_event, uri) => this.hoverLink(uri),
+      new WebLinksAddon((event, uri) => this.activateUrl(event, uri), {
+        hover: (_event, uri) => this.hoverLink({ kind: 'url', url: uri }),
         leave: () => this.leaveLink()
       })
     )
+    // File paths that main finds inside the session's worktree (PRD F17).
+    this.term.registerLinkProvider({ provideLinks: (y, callback) => this.providePathLinks(y, callback) })
     this.attachTuiWheel()
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
@@ -401,15 +409,19 @@ export class XtermSurface implements TerminalSurface {
     return { dispose: () => void this.linkListeners.delete(listener) }
   }
 
-  private activateLink(event: MouseEvent, url: string): void {
-    // Without a listener (the settings preview) window.open goes to main, which hands http(s) to the system browser.
-    if (this.linkListeners.size === 0) return void window.open(url, '_blank')
-    this.emitLink({ url, action: 'open', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+  setPathResolver(resolver: PathResolver | null): void {
+    this.pathResolver = resolver
   }
 
-  private hoverLink(url: string): void {
-    this.hoveredLink = url
-    if (this.term.element) this.term.element.title = linkHint(url)
+  private activateUrl(event: MouseEvent, url: string): void {
+    // Without a listener (the settings preview) window.open goes to main, which hands http(s) to the system browser.
+    if (this.linkListeners.size === 0) return void window.open(url, '_blank')
+    this.emitLink({ kind: 'url', url, action: 'open', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+  }
+
+  private hoverLink(ref: LinkRef): void {
+    this.hoveredLink = ref
+    if (this.term.element) this.term.element.title = linkHint(ref)
   }
 
   private leaveLink(): void {
@@ -418,10 +430,65 @@ export class XtermSurface implements TerminalSurface {
   }
 
   private onContextMenu(event: MouseEvent): void {
-    const url = this.hoveredLink
-    if (!url || this.linkListeners.size === 0) return
+    const ref = this.hoveredLink
+    if (!ref || this.linkListeners.size === 0) return
     event.preventDefault()
-    this.emitLink({ url, action: 'menu', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+    this.emitLink({ ...ref, action: 'menu', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+  }
+
+  /** Path-looking text in the (wrapped) line at buffer row `y` (1-based) that main confirms is a file of the session. */
+  private providePathLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
+    const resolve = this.pathResolver
+    if (!resolve || this.linkListeners.size === 0) return callback(undefined)
+    const { text, cells, firstRow } = this.wrappedLine(y - 1)
+    const candidates = findPathCandidates(text)
+    if (candidates.length === 0) return callback(undefined)
+    resolve(candidates.map((c) => c.path)).then(
+      (resolved) => {
+        const links: ILink[] = []
+        candidates.forEach((candidate, i) => {
+          const path = resolved[i]
+          if (!path) return
+          const ref: LinkRef = { kind: 'file', path, line: candidate.line, column: candidate.column }
+          links.push({
+            range: this.cellRange(firstRow, cells[candidate.start]!, cells[candidate.end]! - 1),
+            text: text.slice(candidate.start, candidate.end),
+            activate: (event) => this.emitLink({ ...ref, action: 'open', metaKey: event.metaKey, x: event.clientX, y: event.clientY }),
+            hover: () => this.hoverLink(ref),
+            leave: () => this.leaveLink()
+          })
+        })
+        callback(links.length > 0 ? links : undefined)
+      },
+      () => callback(undefined)
+    )
+  }
+
+  /** The logical line around buffer row `row` (0-based): soft-wrapped rows joined, up to WRAPPED_ROWS_MAX of them. */
+  private wrappedLine(row: number): { text: string; cells: number[]; firstRow: number } {
+    const buffer = this.term.buffer.active
+    let firstRow = row
+    while (firstRow > 0 && row - firstRow < WRAPPED_ROWS_MAX && buffer.getLine(firstRow)?.isWrapped) firstRow--
+    const scratch = buffer.getNullCell()
+    const rowCells: Cell[] = []
+    for (let r = firstRow; r < buffer.length && r < firstRow + 2 * WRAPPED_ROWS_MAX; r++) {
+      const line = buffer.getLine(r)
+      if (!line || (r > firstRow && !line.isWrapped)) break
+      for (let x = 0; x < this.term.cols; x++) {
+        const cell = line.getCell(x, scratch)
+        rowCells.push(cell ? { chars: cell.getChars(), width: cell.getWidth() } : { chars: '', width: 1 })
+      }
+    }
+    return { ...cellText(rowCells), firstRow }
+  }
+
+  /** Buffer range (1-based, end inclusive) of cells `from`..`to` counted from the start of row `firstRow`. */
+  private cellRange(firstRow: number, from: number, to: number): IBufferRange {
+    const cols = this.term.cols
+    return {
+      start: { x: (from % cols) + 1, y: firstRow + Math.floor(from / cols) + 1 },
+      end: { x: (to % cols) + 1, y: firstRow + Math.floor(to / cols) + 1 }
+    }
   }
 
   private emitLink(link: TerminalLink): void {
@@ -524,6 +591,7 @@ export class XtermSurface implements TerminalSurface {
     if (this.disposed) return
     this.disposed = true
     this.linkListeners.clear()
+    this.pathResolver = null
     this.themeObserver.disconnect()
     this.unloadWebgl()
     this.term.dispose()

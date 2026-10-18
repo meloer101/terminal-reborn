@@ -115,6 +115,7 @@ const api: TrApi = {
     gitStatus: (root) => ipcRenderer.invoke(IPC.worktreeGitStatus, root),
     lineMarks: (root, path) => ipcRenderer.invoke(IPC.worktreeLineMarks, root, path),
     listFiles: (root) => ipcRenderer.invoke(IPC.worktreeListFiles, root),
+    resolveLinks: (root, paths) => ipcRenderer.invoke(IPC.worktreeResolveLinks, root, paths),
     open: (root, path) => ipcRenderer.invoke(IPC.worktreeOpen, root, path),
     reveal: (root, path) => ipcRenderer.send(IPC.worktreeReveal, root, path),
     watch: (root) => ipcRenderer.send(IPC.worktreeWatch, root),

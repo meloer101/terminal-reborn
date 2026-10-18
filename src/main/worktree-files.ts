@@ -61,6 +61,38 @@ async function resolveInside(realRoot: string, path: unknown): Promise<{ rel: st
   return { rel, abs }
 }
 
+/** Paths checked per call (the renderer sends one terminal line's candidates). */
+const MAX_LINK_PATHS = 64
+
+/**
+ * Which of the paths printed in a session's terminal are files inside the worktree (PRD F17): each becomes its
+ * relative POSIX path, or null. Relative paths are relative to the root; absolute ones must lie inside it.
+ */
+export async function resolveFileLinks(root: unknown, paths: unknown): Promise<(string | null)[]> {
+  if (!Array.isArray(paths) || paths.length > MAX_LINK_PATHS) throw new Error('invalid paths')
+  const realRoot = await resolveRoot(root)
+  return Promise.all(paths.map((path) => resolveFileLink(root as string, realRoot, path).catch(() => null)))
+}
+
+async function resolveFileLink(root: string, realRoot: string, path: unknown): Promise<string | null> {
+  if (typeof path !== 'string' || path === '' || path.length > MAX_PATH || path.includes('\0')) return null
+  let rel = isAbsolute(path) ? null : normalizeRelative(path)
+  if (isAbsolute(path)) {
+    // As printed when it is under the root as given or as resolved; otherwise (an alias of it) via the real path.
+    for (const base of [root, realRoot]) {
+      const candidate = relative(base, path)
+      if (!isAbsolute(candidate)) rel ??= normalizeRelative(candidate.split(sep).join('/'))
+    }
+    if (rel === null) {
+      const real = await realpath(path)
+      if (isInside(realRoot, real)) rel = relative(realRoot, real).split(sep).join('/')
+    }
+  }
+  if (!rel) return null
+  const { abs } = await resolveInside(realRoot, rel)
+  return (await stat(abs)).isFile() ? rel : null
+}
+
 export function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -249,6 +281,7 @@ export function registerWorktreeFileHandlers(): void {
   ipcMain.handle(IPC.worktreeGitStatus, (_event, root: unknown) => gitStatus(root))
   ipcMain.handle(IPC.worktreeLineMarks, (_event, root: unknown, path: unknown) => lineMarks(root, path))
   ipcMain.handle(IPC.worktreeListFiles, (_event, root: unknown) => listFiles(root))
+  ipcMain.handle(IPC.worktreeResolveLinks, (_event, root: unknown, paths: unknown) => resolveFileLinks(root, paths))
   ipcMain.handle(IPC.worktreeOpen, async (_event, root: unknown, path: unknown) => {
     const { abs } = await resolveInside(await resolveRoot(root), path)
     return shell.openPath(abs)

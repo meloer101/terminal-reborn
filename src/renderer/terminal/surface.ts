@@ -1,6 +1,6 @@
 // Terminal rendering abstraction (docs/PRD.md §6.3). xterm.js is the first implementation;
 // keeping callers on this interface leaves room for a libghostty-backed surface later.
-import type { TerminalLink } from './links'
+import type { PathResolver, TerminalLink } from './links'
 
 export interface Disposable {
   dispose(): void
@@ -44,4 +44,6 @@ export interface TerminalSurface extends Disposable {
   setAppearance(appearance: Partial<TerminalAppearance>): void
   /** A link in the output was clicked or right-clicked (PRD F17). With no listener a click opens the system browser. */
   onLink(listener: (link: TerminalLink) => void): Disposable
+  /** Lets file paths in the output become links: the resolver says which are files of the session (PRD F17). */
+  setPathResolver(resolver: PathResolver | null): void
 }

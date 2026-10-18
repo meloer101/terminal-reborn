@@ -25,6 +25,10 @@ describe('linkTarget', () => {
 
 describe('linkHint', () => {
   it('shows the real address first', () => {
-    expect(linkHint('https://example.com/').split('\n')[0]).toBe('https://example.com/')
+    expect(linkHint({ kind: 'url', url: 'https://example.com/' }).split('\n')[0]).toBe('https://example.com/')
+  })
+
+  it('shows the path and line of a file link', () => {
+    expect(linkHint({ kind: 'file', path: 'src/a.ts', line: 3, column: null })).toBe('src/a.ts:3\n单击预览 · ⌘ 单击用默认编辑器打开')
   })
 })

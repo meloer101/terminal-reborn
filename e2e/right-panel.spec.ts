@@ -1,5 +1,6 @@
 // F17 right panel: the floating card, the session header's view icons, ⌥⌘B, resizing, and the 文件 view on a real
-// git worktree — lazy tree, git letters, ignored entries, filter, 有改动, preview with change marks, the context menu.
+// git worktree — lazy tree, git letters, ignored entries, filter, 有改动, preview with change marks, the context menu,
+// and file paths printed in the terminal opening the preview at their line (⌘-click / the link menu: the editor).
 // Screenshots in both themes go to test-results/right-panel/ (compare with Figma 13D / 13F / 13G).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -228,5 +229,83 @@ test.describe('F17 right panel · 文件', () => {
     writeFileSync(join(project, 'src', 'fresh.ts'), 'new\n')
     await expect(row('src/fresh.ts')).toHaveText('fresh.tsU', { timeout: 5000 })
     await expect(panel().getByRole('button', { name: '有改动 3' })).toBeVisible()
+  })
+
+  test('a path in the terminal opens the preview at its line; ⌘-click and the link menu reach the editor', async () => {
+    // Main's shell.openPath, recorded instead of opening the user's editor.
+    await app.evaluate(({ shell }) => {
+      const opened: string[] = []
+      ;(globalThis as unknown as { __openedPaths: string[] }).__openedPaths = opened
+      shell.openPath = async (path: string) => {
+        opened.push(path)
+        return ''
+      }
+    })
+    const openedPaths = () => app.evaluate(() => (globalThis as unknown as { __openedPaths: string[] }).__openedPaths.slice())
+    const xterm = page.locator('[data-region="terminal"] .xterm').first()
+    // Close the pane, then print paths on the first rows of a cleared screen: one with a line, one that does not
+    // exist, and an absolute one inside the worktree.
+    await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
+    await expect(panel()).toHaveCount(0)
+    await page.locator('[data-region="terminal"] .xterm').first().click()
+    // The earlier test left `@src/app.ts ` in the input line.
+    await page.keyboard.press('Control+U')
+    await page.keyboard.type(`clear; printf '%s\\n' src/app.ts:7 missing.ts:3 ${join(project, 'README.md')}`)
+    await page.keyboard.press('Enter')
+    await expect.poll(async () => (await screen()).split('\n')[0]?.trim()).toBe('src/app.ts:7')
+    /** The middle of the cell in column `col` of row `row`, in page coordinates. */
+    const cell = async (row: number, col: number) => {
+      const box = await page.locator('[data-region="terminal"] .xterm-screen').first().boundingBox()
+      const size = await page.evaluate(
+        (id) => (globalThis as unknown as { __trTerminals: { size(id: string): { cols: number; rows: number } | null } }).__trTerminals.size(id),
+        SESSION
+      )
+      if (!box || !size) throw new Error('no terminal')
+      return { x: box.x + (box.width / size.cols) * (col + 0.5), y: box.y + (box.height / size.rows) * (row + 0.5) }
+    }
+
+    // A path that does not exist is not a link.
+    const missing = await cell(1, 2)
+    await page.mouse.move(missing.x, missing.y)
+    await page.waitForTimeout(500)
+    await expect(xterm).not.toHaveAttribute('title', /.*/)
+
+    // Hovering names the path and line; a click previews the file, scrolled to and marking line 7.
+    const at = await cell(0, 3)
+    await page.mouse.move(at.x, at.y)
+    await expect(xterm).toHaveAttribute('title', /^src\/app\.ts:7\n/)
+    await page.mouse.click(at.x, at.y)
+    const preview = panel().getByTestId('file-preview')
+    await expect(preview).toBeVisible()
+    await expect(panel().getByTitle('src/app.ts')).toHaveText('src/app.ts')
+    await expect(preview.locator('[data-target]')).toHaveText('7export const line7 = 7')
+    await expect(preview.locator('[data-target]')).toBeInViewport()
+
+    // An absolute path inside the worktree previews that file.
+    const absolute = await cell(2, 5)
+    await page.mouse.move(absolute.x, absolute.y)
+    await expect(xterm).toHaveAttribute('title', /^README\.md\n/)
+    await page.mouse.click(absolute.x, absolute.y)
+    await expect(panel().getByTitle('README.md')).toHaveText('README.md')
+    await expect(preview.locator('[data-target]')).toHaveCount(0)
+
+    // ⌘-click: the default editor.
+    const meta = await cell(0, 6)
+    await page.mouse.move(meta.x, meta.y)
+    await expect(xterm).toHaveAttribute('title', /^src\/app\.ts:7/)
+    await page.keyboard.down('Meta')
+    await page.mouse.click(meta.x, meta.y)
+    await page.keyboard.up('Meta')
+    await expect.poll(openedPaths).toEqual([expect.stringMatching(/\/src\/app\.ts$/)])
+
+    // Right-click: the path menu.
+    const right = await cell(0, 8)
+    await page.mouse.move(right.x, right.y)
+    await expect(xterm).toHaveAttribute('title', /^src\/app\.ts:7/)
+    await page.mouse.click(right.x, right.y, { button: 'right' })
+    const menu = page.getByRole('menu')
+    await expect(menu.getByRole('menuitem')).toHaveText(['预览', '用默认编辑器打开', '在 Finder 中显示', '复制路径'])
+    await menu.getByRole('menuitem', { name: '复制路径' }).click()
+    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe('src/app.ts')
   })
 })

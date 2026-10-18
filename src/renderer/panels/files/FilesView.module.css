@@ -236,6 +236,11 @@
   font: var(--text-mono-code);
 }
 
+/* The line a `path:line` link in the terminal points at. */
+.line[data-target] {
+  background: var(--bg-selected);
+}
+
 .changeMark {
   flex: none;
   width: var(--space-2);

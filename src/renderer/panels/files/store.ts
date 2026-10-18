@@ -20,6 +20,10 @@ export interface RootFiles {
   selected: string | null
   /** File shown in the read-only preview (13F), or null for the tree. */
   preview: string | null
+  /** Line the preview scrolls to (a `path:line` link in the terminal), or null. */
+  previewLine: number | null
+  /** Bumped per showPreview, so opening the same line again scrolls to it again. */
+  previewRequest: number
   /** Bumped when the previewed file may have changed on disk, so the preview reloads. */
   previewRevision: number
 }
@@ -35,6 +39,8 @@ const EMPTY: RootFiles = {
   changedOnly: false,
   selected: null,
   preview: null,
+  previewLine: null,
+  previewRequest: 0,
   previewRevision: 0
 }
 
@@ -137,8 +143,8 @@ export function setChangedOnly(root: string, changedOnly: boolean): void {
 }
 
 export const select = (root: string, path: string | null): void => patchRoot(root, { selected: path })
-export const showPreview = (root: string, path: string | null): void =>
-  patchRoot(root, (c) => ({ preview: path, selected: path ?? c.selected }))
+export const showPreview = (root: string, path: string | null, line: number | null = null): void =>
+  patchRoot(root, (c) => ({ preview: path, previewLine: line, previewRequest: c.previewRequest + 1, selected: path ?? c.selected }))
 
 /** Collapses every folder (更多 › 全部折叠). */
 export const collapseAll = (root: string): void => patchRoot(root, { expanded: new Set(), collapsed: new Set() })
