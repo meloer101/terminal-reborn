@@ -1,10 +1,10 @@
 // Integration seam between UI features and live agent sessions: typing a prompt into an agent's TUI with the
 // measured send protocol (PRD §6.9). Callers never touch PTYs or protocols.
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
-import { bracketedPaste, detectBlockingDialog, normalizeSendText, planSend } from '@shared/send-protocol'
+import { detectBlockingDialog, inputLineText, normalizeSendText, planSend } from '@shared/send-protocol'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from './state/workspace'
-import { getSendIo, readViewport } from './terminal/registry'
+import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
 
 // One serial queue per session: two sends to the same PTY must never interleave.
 const queue = createSendQueue()
@@ -26,12 +26,14 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
 
 /**
  * Puts `text` into the session's input line without pressing Enter (the 文件 view's 插入路径到终端, PRD F17):
- * one bracketed paste, queued behind any send in flight (§6.9).
+ * one bracketed paste — or one line when the program does not take bracketed paste, so no newline submits it —
+ * queued behind any send in flight (§6.9).
  */
 export async function insertIntoTerminal(sessionId: SessionId, text: string): Promise<void> {
   const body = normalizeSendText(text)
   if (!body) return
-  await sendQueued(queue, sessionId, [{ type: 'write', data: bracketedPaste(body) }], getSendIo(sessionId))
+  const data = inputLineText(body, acceptsBracketedPaste(sessionId))
+  await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
 }
 
 const READY_TIMEOUT_MS = 30_000

@@ -102,8 +102,9 @@ test.describe('F6 graph performance', () => {
     for (let run = 0; run < 3; run++) {
       // Each run opens the Git view from a fresh page, so git is read again.
       times.push(await openGit())
-      // Close it (the open view is remembered across reloads), then reload.
-      await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: 'Git' }).click()
+      // Close it (the open view is remembered across reloads), then reload. Use the panel's own close button: on a
+      // narrow screen (CI's is 1024 wide) the panel floats over the header and covers the Git icon.
+      await page.locator('[data-region="panel"]').getByRole('button', { name: '关闭右侧栏' }).click()
       await expect(page.locator('[data-region="panel"]')).toHaveCount(0)
       await page.reload()
       await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })

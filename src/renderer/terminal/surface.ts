@@ -35,6 +35,8 @@ export interface TerminalSurface extends Disposable {
   focus(): void
   /** Visible viewport plus `scrollbackLines` of history, as plain text (for send confirmation and screen fallbacks). */
   readScreen(scrollbackLines?: number): string
+  /** Whether the program in the terminal turned on bracketed paste (`ESC[?2004h`). */
+  bracketedPasteMode(): boolean
   onTitleChange(listener: (title: string) => void): Disposable
   /** Subscribe to an OSC sequence by numeric identifier (e.g. 7, 133, 777). */
   onOsc(code: number, listener: (payload: string) => void): Disposable

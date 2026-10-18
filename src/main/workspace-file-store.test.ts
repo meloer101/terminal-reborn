@@ -66,6 +66,15 @@ describe('WorkspaceFileStore', () => {
     expect(readdirSync(dir)).toEqual(['workspace.json'])
   })
 
+  it('a load right after a save returns that save, not the file from before it (a renderer reload)', () => {
+    const store = new WorkspaceFileStore(path)
+    store.save(file)
+    vi.advanceTimersByTime(1000)
+    store.save({ ...file, rightPanel: 'git' })
+    expect(store.load()?.rightPanel).toBe('git')
+    expect(JSON.parse(readFileSync(path, 'utf8')).rightPanel).toBe('git')
+  })
+
   it('sanitizes what it is given and ignores payloads that are not a workspace', () => {
     const store = new WorkspaceFileStore(path)
     store.save('junk')

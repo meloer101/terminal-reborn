@@ -100,6 +100,16 @@ export function bracketedPaste(text: string): string {
   return PASTE_START + text + PASTE_END
 }
 
+/**
+ * Bytes that put normalized `text` into a shell or TUI input line without submitting it. A program that turned on
+ * bracketed paste (`ESC[?2004h`) takes newlines inside the markers as text. One that did not (macOS's bash 3.2, a
+ * bare `sh`) would run every line, and show the markers as `00~` / `01~` — so it gets one line instead: newlines and
+ * tabs (completion) become spaces, and nothing is submitted.
+ */
+export function inputLineText(text: string, bracketedPasteMode: boolean): string {
+  return bracketedPasteMode ? bracketedPaste(text) : text.replace(/[\n\t]+/g, ' ')
+}
+
 function countChar(text: string, ch: string): number {
   let n = 0
   for (const c of text) if (c === ch) n++
