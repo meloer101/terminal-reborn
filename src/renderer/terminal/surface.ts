@@ -1,5 +1,6 @@
 // Terminal rendering abstraction (docs/PRD.md §6.3). xterm.js is the first implementation;
 // keeping callers on this interface leaves room for a libghostty-backed surface later.
+import type { TerminalLink } from './links'
 
 export interface Disposable {
   dispose(): void
@@ -41,4 +42,6 @@ export interface TerminalSurface extends Disposable {
   /** Subscribe to an OSC sequence by numeric identifier (e.g. 7, 133, 777). */
   onOsc(code: number, listener: (payload: string) => void): Disposable
   setAppearance(appearance: Partial<TerminalAppearance>): void
+  /** A link in the output was clicked or right-clicked (PRD F17). With no listener a click opens the system browser. */
+  onLink(listener: (link: TerminalLink) => void): Disposable
 }

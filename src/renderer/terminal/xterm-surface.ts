@@ -10,6 +10,7 @@ import { whenAppearanceKnown } from './appearance-ready'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { macKeyToBytes } from './keymap'
 import { findLigatureRanges } from './ligatures'
+import { linkHint, type TerminalLink } from './links'
 import { readBufferText } from './screen-text'
 import { reattachPayload } from './reattach-payload'
 import { restorePayload, SNAPSHOT_MAX_CHARS, SNAPSHOT_SCROLLBACK_STEPS } from './snapshot-payload'
@@ -78,6 +79,9 @@ export class XtermSurface implements TerminalSurface {
   private appearanceSeq = 0
   private openPromise: Promise<void> | null = null
   private container: HTMLElement | null = null
+  private readonly linkListeners = new Set<(link: TerminalLink) => void>()
+  /** The link under the pointer, so a right-click on it opens the link menu. */
+  private hoveredLink: string | null = null
 
   constructor(options: XtermSurfaceOptions = {}) {
     this.webglUnavailable = options.webgl === false
@@ -92,15 +96,26 @@ export class XtermSurface implements TerminalSurface {
       // Agents' TUIs turn on mouse reporting, which takes plain drags; ⌥-drag still selects text there (B19).
       macOptionClickForcesSelection: true,
       allowTransparency: this.isTransparent(),
-      theme: this.buildTheme()
+      theme: this.buildTheme(),
+      // OSC 8 hyperlinks: same rules as plain-text URLs (PRD F17).
+      linkHandler: {
+        activate: (event, uri) => this.activateLink(event, uri),
+        hover: (_event, uri) => this.hoverLink(uri),
+        leave: () => this.leaveLink(),
+        allowNonHttpProtocols: false
+      }
     })
     this.term.loadAddon(this.fitAddon)
     this.term.loadAddon(this.serializeAddon)
     this.term.loadAddon(this.searchAddon)
     this.term.loadAddon(new Unicode11Addon())
     this.term.unicode.activeVersion = '11'
-    // Plain clicks open links through window.open, which main routes to the default browser.
-    this.term.loadAddon(new WebLinksAddon((_event, uri) => window.open(uri, '_blank')))
+    this.term.loadAddon(
+      new WebLinksAddon((event, uri) => this.activateLink(event, uri), {
+        hover: (_event, uri) => this.hoverLink(uri),
+        leave: () => this.leaveLink()
+      })
+    )
     this.attachTuiWheel()
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
@@ -174,6 +189,7 @@ export class XtermSurface implements TerminalSurface {
     this.openPromise = whenAppearanceKnown().then(() => this.loadFonts()).then(() => {
       if (this.disposed || !this.container) return
       this.term.open(this.container)
+      this.term.element?.addEventListener('contextmenu', (event) => this.onContextMenu(event))
       this.syncLigatures()
       this.syncRenderer()
       this.fit()
@@ -380,6 +396,38 @@ export class XtermSurface implements TerminalSurface {
     return this.term.onTitleChange(listener)
   }
 
+  onLink(listener: (link: TerminalLink) => void): Disposable {
+    this.linkListeners.add(listener)
+    return { dispose: () => void this.linkListeners.delete(listener) }
+  }
+
+  private activateLink(event: MouseEvent, url: string): void {
+    // Without a listener (the settings preview) window.open goes to main, which hands http(s) to the system browser.
+    if (this.linkListeners.size === 0) return void window.open(url, '_blank')
+    this.emitLink({ url, action: 'open', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+  }
+
+  private hoverLink(url: string): void {
+    this.hoveredLink = url
+    if (this.term.element) this.term.element.title = linkHint(url)
+  }
+
+  private leaveLink(): void {
+    this.hoveredLink = null
+    this.term.element?.removeAttribute('title')
+  }
+
+  private onContextMenu(event: MouseEvent): void {
+    const url = this.hoveredLink
+    if (!url || this.linkListeners.size === 0) return
+    event.preventDefault()
+    this.emitLink({ url, action: 'menu', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+  }
+
+  private emitLink(link: TerminalLink): void {
+    for (const listener of [...this.linkListeners]) listener(link)
+  }
+
   onOsc(code: number, listener: (payload: string) => void): Disposable {
     return this.term.parser.registerOscHandler(code, (payload) => {
       listener(payload)
@@ -475,6 +523,7 @@ export class XtermSurface implements TerminalSurface {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.linkListeners.clear()
     this.themeObserver.disconnect()
     this.unloadWebgl()
     this.term.dispose()

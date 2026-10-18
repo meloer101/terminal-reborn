@@ -1,6 +1,7 @@
 // Binds one XtermSurface to one PTY session through window.tr.pty.
 import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import type { AgentKind, SessionId } from '@shared/types'
+import { handleTerminalLink } from '../state/link-actions'
 import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
 import { loadLiveSessions, takeReattach } from './live-sessions'
 import { uncovered } from './reattach-payload'
@@ -42,7 +43,10 @@ export class SessionTerminal {
     private readonly agent: AgentKind = 'shell',
     /** Relaunch the agent into this earlier conversation instead of starting a new one. */
     private readonly resumeAgentSessionId?: string
-  ) {}
+  ) {
+    // Links in the output open in the built-in browser (PRD F17); the surface drops the listener when disposed.
+    this.surface.onLink((link) => handleTerminalLink(sessionId, link))
+  }
 
   /** The PTY is running (spawn requested, not exited, not disposed). */
   get alive(): boolean {

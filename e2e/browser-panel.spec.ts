@@ -1,8 +1,8 @@
 // F17 right panel · 浏览器: the empty state, typing a port to open a local server, isolation of the page from the
 // app (no window.tr, no Node), console error counting, errors going into the input line (never submitted), the
 // keyboard leaving a hidden page, app / page chords, pop-ups gated on real input, the page following the well and
-// hiding under dialogs, the mobile viewport, a port found in the session's PTY tree (F14, minimal), and refusing
-// non-http schemes.
+// hiding under dialogs, the mobile viewport, a port found in the session's PTY tree (F14, minimal), refusing
+// non-http schemes, and links in the terminal opening here first (⌘-click / the link menu: the system browser).
 // Screenshots of the app window (chrome only; the page is a native view) go to test-results/browser-panel/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtempSync, writeFileSync } from 'node:fs'
@@ -315,5 +315,52 @@ test.describe('F17 right panel · 浏览器', () => {
     const urls = await app.evaluate(({ webContents }) => webContents.getAllWebContents().map((w) => w.getURL()))
     expect(urls.some((u) => u.startsWith('file:///etc'))).toBe(false)
     await address().press('Escape')
+  })
+
+  test('a link in the terminal opens in the built-in browser; ⌘-click and the link menu reach the system browser', async () => {
+    // Close the pane, then print a link alone on the first row of a cleared screen.
+    await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '浏览器' }).click()
+    await expect(panel()).toHaveCount(0)
+    const link = `${origin()}/linked`
+    await page.locator('[data-region="terminal"] .xterm').first().click()
+    await page.keyboard.type(`clear; printf '%s\\n' ${link}`)
+    await page.keyboard.press('Enter')
+    await expect.poll(async () => (await screen()).split('\n')[0]?.trim()).toBe(link)
+    /** The middle of the link's character in column `col`, in page coordinates. */
+    const linkPoint = async (col: number) => {
+      const box = await page.locator('[data-region="terminal"] .xterm-screen').first().boundingBox()
+      const size = await page.evaluate(
+        (id) => (globalThis as unknown as { __trTerminals: { size(id: string): { cols: number; rows: number } | null } }).__trTerminals.size(id),
+        SESSION
+      )
+      if (!box || !size) throw new Error('no terminal')
+      return { x: box.x + (box.width / size.cols) * (col + 0.5), y: box.y + (box.height / size.rows) * 0.5 }
+    }
+    const at = await linkPoint(4)
+    await page.mouse.move(at.x, at.y)
+    // The hover hint names the real address.
+    await expect(page.locator('[data-region="terminal"] .xterm').first()).toHaveAttribute('title', new RegExp(`^${link}`))
+    await page.mouse.click(at.x, at.y)
+    await expect(panel().getByRole('textbox', { name: '地址' })).toHaveValue(link)
+    await expect.poll(() => inPage(link, 'location.pathname'), { timeout: 15_000 }).toBe('/linked')
+
+    const opened = () => app.evaluate(() => (globalThis as unknown as { __opened: string[] }).__opened.slice())
+    // Opening the pane re-fits the terminal; xterm finds the link again once the pointer reaches another cell.
+    const meta = await linkPoint(7)
+    await page.mouse.move(meta.x, meta.y)
+    await page.keyboard.down('Meta')
+    await page.mouse.click(meta.x, meta.y)
+    await page.keyboard.up('Meta')
+    await expect.poll(opened).toContain(link)
+
+    const before = (await opened()).length
+    const right = await linkPoint(10)
+    await page.mouse.move(right.x, right.y)
+    await page.mouse.click(right.x, right.y, { button: 'right' })
+    const menu = page.getByRole('menu')
+    await expect(menu.getByRole('menuitem', { name: '在内置浏览器打开' })).toBeVisible()
+    await expect(menu.getByRole('menuitem', { name: '复制链接' })).toBeVisible()
+    await menu.getByRole('menuitem', { name: '用系统浏览器打开' }).click()
+    await expect.poll(async () => (await opened()).length).toBe(before + 1)
   })
 })
