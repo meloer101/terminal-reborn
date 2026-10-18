@@ -57,13 +57,15 @@ function ResizeHandle() {
     // The release point counts too: Chromium can drop the last rAF-aligned move before pointerup.
     const up = (event: PointerEvent) => {
       move(event)
-      handle.removeEventListener('pointermove', move)
-      handle.removeEventListener('pointerup', up)
-      handle.removeEventListener('pointercancel', up)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
     }
-    handle.addEventListener('pointermove', move)
-    handle.addEventListener('pointerup', up)
-    handle.addEventListener('pointercancel', up)
+    // On the window, not the handle: Chromium sometimes drops the capture mid-drag (lostpointercapture with no
+    // pointerup), and the rest of the drag then never reached the handle.
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
   }
   return (
     <div
