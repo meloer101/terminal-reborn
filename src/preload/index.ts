@@ -134,7 +134,9 @@ const api: TrApi = {
     remove: (root, path, force) => ipcRenderer.invoke(IPC.gitWorktreesRemove, root, path, force),
     watch: (root) => ipcRenderer.send(IPC.gitWorktreesWatch, root),
     unwatch: (root) => ipcRenderer.send(IPC.gitWorktreesUnwatch, root),
-    onChanged: (listener) => listen(IPC.gitWorktreesChanged, listener)
+    onChanged: (listener) => listen(IPC.gitWorktreesChanged, listener),
+    newSessionInfo: (root) => ipcRenderer.invoke(IPC.gitWorktreesNewSessionInfo, root),
+    create: (request) => ipcRenderer.invoke(IPC.gitWorktreesCreate, request)
   },
   browser: browserApi
 }

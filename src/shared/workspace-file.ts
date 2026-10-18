@@ -1,6 +1,7 @@
 // On-disk shape of the workspace (`<userData>/workspace.json`, phase 2 · A12) and its sanitizer.
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
+import { isWorkdir, type Workdir } from './new-session'
 import type { AgentKind, Project, Worktree } from './types'
 
 export const WORKSPACE_FILE_VERSION = 2
@@ -59,6 +60,8 @@ export interface WorkspaceFile {
   drafts: Record<string, string>
   /** Folders opened as projects, most recent first (first-run screen, B10). Absent when empty. */
   recentProjects?: string[]
+  /** 工作目录 last used in the new-session sheet, by project id (PRD F4). Absent when empty. */
+  newSessionWorkdir?: Record<string, Workdir>
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -157,6 +160,11 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ? [...new Set(value.recentProjects.filter((p): p is string => isText(p) && p.startsWith('/')))].slice(0, MAX_RECENT_PROJECTS)
     : []
 
+  const newSessionWorkdir: Record<string, Workdir> = {}
+  if (isRecord(value.newSessionWorkdir)) {
+    for (const [id, choice] of Object.entries(value.newSessionWorkdir)) if (projectIds.has(id) && isWorkdir(choice)) newSessionWorkdir[id] = choice
+  }
+
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
   const lastRightPanel = sanitizeRightPanel(value.lastRightPanel)
   return {
@@ -175,7 +183,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
       ? [...new Set(value.collapsedProjectIds.filter((id): id is string => isString(id) && projectIds.has(id)))]
       : [],
     drafts,
-    ...(recentProjects.length > 0 ? { recentProjects } : {})
+    ...(recentProjects.length > 0 ? { recentProjects } : {}),
+    ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {})
   }
 }
 

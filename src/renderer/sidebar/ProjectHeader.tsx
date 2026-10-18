@@ -14,8 +14,8 @@ interface Props {
   /** Shown on a collapsed header so a folded project can't hide a session that needs you. */
   attention: SessionStatus | null
   onToggle(): void
-  /** ＋ — new session in this project; the menu drops down from `anchor`. */
-  onNewSession(anchor: MenuAnchor): void
+  /** ＋ — the new-session sheet for this project (PRD F4). */
+  onNewSession(): void
   /** … and right-click — the project menu, under the … or at the pointer. */
   onMenu(anchor: MenuAnchor): void
 }
@@ -51,7 +51,7 @@ export function ProjectHeader({ name, count, collapsed, attention, onToggle, onN
       )}
       {count > 0 && <span className={styles.count}>{count}</span>}
       <span className={styles.actions}>
-        <button type="button" className={styles.action} aria-label={`在 ${name} 新建会话`} title="新建会话" aria-haspopup="menu" onClick={(e) => onNewSession(e.currentTarget)}>
+        <button type="button" className={styles.action} aria-label={`在 ${name} 新建会话`} title="新建会话 · ⌘N" aria-haspopup="dialog" onClick={() => onNewSession()}>
           <Plus {...ICON} />
         </button>
         <button type="button" className={styles.action} aria-label={`${name} 项目菜单`} title="项目菜单" aria-haspopup="menu" onClick={(e) => onMenu(e.currentTarget)}>

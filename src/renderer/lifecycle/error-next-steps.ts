@@ -20,6 +20,7 @@ export interface ErrorNextSteps {
 type ErrorView = Pick<Session, 'kind' | 'status' | 'phase' | 'currentAction'>
 
 export function errorNextSteps(session: ErrorView, issue?: LaunchIssue): ErrorNextSteps | null {
+  if (issue?.kind === 'worktree-failed') return { summary: `没能创建 worktree：${issue.message}`, canFix: false, retry: null }
   if (session.kind === 'shell') return null
   if (issue?.kind === 'missing-cli') return { summary: `没有找到 ${AGENT_NAME[session.kind]} 命令，安装后重试`, canFix: false, retry: 'start' }
   if (issue?.kind === 'cwd-missing') return { summary: `项目目录不存在：${issue.path}`, canFix: false, retry: null }

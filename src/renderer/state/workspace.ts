@@ -3,6 +3,7 @@
 // feature's own store, not here — keeps parallel work from colliding on this file.
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
+import { rememberWorkdir, type Workdir } from '@shared/new-session'
 import type { AgentKind, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
 import { mockProjects, mockSessions, mockWorktrees } from './mock-data'
 import {
@@ -41,6 +42,8 @@ interface WorkspaceState extends WorkspaceData {
   mainView: MainView
   /** Folders opened as projects, most recent first (first-run screen). */
   recentProjects: readonly string[]
+  /** 工作目录 last used in the new-session sheet, by project (PRD F4). */
+  newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
   /** Bumped whenever the keyboard should go to the active session's terminal (B7), even if it is already active. */
   focusRequest: number
   /** Bumped by 会话 › 重命名会话: the header starts renaming the active session. */
@@ -66,7 +69,9 @@ interface WorkspaceState extends WorkspaceData {
   /** Starts a session in the project and selects it; null if the project is gone. */
   addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
   /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
-  addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string }, kind: AgentKind): SessionId | null
+  addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind): SessionId | null
+  /** Remembers the new-session sheet's 工作目录 for a git project. */
+  rememberWorkdir(projectId: ProjectId, choice: Workdir): void
   closeSession(id: SessionId): void
   /** Drops linked worktree records whose folder was deleted, with their sessions (Worktree view). */
   forgetWorktrees(ids: WorktreeId[]): void
@@ -118,6 +123,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   collapsedProjectIds: saved?.collapsedProjectIds ?? [],
   mainView: 'session',
   recentProjects: saved?.recentProjects ?? [],
+  newSessionWorkdir: saved?.newSessionWorkdir ?? {},
   focusRequest: 0,
   renameRequest: 0,
 
@@ -155,6 +161,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
     set({ ...result.data, mainView: 'session', focusRequest: get().focusRequest + 1 })
     return result.sessionId
   },
+  rememberWorkdir: (projectId, choice) => set((s) => ({ newSessionWorkdir: rememberWorkdir(s.newSessionWorkdir, projectId, choice, true) })),
   closeSession: (id) => set(closeSession(pick(get()), id)),
   forgetWorktrees: (ids) => set(forgetWorktrees(pick(get()), ids)),
   patchSession: (id, patch) =>
@@ -182,7 +189,8 @@ setSnapshotProvider(() => {
       lastRightPanel: state.lastRightPanel,
       rightPanelWidth: state.rightPanelWidth,
       collapsedProjectIds: state.collapsedProjectIds,
-      recentProjects: state.recentProjects
+      recentProjects: state.recentProjects,
+      newSessionWorkdir: state.newSessionWorkdir
     },
     drafts.snapshot()
   )

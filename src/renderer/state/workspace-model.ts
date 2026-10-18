@@ -1,5 +1,6 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
+import type { Workdir } from '@shared/new-session'
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree } from '@shared/types'
 import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
@@ -66,7 +67,7 @@ export function addSession(
 export function addSessionInWorktree(
   data: WorkspaceData,
   projectId: ProjectId,
-  target: { path: string; branch: string },
+  target: { path: string; branch: string; baseBranch?: string },
   kind: AgentKind,
   now: number,
   makeId: MakeId = randomId
@@ -74,7 +75,14 @@ export function addSessionInWorktree(
   if (!data.projects.some((p) => p.id === projectId)) return null
   const known = data.worktrees.find((w) => w.projectId === projectId && w.path === target.path)
   if (known) return startSessionIn(data, known, kind, now, makeId)
-  const worktree: Worktree = { id: makeId('w'), projectId, branch: target.branch, path: target.path, isMain: false }
+  const worktree: Worktree = {
+    id: makeId('w'),
+    projectId,
+    branch: target.branch,
+    path: target.path,
+    isMain: false,
+    ...(target.baseBranch ? { baseBranch: target.baseBranch } : {})
+  }
   return startSessionIn({ ...data, worktrees: [...data.worktrees, worktree] }, worktree, kind, now, makeId)
 }
 
@@ -145,6 +153,8 @@ export interface WorkspaceUi {
   rightPanelWidth: number
   collapsedProjectIds: ProjectId[]
   recentProjects: readonly string[]
+  /** 工作目录 last used in the new-session sheet, by project. */
+  newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
 }
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
@@ -178,6 +188,9 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
     rightPanelWidth: ui.rightPanelWidth,
     collapsedProjectIds: ui.collapsedProjectIds.filter((id) => data.projects.some((p) => p.id === id)),
     ...(ui.recentProjects.length > 0 ? { recentProjects: [...ui.recentProjects] } : {}),
+    ...(Object.keys(ui.newSessionWorkdir).length > 0
+      ? { newSessionWorkdir: Object.fromEntries(Object.entries(ui.newSessionWorkdir).filter(([id]) => data.projects.some((p) => p.id === id))) }
+      : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
     )
@@ -225,6 +238,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.rightPanelWidth !== prev.rightPanelWidth ||
     next.collapsedProjectIds !== prev.collapsedProjectIds ||
     next.recentProjects !== prev.recentProjects ||
+    next.newSessionWorkdir !== prev.newSessionWorkdir ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true

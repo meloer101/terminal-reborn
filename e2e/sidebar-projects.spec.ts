@@ -45,30 +45,24 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   await expect(sidebar.getByRole('button', { name: 'acme-web 项目菜单' })).toBeVisible()
   await page.screenshot({ path: 'test-results/sidebar-projects-hover.png' })
 
-  // ＋ drops the agent menu under itself and keeps the header's actions up while it is open; Esc closes it.
+  // ＋ opens the new-session sheet for that project (PRD F4); Esc closes it.
   // Keyboard focus inside the header also shows its actions (:focus-within), so a lost hover can't hide ＋ mid-click.
   await sidebar.getByRole('button', { name: 'acme-web', exact: true }).focus()
   await plus.click()
-  const menu = page.getByRole('menu')
-  await expect(menu.getByRole('menuitem')).toHaveText(['Claude Code⌘N', 'Codex', '终端'])
-  const plusBox = (await plus.boundingBox())!
-  const menuBox = (await menu.boundingBox())!
-  expect(menuBox.y).toBeGreaterThan(plusBox.y + plusBox.height)
-  await page.mouse.move(600, 600)
-  await expect(plus).toBeVisible()
-  await expect(plus).toHaveAttribute('aria-expanded', 'true')
-  await page.screenshot({ path: 'test-results/sidebar-projects-new-menu.png' })
+  const sheet = page.getByTestId('new-session-sheet')
+  await expect(sheet.getByRole('button', { name: '项目' })).toHaveText('acme-web')
   await page.keyboard.press('Escape')
-  await expect(menu).toHaveCount(0)
-  await expect(plus).toHaveAttribute('aria-expanded', 'false')
+  await expect(sheet).toHaveCount(0)
 
-  // Right-clicking a session opens its menu at the pointer; hovering 在此项目新建 opens the submenu.
+  // Right-clicking a session opens its menu at the pointer; hovering 在此新建会话 opens the submenu, which starts
+  // another session in the same folder without the sheet.
+  const menu = page.getByRole('menu')
   const cookie = sidebar.locator('[data-session-id="s-cookie"]')
   await cookie.click({ button: 'right' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['关闭会话⌘W', '在此项目新建'])
-  const submenu = page.getByRole('menu', { name: '在此项目新建' })
-  await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此项目新建' }), submenu)
-  await expect(submenu.getByRole('menuitem')).toHaveText(['Claude Code⌘N', 'Codex', '终端'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['关闭会话⌘W', '在此新建会话'])
+  const submenu = page.getByRole('menu', { name: '在此新建会话' })
+  await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此新建会话' }), submenu)
+  await expect(submenu.getByRole('menuitem')).toHaveText(['Claude Code', 'Codex', '终端'])
   await page.screenshot({ path: 'test-results/sidebar-session-context-menu.png' })
   for (const theme of ['light', 'dark'] as const) {
     await page.locator('html').evaluate((html, t) => html.setAttribute('data-theme', t), theme)

@@ -138,7 +138,11 @@ test.describe('first run and the session header', () => {
 
   test('F18: a Claude session starts from the project in the sidebar', async () => {
     await page.locator('[data-region="sidebar"]').getByRole('button', { name: '新建会话' }).click()
-    await page.getByRole('menu').getByRole('menuitem', { name: /Claude Code/ }).click()
+    // The new-session sheet (PRD F4): a plain folder can only start in itself; Claude Code is the default agent.
+    const sheet = page.getByTestId('new-session-sheet')
+    await expect(sheet.getByRole('radio', { name: '当前目录' })).toHaveAttribute('aria-checked', 'true')
+    await sheet.getByRole('button', { name: /创建/ }).click()
+    await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('empty-main')).toHaveCount(0)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
   })

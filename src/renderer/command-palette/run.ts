@@ -1,6 +1,7 @@
 // Executes a palette entry against the real stores. Kept apart from the pure model so
 // entries.ts stays free of side effects.
 import type { AgentKind } from '@shared/types'
+import { openNewSessionSheet } from '../new-session/sheet-store'
 import { openProjectInteractive } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
 import { applyTheme, type ThemePreference } from '../theme'
@@ -40,6 +41,9 @@ function runAction(action: ActionId): void {
     return
   }
   switch (action) {
+    case 'new-session':
+      openNewSessionSheet(currentProject(state)?.id ?? null)
+      break
     case 'open-project':
       void openProjectInteractive()
       break
@@ -59,7 +63,8 @@ export function runEntry(entry: PaletteEntry): void {
   const target = entry.target
   // Picking a session or starting one hands the keyboard to its terminal (B7); other actions give it back.
   const toTerminal = target.type === 'session' || NEW_KIND[target.action] !== undefined
-  closeCommandPalette({ restoreFocus: !toTerminal })
+  // The new-session sheet takes the keyboard itself.
+  closeCommandPalette({ restoreFocus: !toTerminal && !(target.type === 'action' && target.action === 'new-session') })
   if (target.type === 'session') useWorkspace.getState().setActiveSession(target.sessionId)
   else runAction(target.action)
 }

@@ -7,33 +7,14 @@ import {
   removeProjectMenuLabel
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
+import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace } from './workspace'
 import { projectOfSession } from './workspace-model'
 
 const NEW_SESSION_LABEL: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
-const NEW_SESSION_IN_PROJECT_LABEL: Record<AgentKind, string> = {
-  claude: '新建 Claude Code 会话',
-  codex: '新建 Codex 会话',
-  shell: '新建终端'
-}
 const KINDS: AgentKind[] = ['claude', 'codex', 'shell']
-
-function kindItems(projectId: ProjectId, labels: Record<AgentKind, string>): MenuEntry[] {
-  return KINDS.map((kind) => ({
-    type: 'item',
-    id: `new:${projectId}:${kind}`,
-    label: labels[kind],
-    // ⌘N always means "Claude Code in the current project".
-    ...(kind === 'claude' ? { accelerator: 'CmdOrCtrl+N' } : {})
-  }))
-}
-
-async function runNewSessionChoice(id: string | null): Promise<void> {
-  const match = id ? /^new:(.+):(claude|codex|shell)$/.exec(id) : null
-  if (match) useWorkspace.getState().addSession(match[1]!, match[2] as AgentKind)
-}
 
 /**
  * Opens a folder as a project: a known one selects its latest session (or starts `kind` when it has none),
@@ -53,13 +34,14 @@ export function openProjectPath(path: string, kind: AgentKind = 'claude'): Sessi
 
 /** "打开项目… ⌘O": pick a folder, then openProjectPath. */
 export async function openProjectInteractive(kind: AgentKind = 'claude'): Promise<SessionId | null> {
+  if (isNewSessionSheetOpen()) return null
   const path = await window.tr.ui.pickFolder()
   return path ? openProjectPath(path, kind) : null
 }
 
-/** The project header's ＋ and the empty project's 新建会话 row. */
-export async function openNewSessionMenu(projectId: ProjectId, anchor: MenuAnchor): Promise<void> {
-  await runNewSessionChoice(await popupMenu(kindItems(projectId, NEW_SESSION_LABEL), anchor))
+/** The project header's ＋, the empty project's 新建会话 row and the Worktree view's ＋: the sheet, with that project chosen (PRD F4). */
+export function newSessionInProject(projectId: ProjectId): void {
+  openNewSessionSheet(projectId)
 }
 
 /** Right-click on a project header, or its … button. */
@@ -70,7 +52,7 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   const worktreeIds = new Set(state.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))
   const sessionCount = state.sessions.filter((s) => worktreeIds.has(s.worktreeId)).length
   const entries: MenuEntry[] = [
-    ...kindItems(projectId, NEW_SESSION_IN_PROJECT_LABEL),
+    { type: 'item', id: 'new', label: '新建会话…', accelerator: 'CmdOrCtrl+N' },
     { type: 'separator' },
     { type: 'item', id: 'reveal', label: '在 Finder 中显示' },
     { type: 'item', id: 'copy-path', label: '复制路径' },
@@ -81,7 +63,7 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   if (choice === 'reveal') window.tr.ui.revealInFinder(project.rootPath)
   else if (choice === 'copy-path') void navigator.clipboard.writeText(project.rootPath).catch(() => {})
   else if (choice === 'remove') await removeProjectInteractive(projectId)
-  else await runNewSessionChoice(choice)
+  else if (choice === 'new') openNewSessionSheet(projectId)
 }
 
 /** Closes a session; asks first while its agent is running or waiting for the user. Resolves to whether it closed. */
@@ -107,24 +89,41 @@ export async function removeProjectInteractive(projectId: ProjectId): Promise<bo
   return true
 }
 
-/** ⌘N: a Claude Code session in the current project; with no project yet, open one first. */
+/** ⌘N: the new-session sheet for the current project (PRD F4); with no project yet, open one first. */
 export async function quickNewSession(): Promise<void> {
+  if (isNewSessionSheetOpen()) return
   const state = useWorkspace.getState()
   const projectId = projectOfSession(state, state.activeSessionId) ?? state.projects[0]?.id
-  if (projectId) state.addSession(projectId, 'claude')
+  if (projectId) openNewSessionSheet(projectId)
   else await openProjectInteractive()
 }
 
+/**
+ * Right-click on a session: 关闭会话, and 在此新建会话 — another session in the same worktree folder, started directly
+ * without the sheet (PRD F4).
+ */
 export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<void> {
   const state = useWorkspace.getState()
-  const projectId = projectOfSession(state, sessionId)
+  const session = state.sessions.find((s) => s.id === sessionId)
+  const worktree = state.worktrees.find((w) => w.id === session?.worktreeId)
   const entries: MenuEntry[] = [{ type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }]
-  if (projectId) {
-    entries.push({ type: 'separator' }, { type: 'submenu', label: '在此项目新建', items: kindItems(projectId, NEW_SESSION_LABEL) })
+  if (worktree) {
+    entries.push(
+      { type: 'separator' },
+      { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: NEW_SESSION_LABEL[kind] })) }
+    )
   }
   const choice = await popupMenu(entries, anchor)
   if (choice === 'close') await closeSessionInteractive(sessionId)
-  else await runNewSessionChoice(choice)
+  const kind = choice?.startsWith('here:') ? (choice.slice('here:'.length) as AgentKind) : null
+  if (!kind || !worktree || !KINDS.includes(kind)) return
+  const workspace = useWorkspace.getState()
+  if (worktree.isMain) {
+    const id = workspace.addSession(worktree.projectId, kind)
+    if (id) useWorkspace.getState().setActiveSession(id)
+  } else {
+    workspace.addSessionInWorktree(worktree.projectId, { path: worktree.path, branch: worktree.branch }, kind)
+  }
 }
 
 /**
@@ -165,8 +164,12 @@ export function renameSession(sessionId: SessionId, input: string): void {
 const plainCmd = (e: KeyboardEvent, key: string) =>
   e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === key
 
-/** ⌘W: close the active session (with the running-session confirmation). */
+/** ⌘W: close the active session (with the running-session confirmation); with the new-session sheet open, close that. */
 export async function closeActiveSession(): Promise<void> {
+  if (isNewSessionSheetOpen()) {
+    closeNewSessionSheet(true)
+    return
+  }
   const id = useWorkspace.getState().activeSessionId
   if (id) await closeSessionInteractive(id)
 }

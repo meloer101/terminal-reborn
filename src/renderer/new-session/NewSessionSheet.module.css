@@ -1,0 +1,434 @@
+/* 新建会话 (Figma 15): the glass overlay material of PRD §5 — a lightly blurred scrim, a translucent frosted panel with
+ * a top highlight and two shadows, borderless controls. Solid (bg/raised, bg/popover) under "reduce transparency". */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: var(--glass-scrim);
+  backdrop-filter: blur(var(--glass-scrim-blur));
+  /* The titlebar drag regions underneath must not swallow clicks on the scrim. */
+  -webkit-app-region: no-drag;
+}
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: calc(100vw - 2 * var(--space-24));
+  border-radius: var(--radius-sheet);
+  background: var(--glass-sheet);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+  box-shadow: var(--glass-highlight), var(--shadow-glass);
+  outline: none;
+}
+
+.context {
+  display: flex;
+  align-items: center;
+  padding: var(--space-16) var(--space-20) calc(var(--space-6) + var(--space-4));
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-m);
+  letter-spacing: var(--tracking-title-m);
+  color: var(--text-primary);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-20) var(--space-8);
+}
+
+/* One row per choice: label column 64, then the control. No separators between rows. */
+.field {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-16);
+  padding: var(--space-6) 0;
+}
+
+.field[data-disabled='true'] {
+  opacity: 0.4;
+}
+
+.labelBox {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 64px;
+  height: 30px;
+}
+
+.label {
+  flex-shrink: 0;
+  width: 64px;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.control {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.note,
+.error {
+  margin: 0;
+  font: var(--text-caption);
+}
+
+.note {
+  color: var(--text-tertiary);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-secondary);
+}
+
+.error svg {
+  flex-shrink: 0;
+  color: var(--status-error);
+}
+
+/* Select: a fill, no border (Figma Select after v1.12). */
+.select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-8) 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.select:hover:not(:disabled),
+.select[aria-expanded='true'] {
+  background: var(--border-default);
+}
+
+.select svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.selectValue {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Segment: the group is a fill, the chosen option a lighter glass chip. */
+.segmented {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+}
+
+.segment {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.segment:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.segment[aria-checked='true'] {
+  background: var(--glass-segment-selected);
+  color: var(--text-primary);
+}
+
+.segment:disabled {
+  opacity: 0.4;
+}
+
+/* 高级: collapsed it shows the branch name; the chevron says which way it goes. */
+.advanced {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  width: 100%;
+  min-height: 42px;
+  padding: var(--space-6) var(--space-8) var(--space-6) 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: default;
+}
+
+.advanced:disabled {
+  opacity: 1;
+}
+
+.advancedBranch {
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.input {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-8) 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-mono-terminal);
+  color: var(--text-primary);
+  outline: none;
+  user-select: text;
+}
+
+.input:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.input[data-invalid='true'] {
+  box-shadow: inset 0 0 0 1px var(--status-error);
+}
+
+.path {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  height: 30px;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  height: 30px;
+}
+
+.prepText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-20) var(--space-16);
+}
+
+.cancel,
+.primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  font: var(--text-body-strong);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.cancel {
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* The committing action is glass too: same material, told apart by opacity and brightness. */
+.primary {
+  border-radius: var(--radius-button-glass);
+  background: var(--glass-primary-bg);
+  box-shadow: var(--glass-highlight), var(--shadow-glass-button);
+  color: var(--glass-primary-fg);
+}
+
+.primary:disabled {
+  opacity: 0.4;
+}
+
+.shortcut {
+  font: var(--text-mono-s);
+  opacity: 0.55;
+}
+
+.select:focus-visible,
+.segment:focus-visible,
+.advanced:focus-visible,
+.cancel:focus-visible,
+.primary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Menu (Figma 15C Popover · 分支) ---------------------------------------------------------------------------- */
+
+.menu {
+  position: fixed;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  overflow: hidden;
+  border-radius: var(--radius-popover);
+  background: var(--glass-menu);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+  box-shadow: var(--glass-highlight), var(--shadow-glass-menu);
+}
+
+.menuSearch {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-button-glass);
+  background: var(--bg-selected);
+  color: var(--text-tertiary);
+}
+
+.menuSearch input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: var(--text-body);
+  color: var(--text-primary);
+  outline: none;
+  user-select: text;
+}
+
+.menuSearch input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.menuList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+}
+
+.menuGroup {
+  padding: var(--space-8) 0 var(--space-4) var(--space-8);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 30px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-md);
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.menuItem[data-active='true'] {
+  background: var(--bg-selected);
+}
+
+.menuIcon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.menuLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuMeta {
+  flex-shrink: 0;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.menuEmpty,
+.menuHint {
+  margin: 0;
+  padding: var(--space-8) var(--space-8) var(--space-6);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .scrim {
+    background: var(--scrim);
+    backdrop-filter: none;
+  }
+
+  .sheet {
+    background: var(--bg-raised);
+    backdrop-filter: none;
+  }
+
+  .menu {
+    background: var(--bg-popover);
+    backdrop-filter: none;
+  }
+}
