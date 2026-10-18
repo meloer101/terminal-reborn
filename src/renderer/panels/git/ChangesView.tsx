@@ -1,10 +1,16 @@
 // Git · 变更 (PRD F17 13B2 / F5): the worktree's files grouped 未提交 (working tree) and 已提交 (vs the base branch),
 // each expandable to a unified diff. Every row has a fixed height, so long diffs render only the visible window.
-// Inline review comments and merging come later (F5 comments, F4 merge).
+// The footer asks the session's agent to review (F13) and opens the merge sheet (F4). Inline comments come later (F5).
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
+import { SHORTCUTS } from '@shared/shortcuts'
+import type { Worktree } from '@shared/types'
+import { ReviewButton } from '../../review/ReviewButton'
+import { formatAccelerator } from '../../ui/menu-model'
+import { useActiveSession, useWorkspace } from '../../state/workspace'
+import { openMergeSheet, targetFor } from '../merge/store'
 import { changeItems, itemHeight, type ChangeItem } from './changes-model'
 import { toggleFile, type RootGit } from './store'
 import { offsetsOf, useViewport, visibleRange } from './virtual'
@@ -14,8 +20,11 @@ const STATUS_LABEL: Record<GitFileChange['status'], string> = { M: '已修改', 
 /** Items rendered beyond each edge of the viewport. */
 const OVERSCAN = 20
 
-export function ChangesView({ root, git }: { root: string; git: RootGit }) {
+export function ChangesView({ root, git, worktree }: { root: string; git: RootGit; worktree: Worktree }) {
   const changes = git.changes
+  const active = useActiveSession()
+  const projectRoot = useWorkspace((s) => s.projects.find((p) => p.id === worktree.projectId)?.rootPath ?? null)
+  const reviewer = active && active.session.worktreeId === worktree.id ? active.session.id : null
   const scroller = useRef<HTMLDivElement>(null)
   const items = useMemo(() => (changes ? changeItems(changes, git.expanded, git.diffs) : []), [changes, git.expanded, git.diffs])
   const offsets = useMemo(() => offsetsOf(items.map(itemHeight)), [items])
@@ -37,14 +46,21 @@ export function ChangesView({ root, git }: { root: string; git: RootGit }) {
         </div>
       </div>
       <div className={styles.footer}>
+        {reviewer && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />}
         <span className={styles.spacer} />
-        {/* Both wait for F4 (local merge) and F16 (PRs); disabled with a reason rather than hidden. */}
+        {/* PRs wait for F16; disabled with a reason rather than hidden. */}
         <button type="button" className={styles.ghostButton} disabled title="即将支持">
           创建 PR
         </button>
-        <button type="button" className={styles.primaryButton} disabled title="即将支持：合并在 F4 本地合并完成后可用">
-          合并到 {changes.base ?? 'main'}
-          <span className={styles.shortcut}>⌘M</span>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={worktree.isMain || !projectRoot}
+          title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
+          onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
+        >
+          合并到 {changes.base ?? 'main'}…
+          <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
         </button>
       </div>
     </>

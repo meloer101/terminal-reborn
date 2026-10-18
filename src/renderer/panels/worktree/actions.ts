@@ -2,7 +2,7 @@
 // confirmed and refused whenever work could be lost (see deleteBlocker; main checks again). `--force` is offered in a
 // second confirmation only for git's submodule refusal.
 import type { WorktreeRemoveResult } from '@shared/git-worktrees'
-import type { AgentKind, ProjectId } from '@shared/types'
+import type { AgentKind, ProjectId, WorktreeId } from '@shared/types'
 import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
@@ -27,7 +27,7 @@ export function startSessionIn(projectId: ProjectId, row: WorktreeRow, kind: Age
   useWorkspace.getState().addSessionInWorktree(projectId, { path: row.openPath, branch: row.info.branch ?? '' }, kind)
 }
 
-function failureText(result: Exclude<WorktreeRemoveResult, { ok: true }>): string {
+export function removeFailureText(result: Exclude<WorktreeRemoveResult, { ok: true }>): string {
   switch (result.reason) {
     case 'dirty':
       return '有未提交的改动'
@@ -56,16 +56,29 @@ function freshRow(row: WorktreeRow): WorktreeRow {
   return { ...row, sessions: useWorkspace.getState().sessions.filter((s) => ids.has(s.worktreeId)) }
 }
 
-/** Ends the worktree's terminals before its folder goes, then removes it; the records go only once it is gone. */
-async function removeOne(root: string, row: WorktreeRow, force = false): Promise<WorktreeRemoveResult> {
-  for (const session of row.sessions) disposeTerminal(session.id, true)
-  const result = await window.tr.gitWorktrees.remove(root, row.info.path, force)
+/**
+ * Ends the worktree's terminals before its folder goes, then removes it; the records go only once it is gone.
+ * Also used after a local merge (F4) that was asked to remove the worktree.
+ */
+export async function removeWorktreeWithSessions(
+  root: string,
+  path: string,
+  worktreeIds: readonly WorktreeId[],
+  force = false
+): Promise<WorktreeRemoveResult> {
+  const ids = new Set(worktreeIds)
+  const sessions = useWorkspace.getState().sessions.filter((s) => ids.has(s.worktreeId))
+  for (const session of sessions) disposeTerminal(session.id, true)
+  const result = await window.tr.gitWorktrees.remove(root, path, force)
   const state = useWorkspace.getState()
-  if (result.ok) state.forgetWorktrees(row.worktreeIds)
+  if (result.ok) state.forgetWorktrees([...worktreeIds])
   // Their terminals are gone either way (the confirmation said they close); the folder's record stays if it does.
-  else for (const session of row.sessions) state.closeSession(session.id)
+  else for (const session of sessions) state.closeSession(session.id)
   return result
 }
+
+const removeOne = (root: string, row: WorktreeRow, force = false): Promise<WorktreeRemoveResult> =>
+  removeWorktreeWithSessions(root, row.info.path, row.worktreeIds, force)
 
 /** 更多 › 删除 worktree…: guard → confirm → guard again → `git worktree remove` → (submodules) second confirm → `--force`. */
 export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, refresh: () => Promise<void>): Promise<void> {
@@ -100,7 +113,7 @@ export async function deleteWorktreeInteractive(root: string, row: WorktreeRow, 
       })
       if (force) result = await removeOne(root, current, true)
     }
-    patchRoot(root, { notice: result.ok ? `已删除 ${row.name}` : `没有删除 ${row.name}：${failureText(result)}` })
+    patchRoot(root, { notice: result.ok ? `已删除 ${row.name}` : `没有删除 ${row.name}：${removeFailureText(result)}` })
   } catch {
     patchRoot(root, { notice: `没有删除 ${row.name}：出错了` })
   } finally {
@@ -140,7 +153,7 @@ export async function cleanUpInteractive(root: string, rows: readonly WorktreeRo
       }
       const result = await removeOne(root, current).catch((): WorktreeRemoveResult => ({ ok: false, reason: 'git', message: '出错了' }))
       if (result.ok) removed++
-      else failed.push(`${row.name}（${failureText(result)}）`)
+      else failed.push(`${row.name}（${removeFailureText(result)}）`)
     }
   } finally {
     patchRoot(root, {

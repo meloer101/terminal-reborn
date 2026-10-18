@@ -12,6 +12,7 @@ import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeC
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
+import type { MergePrecheck, MergeRequest, MergeResult } from './git-merge'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -188,6 +189,10 @@ export interface GitWorktreesApi {
   newSessionInfo(root: string): Promise<NewSessionInfo>
   /** Fetches, then `git worktree add` on a new branch and copies the `.worktreeinclude` files (PRD F4). */
   create(request: WorktreeCreateRequest): Promise<WorktreeCreateResult>
+  /** Whether `worktree`'s branch can be merged into its base, and what is in the way (PRD F4 预检). Rejects on bad input. */
+  mergePrecheck(root: string, worktree: string): Promise<MergePrecheck>
+  /** Merges the branch into its base (squash / merge / rebase), then optionally pushes the base to origin (PRD F4). */
+  merge(request: MergeRequest): Promise<MergeResult>
 }
 
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
@@ -380,5 +385,9 @@ export const IPC = {
   /** invoke(root) → NewSessionInfo */
   gitWorktreesNewSessionInfo: 'git-worktrees:new-session-info',
   /** invoke(WorktreeCreateRequest) → WorktreeCreateResult */
-  gitWorktreesCreate: 'git-worktrees:create'
+  gitWorktreesCreate: 'git-worktrees:create',
+  /** invoke(root, worktree) → MergePrecheck */
+  gitWorktreesMergePrecheck: 'git-worktrees:merge-precheck',
+  /** invoke(MergeRequest) → MergeResult */
+  gitWorktreesMerge: 'git-worktrees:merge'
 } as const

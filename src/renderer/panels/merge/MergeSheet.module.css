@@ -1,0 +1,268 @@
+/* 合并到 <base> (Figma 05): the new-session sheet's glass material and footer, a checklist instead of form rows. */
+
+.scrim {
+  composes: scrim from '../../new-session/NewSessionSheet.module.css';
+}
+
+.sheet {
+  composes: sheet from '../../new-session/NewSessionSheet.module.css';
+}
+
+.title {
+  composes: title from '../../new-session/NewSessionSheet.module.css';
+}
+
+.cancel {
+  composes: cancel from '../../new-session/NewSessionSheet.module.css';
+}
+
+.primary {
+  composes: primary from '../../new-session/NewSessionSheet.module.css';
+}
+
+.shortcut {
+  composes: shortcut from '../../new-session/NewSessionSheet.module.css';
+}
+
+.footer {
+  composes: footer from '../../new-session/NewSessionSheet.module.css';
+}
+
+.label {
+  composes: label from '../../new-session/NewSessionSheet.module.css';
+  line-height: 30px;
+}
+
+.note {
+  composes: note from '../../new-session/NewSessionSheet.module.css';
+}
+
+.context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-16) var(--space-20) var(--space-8);
+}
+
+.branches {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+  margin: 0;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+}
+
+.branches svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.branches span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The checklist: one line per finding, icon in status color, a monospaced count on the right. */
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-20) var(--space-12);
+}
+
+.line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-6) 0;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.lineIcon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  height: 18px;
+}
+
+.line[data-tone='ok'] .lineIcon {
+  color: var(--status-done);
+}
+
+.line[data-tone='warn'] .lineIcon {
+  color: var(--status-attention);
+}
+
+.line[data-tone='error'] .lineIcon {
+  color: var(--status-error);
+}
+
+.lineText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lineMeta {
+  flex-shrink: 0;
+  font: var(--text-mono-s);
+  line-height: 18px;
+  color: var(--text-tertiary);
+}
+
+.muted {
+  margin: 0;
+  padding: var(--space-6) 0;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.conflicts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 0 0 var(--space-24);
+  list-style: none;
+}
+
+.conflict {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-12);
+  padding: var(--space-4) 0;
+}
+
+.conflictPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflictReason,
+.conflictMore {
+  flex-shrink: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.conflictMore {
+  padding: var(--space-4) 0;
+}
+
+/* Method and options: the new-session sheet's label column. */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-20) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.field {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-16);
+  padding: var(--space-6) 0;
+}
+
+.control {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.checkboxRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.checkboxRow .note {
+  padding-left: calc(16px + var(--space-8));
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: var(--text-body);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.checkbox:disabled {
+  color: var(--text-tertiary);
+}
+
+.box {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-selected);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.checkbox[aria-checked='true'] .box {
+  background: var(--text-primary);
+  box-shadow: none;
+  color: var(--bg-app);
+}
+
+.checkbox:disabled .box {
+  opacity: 0.5;
+}
+
+.checkbox:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.failure {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-8) var(--space-20) 0;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.failure svg {
+  flex-shrink: 0;
+  color: var(--status-error);
+}
+
+.footerNote {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.cancel:disabled {
+  opacity: 0.4;
+}

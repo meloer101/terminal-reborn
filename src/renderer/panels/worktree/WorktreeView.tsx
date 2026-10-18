@@ -6,11 +6,14 @@
 import { Ellipsis, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { SHORTCUTS } from '@shared/shortcuts'
 import type { ProjectId, Session, WorktreeId } from '@shared/types'
 import { newSessionInProject } from '../../state/session-actions'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
+import { formatAccelerator } from '../../ui/menu-model'
 import { StatusGlyph } from '../../ui/StatusGlyph'
+import { openMergeSheet } from '../merge/store'
 import { PaneHeader } from '../PaneHeader'
 import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
 import { buildRows, detailLines, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
@@ -222,10 +225,16 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
             >
               打开文件夹
             </button>
-            {info.base && (
-              // Local merge is F4; until then the button only says where it will be.
-              <button type="button" className={styles.ghost} aria-disabled="true" title="本地合并还没有做好（F4）">
-                合并到 {info.base}…<span className={styles.shortcut}>⌘M</span>
+            {info.base && !info.isMain && (
+              <button
+                type="button"
+                className={styles.ghost}
+                disabled={info.prunable !== null}
+                onClick={() =>
+                  openMergeSheet({ projectId, root, worktreePath: info.path, worktreeIds: row.worktreeIds, isMain: info.isMain })
+                }
+              >
+                合并到 {info.base}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
               </button>
             )}
             <span className={styles.spacer} />

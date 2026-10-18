@@ -11,6 +11,7 @@ import { StatusBridge } from '../status/StatusBridge'
 import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
+import { MergeSheet } from '../panels/merge/MergeSheet'
 import { RightPanel } from '../panels/RightPanel'
 import { Overview } from '../overview/Overview'
 import { MenuHost } from '../ui/MenuHost'
@@ -79,6 +80,7 @@ export function AppShell() {
       <AppearanceBridge />
       <SettingsDialog />
       <NewSessionSheet />
+      <MergeSheet />
       <MenuHost />
     </div>
   )

@@ -13,7 +13,8 @@ export const MENU_COMMANDS = [
   'next-attention',
   'rename-session',
   'toggle-sidebar',
-  'toggle-right-panel'
+  'toggle-right-panel',
+  'merge-worktree'
 ] as const
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number]
@@ -36,6 +37,8 @@ export const SHORTCUTS = {
   // As in VS Code / Cursor: ⌘B the left sidebar, ⇧⌘B the right panel.
   'toggle-sidebar': 'CmdOrCtrl+B',
   'toggle-right-panel': 'Shift+CmdOrCtrl+B',
+  // ⌘M stays the system's Minimize; the merge sheet takes ⇧⌘M (PRD F4).
+  'merge-worktree': 'Shift+CmdOrCtrl+M',
   settings: 'CmdOrCtrl+,',
   'font-bigger': 'CmdOrCtrl+Plus',
   'font-smaller': 'CmdOrCtrl+-',

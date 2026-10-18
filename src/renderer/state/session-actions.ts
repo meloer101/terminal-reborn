@@ -8,6 +8,7 @@ import {
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
+import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace } from './workspace'
@@ -165,10 +166,14 @@ export function renameSession(sessionId: SessionId, input: string): void {
 const plainCmd = (e: KeyboardEvent, key: string) =>
   e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === key
 
-/** ⌘W: close the active session (with the running-session confirmation); with the new-session sheet open, close that. */
+/** ⌘W: close the active session (with the running-session confirmation); with a sheet open, close that. */
 export async function closeActiveSession(): Promise<void> {
   if (isNewSessionSheetOpen()) {
     closeNewSessionSheet(true)
+    return
+  }
+  if (isMergeSheetOpen()) {
+    closeMergeSheet(true)
     return
   }
   const id = useWorkspace.getState().activeSessionId
