@@ -1,12 +1,12 @@
 // 合并到 <base> (PRD F4, Figma 05 19:814): the precheck as a short checklist (ahead, behind, conflicts, uncommitted
 // work, an upstream the base has not pulled), then the method (Squash · Merge · Rebase) and two options (remove the
-// worktree, push to origin). With conflicts the only way forward is handing them to the worktree's agent; nothing is
-// changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
+// worktree, push to origin). With conflicts the only way forward is the worktree's agent: the instructions go into its
+// input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { ArrowRight, Check, CircleAlert, CircleX, GitBranch } from 'lucide-react'
 import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
-import { submitPrompt } from '../../session-io'
+import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../../ui/Segmented'
 import { removeFailureText, removeWorktreeWithSessions } from '../worktree/actions'
@@ -140,7 +140,9 @@ function Sheet({ target }: { target: MergeTarget }) {
     state.setActiveSession(agent.id)
     try {
       await ensureAgentUp(agent.id)
-      await submitPrompt(agent.id, prompt)
+      // Into the input line only: resolving conflicts can cost a lot of tokens, so the user sends it (PRD §2).
+      await insertIntoTerminal(agent.id, prompt)
+      useWorkspace.getState().requestTerminalFocus()
     } catch {
       // The terminal shows what happened; the sheet is gone by now.
     }
@@ -258,7 +260,11 @@ function Sheet({ target }: { target: MergeTarget }) {
         )}
 
         <footer className={styles.footer}>
-          {conflicts.length > 0 && !agent && <span className={styles.footerNote}>在终端里解决冲突后重新打开</span>}
+          {conflicts.length > 0 && !shown?.blocker && (
+            <span className={styles.footerNote}>
+              {agent ? `说明会放进 ${agentLabel(agent.kind)} 的输入行，看过后按回车发送` : '在终端里解决冲突后重新打开'}
+            </span>
+          )}
           <span className={styles.spacer} />
           {phase.kind !== 'done' && (
             <button type="button" className={styles.cancel} disabled={busy} onClick={() => closeMergeSheet(true)}>

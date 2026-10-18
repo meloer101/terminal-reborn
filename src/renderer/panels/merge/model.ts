@@ -109,15 +109,26 @@ export function agentSessionFor<T extends Pick<Session, 'id' | 'kind'>>(sessions
 }
 
 const MAX_PROMPT_FILES = 10
+/** Below Claude's paste-placeholder threshold (PRD §6.9), so the whole text stays readable in the input line. */
+export const MAX_PROMPT_CHARS = 800
 
-/** One line for the agent (the send protocol types it): merge the base in, resolve, commit, without an editor. */
+/**
+ * One line put into the agent's input line (not sent; the user reads it and presses Enter): merge the base in,
+ * resolve, commit, without an editor. Files are listed while the text stays within MAX_PROMPT_CHARS.
+ */
 export function conflictPrompt(check: Pick<MergePrecheck, 'base' | 'branch' | 'conflicts'>): string {
-  const files = check.conflicts.slice(0, MAX_PROMPT_FILES).map((c) => `${c.path}（${conflictReason(c)}）`)
-  const more = check.conflicts.length > MAX_PROMPT_FILES ? ` 等 ${check.conflicts.length} 个文件` : ''
-  return (
-    `把 ${check.branch} 合并到 ${check.base} 会冲突：${files.join('、')}${more}。` +
-    `请在当前 worktree 里运行 GIT_EDITOR=true git merge ${check.base}，解决这些冲突，确认构建和测试通过后提交合并结果，完成后告诉我。`
-  )
+  const head = `把 ${check.branch} 合并到 ${check.base} 会冲突：`
+  const tail = `请在当前 worktree 里运行 GIT_EDITOR=true git merge ${check.base}，解决这些冲突，确认构建和测试通过后提交合并结果，完成后告诉我。`
+  const total = check.conflicts.length
+  const files: string[] = []
+  for (const conflict of check.conflicts.slice(0, MAX_PROMPT_FILES)) {
+    const next = [...files, `${conflict.path}（${conflictReason(conflict)}）`]
+    const more = next.length < total ? ` 等 ${total} 个文件` : ''
+    if (files.length > 0 && head.length + next.join('、').length + more.length + 1 + tail.length > MAX_PROMPT_CHARS) break
+    files.push(next[next.length - 1]!)
+  }
+  const more = files.length < total ? ` 等 ${total} 个文件` : ''
+  return `${head}${files.join('、')}${more}。${tail}`
 }
 
 export function agentLabel(kind: AgentKind): string {

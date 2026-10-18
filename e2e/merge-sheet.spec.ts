@@ -1,7 +1,7 @@
 // F4 local merge and F13 让 agent 审阅 on a real repository, with a fake `claude` (a shell script first on the login
 // shell's PATH via a throwaway ZDOTDIR) that logs every line it reads. Worktrees: jacob/clean (two commits, merges
 // cleanly) and jacob/conflict (edits the README that main also edited). Checks the review command reaches the agent,
-// a squash merge lands on main and removes the worktree, and a conflict is listed and handed to the agent unmerged.
+// a squash merge lands on main and removes the worktree, and a conflict is listed and put into the agent's input line (sent only when the user presses Enter), unmerged.
 // Screenshots in both themes go to test-results/merge-sheet/ (compare with Figma 05).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -13,13 +13,17 @@ import { launchApp } from './launch'
 const SHOTS = join(process.cwd(), 'test-results', 'merge-sheet')
 const WITHIN = { timeout: 30_000 }
 
+// Reads byte by byte (-icanon) so the log shows what sits in the input line before Enter, which it logs as <ENTER>.
 // Control characters are echoed raw (-echoctl), so the paste markers the send protocol writes are swallowed by the
 // terminal as escape sequences instead of showing up as ^[[200~, as in the real TUI.
 const FAKE_CLAUDE = `#!/bin/sh
-stty -echoctl 2>/dev/null
+stty -echoctl -icanon min 1 2>/dev/null
 printf 'Claude Code v9.9.9\\n\\n❯ Try "how does it work?"\\n\\n  ⏸ manual mode on\\n'
-while read -r line; do
-  printf '%s\\n' "$line" >> "$TR_FAKE_LOG"
+nl=$(printf '\\n.'); nl=\${nl%.}
+while c=$(dd bs=1 count=1 2>/dev/null; echo .); do
+  c=\${c%.}
+  [ -z "$c" ] && exit 0
+  if [ "$c" = "$nl" ]; then printf '<ENTER>\\n' >> "$TR_FAKE_LOG"; else printf '%s' "$c" >> "$TR_FAKE_LOG"; fi
 done
 `
 
@@ -137,7 +141,7 @@ test.describe('F4 merge sheet · F13 review', () => {
     // Enabled once the fake agent has drawn its UI.
     await expect(review).toBeEnabled(WITHIN)
     await review.click()
-    await expect.poll(logged, WITHIN).toContain('code-review')
+    await expect.poll(logged, WITHIN).toMatch(/code-review.*<ENTER>/s)
   })
 
   test('F4: a clean branch squashes into main, and the worktree goes with its session', async () => {
@@ -175,13 +179,20 @@ test.describe('F4 merge sheet · F13 review', () => {
     await expect(sheet()).toContainText('main 有 2 个新提交，与本分支冲突')
     await expect(sheet().getByRole('list', { name: '冲突的文件' })).toContainText('README.md两边都改了同一处')
     await expect(sheet().getByRole('radio', { name: 'Squash' })).toHaveCount(0)
-    await shoot('05c-conflict')
 
     const handOff = sheet().getByRole('button', { name: /^交给 Claude 解决/ })
     await expect(handOff).toBeVisible()
+    await expect(sheet()).toContainText('说明会放进 Claude 的输入行，看过后按回车发送')
+    await shoot('05c-conflict')
     await page.keyboard.press('Meta+Enter')
     await expect(sheet()).toHaveCount(0)
-    await expect.poll(logged, WITHIN).toContain('GIT_EDITOR=true git merge main')
+    // Put into the input line, not sent: the text arrives without an Enter after it until the user presses one.
+    await expect.poll(logged, WITHIN).toContain('完成后告诉我。')
+    await page.waitForTimeout(500)
+    expect(logged().endsWith('完成后告诉我。') || /完成后告诉我。\x1b\[201~$/.test(logged())).toBe(true)
+    expect(logged()).toContain('GIT_EDITOR=true git merge main')
+    await page.keyboard.press('Enter')
+    await expect.poll(logged, WITHIN).toMatch(/完成后告诉我。(\x1b\[201~)?<ENTER>\n$/)
     expect(repo.git(repo.project, 'rev-parse', 'main').trim()).toBe(before)
   })
 })
