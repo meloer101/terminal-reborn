@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
-import { changedSince, changeItems, changeKey, MAX_DIFF_LINES, noDiffReason } from './changes-model'
+import type { ReviewComment } from '@shared/review-comments'
+import { changedSince, changeItems, changeKey, codeBetween, MAX_DIFF_LINES, noDiffReason, rowAnchor } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -66,5 +67,60 @@ describe('changeItems', () => {
     ])
     expect(items[0]).toMatchObject({ meta: '5 个文件' })
     expect(items.at(-1)).toMatchObject({ title: '已提交', meta: '没有可对比的基线分支' })
+  })
+})
+
+describe('review comments in the list (F5)', () => {
+  const rows = [
+    { kind: 'hunk' as const, old: null, new: null, text: '@@ -1,3 +1,3 @@' },
+    { kind: 'context' as const, old: 1, new: 1, text: 'a' },
+    { kind: 'del' as const, old: 2, new: null, text: 'b' },
+    { kind: 'add' as const, old: null, new: 2, text: 'B' },
+    { kind: 'context' as const, old: 3, new: 3, text: 'c' }
+  ]
+  const data = changes({ uncommitted: [file('a.ts')] })
+  const open = new Set([changeKey('uncommitted', 'a.ts')])
+  const diffs = { [changeKey('uncommitted', 'a.ts')]: { kind: 'ready' as const, rows, binary: false, truncated: 0 } }
+  const note = (patch: Partial<ReviewComment>): ReviewComment => ({
+    id: 'c',
+    group: 'uncommitted',
+    path: 'a.ts',
+    side: 'new',
+    line: 2,
+    endLine: 2,
+    code: '',
+    text: 'x',
+    createdAt: 0,
+    ...patch
+  })
+  const kinds = (items: ReturnType<typeof changeItems>) =>
+    items.map((i) => (i.kind === 'diff' ? `${i.row.kind}${i.row.new ?? i.row.old ?? ''}` : i.kind === 'comment' ? `comment:${i.comment.id}` : i.kind))
+
+  it('anchors each comment under its last line, on its side', () => {
+    const items = changeItems(data, open, diffs, [note({ id: 'n2' }), note({ id: 'o2', side: 'old' }), note({ id: 'r', line: 1, endLine: 3 })])
+    expect(kinds(items)).toEqual(['group', 'file', 'hunk', 'context1', 'del2', 'comment:o2', 'add2', 'comment:n2', 'context3', 'comment:r', 'group'])
+    expect(items[1]).toMatchObject({ kind: 'file', comments: 3 })
+  })
+
+  it('puts the editor where a new comment goes, or in place of the one being edited', () => {
+    const fresh = changeItems(data, open, diffs, [], { id: null, group: 'uncommitted', path: 'a.ts', side: 'new', endLine: 1 })
+    expect(kinds(fresh)).toEqual(['group', 'file', 'hunk', 'context1', 'editor', 'del2', 'add2', 'context3', 'group'])
+    const editing = changeItems(data, open, diffs, [note({ id: 'n2' })], { id: 'n2', group: 'uncommitted', path: 'a.ts', side: 'new', endLine: 2 })
+    expect(kinds(editing)).toContain('editor')
+    expect(kinds(editing)).not.toContain('comment:n2')
+  })
+
+  it('keeps comments whose line left the diff, after the file; a collapsed file only counts them', () => {
+    const items = changeItems(data, open, diffs, [note({ id: 'gone', line: 99, endLine: 99 })])
+    expect(kinds(items).slice(-2)).toEqual(['comment:gone', 'group'])
+    const collapsed = changeItems(data, new Set(), diffs, [note({ id: 'n2' })])
+    expect(kinds(collapsed)).toEqual(['group', 'file', 'group'])
+    expect(collapsed[1]).toMatchObject({ comments: 1 })
+  })
+
+  it('quotes the code of one side between two lines', () => {
+    expect(codeBetween(rows, 'new', 1, 3)).toEqual(['a', 'B', 'c'])
+    expect(codeBetween(rows, 'old', 2, 2)).toEqual(['b'])
+    expect(rowAnchor(rows[0]!)).toBeNull()
   })
 })

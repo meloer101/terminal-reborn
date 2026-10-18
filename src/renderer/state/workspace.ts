@@ -21,6 +21,7 @@ import {
   type WorkspaceData
 } from './workspace-model'
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
+import { reviewCommentsSnapshot } from './review-comments'
 import { clampPanelWidth, PANEL_WIDTH_DEFAULT, type PersistedRightPanel } from '@shared/workspace-file'
 
 /** The right panel's views (PRD F17), switched by the icons in the session header. */
@@ -193,7 +194,8 @@ setSnapshotProvider(() => {
       recentProjects: state.recentProjects,
       newSessionWorkdir: state.newSessionWorkdir
     },
-    drafts.snapshot()
+    drafts.snapshot(),
+    reviewCommentsSnapshot()
   )
 })
 useWorkspace.subscribe((state, prev) => {

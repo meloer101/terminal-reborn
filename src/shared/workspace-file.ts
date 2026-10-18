@@ -2,6 +2,7 @@
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
 import { isWorkdir, type Workdir } from './new-session'
+import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import type { AgentKind, Project, TitleSource, Worktree } from './types'
 
 export const WORKSPACE_FILE_VERSION = 2
@@ -64,6 +65,8 @@ export interface WorkspaceFile {
   recentProjects?: string[]
   /** 工作目录 last used in the new-session sheet, by project id (PRD F4). Absent when empty. */
   newSessionWorkdir?: Record<string, Workdir>
+  /** Unsent inline review comments (PRD F5) by worktree path; only worktrees that exist. Absent when empty. */
+  reviewComments?: Record<string, ReviewComment[]>
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -169,6 +172,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     for (const [id, choice] of Object.entries(value.newSessionWorkdir)) if (projectIds.has(id) && isWorkdir(choice)) newSessionWorkdir[id] = choice
   }
 
+  const reviewComments = sanitizeReviewComments(value.reviewComments, new Set(worktrees.map((w) => w.path)))
+
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
   const lastRightPanel = sanitizeRightPanel(value.lastRightPanel)
   return {
@@ -188,7 +193,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
       : [],
     drafts,
     ...(recentProjects.length > 0 ? { recentProjects } : {}),
-    ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {})
+    ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
+    ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {})
   }
 }
 

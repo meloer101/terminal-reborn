@@ -1,6 +1,7 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
 import type { Workdir } from '@shared/new-session'
+import type { ReviewComment } from '@shared/review-comments'
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree } from '@shared/types'
 import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
@@ -158,7 +159,13 @@ export interface WorkspaceUi {
 }
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
-export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts: Readonly<Record<string, string>>): WorkspaceFile {
+export function serializeWorkspace(
+  data: WorkspaceData,
+  ui: WorkspaceUi,
+  drafts: Readonly<Record<string, string>>,
+  reviewComments: Readonly<Record<string, readonly ReviewComment[]>> = {}
+): WorkspaceFile {
+  const comments = Object.entries(reviewComments).filter(([path, list]) => list.length > 0 && data.worktrees.some((w) => w.path === path))
   return {
     version: WORKSPACE_FILE_VERSION,
     projects: data.projects.map(({ id, name, rootPath }) => ({ id, name, rootPath })),
@@ -194,7 +201,8 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
       : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
-    )
+    ),
+    ...(comments.length > 0 ? { reviewComments: Object.fromEntries(comments.map(([path, list]) => [path, [...list]])) } : {})
   }
 }
 

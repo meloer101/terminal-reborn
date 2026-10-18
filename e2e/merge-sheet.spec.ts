@@ -5,49 +5,21 @@
 // Screenshots in both themes go to test-results/merge-sheet/ (compare with Figma 05).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fakeClaude } from './fake-claude'
 import { launchApp } from './launch'
 
 const SHOTS = join(process.cwd(), 'test-results', 'merge-sheet')
 const WITHIN = { timeout: 30_000 }
 
-// Reads byte by byte (-icanon) so the log shows what sits in the input line before Enter, which it logs as <ENTER>.
-// Control characters are echoed raw (-echoctl), so the paste markers the send protocol writes are swallowed by the
-// terminal as escape sequences instead of showing up as ^[[200~, as in the real TUI.
-const FAKE_CLAUDE = `#!/bin/sh
-stty -echoctl -icanon min 1 2>/dev/null
-printf 'Claude Code v9.9.9\\n\\n❯ Try "how does it work?"\\n\\n  ⏸ manual mode on\\n'
-nl=$(printf '\\n.'); nl=\${nl%.}
-while c=$(dd bs=1 count=1 2>/dev/null; echo .); do
-  c=\${c%.}
-  [ -z "$c" ] && exit 0
-  if [ "$c" = "$nl" ]; then printf '<ENTER>\\n' >> "$TR_FAKE_LOG"; else printf '%s' "$c" >> "$TR_FAKE_LOG"; fi
-done
-`
-
-function outerClaudeEnv(): Record<string, undefined> {
-  const strip: Record<string, undefined> = {}
-  for (const key of Object.keys(process.env)) {
-    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_') || key.startsWith('CLAUDE_AGENT_')) strip[key] = undefined
-  }
-  return strip
-}
-
 function setup() {
-  const root = mkdtempSync(join(tmpdir(), 'tr-e2e-merge-'))
-  const bin = join(root, 'bin')
-  const zdot = join(root, 'zdot')
-  const project = join(root, 'demo')
-  const clean = join(root, 'wt-clean')
-  const conflict = join(root, 'wt-conflict')
-  for (const dir of [bin, zdot, project]) mkdirSync(dir)
-  writeFileSync(join(bin, 'claude'), FAKE_CLAUDE)
-  chmodSync(join(bin, 'claude'), 0o755)
-  writeFileSync(join(zdot, '.zshrc'), `export PATH="${bin}:$PATH"\n`)
-  const log = join(root, 'claude.log')
-  writeFileSync(log, '')
+  const fake = fakeClaude('tr-e2e-merge-')
+  const project = join(fake.root, 'demo')
+  const clean = join(fake.root, 'wt-clean')
+  const conflict = join(fake.root, 'wt-conflict')
+  mkdirSync(project)
 
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], { cwd }).toString()
@@ -71,8 +43,7 @@ function setup() {
   commitIn(clean, 'nav.test.ts', 'test("nav")\n', 'Test nav')
   commitIn(conflict, 'README.md', '# demo\nfrom the branch\n', 'Branch edits README')
   commitIn(project, 'README.md', '# demo\nfrom main\n', 'Main edits README')
-  const env = { ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log }
-  return { env, log, project, clean, conflict, git }
+  return { ...fake, project, clean, conflict, git }
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -86,7 +57,7 @@ test.describe('F4 merge sheet · F13 review', () => {
 
   const panel = () => page.locator('[data-region="panel"]')
   const sheet = () => page.getByTestId('merge-sheet')
-  const logged = () => readFileSync(repo.log, 'utf8')
+  const { logged, typed } = repo
   const setTheme = async (theme: 'dark' | 'light') => {
     await page.evaluate(
       (t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }),
@@ -125,7 +96,7 @@ test.describe('F4 merge sheet · F13 review', () => {
         drafts: {}
       })
     )
-    app = await launchApp({ ...outerClaudeEnv(), ...repo.env }, { userDataDir: profile })
+    app = await launchApp(repo.env, { userDataDir: profile })
     page = await app.firstWindow()
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
@@ -189,10 +160,10 @@ test.describe('F4 merge sheet · F13 review', () => {
     // Put into the input line, not sent: the text arrives without an Enter after it until the user presses one.
     await expect.poll(logged, WITHIN).toContain('完成后告诉我。')
     await page.waitForTimeout(500)
-    expect(logged().endsWith('完成后告诉我。') || /完成后告诉我。\x1b\[201~$/.test(logged())).toBe(true)
+    expect(typed().endsWith('完成后告诉我。')).toBe(true)
     expect(logged()).toContain('GIT_EDITOR=true git merge main')
     await page.keyboard.press('Enter')
-    await expect.poll(logged, WITHIN).toMatch(/完成后告诉我。(\x1b\[201~)?<ENTER>\n$/)
+    await expect.poll(typed, WITHIN).toMatch(/完成后告诉我。<ENTER>\n$/)
     expect(repo.git(repo.project, 'rev-parse', 'main').trim()).toBe(before)
   })
 })
