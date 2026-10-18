@@ -67,9 +67,9 @@ test('groups sessions by what they need, across projects', async () => {
   await expect(row('s-graph')).toContainText('terminal-reborn › jacob/graph-layout')
   await expect(group('待审阅')).toContainText('修复移动端导航抖动')
   await expect(group('运行中').locator('[data-session-id]')).toHaveCount(3)
-  // Group order is fixed: answer, fix, review, watch, ignore.
+  // Group order is fixed: answer, fix, review, watch, ignore. Empty groups (等你处理 here) are left out of the list.
   const labels = await overview().locator('section > button h2').allTextContents()
-  expect(labels).toEqual(['等你处理', '出错', '待审阅', '运行中', '空闲'])
+  expect(labels).toEqual(['出错', '待审阅', '运行中', '空闲'])
 })
 
 test('a waiting permission moves the session to 等你处理; a click expands its own terminal in place', async () => {

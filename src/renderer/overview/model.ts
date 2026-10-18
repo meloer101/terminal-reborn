@@ -164,8 +164,8 @@ function matches(row: OverviewRow, groupLabel: string, f: FilterTokens): boolean
 }
 
 /**
- * Groups in GROUP_ORDER, each with its rows. Empty groups are kept (the board draws a column for each and
- * the list shows "0") except `exited`, which only appears when it has rows. Waiting sessions list the one
+ * Groups in GROUP_ORDER, each with its rows. Empty groups are kept (the board draws a column for each; the
+ * list skips them) except `exited`, which only appears when it has rows. Waiting sessions list the one
  * that has waited longest first; every other group lists the most recently active first.
  */
 export function buildOverview({ projects, worktrees, sessions, now, filter }: OverviewInput): OverviewGroup[] {
