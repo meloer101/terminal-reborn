@@ -33,7 +33,7 @@ interface WorkspaceState extends WorkspaceData {
   sidebarCollapsed: boolean
   /** null = right panel closed */
   rightPanel: PanelView | null
-  /** The view ⌥⌘B reopens. */
+  /** The view ⇧⌘B reopens. */
   lastRightPanel: PanelView
   /** Card width in px (dragged by its left edge). */
   rightPanelWidth: number
@@ -59,7 +59,7 @@ interface WorkspaceState extends WorkspaceData {
   setRightPanel(view: PanelView | null): void
   /** Header icon: opens that view, or closes the panel when it is the one showing. */
   togglePanelView(view: PanelView): void
-  /** ⌥⌘B: closes the panel, or reopens the last view. */
+  /** ⇧⌘B: closes the panel, or reopens the last view. */
   toggleRightPanel(): void
   setRightPanelWidth(width: number): void
   toggleProjectCollapsed(id: ProjectId): void

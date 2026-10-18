@@ -253,8 +253,8 @@ export type AppChordCommand =
 const APP_CHORDS: Record<string, AppChordCommand> = {
   KeyK: 'command-palette',
   KeyJ: 'next-attention',
-  'alt+KeyB': 'toggle-right-panel',
-  Backslash: 'toggle-sidebar',
+  KeyB: 'toggle-sidebar',
+  'shift+KeyB': 'toggle-right-panel',
   Comma: 'settings',
   KeyW: 'close-session',
   'shift+KeyA': 'toggle-overview',

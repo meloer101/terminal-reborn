@@ -214,10 +214,10 @@ test.describe('F17 right panel · 浏览器', () => {
 
     // Closing the pane while the page has the keyboard hands it back too.
     await givePageFocus()
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect(panel()).toHaveCount(0)
     await expect.poll(focus).toEqual({ app: true, page: false })
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect(address()).toBeVisible()
   })
 
@@ -261,9 +261,9 @@ test.describe('F17 right panel · 浏览器', () => {
     await expect.poll(async () => (await views()).map((v) => v.visible)).toEqual([true])
 
     // Closing the pane takes the page away; reopening brings the same page back.
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect.poll(async () => (await views()).map((v) => v.visible)).toEqual([false])
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect.poll(async () => (await views()).map((v) => v.visible)).toEqual([true])
   })
 

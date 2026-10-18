@@ -33,8 +33,9 @@ export const SHORTCUTS = {
   'command-palette': 'CmdOrCtrl+K',
   'toggle-overview': 'CmdOrCtrl+Shift+A',
   'next-attention': 'CmdOrCtrl+J',
-  'toggle-sidebar': 'CmdOrCtrl+\\',
-  'toggle-right-panel': 'Alt+CmdOrCtrl+B',
+  // As in VS Code / Cursor: ⌘B the left sidebar, ⇧⌘B the right panel.
+  'toggle-sidebar': 'CmdOrCtrl+B',
+  'toggle-right-panel': 'Shift+CmdOrCtrl+B',
   settings: 'CmdOrCtrl+,',
   'font-bigger': 'CmdOrCtrl+Plus',
   'font-smaller': 'CmdOrCtrl+-',

@@ -52,7 +52,7 @@ export interface WorkspaceFile {
   activeSessionId: string | null
   sidebarCollapsed: boolean
   rightPanel: PersistedRightPanel | null
-  /** The view ⌥⌘B reopens. Absent = files. */
+  /** The view ⇧⌘B reopens. Absent = files. */
   lastRightPanel?: PersistedRightPanel
   /** Card width in px. Absent = PANEL_WIDTH_DEFAULT. */
   rightPanelWidth?: number

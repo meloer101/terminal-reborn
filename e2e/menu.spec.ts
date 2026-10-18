@@ -56,7 +56,8 @@ test('the menus are in Chinese and show their shortcuts', async () => {
     ['关闭会话', 'CmdOrCtrl+W']
   ])
   expect(items('编辑').map(([l]) => l)).toEqual(['撤销', '重做', '剪切', '拷贝', '粘贴', '全选', '在终端中查找…'])
-  expect(items('显示')).toContainEqual(['显示 / 隐藏侧栏', 'CmdOrCtrl+\\'])
+  expect(items('显示')).toContainEqual(['显示 / 隐藏侧栏', 'CmdOrCtrl+B'])
+  expect(items('显示')).toContainEqual(['显示 / 隐藏右侧栏', 'Shift+CmdOrCtrl+B'])
   // Nothing English is left at the top level or in the items we own.
   for (const menu of menus.slice(1)) for (const [label] of menu.items) expect(label).toMatch(/[一-鿿]/)
 })
@@ -82,14 +83,22 @@ test('menu commands reach the renderer: sidebar, find, rename, overview', async 
   await expect(page.locator('[data-region="overview"]')).toHaveCount(0)
 })
 
-test('⌘\\ toggles the sidebar exactly once, also from the terminal', async () => {
+test('⌘B toggles the sidebar and ⇧⌘B the right panel, exactly once, also from the terminal', async () => {
   await page.locator('[data-region="terminal"] [data-active="true"]').click()
-  await page.keyboard.press('Meta+Backslash')
+  await page.keyboard.press('Meta+B')
   await expect(sidebar()).toHaveCount(0)
   await page.waitForTimeout(400)
   await expect(sidebar()).toHaveCount(0)
-  await page.keyboard.press('Meta+Backslash')
+  await page.keyboard.press('Meta+B')
   await expect(sidebar()).toBeVisible()
+  const panel = page.locator('[data-region="panel"]')
+  const open = (await panel.count()) > 0
+  await page.keyboard.press('Meta+Shift+B')
+  await expect(panel).toHaveCount(open ? 0 : 1)
+  await page.waitForTimeout(400)
+  await expect(panel).toHaveCount(open ? 0 : 1)
+  await page.keyboard.press('Meta+Shift+B')
+  await expect(panel).toHaveCount(open ? 1 : 0)
 })
 
 test('放大 / 缩小 / 实际大小 step the terminal font size', async () => {
@@ -107,6 +116,7 @@ test('⌘K rows carry the same shortcuts', async () => {
   await page.keyboard.press('Meta+k')
   const palette = page.getByTestId('command-palette')
   await expect(palette.getByRole('option', { name: /打开总览/ })).toContainText('⇧⌘A')
-  await expect(palette.getByRole('option', { name: /切换侧栏/ })).toContainText('⌘\\')
+  await expect(palette.getByRole('option', { name: /切换侧栏/ })).toContainText('⌘B')
+  await expect(palette.getByRole('option', { name: /右侧栏/ })).toContainText('⇧⌘B')
   await page.keyboard.press('Escape')
 })

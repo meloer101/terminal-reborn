@@ -1,4 +1,4 @@
-// F17 right panel: the floating card, the session header's view icons, ⌥⌘B, resizing, and the 文件 view on a real
+// F17 right panel: the floating card, the session header's view icons, ⇧⌘B, resizing, and the 文件 view on a real
 // git worktree — lazy tree, git letters, ignored entries, filter, 有改动, preview with change marks, the context menu,
 // and file paths printed in the terminal opening the preview at their line (⌘-click / the link menu: the editor).
 // Screenshots in both themes go to test-results/right-panel/ (compare with Figma 13D / 13F / 13G).
@@ -98,7 +98,7 @@ test.describe('F17 right panel · 文件', () => {
     await app?.close().catch(() => {})
   })
 
-  test('the header icons open a view, the active one closes it, ⌥⌘B remembers the last view', async () => {
+  test('the header icons open a view, the active one closes it, ⇧⌘B remembers the last view', async () => {
     const header = page.locator('header')
     // F17: the header no longer repeats the agent status.
     await expect(header).not.toContainText('终端 ·')
@@ -115,11 +115,11 @@ test.describe('F17 right panel · 文件', () => {
     await switcher.getByRole('button', { name: '文件' }).click()
     await expect(panel()).toHaveCount(0)
 
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect(tree()).toBeVisible()
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect(panel()).toHaveCount(0)
-    await page.keyboard.press('Meta+Alt+KeyB')
+    await page.keyboard.press('Meta+Shift+KeyB')
     await expect(tree()).toBeVisible()
   })
 

@@ -1,4 +1,4 @@
-// Runs the app menu's commands (B8) and the shortcuts that only the menu table defines (⌘\, ⌥⌘B).
+// Runs the app menu's commands (B8) and the shortcuts that only the menu table defines (⌘B, ⇧⌘B).
 import type { MenuCommand } from '@shared/shortcuts'
 import { toggleCommandPalette } from '../command-palette/palette-store'
 import { toggleOverview } from '../overview/store'
@@ -25,12 +25,10 @@ export function runMenuCommand(command: MenuCommand): void {
   if (!isKeyEcho(command)) RUN[command]()
 }
 
-/** ⌘\ and ⌥⌘B, in the capture phase so they work while the terminal has focus. */
+/** ⌘B and ⇧⌘B, in the capture phase so they work while the terminal has focus. */
 function keyCommand(e: KeyboardEvent): MenuCommand | null {
-  if (!e.metaKey || e.ctrlKey || e.shiftKey) return null
-  if (!e.altKey && e.code === 'Backslash') return 'toggle-sidebar'
-  if (e.altKey && e.code === 'KeyB') return 'toggle-right-panel'
-  return null
+  if (!e.metaKey || e.ctrlKey || e.altKey || e.code !== 'KeyB') return null
+  return e.shiftKey ? 'toggle-right-panel' : 'toggle-sidebar'
 }
 
 const onKeyDown = (e: KeyboardEvent): void => {

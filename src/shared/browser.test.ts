@@ -275,7 +275,9 @@ describe('pageChord', () => {
   })
   it('sends the app chords to the app', () => {
     expect(pageChord(key('KeyK'))).toEqual({ kind: 'app', command: 'command-palette' })
-    expect(pageChord(key('KeyB', { alt: true }))).toEqual({ kind: 'app', command: 'toggle-right-panel' })
+    expect(pageChord(key('KeyB'))).toEqual({ kind: 'app', command: 'toggle-sidebar' })
+    expect(pageChord(key('KeyB', { shift: true }))).toEqual({ kind: 'app', command: 'toggle-right-panel' })
+    expect(pageChord(key('KeyB', { alt: true }))).toBeNull()
     expect(pageChord(key('KeyA', { shift: true }))).toEqual({ kind: 'app', command: 'toggle-overview' })
     expect(pageChord(key('Comma'))).toEqual({ kind: 'app', command: 'settings' })
   })
