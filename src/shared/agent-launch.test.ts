@@ -97,6 +97,11 @@ describe('agentShellArgs', () => {
     expect(agentShellArgs('shell', '/tmp', '/bin/zsh')).toEqual(['-l'])
   })
 
+  it('runs `before` (the setup script) first, for agents and plain shells alike', () => {
+    expect(agentShellArgs('shell', '/tmp', '/bin/zsh', { before: 'make setup' })).toEqual(['-l', '-i', '-c', "make setup; exec '/bin/zsh' -l"])
+    expect(agentShellArgs('claude', '/tmp', '/bin/zsh', { before: 'make setup' })[3]).toBe(`make setup; ${script('claude', "'claude'")}`)
+  })
+
   it('runs the agent, reports how it ended, then execs a login shell', () => {
     expect(agentShellArgs('claude', '/tmp', '/bin/zsh')).toEqual(['-l', '-i', '-c', script('claude', "'claude'")])
   })

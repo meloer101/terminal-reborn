@@ -16,7 +16,8 @@ const info: NewSessionInfo = {
   worktreesDir: '/Users/j/.tr/worktrees/acme',
   takenFolders: ['swift-otter'],
   includeFiles: ['.env.local'],
-  includeCount: 1
+  includeCount: 1,
+  hasSetup: false
 }
 
 const form = (patch: Partial<SheetForm> = {}): SheetForm => ({ workdir: 'worktree', base: 'main', branch: 'jacob/brave-heron', prepare: true, ...patch })
@@ -72,9 +73,11 @@ describe('copy', () => {
   })
 
   it('says what 准备 copies', () => {
-    expect(prepareText({ includeFiles: [], includeCount: 0 })).toBeNull()
-    expect(prepareText({ includeFiles: ['.env.local'], includeCount: 1 })).toBe('复制 .env.local')
-    expect(prepareText({ includeFiles: ['.env', '.env.local', 'node_modules/'], includeCount: 3 })).toBe('复制 .env、.env.local 等 3 项')
+    expect(prepareText({ includeFiles: [], includeCount: 0, hasSetup: false })).toBeNull()
+    expect(prepareText({ includeFiles: ['.env.local'], includeCount: 1, hasSetup: false })).toBe('复制 .env.local')
+    expect(prepareText({ includeFiles: ['.env', '.env.local', 'node_modules/'], includeCount: 3, hasSetup: false })).toBe('复制 .env、.env.local 等 3 项')
+    expect(prepareText({ includeFiles: [], includeCount: 0, hasSetup: true })).toBe('运行 setup 脚本')
+    expect(prepareText({ includeFiles: ['.env.local'], includeCount: 1, hasSetup: true })).toBe('复制 .env.local，运行 setup 脚本')
   })
 
   it('shortens the home folder', () => {

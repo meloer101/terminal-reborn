@@ -13,6 +13,7 @@ import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from '
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
 import type { MergePrecheck, MergeRequest, MergeResult } from './git-merge'
+import type { RepoScripts, RunnableScript } from './repo-scripts'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -32,6 +33,12 @@ export interface PtySpawnOptions {
   command?: string
   args?: string[]
   env?: Record<string, string>
+  /**
+   * Run one of the repository's approved scripts (PRD F4): 'setup' before the agent (or shell) starts, 'run' as the
+   * terminal's only program. Main reads the script from `cwd`'s `.tr/settings.toml` and refuses one that is not
+   * approved (RepoScriptsApi.approve).
+   */
+  script?: RunnableScript
   cols: number
   rows: number
 }
@@ -195,6 +202,33 @@ export interface GitWorktreesApi {
   merge(request: MergeRequest): Promise<MergeResult>
 }
 
+/** What `.tr/settings.toml` of a worktree says (PRD F4 · 脚本与端口), plus the worktree's TR_PORT. */
+export interface RepoScriptsInfo {
+  scripts: RepoScripts
+  /** What is wrong with the file (UI copy); empty when it is fine or missing. */
+  problems: string[]
+  /** First port of the worktree's block; null when every block is taken. */
+  port: number | null
+}
+
+export type ScriptApproval =
+  /** Approved now or earlier: spawn with `script` set. */
+  | 'approved'
+  /** The user said no in the confirmation sheet. */
+  | 'declined'
+  /** The file has no such script. */
+  | 'none'
+
+export interface RepoScriptsApi {
+  /** The scripts of the worktree (or folder) at `dir`. Rejects on bad input. */
+  get(dir: string): Promise<RepoScriptsInfo>
+  /**
+   * Makes sure the repository's scripts may run: the first time (and whenever they changed) main shows a confirmation
+   * sheet listing every command and remembers the approved content per repository.
+   */
+  approve(dir: string, name: RunnableScript): Promise<ScriptApproval>
+}
+
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
 export interface WorkspaceStoreApi {
   /** Synchronous read at startup (null when nothing is stored yet). */
@@ -291,6 +325,8 @@ export interface TrApi {
   gitWorktrees: GitWorktreesApi
   /** The right panel's built-in browser and the session ports it lists (PRD F17 / F14); channels in BROWSER_IPC. */
   browser: BrowserApi
+  /** `.tr/settings.toml` scripts and TR_PORT (PRD F4). */
+  repoScripts: RepoScriptsApi
 }
 
 export const IPC = {
@@ -389,5 +425,9 @@ export const IPC = {
   /** invoke(root, worktree) → MergePrecheck */
   gitWorktreesMergePrecheck: 'git-worktrees:merge-precheck',
   /** invoke(MergeRequest) → MergeResult */
-  gitWorktreesMerge: 'git-worktrees:merge'
+  gitWorktreesMerge: 'git-worktrees:merge',
+  /** invoke(dir) → RepoScriptsInfo */
+  repoScriptsGet: 'repo-scripts:get',
+  /** invoke(dir, name) → ScriptApproval */
+  repoScriptsApprove: 'repo-scripts:approve'
 } as const

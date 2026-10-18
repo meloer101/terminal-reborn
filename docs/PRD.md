@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.22 · 2026-10-18 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.23 · 2026-10-18 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.23 | 2026-10-18 | F4 脚本与端口实现时定下的细节：`.tr/settings.toml` 只读 `[scripts]` 的 `setup` / `run` / `archive`（字符串或字符串数组，数组按行拼接），其他键忽略，从各 worktree 自己的检出里读；脚本一律用 `/bin/sh -e` 在用户的交互式登录 shell 里运行（PATH 同终端），遇到第一条失败的命令就停。仓库的脚本第一次要运行时、以及三个脚本任何一个改动后，弹确认框列出全部命令；批准的内容哈希按仓库（git common dir）记在 Wavi 自己的 `repo-scripts.json`，每个仓库最多记 20 个版本，不同分支各自的脚本不会来回重复询问；拒绝就不运行。setup 在新 worktree 第一个终端里先于 agent 运行（准备开关同时管复制和 setup）；失败时终端停在输出处，会话下方写“setup 脚本失败（退出码 N）”，点“仍然启动 …”或在终端按回车后 agent 照常启动；`.tr/settings.toml` 写错时会话下方说明、不运行。Run 按钮（▶）只在 worktree 有 `run` 时出现：没运行 → 新开一个名为 `run` 的普通终端会话运行它并切过去；在别的会话里运行中 → 切过去；正在看 run 会话 → ■ 停止（结束进程）；再按一次在同一会话里重跑、保留之前的输出；重启 Wavi 后 run 会话不会自己重跑。TR_PORT：每个工作目录一段 10 个端口，默认从 41000 起（设置文件 `ports.base`，暂无界面），持久保存，文件夹不在了就收回；注入该目录下每个终端（agent、shell、setup、run），由主进程设置、不能被覆盖。`archive` 只解析，等 F15 运行 |
 | v1.22 | 2026-10-18 | 新增设计原则 **Wavi 不替用户花 token**（§2）：只有用户点了按钮才向 agent 发消息，按钮写明会发什么；可能很贵的任务只放进输入行、由用户按回车；以后任何自动发送的功能都要在设置里有开关、默认关闭，统一放进设置的“自动化”分组。F4“交给 Claude / Codex 解决”据此改为只把说明放进输入行（不超过 800 字，超出的文件只计数），不再自动回车 |
 | v1.21 | 2026-10-18 | F4 本地合并实现时定下的细节：合并在内存里完成（`git merge-tree --write-tree` + `commit-tree`），基线只在最后一步前移——检出了基线的目录用 `merge --ff-only`、没有检出的用 compare-and-swap 的 `update-ref`，失败时什么都不变；预检和合并之间分支或基线变了就重新检查；基线目录里有未提交的改动、且和这次合并改到同样的文件时拒绝；worktree 里未提交的改动不参与合并（照常提示），这时不能 rebase、也不删 worktree；合并面板默认 Squash，Squash 的提交说明 = 会话标题 + 各提交标题；冲突时只有“交给 Claude / Codex 解决”（在该 worktree 里 `git merge <基线>` 并解决）或取消，没有会话时提示在终端里解决；合并快捷键改为 **⇧⌘M**（⌘M 仍是系统的最小化）；可选测试命令等 `.tr/settings.toml`。commit-tree 不跑 pre-commit / commit-msg 钩子。F13 的按钮在变更视图底部和总览“待审阅”行展开后 / 浮层里；agent 正在运行或在等你处理时置灰并写明原因，已退出的先 `--resume` 再发 |
 | v1.20 | 2026-10-18 | 侧栏快捷键改成和 VS Code / Cursor 一样：⌘B 收起或展开左侧栏，⇧⌘B 收起或展开右侧栏（取代 ⌘\ 和 ⌥⌘B，旧的不再保留）；浏览器页面有焦点时同样生效 |
@@ -163,6 +164,13 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **入口**：⌘N 和项目标题的 ＋ 打开面板（＋ 预选那个项目；还没有项目时 ⌘N 先打开项目）。会话右键和 Worktree 视图的“在此新建会话”不弹面板，直接在那个 worktree 里再开一个会话。
 - 点“创建”后面板立即关闭，侧栏马上出现该会话。新 worktree 的后台执行：`git fetch` → `git worktree add --no-track -b <branch> ~/.tr/worktrees/<repo>/<name> <base>` → 记录 `branch.<name>.base` → 按 `.worktreeinclude` 用 `cp -c`（APFS 写时复制）复制被忽略文件 → 在可见终端里运行 setup 脚本 → 启动 agent（不送 prompt）。
 - **脚本与端口**：可以提交进仓库的 `.tr/settings.toml`，配置 `setup`、`run`、`archive` 三个脚本；会话头放一个 Run 按钮；按工作区分配端口段，注入 `TR_PORT`。
+  ```toml
+  [scripts]
+  setup = ["npm ci", "cp .env.example .env"]   # 新 worktree 的终端里、agent 之前
+  run = "npm run dev -- --port $TR_PORT"         # 会话头 ▶，单独的 run 终端
+  archive = "docker compose down"                # 归档时（F15）
+  ```
+  仓库的脚本是仓库里的代码：第一次运行、以及内容改变后都先弹确认框列出全部命令（细节见 v1.23）。
 - 本地合并：预检（落后基线的提交数、`git merge-tree --write-tree` 冲突检测、可选测试命令）→ 选择 merge `--no-ff` / squash / rebase + `--ff-only` → 可选“合并后删除 worktree（保留分支）”和“推送到 origin”。
 - 冲突处理：列出冲突文件和原因 →「交给 agent 解决」会自动生成说明（冲突类型、分支、文件列表、提醒设置 `GIT_EDITOR=true`），放进该会话的输入行、不按回车（§2 不替用户花 token）；或者选择「中止」。能识别仓库处于 merge / rebase / cherry-pick 进行中的状态。
 - 清理：合并后提示删除；列出孤儿 worktree（P2：按 TTL 自动回收）。
@@ -227,7 +235,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - 主进程低频扫描每个 PTY 子进程树正在监听的端口（`lsof`，按需开启），在会话行和总览中以小标签显示 `:5173`。点击在右侧栏的浏览器页签中打开（F17），⌥ 点击用系统浏览器打开，右键可以结束进程。
 
 ### F15 归档 · P1
-- 归档 = 停止 agent + 把 worktree 状态（含未提交的改动）存进私有 ref + 从侧栏隐藏。可以在 ⌘K“历史”中恢复，恢复时用 `--resume` 接上原对话。合并后可选自动归档。agent 运行中不允许归档。
+- 归档 = 停止 agent + 运行 `.tr/settings.toml` 的 `archive`（同样要批准）+ 把 worktree 状态（含未提交的改动）存进私有 ref + 从侧栏隐藏。可以在 ⌘K“历史”中恢复，恢复时用 `--resume` 接上原对话。合并后可选自动归档。agent 运行中不允许归档。
 
 ### F16 PR / CI 只读状态 · P1
 - 检测到 `gh` 且已登录时，会话行和总览显示 `#123` 与 checks 状态（✓ / ✗ / 进行中）。CI 失败时提供“让 agent 修复”，由我们生成一条 prompt 发给该会话。创建和合并 PR 是后续工作。

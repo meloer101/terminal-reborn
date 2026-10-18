@@ -1,6 +1,7 @@
 // User settings (PRD §4 F7). Persisted by main in <userData>/settings.json; every window receives
 // changes through TrApi.settings.onChange. Pure: sanitizing never throws, unknown/invalid values
 // fall back to defaults so a hand-edited file can't break the app.
+import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 
 export type ThemePreference = 'system' | 'dark' | 'light'
 
@@ -25,13 +26,20 @@ export interface AppearanceSettings {
   screenReader: boolean
 }
 
+/** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
+export interface PortSettings {
+  base: number
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
+  ports: PortSettings
 }
 
 export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>
+  ports?: Partial<PortSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -48,7 +56,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     terminalOpacity: 1,
     sidebarVibrancy: false,
     screenReader: false
-  }
+  },
+  ports: { base: DEFAULT_PORT_BASE }
 }
 
 export const LIMITS = {
@@ -85,10 +94,15 @@ function appearance(value: unknown): AppearanceSettings {
   }
 }
 
+function ports(value: unknown): PortSettings {
+  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return { base: Math.round(num(v.base, DEFAULT_PORT_BASE, PORT_BASE_LIMITS)) }
+}
+
 /** Any JSON value → valid settings. */
 export function sanitizeSettings(raw: unknown): AppSettings {
   const v = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
-  return { version: 1, appearance: appearance(v.appearance) }
+  return { version: 1, appearance: appearance(v.appearance), ports: ports(v.ports) }
 }
 
 /** Applies a (possibly untrusted) patch and re-sanitizes the result. */
@@ -96,5 +110,6 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const p = typeof patch === 'object' && patch !== null ? (patch as Record<string, unknown>) : {}
   const nextAppearance =
     typeof p.appearance === 'object' && p.appearance !== null ? { ...current.appearance, ...(p.appearance as object) } : current.appearance
-  return sanitizeSettings({ ...current, appearance: nextAppearance })
+  const nextPorts = typeof p.ports === 'object' && p.ports !== null ? { ...current.ports, ...(p.ports as object) } : current.ports
+  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts })
 }

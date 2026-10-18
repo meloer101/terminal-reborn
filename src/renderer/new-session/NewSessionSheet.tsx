@@ -89,7 +89,7 @@ function Sheet() {
   const workdir: Workdir = notRepo ? 'current' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
   const base = baseChoice ?? (info ? defaultBase(info) : null)
   const branch = branchInput ?? generated
-  const prepare = prepareChoice && (info?.includeCount ?? 0) > 0
+  const prepare = prepareChoice && ((info?.includeCount ?? 0) > 0 || info?.hasSetup === true)
   const form = { workdir, base, branch, prepare }
   const result = project ? planCreate(project.rootPath, info, form) : null
   const baseBranch = info ? selectedBase(info, form) : null
@@ -265,8 +265,8 @@ function Sheet() {
               </Field>
               <Field label="准备">
                 <div className={styles.prep}>
-                  <span className={styles.prepText}>{prepText ?? '没有 .worktreeinclude 要复制的文件'}</span>
-                  {prepText && <Toggle checked={prepare} onChange={setPrepareChoice} label="准备：复制被忽略的文件" />}
+                  <span className={styles.prepText}>{prepText ?? '没有 .worktreeinclude 要复制的文件，也没有 setup 脚本'}</span>
+                  {prepText && <Toggle checked={prepare} onChange={setPrepareChoice} label="准备：复制被忽略的文件、运行 setup 脚本" />}
                 </div>
               </Field>
             </>

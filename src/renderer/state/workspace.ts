@@ -8,6 +8,7 @@ import type { AgentKind, ProjectId, Session, SessionId, Worktree, WorktreeId } f
 import { mockProjects, mockSessions, mockWorktrees } from './mock-data'
 import {
   addProject,
+  addRunSession,
   addSession,
   addSessionInWorktree,
   closeSession,
@@ -70,6 +71,8 @@ interface WorkspaceState extends WorkspaceData {
   addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
   /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
   addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind): SessionId | null
+  /** Adds the Run button's terminal for a worktree (PRD F4) and selects it. */
+  addRunSession(worktreeId: WorktreeId): SessionId | null
   /** Remembers the new-session sheet's 工作目录 for a git project. */
   rememberWorkdir(projectId: ProjectId, choice: Workdir): void
   closeSession(id: SessionId): void
@@ -158,6 +161,12 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   },
   addSessionInWorktree(projectId, target, kind) {
     const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now())
+    if (!result) return null
+    set({ ...result.data, mainView: 'session', focusRequest: get().focusRequest + 1 })
+    return result.sessionId
+  },
+  addRunSession(worktreeId) {
+    const result = addRunSession(pick(get()), worktreeId, Date.now())
     if (!result) return null
     set({ ...result.data, mainView: 'session', focusRequest: get().focusRequest + 1 })
     return result.sessionId

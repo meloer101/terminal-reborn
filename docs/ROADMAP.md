@@ -92,7 +92,7 @@
 - [x] 浮层玻璃材质（2026-10-18，PRD §5）：新建会话面板和它的下拉菜单，“降低透明度”时回退实心；tokens.css 加 `--bg-popover` 和 `--glass-*`、`--radius-sheet / popover / button-glass`
 - [x] Select 和分段按钮去掉边框，只用色块（2026-10-18，`settings/controls` 和新建会话面板）
 - [x] 分段按钮共用 `ui/Segmented`，选中色块用弹簧曲线滑到新选项、宽度跟着变（2026-10-18；新建会话、总览列表 / 看板、Git 图谱 / 变更、安装 agent 选择；tokens `--motion-spring` / `--motion-duration-slide`；首次显示和尺寸变化不动画，“减少动态效果”时直接跳）
-- [ ] F4 `.tr/settings.toml` 的 setup / run / archive 脚本、Run 按钮、`TR_PORT`
+- [x] F4 `.tr/settings.toml` 脚本与端口（2026-10-18，PRD v1.23）：`[scripts]` setup / run / archive（`smol-toml` 解析，未知键忽略）；第一次运行和内容改变后弹确认框列出全部命令，批准的哈希按仓库记在 `repo-scripts.json`；新 worktree 的终端里 setup 先于 agent 运行，失败时会话下方说明、“仍然启动”后照常启动，新建会话面板的“准备”写明会运行 setup；会话头 Run 按钮（开始 / 切过去 / 停止，单独的 `run` 终端会话）；每个工作目录 10 个端口、默认 41000 起，`TR_PORT` 注入该目录的每个终端；单元测试 `repo-scripts` / `ports` / `script-launch`，e2e `repo-scripts.spec.ts`（两种主题截图）。以后：`archive` 随 F15 运行、设置里改端口起点的界面、可选测试命令（合并预检）、Worktree 视图显示端口段
 - [x] F4 本地合并（2026-10-18，Figma 05，PRD v1.21）：合并面板 ⇧⌘M（变更视图、Worktree 详情、“会话”菜单）；预检 = 领先 / 落后、`merge-tree --write-tree` 冲突检测、未提交改动、基线 upstream 未拉取、merge / rebase 进行中、基线目录的冲突改动；Squash（默认）/ Merge / Rebase，内存里建提交，基线最后一步前移（`merge --ff-only` 或 CAS `update-ref`），失败不留半截；可选合并后删除 worktree（保留分支，会话一起关闭）和推送到 origin；冲突时“交给 Claude / Codex 解决”（只放进输入行、由用户按回车，PRD v1.22）；主进程测试 `git-merge.test.ts`（临时仓库），e2e `merge-sheet.spec.ts`（05A–05C 两种主题截图）。以后：可选测试命令（随 `.tr/settings.toml`）、图谱右键合并、合并后自动归档（F15）
 - [x] F17 右侧栏外壳（2026-10-17）：浮层卡片、会话头四个切换图标、⌥⌘B 记住上次的视图、宽度可拖拽并保存（400–1200）、跟随当前会话的 worktree；tokens.css 加 `--bg-float` 和 `--shadow-pane`；浏览器 / Git / Worktree 视图暂为占位
 - [x] F5 / F17 Git · 变更视图（2026-10-17，Figma 13B2）：未提交 / 已提交（对比基线；本地基线落后时对比 origin；在基线分支本身上对比 upstream）分组、领先 / 落后、展开单个文件的 unified diff（只渲染可见行；嵌套仓库、超大文件不展开）、文件变化时每秒最多刷新一次；e2e `git-panel.spec.ts`，主进程测试 `git-graph.test.ts`
@@ -100,7 +100,7 @@
 - [x] F17 Worktree 页签（2026-10-17）：`git worktree list` + 会话状态、未提交 `+N −M`、领先 / 落后，选中行展开详情和操作（打开文件夹 · 在此新建会话 · 复制路径 · 删除），可清理分组一键清理（只碰没有会话、已合并的）、没有会话分组逐个删除；删除在有改动、git 检查失败、分离 HEAD 有孤立提交、变基中、会话在跑时拒绝；监听 `.git` 变化 + 可见时轮询；e2e `worktree-panel.spec.ts`。以后：`worktree list -z`、lock 原因、squash / rebase 合并识别、删除时可选删分支（`branch -d`）、手动刷新和逐行错误、`core.fsmonitor=false`、我们 PTY 之外 cwd 在 worktree 里的进程。+ 已打开新建会话面板（2026-10-18）；“合并到 main…”已接上 F4（2026-10-18）；端口段等端口扫描
 - [x] F17 文件页签（2026-10-17）：按需加载的目录树 + git 状态、筛选和“有改动 N”、只读预览（行号 + 改动标记）、用默认编辑器打开、右键菜单、`fs.watch` 增量刷新；e2e `right-panel.spec.ts`。还没测：1 万文件仓库首屏 < 200 ms、切换会话 100 ms 内换内容
 - [x] F13 一键 AI 审阅（2026-10-18）：“让 agent 审阅”在变更视图底部和总览“待审阅”行（展开后 / 浮层），向 Claude 发 `/code-review`、Codex 发 `/review`；agent 忙或未就绪时置灰写明原因，已退出的先 `--resume`；e2e 在 `merge-sheet.spec.ts`
-- [ ] F15 归档
+- [ ] F15 归档（含运行 `.tr/settings.toml` 的 `archive`，已能解析）
 - 可以并行（与 git 无关）：
   - [ ] F11 上下文占用与额度
   - [ ] F12 todo 进度

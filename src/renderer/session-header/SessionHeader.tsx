@@ -1,8 +1,10 @@
-import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, type LucideIcon } from 'lucide-react'
+import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Play, Square, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
+import { useWorktreeCreations } from '../new-session/creation'
 import { PANEL_VIEW_LABEL } from '../panels/RightPanel'
+import { pressRun, runAction, runSessionOf, useRepoScripts, useRunRunning, type RunAction } from '../scripts/run-script'
 import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -40,6 +42,13 @@ export function SessionHeader() {
       }),
     []
   )
+  // The worktree's `run` script (PRD F4): the button only exists when `.tr/settings.toml` has one.
+  // A new worktree's folder appears after its session does: read again once it is there.
+  const creating = useWorktreeCreations((s) => (active ? s.held[active.session.id] : undefined))
+  const scripts = useRepoScripts(active?.worktree?.path, creating)
+  const worktreeId = active?.worktree?.id
+  const runSession = useWorkspace((s) => (worktreeId ? runSessionOf(s.sessions, worktreeId) : undefined))
+  const running = useRunRunning(runSession?.id)
   const agentUp = active !== null && active.session.kind !== 'shell' && active.session.phase !== 'not-started' && active.session.phase !== 'exited'
   // The status is in the sidebar row already (F17 dropped the copy here); only a hooks problem is worth repeating.
 
@@ -93,6 +102,16 @@ export function SessionHeader() {
       {/* Without a session there is no status to push the tools right. */}
       {!active && <span className={styles.spacer} />}
       <span className={styles.tools}>
+        {active?.worktree && scripts?.scripts.run && (
+          <RunButton
+            action={runAction(running, runSession?.id === active.session.id)}
+            command={scripts.scripts.run}
+            port={scripts.port}
+            onPress={(action) => {
+              if (active.worktree) void pressRun(active.worktree, action)
+            }}
+          />
+        )}
         {active && (
           <span className={styles.panes} role="group" aria-label="右侧栏">
             {PANE_ICONS.map(({ view, icon: Icon }) => (
@@ -124,6 +143,21 @@ export function SessionHeader() {
         )}
       </span>
     </header>
+  )
+}
+
+const RUN_LABEL: Record<RunAction, string> = { start: '运行 run 脚本', show: '显示正在运行的 run', stop: '停止 run 脚本' }
+
+/** Play starts the worktree's run script (or shows it while it runs elsewhere); in the run session itself, Square stops it. */
+function RunButton({ action, command, port, onPress }: { action: RunAction; command: string; port: number | null; onPress(action: RunAction): void }) {
+  const firstLine = command.split('\n')[0] ?? ''
+  const title = [RUN_LABEL[action], firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine, port !== null ? `TR_PORT ${port}` : null]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <IconButton label={RUN_LABEL[action]} title={title} active={action !== 'start'} data-testid="run-script" onClick={() => onPress(action)}>
+      {action === 'stop' ? <Square size={16} strokeWidth={1.75} /> : <Play size={16} strokeWidth={1.75} />}
+    </IconButton>
   )
 }
 

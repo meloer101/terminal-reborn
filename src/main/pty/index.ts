@@ -3,11 +3,16 @@
 // When the daemon cannot be reached, the pty-host utilityProcess takes over for this run (sessions then end with
 // the app). Main relays renderer IPC <-> host messages and validates every renderer payload.
 import { app, ipcMain, utilityProcess, type WebContents } from 'electron'
+import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
+import { agentShellArgs } from '@shared/agent-launch'
 import { IPC, type LivePtySession, type PtyAttachResult, type PtySpawnOptions } from '@shared/ipc'
 import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
+import { runShellArgs, SCRIPT_MARKER_OSC, SETUP_DONE_PAYLOAD, setupCommand } from '@shared/script-launch'
+import { buildPtyEnv, resolveShell } from '../../pty-host/env'
 import type { HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
-import { adoptAgentSession, endAgentSession, handleRelayedHook, prepareAgentLaunch, setHookTarget } from '../hooks'
+import { adoptAgentSession, armStartWatchdog, endAgentSession, handleRelayedHook, prepareAgentLaunch, setHookTarget, type AgentLaunchHooks } from '../hooks'
+import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { shouldKillLateSpawn } from './late-spawn'
 import { assertCwdExists } from './preflight'
@@ -51,6 +56,9 @@ let endSessionsOnQuit = process.env.TR_KILL_SESSIONS_ON_QUIT === '1'
 let quitHandled = false
 
 const sessions = new Map<string, LiveSession>()
+/** Agent launches whose setup script is still running, with the tail of their output: the start watchdog waits. */
+const awaitingSetup = new Map<string, string>()
+const SETUP_DONE_MARKER = `\x1b]${SCRIPT_MARKER_OSC};${SETUP_DONE_PAYLOAD}\x07`
 const pendingSpawns = new Map<string, Pending<{ pid: number }>>()
 const pendingAttaches = new Map<string, Pending<PtyAttachResult | null>>()
 const pendingLists: Array<(sessions: HostSessionInfo[]) => void> = []
@@ -200,17 +208,20 @@ function handleHostEvent(event: HostEvent): void {
       break
     }
     case 'spawn-error': {
+      awaitingSetup.delete(event.id)
       sessions.delete(event.id)
       endAgentSession(event.id)
       settle(pendingSpawns, event.id)?.reject(new Error(event.message))
       break
     }
     case 'data': {
+      watchSetup(event.id, event.data)
       const session = sessions.get(event.id)
       if (session && !session.owner.isDestroyed()) session.owner.send(IPC.ptyData, { sessionId: event.id, data: event.data, seq: event.seq })
       break
     }
     case 'exit': {
+      awaitingSetup.delete(event.id)
       const session = sessions.get(event.id)
       if (!session) break
       sessions.delete(event.id)
@@ -256,27 +267,90 @@ function appEnv(): Record<string, string> {
   return env
 }
 
+/** The setup runner said it is done: from now on the agent should report SessionStart within the usual time. */
+function watchSetup(id: string, data: string): void {
+  const tail = awaitingSetup.get(id)
+  if (tail === undefined) return
+  const seen = tail + data
+  if (!seen.includes(SETUP_DONE_MARKER)) {
+    awaitingSetup.set(id, seen.slice(-SETUP_DONE_MARKER.length))
+    return
+  }
+  awaitingSetup.delete(id)
+  armStartWatchdog(id)
+}
+
+/** The real folder a terminal starts in, or null when it is missing (the host then falls back to the home folder). */
+function realCwdOf(cwd: string): string | null {
+  try {
+    return realpathSync(cwd)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A spawn that runs one of the repository's approved scripts (PtySpawnOptions.script): main builds the login shell's
+ * arguments itself — `run` alone, or `setup` followed by the agent / shell — so the pty host needs nothing new.
+ */
+async function scriptLaunch(
+  options: PtySpawnOptions,
+  realCwd: string | null,
+  env: Record<string, string>,
+  hooks: AgentLaunchHooks | null
+): Promise<{ command: string; args: string[] } | null> {
+  if (!options.script) return null
+  if (!realCwd) throw new Error(`the folder ${options.cwd} does not exist`)
+  const script = await approvedScript(realCwd, options.script)
+  const shell = resolveShell(buildPtyEnv(appEnv(), env)).command
+  if (options.script === 'run') return { command: shell, args: runShellArgs(script) }
+  const args = agentShellArgs(options.agent ?? 'shell', realCwd, shell, {
+    ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
+    ...(hooks?.codexConfig ? { codexConfig: hooks.codexConfig } : {}),
+    ...(options.resumeAgentSessionId ? { resumeAgentSessionId: options.resumeAgentSessionId } : {}),
+    before: setupCommand(script)
+  })
+  return { command: shell, args }
+}
+
 async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promise<{ pid: number }> {
   const id = options.sessionId
+  const agent = options.agent !== undefined && options.agent !== 'shell' ? options.agent : undefined
+  if (options.script === 'run' && agent) throw new Error('the run script starts in a plain terminal')
   // An agent in a missing directory is refused rather than quietly started in the home directory (phase 2a · A8).
-  if (options.command === undefined && options.agent !== undefined && options.agent !== 'shell') assertCwdExists(options.cwd)
+  if (options.command === undefined && agent) assertCwdExists(options.cwd)
   // Re-spawning an id (e.g. after a renderer reload) makes the host replace the old process.
   sessions.set(id, { owner })
+  awaitingSetup.delete(id)
 
   // Agent sessions get their hook environment and the per-launch `--settings` file. Our TR_* keys
-  // come last so the renderer cannot spoof them.
-  const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent) : null
+  // come last so the renderer cannot spoof them. Every terminal of a worktree gets the worktree's TR_PORT (PRD F4).
+  const setup = options.script === 'setup' && agent !== undefined
+  const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent, { deferStartWatchdog: setup }) : null
+  const realCwd = realCwdOf(options.cwd)
+  const port = realCwd ? portFor(realCwd) : null
+  const env = { ...options.env, ...hooks?.env, ...(port !== null ? { TR_PORT: String(port) } : {}) }
+  let launch: { command: string; args: string[] } | null
+  try {
+    launch = await scriptLaunch(options, realCwd, env, hooks)
+  } catch (error) {
+    sessions.delete(id)
+    if (hooks) endAgentSession(id)
+    throw error
+  }
   await ensureHost()
   // The window went away (reload, close) while we were getting ready: starting the process now would orphan it.
   if (sessions.get(id)?.owner !== owner) {
     if (hooks) endAgentSession(id)
     throw new Error('the window went away before the terminal process started')
   }
+  if (setup && hooks) awaitingSetup.set(id, '')
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingSpawns.delete(id)
       sessions.delete(id)
+      awaitingSetup.delete(id)
       endAgentSession(id)
       // The host handles messages in order, so this lands right after the spawn it is still working on.
       // If it somehow slips past, handleHostEvent kills the late process when it reports in.
@@ -284,21 +358,21 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       reject(new Error('timed out starting the terminal process'))
     }, SPAWN_TIMEOUT_MS)
     pendingSpawns.set(id, { resolve, reject, timer })
-    const { sessionId: _sessionId, env, ...rest } = options
+    const { sessionId: _sessionId, env: _env, script: _script, ...rest } = options
     send({
       type: 'spawn',
       id,
       ...rest,
+      ...(launch ?? {}),
       baseEnv: appEnv(),
-      ...(hooks
+      env,
+      // A script launch has the hook flags in its arguments already.
+      ...(hooks && !launch
         ? {
-            env: { ...env, ...hooks.env },
             ...(hooks.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
             ...(hooks.codexConfig ? { codexConfig: hooks.codexConfig } : {})
           }
-        : env
-          ? { env }
-          : {})
+        : {})
     })
   })
 }

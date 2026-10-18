@@ -15,6 +15,13 @@ describe('parseSpawnOptions', () => {
     expect(parsed.env).toEqual({ FOO: 'bar' })
   })
 
+  it('accepts the setup and run scripts, never next to a command', () => {
+    expect(parseSpawnOptions({ ...base, agent: 'claude', script: 'setup' }).script).toBe('setup')
+    expect(parseSpawnOptions({ ...base, script: 'run' }).script).toBe('run')
+    expect(() => parseSpawnOptions({ ...base, script: 'archive' })).toThrow()
+    expect(() => parseSpawnOptions({ ...base, script: 'run', command: '/bin/sh' })).toThrow()
+  })
+
   it('accepts a known agent kind and rejects others', () => {
     expect(parseSpawnOptions({ ...base, agent: 'codex' }).agent).toBe('codex')
     expect(() => parseSpawnOptions({ ...base, agent: 'bash' })).toThrow()
