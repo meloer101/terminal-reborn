@@ -38,7 +38,7 @@
    git push origin main v0.2.0
    ```
    tag 必须等于 `v` + `package.json` 的版本，否则流水线第一步就会停下。
-5. **等流水线跑完**（Actions → Release）：`npm ci`、`npm run check`、`npm run dist`、校验两个架构的签名、启动打包版跑 `npm run test:packaged`，然后创建草稿，附件为 `Terminal-Reborn-<version>-arm64.dmg / .zip` 和 `-x64.dmg / .zip`。
+5. **等流水线跑完**（Actions → Release）：`npm ci`、`npm run check`、`npm run dist`、校验两个架构的签名、启动打包版跑 `npm run test:packaged`，然后创建草稿，附件为 `Wavi-<version>-arm64.dmg / .zip` 和 `-x64.dmg / .zip`。
 6. **读一遍说明后发布草稿**。带连字符的版本（`-beta.1`）会建成预发布版，应用内的更新检查会忽略它。
 
 同一个 tag 重跑流水线会替换已有附件。要重做一个错误的 tag：删除草稿和 tag（`git push origin :refs/tags/v0.2.0`），修好后重新打。

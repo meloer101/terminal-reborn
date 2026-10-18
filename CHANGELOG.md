@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to Terminal Reborn. Format: [Keep a Changelog](https://keepachangelog.com/), versioning: [SemVer](https://semver.org/).
+All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep a Changelog](https://keepachangelog.com/), versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
+
+### Renamed to Wavi / 改名为 Wavi
+- The app is now **Wavi** (bundle id `dev.wavi.app`). Your Terminal Reborn workspace and settings move over on the first launch with nothing running from the old profile.
+  应用改名为 **Wavi**。旧的工作区和设置会在第一次启动、且旧配置下没有仍在运行的会话时自动迁移过来。
+- Developers: `npm run app:install` puts a Wavi.app in Applications that runs the checkout's build; `npm run build` (or `build:watch`) reloads it or offers a restart. `npm run dev` now uses its own “Wavi Dev” profile.
+  开发者：`npm run app:install` 安装一个运行本仓库构建的 Wavi.app，`npm run build` 后自动刷新界面或提示重启；`npm run dev` 改用独立的 “Wavi Dev” 配置。
 
 ### No dead ends (phase 2b · P0) / 没有死角
 - With no session open, the main area shows how to start: 打开项目 ⌘O, recent folders, whether Claude Code / Codex are installed (with the install command), and folder drop. The composer is hidden until there is a session.

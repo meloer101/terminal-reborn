@@ -4,7 +4,7 @@ import { launchApp } from './launch'
 test('app window opens with the shell regions', async () => {
   const app = await launchApp()
   const page = await app.firstWindow()
-  await expect(page).toHaveTitle('Terminal Reborn')
+  await expect(page).toHaveTitle('Wavi')
   for (const region of ['sidebar', 'main', 'terminal']) {
     await expect(page.locator(`[data-region="${region}"]`)).toBeVisible()
   }

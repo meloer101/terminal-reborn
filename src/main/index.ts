@@ -9,11 +9,13 @@ import { registerAppearanceEffects } from './appearance'
 import { registerConfirmHandlers } from './confirm'
 import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
+import { selectProfile } from './profile'
 import { registerPtyHandlers } from './pty'
 import { installQuitGuard } from './quit'
 import { registerSettingsHandlers } from './settings'
 import { registerUiHandlers } from './ui'
 import { registerUpdateHandlers } from './updates'
+import { registerLiveRebuilds } from './live-rebuilds'
 import { createMainWindow, getMainWindow, installAppMenu, showMainWindow, showSettings } from './windows'
 import { registerTerminalSnapshots } from './terminal-snapshots'
 import { registerWorkspaceStore } from './workspace-store'
@@ -21,8 +23,9 @@ import { registerWorktreeFileHandlers } from './worktree-files'
 import { registerGitGraphHandlers } from './git-graph'
 import { registerGitWorktreeHandlers } from './git-worktrees'
 
-// Lets e2e runs use a throwaway profile instead of the user's real workspace and drafts.
-if (process.env.TR_USER_DATA_DIR) app.setPath('userData', process.env.TR_USER_DATA_DIR)
+// Before anything reads userData (the single-instance lock included): dev runs, e2e runs (TR_USER_DATA_DIR) and the
+// installed app each get their own profile; the pre-rename "Terminal Reborn" profile moves to Wavi.
+selectProfile()
 
 // A stray bug must not take every agent down: log and keep running.
 process.on('uncaughtException', (error) => console.error('[main] uncaughtException', error))
@@ -79,6 +82,7 @@ function boot(): void {
   installAppMenu()
   installQuitGuard(getMainWindow)
   createMainWindow()
+  registerLiveRebuilds()
   // Dock icon click: the close button only hid the window.
   app.on('activate', () => showMainWindow())
 }

@@ -43,7 +43,7 @@ jobs:
       - name: Verify signatures and launch the arm64 app
         run: |
           version="$(node -p "require('./package.json').version")"
-          for app in "release/$version/mac-arm64/Terminal Reborn.app" "release/$version/mac/Terminal Reborn.app"; do
+          for app in "release/$version/mac-arm64/Wavi.app" "release/$version/mac/Wavi.app"; do
             codesign --verify --deep --strict --verbose=2 "$app"
           done
           npm run test:packaged
@@ -59,9 +59,9 @@ jobs:
             found && /^\[[^]]+\]: / { next }
             found { print }
           ' CHANGELOG.md > release-notes.md
-          if [ ! -s release-notes.md ]; then echo "Terminal Reborn $version" > release-notes.md; fi
+          if [ ! -s release-notes.md ]; then echo "Wavi $version" > release-notes.md; fi
           files=(release/$version/Terminal-Reborn-$version-arm64.dmg release/$version/Terminal-Reborn-$version-arm64.zip release/$version/Terminal-Reborn-$version-x64.dmg release/$version/Terminal-Reborn-$version-x64.zip)
-          flags=(--draft --verify-tag --title "Terminal Reborn $version" --notes-file release-notes.md)
+          flags=(--draft --verify-tag --title "Wavi $version" --notes-file release-notes.md)
           case "$version" in *-*) flags+=(--prerelease) ;; esac
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber

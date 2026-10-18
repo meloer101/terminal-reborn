@@ -79,7 +79,7 @@ describe('buildPtyEnv', () => {
     const env = buildPtyEnv({ LANG: 'C', LC_ALL: 'C', TERM: 'dumb', PATH: '/usr/bin' })
     expect(env.TERM).toBe('xterm-256color')
     expect(env.COLORTERM).toBe('truecolor')
-    expect(env.TERM_PROGRAM).toBe('TerminalReborn')
+    expect(env.TERM_PROGRAM).toBe('Wavi')
     expect(env.LANG).toBe('en_US.UTF-8')
     expect(env.LC_ALL).toBeUndefined()
     expect(env.PATH).toBe('/usr/bin')

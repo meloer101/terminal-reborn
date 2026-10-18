@@ -1,5 +1,5 @@
 #!/bin/sh
-# Terminal Reborn agent hook relay (PRD §6.6).
+# Wavi agent hook relay (PRD §6.6).
 #   usage: tr-hook.sh <EventName> [agent]
 # Pipes the hook payload from stdin to the app over a Unix socket and prints the reply body,
 # which is how a PermissionRequest decision reaches Claude Code. Needs only sh and curl (both

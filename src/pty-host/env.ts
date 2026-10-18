@@ -24,7 +24,7 @@ export function buildPtyEnv(base: NodeJS.ProcessEnv, extra: Record<string, strin
 
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
-  env.TERM_PROGRAM = 'TerminalReborn'
+  env.TERM_PROGRAM = 'Wavi'
   return env
 }
 

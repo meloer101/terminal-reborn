@@ -42,13 +42,13 @@ export function decisionBody(decision: PermissionDecision, suggestions: unknown[
   if (agent === 'codex') {
     const behavior =
       decision === 'deny'
-        ? { behavior: 'deny', message: 'The user denied this request in Terminal Reborn.' }
+        ? { behavior: 'deny', message: 'The user denied this request in Wavi.' }
         : { behavior: 'allow' }
     return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: behavior } })
   }
   const behavior =
     decision === 'deny'
-      ? { behavior: 'deny', message: 'The user denied this request in Terminal Reborn.', interrupt: false }
+      ? { behavior: 'deny', message: 'The user denied this request in Wavi.', interrupt: false }
       : decision === 'allow-always' && suggestions.length > 0
         ? { behavior: 'allow', updatedPermissions: suggestions }
         : { behavior: 'allow' }

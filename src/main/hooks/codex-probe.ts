@@ -78,7 +78,7 @@ export function requestHooksList(input: Writable, output: Readable, cwd: string,
     // A dead child's stdin raises EPIPE; the exit handler reports the real reason.
     input.on('error', () => undefined)
     const send = (message: object): void => void input.write(`${JSON.stringify(message)}\n`)
-    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'terminal-reborn', version: '0' } } })
+    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'wavi', version: '0' } } })
     send({ method: 'initialized' })
     send({ id: 2, method: 'hooks/list', params: { cwds: [cwd] } })
   })
