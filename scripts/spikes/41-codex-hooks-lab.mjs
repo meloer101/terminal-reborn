@@ -146,6 +146,22 @@ const SCENARIOS = {
     await prompt('Reply with only the word OK.')
     console.log('stop seen:', await waitStop())
   },
+  // Thread title (PRD §6.7): when the TUI's generated thread_name lands in ~/.codex/session_index.jsonl and whether
+  // its id is the hooks' session_id. Read-only on ~/.codex. PROMPT overrides the first prompt.
+  async title() {
+    const index = join(process.env.HOME, '.codex', 'session_index.jsonl')
+    const lines = () => (existsSync(index) ? readFileSync(index, 'utf8').split('\n').filter(Boolean) : [])
+    const before = lines().length
+    await prompt(process.env.PROMPT ?? '帮我想想怎么给一个终端应用的会话自动起标题，给三个思路就行，不要动任何文件。')
+    console.log('stop seen:', await waitStop())
+    for (let i = 0; i < 30; i++) {
+      const added = lines().slice(before)
+      if (added.length) log({ dir: 'index-added', at: i, added })
+      await sleep(1000)
+    }
+    log({ dir: 'index-final', added: lines().slice(before) })
+    snap('after title wait')
+  },
   // A write that read-only + on-request must ask about; the capture server answers per PERM_MODE / ACT.
   async approve() {
     if (process.env.PRE_SLASH) {

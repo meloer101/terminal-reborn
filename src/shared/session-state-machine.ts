@@ -221,6 +221,10 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         toolAction: undefined,
         ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
       }
+
+    case 'agent-title':
+      // A name, not activity: it can arrive well after the turn ended.
+      return state
   }
 }
 

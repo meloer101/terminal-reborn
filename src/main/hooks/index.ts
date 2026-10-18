@@ -8,6 +8,7 @@ import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
+import { AgentTitleWatcher } from './agent-title'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
 import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
@@ -85,6 +86,11 @@ const emitter: BridgeEmitter = {
   canDeliver: (sessionId) => ownerOf(sessionId) !== null
 }
 
+/** The agents' own session titles, read back from their data files after hooks (PRD F2). */
+const titles = new AgentTitleWatcher((sessionId, agent, title) =>
+  emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'agent-title', title } })
+)
+
 /** `TR_HOOKS_CHECK_MS` lets e2e fault-injection runs shorten the self-check interval. */
 function checkIntervalOverride(): { intervalMs?: number } {
   const ms = Number(process.env.TR_HOOKS_CHECK_MS)
@@ -111,7 +117,7 @@ async function start(): Promise<Runtime | null> {
   ])
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: false })
+      const bridge = new HookBridge(emitter, { holdPermissions: false, titles })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -135,7 +141,7 @@ async function start(): Promise<Runtime | null> {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
     // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
-    const bridge = new HookBridge(emitter, { holdPermissions: false })
+    const bridge = new HookBridge(emitter, { holdPermissions: false, titles })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => bridge.handle(request),

@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
 import { describeAllowAlways, type AllowAlwaysScope } from '@shared/permission-scope'
+import type { AgentTitleWatcher } from './agent-title'
 import { normalizeHook } from './normalize'
 import { PermissionRegistry, type Scheduler } from './permission-registry'
 import { UnknownSessionError, type HookRequest } from './server'
@@ -34,6 +35,8 @@ export class HookBridge {
        * is the whole UI, so the request is only announced (status "等你处理") and answered in the TUI.
        */
       holdPermissions?: boolean
+      /** Follows hook traffic to report the agent's own session title (./agent-title.ts). */
+      titles?: Pick<AgentTitleWatcher, 'observe' | 'forget'>
     } = {}
   ) {
     this.registry = new PermissionRegistry((resolution) => emitter.resolved(resolution), options.scheduler, options.permissionTimeoutMs)
@@ -54,6 +57,7 @@ export class HookBridge {
   detach(sessionId: string): void {
     this.registry.resolveSession(sessionId, 'session-ended')
     this.resolveQuestion(sessionId, 'session-ended')
+    this.options.titles?.forget(sessionId)
     this.sessions.delete(sessionId)
   }
 
@@ -82,6 +86,7 @@ export class HookBridge {
     const { sessionId, agent, event } = request
     if (!this.sessions.has(sessionId)) throw new UnknownSessionError(sessionId)
 
+    this.options.titles?.observe(sessionId, agent, event, request.payload)
     const normalized = normalizeHook(agent, event, request.payload)
     const at = request.receivedAt ?? this.now()
     for (const e of normalized.events) this.emitter.event({ sessionId, agent, at, event: e })

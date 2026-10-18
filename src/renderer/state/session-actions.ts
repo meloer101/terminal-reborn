@@ -158,7 +158,8 @@ export function renameSession(sessionId: SessionId, input: string): void {
   const title = [...input.replace(/\s+/g, ' ').trim()].slice(0, MAX_TITLE_CHARS).join('')
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session || title === '' || title === session.title) return
-  useWorkspace.getState().patchSession(sessionId, { title })
+  // From now on the agent's own title never replaces it (PRD F2).
+  useWorkspace.getState().patchSession(sessionId, { title, titleSource: 'user' })
 }
 
 const plainCmd = (e: KeyboardEvent, key: string) =>

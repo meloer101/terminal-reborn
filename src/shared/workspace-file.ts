@@ -2,7 +2,7 @@
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
 import { isWorkdir, type Workdir } from './new-session'
-import type { AgentKind, Project, Worktree } from './types'
+import type { AgentKind, Project, TitleSource, Worktree } from './types'
 
 export const WORKSPACE_FILE_VERSION = 2
 
@@ -30,6 +30,8 @@ export interface PersistedSession {
   worktreeId: string
   kind: AgentKind
   title: string
+  /** Where the title came from (PRD F2); absent in files written before it existed. */
+  titleSource?: TitleSource
   /** The agent's own conversation id, used to resume after a restart. */
   agentSessionId?: string
   startedAt: number
@@ -86,6 +88,7 @@ const isText = (v: unknown, max = MAX_TEXT): v is string => typeof v === 'string
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
 const KINDS: ReadonlySet<unknown> = new Set<AgentKind>(['claude', 'codex', 'shell'])
+const TITLE_SOURCES: ReadonlySet<unknown> = new Set<TitleSource>(['prompt', 'agent', 'user'])
 
 function list(v: unknown): Record<string, unknown>[] {
   return Array.isArray(v) ? v.filter(isRecord).slice(0, MAX_ITEMS) : []
@@ -138,6 +141,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           worktreeId: s.worktreeId as string,
           kind: s.kind as AgentKind,
           title: s.title as string,
+          ...(TITLE_SOURCES.has(s.titleSource) ? { titleSource: s.titleSource as TitleSource } : {}),
           // A shell has no conversation to resume.
           ...(s.kind !== 'shell' && isSafeAgentSessionId(s.agentSessionId) ? { agentSessionId: s.agentSessionId } : {}),
           startedAt,

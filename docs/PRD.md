@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.14 | 2026-10-18 | F2 会话标题改为**用 agent 自己起的名字**：Claude Code、Codex 都已在用户自己的额度上用小模型给对话起名，Wavi 只读回来，不自己调模型、不需要 API key。首条 prompt 只是占位，几秒后被替换；在 Wavi 里重命名过的永远不被覆盖（优先级：Wavi 重命名 > agent 标题 > 首条 prompt）；agent 里的 /rename 会跟过来。实测见 §6.6、§6.7。Codex 0.163 以前、其他 agent 和终端会话没有 agent 标题，保留首条 prompt |
 | v1.13 | 2026-10-18 | F4 新建会话面板实现时定下的细节：分支名前缀取 git `user.name` 的第一个词，没有就用登录名；“已在 worktree 里”只标在其他 worktree 里检出的分支（主目录的分支照常作为基线）；远程分支在本地有同名分支时不再列出；本地基线只是落后 upstream 时，新分支从刚 fetch 的 upstream 开始；工作目录的选择记在 workspace.json；创建失败时会话下方写原因、不启动终端；setup 脚本等 `.tr/settings.toml` 一起做；项目右键菜单改为“新建会话… ⌘N”，⌘K 加“新建会话…” |
 | v1.12 | 2026-10-18 | F4 “新建任务”改为**新建会话**面板（Figma 15，取代 06）：不再写任务描述，创建后进入会话自己发第一句话；“工作目录”二选一（新 worktree / 当前目录），按项目记住上次的选择，第一次默认新 worktree；⌘N 和项目标题的 ＋ 打开面板，会话右键 / Worktree 视图的“在此新建会话”不弹面板；分支名不再从任务生成。§5：浮层改用玻璃材质（轻模糊背景 + 半透明面板 + 阴影），面板里的控件去掉边框只留色块；Figma 组件 Select、Segment 已去掉边框，新增 token `bg/popover` |
 | v1.11 | 2026-10-18 | 产品改名 **Wavi**（appId `dev.wavi.app`，`TERM_PROGRAM=Wavi`）；旧的 “Terminal Reborn” 配置目录在没有守护进程或实例在用时自动改名迁移；`npm run dev` 用独立的 “Wavi Dev” 配置；新增 `npm run app:install`：装进「应用程序」的 Wavi.app 直接运行本仓库的 `out/`，构建后界面自动重新载入、主进程更新时提示重启（§7） |
@@ -131,7 +132,8 @@ Project（git 仓库根目录）
 
 ### F2 状态侧栏 · P0 · Figma 01 / 02（Sidebar、SessionRow、NavItem）
 - 项目 › 会话两级树，层级规则见 §3.3；项目可折叠。跨项目的状态视图交给 F9 总览。
-- 每行显示：StatusGlyph、任务标题（默认为首条 prompt，可重命名）、当前动作、`+N −M`、耗时（等你处理时显示“已等 3m”，见 F10）。
+- 每行显示：StatusGlyph、会话标题、当前动作、`+N −M`、耗时（等你处理时显示“已等 3m”，见 F10）。
+- **会话标题**：用 agent 自己给对话起的名字（Claude `ai-title`，Codex `thread_name`，见 §6.6、§6.7），Wavi 不自己调模型。首条 prompt（第一行，40 字）先占位；agent 起名后替换，agent 里 /rename 也跟着变。在 Wavi 里重命名后永远不再被替换。优先级：Wavi 重命名 > agent 标题 > 首条 prompt。没有 agent 标题的（Codex 0.163 以前、其他 agent、终端）保留首条 prompt。
 - 导航区：打开项目 ⌘O · 跳转到 ⌘K · 总览 ⌘⇧A（右侧显示需要处理的数量，形式为状态图形加数字）。
 - 系统通知：只在窗口失焦或该会话不可见时发送，点击后跳到对应会话。Dock 角标显示 `needsAttention` 的数量。
 - 快捷键：⌘1–9 切换会话，⌘J 跳到下一个需要处理的会话。
@@ -323,6 +325,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 用户默认的 auto 模式下，无害的 Bash 不会触发 PermissionRequest。
 - PostToolUse 带完整的工具输出（可能几 MB），服务端上限 32 MB。
 - 延迟：每个 hook 15–25 ms（SessionStart 冷启动约 75 ms）；UserPromptSubmit 在回车写入约 75 ms 后到达。`SessionEnd` 的 hooks 一共只有 1.5 s。
+- **会话标题**（2.1.302，2026-10-18，`30-hooks-lab.mjs title`）：hook payload 里**没有**标题字段，只有 `transcript_path`。Claude 在第一条 prompt 后约 4 s、和回复并行，用小模型生成标题，写进 transcript：`{"type":"ai-title","aiTitle":"…"}`；/rename 写 `{"type":"custom-title","customTitle":"…"}`，显示规则是 `customTitle ?? aiTitle`。两种条目每一轮都会在文件尾部重新追加一遍，所以只读文件尾部（4 MB）就够。标题之后不会随对话变化。本机 80 个会话里 74 个在第一条回复之前就有了 ai-title。Wavi 在 SessionStart（含 --resume）、Stop 时读，第一条 prompt 后 3 / 8 / 20 s 再读；只接受 `~/.claude/projects`（或 `$CLAUDE_CONFIG_DIR/projects`）下的 `.jsonl`。
 
 ### 6.7 实测结论 · Codex（0.142.5，2026-10-14）
 脚本 `scripts/spikes/40-codex-hooks-list.mjs`、`41-codex-hooks-lab.mjs`、`codex-mock-provider.mjs`（本地模拟模型）；payload 在 `src/main/hooks/codex-fixtures.ts`。当时第三方模型服务一直返回 503，所以依赖真实模型的行为没有验证。
@@ -336,6 +339,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 空 prompt 下按一次 Ctrl+C 就开始退出；运行中 Ctrl+C 和 Esc 都只是中断回合。
 - 工具映射到 Claude 的词汇：shell → `Bash {command}`；`apply_patch` → `Write` / `Edit`；`request_user_input` → `AskUserQuestion`。PostToolUse 的 `tool_response` 是纯字符串，没有退出码。
 - 延迟：UserPromptSubmit 在回车约 100 ms 后到达，PermissionRequest 比 PreToolUse 晚约 21 ms。
+- **会话标题**（2026-10-18，`41-codex-hooks-lab.mjs title` + 本地模拟模型）：0.142.5 的 TUI 不会自动起名，只有 Codex 桌面版会。**0.163.0** 的 TUI 在第一轮 Stop 后约 60 ms 发一个结构化输出请求（`{title}`，≤ 36 字，用用户的语言）；没登录 ChatGPT 时发给会话当前的模型服务商。结果追加到 `$CODEX_HOME/session_index.jsonl`：`{"id":<session_id>,"thread_name":"…","updated_at":"…"}`，**`id` 就是 hook payload 里的 `session_id`**；同一 id 以最后一行为准（改名会再追加一行）。终端标题同时变成 `<标题> | <目录>`，不以 spinner 开头，状态规则照常按空闲处理。Hook payload 里没有标题字段。Wavi 在 Stop 后 0 / 2 / 6 / 15 / 30 s、SessionStart 和 UserPromptSubmit 时读这个文件，只读不写。用户的模型服务商不可用时（本机第三方服务一直 503）就没有标题，保留首条 prompt。注意：0.163 第一次启动会弹“Meet GPT-6 Sol”，并在 `~/.codex/config.toml` 的 `[tui.model_availability_nux]` 里给计数加一，这是 Codex 自己的行为。
 
 ### 6.8 PTY 守护进程（2026-10-16 实现）
 参考 Orca（MIT）的 `src/main/daemon/*`，只取核心形态，不要 launchd。e2e：`e2e/pty-daemon.spec.ts`；其余 e2e 用 `TR_KILL_SESSIONS_ON_QUIT=1` 退出，不留守护进程。

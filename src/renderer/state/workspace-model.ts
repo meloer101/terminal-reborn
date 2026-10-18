@@ -170,11 +170,12 @@ export function serializeWorkspace(data: WorkspaceData, ui: WorkspaceUi, drafts:
       isMain,
       ...(baseBranch ? { baseBranch } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, title, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt }) => ({
       id,
       worktreeId,
       kind,
       title,
+      ...(titleSource ? { titleSource } : {}),
       ...(agentSessionId ? { agentSessionId } : {}),
       startedAt,
       lastActivityAt,
@@ -212,6 +213,7 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       worktreeId: s.worktreeId,
       kind: s.kind,
       title: s.title,
+      ...(s.titleSource ? { titleSource: s.titleSource } : {}),
       status: 'idle',
       startedAt: s.startedAt,
       lastActivityAt: s.lastActivityAt,
@@ -249,6 +251,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
       !before ||
       s.id !== before.id ||
       s.title !== before.title ||
+      s.titleSource !== before.titleSource ||
       s.agentSessionId !== before.agentSessionId ||
       s.worktreeId !== before.worktreeId ||
       s.lastReply !== before.lastReply ||
@@ -266,11 +269,12 @@ export function removedSessionIds(next: WorkspaceData, prev: WorkspaceData): Ses
 const TITLE_MAX_CHARS = 40
 
 /**
- * Title for a session still carrying its default name, taken from the first prompt (PRD F2).
- * Returns null when the session already has a real title or the prompt has nothing usable.
+ * Title for a session still carrying its default name, taken from the first prompt (PRD F2). It is only a placeholder
+ * until the agent names the conversation (titleFromAgent). Returns null when the session already has a title or the
+ * prompt has nothing usable.
  */
-export function titleFromFirstPrompt(session: Pick<Session, 'kind' | 'title'>, prompt: string): string | null {
-  if (session.title !== DEFAULT_SESSION_TITLE[session.kind]) return null
+export function titleFromFirstPrompt(session: Pick<Session, 'kind' | 'title' | 'titleSource'>, prompt: string): string | null {
+  if (session.titleSource !== undefined || session.title !== DEFAULT_SESSION_TITLE[session.kind]) return null
   const line = prompt
     .split('\n')
     .map((l) => l.trim())
@@ -278,4 +282,18 @@ export function titleFromFirstPrompt(session: Pick<Session, 'kind' | 'title'>, p
   if (!line) return null
   const chars = [...line.replace(/\s+/g, ' ')]
   return chars.length > TITLE_MAX_CHARS ? `${chars.slice(0, TITLE_MAX_CHARS).join('')}…` : chars.join('')
+}
+
+/**
+ * The agent's own name for the conversation replaces the prompt placeholder and follows later renames made inside
+ * the agent (PRD F2). A rename in Wavi always wins. Titles saved before `titleSource` existed may be replaced: they
+ * were almost all cut from the first prompt.
+ */
+export function titleFromAgent(
+  session: Pick<Session, 'kind' | 'title' | 'titleSource'>,
+  title: string
+): Pick<Session, 'title' | 'titleSource'> | null {
+  if (session.kind === 'shell' || session.titleSource === 'user') return null
+  if (session.titleSource === 'agent' && session.title === title) return null
+  return { title, titleSource: 'agent' }
 }

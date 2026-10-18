@@ -166,3 +166,20 @@ describe('HookBridge', () => {
     expect(emitted[0]?.by).toBe('timeout')
   })
 })
+
+describe('HookBridge · agent titles', () => {
+  it('shows every hook of an attached session to the title watcher and forgets it on detach', async () => {
+    const calls: string[] = []
+    const titles = {
+      observe: (sessionId: string, agent: string, event: string) => void calls.push(`observe ${sessionId} ${agent} ${event}`),
+      forget: (sessionId: string) => void calls.push(`forget ${sessionId}`)
+    }
+    const emitter: BridgeEmitter = { event: () => undefined, prompt: () => undefined, resolved: () => undefined, canDeliver: () => true }
+    const bridge = new HookBridge(emitter, { titles })
+    bridge.attach('s1')
+    await bridge.handle({ event: 'Stop', sessionId: 's1', agent: 'claude', payload: {}, signal: new AbortController().signal })
+    await expect(bridge.handle({ event: 'Stop', sessionId: 'nope', agent: 'claude', payload: {}, signal: new AbortController().signal })).rejects.toThrow()
+    bridge.detach('s1')
+    expect(calls).toEqual(['forget s1', 'observe s1 claude Stop', 'forget s1'])
+  })
+})

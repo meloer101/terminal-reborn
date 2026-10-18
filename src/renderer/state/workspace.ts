@@ -85,6 +85,7 @@ export type SessionPatch = Partial<
     | 'status'
     | 'currentAction'
     | 'title'
+    | 'titleSource'
     | 'lastActivityAt'
     | 'agentSessionId'
     | 'phase'
