@@ -1,8 +1,19 @@
 // The built-in browser's pages (PRD F17 · 浏览器): one WebContentsView per worktree, laid over the rectangle the
-// renderer reports. Pages run in a session partition per worktree with no preload, sandboxed and context-isolated,
-// so they can never reach `window.tr` or Node; only http(s) is ever loaded. A page can open another site in the
-// system browser only right after the user pressed a key or the mouse in it, and never in bursts.
-import { BrowserWindow, session, shell, WebContentsView, type Session, type WebContents } from 'electron'
+// renderer reports. Pages on this machine or the LAN run in a session partition per worktree; every other site in
+// one shared partition, so a sign-in sticks (a navigation across the two swaps the view). No preload, sandboxed and
+// context-isolated, so pages can never reach `window.tr` or Node; only http(s) is ever loaded. Right after the user
+// pressed a key or the mouse in a page, it may open a sign-in pop-up (an in-app window) or another site in the
+// system browser, never in bursts.
+import {
+  app,
+  BrowserWindow,
+  session,
+  shell,
+  WebContentsView,
+  type BrowserWindowConstructorOptions,
+  type Session,
+  type WebContents
+} from 'electron'
 import {
   addConsoleEntry,
   BROWSER_IPC,
@@ -10,17 +21,20 @@ import {
   EMPTY_CONSOLE,
   isAllowedUrl,
   pageChord,
+  pageScope,
+  pageUserAgent,
   type AppChordCommand,
   type BrowserBounds,
   type BrowserNotice,
   type BrowserPageState,
   type PageAction,
   type PageCommand,
-  type PageContextMenu
+  type PageContextMenu,
+  type PageScope
 } from '@shared/browser'
 import { IPC } from '@shared/ipc'
 import { isMenuCommand } from '@shared/shortcuts'
-import { partitionFor } from './partition'
+import { partitionFor, WEB_PARTITION } from './partition'
 import type { RememberedPages } from './remembered'
 
 /** Live pages per window; the least recently shown one beyond this is closed (its URL stays remembered). */
@@ -34,7 +48,11 @@ const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write'])
 
 interface Page {
   worktree: string
+  /** Which cookie jar the view runs in; fixed per view, so crossing it swaps the view. */
+  scope: PageScope
   view: WebContentsView
+  /** Sign-in pop-ups this page opened; closed with it. */
+  popups: Set<BrowserWindow>
   state: BrowserPageState
   lastShown: number
   /** Last key or mouse press in the page (pop-ups need a recent one). */
@@ -53,11 +71,13 @@ export function isPageContents(contents: WebContents): boolean {
 
 const hardened = new WeakSet<Session>()
 
-/** A worktree's session partition, hardened once (permission handlers and downloads are per session). */
-function browserSession(worktree: string): Session {
-  const ses = session.fromPartition(partitionFor(worktree))
+/** The session partition for a page, hardened once (permission handlers, downloads and the UA are per session). */
+function browserSession(worktree: string, scope: PageScope): Session {
+  const ses = session.fromPartition(scope === 'web' ? WEB_PARTITION : partitionFor(worktree))
   if (hardened.has(ses)) return ses
   hardened.add(ses)
+  // Sign-in pages refuse a browser that says it is embedded in an app.
+  ses.setUserAgent(pageUserAgent(ses.getUserAgent(), [app.getName()]))
   ses.setPermissionRequestHandler((_contents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)))
   ses.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.has(permission))
   ses.setDevicePermissionHandler(() => false)
@@ -74,7 +94,8 @@ function browserSession(worktree: string): Session {
 
 /** Sets a worktree's session up ahead of its first page (the view opened; the user has not typed yet). */
 export function warmBrowserSession(worktree: string): void {
-  browserSession(worktree)
+  browserSession(worktree, 'local')
+  browserSession(worktree, 'web')
 }
 
 function loadErrorText(code: number, description: string, url: string): string {
@@ -181,7 +202,7 @@ export class BrowserHost {
   }
 
   navigate(worktree: string, url: string): void {
-    const page = this.pages.get(worktree) ?? this.create(worktree, this.remembered.get(worktree)?.mobile ?? false)
+    const page = this.pages.get(worktree) ?? this.create(worktree, this.remembered.get(worktree)?.mobile ?? false, pageScope(url))
     this.load(page, url)
   }
 
@@ -260,16 +281,35 @@ export class BrowserHost {
   private reopen(worktree: string): Page | null {
     const saved = this.remembered.get(worktree)
     if (!saved) return null
-    const page = this.create(worktree, saved.mobile)
+    const page = this.create(worktree, saved.mobile, pageScope(saved.url))
     this.load(page, saved.url)
     return page
   }
 
-  private create(worktree: string, mobile: boolean): Page {
+  /** The same worktree's page in the other cookie jar (history does not carry over); shown if the old one was. */
+  private rescope(page: Page, scope: PageScope): Page {
+    const wasVisible = this.visible === page
+    this.pages.delete(page.worktree)
+    // Off screen now; the WebContents itself is closed on the next tick, outside whatever call got us here.
+    page.view.setVisible(false)
+    setImmediate(() => this.close(page))
+    const next = this.create(page.worktree, page.state.mobile, scope)
+    next.lastShown = page.lastShown
+    if (wasVisible) {
+      this.visible = next
+      // Not layout(): device emulation on a WebContents that has loaded nothing yet crashes Electron's main
+      // process. did-navigate applies it once the address loads.
+      next.view.setBounds(this.bounds)
+      next.view.setVisible(true)
+    }
+    return next
+  }
+
+  private create(worktree: string, mobile: boolean, scope: PageScope): Page {
     this.evict()
     const view = new WebContentsView({
       webPreferences: {
-        session: browserSession(worktree),
+        session: browserSession(worktree, scope),
         // No preload: the page gets no bridge to the app at all.
         contextIsolation: true,
         sandbox: true,
@@ -290,27 +330,49 @@ export class BrowserHost {
     const contents = view.webContents
     pageContents.add(contents)
     noticeTargets.set(contents, (message) => this.notify(worktree, message))
-    const page: Page = { worktree, view, lastShown: 0, lastInputAt: 0, stateTimer: null, state: { ...this.state(worktree), url: '', mobile } }
+    const page: Page = {
+      worktree,
+      scope,
+      view,
+      popups: new Set(),
+      lastShown: 0,
+      lastInputAt: 0,
+      stateTimer: null,
+      state: { ...this.state(worktree), url: '', mobile }
+    }
     this.pages.set(worktree, page)
 
-    // Only http(s). The page's own origin and this machine open in this view; other sites go to the system
-    // browser only right after real input (a page cannot flood the user's browser); the rest is dropped.
-    contents.setWindowOpenHandler(({ url }) => {
+    // Only http(s). Right after real input a sign-in pop-up opens as an in-app window (window.opener intact) and
+    // another site in the system browser (a page cannot flood either); the page's own origin and this machine open
+    // in this view; the rest is dropped.
+    contents.setWindowOpenHandler(({ url, disposition }) => {
       const now = Date.now()
-      const decision = decidePopup({ url, pageUrl: page.state.url, lastInputAt: page.lastInputAt, lastExternalAt: this.lastExternalAt, now })
-      if (decision === 'same-view') this.load(page, url)
+      const decision = decidePopup({ url, pageUrl: page.state.url, disposition, lastInputAt: page.lastInputAt, lastExternalAt: this.lastExternalAt, now })
+      if (decision === 'window') {
+        this.lastExternalAt = now
+        return { action: 'allow', overrideBrowserWindowOptions: this.popupOptions(contents.session) }
+      }
+      // Next tick: the load may swap (close) this very view.
+      if (decision === 'same-view') setImmediate(() => this.pages.get(worktree) === page && this.load(page, url))
       else if (decision === 'external') {
         this.lastExternalAt = now
         void shell.openExternal(url)
       } else this.notify(worktree, '拦下了页面自己打开的新窗口')
       return { action: 'deny' }
     })
-    contents.on('will-navigate', (event) => {
-      if (!isAllowedUrl(event.url)) event.preventDefault()
-    })
-    contents.on('will-redirect', (event) => {
-      if (event.isMainFrame && !isAllowedUrl(event.url)) event.preventDefault()
-    })
+    contents.on('did-create-window', (child) => this.adoptPopup(page, child))
+    // Crossing between this machine and the web swaps the view's cookie jar: load the address in the other view.
+    const crossing = (event: { url: string; isMainFrame: boolean; preventDefault(): void }) => {
+      if (!isAllowedUrl(event.url)) return event.preventDefault()
+      if (!event.isMainFrame || pageScope(event.url) === scope) return
+      event.preventDefault()
+      const url = event.url
+      setImmediate(() => {
+        if (this.pages.get(worktree) === page) this.load(page, url)
+      })
+    }
+    contents.on('will-navigate', crossing)
+    contents.on('will-redirect', crossing)
     contents.on('will-attach-webview', (event) => event.preventDefault())
     // A beforeunload prompt would leave the page stuck: always let it go.
     contents.on('will-prevent-unload', (event) => event.preventDefault())
@@ -339,6 +401,8 @@ export class BrowserHost {
     })
 
     const update = (patch: Partial<BrowserPageState>) => {
+      // A page swapped out for the other cookie jar still reports its aborted load: not the worktree's page any more.
+      if (this.pages.get(worktree) !== page) return
       page.state = { ...page.state, ...patch }
       this.emit(page)
     }
@@ -401,6 +465,8 @@ export class BrowserHost {
 
   private load(page: Page, url: string): void {
     if (!isAllowedUrl(url)) return
+    const scope = pageScope(url)
+    if (scope !== page.scope) page = this.rescope(page, scope)
     page.state = { ...page.state, url, loadError: null }
     this.emit(page)
     // Failures arrive through did-fail-load; the rejected promise carries nothing more.
@@ -481,7 +547,56 @@ export class BrowserHost {
     this.send(BROWSER_IPC.state, this.state(oldest.worktree))
   }
 
+  /** A sign-in pop-up: a small window over the app in the page's session, with the page's own rules. */
+  private popupOptions(pageSession: Session): BrowserWindowConstructorOptions {
+    return {
+      // The parent marks it as a pop-up, not an app window (app-windows.ts).
+      parent: this.window,
+      minimizable: false,
+      fullscreenable: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#ffffff',
+      webPreferences: {
+        session: pageSession,
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        nodeIntegrationInSubFrames: false,
+        nodeIntegrationInWorker: false,
+        webviewTag: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        navigateOnDragDrop: false,
+        safeDialogs: true,
+        spellcheck: false
+      }
+    }
+  }
+
+  private adoptPopup(page: Page, child: BrowserWindow): void {
+    const contents = child.webContents
+    pageContents.add(contents)
+    noticeTargets.set(contents, (message) => this.notify(page.worktree, message))
+    page.popups.add(child)
+    child.on('closed', () => page.popups.delete(child))
+    // A pop-up opening another (some sign-in flows do): load it in this pop-up, never a third window.
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isAllowedUrl(url)) contents.loadURL(url).catch(() => {})
+      return { action: 'deny' }
+    })
+    contents.on('will-navigate', (event) => {
+      if (!isAllowedUrl(event.url)) event.preventDefault()
+    })
+    contents.on('will-redirect', (event) => {
+      if (event.isMainFrame && !isAllowedUrl(event.url)) event.preventDefault()
+    })
+    contents.on('will-attach-webview', (event) => event.preventDefault())
+    contents.on('will-prevent-unload', (event) => event.preventDefault())
+  }
+
   private close(page: Page): void {
+    for (const popup of page.popups) if (!popup.isDestroyed()) popup.close()
+    page.popups.clear()
     if (page.stateTimer) clearTimeout(page.stateTimer)
     this.releaseFocus(page)
     const contents = page.view.webContents

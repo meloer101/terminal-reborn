@@ -1,8 +1,9 @@
 // Linked app only (src/main/source-checkout.ts): a new renderer build reloads the windows, a new main or preload
 // build offers a restart. With the pty daemon both keep the terminals (the reloaded window reattaches them); with
 // the fallback host they would end, so then the reload is asked first too.
-import { app, BrowserWindow } from 'electron'
+import { app } from 'electron'
 import { join } from 'node:path'
+import { appWindows } from './app-windows'
 import { confirm } from './confirm'
 import { quitKeepsSessions } from './pty'
 import { watchRebuilds, type BuildChange } from './rebuilds'
@@ -10,7 +11,7 @@ import { sourceRoot } from './source-checkout'
 import { getMainWindow } from './windows'
 
 function reloadWindows(): void {
-  for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.reload()
+  for (const win of appWindows()) win.webContents.reload()
 }
 
 function ask(change: BuildChange, keepsSessions: boolean): Promise<boolean> {

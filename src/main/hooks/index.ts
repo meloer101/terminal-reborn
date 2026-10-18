@@ -2,7 +2,7 @@
 // hands agent PTYs their env, and forwards bridge signals to the window that owns the session.
 // Reliability (phase 2a): the socket lives under userData and is supervised (supervisor.ts); health and
 // per-session "no hooks" / "no SessionStart" signals reach the renderer on IPC.agentHooksHealth / agentSessionHooks.
-import { app, BrowserWindow, ipcMain, type WebContents } from 'electron'
+import { app, ipcMain, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
@@ -17,6 +17,7 @@ import { UnknownSessionError } from './server'
 import { buildClaudeHookSettings } from './settings'
 import { StartWatchdog } from './start-watchdog'
 import { HookSupervisor } from './supervisor'
+import { appWindows } from '../app-windows'
 import { sourceRoot } from '../source-checkout'
 
 export interface AgentLaunchHooks {
@@ -70,7 +71,7 @@ function sendSessionSignal(owner: WebContents | null, signal: SessionHooksSignal
 const watchdog = new StartWatchdog((sessionId, afterMs) => sendSessionSignal(ownerOf(sessionId), { sessionId, kind: 'start-timeout', afterMs }))
 
 function broadcastHealth(health: HooksHealth): void {
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of appWindows()) {
     if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentHooksHealth, health)
   }
 }

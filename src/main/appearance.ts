@@ -1,8 +1,9 @@
 // Main-side appearance effects (PRD §4 F7): native theme, window
 // background color (no flash of the wrong color) and sidebar vibrancy for every window.
-import { app, BrowserWindow, nativeTheme } from 'electron'
+import { app, nativeTheme, type BrowserWindow } from 'electron'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
 import type { AppSettings } from '@shared/settings'
+import { appWindows, isAppWindow } from './app-windows'
 import { getSettings, onSettingsChange } from './settings'
 
 function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
@@ -16,13 +17,15 @@ function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
 function applyToAll(settings: AppSettings): void {
   // Forces the native appearance (and prefers-color-scheme in renderers) to the user's choice.
   nativeTheme.themeSource = settings.appearance.theme
-  for (const win of BrowserWindow.getAllWindows()) applyToWindow(win, settings)
+  for (const win of appWindows()) applyToWindow(win, settings)
 }
 
 export function registerAppearanceEffects(): void {
   nativeTheme.themeSource = getSettings().appearance.theme
   // Windows are created hidden (shown on ready-to-show), so this lands before first paint.
-  app.on('browser-window-created', (_event, win) => applyToWindow(win, getSettings()))
+  app.on('browser-window-created', (_event, win) => {
+    if (isAppWindow(win)) applyToWindow(win, getSettings())
+  })
   onSettingsChange(applyToAll)
   // 'system' resolves differently when the OS flips; keep the native fill in step.
   nativeTheme.on('updated', () => applyToAll(getSettings()))

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 /**
  * Launches the built app with a throwaway profile, so tests never see or change the user's workspace.
- * `options.userDataDir` reuses a profile across launches. `envOverrides` adjusts the app's environment (a `undefined` value removes the variable); agent PTYs
+ * `options.userDataDir` reuses a profile across launches; `options.args` adds Chromium switches (e.g. host-resolver-rules). `envOverrides` adjusts the app's environment (a `undefined` value removes the variable); agent PTYs
  * inherit it, so e2e runs started from inside Claude Code strip the outer session's markers this way.
  * Confirmation dialogs are recorded in main (`globalThis.__trDialogs`) and auto-answered instead of shown.
  * Quitting ends every session (and the pty daemon) so no test leaves processes behind; pass
@@ -13,7 +13,7 @@ import { join } from 'node:path'
  */
 export function launchApp(
   envOverrides: Record<string, string | undefined> = {},
-  options: { userDataDir?: string } = {}
+  options: { userDataDir?: string; args?: string[] } = {}
 ): Promise<ElectronApplication> {
   // A fixed `userDataDir` lets a test relaunch with the same profile (persistence).
   const userData = options.userDataDir ?? mkdtempSync(join(tmpdir(), 'tr-e2e-'))
@@ -25,5 +25,5 @@ export function launchApp(
     ...envOverrides
   }
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key]
-  return electron.launch({ args: ['.'], env: env as Record<string, string> })
+  return electron.launch({ args: ['.', ...(options.args ?? [])], env: env as Record<string, string> })
 }

@@ -125,7 +125,8 @@ test.describe('F17 right panel · 浏览器', () => {
         drafts: {}
       })
     )
-    app = await launchApp({}, { userDataDir: profile })
+    // site.example is a public-looking host (the shared web jar) served by the local test server.
+    app = await launchApp({}, { userDataDir: profile, args: ['--host-resolver-rules=MAP site.example 127.0.0.1'] })
     page = await app.firstWindow()
     await page.addInitScript(() => {
       ;(globalThis as unknown as { __TR_TERMINAL_PROBE__: boolean }).__TR_TERMINAL_PROBE__ = true
@@ -362,5 +363,80 @@ test.describe('F17 right panel · 浏览器', () => {
     await expect(menu.getByRole('menuitem', { name: '复制链接' })).toBeVisible()
     await menu.getByRole('menuitem', { name: '用系统浏览器打开' }).click()
     await expect.poll(async () => (await opened()).length).toBe(before + 1)
+  })
+
+  test('other sites share one cookie jar and a plain UA; crossing to this machine swaps back to the worktree jar', async () => {
+    const web = `http://site.example:${port}`
+    await address().click()
+    await address().fill(`${web}/signin`)
+    await address().press('Enter')
+    await expect.poll(() => inPage(web, 'location.pathname'), { timeout: 15_000 }).toBe('/signin')
+    /** The partition each loaded page runs in, by origin. */
+    const jarOf = (o: string) =>
+      app.evaluate(({ session, webContents }, origin) => {
+        const target = webContents.getAllWebContents().find((w) => w.getURL().startsWith(origin))
+        if (!target) return 'no page'
+        return target.session === session.fromPartition('persist:tr-browser:web') ? 'web' : 'other'
+      }, o)
+    expect(await jarOf(web)).toBe('web')
+    expect(await inPage(web, 'navigator.userAgent')).not.toMatch(/Electron|Wavi/)
+    // A cookie set here is in the shared jar, where any worktree's page finds it.
+    await inPage(web, "document.cookie = 'signed=yes; max-age=600'; 1")
+    expect(
+      await app.evaluate(async ({ session }) => (await session.fromPartition('persist:tr-browser:web').cookies.get({ name: 'signed' })).length)
+    ).toBe(1)
+    // The page itself going to localhost: the view swaps to the worktree's own jar.
+    await inPage(web, `location.href = '${origin()}/back-home'; 1`)
+    await expect.poll(() => inPage(origin(), 'location.pathname'), { timeout: 15_000 }).toBe('/back-home')
+    expect(await jarOf(origin())).toBe('other')
+    await expect(address()).toHaveValue(`${origin()}/back-home`)
+  })
+
+  test('a sign-in pop-up opens as an in-app window that keeps window.opener; ⌘W closes only the pop-up', async () => {
+    const web = `http://site.example:${port}`
+    await address().click()
+    await address().fill(`${web}/login`)
+    await address().press('Enter')
+    await expect.poll(() => inPage(web, 'location.pathname'), { timeout: 15_000 }).toBe('/login')
+    await inPage(web, "window.__got = null; window.addEventListener('message', (e) => { window.__got = e.data }); 1")
+    const windows = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+    expect(await windows()).toBe(1)
+    await app.evaluate(({ webContents }, o) => {
+      const target = webContents.getAllWebContents().find((w) => w.getURL().startsWith(o))
+      target?.sendInputEvent({ type: 'mouseDown', x: 10, y: 10, button: 'left', clickCount: 1 })
+      target?.sendInputEvent({ type: 'mouseUp', x: 10, y: 10, button: 'left', clickCount: 1 })
+    }, web)
+    await inPage(web, `window.open('${web}/oauth', 'signin', 'width=420,height=520'); 1`)
+    await expect.poll(windows).toBe(2)
+    const popup = () =>
+      app.evaluate(async ({ BrowserWindow, session }) => {
+        const child = BrowserWindow.getAllWindows().find((w) => w.getParentWindow() !== null)
+        if (!child) return null
+        const contents = child.webContents
+        return {
+          url: contents.getURL(),
+          webJar: contents.session === session.fromPartition('persist:tr-browser:web'),
+          opener: (await contents.executeJavaScript('window.opener !== null')) as boolean
+        }
+      })
+    await expect.poll(async () => (await popup())?.url).toBe(`${web}/oauth`)
+    expect(await popup()).toMatchObject({ webJar: true, opener: true })
+    // The pop-up reports back to its opener, like a sign-in flow does.
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((w) => w.getParentWindow() !== null)
+        ?.webContents.executeJavaScript("window.opener.postMessage('signed-in', '*'); 1")
+    )
+    await expect.poll(() => inPage(web, 'window.__got')).toBe('signed-in')
+    // ⌘W (the 关闭会话 menu item) in the pop-up closes the pop-up and leaves the session alone.
+    await app.evaluate(({ BrowserWindow, Menu }) => {
+      const child = BrowserWindow.getAllWindows().find((w) => w.getParentWindow() !== null)
+      const item = Menu.getApplicationMenu()
+        ?.items.flatMap((i) => i.submenu?.items ?? [])
+        .find((i) => i.label === '关闭会话')
+      item?.click(undefined, child, undefined)
+    })
+    await expect.poll(windows).toBe(1)
+    await expect(page.locator('[data-region="sidebar"]')).toContainText('修复移动端导航抖动')
   })
 })

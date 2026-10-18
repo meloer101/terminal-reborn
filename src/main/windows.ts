@@ -5,6 +5,7 @@ import { IPC } from '@shared/ipc'
 import { viewMenuItems } from '@shared/lifecycle'
 import { SHORTCUTS, stepFontSize, type FontSizeStep, type MenuCommand } from '@shared/shortcuts'
 import { clearActivity } from './activity'
+import { appWindows, isAppWindow } from './app-windows'
 import { releaseSessionsOf } from './pty'
 import { isQuitting, quitEndingSessions } from './quit'
 import { getSettings, updateSettings } from './settings'
@@ -78,7 +79,7 @@ export function createMainWindow(): BrowserWindow {
 
 /** Asks a window's renderer to show the settings dialog (Figma 07). */
 export function showSettings(win: BrowserWindow | null | undefined): void {
-  const target = win && !win.isDestroyed() ? win : (BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0])
+  const target = win && !win.isDestroyed() ? win : (appWindows().find((w) => w.isFocused()) ?? appWindows()[0])
   if (!target) return
   target.show()
   target.webContents.send(IPC.uiShowSettings)
@@ -104,6 +105,11 @@ const DEV_ITEM_LABEL: Record<'reload' | 'toggleDevTools', string> = { reload: 'é
 function command(name: MenuCommand): Pick<MenuItemConstructorOptions, 'click'> {
   return {
     click: (_item, window) => {
+      // In a page's sign-in pop-up only âŒ˜W means something: it closes the pop-up, never the session behind it.
+      if (window instanceof BrowserWindow && !isAppWindow(window)) {
+        if (name === 'close-session' && !window.isDestroyed()) window.close()
+        return
+      }
       const target = window instanceof BrowserWindow ? window : getMainWindow()
       if (target && !target.isDestroyed()) target.webContents.send(IPC.uiMenuCommand, name)
     }

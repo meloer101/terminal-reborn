@@ -1,10 +1,11 @@
 // Settings persistence (PRD F7): <userData>/settings.json, sanitized on read and write, broadcast to
 // every window on change. Main-process consumers (window vibrancy, …) subscribe with onSettingsChange.
 // Disk handling (corrupt-file backup, the write chain) lives in ./settings-file.ts.
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { IPC, type SettingsSaveError } from '@shared/ipc'
 import { applySettingsPatch, type AppSettings } from '@shared/settings'
+import { appWindows } from './app-windows'
 import { loadSettingsFile, SettingsWriter } from './settings-file'
 
 let current: AppSettings | null = null
@@ -17,7 +18,7 @@ function file(): string {
 
 function broadcastSaveError(error: Error): void {
   const payload: SettingsSaveError = { message: error.message }
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of appWindows()) {
     if (!win.webContents.isDestroyed()) win.webContents.send(IPC.settingsSaveFailed, payload)
   }
 }
@@ -40,7 +41,7 @@ export async function updateSettings(patch: unknown): Promise<AppSettings> {
   current = next
   writer ??= new SettingsWriter(file(), broadcastSaveError)
   await writer.write(next)
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of appWindows()) {
     if (!win.webContents.isDestroyed()) win.webContents.send(IPC.settingsChanged, next)
   }
   for (const listener of listeners) listener(next)

@@ -7,6 +7,8 @@ import {
   MAX_AGENT_TEXT,
   mergePorts,
   pageChord,
+  pageScope,
+  pageUserAgent,
   portUrl,
   isAllowedUrl,
   localPortOf,
@@ -219,6 +221,45 @@ describe('decidePopup', () => {
   it('never opens other schemes', () => {
     expect(decidePopup({ ...base, url: 'file:///etc/hosts', lastInputAt: 10_000 })).toBe('blocked')
     expect(decidePopup({ ...base, url: 'vscode://x', lastInputAt: 10_000 })).toBe('blocked')
+    expect(decidePopup({ ...base, url: 'vscode://x', disposition: 'new-window', lastInputAt: 10_000 })).toBe('blocked')
+  })
+
+  it('opens a sign-in pop-up as an in-app window, only right after input and not in bursts', () => {
+    const popup = { ...base, pageUrl: 'https://claude.ai/login', url: 'https://accounts.google.com/o/oauth2', disposition: 'new-window' }
+    expect(decidePopup({ ...popup, lastInputAt: 9_500 })).toBe('window')
+    // Same-origin sign-in pop-ups too: the opener must stay.
+    expect(decidePopup({ ...popup, url: 'https://claude.ai/api/auth/google', lastInputAt: 9_500 })).toBe('window')
+    expect(decidePopup(popup)).toBe('blocked')
+    expect(decidePopup({ ...popup, lastInputAt: 9_500, lastExternalAt: 9_800 })).toBe('blocked')
+    // A plain target=_blank stays as before.
+    expect(decidePopup({ ...popup, disposition: 'foreground-tab', lastInputAt: 9_500 })).toBe('external')
+  })
+})
+
+describe('pageScope', () => {
+  it('keeps this machine and the LAN per worktree', () => {
+    for (const url of ['http://localhost:5173/', 'http://127.0.0.1:3000', 'http://app.localhost/', 'http://[::1]:8080/', 'http://192.168.1.20:5173/', 'http://10.0.0.5/', 'http://172.20.1.1/'])
+      expect(pageScope(url)).toBe('local')
+  })
+
+  it('puts every other site in the shared jar', () => {
+    for (const url of ['https://claude.ai/artifact/x', 'https://accounts.google.com/', 'http://8.8.8.8/', 'http://172.32.0.1/'])
+      expect(pageScope(url)).toBe('web')
+  })
+})
+
+describe('pageUserAgent', () => {
+  const ua =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Wavi/0.1.1 Chrome/142.0.7444.59 Electron/39.0.0 Safari/537.36'
+  it('drops the Electron and app tokens, keeps Chrome and Safari', () => {
+    expect(pageUserAgent(ua, ['Wavi'])).toBe(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.7444.59 Safari/537.36'
+    )
+  })
+
+  it('handles app names with spaces or regex characters', () => {
+    expect(pageUserAgent(ua.replace('Wavi/', 'Wavi Dev/'), ['Wavi Dev'])).not.toMatch(/Wavi|Electron/)
+    expect(pageUserAgent(ua.replace('Wavi/', 'a.b+/'), ['a.b+'])).not.toContain('a.b+')
   })
 })
 

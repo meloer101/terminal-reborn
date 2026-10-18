@@ -163,14 +163,27 @@ export const POPUP_GESTURE_MS = 1000
 /** …and at most once per this interval. */
 export const POPUP_INTERVAL_MS = 1000
 
-export type PopupDecision = 'same-view' | 'external' | 'blocked'
+export type PopupDecision = 'same-view' | 'window' | 'external' | 'blocked'
 
 /**
- * Where a `window.open` / `target=_blank` goes: the page's own origin or this machine stays in the view; another
- * http(s) site opens in the system browser, but only right after real input and not in bursts; the rest is dropped.
+ * Where a `window.open` / `target=_blank` goes. A sized pop-up (`window.open` with features — sign-in with Google,
+ * Apple, GitHub …) opens as a small in-app window that keeps `window.opener`, so the page gets the sign-in result.
+ * Otherwise the page's own origin or this machine stays in the view, and another http(s) site opens in the system
+ * browser. Anything that leaves the view needs real input just before and never comes in bursts; the rest is dropped.
  */
-export function decidePopup(input: { url: string; pageUrl: string; lastInputAt: number; lastExternalAt: number; now: number }): PopupDecision {
+export function decidePopup(input: {
+  url: string
+  pageUrl: string
+  /** Electron's `disposition`: `new-window` = opened with window features (a pop-up), tabs otherwise. */
+  disposition?: string
+  lastInputAt: number
+  lastExternalAt: number
+  now: number
+}): PopupDecision {
   if (!isAllowedUrl(input.url)) return 'blocked'
+  const gesture = input.now - input.lastInputAt <= POPUP_GESTURE_MS
+  const rested = input.now - input.lastExternalAt >= POPUP_INTERVAL_MS
+  if (input.disposition === 'new-window' && gesture && rested) return 'window'
   const target = new URL(input.url)
   let sameOrigin = false
   try {
@@ -179,9 +192,35 @@ export function decidePopup(input: { url: string; pageUrl: string; lastInputAt: 
     // No page yet.
   }
   if (sameOrigin || LOCAL_HOST.test(target.host)) return 'same-view'
-  const gesture = input.now - input.lastInputAt <= POPUP_GESTURE_MS
-  const rested = input.now - input.lastExternalAt >= POPUP_INTERVAL_MS
   return gesture && rested ? 'external' : 'blocked'
+}
+
+/** Private (RFC 1918) and link-local IPv4: a dev server on the LAN. */
+const PRIVATE_IPV4 = /^(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01])|169\.254)\.\d{1,3}\.\d{1,3}$/
+
+/**
+ * Which cookie jar a page uses: `local` (this machine and the LAN — dev servers, kept apart per worktree so two
+ * worktrees on the same port never share a login) or `web` (every other site, one jar for the whole app, so signing
+ * in to a site once is enough).
+ */
+export type PageScope = 'local' | 'web'
+
+export function pageScope(url: string): PageScope {
+  try {
+    const { host, hostname } = new URL(url)
+    return LOCAL_HOST.test(host) || PRIVATE_IPV4.test(hostname) ? 'local' : 'web'
+  } catch {
+    return 'local'
+  }
+}
+
+/**
+ * The pages' User-Agent: Chromium's own, without the `Electron/…` and app tokens — sign-in pages (Google's above
+ * all) refuse browsers that say they are embedded in an app.
+ */
+export function pageUserAgent(userAgent: string, appNames: readonly string[]): string {
+  const names = ['Electron', ...appNames].filter(Boolean).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  return userAgent.replace(new RegExp(`\\s(?:${names.join('|')})/\\S+`, 'g'), '').replace(/\s{2,}/g, ' ').trim()
 }
 
 /** A keyboard chord pressed while the page has focus, as Electron's before-input-event reports it. */
