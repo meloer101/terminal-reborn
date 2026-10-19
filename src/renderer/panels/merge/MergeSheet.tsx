@@ -6,9 +6,11 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent
 import { ArrowRight, Check, CircleAlert, CircleX, GitBranch } from 'lucide-react'
 import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
+import { useRepoScripts } from '../../scripts/run-script'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../../ui/Segmented'
+import { StatusGlyph } from '../../ui/StatusGlyph'
 import { removeFailureText, removeWorktreeWithSessions } from '../worktree/actions'
 import {
   agentLabel,
@@ -21,7 +23,10 @@ import {
   methodOptions,
   removeBlocker,
   resultLines,
-  type CheckLine
+  testBlocksMerge,
+  testLine,
+  type CheckLine,
+  type MergeTestState
 } from './model'
 import { closeMergeSheet, useMergeSheet, type MergeTarget } from './store'
 import styles from './MergeSheet.module.css'
@@ -84,7 +89,56 @@ function Sheet({ target }: { target: MergeTarget }) {
   useEffect(() => sheetRef.current?.focus(), [])
 
   const ready = phase.kind === 'ready' ? phase.check : null
-  const mergeable = ready !== null && ready.blocker === null && ready.conflicts.length === 0
+  const gitMergeable = ready !== null && ready.blocker === null && ready.conflicts.length === 0
+  const repo = useRepoScripts(target.worktreePath)
+  const scriptsKnown = repo !== null
+  const testScript = repo?.scripts.test
+  const [testRun, setTestRun] = useState<{ attempt: number; script: string; state: MergeTestState } | null>(null)
+  const [testAttempt, setTestAttempt] = useState(0)
+  // Until this attempt reports back, the test is running. No setState for that: it is just the absence of a result.
+  const reported = testRun && testRun.attempt === testAttempt && testRun.script === testScript ? testRun.state : null
+  const testing = phase.kind === 'ready' && gitMergeable && testScript !== undefined
+  const testState: MergeTestState | null = testing ? (reported ?? { status: 'running', command: testScript }) : phase.kind === 'merging' ? reported : null
+
+  // Git precheck first. When it can merge and the repo names `test`, run that before 合并 is offered.
+  // Closing the sheet (cleanup) kills the process. 重新运行 bumps testAttempt.
+  useEffect(() => {
+    if (!testing || testScript === undefined) return
+    let live = true
+    const command = testScript
+    const attempt = testAttempt
+    const dir = target.worktreePath
+    void (async () => {
+      try {
+        const approval = await window.tr.repoScripts.approve(dir, 'test')
+        if (!live) return
+        if (approval !== 'approved') {
+          setTestRun({ attempt, script: command, state: { status: 'declined', command } })
+          return
+        }
+        const result = await window.tr.repoScripts.run(dir, 'test')
+        if (!live || result.cancelled) return
+        const state: MergeTestState =
+          result.code === 0
+            ? { status: 'passed', command }
+            : { status: 'failed', command, code: result.code, output: result.output }
+        setTestRun({ attempt, script: command, state })
+      } catch (error) {
+        if (!live) return
+        setTestRun({
+          attempt,
+          script: command,
+          state: { status: 'failed', command, code: null, output: error instanceof Error ? error.message : String(error) }
+        })
+      }
+    })()
+    return () => {
+      live = false
+      void window.tr.repoScripts.cancel(dir)
+    }
+  }, [testing, testScript, testAttempt, target.worktreePath])
+
+  const mergeable = gitMergeable && scriptsKnown && !testBlocksMerge(testState, testScript !== undefined)
   const removeReason = ready ? removeBlocker(ready, here, target.isMain) : null
   const willRemove = removeAfter && removeReason === null
   const willPush = push && (ready?.hasOrigin ?? false)
@@ -205,6 +259,9 @@ function Sheet({ target }: { target: MergeTarget }) {
           {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: `没能检查：${phase.message}` }} />}
           {phase.kind === 'done' && phase.lines.map((line) => <Line key={line.text} line={line} />)}
           {shown && phase.kind !== 'done' && checkLines(shown).map((line) => <Line key={line.text} line={line} />)}
+          {shown && phase.kind !== 'done' && testState && (
+            <TestResult line={testLine(testState)} onRerun={() => setTestAttempt((n) => n + 1)} />
+          )}
           {conflicts.length > 0 && (
             <ul className={styles.conflicts} aria-label="冲突的文件">
               {conflicts.slice(0, MAX_LISTED_CONFLICTS).map((c) => (
@@ -296,14 +353,38 @@ function Sheet({ target }: { target: MergeTarget }) {
 }
 
 function Line({ line }: { line: CheckLine }) {
+  const icon =
+    line.tone === 'ok' ? (
+      <Check {...ICON} />
+    ) : line.tone === 'warn' ? (
+      <CircleAlert {...ICON} />
+    ) : line.tone === 'working' ? (
+      <StatusGlyph status="running" />
+    ) : (
+      <CircleX {...ICON} />
+    )
   return (
     <p className={styles.line} data-tone={line.tone}>
-      <span className={styles.lineIcon}>
-        {line.tone === 'ok' ? <Check {...ICON} /> : line.tone === 'warn' ? <CircleAlert {...ICON} /> : <CircleX {...ICON} />}
+      <span className={styles.lineIcon} aria-hidden={line.tone === 'working'}>
+        {icon}
       </span>
       <span className={styles.lineText}>{line.text}</span>
       {line.meta && <span className={styles.lineMeta}>{line.meta}</span>}
     </p>
+  )
+}
+
+function TestResult({ line, onRerun }: { line: ReturnType<typeof testLine>; onRerun(): void }) {
+  return (
+    <>
+      <Line line={line} />
+      {line.output && <pre className={styles.output}>{line.output}</pre>}
+      {line.rerun && (
+        <button type="button" className={styles.rerun} onClick={onRerun}>
+          重新运行
+        </button>
+      )}
+    </>
   )
 }
 

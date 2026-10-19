@@ -4,7 +4,12 @@ import { launchApp } from './launch'
 interface TrWindow {
   tr: {
     ui: { openSettings(): void }
-    settings: { get(): Promise<{ appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean } }> }
+    settings: {
+      get(): Promise<{
+        appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean }
+        ports: { base: number }
+      }>
+    }
   }
 }
 
@@ -84,6 +89,32 @@ test('settings screenshots', async () => {
   await app.close()
 })
 
+test('Worktree pane sets the port block base', async () => {
+  const app = await launchApp()
+  const settings = await openSettings(app)
+  await settings.getByRole('tab', { name: 'Worktree' }).click()
+  const field = settings.getByRole('textbox', { name: '起始端口' })
+  await expect(field).toHaveValue('41000')
+  await expect(settings.getByText('每个目录分到 10 个连续端口。TR_PORT 是其中的第一个。已经分过的目录仍用原来的一段；改起点只影响之后新分的目录。')).toBeVisible()
+
+  await field.fill('42000')
+  await field.press('Enter')
+  await expect.poll(async () => (await readSettings(settings)).ports.base).toBe(42000)
+  await expect(field).toHaveValue('42000')
+
+  await field.fill('80')
+  await field.press('Enter')
+  await expect.poll(async () => (await readSettings(settings)).ports.base).toBe(1024)
+  await expect(field).toHaveValue('1024')
+
+  await settings.getByRole('tab', { name: '外观' }).click()
+  await settings.getByRole('radio', { name: '浅色' }).click()
+  await expect(settings.locator('html')).toHaveAttribute('data-theme', 'light')
+  await settings.getByRole('tab', { name: 'Worktree' }).click()
+  await expect(settings.getByRole('textbox', { name: '起始端口' })).toHaveValue('1024')
+  await app.close()
+})
+
 test('about pane shows the version and checks for updates', async () => {
   const app = await launchApp()
   const settings = await openSettings(app)
@@ -91,7 +122,7 @@ test('about pane shows the version and checks for updates', async () => {
   await expect(settings.getByTestId('app-version')).not.toBeEmpty()
   await expect(settings.getByRole('button', { name: '检查更新' })).toBeVisible()
   // Panes without content yet are not listed (B11): no 即将推出 dead ends.
-  await expect(settings.getByRole('tab')).toHaveText(['外观', '关于'])
+  await expect(settings.getByRole('tab')).toHaveText(['外观', 'Worktree', '关于'])
   await app.close()
 })
 

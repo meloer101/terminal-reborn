@@ -144,7 +144,9 @@ const api: TrApi = {
   browser: browserApi,
   repoScripts: {
     get: (dir) => ipcRenderer.invoke(IPC.repoScriptsGet, dir),
-    approve: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsApprove, dir, name)
+    approve: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsApprove, dir, name),
+    run: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsRun, dir, name),
+    cancel: (dir) => ipcRenderer.invoke(IPC.repoScriptsCancel, dir)
   }
 }
 

@@ -50,3 +50,19 @@ export function setupCommand(script: string): string {
 export function runShellArgs(script: string): string[] {
   return ['-l', '-i', '-c', `/bin/sh -ec ${shellQuote(script)}`]
 }
+
+/** Stdout and stderr kept from a captured script (the merge test). The tail, so a long run stays bounded. */
+export const MAX_SCRIPT_OUTPUT = 8 * 1024
+
+/**
+ * Appends `chunk` and, past MAX_SCRIPT_OUTPUT, keeps the tail. A cut that lands mid-line drops that partial first
+ * line when a later newline exists, so the sheet shows whole lines.
+ */
+export function appendScriptOutput(current: string, chunk: string): string {
+  const next = current + chunk
+  if (next.length <= MAX_SCRIPT_OUTPUT) return next
+  const cut = next.slice(next.length - MAX_SCRIPT_OUTPUT)
+  const newline = cut.indexOf('\n')
+  if (newline === -1 || newline === cut.length - 1) return cut
+  return cut.slice(newline + 1)
+}

@@ -142,6 +142,10 @@
   white-space: nowrap;
 }
 
+.kvValue[data-mono] {
+  font: var(--text-mono-s);
+}
+
 /* Actions (149:6272): Ghost S buttons on the left, 更多 on the right. */
 .actions {
   display: flex;

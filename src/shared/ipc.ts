@@ -13,7 +13,7 @@ import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from '
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
 import type { MergePrecheck, MergeRequest, MergeResult } from './git-merge'
-import type { RepoScripts, RunnableScript } from './repo-scripts'
+import type { CapturedScript, RepoScripts, RunnableScript } from './repo-scripts'
 
 export type { ActivitySummary, ConfirmOptions } from './lifecycle'
 
@@ -219,6 +219,14 @@ export type ScriptApproval =
   /** The file has no such script. */
   | 'none'
 
+/** How a captured script (the merge test) ended. `code` is null when it was cancelled or did not start. */
+export interface ScriptRunResult {
+  code: number | null
+  /** Tail of stdout and stderr, capped. */
+  output: string
+  cancelled: boolean
+}
+
 export interface RepoScriptsApi {
   /** The scripts of the worktree (or folder) at `dir`. Rejects on bad input. */
   get(dir: string): Promise<RepoScriptsInfo>
@@ -226,7 +234,14 @@ export interface RepoScriptsApi {
    * Makes sure the repository's scripts may run: the first time (and whenever they changed) main shows a confirmation
    * sheet listing every command and remembers the approved content per repository.
    */
-  approve(dir: string, name: RunnableScript): Promise<ScriptApproval>
+  approve(dir: string, name: RunnableScript | CapturedScript): Promise<ScriptApproval>
+  /**
+   * Runs an approved captured script in `dir` (the merge `test`) and resolves when it exits. One run per directory;
+   * cancelling resolves the in-flight call with `cancelled`.
+   */
+  run(dir: string, name: CapturedScript): Promise<ScriptRunResult>
+  /** Stops the captured script running in `dir`, if any. */
+  cancel(dir: string): Promise<void>
 }
 
 /** Main-owned workspace persistence (phase 2 · A12). The payload is the renderer's versioned workspace JSON. */
@@ -429,5 +444,9 @@ export const IPC = {
   /** invoke(dir) → RepoScriptsInfo */
   repoScriptsGet: 'repo-scripts:get',
   /** invoke(dir, name) → ScriptApproval */
-  repoScriptsApprove: 'repo-scripts:approve'
+  repoScriptsApprove: 'repo-scripts:approve',
+  /** invoke(dir, name) → ScriptRunResult */
+  repoScriptsRun: 'repo-scripts:run',
+  /** invoke(dir) → void. Stops the captured script in that directory. */
+  repoScriptsCancel: 'repo-scripts:cancel'
 } as const

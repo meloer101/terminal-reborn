@@ -2,6 +2,7 @@
 // into the working list, 可清理 (bulk) and 没有会话 (one by one), plus the delete guard. Pure; WorktreeView renders it.
 import type { GitWorktreeInfo, GitWorktreeListing } from '@shared/git-worktrees'
 import { isActiveStatus } from '@shared/lifecycle'
+import { PORT_BLOCK } from '@shared/ports'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 
@@ -180,12 +181,19 @@ export function keptText(info: Pick<GitWorktreeInfo, 'branch'>): string {
 export interface DetailLine {
   label: string
   value: string
+  /** Port block, shown in the mono face. */
+  mono?: boolean
+}
+
+/** The reserved block, TR_PORT through the last port of the ten. */
+export function portBlockLabel(port: number): string {
+  return `${port}\u2013${port + PORT_BLOCK - 1}`
 }
 
 const MAX_LISTED_FILES = 3
 
-/** The selected row's key–value lines (Figma 13C "Details"). Ports are added once the port scan exists. */
-export function detailLines(info: GitWorktreeInfo): DetailLine[] {
+/** The selected row's key–value lines (Figma 13C "Details"). `port` is the directory's TR_PORT, when it has a block. */
+export function detailLines(info: GitWorktreeInfo, port: number | null = null): DetailLine[] {
   let branch = info.branch ?? (info.rebasing ? `变基中 · ${info.rebasing}` : `分离的 HEAD · ${shortSha(info.head)}`)
   if (info.branch === null && info.unreachableCommits) branch += ` · ${info.unreachableCommits} 个提交不在分支上`
   if (info.locked) branch += ' · 已锁定'
@@ -208,6 +216,7 @@ export function detailLines(info: GitWorktreeInfo): DetailLine[] {
               : files
     }
   ]
+  if (port !== null) lines.push({ label: '端口段', value: portBlockLabel(port), mono: true })
   if (info.prunable !== null) lines.push({ label: '文件夹', value: '已不存在' })
   return lines
 }

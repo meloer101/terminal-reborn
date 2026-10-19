@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, removeBlocker, resultLines } from './model'
+import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, removeBlocker, resultLines, testBlocksMerge, testLine } from './model'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
   branch: 'jacob/nav',
@@ -17,6 +17,28 @@ const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
   hasOrigin: true,
   blocker: null,
   ...patch
+})
+
+describe('testLine', () => {
+  it('is absent from the gate when the repo has no test, and blocks until exit 0', () => {
+    expect(testBlocksMerge(null, false)).toBe(false)
+    expect(testBlocksMerge(null, true)).toBe(true)
+    expect(testBlocksMerge({ status: 'running', command: 'pnpm test' }, true)).toBe(true)
+    expect(testBlocksMerge({ status: 'passed', command: 'pnpm test' }, true)).toBe(false)
+  })
+
+  it('says what the test is doing, and keeps the failure tail', () => {
+    expect(testLine({ status: 'running', command: 'pnpm test' })).toEqual({ tone: 'working', text: '正在运行测试…', meta: 'pnpm test' })
+    expect(testLine({ status: 'passed', command: 'pnpm\ntest' }).meta).toBe('pnpm test')
+    expect(testLine({ status: 'failed', command: 'pnpm test', code: 1, output: ' FAIL src/nav.test.ts \n' })).toEqual({
+      tone: 'error',
+      text: '测试没通过（退出码 1）',
+      meta: 'pnpm test',
+      output: 'FAIL src/nav.test.ts',
+      rerun: true
+    })
+    expect(testLine({ status: 'declined', command: 'pnpm test' }).text).toBe('没有允许运行测试')
+  })
 })
 
 describe('checkLines', () => {

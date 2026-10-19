@@ -27,6 +27,14 @@ npm start
     expect(parsed.scripts.run).toBe('npm run build\nnpm start')
   })
 
+  it('reads an optional test script and still ignores unknown keys', () => {
+    const parsed = parseRepoSettings(`[scripts]
+test = ["pnpm", "test"]
+lint = "eslint ."
+`)
+    expect(parsed).toEqual({ scripts: { test: 'pnpm\ntest' }, problems: [] })
+  })
+
   it('ignores unknown keys and tables, and blank scripts', () => {
     const parsed = parseRepoSettings(`
 version = 3
@@ -75,11 +83,27 @@ archive = "${'x'.repeat(MAX_SCRIPT_CHARS + 1)}"
 describe('approvals', () => {
   it('cover every script in a fixed order, and nothing else', () => {
     const a = approvalInput({ setup: 'npm ci', run: 'npm run dev' })
+    expect(a).toBe(
+      JSON.stringify([
+        ['setup', 'npm ci'],
+        ['run', 'npm run dev'],
+        ['archive', null]
+      ])
+    )
     expect(approvalInput({ run: 'npm run dev', setup: 'npm ci' })).toBe(a)
     expect(approvalInput({ setup: 'npm ci', run: 'npm run dev', archive: 'true' })).not.toBe(a)
     expect(approvalInput({ setup: 'npm ci', run: 'npm run dev ' })).not.toBe(a)
     // A script cannot pass for another one.
     expect(approvalInput({ run: 'npm ci' })).not.toBe(approvalInput({ setup: 'npm ci' }))
+    // No test key keeps the old payload, so an approval from before `test` existed still matches.
+    expect(approvalInput({ setup: 'npm ci', run: 'npm run dev', test: 'pnpm test' })).toBe(
+      JSON.stringify([
+        ['setup', 'npm ci'],
+        ['run', 'npm run dev'],
+        ['archive', null],
+        ['test', 'pnpm test']
+      ])
+    )
   })
 
   it('show every command the approval lets run', () => {
@@ -87,6 +111,7 @@ describe('approvals', () => {
     expect(detail).toContain('setup：\nnpm ci')
     expect(detail).toContain('run：\nnpm run dev')
     expect(detail).toContain('archive（归档时）：\nmake clean')
+    expect(approvalDetail({ test: 'pnpm test' })).toContain('test（合并前）：\npnpm test')
     expect(detail).toContain('.tr/settings.toml')
     expect(approvalDetail({ setup: 'x'.repeat(2000) })).toContain(`${'x'.repeat(600)}…`)
   })

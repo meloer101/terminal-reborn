@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { applySettingsPatch, DEFAULT_SETTINGS, type AppSettings, type AppearanceSettings } from '@shared/settings'
+import { applySettingsPatch, DEFAULT_SETTINGS, type AppSettings, type AppearanceSettings, type PortSettings } from '@shared/settings'
 
 export interface SettingsHandle {
   settings: AppSettings
   /** True once the persisted settings have been read (before that, defaults are shown). */
   loaded: boolean
   updateAppearance(patch: Partial<AppearanceSettings>): void
+  updatePorts(patch: Partial<PortSettings>): void
 }
 
 /**
@@ -39,5 +40,10 @@ export function useSettings(): SettingsHandle {
     void window.tr.settings.update({ appearance: patch })
   }, [])
 
-  return { settings, loaded, updateAppearance }
+  const updatePorts = useCallback((patch: Partial<PortSettings>) => {
+    setSettings((current) => applySettingsPatch(current, { ports: patch }))
+    void window.tr.settings.update({ ports: patch })
+  }, [])
+
+  return { settings, loaded, updateAppearance, updatePorts }
 }
