@@ -4,23 +4,68 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
-### Renamed to Wavi / 改名为 Wavi
-- The app is now **Wavi** (bundle id `dev.wavi.app`). Your Terminal Reborn workspace and settings move over on the first launch with nothing running from the old profile.
-  应用改名为 **Wavi**。旧的工作区和设置会在第一次启动、且旧配置下没有仍在运行的会话时自动迁移过来。
-- Developers: `npm run app:install` puts a Wavi.app in Applications that runs the checkout's build; `npm run build` (or `build:watch`) reloads it or offers a restart. `npm run dev` now uses its own “Wavi Dev” profile.
-  开发者：`npm run app:install` 安装一个运行本仓库构建的 Wavi.app，`npm run build` 后自动刷新界面或提示重启；`npm run dev` 改用独立的 “Wavi Dev” 配置。
+## [0.3.0] - 2026-10-19
 
-### No dead ends (phase 2b · P0) / 没有死角
-- With no session open, the main area shows how to start: 打开项目 ⌘O, recent folders, whether Claude Code / Codex are installed (with the install command), and folder drop. The composer is hidden until there is a session.
-  没有会话时，主区给出下一步：打开项目 ⌘O、最近项目、Claude Code / Codex 是否已安装（附安装命令）、拖入文件夹；没有会话时不再显示输入栏。
-- Permission options say what they allow: 允许 · 允许，本会话不再询问 pnpm prisma · 拒绝并说明…; denying puts the caret in the composer, whose hint becomes “回复 Claude，或按 1–3 直接选择”.
-  权限选项写明范围；拒绝后焦点回到输入栏，输入栏提示改为“回复 Claude，或按 1–3 直接选择”。
-- The session header’s … opens a real menu: 重命名… (or double-click the title), 在 Finder 中显示, 复制路径, 关闭会话.
-  标题栏“…”现在有菜单：重命名（也可双击标题）、在 Finder 中显示、复制路径、关闭会话。
-- Hidden until they have content: the right-panel toggle and its ⌘K action, and the 通用 / 终端 / Agent / 快捷键 settings panes.
-  尚未完成的入口先隐藏：右侧面板开关及其 ⌘K 操作、设置里的通用 / 终端 / Agent / 快捷键。
-- The main column never gets narrower than 560 px: when the right panel does not fit it floats over main, and it has a close button.
-  主区最小宽度 560 px；放不下时右侧面板浮在主区上方，面板也有关闭按钮。
+Worktrees, review and a view over every agent. There is no separate 0.2.0: its work ships here.
+Worktree、审阅和所有 agent 的总览。没有单独的 0.2.0，它的内容都在这一版里。
+
+### Renamed to Wavi / 改名为 Wavi
+- The app is now **Wavi** (bundle id `dev.wavi.app`). Your Terminal Reborn workspace and settings move over on the first launch.
+  应用改名为 **Wavi**。旧的工作区和设置会在第一次启动时自动迁移。
+
+### The terminal is the whole interface / 终端就是全部界面
+- The input bar and the in-app answer bar are gone: you type straight into the agent's own TUI and answer its prompts there; Wavi only marks the session 等你处理.
+  去掉输入栏和应用内作答条：直接在 agent 自己的界面里输入、作答，Wavi 只把会话标成“等你处理”。
+- Terminal: ⌘F search, ⌘A / ⌘C / ⌘V with Chinese text, ⌥-drag to select while an agent captures the mouse, screen-reader mode, colors that follow the light / dark theme.
+  终端：⌘F 搜索、⌘A / ⌘C / ⌘V（含中文）、agent 开启鼠标上报时按住 ⌥ 拖动选中、读屏模式、底色跟随浅色 / 深色。
+
+### Agents keep running / agent 持续运行
+- Quitting with ⌘Q leaves agents running; the next launch reattaches to the same processes and catches up on what happened meanwhile. ⌥⌘Q quits and ends them.
+  ⌘Q 退出后 agent 继续运行，下次打开接回同一个进程并补上期间发生的事；⌥⌘Q 退出并结束所有会话。
+
+### Sidebar and overview / 侧栏与总览
+- The sidebar groups sessions under collapsible projects, shows each session's last reply and a time that fits its state (本轮用时 · 已等 3m · 5m 前), and ⌘1–⌘9.
+  侧栏按项目分组、可折叠；每个会话显示最后一句回复和随状态变化的时间；⌘1–⌘9 切换。
+- Session titles come from the agent's own name for the conversation; rename by double-clicking the title.
+  会话标题用 agent 自己起的名字；双击标题可重命名。
+- Overview (⇧⌘A): a list that opens a session's terminal in place, and a board of status cards with a session overlay.
+  总览（⇧⌘A）：列表里原地展开终端，看板用状态色块卡片并可打开会话浮层。
+- Notifications name the project and session and say what the agent asked or answered; finishes within a second are merged. 等你处理 is now magenta.
+  通知写明“项目 · 会话”和问题或最后一句回复，一秒内的多个完成合并成一条；“等你处理”改用品红。
+- A new welcome page, and ⌘B / ⇧⌘B for the left / right panels.
+  新的欢迎页；⌘B / ⇧⌘B 切换左 / 右侧栏。
+
+### Worktrees / Worktree
+- ⌘N opens a new-session sheet: a new worktree or the current folder, the base branch, the agent; the worktree is created in the background and copies ignored files listed in `.worktreeinclude`.
+  ⌘N 打开新建会话面板：新 worktree 或当前目录、基于哪个分支、用哪个 agent；worktree 在后台创建，并按 `.worktreeinclude` 复制被忽略的文件。
+- `.tr/settings.toml` scripts (setup / run / archive / test) run after you approve them; every worktree gets its own `TR_PORT` block and a Run button.
+  `.tr/settings.toml` 的 setup / run / archive / test 脚本经你确认后运行；每个工作目录有自己的 `TR_PORT` 端口段和 Run 按钮。
+- Merge sheet (⇧⌘M): checks ahead / behind, conflicts and uncommitted work, then squash, merge or rebase without leaving a half-done state; conflicts can be handed to the agent.
+  合并面板（⇧⌘M）：先检查领先 / 落后、冲突和未提交改动，再 squash / merge / rebase，失败不留半截；冲突可以交给 agent 处理。
+- Archive a worktree and bring it back later from ⌘K 历史.
+  可以归档 worktree，之后在 ⌘K“历史”里恢复。
+
+### Right panel / 右侧栏
+- Browser per worktree (terminal links open there, sign-in pop-ups work), Git graph and changes with unified or side-by-side diffs, a Worktree list and a file tree.
+  每个 worktree 一个内置浏览器（终端里的链接在这里打开，支持登录弹窗）；Git 图谱与变更（统一或并排 diff）；Worktree 列表；文件树。
+- Comment on diff lines and send them to the agent; a background reviewer can turn its findings into such comments (设置 · 自动化, off by default).
+  可以在 diff 行上评论并发给 agent；后台审阅能把发现的问题变成评论（设置 · 自动化，默认关）。
+- Ports a session listens on show up in the sidebar and the overview.
+  会话监听的端口显示在侧栏和总览里。
+
+### Context, todo and plan usage / 上下文、todo 与额度
+- Each session header shows the agent's todo progress, how full its context window is and its vendor's plan usage. Click for the details: the context curve over recent turns with compactions, cache and cost figures, each plan window's pace and when it would run out at this rate, and which sessions used it.
+  会话头显示 todo 进度、上下文占用和该厂商的额度。点开看详情：最近几轮的 context 曲线和压缩点、缓存与折算成本、每个额度窗口的进度和按当前速度何时用完、各会话用了多少。
+- A system notification at 75 %, 90 % and when a plan window is used up (设置 · 自动化 · 额度提醒).
+  额度用到 75%、90% 和用完时各提醒一次（设置 · 自动化 · 额度提醒）。
+- This also works for a `claude` or `codex` you type yourself in a plain Wavi terminal. Nothing in your global Claude or Codex config is changed.
+  在普通终端里自己敲的 `claude` / `codex` 也一样；不会改动你的 Claude / Codex 全局配置。
+
+### Known limitations / 已知限制
+- Still unsigned (ad-hoc): after downloading, run `xattr -cr /Applications/Wavi.app` once.
+  仍未签名（ad-hoc）：下载后需要运行一次 `xattr -cr /Applications/Wavi.app`。
+- Plan usage appears after the agent's first reply; Codex plan figures on a real ChatGPT account have not been verified yet.
+  额度要等 agent 第一次回复后才出现；Codex 在真实 ChatGPT 账号下的额度数据还没有验证过。
 
 ## [0.1.1] - 2026-10-15
 
@@ -102,6 +147,7 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/meloer101/terminal-reborn/compare/v0.1.1...v0.3.0
 [0.1.1]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.1
 [0.1.0]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.0

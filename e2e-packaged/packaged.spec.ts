@@ -128,7 +128,7 @@ test('a Claude session starts and its hooks arrive (launch only, no prompts)', a
     return ws.addSession(ws.addProject(root), 'claude') ?? ''
   }, LAB)
   expect(id).not.toBe('')
-  await expect.poll(() => screen(id), { timeout: 60_000, intervals: [500] }).toMatch(/\? for shortcuts|manual mode|Yes, I trust/)
+  await expect.poll(() => screen(id), { timeout: 60_000, intervals: [500] }).toMatch(/\? for shortcuts|manual mode|auto mode|Yes, I trust/)
   await expect
     .poll(() => page.evaluate(() => (globalThis as unknown as Hooks).__trSeen.events.map((e) => e.event.type)), { timeout: 30_000 })
     .toContain('session-start')
