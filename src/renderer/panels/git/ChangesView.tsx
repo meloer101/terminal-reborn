@@ -9,7 +9,11 @@ import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { Worktree } from '@shared/types'
+import { severityCounts } from '@shared/background-review'
+import { commentPicked } from '@shared/review-comments'
+import { cancelBackgroundReview, reviewLine, useBackgroundReview } from '../../review/background'
 import { ReviewButton } from '../../review/ReviewButton'
+import { StatusGlyph } from '../../ui/StatusGlyph'
 import { formatAccelerator } from '../../ui/menu-model'
 import { useActiveSession, useWorkspace } from '../../state/workspace'
 import { openMergeSheet, targetFor } from '../merge/store'
@@ -34,13 +38,14 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
   const scroller = useRef<HTMLDivElement>(null)
   const comments = useReviewComments((s) => s.byRoot[root])
   const draft = useReviewComments((s) => (s.draft?.root === root ? s.draft : null))
+  const opened = useReviewComments((s) => s.opened)
   const place: DraftPlace | null = useMemo(
     () => (draft ? { id: draft.id, group: draft.group, path: draft.path, side: draft.side, endLine: draft.endLine } : null),
     [draft?.id, draft?.group, draft?.path, draft?.side, draft?.endLine] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const items = useMemo(
-    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place) : []),
-    [changes, git.expanded, git.diffs, comments, place]
+    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, opened) : []),
+    [changes, git.expanded, git.diffs, comments, place, opened]
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -54,6 +59,7 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
   if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
 
   const count = comments?.length ?? 0
+  const picked = comments?.filter(commentPicked).length ?? 0
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
@@ -66,14 +72,21 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
           {rendered}
         </div>
       </div>
+      <ReviewStatus root={root} />
       <div className={styles.footer}>
         {count > 0 ? (
           <>
             <button
               type="button"
               className={styles.ghostButton}
-              disabled={!target}
-              title={target ? `放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送` : '这个 worktree 没有 agent 会话'}
+              disabled={!target || picked === 0}
+              title={
+                !target
+                  ? '这个 worktree 没有 agent 会话'
+                  : picked === 0
+                    ? '勾选要发送的审阅意见'
+                    : `放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`
+              }
               onClick={() => {
                 if (!target) return
                 setSendError(null)
@@ -81,7 +94,7 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
               }}
             >
               <MessageSquare size={16} strokeWidth={1.75} aria-hidden />
-              {sendError ? '没能发送' : `发给 ${target ? agentLabel(target.kind) : 'agent'} · ${count}`}
+              {sendError ? '没能发送' : `发给 ${target ? agentLabel(target.kind) : 'agent'} · ${picked}`}
             </button>
             <button type="button" className={styles.ghostButton} onClick={() => void discardComments(root)}>
               放弃
@@ -109,6 +122,28 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
         </button>
       </div>
     </>
+  )
+}
+
+/** The worktree's latest background review (PRD F13): progress with 取消, the result, or why it failed. */
+function ReviewStatus({ root }: { root: string }) {
+  const status = useBackgroundReview((s) => s.byRoot[root])
+  const comments = useReviewComments((s) => s.byRoot[root])
+  if (!status) return null
+  const line = reviewLine(status, severityCounts((comments ?? []).filter((c) => c.origin === 'review')))
+  return (
+    <p className={styles.reviewStatus} data-tone={line.tone} role="status" data-testid="review-status">
+      {line.tone === 'working' && <StatusGlyph status="running" />}
+      <span className={styles.reviewStatusText} title={line.detail ?? line.text}>
+        {line.text}
+      </span>
+      {line.meta && <span className={styles.reviewStatusMeta}>{line.meta}</span>}
+      {status.phase === 'running' && (
+        <button type="button" className={styles.noteAction} onClick={() => cancelBackgroundReview(root)}>
+          取消
+        </button>
+      )}
+    </p>
   )
 }
 
@@ -172,7 +207,7 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
       return <DiffLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} />
     }
     case 'comment':
-      return <CommentRow root={root} comment={item.comment} top={top} />
+      return <CommentRow root={root} comment={item.comment} top={top} folded={item.folded} />
     case 'editor':
       return <CommentEditor top={top} />
     case 'note':

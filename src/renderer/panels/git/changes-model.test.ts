@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
-import { changedSince, changeItems, changeKey, codeBetween, MAX_DIFF_LINES, noDiffReason, rowAnchor } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, rowAnchor } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -116,6 +116,18 @@ describe('review comments in the list (F5)', () => {
     const collapsed = changeItems(data, new Set(), diffs, [note({ id: 'n2' })])
     expect(kinds(collapsed)).toEqual(['group', 'file', 'group'])
     expect(collapsed[1]).toMatchObject({ comments: 1 })
+  })
+
+  it('folds P2 / P3 review comments to their head line until opened (F13)', () => {
+    const review = [note({ id: 'p1', origin: 'review', severity: 'P1' }), note({ id: 'p3', origin: 'review', severity: 'P3' })]
+    const items = changeItems(data, open, diffs, review)
+    const shown = items.filter((i) => i.kind === 'comment')
+    expect(shown.map((i) => [i.comment.id, i.folded, itemHeight(i)])).toEqual([
+      ['p1', false, ITEM_HEIGHT.comment],
+      ['p3', true, ITEM_HEIGHT.commentFolded]
+    ])
+    const opened = changeItems(data, open, diffs, review, null, { p3: true }).filter((i) => i.kind === 'comment')
+    expect(opened.map((i) => i.folded)).toEqual([false, false])
   })
 
   it('quotes the code of one side between two lines', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { applySettingsPatch, DEFAULT_SETTINGS, type AppSettings, type AppearanceSettings, type PortSettings } from '@shared/settings'
+import { applySettingsPatch, DEFAULT_SETTINGS, type AppSettings, type AppearanceSettings, type PortSettings, type ReviewSettings } from '@shared/settings'
 
 export interface SettingsHandle {
   settings: AppSettings
@@ -7,6 +7,7 @@ export interface SettingsHandle {
   loaded: boolean
   updateAppearance(patch: Partial<AppearanceSettings>): void
   updatePorts(patch: Partial<PortSettings>): void
+  updateReview(patch: Partial<ReviewSettings>): void
 }
 
 /**
@@ -45,5 +46,10 @@ export function useSettings(): SettingsHandle {
     void window.tr.settings.update({ ports: patch })
   }, [])
 
-  return { settings, loaded, updateAppearance, updatePorts }
+  const updateReview = useCallback((patch: Partial<ReviewSettings>) => {
+    setSettings((current) => applySettingsPatch(current, { review: patch }))
+    void window.tr.settings.update({ review: patch })
+  }, [])
+
+  return { settings, loaded, updateAppearance, updatePorts, updateReview }
 }

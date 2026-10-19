@@ -1,0 +1,60 @@
+.page {
+  composes: page from './WorktreePane.module.css';
+}
+
+.form {
+  composes: form from './WorktreePane.module.css';
+}
+
+.title {
+  composes: title from './WorktreePane.module.css';
+}
+
+.hint {
+  composes: hint from './WorktreePane.module.css';
+  margin-bottom: var(--space-12);
+}
+
+.lead {
+  margin: 0 0 var(--space-12);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.rules {
+  height: 160px;
+  margin-bottom: var(--space-12);
+  padding: var(--space-6) var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font: var(--text-mono-s);
+  resize: vertical;
+}
+
+.model {
+  width: 180px;
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font: var(--text-mono-s);
+}
+
+.rules:focus-visible,
+.model:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 1px;
+}
+
+.model[aria-invalid='true'] {
+  border-color: var(--status-error);
+}
+
+.rules::placeholder,
+.model::placeholder {
+  color: var(--text-tertiary);
+}
