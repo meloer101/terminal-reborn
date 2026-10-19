@@ -58,7 +58,15 @@
   color: var(--text-primary);
 }
 
+.activityLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
 .activity {
+  flex: 1;
   font: var(--text-caption);
   color: var(--text-secondary);
 }

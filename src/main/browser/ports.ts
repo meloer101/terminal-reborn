@@ -1,18 +1,24 @@
-// Minimal port detection (PRD F14) for the 浏览器 view: which TCP ports a session's PTY process tree listens on.
-// One `ps` + one `lsof` per poll, polled only while some window watches a session (the 浏览器 view is open).
-// The rest of F14 (tags in the sidebar / overview, ⌥-click, ending the process) is not built yet.
+// Listening ports of each session's PTY process tree (PRD F14).
+// One `ps` + one `lsof` per pass, about every 3s, whenever a session is alive — the sidebar and the overview show
+// the tags, so this does not wait for the 浏览器 view to open. Ending a process is allowed only for a pid this
+// session's latest scan found listening (`sessionListener`); there is no IPC that signals an arbitrary pid.
 import { execFile } from 'node:child_process'
 import type { WebContents } from 'electron'
-import { BROWSER_IPC, parseLsofListen, parsePs, processTree, serverLabel, type SessionPorts } from '@shared/browser'
-import { sessionPid } from '../pty'
-import { PortWatches, type PortWatch } from './port-watches'
+import { BROWSER_IPC, parseLsofListen, parsePs, portsChanged, processTree, serverLabel, type ListeningPort, type SessionPorts } from '@shared/browser'
+import { onSessionRootsChanged, sessionRoots, type SessionRoot } from '../pty'
+import { PortWatches } from './port-watches'
 
 const POLL_MS = 3_000
 const RUN_TIMEOUT_MS = 5_000
 
 const watches = new PortWatches<WebContents>()
+/** Last list published per session, with the window that owns the PTY. */
+const latest = new Map<string, { owner: WebContents; ports: ListeningPort[] }>()
 let timer: ReturnType<typeof setTimeout> | null = null
-let polling = false
+let inflight: Promise<void> | null = null
+/** A session appeared while a pass was running: scan again as soon as it finishes. */
+let soon = false
+let started = false
 
 /** stdout of a system tool; lsof exits 1 when it finds nothing, which is not an error here. */
 function run(file: string, args: string[]): Promise<string> {
@@ -21,54 +27,137 @@ function run(file: string, args: string[]): Promise<string> {
   })
 }
 
+/** This session's latest scan (empty when it has not been scanned, or it listens on nothing). */
+export function portsOf(sessionId: string): readonly ListeningPort[] {
+  return latest.get(sessionId)?.ports ?? []
+}
+
+function send(owner: WebContents, sessionId: string, ports: ListeningPort[]): void {
+  if (!owner.isDestroyed()) owner.send(BROWSER_IPC.ports, { sessionId, ports } satisfies SessionPorts)
+}
+
+function publish(root: SessionRoot, ports: ListeningPort[]): void {
+  const watch = watches.all().find((w) => w.owner === root.owner && w.sessionId === root.sessionId)
+  if (watch) {
+    // A new watcher has last = null, so it is sent the list even when the scan did not change.
+    if (!watches.update(watch, ports)) {
+      latest.set(root.sessionId, { owner: root.owner, ports })
+      return
+    }
+  } else {
+    const prev = latest.get(root.sessionId)?.ports
+    if (prev && !portsChanged(prev, ports)) return
+  }
+  latest.set(root.sessionId, { owner: root.owner, ports })
+  send(root.owner, root.sessionId, ports)
+}
+
+/** Sessions that ended: drop the cache and clear tags that were showing. */
+function clearMissing(live: ReadonlySet<string>): void {
+  for (const [sessionId, cached] of latest) {
+    if (live.has(sessionId)) continue
+    latest.delete(sessionId)
+    const watch = watches.all().find((w) => w.sessionId === sessionId && w.owner === cached.owner)
+    if (watch) watches.update(watch, [])
+    if (cached.ports.length > 0) send(cached.owner, sessionId, [])
+  }
+}
+
 async function poll(): Promise<void> {
-  const live = watches.all().filter((w) => !w.owner.isDestroyed())
-  if (live.length === 0) return
+  const roots = sessionRoots()
+  if (roots.length === 0) {
+    clearMissing(new Set())
+    return
+  }
   const processes = parsePs(await run('/bin/ps', ['-A', '-o', 'pid=,ppid=,args=']))
-  const trees = new Map<PortWatch<WebContents>, Map<number, string>>()
+  // The set of sessions can change while `ps` runs; only report ones that are still alive.
+  const current = sessionRoots()
+  const trees = new Map<string, Map<number, string>>()
   const allPids = new Set<number>()
-  for (const watch of live) {
-    const root = sessionPid(watch.owner, watch.sessionId)
-    const tree = new Map(root ? processTree(processes, root).map((p) => [p.pid, p.args] as const) : [])
-    trees.set(watch, tree)
+  for (const root of current) {
+    const tree = new Map(processTree(processes, root.pid).map((p) => [p.pid, p.args] as const))
+    trees.set(root.sessionId, tree)
     for (const pid of tree.keys()) allPids.add(pid)
   }
   const listening =
     allPids.size > 0 ? parseLsofListen(await run('/usr/sbin/lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', [...allPids].join(','), '-F', 'pn'])) : []
-  for (const watch of live) {
-    const tree = trees.get(watch) ?? new Map<number, string>()
+  const still = new Set(sessionRoots().map((r) => r.sessionId))
+  for (const root of current) {
+    if (!still.has(root.sessionId)) continue
+    const tree = trees.get(root.sessionId) ?? new Map<number, string>()
     const ports = listening.filter((l) => tree.has(l.pid)).map((l) => ({ ...l, label: serverLabel(tree.get(l.pid) ?? '') }))
-    // A watch dropped while scanning (its window reloaded) must not report.
-    if (!watches.all().includes(watch) || !watches.update(watch, ports)) continue
-    if (!watch.owner.isDestroyed()) watch.owner.send(BROWSER_IPC.ports, { sessionId: watch.sessionId, ports } satisfies SessionPorts)
+    publish(root, ports)
   }
+  clearMissing(still)
 }
 
 function schedule(delay: number): void {
-  if (timer || polling || watches.size === 0) return
+  if (timer || inflight || sessionRoots().length === 0) return
   timer = setTimeout(() => {
     timer = null
-    polling = true
-    poll()
+    const job = poll()
       .catch((error: unknown) => console.error('[browser] port scan failed', error))
       .finally(() => {
-        polling = false
-        schedule(POLL_MS)
+        inflight = null
+        const delayNext = soon ? 50 : POLL_MS
+        soon = false
+        schedule(delayNext)
       })
+    inflight = job
   }, delay)
 }
 
-function stopIfIdle(): void {
-  if (watches.size === 0 && timer) {
+/** One pass that is not the one already in flight (so a confirm sheet sees a fresh scan). */
+export function scanPortsFresh(): Promise<void> {
+  const pending = inflight ?? Promise.resolve()
+  return pending.then(() => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    soon = false
+    const job = poll()
+      .catch((error: unknown) => console.error('[browser] port scan failed', error))
+      .finally(() => {
+        inflight = null
+        schedule(POLL_MS)
+      })
+    inflight = job
+    return job
+  })
+}
+
+function kick(): void {
+  if (sessionRoots().length === 0) {
+    if (!inflight) clearMissing(new Set())
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    return
+  }
+  if (inflight) {
+    soon = true
+    return
+  }
+  if (timer) {
     clearTimeout(timer)
     timer = null
   }
+  schedule(50)
+}
+
+/** Starts the low-frequency scan. Sessions that appear later are picked up through `onSessionRootsChanged`. */
+export function startPortScanning(): void {
+  if (started) return
+  started = true
+  onSessionRootsChanged(kick)
+  kick()
 }
 
 /** The window's watchers are gone (closed, crashed, or its page reloaded): stop scanning for them. */
 function forget(owner: WebContents): void {
   watches.dropOwner(owner)
-  stopIfIdle()
 }
 
 const hooked = new WeakSet<WebContents>()
@@ -83,13 +172,15 @@ export function watchPorts(owner: WebContents, sessionId: string): void {
       if (details.isMainFrame && !details.isSameDocument) forget(owner)
     })
   }
-  // Scan soon rather than after a full interval.
-  if (timer) clearTimeout(timer)
-  timer = null
-  schedule(50)
+  const cached = latest.get(sessionId)
+  if (cached && cached.owner === owner) {
+    send(owner, sessionId, cached.ports)
+    const watch = watches.all().find((w) => w.owner === owner && w.sessionId === sessionId)
+    if (watch) watch.last = cached.ports
+  }
+  kick()
 }
 
 export function unwatchPorts(owner: WebContents, sessionId: string): void {
   watches.remove(owner, sessionId)
-  stopIfIdle()
 }

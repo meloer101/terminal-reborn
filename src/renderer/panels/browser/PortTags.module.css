@@ -1,0 +1,35 @@
+.ports {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.port,
+.more {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.port {
+  height: 16px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  line-height: 16px;
+  cursor: default;
+}
+
+.port:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.port:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}

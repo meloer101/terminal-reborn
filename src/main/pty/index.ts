@@ -56,6 +56,7 @@ let endSessionsOnQuit = process.env.TR_KILL_SESSIONS_ON_QUIT === '1'
 let quitHandled = false
 
 const sessions = new Map<string, LiveSession>()
+const sessionRootListeners = new Set<() => void>()
 /** Agent launches whose setup script is still running, with the tail of their output: the start watchdog waits. */
 const awaitingSetup = new Map<string, string>()
 const SETUP_DONE_MARKER = `\x1b]${SCRIPT_MARKER_OSC};${SETUP_DONE_PAYLOAD}\x07`
@@ -205,6 +206,7 @@ function handleHostEvent(event: HostEvent): void {
       const spawned = sessions.get(event.id)
       if (spawned) spawned.pid = event.pid
       settle(pendingSpawns, event.id)?.resolve({ pid: event.pid })
+      notifySessionRoots()
       break
     }
     case 'spawn-error': {
@@ -212,6 +214,7 @@ function handleHostEvent(event: HostEvent): void {
       sessions.delete(event.id)
       endAgentSession(event.id)
       settle(pendingSpawns, event.id)?.reject(new Error(event.message))
+      notifySessionRoots()
       break
     }
     case 'data': {
@@ -227,6 +230,7 @@ function handleHostEvent(event: HostEvent): void {
       sessions.delete(event.id)
       endAgentSession(event.id)
       notifyExit(session.owner, event.id, event.exitCode, event.signal)
+      notifySessionRoots()
       break
     }
     case 'attached': {
@@ -240,6 +244,7 @@ function handleHostEvent(event: HostEvent): void {
       session.pid = event.pid
       if (event.exit) sessions.delete(event.id)
       else if (event.agent === 'claude' || event.agent === 'codex') adoptAgentSession(event.id, session.owner, event.hooks)
+      notifySessionRoots()
       pending.resolve({
         pid: event.pid,
         seq: event.seq,
@@ -251,6 +256,7 @@ function handleHostEvent(event: HostEvent): void {
     case 'attach-miss': {
       sessions.delete(event.id)
       settle(pendingAttaches, event.id)?.resolve(null)
+      notifySessionRoots()
       break
     }
     case 'sessions': {
@@ -336,12 +342,14 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   } catch (error) {
     sessions.delete(id)
     if (hooks) endAgentSession(id)
+    notifySessionRoots()
     throw error
   }
   await ensureHost()
   // The window went away (reload, close) while we were getting ready: starting the process now would orphan it.
   if (sessions.get(id)?.owner !== owner) {
     if (hooks) endAgentSession(id)
+    notifySessionRoots()
     throw new Error('the window went away before the terminal process started')
   }
   if (setup && hooks) awaitingSetup.set(id, '')
@@ -352,6 +360,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       sessions.delete(id)
       awaitingSetup.delete(id)
       endAgentSession(id)
+      notifySessionRoots()
       // The host handles messages in order, so this lands right after the spawn it is still working on.
       // If it somehow slips past, handleHostEvent kills the late process when it reports in.
       if (link) send({ type: 'kill', id })
@@ -416,12 +425,15 @@ async function liveSessions(owner: WebContents): Promise<LivePtySession[]> {
 /** A window is gone (closed, crashed, reloaded): with the daemon its sessions keep running for the next attach. */
 function releaseOwner(owner: WebContents): void {
   const keep = link?.kind === 'daemon'
+  let changed = false
   for (const [id, session] of sessions) {
     if (session.owner !== owner) continue
     sessions.delete(id)
     endAgentSession(id)
     send(keep ? { type: 'detach', id } : { type: 'kill', id })
+    changed = true
   }
+  if (changed) notifySessionRoots()
 }
 
 /** A window's renderer is gone (crash): its terminals are detached (daemon) or killed (fallback host). */
@@ -443,6 +455,31 @@ export function endSessionsOnNextQuit(): void {
 export function sessionPid(owner: WebContents, sessionId: string): number | undefined {
   const session = sessions.get(sessionId)
   return session?.owner === owner ? session.pid : undefined
+}
+
+export interface SessionRoot {
+  owner: WebContents
+  sessionId: string
+  pid: number
+}
+
+/** Live PTY roots. Port scanning uses this so it runs for every session, not only a watched browser tab. */
+export function sessionRoots(): SessionRoot[] {
+  const list: SessionRoot[] = []
+  for (const [sessionId, session] of sessions) {
+    if (session.pid !== undefined && !session.owner.isDestroyed()) list.push({ owner: session.owner, sessionId, pid: session.pid })
+  }
+  return list
+}
+
+/** Fires when a session gains a pid or leaves the map (the port scan starts or drops it). */
+export function onSessionRootsChanged(listener: () => void): () => void {
+  sessionRootListeners.add(listener)
+  return () => sessionRootListeners.delete(listener)
+}
+
+function notifySessionRoots(): void {
+  for (const listener of sessionRootListeners) listener()
 }
 
 /** Only the window that spawned a session may drive it. */
