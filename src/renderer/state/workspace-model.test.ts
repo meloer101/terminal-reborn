@@ -97,7 +97,7 @@ describe('addRunSession', () => {
     const result = addRunSession(data, 'w-2', 1000, makeId)!
     expect(result.data.sessions.at(-1)).toMatchObject({ id: result.sessionId, worktreeId: 'w-2', kind: 'shell', title: 'run', script: 'run' })
     expect(result.data.activeSessionId).toBe(result.sessionId)
-    const file = serializeWorkspace(result.data, { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 560, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }, {})
+    const file = serializeWorkspace(result.data, { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 560, diffLayout: 'unified' as const, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }, {})
     const restored = restoreWorkspace(sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0))
     expect(restored.sessions.at(-1)?.script).toBe('run')
     expect(addRunSession(data, 'nope', 0, makeId)).toBeNull()
@@ -142,7 +142,7 @@ describe('archiveWorktrees / unarchiveWorktrees (F15)', () => {
 
   it('survives the workspace file', () => {
     const { data, linkedId } = linkedWorkspace()
-    const ui = { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 560, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }
+    const ui = { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 560, diffLayout: 'unified' as const, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }
     const file = serializeWorkspace(archiveWorktrees(data, [linkedId], archive), ui, {})
     const saved = sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0)
     expect(saved?.worktrees.find((w) => w.id === linkedId)?.archived).toEqual(archive)
@@ -192,7 +192,7 @@ describe('projectOfSession', () => {
 })
 
 describe('persistence', () => {
-  const ui = { sidebarCollapsed: true, rightPanel: 'files' as const, lastRightPanel: 'files' as const, rightPanelWidth: 520, collapsedProjectIds: ['p-1', 'gone'], recentProjects: ['/code/a'], newSessionWorkdir: { 'p-1': 'current' as const, gone: 'worktree' as const } }
+  const ui = { sidebarCollapsed: true, rightPanel: 'files' as const, lastRightPanel: 'files' as const, rightPanelWidth: 520, diffLayout: 'unified' as const, collapsedProjectIds: ['p-1', 'gone'], recentProjects: ['/code/a'], newSessionWorkdir: { 'p-1': 'current' as const, gone: 'worktree' as const } }
 
   it('round-trips; agent sessions come back not-started, shells have no phase, startedAt is kept', () => {
     const data = withSessions('claude', 'shell') // s-3, s-4 (startedAt 1000)
@@ -212,6 +212,8 @@ describe('persistence', () => {
     expect(file.rightPanel).toBe('files')
     expect(file.lastRightPanel).toBe('files')
     expect(file.rightPanelWidth).toBe(520)
+    expect(file.diffLayout).toBeUndefined()
+    expect(serializeWorkspace(live, { ...ui, diffLayout: 'split' }, {}).diffLayout).toBe('split')
     expect(file.collapsedProjectIds).toEqual(['p-1'])
     expect(file.drafts).toEqual({ 's-3': 'draft' })
     expect(file.recentProjects).toEqual(['/code/a'])
@@ -259,7 +261,7 @@ describe('persistence', () => {
 })
 
 describe('persistedStateChanged', () => {
-  const ui = { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 480, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }
+  const ui = { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 480, diffLayout: 'unified' as const, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }
   const base = { ...withSessions('claude'), ...ui }
 
   it('ignores live status and activity', () => {
@@ -277,6 +279,7 @@ describe('persistedStateChanged', () => {
     expect(persistedStateChanged({ ...base, rightPanel: 'git' }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, lastRightPanel: 'git' }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, rightPanelWidth: 500 }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, diffLayout: 'split' }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, collapsedProjectIds: ['p-1'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, recentProjects: ['/x'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, newSessionWorkdir: { 'p-1': 'current' } }, base)).toBe(true)

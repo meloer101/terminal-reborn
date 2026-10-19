@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, rowAnchor } from './changes-model'
+import type { DiffRow } from '@shared/git-graph/diff'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, rowAnchor, splitAnchors, splitRows } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -134,5 +135,71 @@ describe('review comments in the list (F5)', () => {
     expect(codeBetween(rows, 'new', 1, 3)).toEqual(['a', 'B', 'c'])
     expect(codeBetween(rows, 'old', 2, 2)).toEqual(['b'])
     expect(rowAnchor(rows[0]!)).toBeNull()
+  })
+})
+
+describe('splitRows (F5 并排)', () => {
+  // Figma 17F: two removed lines replaced by six, context around them.
+  const rows: DiffRow[] = [
+    { kind: 'hunk', old: null, new: null, text: '@@ -24,10 +24,14 @@' },
+    { kind: 'context', old: 24, new: 24, text: 'const ref = useRef()' },
+    { kind: 'del', old: 25, new: null, text: 'const [offset, setOffset] = useState(0)' },
+    { kind: 'add', old: null, new: 25, text: 'const [hidden, setHidden] = useState(false)' },
+    { kind: 'context', old: 26, new: 26, text: '' },
+    { kind: 'del', old: 27, new: null, text: 'useEffect(() => {' },
+    { kind: 'del', old: 28, new: null, text: 'const onScroll = …' },
+    { kind: 'add', old: null, new: 27, text: 'useEffect(() => {' },
+    { kind: 'add', old: null, new: 28, text: 'const max = …' },
+    { kind: 'add', old: null, new: 29, text: 'const onScroll = () => {' },
+    { kind: 'add', old: null, new: 30, text: 'const y = …' },
+    { kind: 'context', old: 29, new: 31, text: 'addEventListener(…)' }
+  ]
+
+  it('pairs a block’s removed and added lines in order and fills the shorter side', () => {
+    const split = splitRows(rows)
+    const shape = split.map((r) => (r.kind === 'hunk' ? 'hunk' : `${r.old?.old ?? '·'}|${r.new?.new ?? '·'}`))
+    expect(shape).toEqual(['hunk', '24|24', '25|25', '26|26', '27|27', '28|28', '·|29', '·|30', '29|31'])
+  })
+
+  it('handles a pure deletion, a pure addition and a removal after additions', () => {
+    const del: DiffRow = { kind: 'del', old: 1, new: null, text: 'a' }
+    const add: DiffRow = { kind: 'add', old: null, new: 1, text: 'b' }
+    expect(splitRows([del])).toEqual([{ kind: 'pair', old: del, new: null }])
+    expect(splitRows([add])).toEqual([{ kind: 'pair', old: null, new: add }])
+    expect(splitRows([add, del])).toEqual([
+      { kind: 'pair', old: null, new: add },
+      { kind: 'pair', old: del, new: null }
+    ])
+  })
+
+  it('anchors comments to the removed line and to the new line', () => {
+    const [, context, changed] = splitRows(rows)
+    expect(splitAnchors(context!)).toEqual([{ side: 'new', line: 24 }])
+    expect(splitAnchors(changed!)).toEqual([
+      { side: 'old', line: 25 },
+      { side: 'new', line: 25 }
+    ])
+    expect(splitAnchors({ kind: 'hunk', row: rows[0]! })).toEqual([])
+  })
+
+  it('lays a file out side by side with comments on the right half', () => {
+    const key = changeKey('committed', 'nav.tsx')
+    const comment: ReviewComment = { id: 'c1', group: 'committed', path: 'nav.tsx', side: 'new', line: 28, endLine: 28, text: 'ResizeObserver', code: '', createdAt: 1 }
+    const items = changeItems(
+      changes({ committed: [file('nav.tsx')] }),
+      new Set([key]),
+      { [key]: { kind: 'ready', binary: false, truncated: 0, rows } },
+      [comment],
+      null,
+      {},
+      'split'
+    )
+    const kinds = items.map((i) => i.kind)
+    expect(kinds.filter((k) => k === 'split')).toHaveLength(9)
+    expect(kinds).not.toContain('diff')
+    const at = items.findIndex((i) => i.kind === 'comment')
+    expect(items[at]).toMatchObject({ kind: 'comment', split: true })
+    expect(items[at - 1]).toMatchObject({ kind: 'split', row: { kind: 'pair', new: { new: 28 } } })
+    expect(itemHeight(items[at - 1]!)).toBe(ITEM_HEIGHT.split)
   })
 })

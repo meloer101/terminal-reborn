@@ -4,11 +4,12 @@
 // the footer puts them into the agent's input line together. The footer also asks the session's agent to review (F13)
 // and opens the merge sheet (F4).
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { Worktree } from '@shared/types'
+import type { DiffLayout } from '@shared/workspace-file'
 import { severityCounts } from '@shared/background-review'
 import { commentPicked } from '@shared/review-comments'
 import { cancelBackgroundReview, reviewLine, useBackgroundReview } from '../../review/background'
@@ -19,7 +20,7 @@ import { useActiveSession, useWorkspace } from '../../state/workspace'
 import { openMergeSheet, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace } from './changes-model'
+import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { commentTarget, discardComments, sendComments } from './comments'
 import { toggleFile, type RootGit } from './store'
@@ -30,7 +31,7 @@ const STATUS_LABEL: Record<GitFileChange['status'], string> = { M: '已修改', 
 /** Items rendered beyond each edge of the viewport. */
 const OVERSCAN = 20
 
-export function ChangesView({ root, git, worktree }: { root: string; git: RootGit; worktree: Worktree }) {
+export function ChangesView({ root, git, worktree, layout }: { root: string; git: RootGit; worktree: Worktree; layout: DiffLayout }) {
   const changes = git.changes
   const active = useActiveSession()
   const projectRoot = useWorkspace((s) => s.projects.find((p) => p.id === worktree.projectId)?.rootPath ?? null)
@@ -44,8 +45,8 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
     [draft?.id, draft?.group, draft?.path, draft?.side, draft?.endLine] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const items = useMemo(
-    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, opened) : []),
-    [changes, git.expanded, git.diffs, comments, place, opened]
+    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, opened, layout) : []),
+    [changes, git.expanded, git.diffs, comments, place, opened, layout]
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -67,7 +68,7 @@ export function ChangesView({ root, git, worktree }: { root: string; git: RootGi
   }
   return (
     <>
-      <div ref={scroller} className={styles.files} role="list" aria-label="改动的文件">
+      <div ref={scroller} className={styles.files} role="list" aria-label="改动的文件" data-layout={layout}>
         <div className={styles.filesCanvas} style={{ height: offsets[items.length] }}>
           {rendered}
         </div>
@@ -152,6 +153,7 @@ function itemKey(item: ChangeItem, index: number): string {
   if (item.kind === 'file') return `file:${item.key}`
   // Stable across items added above, so the editor keeps its focus.
   if (item.kind === 'editor') return 'editor'
+  if (item.kind === 'split') return `split:${item.key}:${index}`
   if (item.kind === 'comment') return `comment:${item.comment.id}`
   return `${item.kind}:${item.key}:${index}`
 }
@@ -206,10 +208,29 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
         anchor.line <= draft.endLine
       return <DiffLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} />
     }
+    case 'split': {
+      const view = git.diffs[item.key]
+      const rows = () => (view?.kind === 'ready' ? view.rows : [])
+      const inDraft = (row: DiffRow | null, side: 'old' | 'new') => {
+        const anchor = row ? rowAnchor(row) : null
+        return (
+          draft !== null &&
+          anchor !== null &&
+          anchor.side === side &&
+          draft.group === item.group &&
+          draft.path === item.path &&
+          draft.side === side &&
+          anchor.line >= draft.line &&
+          anchor.line <= draft.endLine
+        )
+      }
+      const marked = item.row.kind === 'pair' && (inDraft(item.row.old, 'old') || inDraft(item.row.new, 'new'))
+      return <SplitLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} />
+    }
     case 'comment':
-      return <CommentRow root={root} comment={item.comment} top={top} folded={item.folded} />
+      return <CommentRow root={root} comment={item.comment} top={top} folded={item.folded} split={item.split === true} />
     case 'editor':
-      return <CommentEditor top={top} />
+      return <CommentEditor top={top} split={item.split === true} />
     case 'note':
       return (
         <p className={styles.diffNote} style={style} data-owner={item.key}>
@@ -273,5 +294,60 @@ function DiffLine({
       <span className={styles.marker}>{MARKER[row.kind]}</span>
       <span className={styles.code}>{row.text}</span>
     </div>
+  )
+}
+
+/**
+ * Figma DiffSplitRow (262:10029): base on the left, new on the right, a hairline between; a side without a line is a
+ * quiet filler, and a hunk header spans both. ＋ to comment is on the new side only (F5).
+ */
+function SplitLine({
+  row,
+  top,
+  owner,
+  root,
+  group,
+  path,
+  rows,
+  marked
+}: {
+  row: SplitRow
+  top: number
+  owner: string
+  root: string
+  group: ChangeGroup
+  path: string
+  rows: () => readonly DiffRow[]
+  marked: boolean
+}) {
+  if (row.kind === 'hunk') {
+    return (
+      <div className={styles.diffLine} style={{ top }} data-kind="hunk" data-split data-owner={owner}>
+        <span className={styles.splitHunk}>{row.row.text}</span>
+      </div>
+    )
+  }
+  const line = row.new?.new ?? row.old?.old ?? undefined
+  return (
+    <div className={styles.splitLine} style={{ top }} data-owner={owner} data-line={line} data-marked={marked || undefined}>
+      <SplitSide row={row.old} side="old" />
+      <span className={styles.splitDivider} aria-hidden />
+      <SplitSide row={row.new} side="new">
+        {row.new && <CommentAddButton root={root} group={group} path={path} row={row.new} rows={rows} />}
+      </SplitSide>
+    </div>
+  )
+}
+
+function SplitSide({ row, side, children }: { row: DiffRow | null; side: 'old' | 'new'; children?: ReactNode }) {
+  if (!row) return <span className={styles.splitSide} data-kind="empty" data-side={side} />
+  const kind = row.kind === 'context' ? 'context' : side === 'old' ? 'del' : 'add'
+  return (
+    <span className={styles.splitSide} data-kind={kind} data-side={side} data-line={(side === 'old' ? row.old : row.new) ?? undefined}>
+      {children}
+      <span className={styles.gutter}>{side === 'old' ? row.old : row.new}</span>
+      <span className={styles.marker}>{kind === 'del' ? '−' : kind === 'add' ? '+' : ''}</span>
+      <span className={styles.code}>{row.text}</span>
+    </span>
   )
 }

@@ -49,7 +49,8 @@ export function CommentAddButton({
   )
 }
 
-export function CommentRow({ root, comment, top, folded }: { root: string; comment: ReviewComment; top: number; folded: boolean }) {
+/** `split`: on the new (right) half of a 并排 diff, the left half a filler (Figma 17F "Comment row"). */
+export function CommentRow({ root, comment, top, folded, split = false }: { root: string; comment: ReviewComment; top: number; folded: boolean; split?: boolean }) {
   const review = comment.origin === 'review'
   const foldable = comment.severity === 'P2' || comment.severity === 'P3'
   const title = comment.text.split('\n')[0] ?? ''
@@ -60,6 +61,7 @@ export function CommentRow({ root, comment, top, folded }: { root: string; comme
       style={{ top }}
       data-comment-id={comment.id}
       data-folded={folded || undefined}
+      data-split={split || undefined}
       data-severity={comment.severity}
       role="note"
       aria-label={`${review ? `审阅 ${comment.severity} ` : '评论 '}${commentLocation(comment)}`}
@@ -121,7 +123,7 @@ function PickBox({ root, comment }: { root: string; comment: ReviewComment }) {
   )
 }
 
-export function CommentEditor({ top }: { top: number }) {
+export function CommentEditor({ top, split = false }: { top: number; split?: boolean }) {
   const draft = useReviewComments((s) => s.draft)
   const ref = useRef<HTMLTextAreaElement>(null)
   // The keyboard comes back here when the editor opens and whenever ⇧-click on a ＋ changes its range.
@@ -148,7 +150,7 @@ export function CommentEditor({ top }: { top: number }) {
   }
 
   return (
-    <div className={styles.editor} style={{ top }} role="group" aria-label="写评论">
+    <div className={styles.editor} style={{ top }} role="group" aria-label="写评论" data-split={split || undefined}>
       <textarea
         ref={ref}
         className={styles.editorText}
