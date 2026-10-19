@@ -10,6 +10,7 @@ import { useActiveSession, useWorkspace, type PanelView } from '../state/workspa
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
 import { SessionMetaChips } from '../session-meta/MetaChips'
+import { useSessionMeta } from '../session-meta/store'
 import styles from './SessionHeader.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
@@ -33,6 +34,7 @@ export function SessionHeader() {
   const rightPanel = useWorkspace((s) => s.rightPanel)
   const togglePanelView = useWorkspace((s) => s.togglePanelView)
   const hooks = useHooksHealth(active?.session.id ?? null)
+  const shellAgent = useSessionMeta((s) => (active ? s.bySession[active.session.id]?.agent : undefined))
   // Inline rename from the … menu: the session being renamed (so switching sessions ends it).
   const [renaming, setRenaming] = useState<string | null>(null)
   // 会话 › 重命名会话 in the app menu: each new request starts renaming the active session.
@@ -93,7 +95,8 @@ export function SessionHeader() {
           )}
           <span className={styles.spacer} />
           {/* Figma 17A: todo · context · usage, after the branch and before the pane icons (PRD F11 / F12). */}
-          <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? null : active.session.kind} />
+          {/* A plain terminal shows the agent started in it by hand, while it runs. */}
+          <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? shellAgent ?? null : active.session.kind} />
           {agentUp && hooks === 'unavailable' && (
             <span className={styles.hooks} data-testid="hooks-unavailable" title="hooks 不可用，状态只能按终端标题判断">
               <CircleAlert size={16} strokeWidth={1.75} />

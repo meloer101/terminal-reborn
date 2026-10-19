@@ -48,6 +48,7 @@ setInterval(() => {
   }
   for (; seen < steps.length; seen++) {
     const step = JSON.parse(steps[seen])
+    if (step.exit !== undefined) process.exit(step.exit)
     if (step.statusLine && settings.statusLine) fs.appendFileSync(log + '.statusline', run(settings.statusLine.command, step.statusLine) + '\\n')
     if (step.hook) hook(step.hook, step.payload || {})
   }
@@ -90,6 +91,8 @@ function setup() {
   git(project, 'worktree', 'add', '-q', '-b', 'jacob/graph-layout', graph)
   git(project, 'worktree', 'add', '-q', '-b', 'jacob/mobile-nav', nav)
   writeFileSync(join(nav, '.fake-steps'), '')
+  // The plain terminal in the main folder: a claude typed there by hand reads its own script.
+  writeFileSync(join(project, '.fake-steps'), '')
   // Claude's data directory for this run: transcripts the hooks point at must live under its projects/.
   const claudeConfig = join(root, 'claude-config')
   mkdirSync(join(claudeConfig, 'projects', 'acme'), { recursive: true })
@@ -108,6 +111,7 @@ function setup() {
     env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log, CLAUDE_CONFIG_DIR: claudeConfig },
     step: (value: unknown) => appendFileSync(`${log}.steps`, `${JSON.stringify(value)}\n`),
     navStep: (value: unknown) => appendFileSync(join(nav, '.fake-steps'), `${JSON.stringify(value)}\n`),
+    shellStep: (value: unknown) => appendFileSync(join(project, '.fake-steps'), `${JSON.stringify(value)}\n`),
     statusLines: () => {
       try {
         return readFileSync(`${log}.statusline`, 'utf8')
@@ -443,5 +447,24 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(header().getByTestId('context-chip')).toHaveCount(0)
     await expect(header().getByTestId('usage-chip-claude')).toBeVisible()
     await expect(sidebarRow('s-cookie').getByTestId('todo-line')).toHaveCount(0)
+  })
+
+  test('a claude typed by hand in a plain terminal reports context and usage there, until it exits', async () => {
+    await sidebarRow('s-main').click()
+    const terminal = page.locator('[data-region="terminal"] .xterm:visible').first()
+    await expect(terminal).toBeVisible(WITHIN)
+    await expect(header().getByTestId('session-meta')).toHaveCount(0)
+    // The terminal's zsh ran the user's .zshrc (which puts the fake CLIs first); the Wavi shim still comes first.
+    await terminal.click()
+    await page.keyboard.type('claude')
+    await page.keyboard.press('Enter')
+    repo.shellStep(statusLine(55, { five: 20, seven: 85 }))
+    await expect(header().getByTestId('context-chip')).toHaveText('context55%', WITHIN)
+    await expect(header().getByTestId('usage-chip-claude')).toHaveText('Claude7d 85%')
+    await expect(page.locator('[data-region="sidebar"] [data-session-id="s-main"]')).toContainText('main')
+    await shoot('shell-claude')
+    repo.shellStep({ exit: 0 })
+    await expect(header().getByTestId('context-chip')).toHaveCount(0, WITHIN)
+    await expect(header().getByTestId('usage-chip-claude')).toHaveCount(0)
   })
 })

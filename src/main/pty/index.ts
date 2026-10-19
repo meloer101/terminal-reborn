@@ -11,7 +11,16 @@ import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
 import { runShellArgs, SCRIPT_MARKER_OSC, SETUP_DONE_PAYLOAD, setupCommand } from '@shared/script-launch'
 import { buildPtyEnv, resolveShell } from '../../pty-host/env'
 import type { HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
-import { adoptAgentSession, armStartWatchdog, endAgentSession, handleRelayedHook, prepareAgentLaunch, setHookTarget, type AgentLaunchHooks } from '../hooks'
+import {
+  adoptAgentSession,
+  armStartWatchdog,
+  endAgentSession,
+  handleRelayedHook,
+  prepareAgentLaunch,
+  prepareShellLaunch,
+  setHookTarget,
+  type AgentLaunchHooks
+} from '../hooks'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { shouldKillLateSpawn } from './late-spawn'
@@ -243,7 +252,8 @@ function handleHostEvent(event: HostEvent): void {
       }
       session.pid = event.pid
       if (event.exit) sessions.delete(event.id)
-      else if (event.agent === 'claude' || event.agent === 'codex') adoptAgentSession(event.id, session.owner, event.hooks)
+      // Plain terminals too: an agent started in one by hand reports through the same hooks (PRD F11).
+      else adoptAgentSession(event.id, session.owner, event.hooks)
       notifySessionRoots()
       pending.resolve({
         pid: event.pid,
@@ -334,21 +344,31 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   const setup = options.script === 'setup' && agent !== undefined
   const realCwd = realCwdOf(options.cwd)
   const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent, { deferStartWatchdog: setup, cwd: realCwd ?? options.cwd }) : null
+  // A plain terminal gets the agent shims, so a `claude` / `codex` typed in it reports here too (PRD F11).
+  const shellEnv =
+    !agent && options.command === undefined && !options.script
+      ? await prepareShellLaunch(id, owner, {
+          shell: resolveShell(buildPtyEnv(appEnv(), options.env ?? {})).command,
+          base: { ...appEnv(), ...options.env },
+          cwd: realCwd ?? options.cwd
+        })
+      : null
+  const attached = hooks !== null || shellEnv !== null
   const port = realCwd ? portFor(realCwd) : null
-  const env = { ...options.env, ...hooks?.env, ...(port !== null ? { TR_PORT: String(port) } : {}) }
+  const env = { ...options.env, ...hooks?.env, ...shellEnv, ...(port !== null ? { TR_PORT: String(port) } : {}) }
   let launch: { command: string; args: string[] } | null
   try {
     launch = await scriptLaunch(options, realCwd, env, hooks)
   } catch (error) {
     sessions.delete(id)
-    if (hooks) endAgentSession(id)
+    if (attached) endAgentSession(id)
     notifySessionRoots()
     throw error
   }
   await ensureHost()
   // The window went away (reload, close) while we were getting ready: starting the process now would orphan it.
   if (sessions.get(id)?.owner !== owner) {
-    if (hooks) endAgentSession(id)
+    if (attached) endAgentSession(id)
     notifySessionRoots()
     throw new Error('the window went away before the terminal process started')
   }

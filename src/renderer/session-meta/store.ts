@@ -2,7 +2,7 @@
 // plan usage per vendor. Main sends only changes (and replays them to a reloaded window); usage comes from every
 // session of a vendor and is kept by main across runs, so a fresh window asks for it once.
 import { create } from 'zustand'
-import type { AgentEvent } from '@shared/agent-events'
+import type { AgentEvent, HookAgent } from '@shared/agent-events'
 import { usageAlertText, type ContextUsage, type UsageVendor, type VendorUsage } from '@shared/session-meta'
 import type { TodoItem } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
@@ -11,6 +11,8 @@ import { useWorkspace } from '../state/workspace'
 export interface SessionMetrics {
   context?: ContextUsage
   todos?: TodoItem[]
+  /** The agent reporting for the session; for a plain terminal, the one started in it by hand (until it exits). */
+  agent?: UsageVendor
 }
 
 interface SessionMetaState {
@@ -23,6 +25,9 @@ interface SessionMetaState {
   setContext(sessionId: SessionId, context: ContextUsage | null): void
   setTodos(sessionId: SessionId, items: TodoItem[]): void
   setUsage(usage: VendorUsage): void
+  setAgent(sessionId: SessionId, agent: UsageVendor): void
+  /** The hand-started agent of a plain terminal ended: everything it reported goes. */
+  clearSession(sessionId: SessionId): void
   /** Drops sessions that are gone. */
   retain(live: ReadonlySet<SessionId>): void
 }
@@ -55,6 +60,15 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
         return next
       })
     ),
+  setAgent: (sessionId, agent) =>
+    set((s) => (s.bySession[sessionId]?.agent === agent ? {} : patchSession(s, sessionId, (current) => ({ ...current, agent })))),
+  clearSession: (sessionId) =>
+    set((s) => {
+      if (!(sessionId in s.bySession)) return {}
+      const bySession = { ...s.bySession }
+      delete bySession[sessionId]
+      return { bySession }
+    }),
   setUsage: (usage) =>
     set((s) => {
       const held = s.usage[usage.vendor]
@@ -68,8 +82,13 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
     })
 }))
 
-export function applyMetaEvent(sessionId: SessionId, event: AgentEvent): void {
+export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: HookAgent): void {
   const state = useSessionMeta.getState()
+  if (event.type === 'agent-exit') {
+    state.clearSession(sessionId)
+    return
+  }
+  if (agent === 'claude' || agent === 'codex') state.setAgent(sessionId, agent)
   if (event.type === 'context') state.setContext(sessionId, event.context)
   else if (event.type === 'todos') state.setTodos(sessionId, event.items)
 }
@@ -79,7 +98,7 @@ export const USAGE_NOTIFICATION_TAG = 'wavi:usage'
 
 /** Listens to main; returns a function that stops listening. */
 export function startSessionMetaBridge(): () => void {
-  const offEvents = window.tr.agent.onEvent(({ sessionId, event }) => applyMetaEvent(sessionId, event))
+  const offEvents = window.tr.agent.onEvent(({ sessionId, event, agent }) => applyMetaEvent(sessionId, event, agent))
   const offUsage = window.tr.agent.onUsage((usage) => useSessionMeta.getState().setUsage(usage))
   // Main sends each crossing once, to one window; 设置 · 自动化 · 额度提醒 decides whether it becomes a notification.
   const offAlert = window.tr.agent.onUsageAlert((alert) => {

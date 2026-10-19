@@ -29,6 +29,8 @@ export type AgentEvent =
   | { type: 'context'; context: ContextUsage | null }
   /** The agent's todo list after a todo-tool call; [] after /clear (PRD F12). Not activity. */
   | { type: 'todos'; items: TodoItem[] }
+  /** An agent started by hand in a plain terminal ended (resources/hooks/agent-shim.sh): its metrics are gone. */
+  | { type: 'agent-exit' }
 
 export interface AgentEventEnvelope {
   sessionId: SessionId
