@@ -1,4 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { listenForBrowser } from '../panels/browser/store'
+import { listenForBackgroundReview } from '../review/background'
 import { useWorkspace } from '../state/workspace'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
@@ -45,7 +47,20 @@ export function AppShell() {
   const panelWidth = useWorkspace((s) => s.rightPanelWidth)
   const width = useSyncExternalStore(subscribeResize, windowWidth)
   const mode = rightPanel ? panelMode(width, !sidebarCollapsed, panelWidth) : null
+  // Every session id, so a new or removed session resubscribes. The string compares by value.
+  const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
   useEffect(() => startActivityReporting(), [])
+  useEffect(() => listenForBackgroundReview(), [])
+  // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
+  // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
+  useEffect(() => {
+    listenForBrowser()
+    const ids = sessionPortKey.length === 0 ? [] : sessionPortKey.split('\n')
+    for (const id of ids) window.tr.browser.watchPorts(id)
+    return () => {
+      for (const id of ids) window.tr.browser.unwatchPorts(id)
+    }
+  }, [sessionPortKey])
 
   return (
     <div className={styles.shell}>

@@ -308,6 +308,41 @@ test.describe('F17 right panel · 浏览器', () => {
     await expect(tag).toHaveCount(0, { timeout: 15_000 })
   })
 
+  test('the sidebar row and the overview show the port; ⌥-click opens it outside, right-click ends the process', async () => {
+    // With the 浏览器 view closed: the scan runs for every session, not only a watched tab.
+    const browserToggle = page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '浏览器' })
+    await browserToggle.click()
+    await expect(panel()).toHaveCount(0)
+    const own = await freePort()
+    const script = `require('http').createServer((q,r)=>r.end('ok')).listen(${own})`
+    await page.locator('[data-region="terminal"] .xterm').first().click()
+    await page.keyboard.type(`"${process.execPath}" -e "${script}"`)
+    await page.keyboard.press('Enter')
+    const tag = page.locator('[data-region="sidebar"]').getByTestId('port-tags').getByRole('button', { name: `打开 http://localhost:${own}` })
+    await expect(tag).toBeVisible({ timeout: 15_000 })
+    await expect(tag).toHaveText(`:${own}`)
+    await shoot('F14-sidebar-tag')
+
+    await tag.click({ modifiers: ['Alt'] })
+    await expect.poll(() => app.evaluate(() => (globalThis as unknown as { __opened: string[] }).__opened)).toContain(`http://localhost:${own}/`)
+    await expect(panel()).toHaveCount(0)
+
+    await page.keyboard.press('Meta+Shift+A')
+    const overview = page.locator('[data-region="overview"]')
+    await expect(overview.getByTestId('port-tags').getByText(`:${own}`)).toBeVisible()
+    await shoot('F14-overview-tag')
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(overview).toHaveCount(0)
+
+    await tag.click({ button: 'right' })
+    await expect
+      .poll(() => app.evaluate(() => (globalThis as unknown as { __trDialogs: { requests: { message: string }[] } }).__trDialogs.requests.map((r) => r.message)))
+      .toContain(`结束监听 :${own} 的进程？`)
+    await expect(tag).toHaveCount(0, { timeout: 15_000 })
+    await browserToggle.click()
+    await expect(panel()).toBeVisible()
+  })
+
   test('refuses non-http addresses with a reason', async () => {
     await address().click()
     await address().fill('file:///etc/hosts')

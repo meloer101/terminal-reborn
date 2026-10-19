@@ -1,10 +1,10 @@
 // Sending and discarding a worktree's review comments (PRD F5). Sending puts one prompt into the agent's input line
 // and leaves Enter to the user (PRD §2: Wavi never spends tokens on its own); the comments are cleared once it is there.
-import { reviewPrompt } from '@shared/review-comments'
+import { commentPicked, reviewPrompt } from '@shared/review-comments'
 import type { Session, Worktree } from '@shared/types'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
-import { clearComments, commentsOf } from '../../state/review-comments'
+import { clearComments, commentsOf, removeComments } from '../../state/review-comments'
 import { useWorkspace } from '../../state/workspace'
 import { agentSessionFor } from '../merge/model'
 
@@ -17,14 +17,18 @@ export function commentTarget(worktree: Pick<Worktree, 'projectId' | 'path'>, se
   )
 }
 
+/** The comments 发给 … sends: the user's own, and the review comments that are ticked (PRD F13). */
+export const pickedComments = (root: string) => commentsOf(root).filter(commentPicked)
+
 export async function sendComments(root: string, target: Session): Promise<void> {
-  const comments = commentsOf(root)
+  const comments = pickedComments(root)
   if (comments.length === 0) return
   const state = useWorkspace.getState()
   state.setActiveSession(target.id)
   await ensureAgentUp(target.id)
   await insertIntoTerminal(target.id, reviewPrompt(comments))
-  clearComments(root)
+  // Review comments that were not ticked stay for later.
+  removeComments(root, new Set(comments.map((c) => c.id)))
   useWorkspace.getState().requestTerminalFocus()
 }
 

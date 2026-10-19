@@ -13,6 +13,7 @@ import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { EnterButton } from './EnterButton'
+import { PortTags } from '../panels/browser/PortTags'
 import { ReviewButton } from '../review/ReviewButton'
 import enterStyles from './EnterButton.module.css'
 import {
@@ -265,6 +266,7 @@ function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProp
       <span className={styles.rowTitle}>{row.title}</span>
       <span className={styles.where}>{row.where}</span>
       <span className={styles.summaryCell}>{row.summary}</span>
+      <PortTags sessionId={id} />
       {trailing ?? (
         <>
           <span className={styles.stat}>{row.stat}</span>
@@ -392,6 +394,7 @@ function StatusCard({ row, selected, onClick }: RowProps) {
       </span>
       {row.where && <span className={styles.cardWhere}>{row.where}</span>}
       {row.summary && <span className={styles.cardSummary}>{row.summary}</span>}
+      <PortTags sessionId={id} />
       {row.stat && <span className={styles.cardStat}>{row.stat}</span>}
     </div>
   )

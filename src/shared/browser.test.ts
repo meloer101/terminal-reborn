@@ -20,6 +20,7 @@ import {
   portsChanged,
   processTree,
   serverLabel,
+  sessionListener,
   splitUrl,
   type ConsoleEntry,
   type ConsoleSummary
@@ -186,6 +187,25 @@ describe('serverLabel', () => {
     expect(serverLabel('/usr/local/bin/caddy run')).toBe('caddy')
     expect(serverLabel('node server.js')).toBe('')
     expect(serverLabel('python3 -m http.server 8000')).toBe('')
+  })
+})
+
+describe('sessionListener', () => {
+  const vite = { port: 5173, pid: 200, host: 'localhost', label: 'vite' }
+  const api = { port: 3000, pid: 201, host: '192.168.1.5', label: '' }
+
+  it('accepts a pid this session’s scan found listening', () => {
+    expect(sessionListener([vite, api], 201)).toEqual(api)
+  })
+
+  it('rejects a pid that is not in this session’s scan', () => {
+    expect(sessionListener([vite], 201)).toBeNull()
+    expect(sessionListener([api], 200)).toBeNull()
+    expect(sessionListener([], 200)).toBeNull()
+    expect(sessionListener([vite], 200.5)).toBeNull()
+    expect(sessionListener([vite], 0)).toBeNull()
+    expect(sessionListener([vite], -1)).toBeNull()
+    expect(sessionListener([vite], '200')).toBeNull()
   })
 })
 

@@ -6,7 +6,11 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent
 import { ArrowRight, Check, CircleAlert, CircleX, GitBranch } from 'lucide-react'
 import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
+import { severityCounts } from '@shared/background-review'
+import { cancelBackgroundReview, reviewLine, startBackgroundReview, useBackgroundReview } from '../../review/background'
 import { useRepoScripts } from '../../scripts/run-script'
+import { useSettings } from '../../settings/useSettings'
+import { useReviewComments } from '../../state/review-comments'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../../ui/Segmented'
@@ -143,6 +147,22 @@ function Sheet({ target }: { target: MergeTarget }) {
   const willRemove = removeAfter && removeReason === null
   const willPush = push && (ready?.hasOrigin ?? false)
 
+  // Background review (PRD F13): one more checklist line, never a reason not to merge. 合并前 starts it when the
+  // sheet is ready, 推送前 when 推送到 origin is ticked; 先审阅 starts it by hand. Main skips a diff it already reviewed.
+  const { settings, loaded: settingsLoaded } = useSettings()
+  const builtin = settings.review.mode === 'builtin'
+  const reviewAgent = agent && (agent.kind === 'claude' || agent.kind === 'codex') ? agent.kind : null
+  const review = useBackgroundReview((s) => s.byRoot[target.worktreePath])
+  const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
+  const autoTrigger = !settingsLoaded || !builtin ? null : settings.review.beforeMerge ? 'merge' : settings.review.beforePush && willPush ? 'push' : null
+  const reviewBase = ready?.base
+  useEffect(() => {
+    if (!autoTrigger || !reviewAgent || !reviewBase) return
+    void startBackgroundReview(target.worktreePath, reviewAgent, autoTrigger, reviewBase).catch(() => {})
+  }, [autoTrigger, reviewAgent, reviewBase, target.worktreePath])
+  const reviewCheck = review ? reviewLine(review, severityCounts((reviewComments ?? []).filter((c) => c.origin === 'review'))) : null
+  const reviewRunning = review?.phase === 'running'
+
   const merge = async (): Promise<void> => {
     if (!ready || !mergeable) return
     setFailure(null)
@@ -259,6 +279,15 @@ function Sheet({ target }: { target: MergeTarget }) {
           {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: `没能检查：${phase.message}` }} />}
           {phase.kind === 'done' && phase.lines.map((line) => <Line key={line.text} line={line} />)}
           {shown && phase.kind !== 'done' && checkLines(shown).map((line) => <Line key={line.text} line={line} />)}
+          {shown && phase.kind !== 'done' && reviewCheck && (
+            <Line
+              line={{
+                tone: reviewCheck.tone === 'muted' ? 'warn' : reviewCheck.tone,
+                text: reviewCheck.text,
+                ...(reviewCheck.meta ? { meta: reviewCheck.meta } : {})
+              }}
+            />
+          )}
           {shown && phase.kind !== 'done' && testState && (
             <TestResult line={testLine(testState)} onRerun={() => setTestAttempt((n) => n + 1)} />
           )}
@@ -321,6 +350,20 @@ function Sheet({ target }: { target: MergeTarget }) {
             <span className={styles.footerNote}>
               {agent ? `说明会放进 ${agentLabel(agent.kind)} 的输入行，看过后按回车发送` : '在终端里解决冲突后重新打开'}
             </span>
+          )}
+          {phase.kind === 'ready' && builtin && reviewAgent && conflicts.length === 0 && (
+            <button
+              type="button"
+              className={styles.cancel}
+              title={reviewRunning ? undefined : `在后台用 ${agentLabel(reviewAgent)} 只读审阅（用你自己的额度），不影响合并`}
+              onClick={() =>
+                reviewRunning
+                  ? cancelBackgroundReview(target.worktreePath)
+                  : void startBackgroundReview(target.worktreePath, reviewAgent, 'manual', ready?.base).catch(() => {})
+              }
+            >
+              {reviewRunning ? '取消审阅' : '先审阅'}
+            </button>
           )}
           <span className={styles.spacer} />
           {phase.kind !== 'done' && (

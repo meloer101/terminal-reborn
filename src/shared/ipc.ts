@@ -4,6 +4,7 @@
 
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
+import type { BackgroundReviewApi } from './background-review'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
@@ -342,6 +343,8 @@ export interface TrApi {
   browser: BrowserApi
   /** `.tr/settings.toml` scripts and TR_PORT (PRD F4). */
   repoScripts: RepoScriptsApi
+  /** Background code review (PRD F13); channels in REVIEW_IPC. */
+  review: BackgroundReviewApi
 }
 
 export const IPC = {

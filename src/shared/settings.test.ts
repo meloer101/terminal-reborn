@@ -47,4 +47,25 @@ describe('applySettingsPatch', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, 'x')).toEqual(DEFAULT_SETTINGS)
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 'big' } })).toEqual(DEFAULT_SETTINGS)
   })
+
+  it('keeps code review off unless a real switch is set (PRD F13)', () => {
+    expect(DEFAULT_SETTINGS.review).toEqual({
+      beforeMerge: false,
+      beforePush: false,
+      afterTurnWithCommits: false,
+      mode: 'builtin',
+      rules: 'default',
+      customRules: '',
+      model: ''
+    })
+    const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { beforeMerge: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
+    expect(next.review.beforeMerge).toBe(true)
+    expect(next.review.beforePush).toBe(false)
+    expect(next.review.mode).toBe('agent-command')
+    expect(next.review.model).toBe('haiku')
+    expect(next.review.rules).toBe('default')
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { model: 'not a model', mode: 'nope' } }).review.model).toBe('')
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { mode: 'nope' } }).review.mode).toBe('builtin')
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).review).toEqual(DEFAULT_SETTINGS.review)
+  })
 })

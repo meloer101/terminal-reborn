@@ -108,13 +108,61 @@ test.describe('F4 merge sheet · F13 review', () => {
     await app?.close().catch(() => {})
   })
 
-  test('F13: 让 agent 审阅 in Git · 变更 types /code-review into the session', async () => {
+  const updateSettings = (patch: unknown) =>
+    page.evaluate((p) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(p), patch)
+
+  test('F13: 让 agent 审阅 runs a background review whose findings become comments; only ticked ones are sent', async () => {
+    const finding = { path: 'nav.ts', startLine: 1, endLine: 1, side: 'new', group: 'committed', confidence: 0.9 }
+    repo.reviewReply({
+      summary: '两处',
+      findings: [
+        { ...finding, severity: 'P1', title: 'sticky 会挡住锚点', explanation: '滚动到锚点时标题被导航盖住' },
+        { ...finding, severity: 'P3', title: '可以用常量', explanation: "把 'sticky' 提成常量" }
+      ]
+    })
     await panel().getByRole('tab', { name: /^变更/ }).click()
     const review = panel().getByRole('button', { name: '让 agent 审阅' })
-    // Enabled once the fake agent has drawn its UI.
     await expect(review).toBeEnabled(WITHIN)
     await review.click()
+    const status = panel().getByTestId('review-status')
+    await expect(status).toContainText('审阅找到 2 条（P1 1 · P3 1）', WITHIN)
+    await expect(status).toContainText('花费 $0.012')
+    // Read-only reviewer with the diff on stdin; nothing went into the coding session.
+    expect(repo.reviewPrompt()).toContain("+export const nav = 'sticky'")
+    expect(repo.reviewPrompt()).toContain('# wavi-group: committed')
+    expect(logged()).not.toContain('code-review')
+
+    await panel().locator('[data-path="nav.ts"][data-group="committed"] button').first().click()
+    const p1 = panel().getByRole('note', { name: /^审阅 P1 nav\.ts:1/ })
+    const p3 = panel().getByRole('note', { name: /^审阅 P3 nav\.ts:1/ })
+    await expect(p1).toContainText('sticky 会挡住锚点')
+    await expect(p1.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true')
+    // P3 starts folded and unticked.
+    await expect(p3).toHaveAttribute('data-folded', 'true')
+    await expect(p3.getByRole('checkbox')).toHaveAttribute('aria-checked', 'false')
+    await shoot('F13-review-comments')
+    await p3.getByRole('button', { name: '展开' }).click()
+    await expect(p3).not.toHaveAttribute('data-folded')
+
+    const send = panel().getByRole('button', { name: '发给 Claude · 1' })
+    await send.click()
+    await expect.poll(typed, WITHIN).toContain('P1 nav.ts:1')
+    expect(typed()).not.toContain('可以用常量')
+    // The unticked P3 stays for later; the same diff is not reviewed twice.
+    await expect(p3).toBeVisible()
+    await panel().getByRole('button', { name: '放弃' }).click()
+    await expect(p3).toHaveCount(0)
+    await panel().getByRole('button', { name: '让 agent 审阅' }).click()
+    await expect(status).toContainText('这份改动已经审过')
+  })
+
+  test("F13: 审阅方式 · agent 自带命令 types /code-review into the session", async () => {
+    await updateSettings({ review: { mode: 'agent-command' } })
+    const review = panel().getByRole('button', { name: '让 agent 审阅' })
+    await expect(review).toHaveAttribute('title', '在终端里发送 /code-review', WITHIN)
+    await review.click()
     await expect.poll(logged, WITHIN).toMatch(/code-review.*<ENTER>/s)
+    await updateSettings({ review: { mode: 'builtin', beforeMerge: true } })
   })
 
   test('F4: a clean branch squashes into main, and the worktree goes with its session', async () => {
@@ -126,6 +174,9 @@ test.describe('F4 merge sheet · F13 review', () => {
     await expect(sheet()).toContainText('main 有 1 个新提交，可以自动合并')
     await expect(sheet()).toContainText('测试通过', WITHIN)
     await expect(sheet()).toContainText('exit 0')
+    // 合并前 is on: the sheet asks again, the same diff keeps its earlier result, and nothing blocks 合并.
+    await expect(sheet()).toContainText('这份改动已经审过：审阅找到 2 条', WITHIN)
+    await expect(sheet().getByRole('button', { name: '先审阅' })).toBeVisible()
     await expect(sheet().getByRole('radio', { name: 'Squash' })).toHaveAttribute('aria-checked', 'true')
     await expect(sheet().getByRole('checkbox', { name: '合并后删除 worktree（保留分支）' })).toHaveAttribute('aria-checked', 'true')
     await expect(sheet().getByRole('checkbox', { name: '合并后推送到 origin' })).toBeDisabled()

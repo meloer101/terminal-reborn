@@ -1,5 +1,7 @@
 // A fake `claude` for e2e: a shell script put first on the login shell's PATH through a throwaway ZDOTDIR, so no
 // model, no hooks and no real CLI is involved. It draws a minimal UI and logs every byte it reads to $TR_FAKE_LOG.
+// Run as `claude -p` (Wavi's background review, PRD F13) it saves the prompt from stdin and prints the reply that
+// `reviewReply()` set.
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +10,12 @@ import { join } from 'node:path'
 // Control characters are echoed raw (-echoctl), so the paste markers the send protocol writes are swallowed by the
 // terminal as escape sequences instead of showing up as ^[[200~, as in the real TUI.
 const FAKE_CLAUDE = `#!/bin/sh
+if [ "$1" = "-p" ]; then
+  cat > "$TR_FAKE_LOG.review-in"
+  printf '%s\n' "$@" > "$TR_FAKE_LOG.review-argv"
+  cat "$TR_FAKE_LOG.review-out" 2>/dev/null
+  exit 0
+fi
 stty -echoctl -icanon min 1 2>/dev/null
 printf 'Claude Code v9.9.9\\n\\n❯ Try "how does it work?"\\n\\n  ⏸ manual mode on\\n'
 nl=$(printf '\\n.'); nl=\${nl%.}
@@ -40,6 +48,17 @@ export function fakeClaude(prefix: string) {
   const logged = () => readFileSync(log, 'utf8')
   return {
     root,
+    /** What the next `claude -p` prints (Claude's --output-format json result). */
+    reviewReply: (structured: unknown) =>
+      writeFileSync(`${log}.review-out`, JSON.stringify({ type: 'result', is_error: false, total_cost_usd: 0.012, duration_ms: 900, structured_output: structured })),
+    /** The prompt the last `claude -p` read from stdin ('' before any). */
+    reviewPrompt: () => {
+      try {
+        return readFileSync(`${log}.review-in`, 'utf8')
+      } catch {
+        return ''
+      }
+    },
     env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log },
     logged,
     /** The log without the bracketed-paste end marker the send protocol wraps text in. */

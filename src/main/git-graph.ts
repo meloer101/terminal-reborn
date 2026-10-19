@@ -27,6 +27,7 @@ import {
   type GitLogScope,
   type GitRef
 } from '@shared/git-graph/log'
+import { stampDiffGroup, untrackedFileDiff } from '@shared/background-review'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
 import { isInside, normalizeRelative } from './worktree-files'
 
@@ -396,6 +397,73 @@ export async function fileDiff(request: unknown): Promise<string> {
   }
   const hasHead = (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).trim() !== ''
   return git(cwd, [...flags, hasHead ? 'HEAD' : EMPTY_TREE, '--', ...paths])
+}
+
+// --- background review (PRD F13) --------------------------------------------------------------------------------
+
+export interface ReviewDiff {
+  /** The worktree's top level. */
+  cwd: string
+  /** Every file, each marked `# wavi-group: uncommitted|committed` (see stampDiffGroup). '' when nothing changed. */
+  text: string
+  /** Untracked files left out: binary, too large, nested repositories, past MAX_UNTRACKED. */
+  skipped: number
+}
+
+/** An untracked text file as a diff, read only when git lists it and it really is inside the worktree. */
+async function untrackedDiff(cwd: string, entry: string): Promise<string | null> {
+  if (entry.endsWith('/')) return null
+  try {
+    const abs = await realpath(join(cwd, entry))
+    if (!isInside(cwd, abs)) return null
+    const info = await stat(abs)
+    if (!info.isFile() || info.size > MAX_PREVIEW_BYTES) return null
+    const handle = await open(abs, 'r')
+    try {
+      const buffer = Buffer.alloc(info.size)
+      const { bytesRead } = await handle.read(buffer, 0, info.size, 0)
+      const data = buffer.subarray(0, bytesRead)
+      if (looksBinary(data)) return null
+      return untrackedFileDiff(entry, data.toString('utf8'))
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The text a background review reads: 未提交 (index + working tree vs HEAD, then untracked text files) and 已提交
+ * (`base...HEAD`), the same two groups and line numbers as Git · 变更, so its findings land as F5 comments there.
+ */
+export async function reviewDiff(root: unknown, base: unknown): Promise<ReviewDiff | null> {
+  const cwd = await topLevel(root)
+  if (!cwd) return null
+  const listing = await changes(cwd, base)
+  if (!listing) return null
+  const hasHead = (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).trim() !== ''
+  const flags = ['diff', '--no-color', '--no-ext-diff', '-M']
+  const [tracked, untracked, committed] = await Promise.all([
+    git(cwd, [...flags, hasHead ? 'HEAD' : EMPTY_TREE, '--']),
+    listUntracked(cwd),
+    listing.baseRef ? git(cwd, [...flags, `${listing.baseRef}...HEAD`, '--']) : Promise.resolve('')
+  ])
+  const fresh = await mapLimited(untracked.slice(0, MAX_UNTRACKED), COUNT_CONCURRENCY, (entry) => untrackedDiff(cwd, entry))
+  const added = fresh.filter((d): d is string => d !== null)
+  const skipped = untracked.length - added.length
+  const text = stampDiffGroup(tracked + added.join(''), 'uncommitted') + stampDiffGroup(committed, 'committed')
+  return { cwd, text, skipped }
+}
+
+/** HEAD's commit, or '' (not a repository, unborn branch). Used to tell whether a turn committed. */
+export async function headCommit(root: string): Promise<string> {
+  try {
+    const cwd = await topLevel(root)
+    return cwd ? (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).trim() : ''
+  } catch {
+    return ''
+  }
 }
 
 export function registerGitGraphHandlers(): void {
