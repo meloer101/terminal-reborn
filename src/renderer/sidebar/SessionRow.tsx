@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from 'react'
 import { glyphStatus } from '../lifecycle/present'
+import { PortTags } from '../panels/browser/PortTags'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { showsTime } from './format-elapsed'
@@ -52,7 +53,10 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
       </span>
       <span className={styles.main}>
         <span className={styles.title}>{session.title}</span>
-        <span className={styles.activity}>{secondary}</span>
+        <span className={styles.activityLine}>
+          <span className={styles.activity}>{secondary}</span>
+          <PortTags sessionId={session.id} />
+        </span>
       </span>
       <span className={styles.meta}>
         {showsTime(session, status) ? (

@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { listenForBrowser } from '../panels/browser/store'
 import { useWorkspace } from '../state/workspace'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
@@ -46,6 +47,8 @@ export function AppShell() {
   const width = useSyncExternalStore(subscribeResize, windowWidth)
   const mode = rightPanel ? panelMode(width, !sidebarCollapsed, panelWidth) : null
   useEffect(() => startActivityReporting(), [])
+  // Port tags in the sidebar and the overview need the scan even when the browser tab is closed.
+  useEffect(() => listenForBrowser(), [])
 
   return (
     <div className={styles.shell}>

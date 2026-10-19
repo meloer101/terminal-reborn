@@ -28,5 +28,6 @@ export const browserApi: BrowserApi = {
   onFocusAddress: (listener) => listen(BROWSER_IPC.focusAddress, listener),
   watchPorts: (sessionId) => ipcRenderer.send(BROWSER_IPC.watchPorts, sessionId),
   unwatchPorts: (sessionId) => ipcRenderer.send(BROWSER_IPC.unwatchPorts, sessionId),
-  onPorts: (listener) => listen(BROWSER_IPC.ports, listener)
+  onPorts: (listener) => listen(BROWSER_IPC.ports, listener),
+  endListener: (sessionId, pid) => ipcRenderer.invoke(BROWSER_IPC.endListener, sessionId, pid)
 }
