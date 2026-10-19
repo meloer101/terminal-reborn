@@ -1,6 +1,7 @@
 // On-disk shape of the workspace (`<userData>/workspace.json`, phase 2 · A12) and its sanitizer.
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
+import { archiveRefName, type WorktreeArchive } from './archive'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import type { AgentKind, Project, TitleSource, Worktree } from './types'
@@ -45,7 +46,16 @@ export interface PersistedSession {
   script?: 'run'
 }
 
-export type PersistedWorktree = Pick<Worktree, 'id' | 'projectId' | 'branch' | 'path' | 'isMain'> & { baseBranch?: string }
+/** A saved archive marker (PRD F15), or null when it is not one. */
+function sanitizeArchive(value: unknown): WorktreeArchive | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { id, at, commit, dirty } = value as Record<string, unknown>
+  if (typeof id !== 'string' || archiveRefName(id) === null) return null
+  if (typeof at !== 'number' || !Number.isFinite(at) || typeof commit !== 'string' || !/^[0-9a-f]{40,64}$/.test(commit)) return null
+  return { id, at, commit, dirty: dirty === true }
+}
+
+export type PersistedWorktree = Pick<Worktree, 'id' | 'projectId' | 'branch' | 'path' | 'isMain' | 'archived'> & { baseBranch?: string }
 
 export interface WorkspaceFile {
   version: typeof WORKSPACE_FILE_VERSION
@@ -131,7 +141,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
         branch: w.branch as string,
         path: w.path as string,
         isMain: w.isMain === true,
-        ...(isText(w.baseBranch) && w.baseBranch !== '' ? { baseBranch: w.baseBranch } : {})
+        ...(isText(w.baseBranch) && w.baseBranch !== '' ? { baseBranch: w.baseBranch } : {}),
+        ...(w.isMain !== true && sanitizeArchive(w.archived) ? { archived: sanitizeArchive(w.archived)! } : {})
       }))
   )
   const worktreeIds = new Set(worktrees.map((w) => w.id))

@@ -1,0 +1,66 @@
+/* 归档 (Figma 16D): the merge sheet's glass material, title, checklist and footer, narrower. */
+.scrim {
+  composes: scrim from '../panels/merge/MergeSheet.module.css';
+}
+
+.sheet {
+  composes: sheet from '../panels/merge/MergeSheet.module.css';
+  width: 480px;
+}
+
+.context {
+  composes: context from '../panels/merge/MergeSheet.module.css';
+}
+
+.title {
+  composes: title from '../panels/merge/MergeSheet.module.css';
+}
+
+.branch {
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checks {
+  composes: checks from '../panels/merge/MergeSheet.module.css';
+}
+
+.line {
+  composes: line from '../panels/merge/MergeSheet.module.css';
+}
+
+.lineIcon {
+  composes: lineIcon from '../panels/merge/MergeSheet.module.css';
+}
+
+.lineText {
+  composes: lineText from '../panels/merge/MergeSheet.module.css';
+}
+
+.output {
+  composes: output from '../panels/merge/MergeSheet.module.css';
+}
+
+.footer {
+  composes: footer from '../panels/merge/MergeSheet.module.css';
+}
+
+.spacer {
+  composes: spacer from '../panels/merge/MergeSheet.module.css';
+}
+
+.cancel {
+  composes: cancel from '../panels/merge/MergeSheet.module.css';
+}
+
+.primary {
+  composes: primary from '../panels/merge/MergeSheet.module.css';
+}
+
+.shortcut {
+  composes: shortcut from '../panels/merge/MergeSheet.module.css';
+}

@@ -1,5 +1,6 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
+import type { WorktreeArchive } from '@shared/archive'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
@@ -130,6 +131,41 @@ export function closeSession(data: WorkspaceData, sessionId: SessionId): Workspa
   return { ...data, sessions, activeSessionId }
 }
 
+/**
+ * Marks worktree records archived (PRD F15). Their sessions stay — they are resumed on restore — but leave every list;
+ * a selection inside them moves to the first session still listed, else nothing.
+ */
+export function archiveWorktrees(data: WorkspaceData, worktreeIds: readonly string[], archive: WorktreeArchive): WorkspaceData {
+  const ids = new Set(data.worktrees.filter((w) => worktreeIds.includes(w.id) && !w.isMain).map((w) => w.id))
+  if (ids.size === 0) return data
+  const worktrees = data.worktrees.map((w) => (ids.has(w.id) ? { ...w, archived: archive } : w))
+  const hidden = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
+  const active = data.sessions.find((s) => s.id === data.activeSessionId)
+  const activeSessionId =
+    active && hidden.has(active.worktreeId) ? (data.sessions.find((s) => !hidden.has(s.worktreeId))?.id ?? null) : data.activeSessionId
+  return { ...data, worktrees, activeSessionId }
+}
+
+/**
+ * Brings archived worktree records back and selects their first session. Agents come back not started, so the
+ * first view resumes their conversation with `--resume`, as after an app restart.
+ */
+export function unarchiveWorktrees(data: WorkspaceData, worktreeIds: readonly string[]): WorkspaceData {
+  const ids = new Set(data.worktrees.filter((w) => worktreeIds.includes(w.id) && w.archived).map((w) => w.id))
+  if (ids.size === 0) return data
+  const worktrees = data.worktrees.map((w) => {
+    if (!ids.has(w.id)) return w
+    const { archived: _archived, ...rest } = w
+    return rest
+  })
+  const sessions = data.sessions.map((s): Session => {
+    if (!ids.has(s.worktreeId)) return s
+    return s.kind === 'shell' ? { ...s, status: 'idle' } : { ...s, status: 'idle', phase: 'not-started' }
+  })
+  const first = sessions.find((s) => ids.has(s.worktreeId))
+  return { ...data, worktrees, sessions, activeSessionId: first?.id ?? data.activeSessionId }
+}
+
 /** Forgets linked worktree records (their folder was deleted) and closes their sessions. Main checkouts stay. */
 export function forgetWorktrees(data: WorkspaceData, worktreeIds: readonly string[]): WorkspaceData {
   const ids = new Set(data.worktrees.filter((w) => worktreeIds.includes(w.id) && !w.isMain).map((w) => w.id))
@@ -183,13 +219,14 @@ export function serializeWorkspace(
   return {
     version: WORKSPACE_FILE_VERSION,
     projects: data.projects.map(({ id, name, rootPath }) => ({ id, name, rootPath })),
-    worktrees: data.worktrees.map(({ id, projectId, branch, path, isMain, baseBranch }) => ({
+    worktrees: data.worktrees.map(({ id, projectId, branch, path, isMain, baseBranch, archived }) => ({
       id,
       projectId,
       branch,
       path,
       isMain,
-      ...(baseBranch ? { baseBranch } : {})
+      ...(baseBranch ? { baseBranch } : {}),
+      ...(archived ? { archived } : {})
     })),
     sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script }) => ({
       id,

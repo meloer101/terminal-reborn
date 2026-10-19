@@ -5,6 +5,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { ArrowRight, Check, CircleAlert, CircleX, GitBranch } from 'lucide-react'
 import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
+import { archiveTargetFor, archiveWorktree } from '../../archive/actions'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { severityCounts } from '@shared/background-review'
 import { cancelBackgroundReview, reviewLine, startBackgroundReview, useBackgroundReview } from '../../review/background'
@@ -202,7 +203,22 @@ function Sheet({ target }: { target: MergeTarget }) {
         removal = error instanceof Error ? error.message : String(error)
       }
     }
-    setPhase({ kind: 'done', check: ready, lines: resultLines(result, ready.base, removal) })
+    const lines = resultLines(result, ready.base, removal)
+    // 设置 · Worktree · 合并后自动归档 (PRD F15): a worktree the merge kept is folded away; its archive script runs
+    // after the usual approval, and a failing one does not stop the archive.
+    if (settings.archive.afterMerge && removal !== 'removed' && !target.isMain && ids[0]) {
+      const archiveTarget = archiveTargetFor(ids[0])
+      const archived = archiveTarget
+        ? await archiveWorktree(archiveTarget, { ignoreScriptFailure: true }).catch((error: unknown) => ({
+            ok: false as const,
+            stage: 'snapshot' as const,
+            message: error instanceof Error ? error.message : String(error)
+          }))
+        : null
+      if (archived?.ok) lines.push({ tone: 'ok', text: '已归档 worktree，可以在跳转（⌘K）的历史里恢复' })
+      else if (archived) lines.push({ tone: 'warn', text: `没有归档：${archived.message}` })
+    }
+    setPhase({ kind: 'done', check: ready, lines })
   }
 
   const handToAgent = async (): Promise<void> => {

@@ -178,3 +178,27 @@ describe('stepIndex', () => {
     expect(stepIndex(index, count, dir)).toBe(expected)
   })
 })
+
+describe('历史 (F15)', () => {
+  const archive = { id: 'a1', at: 0, commit: 'a'.repeat(40), dirty: false }
+  const archived = worktrees.map((w) => (w.id === 'w3' ? { ...w, archived: archive } : w))
+
+  it('takes an archived worktree out of 会话 and ⌘1–⌘9, and lists it under 历史, last', () => {
+    const all = buildEntries(input({ worktrees: archived, now: 2 * 86_400_000 }))
+    expect(all.filter((e) => e.section === 'sessions').map((e) => e.id)).not.toContain('session:running-new')
+    const history = all.filter((e) => e.section === 'history')
+    expect(history).toHaveLength(1)
+    expect(history[0]).toMatchObject({
+      target: { type: 'archived', worktreeId: 'w3' },
+      title: '侧边栏状态聚合',
+      subtitle: 'terminal-reborn · jacob/sidebar-status · 2 天前归档'
+    })
+    expect(all.at(-1)?.section).toBe('history')
+  })
+
+  it('is found by its session, branch or the word 历史', () => {
+    expect(ids('侧边栏', { worktrees: archived })[0]).toBe('archived:w3')
+    expect(ids('历史', { worktrees: archived })).toContain('archived:w3')
+    expect(ids('sidebar-status', { worktrees: archived })[0]).toBe('archived:w3')
+  })
+})

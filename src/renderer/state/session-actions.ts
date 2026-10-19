@@ -8,6 +8,7 @@ import {
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
+import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive/store'
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { noteKeyCommand } from './key-commands'
@@ -100,8 +101,8 @@ export async function quickNewSession(): Promise<void> {
 }
 
 /**
- * Right-click on a session: 关闭会话, and 在此新建会话 — another session in the same worktree folder, started directly
- * without the sheet (PRD F4).
+ * Right-click on a session: 关闭会话, 在此新建会话 — another session in the same worktree folder, started directly
+ * without the sheet (PRD F4) — and, in a linked worktree, 归档 worktree… (PRD F15).
  */
 export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<void> {
   const state = useWorkspace.getState()
@@ -113,9 +114,11 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
       { type: 'separator' },
       { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: NEW_SESSION_LABEL[kind] })) }
     )
+    if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: '归档 worktree…' })
   }
   const choice = await popupMenu(entries, anchor)
   if (choice === 'close') await closeSessionInteractive(sessionId)
+  if (choice === 'archive' && worktree) openArchiveSheet(worktree.id)
   const kind = choice?.startsWith('here:') ? (choice.slice('here:'.length) as AgentKind) : null
   if (!kind || !worktree || !KINDS.includes(kind)) return
   const workspace = useWorkspace.getState()
@@ -174,6 +177,10 @@ export async function closeActiveSession(): Promise<void> {
   }
   if (isMergeSheetOpen()) {
     closeMergeSheet(true)
+    return
+  }
+  if (useArchiveSheet.getState().target) {
+    closeArchiveSheet(true)
     return
   }
   const id = useWorkspace.getState().activeSessionId

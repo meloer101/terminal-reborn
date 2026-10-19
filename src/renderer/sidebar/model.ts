@@ -69,7 +69,11 @@ export function buildSidebarGroups({ projects, worktrees, sessions, collapsedPro
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
   const collapsed = new Set(collapsedProjectIds)
   return projects.map((project) => {
-    const own = sessions.filter((s) => worktreeById.get(s.worktreeId)?.projectId === project.id)
+    // Archived worktrees (PRD F15) are folded away until ⌘K 历史 brings them back.
+    const own = sessions.filter((s) => {
+      const worktree = worktreeById.get(s.worktreeId)
+      return worktree?.projectId === project.id && !worktree.archived
+    })
     const urgent = own.filter((s) => needsAttention(s.status)).sort(compareByUrgency)[0]
     const isCollapsed = collapsed.has(project.id)
     return {

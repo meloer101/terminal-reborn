@@ -1,6 +1,7 @@
 // Executes a palette entry against the real stores. Kept apart from the pure model so
 // entries.ts stays free of side effects.
 import type { AgentKind } from '@shared/types'
+import { restoreArchivedWorktree } from '../archive/actions'
 import { openNewSessionSheet } from '../new-session/sheet-store'
 import { openProjectInteractive } from '../state/session-actions'
 import { useWorkspace } from '../state/workspace'
@@ -61,10 +62,25 @@ function runAction(action: ActionId): void {
 
 export function runEntry(entry: PaletteEntry): void {
   const target = entry.target
-  // Picking a session or starting one hands the keyboard to its terminal (B7); other actions give it back.
-  const toTerminal = target.type === 'session' || NEW_KIND[target.action] !== undefined
+  // Picking a session, starting one or restoring an archive hands the keyboard to its terminal (B7); other actions give it back.
+  const toTerminal = target.type !== 'action' || NEW_KIND[target.action] !== undefined
   // The new-session sheet takes the keyboard itself.
   closeCommandPalette({ restoreFocus: !toTerminal && !(target.type === 'action' && target.action === 'new-session') })
   if (target.type === 'session') useWorkspace.getState().setActiveSession(target.sessionId)
+  else if (target.type === 'archived') void restoreFromHistory(target.worktreeId)
   else runAction(target.action)
+}
+
+/** 历史 (PRD F15): restore, or say why not. */
+async function restoreFromHistory(worktreeId: string): Promise<void> {
+  try {
+    await restoreArchivedWorktree(worktreeId)
+  } catch (error) {
+    await window.tr.ui.confirm({
+      message: '没能恢复这个归档',
+      detail: error instanceof Error ? error.message : String(error),
+      confirmLabel: '好',
+      cancelLabel: '关闭'
+    })
+  }
 }

@@ -9,6 +9,8 @@ import {
   closeSession,
   EMPTY_WORKSPACE,
   forgetWorktrees,
+  archiveWorktrees,
+  unarchiveWorktrees,
   persistedStateChanged,
   projectOfSession,
   removedSessionIds,
@@ -112,6 +114,51 @@ describe('forgetWorktrees', () => {
     expect(next.worktrees.map((w) => w.id)).toEqual(['w-2'])
     expect(next.sessions.map((s) => s.worktreeId)).toEqual(['w-2'])
     expect(forgetWorktrees(withMain, ['nope'])).toBe(withMain)
+  })
+})
+
+describe('archiveWorktrees / unarchiveWorktrees (F15)', () => {
+  const archive = { id: 'a1', at: 5, commit: 'a'.repeat(40), dirty: true }
+
+  function linkedWorkspace() {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const main = addSession(data, projectId, 'shell', 0, makeId)!.data
+    const linked = addSessionInWorktree(main, projectId, { path: '/wt/fix', branch: 'fix' }, 'claude', 0, makeId)!
+    return { data: linked.data, linkedId: linked.data.sessions[1]!.worktreeId, mainSession: main.sessions[0]!.id, agent: linked.sessionId }
+  }
+
+  it('marks the record, keeps its sessions, and moves the selection out of it', () => {
+    const { data, linkedId, mainSession, agent } = linkedWorkspace()
+    expect(data.activeSessionId).toBe(agent)
+    const next = archiveWorktrees(data, [linkedId], archive)
+    expect(next.worktrees.find((w) => w.id === linkedId)?.archived).toEqual(archive)
+    expect(next.sessions.map((s) => s.id)).toContain(agent)
+    expect(next.activeSessionId).toBe(mainSession)
+    // The main checkout is never archived.
+    const mainId = data.worktrees.find((w) => w.isMain)!.id
+    expect(archiveWorktrees(data, [mainId], archive)).toBe(data)
+  })
+
+  it('survives the workspace file', () => {
+    const { data, linkedId } = linkedWorkspace()
+    const ui = { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 560, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }
+    const file = serializeWorkspace(archiveWorktrees(data, [linkedId], archive), ui, {})
+    const saved = sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0)
+    expect(saved?.worktrees.find((w) => w.id === linkedId)?.archived).toEqual(archive)
+    const bogus = sanitizeWorkspaceFile({ ...file, worktrees: file.worktrees.map((w) => (w.id === linkedId ? { ...w, archived: { id: '../x', at: 1, commit: 'zz' } } : w)) }, 0)
+    expect(bogus?.worktrees.find((w) => w.id === linkedId)?.archived).toBeUndefined()
+  })
+
+  it('brings the record back with agents not started (they resume on first view) and selects its session', () => {
+    const { data, linkedId, agent } = linkedWorkspace()
+    const archived = archiveWorktrees(data, [linkedId], archive)
+    const exited = { ...archived, sessions: archived.sessions.map((s) => (s.id === agent ? { ...s, status: 'exited' as const, phase: 'exited' as const } : s)) }
+    const back = unarchiveWorktrees(exited, [linkedId])
+    expect(back.worktrees.find((w) => w.id === linkedId)).not.toHaveProperty('archived')
+    expect(back.sessions.find((s) => s.id === agent)).toMatchObject({ status: 'idle', phase: 'not-started' })
+    expect(back.activeSessionId).toBe(agent)
+    expect(unarchiveWorktrees(data, [linkedId])).toBe(data)
   })
 })
 

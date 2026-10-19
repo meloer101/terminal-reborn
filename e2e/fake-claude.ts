@@ -16,6 +16,7 @@ if [ "$1" = "-p" ]; then
   cat "$TR_FAKE_LOG.review-out" 2>/dev/null
   exit 0
 fi
+printf '%s\n' "$*" >> "$TR_FAKE_LOG.argv"
 stty -echoctl -icanon min 1 2>/dev/null
 printf 'Claude Code v9.9.9\\n\\n❯ Try "how does it work?"\\n\\n  ⏸ manual mode on\\n'
 nl=$(printf '\\n.'); nl=\${nl%.}
@@ -48,6 +49,14 @@ export function fakeClaude(prefix: string) {
   const logged = () => readFileSync(log, 'utf8')
   return {
     root,
+    /** One line per interactive launch: its arguments (e.g. `--resume <id>`). */
+    launches: () => {
+      try {
+        return readFileSync(`${log}.argv`, 'utf8').split('\n').filter(Boolean)
+      } catch {
+        return []
+      }
+    },
     /** What the next `claude -p` prints (Claude's --output-format json result). */
     reviewReply: (structured: unknown) =>
       writeFileSync(`${log}.review-out`, JSON.stringify({ type: 'result', is_error: false, total_cost_usd: 0.012, duration_ms: 900, structured_output: structured })),

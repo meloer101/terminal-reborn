@@ -19,8 +19,8 @@ const READ_SCRIPTS = [...SCRIPT_NAMES, 'test'] as const
 export type ScriptName = (typeof READ_SCRIPTS)[number]
 /** Scripts a terminal spawn may run. `test` is captured outside the PTY (see CapturedScript). */
 export type RunnableScript = 'setup' | 'run'
-/** A script main runs itself and keeps the output of, instead of handing it to a terminal. */
-export type CapturedScript = 'test'
+/** A script main runs itself and keeps the output of, instead of handing it to a terminal (`archive`: PRD F15). */
+export type CapturedScript = 'test' | 'archive'
 
 /** Each present script is non-empty shell text (an array in the file is joined with newlines). */
 export type RepoScripts = Partial<Record<ScriptName, string>>

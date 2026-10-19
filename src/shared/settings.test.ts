@@ -69,3 +69,12 @@ describe('applySettingsPatch', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).review).toEqual(DEFAULT_SETTINGS.review)
   })
 })
+
+describe('archive settings (F15)', () => {
+  it('starts with 合并后自动归档 off and takes a boolean patch only', () => {
+    expect(DEFAULT_SETTINGS.archive.afterMerge).toBe(false)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { archive: { afterMerge: true } }).archive.afterMerge).toBe(true)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { archive: { afterMerge: 'yes' } }).archive.afterMerge).toBe(false)
+    expect(sanitizeSettings({}).archive).toEqual({ afterMerge: false })
+  })
+})

@@ -3,6 +3,8 @@
 // second confirmation only for git's submodule refusal.
 import type { WorktreeRemoveResult } from '@shared/git-worktrees'
 import type { AgentKind, ProjectId, WorktreeId } from '@shared/types'
+import { restoreArchivedWorktree } from '../../archive/actions'
+import { openArchiveSheet } from '../../archive/store'
 import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
@@ -164,7 +166,7 @@ export async function cleanUpInteractive(root: string, rows: readonly WorktreeRo
   }
 }
 
-/** The selected row's 更多: 在此新建会话 · 复制路径 · 删除 worktree…. */
+/** The selected row's 更多: 在此新建会话 · 复制路径 · 归档… (or 恢复归档) · 删除 worktree…. */
 export async function openRowMenu(
   projectId: ProjectId,
   root: string,
@@ -173,6 +175,7 @@ export async function openRowMenu(
   refresh: () => Promise<void>
 ): Promise<void> {
   const kinds: AgentKind[] = ['claude', 'codex', 'shell']
+  const archivedId = useWorkspace.getState().worktrees.find((w) => row.worktreeIds.includes(w.id) && w.archived)?.id
   const choice = await popupMenu(
     [
       {
@@ -182,11 +185,20 @@ export async function openRowMenu(
       },
       { type: 'item', id: 'copy-path', label: '复制路径' },
       { type: 'separator' },
+      archivedId
+        ? { type: 'item', id: 'restore', label: '恢复归档' }
+        : { type: 'item', id: 'archive', label: '归档…', enabled: !row.info.isMain && row.worktreeIds.length > 0 },
       { type: 'item', id: 'delete', label: '删除 worktree…', enabled: !row.info.isMain && !worktreesOf(root).busy }
     ],
     anchor
   )
   if (choice === 'copy-path') void navigator.clipboard.writeText(row.openPath).catch(() => {})
+  else if (choice === 'archive' && row.worktreeIds[0]) openArchiveSheet(row.worktreeIds[0])
+  else if (choice === 'restore' && archivedId) {
+    await restoreArchivedWorktree(archivedId).catch((error: unknown) =>
+      patchRoot(root, { notice: `没能恢复：${error instanceof Error ? error.message : String(error)}` })
+    )
+  }
   else if (choice === 'delete') await deleteWorktreeInteractive(root, row, refresh)
   else if (choice?.startsWith('new:')) startSessionIn(projectId, row, choice.slice(4) as AgentKind)
 }

@@ -1,5 +1,6 @@
 // Core domain model. See docs/PRD.md §3.
 // Changing these shapes affects every track — keep edits additive.
+import type { WorktreeArchive } from './archive'
 
 export type ProjectId = string
 export type WorktreeId = string
@@ -36,6 +37,8 @@ export interface Worktree {
   /** Line stats vs baseBranch. */
   added?: number
   removed?: number
+  /** Set while the worktree is archived (PRD F15): its sessions leave the sidebar, overview and ⌘K until restored. */
+  archived?: WorktreeArchive
 }
 
 /** prompt = cut from the first prompt · agent = the agent's own title · user = renamed in Wavi. Precedence user > agent > prompt. */
