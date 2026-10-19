@@ -283,7 +283,7 @@ export function pageChord(key: PageKey): ChordTarget {
   return action ? { kind: 'page', action } : null
 }
 
-// ── Ports (F14, minimal) ───────────────────────────────────────────────────────────────────────────────────────
+// ── Ports (F14) ────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface ListeningPort {
   port: number
@@ -387,6 +387,16 @@ export function serverLabel(args: string): string {
   return binary && !RUNTIMES.has(binary) && !/^python\d/.test(binary) ? binary.slice(0, 16) : ''
 }
 
+/**
+ * The listener from this session's scan whose pid is `pid`.
+ * Null unless `pid` is an integer that this list actually contains — a pid from another session, a stale pid, or
+ * anything that is not a number does not qualify. Callers pass one session's scan, never a merged list.
+ */
+export function sessionListener(ports: readonly ListeningPort[], pid: unknown): ListeningPort | null {
+  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return null
+  return ports.find((p) => p.pid === pid) ?? null
+}
+
 /** Whether two port lists differ (order-insensitive), so unchanged polls send nothing. */
 export function portsChanged(a: readonly ListeningPort[], b: readonly ListeningPort[]): boolean {
   if (a.length !== b.length) return true
@@ -469,10 +479,15 @@ export interface BrowserApi {
   onContextMenu(listener: (menu: PageContextMenu) => void): () => void
   /** ⌘L in the page: put the keyboard in the address field. */
   onFocusAddress(listener: (worktree: string) => void): () => void
-  /** Polls the session's listening ports while watched (PRD F14, minimal); results arrive through onPorts. */
+  /** Polls the session's listening ports while watched (PRD F14); results arrive through onPorts. */
   watchPorts(sessionId: SessionId): void
   unwatchPorts(sessionId: SessionId): void
   onPorts(listener: (ports: SessionPorts) => void): () => void
+  /**
+   * Ends the process listening for this session, after a confirmation.
+   * Main accepts the pid only when it is in that session's latest scan (`sessionListener`).
+   */
+  endListener(sessionId: SessionId, pid: number): Promise<boolean>
 }
 
 export const BROWSER_IPC = {
@@ -500,5 +515,7 @@ export const BROWSER_IPC = {
   watchPorts: 'browser:watch-ports',
   unwatchPorts: 'browser:unwatch-ports',
   /** main → renderer, payload SessionPorts */
-  ports: 'browser:ports'
+  ports: 'browser:ports',
+  /** invoke(sessionId, pid) → boolean. pid must be in that session's latest scan. */
+  endListener: 'browser:end-listener'
 } as const
