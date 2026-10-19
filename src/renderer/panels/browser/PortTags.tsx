@@ -1,4 +1,7 @@
-// `:5173` tags for a session (PRD F14), on the sidebar row and the overview. Same quiet mono label as the browser port row.
+// `:5173` tags for a session (PRD F14), on the sidebar row and the overview.
+// Click opens the built-in browser, ⌥-click the system browser, right-click asks main to end the process.
+import { portUrl } from '@shared/browser'
+import { openLink } from '../../state/link-actions'
 import { useBrowser } from './store'
 import styles from './PortTags.module.css'
 
@@ -10,11 +13,30 @@ export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: numb
   const rest = ports.length - shown.length
   return (
     <span className={styles.ports} data-testid="port-tags">
-      {shown.map((p) => (
-        <span key={p.port} className={styles.port} title={p.label ? `:${p.port} ${p.label}` : `:${p.port}`}>
-          :{p.port}
-        </span>
-      ))}
+      {shown.map((p) => {
+        const url = portUrl(p)
+        return (
+          <button
+            key={p.port}
+            type="button"
+            className={styles.port}
+            title={`${p.label ? `${p.label} · ` : ''}在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`}
+            aria-label={`打开 ${url}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              openLink(sessionId, url, e.altKey ? 'external' : 'internal')
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              void window.tr.browser.endListener(sessionId, p.pid)
+            }}
+          >
+            :{p.port}
+          </button>
+        )
+      })}
       {rest > 0 && (
         <span className={styles.more} title={ports.slice(max).map((p) => `:${p.port}`).join(' ')}>
           +{rest}

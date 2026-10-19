@@ -20,7 +20,7 @@ interface Props {
 /** Figma component `SessionRow` (11:51): 52px, glyph · title/activity · time/diff. */
 export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onSelect, onContextMenu }: Props) {
   const { session, secondary, attention, stat } = row
-  const ref = useRef<HTMLButtonElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const status = glyphStatus(session)
 
   // Keep the selection visible when it changes from elsewhere (⌘1–9, ⌘J).
@@ -29,9 +29,9 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
   }, [selected])
 
   return (
-    <button
+    <div
       ref={ref}
-      type="button"
+      role="button"
       className={styles.row}
       data-selected={selected}
       data-attention={attention}
@@ -39,6 +39,12 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
       aria-current={selected ? 'true' : undefined}
       tabIndex={tabStop ? 0 : -1}
       onClick={() => onSelect(session.id)}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        onSelect(session.id)
+      }}
       onContextMenu={
         onContextMenu &&
         ((e) => {
@@ -66,6 +72,6 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
         )}
         <span className={styles.metaLine}>{stat && `+${stat.added} −${stat.removed}`}</span>
       </span>
-    </button>
+    </div>
   )
 })
