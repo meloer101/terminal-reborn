@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { REVIEW_IPC } from '@shared/background-review'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -147,6 +148,13 @@ const api: TrApi = {
     approve: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsApprove, dir, name),
     run: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsRun, dir, name),
     cancel: (dir) => ipcRenderer.invoke(IPC.repoScriptsCancel, dir)
+  },
+  review: {
+    start: (request) => ipcRenderer.invoke(REVIEW_IPC.start, request),
+    cancel: (root) => ipcRenderer.send(REVIEW_IPC.cancel, root),
+    turnStarted: (root) => ipcRenderer.send(REVIEW_IPC.turnStarted, root),
+    turnEnded: (root, agent) => ipcRenderer.send(REVIEW_IPC.turnEnded, root, agent),
+    onStatus: (listener) => listen(REVIEW_IPC.status, listener)
   }
 }
 

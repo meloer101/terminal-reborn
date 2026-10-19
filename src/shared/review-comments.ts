@@ -27,6 +27,26 @@ export interface ReviewComment {
   confidence?: number
   /** `review` comments are replaced as a set the next time a background review lands. */
   origin?: 'review'
+  /** Review comments only: whether 发给 … includes it. Unset = P0 / P1 yes, P2 / P3 no. */
+  picked?: boolean
+}
+
+/** P2 / P3 start folded. Opening one records its id; user comments and P0 / P1 stay open. */
+export function reviewCommentFolded(comment: Pick<ReviewComment, 'id' | 'severity'>, opened: Readonly<Record<string, true>>): boolean {
+  if (comment.severity !== 'P2' && comment.severity !== 'P3') return false
+  return opened[comment.id] !== true
+}
+
+/** Whether 发给 … sends this comment. The user's own comments always go. */
+export function commentPicked(comment: ReviewComment): boolean {
+  if (comment.origin !== 'review') return true
+  return comment.picked ?? (comment.severity === 'P0' || comment.severity === 'P1')
+}
+
+/** A background review landed: the previous review's comments go, the user's stay, the new ones follow (capped). */
+export function replaceReviewComments(existing: readonly ReviewComment[], incoming: readonly ReviewComment[]): ReviewComment[] {
+  const own = existing.filter((c) => c.origin !== 'review')
+  return [...own, ...incoming].slice(0, MAX_COMMENTS_PER_WORKTREE)
 }
 
 export const MAX_COMMENTS_PER_WORKTREE = 200
@@ -68,7 +88,8 @@ function sanitizeComment(value: unknown): ReviewComment | null {
     createdAt: typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : 0,
     ...(severity ? { severity } : {}),
     ...(confidence !== undefined ? { confidence } : {}),
-    ...(value.origin === 'review' ? { origin: 'review' as const } : {})
+    ...(value.origin === 'review' ? { origin: 'review' as const } : {}),
+    ...(value.origin === 'review' && typeof value.picked === 'boolean' ? { picked: value.picked } : {})
   }
 }
 

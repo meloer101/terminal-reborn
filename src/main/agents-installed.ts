@@ -55,6 +55,27 @@ function loginShellPath(shell: string): Promise<string | null> {
   })
 }
 
+let loginPathOnce: Promise<string | null> | null = null
+
+/**
+ * PATH of the user's interactive login shell, read once per app run: what a background process needs to find
+ * `claude` / `codex` the way a terminal would (PRD F13).
+ */
+export function userLoginPath(shell: string = process.env.SHELL || '/bin/zsh'): Promise<string | null> {
+  loginPathOnce ??= loginShellPath(shell)
+  return loginPathOnce
+}
+
+/** The executable `name` on `pathValue`, or null. */
+export function executableOnPath(pathValue: string, name: string, isExecutable: (path: string) => boolean = isExecutableFile): string | null {
+  for (const dir of pathValue.split(':')) {
+    if (!dir.startsWith('/')) continue
+    const candidate = join(dir, name)
+    if (isExecutable(candidate)) return candidate
+  }
+  return null
+}
+
 let cached: { at: number; result: Promise<AgentAvailability> } | null = null
 
 export function detectAgents(shell: string = process.env.SHELL || '/bin/zsh'): Promise<AgentAvailability> {

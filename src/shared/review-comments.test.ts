@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipCode, commentLocation, MAX_CODE_CHARS, reviewPrompt, sanitizeReviewComments, type ReviewComment } from './review-comments'
+import { clipCode, commentLocation, commentPicked, MAX_CODE_CHARS, replaceReviewComments, reviewCommentFolded, reviewPrompt, sanitizeReviewComments, type ReviewComment } from './review-comments'
 
 const comment = (patch: Partial<ReviewComment> = {}): ReviewComment => ({
   id: 'c1',
@@ -77,5 +77,35 @@ describe('texts', () => {
         '改完后告诉我改了什么。'
       ].join('\n')
     )
+  })
+})
+
+describe('background review comments', () => {
+  const base = { group: 'uncommitted' as const, path: 'a.ts', side: 'new' as const, line: 1, endLine: 1, code: '', text: 't', createdAt: 0 }
+  const mine = { ...base, id: 'mine' }
+  const p1 = { ...base, id: 'p1', origin: 'review' as const, severity: 'P1' as const }
+  const p3 = { ...base, id: 'p3', origin: 'review' as const, severity: 'P3' as const }
+
+  it('folds P2 / P3 until opened, and picks P0 / P1 by default', () => {
+    expect(reviewCommentFolded(p3, {})).toBe(true)
+    expect(reviewCommentFolded(p3, { p3: true })).toBe(false)
+    expect(reviewCommentFolded(p1, {})).toBe(false)
+    expect(reviewCommentFolded(mine, {})).toBe(false)
+    expect(commentPicked(mine)).toBe(true)
+    expect(commentPicked(p1)).toBe(true)
+    expect(commentPicked(p3)).toBe(false)
+    expect(commentPicked({ ...p3, picked: true })).toBe(true)
+    expect(commentPicked({ ...p1, picked: false })).toBe(false)
+  })
+
+  it('replaces the previous review and keeps the user’s comments', () => {
+    const next = { ...p1, id: 'next' }
+    expect(replaceReviewComments([mine, p1, p3], [next]).map((c) => c.id)).toEqual(['mine', 'next'])
+  })
+
+  it('keeps severity, confidence and picked through the workspace file', () => {
+    const saved = sanitizeReviewComments({ '/w': [{ ...p3, confidence: 0.4, picked: true }, { ...mine, picked: false }] }, new Set(['/w']))
+    expect(saved['/w']?.[0]).toMatchObject({ severity: 'P3', confidence: 0.4, picked: true, origin: 'review' })
+    expect(saved['/w']?.[1]).not.toHaveProperty('picked')
   })
 })

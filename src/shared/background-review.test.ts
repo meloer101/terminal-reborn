@@ -16,6 +16,10 @@ import {
   rememberReview,
   reviewArgv,
   REVIEW_OUTPUT_SCHEMA,
+  REVIEW_SEGMENT_CHARS,
+  reviewPromptBudget,
+  severityCounts,
+  stampDiffGroup,
   reviewUserPrompt,
   segmentReviewDiff,
   shouldCancelForDiff,
@@ -97,6 +101,30 @@ describe('segmentReviewDiff', () => {
     const prompt = reviewUserPrompt('rules', diff, null)
     expect(prompt.length).toBe(CODEX_PROMPT_CHAR_LIMIT)
     expect(prompt.length).toBeLessThanOrEqual(CLAUDE_PROMPT_CHAR_LIMIT)
+  })
+
+  it('holds a segment to about half a model window, below either client ceiling', () => {
+    expect(reviewPromptBudget('claude')).toBe(REVIEW_SEGMENT_CHARS)
+    expect(reviewPromptBudget('codex')).toBe(REVIEW_SEGMENT_CHARS)
+    expect(REVIEW_SEGMENT_CHARS).toBeLessThan(CODEX_PROMPT_CHAR_LIMIT)
+  })
+})
+
+describe('stampDiffGroup', () => {
+  it('marks every file, and the comments take the group from the mark', () => {
+    const uncommitted = stampDiffGroup(untrackedFileDiff('a.ts', 'one\n'), 'uncommitted')
+    const committed = stampDiffGroup(untrackedFileDiff('b.ts', 'two\n'), 'committed')
+    expect(uncommitted).toContain('diff --git a/a.ts b/a.ts\n# wavi-group: uncommitted\n')
+    expect(stampDiffGroup('', 'committed')).toBe('')
+    const both = uncommitted + committed
+    const findings = [
+      { path: 'a.ts', startLine: 1, endLine: 1, side: 'new' as const, group: 'committed' as const, severity: 'P2' as const, confidence: 0.5, title: 't', explanation: 'e' },
+      { path: 'b.ts', startLine: 1, endLine: 1, side: 'new' as const, group: 'uncommitted' as const, severity: 'P0' as const, confidence: 0.9, title: 't', explanation: 'e' }
+    ]
+    const comments = findingsToComments(findings, both, 1, 'abcdef0123')
+    expect(comments.map((c) => c.group)).toEqual(['uncommitted', 'committed'])
+    expect(comments[1]?.code).toBe('two')
+    expect(severityCounts(comments)).toBe('P0 1 · P2 1')
   })
 })
 
@@ -197,7 +225,7 @@ describe('reviewArgv', () => {
 
   it('builds a read-only Codex exec command with the schema and output files', () => {
     const argv = reviewArgv({ agent: 'codex', schemaPath: '/tmp/schema.json', outputPath: '/tmp/out.json' })
-    expect(argv).toEqual(['codex', 'exec', '--ephemeral', '--sandbox', 'read-only', '--output-schema', '/tmp/schema.json', '-o', '/tmp/out.json', '--json'])
+    expect(argv).toEqual(['codex', 'exec', '--ephemeral', '--sandbox', 'read-only', '--output-schema', '/tmp/schema.json', '-o', '/tmp/out.json', '--json', '-'])
     expect(argv.join('\n')).not.toMatch(/\.claude|\.codex/)
   })
 })

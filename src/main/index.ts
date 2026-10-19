@@ -25,6 +25,7 @@ import { registerGitWorktreeHandlers } from './git-worktrees'
 import { registerWorktreeCreateHandlers } from './worktree-create'
 import { registerGitMergeHandlers } from './git-merge'
 import { registerRepoScriptHandlers } from './repo-scripts'
+import { registerBackgroundReviewHandlers } from './background-review'
 
 // Before anything reads userData (the single-instance lock included): dev runs, e2e runs (TR_USER_DATA_DIR) and the
 // installed app each get their own profile; the pre-rename "Terminal Reborn" profile moves to Wavi.
@@ -80,6 +81,7 @@ function boot(): void {
   registerWorktreeCreateHandlers()
   registerGitMergeHandlers()
   registerRepoScriptHandlers()
+  registerBackgroundReviewHandlers()
   registerBrowserHandlers()
   registerHookHandlers()
   registerPtyHandlers()
