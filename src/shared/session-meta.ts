@@ -6,14 +6,42 @@
 
 export type UsageVendor = 'claude' | 'codex'
 
-/** How full the session's context window is. */
+/** How full the session's context window is, and what the CLI says about it (Figma 18 ContextPopover). */
 export interface ContextUsage {
   /** 0–100. */
   percent: number
-  /** Tokens in the window and its size, when the agent reports them (for the tooltip). */
+  /** Tokens in the window and its size, when the agent reports them. */
   usedTokens?: number
   windowTokens?: number
+  /** What the window holds now: cached prefix read, cache written this call (Claude), and fresh input. */
+  cacheRead?: number
+  cacheWrite?: number
+  freshInput?: number
+  /** Output tokens over the whole session. */
+  outputTotal?: number
+  /** Claude's own list-price estimate for the session (`cost.total_cost_usd`); not what a subscription pays. */
+  costUsd?: number
+  /** Claude's `model.display_name`. */
+  model?: string
+  /** Claude's prompt cache: warm or cold, and when a warm cache expires (epoch ms). */
+  cacheWarm?: boolean
+  cacheExpiresAt?: number
 }
+
+/** Every optional figure, in the order the popover lists them; also what `sameContext` compares. */
+const CONTEXT_KEYS = [
+  'percent',
+  'usedTokens',
+  'windowTokens',
+  'cacheRead',
+  'cacheWrite',
+  'freshInput',
+  'outputTotal',
+  'costUsd',
+  'model',
+  'cacheWarm',
+  'cacheExpiresAt'
+] as const satisfies readonly (keyof ContextUsage)[]
 
 /** One plan-usage window (5 h, 7 d / weekly). */
 export interface UsageWindow {
@@ -53,6 +81,25 @@ function resetMs(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 1e9 && value < 1e11 ? Math.round(value * 1000) : undefined
 }
 
+/** Epoch seconds, epoch ms or an ISO string -> ms. */
+function timeMs(value: unknown): number | undefined {
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  if (value > 1e9 && value < 1e11) return Math.round(value * 1000)
+  if (value > 1e12 && value < 1e14) return Math.round(value)
+  return undefined
+}
+
+/** Drops the figures a CLI did not give, so readings compare and serialize the same. */
+function compactContext(raw: { [K in keyof ContextUsage]: ContextUsage[K] | undefined } & { percent: number }): ContextUsage {
+  const out: Record<string, unknown> = {}
+  for (const key of CONTEXT_KEYS) if (raw[key] !== undefined) out[key] = raw[key]
+  return out as unknown as ContextUsage
+}
+
 function window(minutes: number, percent: unknown, resetsAt: unknown): UsageWindow | undefined {
   const value = percentOf(percent)
   if (value === undefined) return undefined
@@ -82,11 +129,24 @@ export function parseClaudeStatusLine(payload: unknown, at: number): MetaReading
         ? (tokens(usage.input_tokens) ?? 0) + (tokens(usage.cache_creation_input_tokens) ?? 0) + (tokens(usage.cache_read_input_tokens) ?? 0)
         : undefined
       const usedTokens = used !== undefined && used > 0 ? used : windowTokens !== undefined ? Math.round((percent / 100) * windowTokens) : undefined
-      reading.context = {
+      const cost = isRec(payload.cost) ? payload.cost : null
+      const model = isRec(payload.model) && typeof payload.model.display_name === 'string' ? payload.model.display_name.trim().slice(0, 60) : ''
+      const cache = isRec(payload.prompt_cache) ? payload.prompt_cache : null
+      const costUsd = cost && typeof cost.total_cost_usd === 'number' && Number.isFinite(cost.total_cost_usd) && cost.total_cost_usd >= 0 ? cost.total_cost_usd : undefined
+      const expires = cache ? timeMs(cache.expires_at) : undefined
+      reading.context = compactContext({
         percent,
-        ...(usedTokens !== undefined ? { usedTokens } : {}),
-        ...(windowTokens !== undefined ? { windowTokens } : {})
-      }
+        usedTokens,
+        windowTokens,
+        cacheRead: usage ? tokens(usage.cache_read_input_tokens) : undefined,
+        cacheWrite: usage ? tokens(usage.cache_creation_input_tokens) : undefined,
+        freshInput: usage ? tokens(usage.input_tokens) : undefined,
+        outputTotal: tokens(cw.total_output_tokens),
+        costUsd,
+        model: model || undefined,
+        cacheWarm: cache && typeof cache.warm === 'boolean' ? cache.warm : undefined,
+        cacheExpiresAt: cache?.warm === true ? expires : undefined
+      })
     }
   }
   const limits = payload.rate_limits
@@ -127,9 +187,21 @@ export function parseCodexTokenCount(payload: unknown, at: number): MetaReading 
   const info = payload.info
   if (isRec(info)) {
     const size = tokens(info.model_context_window)
-    const used = isRec(info.last_token_usage) ? tokens(info.last_token_usage.total_tokens) : undefined
+    const last = isRec(info.last_token_usage) ? info.last_token_usage : null
+    const used = last ? tokens(last.total_tokens) : undefined
     if (size !== undefined && size > 0 && used !== undefined) {
-      reading.context = { percent: codexContextPercent(used, size), usedTokens: used, windowTokens: size }
+      // Codex counts cached input inside input_tokens.
+      const input = last ? tokens(last.input_tokens) : undefined
+      const cached = last ? tokens(last.cached_input_tokens) : undefined
+      const total = isRec(info.total_token_usage) ? info.total_token_usage : null
+      reading.context = compactContext({
+        percent: codexContextPercent(used, size),
+        usedTokens: used,
+        windowTokens: size,
+        cacheRead: cached,
+        freshInput: input !== undefined ? Math.max(0, input - (cached ?? 0)) : undefined,
+        outputTotal: total ? tokens(total.output_tokens) : undefined
+      })
     }
   }
   const limits = payload.rate_limits
@@ -167,7 +239,8 @@ export function lastCodexTokenCount(text: string, at: number): MetaReading {
 }
 
 export function sameContext(a: ContextUsage | undefined, b: ContextUsage | undefined): boolean {
-  return a?.percent === b?.percent && a?.usedTokens === b?.usedTokens && a?.windowTokens === b?.windowTokens
+  if (!a || !b) return a === b
+  return CONTEXT_KEYS.every((key) => a[key] === b[key])
 }
 
 /** Same figures (the reading time aside). */
@@ -258,4 +331,255 @@ export function contextDetail(context: ContextUsage): string {
 
 export function isHigh(percent: number): boolean {
   return percent >= HIGH_PERCENT
+}
+
+// ---------------------------------------------------------------------------------------------
+// Pace, history and shares (Figma 18)
+// ---------------------------------------------------------------------------------------------
+
+const MINUTE = 60_000
+/** A projection from the average since the window opened needs at least this much of it behind us. */
+export const PACE_MIN_ELAPSED_MS = 15 * MINUTE
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+function sameDay(a: number, b: number): boolean {
+  const x = new Date(a)
+  const y = new Date(b)
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate()
+}
+
+/** `17:10` today, `10 月 20 日 17:10` on another day. */
+export function formatClock(at: number, now: number): string {
+  const d = new Date(at)
+  const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+  return sameDay(at, now) ? time : `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${time}`
+}
+
+/** `38 分钟`, `2 小时 5 分钟`, `3 天 4 小时`. */
+export function formatDuration(ms: number): string {
+  const minutes = Math.max(1, Math.ceil(ms / MINUTE))
+  if (minutes < 60) return `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return minutes % 60 === 0 ? `${hours} 小时` : `${hours} 小时 ${minutes % 60} 分钟`
+  const days = Math.floor(hours / 24)
+  return hours % 24 === 0 ? `${days} 天` : `${days} 天 ${hours % 24} 小时`
+}
+
+/** How a window is going: how much of its time has passed, and whether the average so far runs out before the reset. */
+export interface WindowPace {
+  /** 0–1 of the window's time behind us; absent when the reset time is unknown. */
+  elapsed?: number
+  exhausted: boolean
+  /** When the average since the window opened reaches 100 %, if that is before the reset. */
+  runsOutAt?: number
+}
+
+export function windowPace(w: UsageWindow, now: number): WindowPace {
+  const exhausted = w.percent >= 100
+  if (w.resetsAt === undefined) return { exhausted }
+  const length = w.minutes * MINUTE
+  const start = w.resetsAt - length
+  const elapsedMs = Math.min(length, Math.max(0, now - start))
+  const pace: WindowPace = { exhausted, elapsed: elapsedMs / length }
+  if (!exhausted && w.percent > 0 && elapsedMs >= PACE_MIN_ELAPSED_MS) {
+    const at = now + ((100 - w.percent) / w.percent) * elapsedMs
+    if (at < w.resetsAt) pace.runsOutAt = Math.round(at)
+  }
+  return pace
+}
+
+/** UsageChip v2 text: `5h 62%`, or `5h 用完 · 14:20 恢复` once the window is used up. */
+export function usageChipText(w: UsageWindow, now: number): string {
+  if (w.percent >= 100) return w.resetsAt !== undefined ? `${windowShort(w.minutes)} 用完 · ${formatClock(w.resetsAt, now)} 恢复` : `${windowShort(w.minutes)} 用完`
+  return `${windowShort(w.minutes)} ${w.percent}%`
+}
+
+/** UsageWindowBlock's last line. */
+export function paceNote(w: UsageWindow, now: number): string {
+  const pace = windowPace(w, now)
+  if (pace.exhausted) return w.resetsAt !== undefined ? `已用完 · 还有 ${formatDuration(w.resetsAt - now)}恢复` : '已用完'
+  if (pace.elapsed === undefined) return ''
+  const elapsed = `时间过了 ${Math.round(pace.elapsed * 100)}%`
+  if (pace.runsOutAt !== undefined) return `${elapsed}，用得比时间快 · 按这个速度约 ${formatClock(pace.runsOutAt, now)} 用完`
+  if (now - (w.resetsAt! - w.minutes * MINUTE) < PACE_MIN_ELAPSED_MS) return elapsed
+  return `${elapsed} · 按这个速度用得完`
+}
+
+/** A Wavi usage alert: one per window per period at each of these levels. */
+export const USAGE_ALERT_LEVELS = [75, 90, 100] as const
+export type UsageAlertLevel = (typeof USAGE_ALERT_LEVELS)[number]
+
+export function usageAlertLevel(percent: number): UsageAlertLevel | 0 {
+  let level: UsageAlertLevel | 0 = 0
+  for (const l of USAGE_ALERT_LEVELS) if (percent >= l) level = l
+  return level
+}
+
+export interface UsageAlert {
+  vendor: UsageVendor
+  minutes: number
+  percent: number
+  level: UsageAlertLevel
+  resetsAt?: number
+}
+
+/** The system notification for an alert. */
+export function usageAlertText(alert: UsageAlert, now: number): { title: string; body: string } {
+  const name = `${VENDOR_LABEL[alert.vendor]} ${windowLabel(alert.vendor, alert.minutes)}额度`
+  const reset = alert.resetsAt
+  if (alert.level === 100) return { title: `${name}已用完`, body: reset !== undefined ? `${formatClock(reset, now)} 恢复` : '等它重置后再继续' }
+  const w: UsageWindow = { minutes: alert.minutes, percent: alert.percent, ...(reset !== undefined ? { resetsAt: reset } : {}) }
+  const pace = windowPace(w, now)
+  const parts = [reset !== undefined ? formatReset(reset, now) : '']
+  if (pace.runsOutAt !== undefined) parts.push(`按这个速度约 ${formatClock(pace.runsOutAt, now)} 用完`)
+  return { title: `${name}已用 ${alert.percent}%`, body: parts.filter(Boolean).join(' · ') }
+}
+
+/** A reading is old when nothing has refreshed it for this long (the popover says it may be out of date). */
+export const STALE_MS = 30 * MINUTE
+
+/** `1 分钟前更新`, or `35 分钟前更新 · 可能不是最新`. */
+export function formatUpdatedNote(at: number, now: number): string {
+  const base = formatUpdated(at, now)
+  return now - at >= STALE_MS ? `${base} · 可能不是最新` : base
+}
+
+/** One finished turn: the tokens in the context window when the agent's last reply of the turn came back. */
+export interface ContextPoint {
+  at: number
+  tokens: number
+}
+
+/** A session's context over its turns, read from the agent's transcript (main · transcript-meter.ts). */
+export interface ContextHistory {
+  /** Finished turns, oldest first, and the turn in progress (or just finished) last. */
+  turns: ContextPoint[]
+  /** When the conversation was compacted. */
+  compactions: number[]
+  /** The window size the transcript states (Codex), for when no statusLine said it. */
+  windowTokens?: number
+}
+
+/** The history as percentages, split where the conversation was compacted. */
+export function contextSegments(history: ContextHistory, windowTokens: number): number[][] {
+  if (windowTokens <= 0) return []
+  const segments: number[][] = [[]]
+  let next = 0
+  const compactions = [...history.compactions].sort((a, b) => a - b)
+  for (const point of history.turns) {
+    while (next < compactions.length && compactions[next]! <= point.at) {
+      next++
+      if (segments[segments.length - 1]!.length > 0) segments.push([])
+    }
+    segments[segments.length - 1]!.push(Math.min(100, Math.max(0, Math.round((point.tokens / windowTokens) * 100))))
+  }
+  return segments.filter((s) => s.length > 0)
+}
+
+/** "大约 N 轮后…" from the average growth of the last few turns since the last compaction. */
+export function contextProjection(segment: readonly number[], options: { minTurns?: number; lookback?: number } = {}): string | null {
+  const minTurns = options.minTurns ?? 3
+  const lookback = options.lookback ?? 5
+  if (segment.length < minTurns) return null
+  const recent = segment.slice(-(lookback + 1))
+  const turns = recent.length - 1
+  const growth = (recent[recent.length - 1]! - recent[0]!) / turns
+  if (growth < 0.5) return null
+  const current = recent[recent.length - 1]!
+  const target = current < HIGH_PERCENT ? HIGH_PERCENT : 100
+  const n = (target - current) / growth
+  if (n > 30) return null
+  const lo = Math.max(1, Math.floor(n))
+  const hi = Math.max(1, Math.ceil(n))
+  const span = lo === hi ? `${lo}` : `${lo}–${hi}`
+  return `按最近 ${turns} 轮的增速，大约 ${span} 轮后${target === 100 ? '用满' : '超过 80%'}`
+}
+
+/** SVG geometry for the ContextPopover sparkline: one path per segment, gaps marked where it was compacted. */
+export function sparkline(
+  segments: readonly (readonly number[])[],
+  width: number,
+  height: number
+): { paths: string[]; breaks: number[]; last: { x: number; y: number } | null; guideY: number } {
+  const total = segments.reduce((n, s) => n + s.length, 0)
+  const guideY = Math.round((height - (HIGH_PERCENT / 100) * height) * 10) / 10
+  if (total === 0) return { paths: [], breaks: [], last: null, guideY }
+  const step = total > 1 ? width / (total - 1) : 0
+  const y = (p: number) => Math.round((height - (p / 100) * height) * 10) / 10
+  const x = (i: number) => Math.round((total > 1 ? i * step : width) * 10) / 10
+  const paths: string[] = []
+  const breaks: number[] = []
+  let i = 0
+  let last: { x: number; y: number } | null = null
+  for (const [s, segment] of segments.entries()) {
+    if (s > 0) breaks.push(Math.round((x(i) - step / 2) * 10) / 10)
+    paths.push(segment.map((p, k) => `${k === 0 ? 'M' : 'L'}${x(i + k)} ${y(p)}`).join(' '))
+    last = { x: x(i + segment.length - 1), y: y(segment[segment.length - 1]!) }
+    i += segment.length
+  }
+  return { paths, breaks, last, guideY }
+}
+
+/** Tokens one session spent in a window: fresh input + cache writes + output (cache reads are left out). */
+export interface SessionSpend {
+  sessionId: string
+  tokens: number
+}
+
+export interface ShareRow {
+  /** Null for the "其他" and "已关闭" lines. */
+  sessionId: string | null
+  title: string
+  project: string
+  percent: number
+}
+
+/**
+ * Who used a vendor's window (Figma 18 SessionShareRow): the top `max` open sessions, then the rest as one line.
+ * Nothing when fewer than two sessions spent anything — a single row says nothing a share could add.
+ */
+export function shareRows(
+  spend: readonly SessionSpend[],
+  labelOf: (sessionId: string) => { title: string; project: string } | null,
+  max = 4
+): ShareRow[] {
+  const used = spend.filter((s) => s.tokens > 0)
+  if (used.length < 2) return []
+  const total = used.reduce((n, s) => n + s.tokens, 0)
+  const open: (SessionSpend & { title: string; project: string })[] = []
+  let closed = 0
+  for (const s of used) {
+    const label = labelOf(s.sessionId)
+    if (label) open.push({ ...s, ...label })
+    else closed += s.tokens
+  }
+  open.sort((a, b) => b.tokens - a.tokens)
+  const shown = open.slice(0, max)
+  const rest = open.slice(max)
+  const rows: ShareRow[] = shown.map((s) => ({ sessionId: s.sessionId, title: s.title, project: s.project, percent: (s.tokens / total) * 100 }))
+  const restTokens = rest.reduce((n, s) => n + s.tokens, 0)
+  if (restTokens > 0) rows.push({ sessionId: null, title: `其他 ${rest.length} 个会话`, project: '', percent: (restTokens / total) * 100 })
+  if (closed > 0) rows.push({ sessionId: null, title: '已关闭的会话', project: '', percent: (closed / total) * 100 })
+  // Whole percents that still add up to 100 (largest remainders get the leftover points).
+  const floors = rows.map((r) => Math.floor(r.percent))
+  let left = 100 - floors.reduce((n, f) => n + f, 0)
+  const order = rows.map((r, i) => ({ i, rest: r.percent - floors[i]! })).sort((a, b) => b.rest - a.rest)
+  for (const { i } of order) {
+    if (left <= 0) break
+    floors[i]!++
+    left--
+  }
+  return rows.map((r, i) => ({ ...r, percent: floors[i]! }))
+}
+
+/** The window the shares are for: the vendor's shortest live one (5 h), where sessions compete. */
+export function shareWindow(usage: VendorUsage, now: number): UsageWindow | null {
+  const live = liveWindows(usage, now).filter((w) => w.resetsAt !== undefined)
+  return live.sort((a, b) => a.minutes - b.minutes)[0] ?? null
+}
+
+/** `$3.42`, `$0.08`, `$128`. */
+export function formatUsd(value: number): string {
+  return value >= 100 ? `$${Math.round(value)}` : `$${value.toFixed(2)}`
 }

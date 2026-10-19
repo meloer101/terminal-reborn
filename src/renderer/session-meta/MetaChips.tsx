@@ -1,34 +1,47 @@
-// Session metrics in the session header and the overview (PRD F11 / F12, Figma 17): TodoChip 261:9961 + TodoPopover,
-// ContextChip 261:9968 + ContextTooltip 261:10030, UsageChip 269:10194 + UsagePopover 269:10201. Numbers only — no
-// status colors; ≥ 80 % is drawn heavier. Without data a chip is not drawn at all.
+// Session metrics in the session header and the overview (PRD F11 / F12, Figma 17 + 18): TodoChip 261:9961 +
+// TodoPopover, ContextChip v2 274:10418 + ContextPopover 276:10395, UsageChip v2 274:10443 + UsagePopover v2
+// 277:10437. Neutral meters and numbers only — no status colors; ≥ 80 % is drawn heavier. No data, no chip.
 import { Check } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
-  contextDetail,
+  contextProjection,
+  contextSegments,
+  formatClock,
+  formatDuration,
   formatReset,
-  formatUpdated,
+  formatTokens,
+  formatUpdatedNote,
+  formatUsd,
+  HIGH_PERCENT,
   isHigh,
   liveWindows,
   orderVendors,
+  paceNote,
+  shareRows,
+  shareWindow,
+  sparkline,
   topWindow,
+  usageChipText,
   VENDOR_LABEL,
   windowLabel,
-  windowShort,
+  windowPace,
+  type ContextHistory,
   type ContextUsage,
+  type SessionSpend,
   type UsageVendor,
+  type UsageWindow,
   type VendorUsage
 } from '@shared/session-meta'
 import { todoProgress, todoRowState, type TodoItem } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
 import { insertSlashCommand } from '../session-io'
 import { subscribeClock } from '../sidebar/clock'
+import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { Popover } from './Popover'
 import { useSessionMeta } from './store'
 import styles from './SessionMeta.module.css'
 
-/** ContextTooltip appears after the pointer rests this long (Figma 17 ContextTooltip). */
-const TOOLTIP_DELAY_MS = 500
 const CLOCK_MS = 15_000
 
 /** "Now" on the shared 15 s clock: usage windows that reset drop out, "N 分钟前更新" moves on. */
@@ -130,83 +143,196 @@ export function TodoLine({ sessionId }: { sessionId: SessionId }) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Meter
+// ---------------------------------------------------------------------------------------------
+
+/** Figma 18 MiniMeter 274:10397: used, and (for plan windows) a tick where the window's time stands. */
+function MiniMeter({ percent, elapsed }: { percent: number; elapsed?: number | undefined }) {
+  return (
+    <span className={styles.meter} aria-hidden>
+      <span className={styles.meterUsed} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
+      {elapsed !== undefined && <span className={styles.meterTick} style={{ left: `${Math.round(elapsed * 100)}%` }} />}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------------------------
 
-/** `context 62%`; at 80 % and above the number is heavier and /compact puts the command into the input line. */
+/**
+ * ContextChip v2 (Figma 18 274:10418): always shown once the agent reported it; a click opens ContextPopover.
+ * At 80 % and above the number is heavier and /compact puts the command into the input line.
+ */
 export function ContextChip({ sessionId, context, compact = true }: { sessionId: SessionId; context: ContextUsage; compact?: boolean }) {
   const high = isHigh(context.percent)
-  const [tip, setTip] = useState(false)
-  const anchor = useRef<HTMLSpanElement>(null)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current)
-  }, [])
-  const enter = () => {
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => {
-      timer.current = null
-      setTip(true)
-    }, TOOLTIP_DELAY_MS)
-  }
-  const leave = () => {
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = null
-    setTip(false)
-  }
+  const [open, setOpen] = useState(false)
+  const anchor = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
   return (
-    <span
-      ref={anchor}
-      className={styles.chip}
-      data-level={high ? 'high' : 'normal'}
-      data-testid="context-chip"
-      onPointerEnter={enter}
-      // Arms again if the pointer was already inside when the chip appeared (no pointerenter then).
-      onPointerMove={() => !tip && timer.current === null && enter()}
-      onPointerLeave={leave}
-    >
-      <span className={styles.contextValue}>context {context.percent}%</span>
+    <span className={styles.chipGroup} data-testid="context-chip" data-level={high ? 'high' : 'normal'}>
+      <button
+        ref={anchor}
+        type="button"
+        className={styles.chip}
+        data-level={high ? 'high' : 'normal'}
+        data-open={open}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`context 已用 ${context.percent}%`}
+        onMouseDown={keepFocus}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={styles.contextLabel}>context</span>
+        <MiniMeter percent={context.percent} />
+        <span className={styles.contextValue}>{context.percent}%</span>
+      </button>
       {high && compact && (
         <button
           type="button"
           className={styles.compact}
           title="把 /compact 放进输入行（不回车）"
           onMouseDown={keepFocus}
-          onClick={() => {
-            leave()
-            void insertSlashCommand(sessionId, '/compact')
-          }}
+          onClick={() => void insertSlashCommand(sessionId, '/compact')}
         >
           /compact
         </button>
       )}
-      {tip && <ContextTooltip anchor={anchor} context={context} hint={high && compact} />}
+      {open && (
+        <Popover anchor={anchor} label="context" onClose={close} testId="context-popover">
+          <ContextPanel sessionId={sessionId} context={context} compact={compact} onCompact={close} />
+        </Popover>
+      )}
     </span>
   )
 }
 
-/** Figma ContextTooltip 261:10030: used / window, and what /compact does. */
-function ContextTooltip({ anchor, context, hint }: { anchor: RefObject<HTMLElement | null>; context: ContextUsage; hint: boolean }) {
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
+const HISTORY_REFRESH_MS = 3_000
+const SPARK_WIDTH = 308
+const SPARK_HEIGHT = 56
+
+/** Figma 18 ContextPopover 276:10395: how full, how it got there, what is in it. */
+function ContextPanel({ sessionId, context, compact, onCompact }: { sessionId: SessionId; context: ContextUsage; compact: boolean; onCompact(): void }) {
+  const [history, setHistory] = useState<ContextHistory | null>(null)
+  // Main reads only what the transcript gained since last time, so the open panel simply asks again now and then
+  // (and at once when the figure moves).
   useEffect(() => {
-    const box = anchor.current?.getBoundingClientRect()
-    const width = ref.current?.offsetWidth ?? 0
-    if (!box) return
-    setPosition({ left: Math.max(8, Math.min(box.left, window.innerWidth - 8 - width)), top: box.bottom + 4 })
-  }, [anchor])
+    let live = true
+    const load = () =>
+      void window.tr.agent.getContextHistory(sessionId).then((next) => {
+        if (live) setHistory(next)
+      })
+    load()
+    const timer = setInterval(load, HISTORY_REFRESH_MS)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [sessionId, context.percent])
+  const window_ = context.windowTokens ?? history?.windowTokens
+  const segments = history && window_ ? contextSegments(history, window_) : []
+  const turns = segments.reduce((n, s) => n + s.length, 0)
+  const lastSegment = segments[segments.length - 1] ?? []
+  const delta = lastSegment.length >= 2 ? lastSegment[lastSegment.length - 1]! - lastSegment[lastSegment.length - 2]! : null
+  const projection = contextProjection(lastSegment)
+  const details = contextRows(context)
+  const high = isHigh(context.percent)
   return (
-    <div
-      ref={ref}
-      className={styles.tooltip}
-      role="tooltip"
-      data-testid="context-tooltip"
-      style={position ? { left: position.left, top: position.top } : { visibility: 'hidden' }}
-    >
-      <span className={styles.tooltipMain}>{contextDetail(context)}</span>
-      {hint && <span className={styles.tooltipHint}>点 /compact 把命令放进输入行，回车后压缩</span>}
+    <div className={styles.contextPanel}>
+      <div className={styles.popoverHeader}>
+        <span className={styles.popoverTitle}>context</span>
+        {(context.model || context.windowTokens) && (
+          <span className={styles.popoverMeta}>
+            {[context.model, context.windowTokens ? `${formatTokens(context.windowTokens)} 窗口` : ''].filter(Boolean).join(' · ')}
+          </span>
+        )}
+      </div>
+      <div className={styles.figure}>
+        <div className={styles.figureRow}>
+          <span className={styles.figureUsed}>{context.usedTokens !== undefined ? formatTokens(context.usedTokens) : `${context.percent}%`}</span>
+          {context.usedTokens !== undefined && context.windowTokens !== undefined && (
+            <span className={styles.figureWindow}>/ {formatTokens(context.windowTokens)}</span>
+          )}
+          <span className={styles.figurePercent} data-level={high ? 'high' : 'normal'}>
+            {context.percent}%
+          </span>
+        </div>
+        <span className={styles.bigBar} data-level={high ? 'high' : 'normal'} aria-hidden>
+          <span className={styles.bigBarUsed} style={{ width: `${context.percent}%` }} />
+          <span className={styles.bigBarMark} style={{ left: `${HIGH_PERCENT}%` }} />
+        </span>
+        <span className={styles.figureNote}>刻度 = 80%，超过后建议 /compact</span>
+      </div>
+      {turns >= 2 && (
+        <div className={styles.trend} data-testid="context-trend">
+          <div className={styles.trendHead}>
+            <span className={styles.trendTitle}>最近 {turns} 轮</span>
+            {delta !== null && <span className={styles.trendDelta}>本轮 {delta >= 0 ? '+' : '−'}{Math.abs(delta)}%</span>}
+          </div>
+          <Sparkline segments={segments} />
+          {segments.length > 1 && <span className={styles.trendNote}>虚线处压缩过</span>}
+          {projection && <span className={styles.projection}>{projection}</span>}
+        </div>
+      )}
+      {details.length > 0 && (
+        <dl className={styles.details}>
+          {details.map(([key, value]) => (
+            <div key={key} className={styles.detailRow}>
+              <dt>{key}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {compact && (
+        <div className={styles.contextFooter}>
+          <span>放进输入行，不会回车</span>
+          <button
+            type="button"
+            className={styles.footerButton}
+            onMouseDown={keepFocus}
+            onClick={() => {
+              onCompact()
+              void insertSlashCommand(sessionId, '/compact')
+            }}
+          >
+            /compact
+          </button>
+        </div>
+      )}
     </div>
   )
+}
+
+function Sparkline({ segments }: { segments: number[][] }) {
+  const { paths, breaks, last, guideY } = sparkline(segments, SPARK_WIDTH, SPARK_HEIGHT)
+  return (
+    <svg className={styles.sparkline} width={SPARK_WIDTH} height={SPARK_HEIGHT} viewBox={`-3 -3 ${SPARK_WIDTH + 6} ${SPARK_HEIGHT + 6}`} aria-hidden>
+      <line className={styles.sparkGuide} x1={0} x2={SPARK_WIDTH} y1={guideY} y2={guideY} />
+      {breaks.map((x) => (
+        <line key={x} className={styles.sparkBreak} x1={x} x2={x} y1={0} y2={SPARK_HEIGHT} />
+      ))}
+      {paths.map((d, i) => (
+        <path key={i} className={styles.sparkLine} d={d} />
+      ))}
+      {last && <circle className={styles.sparkNow} cx={last.x} cy={last.y} r={2.5} />}
+    </svg>
+  )
+}
+
+/** Only the figures the CLI gave, in Figma order. */
+function contextRows(context: ContextUsage): [string, string][] {
+  const rows: [string, string][] = []
+  if (context.cacheRead !== undefined) rows.push(['缓存读取', formatTokens(context.cacheRead)])
+  if (context.cacheWrite !== undefined) rows.push(['缓存写入', formatTokens(context.cacheWrite)])
+  if (context.freshInput !== undefined) rows.push(['新输入', formatTokens(context.freshInput)])
+  if (context.outputTotal !== undefined) rows.push(['本会话输出', formatTokens(context.outputTotal)])
+  if (context.cacheWarm !== undefined) {
+    const left = context.cacheExpiresAt !== undefined ? context.cacheExpiresAt - Date.now() : undefined
+    rows.push(['提示缓存', context.cacheWarm ? (left !== undefined && left > 0 ? `热 · ${formatDuration(left)}后过期` : '热') : '冷'])
+  }
+  if (context.costUsd !== undefined) rows.push(['按 API 价折算', formatUsd(context.costUsd)])
+  return rows
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -214,42 +340,56 @@ function ContextTooltip({ anchor, context, hint }: { anchor: RefObject<HTMLEleme
 // ---------------------------------------------------------------------------------------------
 
 /**
- * One vendor's most used window: `Claude 5h 13%`. Clicking lists every vendor (the current session's first).
- * `current` is the vendor the surrounding view belongs to (null on the overview).
+ * UsageChip v2 (Figma 18 274:10443): one vendor's most used window with a tick for its elapsed time, or
+ * `5h 用完 · 14:20 恢复`. Clicking lists every vendor. `current` is the view's vendor (null on the overview);
+ * with `opensOnRequest` it also opens when a usage notification was clicked (store · usageOpenPending).
  */
-export function UsageChip({ usage, current, all }: { usage: VendorUsage; current: UsageVendor | null; all: VendorUsage[] }) {
+export function UsageChip({ usage, current, all, opensOnRequest = false }: { usage: VendorUsage; current: UsageVendor | null; all: VendorUsage[]; opensOnRequest?: boolean }) {
   const now = useMetaNow()
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => setOpen(false), [])
+  useEffect(() => {
+    if (!opensOnRequest) return
+    const take = () => {
+      if (!useSessionMeta.getState().usageOpenPending) return
+      useSessionMeta.getState().consumeUsageOpen()
+      setOpen(true)
+    }
+    const off = useSessionMeta.subscribe(take)
+    // The request may have come before this chip mounted (the click also switched to the overview).
+    queueMicrotask(take)
+    return off
+  }, [opensOnRequest])
   const top = topWindow(usage, now)
   if (!top) return null
   const label = VENDOR_LABEL[usage.vendor]
+  const pace = windowPace(top, now)
+  const level = pace.exhausted ? 'exhausted' : isHigh(top.percent) ? 'high' : 'normal'
   return (
     <>
       <button
         ref={anchor}
         type="button"
         className={`${styles.chip} ${styles.usageChip}`}
-        data-level={isHigh(top.percent) ? 'high' : 'normal'}
+        data-level={level}
         data-open={open}
         data-testid={`usage-chip-${usage.vendor}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${label} 额度 ${windowLabel(usage.vendor, top.minutes)}已用 ${top.percent}%`}
+        aria-label={`${label} 额度 ${windowLabel(usage.vendor, top.minutes)}${pace.exhausted ? '已用完' : `已用 ${top.percent}%`}`}
         onMouseDown={keepFocus}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={styles.usageVendor} data-part="usage-vendor">
           {label}
         </span>
-        <span className={styles.usageValue}>
-          {windowShort(top.minutes)} {top.percent}%
-        </span>
+        {!pace.exhausted && <MiniMeter percent={top.percent} elapsed={pace.elapsed} />}
+        <span className={styles.usageValue}>{usageChipText(top, now)}</span>
       </button>
       {open && (
         <Popover anchor={anchor} label="额度" onClose={close} testId="usage-popover">
-          <UsageList all={all} current={current} now={now} />
+          <UsageList all={all} current={current} now={now} onPick={close} />
         </Popover>
       )}
     </>
@@ -258,15 +398,17 @@ export function UsageChip({ usage, current, all }: { usage: VendorUsage; current
 
 const FOOTER_SOURCE: Record<UsageVendor, string> = { claude: 'Claude 来自 statusLine', codex: 'Codex 来自会话日志' }
 
-/** Figma UsagePopover 269:10201. */
-function UsageList({ all, current, now }: { all: VendorUsage[]; current: UsageVendor | null; now: number }) {
+/** Figma 18 UsagePopover v2 277:10437. */
+function UsageList({ all, current, now, onPick }: { all: VendorUsage[]; current: UsageVendor | null; now: number; onPick(): void }) {
   const vendors = orderVendors(all, current, now)
   const newest = Math.max(...vendors.map((u) => u.at))
   return (
-    <>
+    <div className={styles.usagePanel}>
       <div className={styles.popoverHeader}>
         <span className={styles.popoverTitle}>额度</span>
-        <span className={styles.popoverMeta}>{formatUpdated(newest, now)}</span>
+        <span className={styles.popoverMeta} data-testid="usage-updated">
+          {formatUpdatedNote(newest, now)}
+        </span>
       </div>
       {vendors.map((usage) => (
         <section key={usage.vendor} className={styles.vendor} aria-label={VENDOR_LABEL[usage.vendor]}>
@@ -275,21 +417,103 @@ function UsageList({ all, current, now }: { all: VendorUsage[]; current: UsageVe
             {usage.vendor === current && <span className={styles.vendorCurrent}>当前会话</span>}
           </div>
           {liveWindows(usage, now).map((w) => (
-            <div key={w.minutes} className={styles.window} data-level={isHigh(w.percent) ? 'high' : 'normal'}>
-              <span className={styles.windowLabel}>{windowLabel(usage.vendor, w.minutes)}</span>
-              <span className={styles.windowBar} aria-hidden>
-                <span className={styles.windowUsed} style={{ width: `${w.percent}%` }} />
-              </span>
-              <span className={styles.windowValue}>{w.percent}%</span>
-              <span className={styles.windowReset}>{w.resetsAt !== undefined ? formatReset(w.resetsAt, now) : ''}</span>
-            </div>
+            <WindowBlock key={w.minutes} vendor={usage.vendor} w={w} now={now} />
           ))}
+          <Shares usage={usage} now={now} onPick={onPick} />
         </section>
       ))}
-      <p className={styles.popoverFooter}>
-        {vendors.map((u) => FOOTER_SOURCE[u.vendor]).join('，')}；登录同一账号的会话共用
-      </p>
-    </>
+      <p className={styles.popoverFooter}>只统计 Wavi 里的会话 · {vendors.map((u) => FOOTER_SOURCE[u.vendor]).join('，')}</p>
+    </div>
+  )
+}
+
+/** Figma 18 UsageWindowBlock 277:10429: name · % · reset, a bar with the elapsed tick, and how it is going. */
+function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; now: number }) {
+  const pace = windowPace(w, now)
+  const level = pace.exhausted ? 'exhausted' : pace.runsOutAt !== undefined || isHigh(w.percent) ? 'ahead' : 'normal'
+  const note = paceNote(w, now)
+  return (
+    <div className={styles.windowBlock} data-level={level} data-testid={`usage-window-${vendor}-${w.minutes}`}>
+      <div className={styles.windowHead}>
+        <span className={styles.windowLabel}>{windowLabel(vendor, w.minutes)}</span>
+        <span className={styles.windowValue}>{w.percent}%</span>
+        <span className={styles.windowReset}>
+          {w.resetsAt !== undefined ? (pace.exhausted ? `${formatClock(w.resetsAt, now)} 恢复` : formatReset(w.resetsAt, now)) : ''}
+        </span>
+      </div>
+      <span className={styles.bigBar} aria-hidden>
+        <span className={styles.bigBarUsed} style={{ width: `${Math.min(100, w.percent)}%` }} />
+        {!pace.exhausted && pace.elapsed !== undefined && <span className={styles.bigBarTick} style={{ left: `${Math.round(pace.elapsed * 100)}%` }} />}
+      </span>
+      {note && <span className={styles.windowNote}>{note}</span>}
+    </div>
+  )
+}
+
+/** Figma 18 SessionShareRow 277:10430: who used the vendor's shortest window, by tokens. */
+function Shares({ usage, now, onPick }: { usage: VendorUsage; now: number; onPick(): void }) {
+  const w = shareWindow(usage, now)
+  const since = w?.resetsAt !== undefined ? w.resetsAt - w.minutes * 60_000 : null
+  const [spend, setSpend] = useState<SessionSpend[] | null>(null)
+  useEffect(() => {
+    if (since === null) return
+    let live = true
+    void window.tr.agent.getUsageShares(usage.vendor, since).then((next) => {
+      if (live) setSpend(next)
+    })
+    return () => {
+      live = false
+    }
+  }, [usage.vendor, since, usage.at])
+  const sessions = useWorkspace((s) => s.sessions)
+  const worktrees = useWorkspace((s) => s.worktrees)
+  const projects = useWorkspace((s) => s.projects)
+  const setActiveSession = useWorkspace((s) => s.setActiveSession)
+  if (!w || !spend) return null
+  const rows = shareRows(spend, (id) => {
+    const session = sessions.find((x) => x.id === id)
+    if (!session) return null
+    const worktree = worktrees.find((x) => x.id === session.worktreeId)
+    const project = projects.find((x) => x.id === worktree?.projectId)
+    return { title: session.title, project: project?.name ?? '' }
+  })
+  if (rows.length === 0) return null
+  return (
+    <div className={styles.shares} data-testid={`usage-shares-${usage.vendor}`}>
+      <div className={styles.sharesHead}>
+        <span className={styles.sharesTitle}>这 {windowLabel(usage.vendor, w.minutes)}里各会话的用量</span>
+        <span className={styles.sharesNote}>按 token 估算</span>
+      </div>
+      {rows.map((row) => {
+        const body = (
+          <>
+            <span className={styles.shareTitle}>{row.title}</span>
+            <span className={styles.shareProject}>{row.project}</span>
+            <span className={styles.shareBar} aria-hidden>
+              <span className={styles.shareUsed} style={{ width: `${row.percent}%` }} />
+            </span>
+            <span className={styles.sharePercent}>{row.percent}%</span>
+          </>
+        )
+        return row.sessionId ? (
+          <button
+            key={row.sessionId}
+            type="button"
+            className={styles.shareRow}
+            onClick={() => {
+              onPick()
+              setActiveSession(row.sessionId!)
+            }}
+          >
+            {body}
+          </button>
+        ) : (
+          <div key={row.title} className={styles.shareRow} data-muted>
+            {body}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

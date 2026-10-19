@@ -1,5 +1,5 @@
-/* Session metrics (Figma 17 · TodoChip 261:9961 · ContextChip 261:9968 · UsageChip 269:10194 and their popovers).
-   Numbers only, no status colors: a high figure is heavier type in text/primary. */
+/* Session metrics (Figma 17 · TodoChip 261:9961; Figma 18 · ContextChip v2 274:10418 · UsageChip v2 274:10443 and
+   their popovers). Neutral meters and numbers, no status colors: a high figure is heavier type in text/primary. */
 
 /* Figma 17A "Meta": 4 between chips, 12 before the pane switcher (the tools' own 8 inset is folded in). */
 .headerChips {
@@ -63,14 +63,56 @@ button.chip:hover {
   color: var(--text-tertiary);
 }
 
-/* ContextChip: high = heavier number in text/primary, and /compact. */
-.contextValue {
+/* ContextChip v2: label · meter · number; high = heavier number and meter in text/primary, then /compact. */
+.chipGroup {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.contextLabel {
+  font: var(--text-caption);
   color: var(--text-tertiary);
+}
+
+.contextValue {
+  color: var(--text-secondary);
 }
 
 .chip[data-level='high'] .contextValue {
   font: var(--text-mono-s-medium);
   color: var(--text-primary);
+}
+
+.chip[data-level='high'] .meterUsed,
+.usageChip[data-level='high'] .meterUsed {
+  background: var(--text-primary);
+}
+
+/* MiniMeter 274:10397: 28 × 4; the tick (plan windows) is how much of the window's time has passed. */
+.meter {
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-default);
+}
+
+.meterUsed {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--text-secondary);
+}
+
+.meterTick {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 8px;
+  background: var(--text-primary);
 }
 
 .compact {
@@ -95,10 +137,11 @@ button.chip:hover {
 }
 
 .usageValue {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
-.usageChip[data-level='high'] .usageValue {
+.usageChip[data-level='high'] .usageValue,
+.usageChip[data-level='exhausted'] .usageValue {
   font: var(--text-mono-s-medium);
   color: var(--text-primary);
 }
@@ -222,38 +265,21 @@ button.chip:hover {
   background: var(--text-secondary);
 }
 
-/* ContextTooltip 261:10030. */
-.tooltip {
-  position: fixed;
-  z-index: 260;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-popover);
-  box-shadow: var(--shadow-overlay);
-  white-space: nowrap;
-  pointer-events: none;
+/* UsagePopover v2 (360) and ContextPopover (340). */
+.popover:has(.usagePanel) {
+  width: 360px;
 }
 
-.tooltipMain {
-  font: var(--text-caption-strong);
-  color: var(--text-primary);
-}
-
-.tooltipHint {
-  font: var(--text-caption);
-  color: var(--text-tertiary);
+.popover:has(.contextPanel) {
+  width: 340px;
 }
 
 /* UsagePopover: one section per vendor; the second and later ones start with a hairline. */
 .vendor {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: var(--space-8) var(--space-16);
+  gap: 14px;
+  padding: var(--space-12) var(--space-16);
 }
 
 .vendor + .vendor {
@@ -273,62 +299,6 @@ button.chip:hover {
   color: var(--text-tertiary);
 }
 
-/* UsageWindowRow 269:10195: name 48 · bar 88 · value 36 · reset. */
-.window {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  height: 20px;
-}
-
-.windowLabel {
-  flex: none;
-  width: 48px;
-  font: var(--text-caption);
-  color: var(--text-secondary);
-}
-
-.windowBar {
-  flex: none;
-  position: relative;
-  width: 88px;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--border-default);
-}
-
-.windowUsed {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--text-secondary);
-}
-
-.window[data-level='high'] .windowUsed {
-  background: var(--text-primary);
-}
-
-.windowValue {
-  flex: none;
-  width: 36px;
-  text-align: right;
-  font: var(--text-mono-s);
-  color: var(--text-primary);
-}
-
-.window[data-level='high'] .windowValue {
-  font: var(--text-mono-s-medium);
-}
-
-.windowReset {
-  flex: 1;
-  min-width: 0;
-  text-align: right;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
 /* Overview top bar: one UsageChip per vendor (Figma 17C PlanUsage), 28 before the filter. */
 .planUsage {
   flex: none;
@@ -337,4 +307,360 @@ button.chip:hover {
   gap: var(--space-4);
   margin-right: var(--space-16);
   -webkit-app-region: no-drag;
+}
+
+/* ---- Figma 18 · ContextPopover 276:10395 ---- */
+.contextPanel {
+  display: flex;
+  flex-direction: column;
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: 0 var(--space-16) var(--space-12);
+}
+
+.figureRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.figureUsed {
+  font: var(--text-title-m);
+  color: var(--text-primary);
+}
+
+.figureWindow {
+  flex: 1;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.figurePercent {
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+}
+
+.figurePercent[data-level='high'] {
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+}
+
+.figureNote {
+  align-self: flex-end;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* A 6-high bar inside a 12-high box, so the 80 % mark / elapsed tick can stand out above and below. */
+.bigBar {
+  position: relative;
+  display: block;
+  height: 12px;
+}
+
+.bigBar::before {
+  content: '';
+  position: absolute;
+  inset: 3px 0;
+  border-radius: 3px;
+  background: var(--border-default);
+}
+
+.bigBarUsed {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--text-secondary);
+}
+
+.bigBar[data-level='high'] .bigBarUsed,
+.windowBlock[data-level='ahead'] .bigBarUsed,
+.windowBlock[data-level='exhausted'] .bigBarUsed {
+  background: var(--text-primary);
+}
+
+/* The 80 % mark is a gap cut through the bar in the popover's own color. */
+.bigBarMark {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 12px;
+  background: var(--bg-popover);
+}
+
+.bigBarTick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 12px;
+  background: var(--text-primary);
+}
+
+.trend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.trendHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.trendTitle {
+  flex: 1;
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.trendDelta {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.sparkline {
+  display: block;
+  overflow: visible;
+}
+
+.sparkGuide,
+.sparkBreak {
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.sparkGuide {
+  stroke: var(--border-default);
+}
+
+.sparkBreak {
+  stroke: var(--border-strong);
+}
+
+.sparkLine {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sparkNow {
+  fill: var(--text-primary);
+}
+
+.trendNote {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.projection {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: var(--space-12) var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.detailRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.detailRow dt {
+  flex: 1;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.detailRow dd {
+  margin: 0;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+}
+
+.contextFooter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.contextFooter > span {
+  flex: 1;
+}
+
+.footerButton {
+  padding: var(--space-4) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-mono-s);
+  cursor: default;
+}
+
+.footerButton:hover {
+  background: var(--bg-hover);
+}
+
+.footerButton:focus-visible,
+.shareRow:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ---- Figma 18 · UsagePopover v2 277:10437 ---- */
+.usagePanel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* UsageWindowBlock 277:10429: name · % · reset, the bar, how it is going. */
+.windowBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.windowHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.windowLabel {
+  flex: 1;
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.windowValue {
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+}
+
+.windowReset {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.windowNote {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.windowBlock[data-level='ahead'] .windowNote,
+.windowBlock[data-level='exhausted'] .windowNote {
+  color: var(--text-secondary);
+}
+
+/* SessionShareRow 277:10430: title · project · share bar 64 · %. */
+.shares {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sharesHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding-bottom: var(--space-4);
+}
+
+.sharesTitle {
+  flex: 1;
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.sharesNote {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.shareRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 24px;
+  margin: 0 calc(-1 * var(--space-4));
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: default;
+}
+
+button.shareRow:hover {
+  background: var(--bg-hover);
+}
+
+.shareTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
+
+.shareRow[data-muted] .shareTitle {
+  color: var(--text-secondary);
+}
+
+.shareProject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.shareBar {
+  flex: none;
+  position: relative;
+  width: 64px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border-default);
+}
+
+.shareUsed {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text-secondary);
+}
+
+.sharePercent {
+  flex: none;
+  width: 32px;
+  text-align: right;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
 }

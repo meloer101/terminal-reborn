@@ -53,12 +53,19 @@ export interface ArchiveSettings {
   afterMerge: boolean
 }
 
+/** 设置 · 自动化 · 额度提醒 (PRD F11, Figma 18D). On by default: it only notifies. */
+export interface AlertSettings {
+  /** A plan window crossed 75 % / 90 % / used up: one system notification each, per period. */
+  usage: boolean
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
   ports: PortSettings
   review: ReviewSettings
   archive: ArchiveSettings
+  alerts: AlertSettings
 }
 
 export interface SettingsPatch {
@@ -66,6 +73,7 @@ export interface SettingsPatch {
   ports?: Partial<PortSettings>
   review?: Partial<ReviewSettings>
   archive?: Partial<ArchiveSettings>
+  alerts?: Partial<AlertSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -93,7 +101,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     customRules: '',
     model: ''
   },
-  archive: { afterMerge: false }
+  archive: { afterMerge: false },
+  alerts: { usage: true }
 }
 
 const MAX_REVIEW_RULES = 8000
@@ -158,12 +167,14 @@ function review(value: unknown): ReviewSettings {
 export function sanitizeSettings(raw: unknown): AppSettings {
   const v = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
   const a = typeof v.archive === 'object' && v.archive !== null ? (v.archive as Record<string, unknown>) : {}
+  const al = typeof v.alerts === 'object' && v.alerts !== null ? (v.alerts as Record<string, unknown>) : {}
   return {
     version: 1,
     appearance: appearance(v.appearance),
     ports: ports(v.ports),
     review: review(v.review),
-    archive: { afterMerge: typeof a.afterMerge === 'boolean' ? a.afterMerge : DEFAULT_SETTINGS.archive.afterMerge }
+    archive: { afterMerge: typeof a.afterMerge === 'boolean' ? a.afterMerge : DEFAULT_SETTINGS.archive.afterMerge },
+    alerts: { usage: typeof al.usage === 'boolean' ? al.usage : DEFAULT_SETTINGS.alerts.usage }
   }
 }
 
@@ -175,5 +186,6 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const nextPorts = typeof p.ports === 'object' && p.ports !== null ? { ...current.ports, ...(p.ports as object) } : current.ports
   const nextReview = typeof p.review === 'object' && p.review !== null ? { ...current.review, ...(p.review as object) } : current.review
   const nextArchive = typeof p.archive === 'object' && p.archive !== null ? { ...current.archive, ...(p.archive as object) } : current.archive
-  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview, archive: nextArchive })
+  const nextAlerts = typeof p.alerts === 'object' && p.alerts !== null ? { ...current.alerts, ...(p.alerts as object) } : current.alerts
+  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview, archive: nextArchive, alerts: nextAlerts })
 }
