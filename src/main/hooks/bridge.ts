@@ -29,6 +29,12 @@ interface SessionMeta {
 
 type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
 
+/** Something that follows a session's hook traffic until the session ends. */
+interface HookObserver {
+  observe(sessionId: string, agent: HookAgent, event: string, payload: unknown): void
+  forget(sessionId: string): void
+}
+
 export class HookBridge {
   private readonly sessions = new Set<string>()
   private readonly questions = new Map<string, QuestionPrompt>()
@@ -51,7 +57,9 @@ export class HookBridge {
       /** Follows hook traffic to report the agent's own session title (./agent-title.ts). */
       titles?: Pick<AgentTitleWatcher, 'observe' | 'forget'>
       /** Follows Codex hooks to read context and plan usage from its rollout (./codex-usage.ts). */
-      rollouts?: { observe(sessionId: string, agent: HookAgent, event: string, payload: unknown): void; forget(sessionId: string): void }
+      rollouts?: HookObserver
+      /** Follows every agent's transcript for context history and token spend (./transcript-meter.ts). */
+      transcripts?: HookObserver
     } = {}
   ) {
     this.registry = new PermissionRegistry((resolution) => emitter.resolved(resolution), options.scheduler, options.permissionTimeoutMs)
@@ -82,6 +90,7 @@ export class HookBridge {
     this.resolveQuestion(sessionId, 'session-ended')
     this.options.titles?.forget(sessionId)
     this.options.rollouts?.forget(sessionId)
+    this.options.transcripts?.forget(sessionId)
     this.meta.delete(sessionId)
     this.agents.delete(sessionId)
     this.sessions.delete(sessionId)
@@ -150,6 +159,7 @@ export class HookBridge {
 
     this.options.titles?.observe(sessionId, agent, event, request.payload)
     this.options.rollouts?.observe(sessionId, agent, event, request.payload)
+    this.options.transcripts?.observe(sessionId, agent, event, request.payload)
     this.agents.set(sessionId, agent)
     const at = request.receivedAt ?? this.now()
     const normalized = normalizeHook(agent, event, request.payload, at)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { VendorUsage } from '@shared/session-meta'
-import { parseStoredUsage, UNCHANGED_REFRESH_MS, UsageStore } from './usage-store'
+import type { UsageAlert, VendorUsage } from '@shared/session-meta'
+import { crossedAlert, parseStoredMarks, parseStoredUsage, UNCHANGED_REFRESH_MS, UsageStore, type AlertMark } from './usage-store'
 
 const claude = (percent: number, at: number): VendorUsage => ({ vendor: 'claude', at, windows: [{ minutes: 300, percent, resetsAt: 1_800_000_000_000 }] })
 
@@ -45,5 +45,55 @@ describe('parseStoredUsage', () => {
         { vendor: 'claude', at: 2, windows: [{ minutes: 300, percent: 5 }] }
       ])
     ).toEqual([{ vendor: 'claude', at: 1, windows: [{ minutes: 300, percent: 9 }] }])
+  })
+})
+
+describe('UsageStore · alerts (Figma 18D)', () => {
+  const NOW = 1_799_990_000_000
+  const reading = (percent: number, resetsAt = 1_800_000_000_000, at = NOW) =>
+    ({ vendor: 'claude', at, windows: [{ minutes: 300, percent, resetsAt }] }) satisfies VendorUsage
+
+  function alerting(marks: unknown = null) {
+    const alerts: UsageAlert[] = []
+    const saved: AlertMark[][] = []
+    const usage = new UsageStore({
+      load: () => null,
+      save: () => undefined,
+      broadcast: () => undefined,
+      loadMarks: () => marks,
+      saveMarks: (list) => saved.push(list),
+      alert: (a) => alerts.push(a),
+      now: () => NOW
+    })
+    return { usage, alerts, saved }
+  }
+
+  it('announces 75, 90 and 100 once each per period, and again after the window resets', () => {
+    const { usage, alerts, saved } = alerting()
+    for (const p of [60, 76, 80, 91, 95, 100, 100]) usage.update(reading(p, undefined, NOW + p))
+    expect(alerts.map((a) => a.level)).toEqual([75, 90, 100])
+    usage.update(reading(77, 1_800_018_000_000, NOW + 200))
+    expect(alerts.map((a) => a.level)).toEqual([75, 90, 100, 75])
+    expect(saved.at(-1)).toEqual([{ vendor: 'claude', minutes: 300, level: 75, resetsAt: 1_800_018_000_000 }])
+  })
+
+  it('jumps straight to the highest level crossed, treats a few seconds of reset jitter as the same period', () => {
+    const { usage, alerts } = alerting()
+    usage.update(reading(92))
+    usage.update(reading(93, 1_800_000_004_000, NOW + 1))
+    expect(alerts).toEqual([{ vendor: 'claude', minutes: 300, percent: 92, level: 90, resetsAt: 1_800_000_000_000 }])
+  })
+
+  it('remembers what it announced across restarts and never alerts on an old reading', () => {
+    const { usage, alerts } = alerting([{ vendor: 'claude', minutes: 300, level: 90, resetsAt: 1_800_000_000_000 }, { vendor: 'x', minutes: 1, level: 75 }])
+    usage.update(reading(95))
+    usage.update(reading(100, undefined, NOW - 11 * 60_000))
+    expect(alerts).toEqual([])
+    expect(parseStoredMarks('nope')).toEqual([])
+  })
+
+  it('names the crossing for a window', () => {
+    expect(crossedAlert('codex', { minutes: 10080, percent: 74 }, undefined)).toBeNull()
+    expect(crossedAlert('codex', { minutes: 10080, percent: 75 }, undefined)).toEqual({ vendor: 'codex', minutes: 10080, percent: 75, level: 75 })
   })
 })

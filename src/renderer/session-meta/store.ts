@@ -3,7 +3,7 @@
 // session of a vendor and is kept by main across runs, so a fresh window asks for it once.
 import { create } from 'zustand'
 import type { AgentEvent } from '@shared/agent-events'
-import type { ContextUsage, UsageVendor, VendorUsage } from '@shared/session-meta'
+import { usageAlertText, type ContextUsage, type UsageVendor, type VendorUsage } from '@shared/session-meta'
 import type { TodoItem } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
@@ -16,6 +16,10 @@ export interface SessionMetrics {
 interface SessionMetaState {
   bySession: Record<SessionId, SessionMetrics>
   usage: Partial<Record<UsageVendor, VendorUsage>>
+  /** A usage notification was clicked: the overview's first usage chip opens its popover and clears this. */
+  usageOpenPending: boolean
+  requestUsageOpen(): void
+  consumeUsageOpen(): void
   setContext(sessionId: SessionId, context: ContextUsage | null): void
   setTodos(sessionId: SessionId, items: TodoItem[]): void
   setUsage(usage: VendorUsage): void
@@ -30,6 +34,9 @@ function patchSession(state: SessionMetaState, sessionId: SessionId, patch: (cur
 export const useSessionMeta = create<SessionMetaState>()((set) => ({
   bySession: {},
   usage: {},
+  usageOpenPending: false,
+  requestUsageOpen: () => set({ usageOpenPending: true }),
+  consumeUsageOpen: () => set({ usageOpenPending: false }),
   setContext: (sessionId, context) =>
     set((s) =>
       patchSession(s, sessionId, (current) => {
@@ -67,10 +74,25 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent): void {
   else if (event.type === 'todos') state.setTodos(sessionId, event.items)
 }
 
+/** Clicking a usage notification lands here: the overview, with its usage popover open. */
+export const USAGE_NOTIFICATION_TAG = 'wavi:usage'
+
 /** Listens to main; returns a function that stops listening. */
 export function startSessionMetaBridge(): () => void {
   const offEvents = window.tr.agent.onEvent(({ sessionId, event }) => applyMetaEvent(sessionId, event))
   const offUsage = window.tr.agent.onUsage((usage) => useSessionMeta.getState().setUsage(usage))
+  // Main sends each crossing once, to one window; 设置 · 自动化 · 额度提醒 decides whether it becomes a notification.
+  const offAlert = window.tr.agent.onUsageAlert((alert) => {
+    void window.tr.settings.get().then((settings) => {
+      if (!settings.alerts.usage) return
+      window.tr.ui.notify({ ...usageAlertText(alert, Date.now()), tag: USAGE_NOTIFICATION_TAG })
+    })
+  })
+  const offClick = window.tr.ui.onNotificationClick((tag) => {
+    if (tag !== USAGE_NOTIFICATION_TAG) return
+    useWorkspace.getState().setMainView('overview')
+    useSessionMeta.getState().requestUsageOpen()
+  })
   let live = true
   void window.tr.agent.getUsage().then((list) => {
     if (!live) return
@@ -84,6 +106,8 @@ export function startSessionMetaBridge(): () => void {
     live = false
     offEvents()
     offUsage()
+    offAlert()
+    offClick()
     offSessions()
   }
 }

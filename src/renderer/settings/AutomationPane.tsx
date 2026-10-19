@@ -1,15 +1,25 @@
-// 设置 · 自动化 · 代码审阅 (PRD F13). Every automatic review is off until the user turns it on: a review spends their
+// 设置 · 自动化 · 代码审阅 (PRD F13) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
 // own Claude / Codex quota. No Figma frame yet; it follows the Worktree pane (16A): sections of label · control rows.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
-import type { ReviewSettings } from '@shared/settings'
+import type { AlertSettings, ReviewSettings } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { Row, Section, Toggle } from './controls'
 import styles from './AutomationPane.module.css'
 
 const MODEL = /^[A-Za-z0-9._:@/-]{0,64}$/
 
-export function AutomationPane({ review, update }: { review: ReviewSettings; update: (patch: Partial<ReviewSettings>) => void }) {
+export function AutomationPane({
+  review,
+  update,
+  alerts,
+  updateAlerts
+}: {
+  review: ReviewSettings
+  update: (patch: Partial<ReviewSettings>) => void
+  alerts: AlertSettings
+  updateAlerts: (patch: Partial<AlertSettings>) => void
+}) {
   const builtin = review.mode === 'builtin'
   return (
     <div className={styles.page}>
@@ -61,6 +71,12 @@ export function AutomationPane({ review, update }: { review: ReviewSettings; upd
               <p className={styles.hint}>留空用 CLI 自己的默认模型。</p>
             </>
           )}
+        </Section>
+        <Section title="额度提醒">
+          <Row label="额度提醒">
+            <Toggle label="额度提醒" checked={alerts.usage} onChange={(usage) => updateAlerts({ usage })} />
+          </Row>
+          <p className={styles.hint}>每个厂商的每个额度窗口，用到 75%、90% 和用完时各发一次系统通知；额度是账号共用的，不按会话重复提醒。</p>
         </Section>
       </div>
     </div>

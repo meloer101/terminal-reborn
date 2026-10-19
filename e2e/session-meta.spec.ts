@@ -1,8 +1,10 @@
-// Session metrics end to end (PRD F11 / F12, Figma 17A / 17B / 17C). A fake `claude` runs the real per-launch
+// Session metrics end to end (PRD F11 / F12, Figma 17A / 17B / 17C and 18). A fake `claude` runs the real per-launch
 // `--settings` file: its statusLine command (our relay, chaining the project's own statusLine) and its hook commands,
 // on steps the test appends to a file — so context %, plan usage and the todo list travel the real path
 // (relay → hook socket → bridge → IPC → header / sidebar / overview). Codex readings are sent from main the way the
-// bridge sends them (its rollout reader is unit-tested). Screenshots in both themes go to test-results/session-meta/.
+// bridge sends them (its rollout reader is unit-tested). Context history and session shares come from transcript files
+// the test writes under a temporary CLAUDE_CONFIG_DIR, named by the hooks the way Claude names them. Screenshots in
+// both themes go to test-results/session-meta/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -34,11 +36,13 @@ const hook = (event, payload) => {
 }
 process.stdout.write('Claude Code v9.9.9\\r\\n\\r\\n❯ \\r\\n')
 hook('SessionStart', { source: 'startup' })
+// A worktree with its own .fake-steps file gets its own script (a second Claude session).
+const stepsFile = fs.existsSync(process.cwd() + '/.fake-steps') ? process.cwd() + '/.fake-steps' : log + '.steps'
 let seen = 0
 setInterval(() => {
   let steps
   try {
-    steps = fs.readFileSync(log + '.steps', 'utf8').split('\\n').filter(Boolean)
+    steps = fs.readFileSync(stepsFile, 'utf8').split('\\n').filter(Boolean)
   } catch {
     return
   }
@@ -81,8 +85,14 @@ function setup() {
   git(project, 'commit', '-q', '-m', 'init')
   const cookie = join(root, 'wt-cookie')
   const graph = join(root, 'wt-graph')
+  const nav = join(root, 'wt-nav')
   git(project, 'worktree', 'add', '-q', '-b', 'jacob/session-cookie', cookie)
   git(project, 'worktree', 'add', '-q', '-b', 'jacob/graph-layout', graph)
+  git(project, 'worktree', 'add', '-q', '-b', 'jacob/mobile-nav', nav)
+  writeFileSync(join(nav, '.fake-steps'), '')
+  // Claude's data directory for this run: transcripts the hooks point at must live under its projects/.
+  const claudeConfig = join(root, 'claude-config')
+  mkdirSync(join(claudeConfig, 'projects', 'acme'), { recursive: true })
   // The user's own statusLine for this project: ours must run it and print what it prints (PRD F11).
   mkdirSync(join(cookie, '.claude'))
   writeFileSync(join(cookie, '.claude', 'settings.local.json'), JSON.stringify({ statusLine: { type: 'command', command: "cat >/dev/null; printf 'USER-SL'" } }))
@@ -92,8 +102,12 @@ function setup() {
     project,
     cookie,
     graph,
-    env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log },
+    nav,
+    cookieTranscript: join(claudeConfig, 'projects', 'acme', 'cookie.jsonl'),
+    navTranscript: join(claudeConfig, 'projects', 'acme', 'nav.jsonl'),
+    env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log, CLAUDE_CONFIG_DIR: claudeConfig },
     step: (value: unknown) => appendFileSync(`${log}.steps`, `${JSON.stringify(value)}\n`),
+    navStep: (value: unknown) => appendFileSync(join(nav, '.fake-steps'), `${JSON.stringify(value)}\n`),
     statusLines: () => {
       try {
         return readFileSync(`${log}.statusline`, 'utf8')
@@ -109,8 +123,11 @@ const NOW_S = Math.floor(Date.now() / 1000)
 const statusLine = (percent: number, usage: { five: number; seven: number }) => ({
   statusLine: {
     session_id: 'fake-conversation',
+    model: { id: 'claude-opus-5-5', display_name: 'Opus 5.5' },
+    cost: { total_cost_usd: 3.4217 },
     context_window: {
       context_window_size: 200000,
+      total_output_tokens: 38000,
       current_usage: { input_tokens: 2, cache_creation_input_tokens: 1998, cache_read_input_tokens: percent * 2000 - 2000 },
       used_percentage: percent
     },
@@ -130,6 +147,29 @@ const TODOS = [
   ['更新 README 的认证说明', 'pending'],
   ['跑完整测试并修复失败项', 'pending']
 ].map(([content, status]) => ({ content, status, activeForm: content }))
+
+/** A Claude transcript: one prompt and one reply per turn (`tokens` in the window), a compaction where `null` is. */
+function transcript(turns: (number | null)[], spendPerTurn: number): string {
+  const lines: string[] = []
+  let minute = turns.length + 2
+  for (const [i, tokens] of turns.entries()) {
+    const at = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+    if (tokens === null) {
+      lines.push(JSON.stringify({ type: 'system', subtype: 'compact_boundary', timestamp: at(minute) }))
+      continue
+    }
+    lines.push(JSON.stringify({ type: 'user', timestamp: at(minute), message: { role: 'user', content: `第 ${i + 1} 轮` } }))
+    lines.push(
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: at(minute - 0.5),
+        message: { id: `msg-${i}`, usage: { input_tokens: 2, cache_creation_input_tokens: spendPerTurn - 102, cache_read_input_tokens: tokens - spendPerTurn + 100, output_tokens: 100 } }
+      })
+    )
+    minute--
+  }
+  return lines.join('\n') + '\n'
+}
 
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(120_000)
@@ -171,12 +211,14 @@ test.describe('session metrics: todo · context · usage', () => {
         worktrees: [
           { id: 'w-main', projectId: 'p1', branch: 'main', path: repo.project, isMain: true },
           { id: 'w-cookie', projectId: 'p1', branch: 'jacob/session-cookie', path: repo.cookie, isMain: false, baseBranch: 'main' },
-          { id: 'w-graph', projectId: 'p1', branch: 'jacob/graph-layout', path: repo.graph, isMain: false, baseBranch: 'main' }
+          { id: 'w-graph', projectId: 'p1', branch: 'jacob/graph-layout', path: repo.graph, isMain: false, baseBranch: 'main' },
+          { id: 'w-nav', projectId: 'p1', branch: 'jacob/mobile-nav', path: repo.nav, isMain: false, baseBranch: 'main' }
         ],
         sessions: [
           { id: 's-cookie', worktreeId: 'w-cookie', kind: 'claude', title: 'Cookie 会话迁移', startedAt: 1, lastActivityAt: 1 },
           { id: 's-graph', worktreeId: 'w-graph', kind: 'codex', title: 'Git 图谱布局算法', startedAt: 1, lastActivityAt: 1 },
-          { id: 's-main', worktreeId: 'w-main', kind: 'shell', title: 'main', startedAt: 1, lastActivityAt: 1 }
+          { id: 's-main', worktreeId: 'w-main', kind: 'shell', title: 'main', startedAt: 1, lastActivityAt: 1 },
+          { id: 's-nav', worktreeId: 'w-nav', kind: 'claude', title: '修复移动端导航抖动', startedAt: 1, lastActivityAt: 1 }
         ],
         activeSessionId: 's-cookie',
         sidebarCollapsed: false,
@@ -188,6 +230,12 @@ test.describe('session metrics: todo · context · usage', () => {
     page = await app.firstWindow()
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible(WITHIN)
+    // Notifications the renderer asks main for (Figma 18D), recorded next to main's own handler.
+    await app.evaluate(({ ipcMain }) => {
+      const g = globalThis as unknown as { __notes: unknown[] }
+      g.__notes = []
+      ipcMain.on('ui:notify', (_event, note) => g.__notes.push(note))
+    })
   })
 
   test.afterAll(async () => {
@@ -197,7 +245,7 @@ test.describe('session metrics: todo · context · usage', () => {
   test('the statusLine relay feeds context and usage, and still prints the user’s own statusLine', async () => {
     await expect(header().getByTestId('session-meta')).toHaveCount(0)
     repo.step(statusLine(62, { five: 13, seven: 26 }))
-    await expect(header().getByTestId('context-chip')).toHaveText('context 62%', WITHIN)
+    await expect(header().getByTestId('context-chip')).toHaveText('context62%', WITHIN)
     await expect(header().getByTestId('usage-chip-claude')).toHaveText('Claude7d 26%')
     await expect.poll(repo.statusLines, WITHIN).toContain('USER-SL')
   })
@@ -227,18 +275,47 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('context ≥ 80%: heavier number, tooltip with tokens, /compact only fills the input line', async () => {
+  test('context ≥ 80%: heavier number, /compact only fills the input line', async () => {
     repo.step(statusLine(86, { five: 13, seven: 26 }))
     const chip = header().getByTestId('context-chip')
     await expect(chip).toHaveAttribute('data-level', 'high', WITHIN)
-    await chip.locator('span').first().hover()
-    await chip.locator('span').first().hover({ position: { x: 4, y: 4 } })
-    await expect(page.getByTestId('context-tooltip')).toContainText('context 172k / 200k · 86%', WITHIN)
-    await expect(page.getByTestId('context-tooltip')).toContainText('点 /compact 把命令放进输入行，回车后压缩')
     await shoot('17B-context-high')
     await chip.getByRole('button', { name: '/compact' }).click()
     await expect.poll(repo.typed, WITHIN).toContain('/compact')
     await page.waitForTimeout(500)
+    expect(repo.typed()).not.toContain('<ENTER>')
+  })
+
+  test('clicking context opens its popover: figure, the turns from the transcript with the compaction, the details', async () => {
+    writeFileSync(repo.cookieTranscript, transcript([40_000, 80_000, 120_000, null, 30_000, 70_000, 120_000, 172_000], 5000))
+    repo.step({ hook: 'Stop', payload: { transcript_path: repo.cookieTranscript, stop_hook_active: false } })
+    // Main has read the transcript the Stop hook named (and the hook's own window traffic has settled).
+    const turnsInMain = () =>
+      page.evaluate(async () => {
+        const tr = (globalThis as unknown as { tr: { agent: { getContextHistory(id: string): Promise<{ turns: unknown[] } | null> } } }).tr
+        return (await tr.agent.getContextHistory('s-cookie'))?.turns.length ?? 0
+      })
+    await expect.poll(turnsInMain, WITHIN).toBe(7)
+    const chip = header().getByTestId('context-chip')
+    await chip.getByRole('button', { name: 'context 已用 86%' }).click()
+    const popover = page.getByTestId('context-popover')
+    await expect(popover).toBeVisible()
+    await expect(popover).toContainText('Opus 5.5 · 200k 窗口')
+    await expect(popover).toContainText('172k/ 200k86%')
+    await expect(popover).toContainText('刻度 = 80%，超过后建议 /compact')
+    const trend = popover.getByTestId('context-trend')
+    await expect(trend).toContainText('最近 7 轮', WITHIN)
+    await expect(trend).toContainText('本轮 +26%')
+    await expect(trend).toContainText('虚线处压缩过')
+    await expect(trend).toContainText('按最近 3 轮的增速，大约 1 轮后用满')
+    await expect(trend.locator('path')).toHaveCount(2)
+    await expect(popover).toContainText('缓存读取170k')
+    await expect(popover).toContainText('本会话输出38k')
+    await expect(popover).toContainText('按 API 价折算$3.42')
+    await shoot('18A-context-popover')
+    await popover.getByRole('button', { name: '/compact' }).click()
+    await expect(popover).toHaveCount(0)
+    await page.waitForTimeout(300)
     expect(repo.typed()).not.toContain('<ENTER>')
   })
 
@@ -251,6 +328,14 @@ test.describe('session metrics: todo · context · usage', () => {
         { minutes: 10080, percent: 12, resetsAt: Date.now() + 5 * 86400_000 }
       ]
     })
+    // A second Claude session that spent tokens in the same window (its own fake reads w-nav/.fake-steps).
+    await sidebarRow('s-nav').click()
+    await expect(header().getByText('修复移动端导航抖动')).toBeVisible()
+    writeFileSync(repo.navTranscript, transcript([20_000, 40_000], 4000))
+    repo.navStep({ hook: 'Stop', payload: { transcript_path: repo.navTranscript, stop_hook_active: false } })
+    await page.waitForTimeout(2000)
+    await sidebarRow('s-cookie').click()
+
     repo.step(statusLine(62, { five: 13, seven: 84 }))
     const chip = header().getByTestId('usage-chip-claude')
     await expect(chip).toHaveText('Claude7d 84%', WITHIN)
@@ -258,9 +343,36 @@ test.describe('session metrics: todo · context · usage', () => {
     await chip.click()
     const popover = page.getByTestId('usage-popover')
     await expect(popover.getByRole('region')).toHaveText([/^Claude当前会话5 小时.*13%.*7 天.*84%/, /^Codex5 小时.*40%.*每周.*12%/])
-    await expect(popover).toContainText('Claude 来自 statusLine，Codex 来自会话日志；登录同一账号的会话共用')
-    await shoot('17B-usage-popover')
+    // 5 h: 2 of 5 hours gone, 13 % used — on pace. 7 d: 5 of 7 days gone, 84 % used — ahead.
+    await expect(popover.getByTestId('usage-window-claude-300')).toContainText('时间过了 40% · 按这个速度用得完')
+    await expect(popover.getByTestId('usage-window-claude-10080')).toContainText('用得比时间快 · 按这个速度约')
+    await expect(popover.getByTestId('usage-window-claude-10080')).toHaveAttribute('data-level', 'ahead')
+    // Cookie: 7 replies × 5000; nav: 2 × 4000 → 81 % / 19 %.
+    const shares = popover.getByTestId('usage-shares-claude')
+    await expect(shares).toContainText('这 5 小时里各会话的用量', WITHIN)
+    await expect(shares.getByRole('button')).toHaveText([/^Cookie 会话迁移acme-web81%$/, /^修复移动端导航抖动acme-web19%$/])
+    await expect(popover).toContainText('只统计 Wavi 里的会话 · Claude 来自 statusLine，Codex 来自会话日志')
+    await shoot('18B-usage-popover')
+    await shares.getByRole('button', { name: /修复移动端导航抖动/ }).click()
+    await expect(popover).toHaveCount(0)
+    await expect(header().getByText('修复移动端导航抖动')).toBeVisible()
+    await sidebarRow('s-cookie').click()
+  })
+
+  test('crossing 75 % of a window raises one system notification; clicking it opens the overview’s usage popover', async () => {
+    const notes = () => app.evaluate(() => (globalThis as unknown as { __notes: { title: string; body: string; tag: string }[] }).__notes)
+    // The 7-day window went to 84 % above: one alert at 75, not one per reading.
+    await expect.poll(async () => (await notes()).map((n) => n.title), WITHIN).toEqual(['Claude 7 天额度已用 84%'])
+    repo.step(statusLine(62, { five: 13, seven: 85 }))
+    await page.waitForTimeout(1500)
+    expect((await notes()).length).toBe(1)
+    const [note] = await notes()
+    await fromMain('ui:notification-click', note!.tag)
+    const overview = page.locator('[data-region="overview"]')
+    await expect(overview).toBeVisible()
+    await expect(page.getByTestId('usage-popover')).toBeVisible()
     await page.keyboard.press('Escape')
+    await sidebarRow('s-cookie').click()
   })
 
   test('a narrow header drops the todo item, then the vendor, then the branch', async () => {
@@ -278,7 +390,7 @@ test.describe('session metrics: todo · context · usage', () => {
   test('a Codex session shows its context and Codex usage, and no todo', async () => {
     await fromMain('agent:event', { sessionId: 's-graph', agent: 'codex', at: Date.now(), event: { type: 'context', context: { percent: 41, usedTokens: 105000, windowTokens: 258400 } } })
     await sidebarRow('s-graph').click()
-    await expect(header().getByTestId('context-chip')).toHaveText('context 41%')
+    await expect(header().getByTestId('context-chip')).toHaveText('context41%')
     await expect(header().getByTestId('usage-chip-codex')).toHaveText('Codex5h 40%')
     await expect(header().getByTestId('todo-chip')).toHaveCount(0)
     await expect(header().getByTestId('usage-chip-claude')).toHaveCount(0)
@@ -289,7 +401,7 @@ test.describe('session metrics: todo · context · usage', () => {
     await page.locator('[data-region="sidebar"]').getByText('总览').click()
     const overview = page.locator('[data-region="overview"]')
     await expect(overview.getByTestId('plan-usage')).toBeVisible()
-    await expect(overview.getByTestId('usage-chip-claude')).toHaveText('Claude7d 84%')
+    await expect(overview.getByTestId('usage-chip-claude')).toHaveText('Claude7d 85%')
     await expect(overview.getByTestId('usage-chip-codex')).toHaveText('Codex5h 40%')
     const row = (id: string) => overview.locator(`[data-session-id="${id}"]`)
     await expect(row('s-cookie').getByTestId('overview-todo')).toHaveText('3/7')
@@ -301,6 +413,25 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(page.getByTestId('usage-popover').getByRole('region')).toHaveCount(2)
     await shoot('17C-overview')
     await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+  })
+
+  test('a used-up window shows when it comes back instead of a percentage', async () => {
+    await fromMain('agent:usage', {
+      vendor: 'codex',
+      at: Date.now(),
+      windows: [
+        { minutes: 300, percent: 100, resetsAt: Date.now() + 38 * 60_000 },
+        { minutes: 10080, percent: 30, resetsAt: Date.now() + 5 * 86400_000 }
+      ]
+    })
+    await page.locator('[data-region="sidebar"]').getByText('总览').click()
+    const chip = page.locator('[data-region="overview"]').getByTestId('usage-chip-codex')
+    await expect(chip).toHaveText(/^Codex5h 用完 · \d\d:\d\d 恢复$/, WITHIN)
+    await expect(chip).toHaveAttribute('data-level', 'exhausted')
+    await chip.click()
+    await expect(page.getByTestId('usage-window-codex-300')).toContainText(/已用完 · 还有 3[789] 分钟恢复/)
+    await shoot('18C-exhausted')
     await page.keyboard.press('Escape')
   })
 

@@ -10,7 +10,8 @@
 
 - 已发布 **v0.1.1**（2026-10-15）。
 - `main` 上已合入、尚未发布：2b 的全部条目（2026-10-17 关闭最后 13 项）、侧栏层级、总览 v2、“终端就是全部界面”（PRD v1.2）、PTY 守护进程。
-- 下一步：作者对照 Figma 11 验收总览、过一遍“待作者手动确认”里新增的真实键盘一项，然后发 **v0.2.0**；之后开始 M4。
+- `main` 上还已合入 M4 的大部分（worktree、合并、Diff 评论、后台审阅、归档、端口、context / todo / 额度、并排 diff）和额度可视化（Figma 18）。
+- 下一步：作者验收 Figma 11 / 15 / 16 / 17 / 18 和“待作者手动确认”里的真实键盘一项，然后直接发 **v0.3.0**（不再单独发 v0.2.0）；之后开始 M5。
 
 ## 已完成
 
@@ -107,6 +108,7 @@
 - [x] F15 归档（2026-10-19，Figma 16D，PRD v1.30）：会话右键“归档 worktree…”和 Worktree 详情“更多”打开 16D 面板；停会话（保留屏幕快照）→ 批准后运行 `archive`（失败可“仍然归档”）→ `src/main/archive-ref.ts` 把 HEAD、暂存区、未提交和未跟踪文件存进 `refs/wavi/archive/<id>` → 侧栏、总览、⌘K 会话和 ⌘1–9 里收起；会话在运行时不能归档。⌘K“历史”恢复：文件夹在就不动，没了就 `git worktree add` 回原分支（分支没了从快照重建）并放回改动，再删 ref；agent 第一次查看时 `--resume`。设置 · Worktree“合并后自动归档”（默认关）。测试：`archive-ref.test.ts`、`archive.test.ts`（真 git 仓库）、`workspace-model.test.ts`、`entries.test.ts`，e2e `archive.spec.ts`（16D 两种主题截图）。以后：历史里删除归档、归档太久的提醒和清理、Worktree 列表里标出已归档
 - 可以并行（与 git 无关）：
   - [x] F11 上下文占用与额度（2026-10-19，Figma 17，PRD v1.31）：Claude 用按次注入的 statusLine 中继（`resources/hooks/tr-statusline.sh`，串联并原样输出用户自己的 statusLine），Codex 在 hook 之后读 rollout 的 `token_count`（`src/main/hooks/codex-usage.ts`，实测见 PRD §6.7）；会话头 `context 62%`（≥ 80% 加重 + `/compact` 只放进输入行，悬停显示 token 数）和本会话厂商的额度（用得最多的窗口），点开按厂商列出；额度由主进程保存（`plan-usage.json`）、发给所有窗口；总览顶栏每个厂商一个额度标签、行里 context 列；会话头变窄依次去掉 todo 当前项 → 厂商名 → 分支名；e2e `session-meta.spec.ts`（假 claude 跑真实的 `--settings`）。真实 ChatGPT 账号的 Codex 额度响应头没在本机验证（服务商 503）
+  - [x] F11 可视化（2026-10-19，Figma 18，PRD v1.32）：先调研 Claude Code `/context` `/usage`、Codex `/status`、ccusage、Claude-Code-Usage-Monitor、ccstatusline、CodexBar、Cline / Roo、Cursor、Warp 的做法。标签加小条（额度带“时间过了多少”竖线），点击打开 ContextPopover（80% 刻度、每轮曲线和压缩点、“大约 N 轮后”、缓存 / 输出 / 折算成本）和 UsagePopover v2（每个窗口的时间进度和用完预测、用完时显示恢复时间、各会话份额、“可能不是最新”）；额度提醒 75% / 90% / 用完各一次（设置 · 自动化，默认开）。主进程 `src/main/hooks/transcript-meter.ts` 增量读 Claude transcript / Codex rollout；测试 `transcript-meter.test.ts`、`usage-store.test.ts`、`session-meta.test.ts`，e2e `session-meta.spec.ts`（18A / 18B / 18C 两种主题截图）。以后：额度历史曲线（跨重启要落盘）、Wavi 之外的用量
   - [x] F12 todo 进度（2026-10-19，Figma 17）：PostToolUse 的 TodoWrite / TaskCreate / TaskUpdate 在主进程里合成列表（/clear 清空，窗口重载时补发）；会话头 `3/7 · 当前项` + 只读 TodoPopover，侧栏 1px 进度线，总览 `3/7` 列。注意 Claude 2.1.303 对 Claude 5 模型默认不开 todo 工具（PRD §6.6），Wavi 不替用户打开
   - [x] F14 端口检测（2026-10-19）：有会话时主进程仍用 `src/main/browser/ports.ts` 的 `ps` + `lsof`，大约每 3 秒扫每个 PTY 进程树（不再只在浏览器页签打开时扫）；窗口订阅每个会话的最近一次结果，所以侧栏会话行和总览在重载后也能显示 `:5173`，不必先打开浏览器页签；点击在右侧栏浏览器打开，⌥ 点击用系统浏览器打开，右键结束进程。主进程只结束该会话最近一次扫描里的 pid（`sessionListener`），没有通用的杀进程 IPC。同一会话超过 2 个端口时其余收成 `+N`；e2e 在 `browser-panel.spec.ts`（关着浏览器页签时侧栏和总览出现标签、⌥ 点击、右键确认后结束）
   - [x] F17 浏览器页签（2026-10-17）：`WebContentsView`（每个 worktree 一个 `persist:tr-browser:<哈希>` 分区、无 preload、只允许 http(s)、新窗口要有用户操作）、每个 worktree 一个页面并记住 URL、地址框（纯数字 = localhost 端口）、worktree 内所有会话的端口条、375 手机视口、控制台错误 / 警告计数和“发给 Claude”（只放进输入行，不按回车）、页面里的应用快捷键和右键菜单、空状态 13E；菜单和对话框打开时用截图代替页面；e2e `browser-panel.spec.ts`。以后再做：截图闪烁 / MutationObserver 范围、本机自签名证书、缩放后的坐标、隐藏时暂停端口扫描、端口出现后自动刷新、闲置页面回收、触摸和移动端 UA、按 cwd 找后台服务的端口
@@ -198,5 +200,6 @@
 | 11 v2 总览 | 2b | 已实现，待验收 |
 | 12 会话头：ctx % · todo · 端口 · PR | M4 并行 / M5 | 已被 17 取代（PR 等 F16） |
 | 17 会话指标（context · todo · 额度）+ F5 并排 diff | M4 | 已实现，待验收（2026-10-19） |
+| 18 context 与额度可视化 | M4 | 已实现，待验收（2026-10-19） |
 | 13 右侧栏：浏览器 · Git · Worktree · 文件 | M4 | 已设计，待作者确认 |
 | 15 新建会话（⌘N，玻璃材质） | M4 | 已实现，待验收（2026-10-18） |

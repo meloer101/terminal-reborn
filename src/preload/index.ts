@@ -89,7 +89,10 @@ const api: TrApi = {
     onHooksHealth: (listener) => listen(IPC.agentHooksHealth, listener),
     onSessionHooks: (listener) => listen(IPC.agentSessionHooks, listener),
     getUsage: () => ipcRenderer.invoke(IPC.agentGetUsage),
-    onUsage: (listener) => listen(IPC.agentUsage, listener)
+    onUsage: (listener) => listen(IPC.agentUsage, listener),
+    onUsageAlert: (listener) => listen(IPC.agentUsageAlert, listener),
+    getContextHistory: (sessionId) => ipcRenderer.invoke(IPC.agentContextHistory, sessionId),
+    getUsageShares: (vendor, since) => ipcRenderer.invoke(IPC.agentUsageShares, vendor, since)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

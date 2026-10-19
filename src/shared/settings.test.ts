@@ -78,3 +78,12 @@ describe('archive settings (F15)', () => {
     expect(sanitizeSettings({}).archive).toEqual({ afterMerge: false })
   })
 })
+
+describe('alert settings (F11 · 额度提醒)', () => {
+  it('turns usage alerts on by default and keeps only booleans', () => {
+    expect(DEFAULT_SETTINGS.alerts.usage).toBe(true)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { alerts: { usage: false } }).alerts.usage).toBe(false)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { alerts: { usage: 'no' } }).alerts.usage).toBe(true)
+    expect(sanitizeSettings({}).alerts).toEqual({ usage: true })
+  })
+})

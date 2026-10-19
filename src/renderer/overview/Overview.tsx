@@ -221,8 +221,9 @@ function PlanUsage() {
   if (vendors.length === 0) return null
   return (
     <span className={metaStyles.planUsage} data-testid="plan-usage">
-      {vendors.map((usage) => (
-        <UsageChip key={usage.vendor} usage={usage} current={null} all={all} />
+      {vendors.map((usage, i) => (
+        // A clicked usage notification opens the panel from the first chip (it lists every vendor).
+        <UsageChip key={usage.vendor} usage={usage} current={null} all={all} opensOnRequest={i === 0} />
       ))}
     </span>
   )

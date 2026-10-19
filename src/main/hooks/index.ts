@@ -7,7 +7,7 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
-import type { VendorUsage } from '@shared/session-meta'
+import type { ContextHistory, SessionSpend, UsageAlert, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { AgentTitleWatcher } from './agent-title'
@@ -19,6 +19,7 @@ import { createHookDir, sweepStaleHookDirs } from './hook-dir'
 import { UnknownSessionError } from './server'
 import { buildClaudeHookSettings } from './settings'
 import { StartWatchdog } from './start-watchdog'
+import { TranscriptMeter } from './transcript-meter'
 import { HookSupervisor } from './supervisor'
 import { UsageStore } from './usage-store'
 import { userStatusLineFor } from './user-statusline'
@@ -84,24 +85,36 @@ function broadcastHealth(health: HooksHealth): void {
 /** Plan usage is the account's (PRD F11): every window gets it, and it is kept across runs. Created once userData is known. */
 let usageStore: UsageStore | null = null
 
+function readJson(file: string): unknown {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as unknown
+  } catch {
+    return null
+  }
+}
+
+function writeJson(file: string, value: unknown, what: string): void {
+  try {
+    const tmp = `${file}.${process.pid}.tmp`
+    writeFileSync(tmp, JSON.stringify(value), { mode: 0o600 })
+    renameSync(tmp, file)
+  } catch (error) {
+    console.error(`[hooks] could not save ${what}:`, error)
+  }
+}
+
 function createUsageStore(): UsageStore {
   const file = join(app.getPath('userData'), 'plan-usage.json')
+  const marks = join(app.getPath('userData'), 'usage-alerts.json')
   return new UsageStore({
-    load: () => {
-      try {
-        return JSON.parse(readFileSync(file, 'utf8')) as unknown
-      } catch {
-        return null
-      }
-    },
-    save: (usage) => {
-      try {
-        const tmp = `${file}.${process.pid}.tmp`
-        writeFileSync(tmp, JSON.stringify(usage), { mode: 0o600 })
-        renameSync(tmp, file)
-      } catch (error) {
-        console.error('[hooks] could not save plan usage:', error)
-      }
+    load: () => readJson(file),
+    save: (usage) => writeJson(file, usage, 'plan usage'),
+    loadMarks: () => readJson(marks),
+    saveMarks: (list) => writeJson(marks, list, 'usage alerts'),
+    // The account's alert is announced once, by one window (the renderer checks 设置 · 自动化 · 额度提醒).
+    alert: (alert: UsageAlert) => {
+      const win = appWindows().find((w) => !w.webContents.isDestroyed())
+      win?.webContents.send(IPC.agentUsageAlert, alert)
     },
     broadcast: (usage: VendorUsage) => {
       for (const win of appWindows()) if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentUsage, usage)
@@ -125,6 +138,9 @@ const emitter: BridgeEmitter = {
 const titles = new AgentTitleWatcher((sessionId, agent, title) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'agent-title', title } })
 )
+
+/** Context history and token spend per session, read from the agents' transcripts (Figma 18). */
+const transcripts = new TranscriptMeter()
 
 /** Codex's context and plan usage, read from its rollout after its hooks (PRD F11, §6.7). */
 const rollouts = new CodexUsageWatcher((sessionId, reading) => void runtime?.then((rt) => rt?.bridge.applyReading(sessionId, 'codex', reading)))
@@ -155,7 +171,7 @@ async function start(): Promise<Runtime | null> {
   ])
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts })
+      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -179,7 +195,7 @@ async function start(): Promise<Runtime | null> {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
     // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
-    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts })
+    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => bridge.handle(request),
@@ -204,6 +220,16 @@ export function registerHookHandlers(): void {
   runtime = start()
 
   ipcMain.handle(IPC.agentGetUsage, (): VendorUsage[] => usageStore?.list() ?? [])
+
+  ipcMain.handle(IPC.agentContextHistory, async (_event, sessionId: unknown): Promise<ContextHistory | null> => {
+    if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 128) return null
+    return transcripts.history(sessionId)
+  })
+
+  ipcMain.handle(IPC.agentUsageShares, async (_event, vendor: unknown, since: unknown): Promise<SessionSpend[]> => {
+    if ((vendor !== 'claude' && vendor !== 'codex') || typeof since !== 'number' || !Number.isFinite(since)) return []
+    return transcripts.spend(vendor, since)
+  })
 
   ipcMain.handle(IPC.agentGetHooksHealth, async (): Promise<HooksHealth> => {
     const rt = await runtime
