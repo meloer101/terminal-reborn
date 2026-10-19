@@ -3,6 +3,7 @@
 // feature's own store, not here — keeps parallel work from colliding on this file.
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
+import type { WorktreeArchive } from '@shared/archive'
 import { rememberWorkdir, type Workdir } from '@shared/new-session'
 import type { AgentKind, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
 import { mockProjects, mockSessions, mockWorktrees } from './mock-data'
@@ -13,6 +14,8 @@ import {
   addSessionInWorktree,
   closeSession,
   forgetWorktrees,
+  archiveWorktrees,
+  unarchiveWorktrees,
   persistedStateChanged,
   rememberRecentProject,
   removedSessionIds,
@@ -79,6 +82,10 @@ interface WorkspaceState extends WorkspaceData {
   closeSession(id: SessionId): void
   /** Drops linked worktree records whose folder was deleted, with their sessions (Worktree view). */
   forgetWorktrees(ids: WorktreeId[]): void
+  /** Folds archived worktree records out of every list, keeping their sessions for the restore (PRD F15). */
+  archiveWorktrees(ids: WorktreeId[], archive: WorktreeArchive): void
+  /** Brings them back; agents resume on first view. */
+  unarchiveWorktrees(ids: WorktreeId[]): void
   /** Live, non-persisted fields driven by agent signals (status track, M2). */
   patchSession(id: SessionId, patch: SessionPatch): void
 }
@@ -175,6 +182,8 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   rememberWorkdir: (projectId, choice) => set((s) => ({ newSessionWorkdir: rememberWorkdir(s.newSessionWorkdir, projectId, choice, true) })),
   closeSession: (id) => set(closeSession(pick(get()), id)),
   forgetWorktrees: (ids) => set(forgetWorktrees(pick(get()), ids)),
+  archiveWorktrees: (ids, archive) => set(archiveWorktrees(pick(get()), ids, archive)),
+  unarchiveWorktrees: (ids) => set({ ...unarchiveWorktrees(pick(get()), ids), mainView: 'session', focusRequest: get().focusRequest + 1 }),
   patchSession: (id, patch) =>
     set((s) => {
       const index = s.sessions.findIndex((x) => x.id === id)

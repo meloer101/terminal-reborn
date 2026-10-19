@@ -1,7 +1,7 @@
 // ⌘K command palette (PRD F8): jump to any session or run a common action. Renders nothing while
 // closed. Open/close state and the global ⌘K shortcut live in palette-store.ts.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { FolderPlus, LayoutList, Monitor, Moon, PanelLeft, PanelRight, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
+import { ArchiveRestore, FolderPlus, LayoutList, Monitor, Moon, PanelLeft, PanelRight, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
 import { formatAccelerator } from '../ui/menu-model'
@@ -23,10 +23,11 @@ const ACTION_ICONS: Record<ActionIcon, LucideIcon> = {
   panel: PanelRight,
   monitor: Monitor,
   moon: Moon,
-  sun: Sun
+  sun: Sun,
+  archive: ArchiveRestore
 }
 
-const SECTION_TITLE: Record<PaletteSection, string> = { sessions: '会话', actions: '操作' }
+const SECTION_TITLE: Record<PaletteSection, string> = { sessions: '会话', actions: '操作', history: '历史' }
 
 function Highlight({ text, ranges }: { text: string; ranges?: Range[] }): ReactNode {
   if (!ranges || ranges.length === 0) return text
@@ -85,7 +86,9 @@ function Sheet() {
   const listRef = useRef<HTMLDivElement>(null)
   const listId = useId()
 
-  const entries = useMemo(() => buildEntries(input), [input])
+  // Opened fresh each time, so 历史's "N 天前" is as of opening.
+  const [openedAt] = useState(() => Date.now())
+  const entries = useMemo(() => buildEntries({ ...input, now: openedAt }), [input, openedAt])
   const results = useMemo(() => rankEntries(entries, query), [entries, query])
   const index = Math.min(selected, Math.max(results.length - 1, 0))
   const optionId = (i: number) => `${listId}-${i}`

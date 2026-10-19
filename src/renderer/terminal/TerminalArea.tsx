@@ -3,7 +3,7 @@
 // switching sessions.
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentKind, SessionId } from '@shared/types'
+import type { AgentKind, SessionId, Worktree } from '@shared/types'
 import { useWorktreeCreations } from '../new-session/creation'
 import { runSessionWaits, useRunScripts } from '../scripts/run-script'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
@@ -181,6 +181,7 @@ export function TerminalArea() {
   useResyncOnWake(activeSessionId)
 
   useEffect(() => {
+    // Every record, archived ones included: their saved screens stay for the restore.
     pruneTerminals(new Set(sessions.map((s) => s.id)))
   }, [sessions])
 
@@ -189,7 +190,8 @@ export function TerminalArea() {
 
   return (
     <div className={styles.area}>
-      {sessions.map((session) => (
+      {/* An archived worktree's panes unmount (PRD F15); restoring mounts them again, which starts them afresh. */}
+      {sessions.filter((session) => !archivedWorktree(worktrees, session.worktreeId)).map((session) => (
         <TerminalPane
           key={session.id}
           sessionId={session.id}
@@ -210,3 +212,5 @@ export function TerminalArea() {
     </div>
   )
 }
+
+const archivedWorktree = (worktrees: readonly Worktree[], id: string): boolean => worktrees.find((w) => w.id === id)?.archived !== undefined

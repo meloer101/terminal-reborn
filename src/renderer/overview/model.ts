@@ -175,6 +175,7 @@ export function buildOverview({ projects, worktrees, sessions, now, filter }: Ov
   const byGroup = new Map<OverviewGroupKey, OverviewRow[]>(GROUP_ORDER.map((k) => [k, []]))
   for (const session of sessions) {
     const worktree = worktreeById.get(session.worktreeId)
+    if (worktree?.archived) continue
     const row = toRow(session, worktree, worktree && projectById.get(worktree.projectId), now)
     if (!matches(row, GROUP_LABEL[row.status], f)) continue
     byGroup.get(row.status)?.push(row)

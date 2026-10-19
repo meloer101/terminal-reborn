@@ -36,3 +36,13 @@ export function loadLiveSessions(): Promise<void> {
 export function takeReattach(sessionId: SessionId): boolean {
   return reattachable.delete(sessionId)
 }
+
+/** Archived sessions (PRD F15): their processes are gone, so a later restore must start them, not wait to reattach. */
+export function forgetLiveSessions(sessionIds: readonly SessionId[]): void {
+  for (const id of sessionIds) reattachable.delete(id)
+  const live = useLiveSessions.getState().live
+  if (!sessionIds.some((id) => live[id])) return
+  const next = { ...live }
+  for (const id of sessionIds) delete next[id]
+  useLiveSessions.setState({ live: next })
+}

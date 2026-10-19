@@ -1,12 +1,14 @@
 // Pure palette model: what can be jumped to or run, and in which order. No React, no store access.
-import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
+import { archivedAgo } from '@shared/archive'
+import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { PersistedRightPanel as PanelView } from '@shared/workspace-file'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
 import { matchFields, type MatchField, type Range } from './match'
 
-export type PaletteSection = 'sessions' | 'actions'
+/** `history`: archived worktrees (PRD F15), restored by picking them. */
+export type PaletteSection = 'sessions' | 'actions' | 'history'
 
 export type ActionId =
   | 'new-session'
@@ -21,9 +23,12 @@ export type ActionId =
   | 'theme-dark'
   | 'theme-light'
 
-export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun'
+export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun' | 'archive'
 
-export type PaletteTarget = { type: 'session'; sessionId: SessionId } | { type: 'action'; action: ActionId }
+export type PaletteTarget =
+  | { type: 'session'; sessionId: SessionId }
+  | { type: 'action'; action: ActionId }
+  | { type: 'archived'; worktreeId: WorktreeId }
 
 export interface PaletteEntry {
   id: string
@@ -52,6 +57,8 @@ export interface PaletteInput {
   mainView?: 'session' | 'overview'
   /** Folded sidebar projects: their sessions are listed but have no ⌘1–⌘9. */
   collapsedProjectIds?: readonly ProjectId[]
+  /** For 历史's "3 天前归档". */
+  now?: number
 }
 
 export interface RankedEntry {
@@ -160,8 +167,45 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
   return entries
 }
 
+/**
+ * 历史 (PRD F15): one row per archived worktree folder, most recently archived first, titled by its first session.
+ * Picking one restores it and resumes its agents.
+ */
+export function buildHistoryEntries(input: PaletteInput): PaletteEntry[] {
+  const projectById = new Map(input.projects.map((p) => [p.id, p]))
+  const seen = new Set<string>()
+  const archived = input.worktrees.filter((w) => w.archived).sort((a, b) => (b.archived?.at ?? 0) - (a.archived?.at ?? 0))
+  const entries: PaletteEntry[] = []
+  for (const worktree of archived) {
+    const key = `${worktree.projectId}\0${worktree.path}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const ids = new Set(input.worktrees.filter((w) => w.projectId === worktree.projectId && w.path === worktree.path).map((w) => w.id))
+    const sessions = input.sessions.filter((s) => ids.has(s.worktreeId))
+    const projectName = projectById.get(worktree.projectId)?.name ?? ''
+    const title = sessions[0]?.title || worktree.branch
+    const ago = archivedAgo(worktree.archived?.at ?? 0, input.now ?? Date.now())
+    entries.push({
+      id: `archived:${worktree.id}`,
+      section: 'history',
+      target: { type: 'archived', worktreeId: worktree.id },
+      title,
+      subtitle: [projectName, worktree.branch, ago].filter(Boolean).join(' · '),
+      icon: 'archive',
+      fields: [
+        { key: 'title', text: title, weight: 3 },
+        { key: 'project', text: projectName, weight: 2 },
+        { key: 'branch', text: worktree.branch, weight: 2 },
+        { key: 'sessions', text: sessions.map((s) => s.title).join(' '), weight: 1.5 },
+        { key: 'keywords', text: '历史 归档 恢复 history archive restore lishi guidang', weight: 0.5 }
+      ]
+    })
+  }
+  return entries
+}
+
 export function buildEntries(input: PaletteInput): PaletteEntry[] {
-  return [...buildSessionEntries(input), ...buildActionEntries(input)]
+  return [...buildSessionEntries(input), ...buildActionEntries(input), ...buildHistoryEntries(input)]
 }
 
 /**
@@ -176,9 +220,9 @@ export function rankEntries(entries: readonly PaletteEntry[], query: string): Ra
     const match = matchFields(query, entry.fields)
     if (match) ranked.push({ entry, score: match.score, ranges: match.ranges })
   }
-  const best: Record<PaletteSection, number> = { sessions: -1, actions: -1 }
+  const best: Record<PaletteSection, number> = { sessions: -1, actions: -1, history: -1 }
   for (const r of ranked) best[r.entry.section] = Math.max(best[r.entry.section], r.score)
-  const sectionRank = (s: PaletteSection) => (s === 'sessions' ? 0 : 1)
+  const sectionRank = (s: PaletteSection) => (s === 'sessions' ? 0 : s === 'actions' ? 1 : 2)
   // Array.prototype.sort is stable, so equal scores keep their urgency / declaration order.
   return ranked.sort(
     (a, b) =>

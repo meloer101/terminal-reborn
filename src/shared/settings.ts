@@ -47,17 +47,25 @@ export interface ReviewSettings {
   model: string
 }
 
+/** 设置 · Worktree · 归档 (PRD F15). */
+export interface ArchiveSettings {
+  /** After a merge that kept the worktree, archive it. Off by default. */
+  afterMerge: boolean
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
   ports: PortSettings
   review: ReviewSettings
+  archive: ArchiveSettings
 }
 
 export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>
   ports?: Partial<PortSettings>
   review?: Partial<ReviewSettings>
+  archive?: Partial<ArchiveSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -84,7 +92,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     rules: 'default',
     customRules: '',
     model: ''
-  }
+  },
+  archive: { afterMerge: false }
 }
 
 const MAX_REVIEW_RULES = 8000
@@ -148,7 +157,14 @@ function review(value: unknown): ReviewSettings {
 /** Any JSON value → valid settings. */
 export function sanitizeSettings(raw: unknown): AppSettings {
   const v = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
-  return { version: 1, appearance: appearance(v.appearance), ports: ports(v.ports), review: review(v.review) }
+  const a = typeof v.archive === 'object' && v.archive !== null ? (v.archive as Record<string, unknown>) : {}
+  return {
+    version: 1,
+    appearance: appearance(v.appearance),
+    ports: ports(v.ports),
+    review: review(v.review),
+    archive: { afterMerge: typeof a.afterMerge === 'boolean' ? a.afterMerge : DEFAULT_SETTINGS.archive.afterMerge }
+  }
 }
 
 /** Applies a (possibly untrusted) patch and re-sanitizes the result. */
@@ -158,5 +174,6 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
     typeof p.appearance === 'object' && p.appearance !== null ? { ...current.appearance, ...(p.appearance as object) } : current.appearance
   const nextPorts = typeof p.ports === 'object' && p.ports !== null ? { ...current.ports, ...(p.ports as object) } : current.ports
   const nextReview = typeof p.review === 'object' && p.review !== null ? { ...current.review, ...(p.review as object) } : current.review
-  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview })
+  const nextArchive = typeof p.archive === 'object' && p.archive !== null ? { ...current.archive, ...(p.archive as object) } : current.archive
+  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview, archive: nextArchive })
 }

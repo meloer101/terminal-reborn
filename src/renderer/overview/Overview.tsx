@@ -62,7 +62,12 @@ export function Overview() {
   )
   const collapsedSet = useMemo(() => new Set(view === 'board' ? [] : collapsed), [collapsed, view])
   const ids = useMemo(() => orderedIds(groups, collapsedSet), [groups, collapsedSet])
-  const attention = sessions.filter((s) => needsAttention(s.status)).length
+  // Archived worktrees' sessions are not on the overview (PRD F15).
+  const shown = useMemo(() => {
+    const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
+    return sessions.filter((s) => !archived.has(s.worktreeId))
+  }, [sessions, worktrees])
+  const attention = shown.filter((s) => needsAttention(s.status)).length
   const openRow = openId ? groups.flatMap((g) => g.rows).find((r) => r.session.id === openId) : undefined
 
   // Keep a selection that exists; default to the first row so ↵ / Space work right away.
@@ -133,7 +138,7 @@ export function Overview() {
           </IconButton>
         )}
         <h1 className={styles.title}>总览</h1>
-        <span className={styles.summary}>{overviewSummary(sessions, attention)}</span>
+        <span className={styles.summary}>{overviewSummary(shown, attention)}</span>
         <span className={styles.spacer} />
         <label className={styles.filter}>
           <Search {...ICON} />

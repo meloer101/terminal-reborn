@@ -154,12 +154,12 @@ export function rememberApproval(key: string, scripts: RepoScripts, target: Repo
 const asking = new Map<string, Promise<boolean>>()
 
 function parseScriptName(value: unknown): RunnableScript | CapturedScript {
-  if (value !== 'setup' && value !== 'run' && value !== 'test') throw new Error('invalid script name')
+  if (value !== 'setup' && value !== 'run' && value !== 'test' && value !== 'archive') throw new Error('invalid script name')
   return value
 }
 
 function parseCapturedScript(value: unknown): CapturedScript {
-  if (value !== 'test') throw new Error('invalid script name')
+  if (value !== 'test' && value !== 'archive') throw new Error('invalid script name')
   return value
 }
 
