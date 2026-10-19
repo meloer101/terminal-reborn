@@ -3,6 +3,7 @@
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
 import { detectBlockingDialog, inputLineText, normalizeSendText, planSend } from '@shared/send-protocol'
 import type { SessionId } from '@shared/types'
+import { useSessionMeta } from './session-meta/store'
 import { useWorkspace } from './state/workspace'
 import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
 
@@ -42,8 +43,10 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
  */
 export async function insertSlashCommand(sessionId: SessionId, command: string): Promise<void> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  if (!session || session.kind === 'shell') return
-  const steps = planSend(command, session.kind)
+  // A plain terminal: the agent started in it by hand, if one is running.
+  const kind = session?.kind === 'shell' ? useSessionMeta.getState().bySession[sessionId]?.agent : session?.kind
+  if (!kind) return
+  const steps = planSend(command, kind)
   const submit = steps.findIndex((step) => step.type === 'waitForText')
   await sendQueued(queue, sessionId, submit >= 0 ? steps.slice(0, submit) : steps, getSendIo(sessionId))
 }

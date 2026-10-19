@@ -227,6 +227,15 @@ describe('HookBridge · session metrics (PRD F11 / F12)', () => {
     ])
   })
 
+  it('clears a hand-started agent’s metrics when the shim reports that it ended', async () => {
+    const { bridge, events, req } = setup()
+    await bridge.handle(req('StatusLine', statusLine(40)))
+    await bridge.handle(req('PostToolUse', { tool_name: 'TodoWrite', tool_input: { todos: [{ content: 'a', status: 'pending' }] } }))
+    events.length = 0
+    expect(await bridge.handle(req('AgentExit', {}))).toBe('')
+    expect(events.map((e) => e.event)).toEqual([{ type: 'todos', items: [] }, { type: 'context', context: null }, { type: 'agent-exit' }])
+  })
+
   it('applies readings taken outside hooks only for attached sessions', () => {
     const { bridge, events } = setup()
     bridge.applyReading('s1', 'codex', { context: { percent: 41 } })

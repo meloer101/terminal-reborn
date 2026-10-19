@@ -29,6 +29,9 @@ interface SessionMeta {
 
 type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
 
+/** resources/hooks/agent-shim.sh reports this through the hook relay when the agent it started has exited. */
+export const AGENT_EXIT_EVENT = 'AgentExit'
+
 /** Something that follows a session's hook traffic until the session ends. */
 interface HookObserver {
   observe(sessionId: string, agent: HookAgent, event: string, payload: unknown): void
@@ -162,6 +165,13 @@ export class HookBridge {
     this.options.transcripts?.observe(sessionId, agent, event, request.payload)
     this.agents.set(sessionId, agent)
     const at = request.receivedAt ?? this.now()
+    // Sent by the shim after an agent started by hand in a plain terminal ended (Codex has no SessionEnd of its own).
+    if (event === AGENT_EXIT_EVENT) {
+      this.setTodos(sessionId, agent, at, [])
+      this.setContext(sessionId, agent, at, null)
+      this.emitter.event({ sessionId, agent, at, event: { type: 'agent-exit' } })
+      return ''
+    }
     const normalized = normalizeHook(agent, event, request.payload, at)
     for (const e of normalized.events) {
       if (e.type === 'context') this.setContext(sessionId, agent, at, e.context)

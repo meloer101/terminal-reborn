@@ -144,8 +144,11 @@ export function startStatusBridge(): () => void {
   const unsubscribeStore = useWorkspace.subscribe((state, prev) => {
     if (state.sessions !== prev.sessions || state.activeSessionId !== prev.activeSessionId) sync()
   })
+  // A plain terminal's hand-started agent reports metrics only (session-meta); its status stays a terminal's.
+  const isShell = (sessionId: string) => useWorkspace.getState().sessions.find((s) => s.id === sessionId)?.kind === 'shell'
   const unsubscribeEvents = window.tr.agent.onEvent((envelope) => {
     const { sessionId, event } = envelope
+    if (isShell(sessionId)) return
     if (event.type === 'agent-title') {
       // A name, not activity: it never touches status.
       const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
@@ -154,7 +157,7 @@ export function startStatusBridge(): () => void {
       return
     }
     // Metrics (session-meta/bridge.ts keeps them): the statusLine runs while idle too, so they say nothing about status.
-    if (event.type === 'context' || event.type === 'todos') return
+    if (event.type === 'context' || event.type === 'todos' || event.type === 'agent-exit') return
     if (event.type === 'prompt-submit') {
       const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
       const title = session && titleFromFirstPrompt(session, event.prompt)
@@ -165,6 +168,7 @@ export function startStatusBridge(): () => void {
   // A PermissionRequest / AskUserQuestion prompt is the authoritative "needs you" signal: Claude's own
   // Notification(permission_prompt) lags ~6 s behind it (PRD §6.6).
   const unsubscribePrompts = window.tr.agent.onPrompt((prompt) =>
+    !isShell(prompt.sessionId) &&
     controller.handleEvent(prompt.sessionId, {
       type: 'notification',
       kind: prompt.kind,

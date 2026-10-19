@@ -4,7 +4,7 @@
 // per-session "no hooks" / "no SessionStart" signals reach the renderer on IPC.agentHooksHealth / agentSessionHooks.
 import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAlert, VendorUsage } from '@shared/session-meta'
@@ -18,6 +18,7 @@ import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
 import { createHookDir, sweepStaleHookDirs } from './hook-dir'
 import { UnknownSessionError } from './server'
 import { buildClaudeHookSettings } from './settings'
+import { shellIntegrationEnv, writeCodexOverrides, writeShims, type ShimDirs } from './shell-agents'
 import { StartWatchdog } from './start-watchdog'
 import { TranscriptMeter } from './transcript-meter'
 import { HookSupervisor } from './supervisor'
@@ -215,9 +216,22 @@ async function start(): Promise<Runtime | null> {
   }
 }
 
+/** The agent shims for plain terminals (./shell-agents.ts); null when they could not be written. */
+let shims: ShimDirs | null = null
+
+/** `resources/hooks/agent-shim.sh`, next to the hook relay. */
+function agentShimScriptPath(): string {
+  return join(dirname(hookScriptPath()), 'agent-shim.sh')
+}
+
 export function registerHookHandlers(): void {
   usageStore = createUsageStore()
   runtime = start()
+  try {
+    shims = writeShims(join(app.getPath('userData'), 'agent-shims'), agentShimScriptPath())
+  } catch (error) {
+    console.error('[hooks] could not write the agent shims:', error)
+  }
 
   ipcMain.handle(IPC.agentGetUsage, (): VendorUsage[] => usageStore?.list() ?? [])
 
@@ -295,6 +309,40 @@ export async function prepareAgentLaunch(
   rt.bridge.attach(sessionId)
   if (!options.deferStartWatchdog) watchdog.arm(sessionId)
   return { env, codexConfig: codex.config }
+}
+
+/**
+ * A plain terminal: an agent the user starts in it by hand reports to this session (PRD F11). Returns the environment
+ * that puts the agent shims first on PATH (and keeps them there in zsh / fish) plus the hook variables; null when
+ * hooks or shims are unavailable (the terminal then works as before). `base` is the shell's starting environment.
+ */
+export async function prepareShellLaunch(
+  sessionId: string,
+  owner: WebContents,
+  options: { shell: string; base: Readonly<Record<string, string | undefined>>; cwd?: string }
+): Promise<Record<string, string> | null> {
+  if (!shims) return null
+  const rt = await runtime
+  if (!rt || !rt.supervisor.health.ok) return null
+  const codex = await rt.codex.get()
+  try {
+    if (codex.ok) writeCodexOverrides(shims, codex.config)
+  } catch (error) {
+    console.error('[hooks] could not write the Codex overrides for the shims:', error)
+  }
+  owners.set(sessionId, owner)
+  rt.bridge.attach(sessionId)
+  return {
+    ...shellIntegrationEnv(options.shell, options.base, shims),
+    TR_SESSION_ID: sessionId,
+    TR_HOOK_SOCK: rt.supervisor.socketPath,
+    TR_HOOK_TOKEN: rt.supervisor.token,
+    TR_HOOK_SCRIPT: hookScriptPath(),
+    TR_CLAUDE_SETTINGS: rt.supervisor.settingsPath,
+    ...(codex.ok ? { TR_CODEX_CONFIG: shims.codexConfig } : {}),
+    // Resolved for the folder the terminal starts in (a statusLine in another project's settings is not seen).
+    TR_USER_STATUSLINE: options.cwd ? userStatusLineFor(options.cwd) : ''
+  }
 }
 
 /** Starts the SessionStart countdown of a launch prepared with `deferStartWatchdog` (its setup script finished). */
