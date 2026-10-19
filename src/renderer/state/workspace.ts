@@ -26,7 +26,7 @@ import {
 } from './workspace-model'
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
 import { reviewCommentsSnapshot } from './review-comments'
-import { clampPanelWidth, PANEL_WIDTH_DEFAULT, type PersistedRightPanel } from '@shared/workspace-file'
+import { clampPanelWidth, PANEL_WIDTH_DEFAULT, type DiffLayout, type PersistedRightPanel } from '@shared/workspace-file'
 
 /** The right panel's views (PRD F17), switched by the icons in the session header. */
 export type PanelView = PersistedRightPanel
@@ -42,6 +42,8 @@ interface WorkspaceState extends WorkspaceData {
   lastRightPanel: PanelView
   /** Card width in px (dragged by its left edge). */
   rightPanelWidth: number
+  /** Git · 变更 layout the user picked; split shows only while the panel is wide enough (PRD F5). */
+  diffLayout: DiffLayout
   /** Projects folded in the sidebar. */
   collapsedProjectIds: ProjectId[]
   mainView: MainView
@@ -67,6 +69,7 @@ interface WorkspaceState extends WorkspaceData {
   /** ⇧⌘B: closes the panel, or reopens the last view. */
   toggleRightPanel(): void
   setRightPanelWidth(width: number): void
+  setDiffLayout(layout: DiffLayout): void
   toggleProjectCollapsed(id: ProjectId): void
   /** Adds (or finds) the project for a folder. */
   addProject(rootPath: string): ProjectId
@@ -132,6 +135,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   rightPanel: saved?.rightPanel ?? null,
   lastRightPanel: saved?.rightPanel ?? saved?.lastRightPanel ?? 'files',
   rightPanelWidth: saved?.rightPanelWidth ?? PANEL_WIDTH_DEFAULT,
+  diffLayout: saved?.diffLayout ?? 'unified',
   collapsedProjectIds: saved?.collapsedProjectIds ?? [],
   mainView: 'session',
   recentProjects: saved?.recentProjects ?? [],
@@ -148,6 +152,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   togglePanelView: (view) => get().setRightPanel(get().rightPanel === view ? null : view),
   toggleRightPanel: () => get().setRightPanel(get().rightPanel ? null : get().lastRightPanel),
   setRightPanelWidth: (width) => set({ rightPanelWidth: clampPanelWidth(width) }),
+  setDiffLayout: (layout) => set({ diffLayout: layout }),
   toggleProjectCollapsed: (id) =>
     set((s) => ({
       collapsedProjectIds: s.collapsedProjectIds.includes(id)
@@ -208,6 +213,7 @@ setSnapshotProvider(() => {
       rightPanel: state.rightPanel,
       lastRightPanel: state.lastRightPanel,
       rightPanelWidth: state.rightPanelWidth,
+      diffLayout: state.diffLayout,
       collapsedProjectIds: state.collapsedProjectIds,
       recentProjects: state.recentProjects,
       newSessionWorkdir: state.newSessionWorkdir

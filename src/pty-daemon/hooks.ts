@@ -30,7 +30,9 @@ export class HookJournal {
     } catch {
       payload = null
     }
-    const list = this.entries.get(sessionId) ?? []
+    // The statusLine relay posts every second or two during a turn; only the newest reading is worth replaying,
+    // and it must not push the turn's real events out of the bounded journal.
+    const list = (this.entries.get(sessionId) ?? []).filter((e) => entry.event !== 'StatusLine' || e.event !== 'StatusLine')
     list.push({ ...entry, payload })
     if (list.length > JOURNAL_LIMIT) list.splice(0, list.length - JOURNAL_LIMIT)
     this.entries.set(sessionId, list)

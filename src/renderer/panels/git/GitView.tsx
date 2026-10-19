@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { compareByUrgency } from '@shared/session-status'
 import type { GitLogScope } from '@shared/git-graph/log'
 import type { Worktree } from '@shared/types'
+import { SPLIT_MIN_PANEL_WIDTH, type DiffLayout } from '@shared/workspace-file'
 import { glyphStatus } from '../../lifecycle/present'
 import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
@@ -99,6 +100,12 @@ function GitPane({ worktree }: { worktree: Worktree }) {
     return byPath
   }, [worktreeList, sessionList, worktree.projectId, realPaths])
 
+  // 并排 needs room: below SPLIT_MIN_PANEL_WIDTH it is off and the diff falls back to one column; the choice is kept.
+  const preferred = useWorkspace((s) => s.diffLayout)
+  const setDiffLayout = useWorkspace((s) => s.setDiffLayout)
+  const roomy = useWorkspace((s) => s.rightPanelWidth >= SPLIT_MIN_PANEL_WIDTH)
+  const layout: DiffLayout = preferred === 'split' && roomy ? 'split' : 'unified'
+
   const changeCount = git.changes ? new Set([...git.changes.uncommitted, ...git.changes.committed].map((c) => c.path)).size : null
   const onGraph = git.tab === 'graph'
 
@@ -165,11 +172,14 @@ function GitPane({ worktree }: { worktree: Worktree }) {
             <ChevronDown size={16} strokeWidth={1.75} />
           </button>
         ) : (
-          git.changes?.base && (
-            <span className={styles.aheadBehind}>
-              领先 {git.changes.ahead} · 落后 {git.changes.behind}
-            </span>
-          )
+          <>
+            {git.changes?.base && (
+              <span className={styles.aheadBehind}>
+                领先 {git.changes.ahead} · 落后 {git.changes.behind}
+              </span>
+            )}
+            <LayoutSwitch layout={layout} roomy={roomy} onChange={setDiffLayout} />
+          </>
         )}
       </div>
       {git.fetchError && onGraph && (
@@ -177,7 +187,41 @@ function GitPane({ worktree }: { worktree: Worktree }) {
           拉取失败：{git.fetchError.split('\n')[0]}
         </p>
       )}
-      {onGraph ? <GraphView root={root} git={git} sessions={sessions} /> : <ChangesView root={root} git={git} worktree={worktree} />}
+      {onGraph ? <GraphView root={root} git={git} sessions={sessions} /> : <ChangesView root={root} git={git} worktree={worktree} layout={layout} />}
     </>
+  )
+}
+
+const NARROW_HINT = `右侧栏宽 ${SPLIT_MIN_PANEL_WIDTH} 以上才能并排`
+
+/**
+ * 统一 / 并排 (PRD F5, Figma 17F / 17H). In a narrow panel 并排 is disabled and hovering the switch says why; picking it
+ * earlier is remembered, so widening the panel brings it back.
+ */
+function LayoutSwitch({ layout, roomy, onChange }: { layout: DiffLayout; roomy: boolean; onChange(layout: DiffLayout): void }) {
+  const [hint, setHint] = useState(false)
+  return (
+    <span
+      className={styles.layoutSwitch}
+      onPointerEnter={() => !roomy && setHint(true)}
+      onPointerLeave={() => setHint(false)}
+      aria-describedby={roomy ? undefined : 'diff-layout-hint'}
+    >
+      <Segmented
+        label="diff 布局"
+        variant="outline"
+        value={layout}
+        options={[
+          { value: 'unified', label: '统一' },
+          { value: 'split', label: '并排', disabled: !roomy }
+        ]}
+        onChange={onChange}
+      />
+      {!roomy && (
+        <span id="diff-layout-hint" role="tooltip" className={styles.layoutHint} data-shown={hint} data-testid="diff-layout-hint">
+          {NARROW_HINT}
+        </span>
+      )}
+    </span>
   )
 }

@@ -705,3 +705,115 @@ button.pill:hover {
 .commentSave {
   composes: primaryButton;
 }
+
+/* 并排 diff (PRD F5, Figma DiffSplitRow 262:10029 / 17F) ------------------------------------------------------- */
+
+.splitLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  height: 20px;
+  font: var(--text-mono-code);
+  color: var(--term-fg);
+  --comment-add-size: 18px;
+}
+
+/* One half: gutter 36 · marker 20 · code; a missing counterpart is a quiet filler. */
+.splitSide {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.splitSide[data-kind='del'] {
+  background: var(--diff-del-bg);
+}
+
+.splitSide[data-kind='add'] {
+  background: var(--diff-add-bg);
+}
+
+.splitSide[data-kind='empty'] {
+  background: var(--bg-hover);
+}
+
+.splitSide[data-kind='del'] .marker {
+  color: var(--diff-del-fg);
+}
+
+.splitSide[data-kind='add'] .marker {
+  color: var(--diff-add-fg);
+}
+
+.splitDivider {
+  flex: none;
+  width: 1px;
+  background: var(--border-subtle);
+}
+
+.splitLine:hover .commentAdd {
+  opacity: 1;
+}
+
+.splitLine[data-marked='true'] .splitSide[data-side='new'] {
+  box-shadow: inset 2px 0 0 var(--text-secondary);
+}
+
+/* The hunk header spans both halves, its text where the code starts. */
+.splitHunk {
+  padding-left: 56px;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Comments and the editor sit under the new half; the old half beside them is a filler. */
+.comment[data-split],
+.editor[data-split] {
+  left: calc(50% + 0.5px);
+}
+
+.comment[data-split]::before,
+.editor[data-split]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: calc(100% + 1px);
+  background: var(--bg-hover);
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+  pointer-events: none;
+}
+
+/* 统一 / 并排, and why 并排 is off in a narrow panel (Figma 17H). */
+.layoutSwitch {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  margin-left: var(--space-12);
+}
+
+.layoutHint {
+  position: absolute;
+  top: calc(100% + var(--space-6));
+  right: 0;
+  z-index: 20;
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-overlay);
+  font: var(--text-caption);
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.layoutHint[data-shown='true'] {
+  visibility: visible;
+}

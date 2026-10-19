@@ -7,6 +7,7 @@ import type { BrowserApi } from './browser'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
+import type { VendorUsage } from './session-meta'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
@@ -323,6 +324,10 @@ export interface AgentApi {
   onHooksHealth(listener: (health: HooksHealth) => void): Unsubscribe
   /** Per-session: launched without hooks, or no hook event within SESSION_START_TIMEOUT_MS of launch. */
   onSessionHooks(listener: (signal: SessionHooksSignal) => void): Unsubscribe
+  /** The latest plan usage per vendor (account-level, kept across app runs; PRD F11). */
+  getUsage(): Promise<VendorUsage[]>
+  /** A vendor's plan usage changed (or was confirmed again after a while). */
+  onUsage(listener: (usage: VendorUsage) => void): Unsubscribe
 }
 
 export interface TrApi {
@@ -385,6 +390,10 @@ export const IPC = {
   agentHooksHealth: 'agent:hooks-health',
   /** main → renderer, payload SessionHooksSignal */
   agentSessionHooks: 'agent:session-hooks',
+  /** invoke → VendorUsage[] */
+  agentGetUsage: 'agent:get-usage',
+  /** main → every window, payload VendorUsage */
+  agentUsage: 'agent:usage',
   uiOpenSettings: 'ui:open-settings',
   /** main → renderer: show the settings dialog */
   uiShowSettings: 'ui:show-settings',

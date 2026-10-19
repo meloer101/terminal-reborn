@@ -57,6 +57,12 @@ function sanitizeArchive(value: unknown): WorktreeArchive | null {
 
 export type PersistedWorktree = Pick<Worktree, 'id' | 'projectId' | 'branch' | 'path' | 'isMain' | 'archived'> & { baseBranch?: string }
 
+/** Git · 变更: one column, or base and new side by side (PRD F5; split needs a right panel ≥ SPLIT_MIN_PANEL_WIDTH). */
+export type DiffLayout = 'unified' | 'split'
+
+/** Narrower than this the 并排 layout is off (the choice is kept and comes back when the panel is widened). */
+export const SPLIT_MIN_PANEL_WIDTH = 720
+
 export interface WorkspaceFile {
   version: typeof WORKSPACE_FILE_VERSION
   projects: Project[]
@@ -69,6 +75,8 @@ export interface WorkspaceFile {
   lastRightPanel?: PersistedRightPanel
   /** Card width in px. Absent = PANEL_WIDTH_DEFAULT. */
   rightPanelWidth?: number
+  /** Git · 变更 diff layout the user picked (PRD F5). Absent = unified. */
+  diffLayout?: DiffLayout
   /** Projects folded in the sidebar (only ids of projects that exist). */
   collapsedProjectIds: string[]
   /** Composer drafts by session id; only non-empty drafts of sessions that exist. */
@@ -202,6 +210,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(typeof value.rightPanelWidth === 'number' && Number.isFinite(value.rightPanelWidth)
       ? { rightPanelWidth: clampPanelWidth(value.rightPanelWidth) }
       : {}),
+    ...(value.diffLayout === 'split' ? { diffLayout: 'split' as const } : {}),
     collapsedProjectIds: Array.isArray(value.collapsedProjectIds)
       ? [...new Set(value.collapsedProjectIds.filter((id): id is string => isString(id) && projectIds.has(id)))]
       : [],

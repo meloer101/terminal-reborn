@@ -245,6 +245,33 @@
   width: 64px;
 }
 
+/* Figma 17C TodoCell 48 / ContextCell 100: the chip's 6px inset, mono; a high context is heavier, never colored. */
+.todoCell,
+.contextCell {
+  flex: none;
+  padding: 0 var(--space-6);
+  overflow: hidden;
+  font: var(--text-mono-s);
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.todoCell {
+  width: 48px;
+  color: var(--text-secondary);
+}
+
+.contextCell {
+  width: 100px;
+  color: var(--text-tertiary);
+}
+
+.contextCell[data-level='high'] {
+  font: var(--text-mono-s-medium);
+  line-height: 20px;
+  color: var(--text-primary);
+}
+
 .time {
   width: 56px;
 }

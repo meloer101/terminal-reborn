@@ -5,6 +5,8 @@
 // (Bash, Edit/Write, AskUserQuestion) so the status, prompt-bar and permission code stays agent-agnostic.
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
+import { parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
+import { isTodoTool } from '@shared/todo-progress'
 
 export interface PermissionDraft {
   tool: string
@@ -26,6 +28,12 @@ export interface NormalizedHook {
    * must not release each other), 'all' = the turn moved on, 'none' = nothing.
    */
   clears: 'none' | 'tool' | 'all'
+  /** Plan usage read from this call (Claude statusLine); account-level, so it goes to every window (PRD F11). */
+  usage?: VendorUsage
+  /** A successful todo-tool call for the session's todo list (PRD F12); the bridge keeps the list. */
+  todoCall?: { tool: string; input: unknown; response: unknown }
+  /** The conversation was cleared (/clear): its todo list and context reading are gone. */
+  cleared?: true
 }
 
 const MAX_SUMMARY = 160
@@ -166,13 +174,22 @@ function sessionStart(payload: Rec): AgentEvent {
   return id && isSafeAgentSessionId(id) ? { type: 'session-start', agentSessionId: id } : { type: 'session-start' }
 }
 
-function normalizeClaude(event: string, payload: Rec): NormalizedHook {
+function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHook {
   const tool = str(payload.tool_name) ?? 'unknown'
   const input = isRec(payload.tool_input) ? payload.tool_input : {}
 
   switch (event) {
     case 'SessionStart':
-      return { events: [sessionStart(payload)], clears: 'none' }
+      return { events: [sessionStart(payload)], clears: 'none', ...(payload.source === 'clear' ? { cleared: true as const } : {}) }
+    // Not a hook: our statusLine relay (resources/hooks/tr-statusline.sh) posts the statusLine JSON under this name.
+    case 'StatusLine': {
+      const reading = parseClaudeStatusLine(payload, at)
+      return {
+        events: reading.context ? [{ type: 'context', context: reading.context }] : [],
+        clears: 'none',
+        ...(reading.usage ? { usage: reading.usage } : {})
+      }
+    }
     case 'UserPromptSubmit':
       return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
     case 'PreToolUse': {
@@ -184,7 +201,11 @@ function normalizeClaude(event: string, payload: Rec): NormalizedHook {
       return result
     }
     case 'PostToolUse':
-      return { events: [{ type: 'tool-end', tool, input, ok: true }], clears: 'tool' }
+      return {
+        events: [{ type: 'tool-end', tool, input, ok: true }],
+        clears: 'tool',
+        ...(isTodoTool(tool) ? { todoCall: { tool, input, response: payload.tool_response } } : {})
+      }
     case 'PostToolUseFailure':
       return { events: [{ type: 'tool-end', tool, input, ok: false }], clears: 'tool' }
     case 'PermissionRequest': {
@@ -297,7 +318,7 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
 }
 
 /** Unknown events and non-object payloads normalize to nothing; they are never an error. */
-export function normalizeHook(agent: HookAgent, event: string, payload: unknown): NormalizedHook {
+export function normalizeHook(agent: HookAgent, event: string, payload: unknown, at = Date.now()): NormalizedHook {
   if (!isRec(payload)) return NONE
-  return agent === 'codex' ? normalizeCodex(event, payload) : normalizeClaude(event, payload)
+  return agent === 'codex' ? normalizeCodex(event, payload) : normalizeClaude(event, payload, at)
 }

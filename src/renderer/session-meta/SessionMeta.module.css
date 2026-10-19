@@ -1,0 +1,340 @@
+/* Session metrics (Figma 17 · TodoChip 261:9961 · ContextChip 261:9968 · UsageChip 269:10194 and their popovers).
+   Numbers only, no status colors: a high figure is heavier type in text/primary. */
+
+/* Figma 17A "Meta": 4 between chips, 12 before the pane switcher (the tools' own 8 inset is folded in). */
+.headerChips {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-right: calc(-1 * var(--space-8));
+  -webkit-app-region: no-drag;
+}
+
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-2) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: var(--text-mono-s);
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+button.chip:hover {
+  background: var(--bg-hover);
+}
+
+.chip[data-open='true'] {
+  background: var(--bg-selected);
+}
+
+.chip:focus-visible,
+.compact:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* TodoChip: count · current item (the item gives way first when the header narrows). */
+.todoChip {
+  flex: 0 1 auto;
+  gap: var(--space-6);
+  max-width: 280px;
+}
+
+.todoCount {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.todoCurrent {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* ContextChip: high = heavier number in text/primary, and /compact. */
+.contextValue {
+  color: var(--text-tertiary);
+}
+
+.chip[data-level='high'] .contextValue {
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+}
+
+.compact {
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font: var(--text-mono-s);
+  cursor: default;
+}
+
+.compact:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+/* UsageChip: vendor in the UI face, window and percentage in mono. */
+.usageVendor {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.usageValue {
+  color: var(--text-tertiary);
+}
+
+.usageChip[data-level='high'] .usageValue {
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+}
+
+/* Popovers (TodoPopover / UsagePopover): popover surface, hairline, overlay shadow, 320 wide. */
+.popover {
+  position: fixed;
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: calc(100vh - 2 * var(--space-40));
+  overflow: hidden auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-overlay);
+  color: var(--text-primary);
+  user-select: none;
+  -webkit-app-region: no-drag;
+  animation: pop-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation: none;
+  }
+}
+
+.popoverHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+}
+
+.popoverTitle {
+  flex: 1;
+  font: var(--text-body-strong);
+}
+
+.popoverMeta {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.popoverFooter {
+  margin: 0;
+  padding: var(--space-12) var(--space-16) var(--space-8);
+  border-top: 1px solid var(--border-subtle);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* TodoItem 261:9985: 26 high; done ✓ tertiary, current highlighted in primary medium, pending secondary. */
+.todoItems {
+  margin: 0;
+  padding: 0 var(--space-12) var(--space-8);
+  list-style: none;
+}
+
+.todoItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 26px;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-sm);
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.todoItem[data-state='done'] {
+  color: var(--text-tertiary);
+}
+
+.todoItem[data-state='current'] {
+  background: var(--bg-hover);
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+.todoIcon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.todoText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sidebar row: a 1px line under the activity, from the title column to the meta column's edge. */
+.todoLine {
+  position: absolute;
+  left: calc(var(--indent-tree) + 14px + var(--space-8));
+  right: var(--space-12);
+  bottom: var(--space-2);
+  height: 1px;
+  overflow: hidden;
+  background: var(--border-default);
+  pointer-events: none;
+}
+
+.todoLineDone {
+  display: block;
+  height: 100%;
+  background: var(--text-secondary);
+}
+
+/* ContextTooltip 261:10030. */
+.tooltip {
+  position: fixed;
+  z-index: 260;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-overlay);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tooltipMain {
+  font: var(--text-caption-strong);
+  color: var(--text-primary);
+}
+
+.tooltipHint {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* UsagePopover: one section per vendor; the second and later ones start with a hairline. */
+.vendor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-8) var(--space-16);
+}
+
+.vendor + .vendor {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.vendorName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font: var(--text-body-strong);
+}
+
+.vendorCurrent {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* UsageWindowRow 269:10195: name 48 · bar 88 · value 36 · reset. */
+.window {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 20px;
+}
+
+.windowLabel {
+  flex: none;
+  width: 48px;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.windowBar {
+  flex: none;
+  position: relative;
+  width: 88px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border-default);
+}
+
+.windowUsed {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text-secondary);
+}
+
+.window[data-level='high'] .windowUsed {
+  background: var(--text-primary);
+}
+
+.windowValue {
+  flex: none;
+  width: 36px;
+  text-align: right;
+  font: var(--text-mono-s);
+  color: var(--text-primary);
+}
+
+.window[data-level='high'] .windowValue {
+  font: var(--text-mono-s-medium);
+}
+
+.windowReset {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* Overview top bar: one UsageChip per vendor (Figma 17C PlanUsage), 28 before the filter. */
+.planUsage {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-right: var(--space-16);
+  -webkit-app-region: no-drag;
+}

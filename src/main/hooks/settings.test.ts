@@ -6,8 +6,8 @@ const script = '/Applications/Wavi.app/Contents/Resources/hooks/tr-hook.sh'
 describe('buildClaudeHookSettings', () => {
   const settings = buildClaudeHookSettings(script)
 
-  it('registers exactly the events the bridge understands, hooks only', () => {
-    expect(Object.keys(settings)).toEqual(['hooks'])
+  it('registers exactly the events the bridge understands, plus the statusLine relay', () => {
+    expect(Object.keys(settings)).toEqual(['hooks', 'statusLine'])
     expect(Object.keys(settings.hooks)).toEqual([...CLAUDE_HOOK_EVENTS])
     for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'Notification', 'Stop', 'StopFailure', 'SessionEnd']) {
       expect(settings.hooks[event]).toBeDefined()
@@ -25,6 +25,10 @@ describe('buildClaudeHookSettings', () => {
       if (event === 'PermissionRequest') expect(timeout).toBeGreaterThan(120)
       else expect(timeout).toBeLessThanOrEqual(10)
     }
+  })
+
+  it('runs the statusLine relay next to the hook relay (PRD F11)', () => {
+    expect(settings.statusLine).toEqual({ type: 'command', command: `/bin/sh '/Applications/Wavi.app/Contents/Resources/hooks/tr-statusline.sh'` })
   })
 
   it('has no matcher, so tool hooks fire for every tool', () => {

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { listenForBrowser } from '../panels/browser/store'
 import { listenForBackgroundReview } from '../review/background'
+import { startSessionMetaBridge } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
@@ -52,6 +53,7 @@ export function AppShell() {
   const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
   useEffect(() => startActivityReporting(), [])
   useEffect(() => listenForBackgroundReview(), [])
+  useEffect(() => startSessionMetaBridge(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
   useEffect(() => {

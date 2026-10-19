@@ -1,10 +1,12 @@
 // Status overview (PRD F9 · Figma 11 v2: list 106:3640 / 106:4038, board 108:4091 / 108:4366). Replaces the
 // terminal in the main area; the terminals stay mounted behind it. A row opens the session's own terminal in place
 // (list) or in an overlay (board). Keyboard: ↑↓ move · Space opens / closes · ↵ enter · Esc closes, then leaves.
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, ChevronUp, PanelLeft, Search } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'
+import { isHigh, orderVendors } from '@shared/session-meta'
+import { todoProgress } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
 import { subscribeClock } from '../sidebar/clock'
 import { useWorkspace } from '../state/workspace'
@@ -15,6 +17,9 @@ import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { EnterButton } from './EnterButton'
 import { PortTags } from '../panels/browser/PortTags'
 import { ReviewButton } from '../review/ReviewButton'
+import { UsageChip, useMetaNow, useUsageList } from '../session-meta/MetaChips'
+import { useSessionMeta } from '../session-meta/store'
+import metaStyles from '../session-meta/SessionMeta.module.css'
 import enterStyles from './EnterButton.module.css'
 import {
   buildOverview,
@@ -34,6 +39,12 @@ import { SHORTCUTS } from '@shared/shortcuts'
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
 const TICK_MS = 15_000
+
+/**
+ * Which metric columns the list draws (Figma 17C TodoCell / ContextCell): a column appears once any session has that
+ * metric and then keeps its place in every row, blank where a session has none (Codex has no todo; shells have neither).
+ */
+const MetaColumns = createContext<{ todo: boolean; context: boolean }>({ todo: false, context: false })
 
 /** "Now" on the shared 15 s clock, so "已等 3m" keeps counting without re-rendering on every frame. */
 function useClockNow(): number {
@@ -69,6 +80,12 @@ export function Overview() {
   }, [sessions, worktrees])
   const attention = shown.filter((s) => needsAttention(s.status)).length
   const openRow = openId ? groups.flatMap((g) => g.rows).find((r) => r.session.id === openId) : undefined
+  const metaColumns = useSessionMeta(
+    useShallow((m) => {
+      const live = shown.map((x) => m.bySession[x.id])
+      return { todo: live.some((x) => x?.todos !== undefined), context: live.some((x) => x?.context !== undefined) }
+    })
+  )
 
   // Keep a selection that exists; default to the first row so ↵ / Space work right away.
   useEffect(() => {
@@ -130,66 +147,106 @@ export function Overview() {
   }
 
   return (
-    <div className={styles.overview} data-region="overview" onKeyDown={onKeyDown}>
-      <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
-        {sidebarCollapsed && (
-          <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
-            <PanelLeft {...ICON} />
-          </IconButton>
-        )}
-        <h1 className={styles.title}>总览</h1>
-        <span className={styles.summary}>{overviewSummary(shown, attention)}</span>
-        <span className={styles.spacer} />
-        <label className={styles.filter}>
-          <Search {...ICON} />
-          <input
-            ref={filterRef}
-            type="search"
-            value={filter}
-            placeholder="过滤  p:项目  s:状态"
-            aria-label="过滤会话"
-            onChange={(e) => setFilter(e.target.value)}
-          />
-        </label>
-        <ViewSwitch view={view} onChange={setView} />
-      </header>
-      <div
-        ref={bodyRef}
-        className={styles.body}
-        data-view={view}
-        tabIndex={-1}
-        role="listbox"
-        aria-label="会话"
-        aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
-      >
-        {sessions.length === 0 ? (
-          <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
-        ) : view === 'list' ? (
-          // Empty groups are left out of the list (a stack of "0" headers is noise); the board keeps every column.
-          groups.filter((g) => g.rows.length > 0).map((g) => (
-            <ListGroup
-              key={g.key}
-              group={g}
-              collapsed={collapsedSet.has(g.key)}
-              selectedId={selectedId}
-              openId={openId}
-              onToggle={() => toggleGroup(g.key)}
-              onClick={onRowClick}
-              onCollapse={closeOpen}
+    <MetaColumns.Provider value={metaColumns}>
+      <div className={styles.overview} data-region="overview" onKeyDown={onKeyDown}>
+        <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
+          {sidebarCollapsed && (
+            <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
+              <PanelLeft {...ICON} />
+            </IconButton>
+          )}
+          <h1 className={styles.title}>总览</h1>
+          <span className={styles.summary}>{overviewSummary(shown, attention)}</span>
+          <span className={styles.spacer} />
+          <PlanUsage />
+          <label className={styles.filter}>
+            <Search {...ICON} />
+            <input
+              ref={filterRef}
+              type="search"
+              value={filter}
+              placeholder="过滤  p:项目  s:状态"
+              aria-label="过滤会话"
+              onChange={(e) => setFilter(e.target.value)}
             />
-          ))
-        ) : (
-          <div className={styles.board}>
-            {groups.map((g) => (
-              <BoardColumn key={g.key} group={g} selectedId={selectedId} onClick={onRowClick} />
-            ))}
-          </div>
-        )}
-        {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
+          </label>
+          <ViewSwitch view={view} onChange={setView} />
+        </header>
+        <div
+          ref={bodyRef}
+          className={styles.body}
+          data-view={view}
+          tabIndex={-1}
+          role="listbox"
+          aria-label="会话"
+          aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
+        >
+          {sessions.length === 0 ? (
+            <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
+          ) : view === 'list' ? (
+            // Empty groups are left out of the list (a stack of "0" headers is noise); the board keeps every column.
+            groups.filter((g) => g.rows.length > 0).map((g) => (
+              <ListGroup
+                key={g.key}
+                group={g}
+                collapsed={collapsedSet.has(g.key)}
+                selectedId={selectedId}
+                openId={openId}
+                onToggle={() => toggleGroup(g.key)}
+                onClick={onRowClick}
+                onCollapse={closeOpen}
+              />
+            ))
+          ) : (
+            <div className={styles.board}>
+              {groups.map((g) => (
+                <BoardColumn key={g.key} group={g} selectedId={selectedId} onClick={onRowClick} />
+              ))}
+            </div>
+          )}
+          {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
+        </div>
+        {/* Keyed by session: switching sessions starts a fresh overlay (focus, borrow). */}
+        {view === 'board' && openRow && <SessionOverlay key={openRow.session.id} row={openRow} onClose={closeOpen} />}
       </div>
-      {/* Keyed by session: switching sessions starts a fresh overlay (focus, borrow). */}
-      {view === 'board' && openRow && <SessionOverlay key={openRow.session.id} row={openRow} onClose={closeOpen} />}
-    </div>
+    </MetaColumns.Provider>
+  )
+}
+
+/** Figma 17C PlanUsage: one UsageChip per vendor with data, each opening the same popover. */
+function PlanUsage() {
+  const all = useUsageList()
+  const now = useMetaNow()
+  const vendors = orderVendors(all, null, now)
+  if (vendors.length === 0) return null
+  return (
+    <span className={metaStyles.planUsage} data-testid="plan-usage">
+      {vendors.map((usage) => (
+        <UsageChip key={usage.vendor} usage={usage} current={null} all={all} />
+      ))}
+    </span>
+  )
+}
+
+/** TodoCell (48) and ContextCell (100) of OverviewRow v2: the count only, and context without /compact. */
+function MetaCells({ sessionId }: { sessionId: SessionId }) {
+  const columns = useContext(MetaColumns)
+  const metrics = useSessionMeta((m) => m.bySession[sessionId])
+  const progress = metrics?.todos ? todoProgress(metrics.todos) : null
+  const context = metrics?.context
+  return (
+    <>
+      {columns.todo && (
+        <span className={styles.todoCell} data-testid="overview-todo">
+          {progress && `${progress.done}/${progress.total}`}
+        </span>
+      )}
+      {columns.context && (
+        <span className={styles.contextCell} data-level={context && isHigh(context.percent) ? 'high' : 'normal'} data-testid="overview-context">
+          {context && `context ${context.percent}%`}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -272,6 +329,7 @@ function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProp
       <span className={styles.where}>{row.where}</span>
       <span className={styles.summaryCell}>{row.summary}</span>
       <PortTags sessionId={id} />
+      <MetaCells sessionId={id} />
       {trailing ?? (
         <>
           <span className={styles.stat}>{row.stat}</span>

@@ -6,8 +6,8 @@ import { useEffect, useState, type RefObject } from 'react'
 
 /** Below this the page is not worth showing. */
 const MIN_SIDE = 80
-/** DOM that must stay above the page. */
-const COVER_SELECTOR = '[role="menu"], [role="dialog"][aria-modal="true"]'
+/** DOM that must stay above the page (popovers opt in with data-covers-page, e.g. the session header's todo / usage). */
+const COVER_SELECTOR = '[role="menu"], [role="dialog"][aria-modal="true"], [data-covers-page]'
 
 /** Whether something that must draw above the page is open. */
 function covered(): boolean {

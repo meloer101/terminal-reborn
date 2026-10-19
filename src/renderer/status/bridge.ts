@@ -153,6 +153,8 @@ export function startStatusBridge(): () => void {
       if (patch) useWorkspace.getState().patchSession(sessionId, patch)
       return
     }
+    // Metrics (session-meta/bridge.ts keeps them): the statusLine runs while idle too, so they say nothing about status.
+    if (event.type === 'context' || event.type === 'todos') return
     if (event.type === 'prompt-submit') {
       const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
       const title = session && titleFromFirstPrompt(session, event.prompt)

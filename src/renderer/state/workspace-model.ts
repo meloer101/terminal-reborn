@@ -4,7 +4,7 @@ import type { WorktreeArchive } from '@shared/archive'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
-import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
+import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
 export interface WorkspaceData {
   projects: Project[]
@@ -202,6 +202,7 @@ export interface WorkspaceUi {
   rightPanel: PersistedRightPanel | null
   lastRightPanel: PersistedRightPanel
   rightPanelWidth: number
+  diffLayout: DiffLayout
   collapsedProjectIds: ProjectId[]
   recentProjects: readonly string[]
   /** 工作目录 last used in the new-session sheet, by project. */
@@ -246,6 +247,7 @@ export function serializeWorkspace(
     rightPanel: ui.rightPanel,
     lastRightPanel: ui.lastRightPanel,
     rightPanelWidth: ui.rightPanelWidth,
+    ...(ui.diffLayout === 'split' ? { diffLayout: 'split' as const } : {}),
     collapsedProjectIds: ui.collapsedProjectIds.filter((id) => data.projects.some((p) => p.id === id)),
     ...(ui.recentProjects.length > 0 ? { recentProjects: [...ui.recentProjects] } : {}),
     ...(Object.keys(ui.newSessionWorkdir).length > 0
@@ -299,6 +301,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.rightPanel !== prev.rightPanel ||
     next.lastRightPanel !== prev.lastRightPanel ||
     next.rightPanelWidth !== prev.rightPanelWidth ||
+    next.diffLayout !== prev.diffLayout ||
     next.collapsedProjectIds !== prev.collapsedProjectIds ||
     next.recentProjects !== prev.recentProjects ||
     next.newSessionWorkdir !== prev.newSessionWorkdir ||

@@ -147,6 +147,8 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.rightPanelWidth).toBe(523)
     expect(sanitizeWorkspaceFile({ ...valid, rightPanelWidth: 12 }, 0)!.rightPanelWidth).toBe(400)
     expect(sanitizeWorkspaceFile({ ...valid, rightPanelWidth: 'wide', lastRightPanel: 'x' }, 0)).not.toHaveProperty('rightPanelWidth')
+    expect(sanitizeWorkspaceFile({ ...valid, diffLayout: 'split' }, 0)!.diffLayout).toBe('split')
+    expect(sanitizeWorkspaceFile({ ...valid, diffLayout: 'sideways' }, 0)).not.toHaveProperty('diffLayout')
   })
 
   it('keeps recent project folders: absolute, unique, at most 8', () => {

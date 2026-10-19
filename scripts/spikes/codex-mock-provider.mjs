@@ -8,6 +8,7 @@
 //   "HANG: ..."             -> the response stream never finishes (a busy turn until the user interrupts)
 //   anything else           -> "OK"
 //   a json_schema request   -> {"title": $MOCK_TITLE} (the thread-title helper, PRD §6.7)
+// `headers` are added to every /responses reply (e.g. the x-codex-primary-* rate-limit headers, 42-codex-usage-lab).
 // Only the CLI side is real (TUI, sandbox/approval logic, hooks); the model is fake.
 import { createServer } from 'node:http'
 
@@ -26,7 +27,7 @@ function lastUserText(input) {
   return ''
 }
 
-export async function startMockProvider({ onRequest } = {}) {
+export async function startMockProvider({ onRequest, headers = {} } = {}) {
   const server = createServer((req, res) => {
     const chunks = []
     req.on('data', (c) => chunks.push(c))
@@ -51,7 +52,7 @@ export async function startMockProvider({ onRequest } = {}) {
       onRequest?.({ tools, input, body })
       if (process.env.MOCK_DUMP_TOOLS) console.error(JSON.stringify((body.tools ?? []).map((t) => ({ name: t.name, type: t.type }))))
       const id = `resp_${++counter}`
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', ...headers })
       sse(res, 'response.created', { response: { id } })
 
       const last = input[input.length - 1]

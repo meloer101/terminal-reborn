@@ -1,6 +1,8 @@
 // Normalized agent signals (PRD §3, F2, F3). Claude Code hooks feed these in M2; Codex hooks in M3.
 // main/hooks turns raw hook payloads into these shapes; the renderer never sees raw hook JSON.
 import type { AllowAlwaysScope } from './permission-scope'
+import type { ContextUsage } from './session-meta'
+import type { TodoItem } from './todo-progress'
 import type { SessionId } from './types'
 
 export type { AllowAlwaysScope } from './permission-scope'
@@ -23,6 +25,10 @@ export type AgentEvent =
   | { type: 'session-end'; reason?: string }
   /** The agent's own name for the conversation (Claude `ai-title` / `custom-title`, Codex `thread_name`), read by main. Not a hook. */
   | { type: 'agent-title'; title: string }
+  /** How full the context window is (Claude statusLine, Codex rollout `token_count`; PRD F11); null after /clear. Not activity. */
+  | { type: 'context'; context: ContextUsage | null }
+  /** The agent's todo list after a todo-tool call; [] after /clear (PRD F12). Not activity. */
+  | { type: 'todos'; items: TodoItem[] }
 
 export interface AgentEventEnvelope {
   sessionId: SessionId
