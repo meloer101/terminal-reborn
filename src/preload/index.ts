@@ -87,7 +87,9 @@ const api: TrApi = {
     respondPermission: (promptId, decision) => ipcRenderer.send(IPC.agentRespondPermission, promptId, decision),
     getHooksHealth: () => ipcRenderer.invoke(IPC.agentGetHooksHealth),
     onHooksHealth: (listener) => listen(IPC.agentHooksHealth, listener),
-    onSessionHooks: (listener) => listen(IPC.agentSessionHooks, listener)
+    onSessionHooks: (listener) => listen(IPC.agentSessionHooks, listener),
+    getUsage: () => ipcRenderer.invoke(IPC.agentGetUsage),
+    onUsage: (listener) => listen(IPC.agentUsage, listener)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

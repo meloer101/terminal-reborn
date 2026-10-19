@@ -3,20 +3,25 @@
 // Reliability (phase 2a): the socket lives under userData and is supervised (supervisor.ts); health and
 // per-session "no hooks" / "no SessionStart" signals reach the renderer on IPC.agentHooksHealth / agentSessionHooks.
 import { app, ipcMain, type WebContents } from 'electron'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
+import type { VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { AgentTitleWatcher } from './agent-title'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
+import { CodexUsageWatcher } from './codex-usage'
 import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
 import { createHookDir, sweepStaleHookDirs } from './hook-dir'
 import { UnknownSessionError } from './server'
 import { buildClaudeHookSettings } from './settings'
 import { StartWatchdog } from './start-watchdog'
 import { HookSupervisor } from './supervisor'
+import { UsageStore } from './usage-store'
+import { userStatusLineFor } from './user-statusline'
 import { appWindows } from '../app-windows'
 import { sourceRoot } from '../source-checkout'
 
@@ -76,6 +81,34 @@ function broadcastHealth(health: HooksHealth): void {
   }
 }
 
+/** Plan usage is the account's (PRD F11): every window gets it, and it is kept across runs. Created once userData is known. */
+let usageStore: UsageStore | null = null
+
+function createUsageStore(): UsageStore {
+  const file = join(app.getPath('userData'), 'plan-usage.json')
+  return new UsageStore({
+    load: () => {
+      try {
+        return JSON.parse(readFileSync(file, 'utf8')) as unknown
+      } catch {
+        return null
+      }
+    },
+    save: (usage) => {
+      try {
+        const tmp = `${file}.${process.pid}.tmp`
+        writeFileSync(tmp, JSON.stringify(usage), { mode: 0o600 })
+        renameSync(tmp, file)
+      } catch (error) {
+        console.error('[hooks] could not save plan usage:', error)
+      }
+    },
+    broadcast: (usage: VendorUsage) => {
+      for (const win of appWindows()) if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentUsage, usage)
+    }
+  })
+}
+
 const emitter: BridgeEmitter = {
   event: (envelope) => {
     // Any hook traffic proves the hooks reach us; withdraw the "silent since launch" countdown.
@@ -84,13 +117,17 @@ const emitter: BridgeEmitter = {
   },
   prompt: (prompt) => ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt),
   resolved: (resolution) => ownerOf(resolution.sessionId)?.send(IPC.agentPromptResolved, resolution),
-  canDeliver: (sessionId) => ownerOf(sessionId) !== null
+  canDeliver: (sessionId) => ownerOf(sessionId) !== null,
+  usage: (usage) => usageStore?.update(usage)
 }
 
 /** The agents' own session titles, read back from their data files after hooks (PRD F2). */
 const titles = new AgentTitleWatcher((sessionId, agent, title) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'agent-title', title } })
 )
+
+/** Codex's context and plan usage, read from its rollout after its hooks (PRD F11, §6.7). */
+const rollouts = new CodexUsageWatcher((sessionId, reading) => void runtime?.then((rt) => rt?.bridge.applyReading(sessionId, 'codex', reading)))
 
 /** `TR_HOOKS_CHECK_MS` lets e2e fault-injection runs shorten the self-check interval. */
 function checkIntervalOverride(): { intervalMs?: number } {
@@ -118,7 +155,7 @@ async function start(): Promise<Runtime | null> {
   ])
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: false, titles })
+      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -142,7 +179,7 @@ async function start(): Promise<Runtime | null> {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
     // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
-    const bridge = new HookBridge(emitter, { holdPermissions: false, titles })
+    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => bridge.handle(request),
@@ -163,7 +200,10 @@ async function start(): Promise<Runtime | null> {
 }
 
 export function registerHookHandlers(): void {
+  usageStore = createUsageStore()
   runtime = start()
+
+  ipcMain.handle(IPC.agentGetUsage, (): VendorUsage[] => usageStore?.list() ?? [])
 
   ipcMain.handle(IPC.agentGetHooksHealth, async (): Promise<HooksHealth> => {
     const rt = await runtime
@@ -200,7 +240,7 @@ export async function prepareAgentLaunch(
   owner: WebContents,
   agent: AgentKind | undefined,
   /** The agent starts only after something else (the repository's setup script): armStartWatchdog() then. */
-  options: { deferStartWatchdog?: boolean } = {}
+  options: { deferStartWatchdog?: boolean; cwd?: string } = {}
 ): Promise<AgentLaunchHooks | null> {
   if (agent !== 'claude' && agent !== 'codex') return null
   const rt = await runtime
@@ -215,7 +255,9 @@ export async function prepareAgentLaunch(
     owners.set(sessionId, owner)
     rt.bridge.attach(sessionId)
     if (!options.deferStartWatchdog) watchdog.arm(sessionId)
-    return { env, settingsPath: rt.supervisor.settingsPath }
+    // Our statusLine replaces the user's own; the relay runs theirs (resolved for this directory) and prints it as is.
+    const userStatusLine = options.cwd ? userStatusLineFor(options.cwd) : ''
+    return { env: { ...env, TR_USER_STATUSLINE: userStatusLine }, settingsPath: rt.supervisor.settingsPath }
   }
   const codex = await rt.codex.get()
   // Without trusted hooks Codex would skip ours, so there is nothing to attach (status falls back to titles).
@@ -242,7 +284,7 @@ export function adoptAgentSession(sessionId: string, owner: WebContents, missed:
   owners.set(sessionId, owner)
   void runtime?.then(async (rt) => {
     if (!rt) return
-    rt.bridge.attach(sessionId)
+    rt.bridge.attach(sessionId, { adopt: true })
     // What happened while the app was closed (a finished turn, a permission prompt) brings the status up to date.
     const signal = new AbortController().signal
     for (const entry of missed) {

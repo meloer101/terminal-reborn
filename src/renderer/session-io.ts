@@ -36,6 +36,18 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
 }
 
+/**
+ * Puts a slash command (`/compact`, PRD F11) into the agent's input line the way the send protocol types one — the
+ * `/` key, then the rest — and stops before Enter: the user presses it after reading.
+ */
+export async function insertSlashCommand(sessionId: SessionId, command: string): Promise<void> {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (!session || session.kind === 'shell') return
+  const steps = planSend(command, session.kind)
+  const submit = steps.findIndex((step) => step.type === 'waitForText')
+  await sendQueued(queue, sessionId, submit >= 0 ? steps.slice(0, submit) : steps, getSendIo(sessionId))
+}
+
 const READY_TIMEOUT_MS = 30_000
 
 /** Resolves once the session's agent is up and idle (after a start or resume); rejects after a while. */

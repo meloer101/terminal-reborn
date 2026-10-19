@@ -3,6 +3,7 @@
  * The 28px left inset puts the glyph under the project name: a session is a child of its project.
  */
 .row {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--space-8);

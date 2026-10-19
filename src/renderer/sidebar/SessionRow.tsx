@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
+import { TodoLine } from '../session-meta/MetaChips'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { showsTime } from './format-elapsed'
@@ -72,6 +73,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
         )}
         <span className={styles.metaLine}>{stat && `+${stat.added} −${stat.removed}`}</span>
       </span>
+      <TodoLine sessionId={session.id} />
     </div>
   )
 })

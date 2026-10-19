@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.30 · 2026-10-19 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.31 · 2026-10-19 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.31 | 2026-10-19 | F11 / F12 / F5 并排按 Figma 17（Section `260:8989`）实现：上下文一律写 `context 62%`（不写 ctx），≥ 80% 数字加重并给 `/compact`（只放进输入行，不回车），悬停显示 `context 172k / 200k · 86%`，不用状态色。**额度放进每个会话头**，按厂商分开：显示本会话厂商用得最多的窗口（`Claude 5h 13%`、`Codex 5h 40%`），点开列出所有拿到过数据的厂商（本会话的排第一）；额度是账号级的，第一轮之前只要有数据就显示，跨重启保留。总览顶栏每个厂商一个额度标签，行里加 todo（只有 `3/7`）和 context 两列，任何一行有数据该列就保留，没有数据的行留空。会话头变窄时依次去掉 todo 当前项 → 额度厂商名 → 分支名。全部完成时保留 `7/7` 到下一次 TodoWrite 或 /clear。F5 并排：变更视图右上角「统一 / 并排」，右侧栏宽 ≥ 720 才能并排，否则置灰并提示、回退到统一，选择会记住；左 = 基线、右 = 新，对面没有对应行时用 `bg/hover` 填空，hunk 横跨两栏；＋ 和评论只挂在右边。实测 Codex 0.142.5 的 rollout `token_count` 带上下文和 5 小时 / 每周额度（§6.7），Claude 2.1.303 的 todo 工具与 2.1.301 相同（§6.6） |
 | v1.30 | 2026-10-19 | F15 归档实现时定下的细节（Figma 16D `249:9117` / `249:9144`）：归档**不删 worktree 文件夹**，只把它在侧栏、总览、⌘K 会话和 ⌘1–9 里收起来；会话记录保留，终端进程结束、屏幕快照保留。顺序：停会话 → 运行 `archive`（沿用脚本批准；拒绝就跳过；失败时面板显示退出码和输出，可“仍然归档”）→ 把 HEAD、暂存区、未提交和未跟踪文件存成 `refs/wavi/archive/<id>`（不写 refs/stash、分支、暂存区和 git config，被忽略的文件不存）→ 收起。会话在运行或等你处理时不能归档，主目录不能归档。入口：会话右键“归档 worktree…”、Worktree 详情“更多”里的“归档…”/“恢复归档”。恢复在 ⌘K 的 **历史** 组（排在操作后面，可搜“历史”、分支、会话标题）：文件夹还在就不碰里面的文件；文件夹没了就在原路径 `git worktree add` 回原分支（分支也没了就从快照的 HEAD 重建）并放回未提交和未跟踪文件，然后删掉私有 ref；agent 会话回到“未启动”，第一次查看时用 `--resume` 接上原对话。设置 · Worktree 新增“合并后自动归档”（默认关）：合并后没删的 worktree 自动归档，脚本失败不拦，结果清单多一行 |
 | v1.29 | 2026-10-19 | F13 后台审阅实现时定下的细节：审阅的 diff = 未提交（对 HEAD）+ 未跟踪的文本文件 + 对比基线的已提交，每个文件标上 `# wavi-group`，评论的分组以它为准；每段提示最多 40 万字符（约半个模型窗口），比客户端上限更紧。CLI 按登录 shell 的 PATH 找，提示走 stdin，每段最多 15 分钟；窗口关掉或退出 Wavi 时取消。审阅评论带勾选框：P0 / P1 默认勾上，P2 / P3 默认不勾且折叠；“发给 …”只发勾选的和用户自己写的，没勾的留着。同一份 diff 再点审阅不重跑，显示“这份改动已经审过”和上次结果。合并面板：清单多一行审阅状态（不挡合并），底部“先审阅”；“合并前”打开面板时开始，“Wavi 推送前”在勾了“合并后推送到 origin”时开始；“一轮结束且有新提交时”用 prompt-submit 记下 HEAD、Stop 时比对，变了才审。三个自动时机只在“Wavi 内置审阅”方式下运行；“agent 自带命令”只管手动按钮。设置新增 **自动化** 页（暂无 Figma 稿，沿用 16A 的排法） |
 | v1.28 | 2026-10-18 | F4 脚本与端口补上闭环里的三块界面（Figma 16A `249:8874` / 16B `249:9089`，13C 端口段改成预留段）：设置新增 **Worktree** 页，可改端口段起点（`ports.base`，默认 41000，已分过的目录不动）；Worktree 详情在「未提交」下面显示 **端口段**（`TR_PORT–TR_PORT+9`，不是正在监听的端口）。`.tr/settings.toml` 增加可选 `[scripts] test`。合并预检在 git 检查能合并之后跑它（同样的登录 shell 和 `TR_PORT`，先走原来的确认框）；没有 test 就不出现这一行，也不因此重新询问已经批准过、且文件里没有 test 的仓库（批准哈希只在 test 存在时多带这一项）。跑的时候合并按钮不可用，取消或关掉面板会停掉测试；退出码 0 显示「测试通过」；非 0 显示退出码和输出尾部，不能合并，可「重新运行」。`archive` 仍等 F15 |
@@ -218,7 +219,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 用户在一个页面里分诊所有 agent，不需要逐个切换会话（Claude Code agent view、Superset Workspaces、Conductor、Vibe Kanban 等产品都采用这一形态）。
 - **入口**：主区的一个视图，与终端互斥，不是弹窗。打开方式：侧栏“总览”或 ⌘⇧A；Esc 或 Enter 进入会话后回到终端。
 - **列表（默认）**：跨项目按状态分组，顺序为 等你处理 → 出错 → 待审阅（`done_unread`）→ 运行中 → 空闲 → 已退出。已退出组默认折叠；分组的折叠状态会保存。**列表里没有分隔线**：分组只靠留白和字号区分——分组标题高 32，12/500 次要色文字 + 数量，不用色块、不画线；会话行高 40，行内所有文字行高 20、严格垂直居中；分组之间用 16 的间距隔开。没有会话的分组在列表里不显示（看板仍保留每一列）。
-- **每行**：StatusGlyph + 状态文字 · 标题 · `项目 › 分支` · 摘要（运行中显示当前动作；等你处理显示问题或待确认的命令；出错显示错误摘要；其他状态显示最后一句回复）· `+N −M` · 时间（等你处理显示“已等 3m”，运行中显示本轮用时，其余显示“5m 前”）· 悬停显示 ⌄。后续接入：todo `3/7`（F12）、`ctx 62%`（F11）、PR `#123 ✓`（F16），数据未就绪时这几列留空，不占位。
+- **每行**：StatusGlyph + 状态文字 · 标题 · `项目 › 分支` · 摘要（运行中显示当前动作；等你处理显示问题或待确认的命令；出错显示错误摘要；其他状态显示最后一句回复）· `+N −M` · 时间（等你处理显示“已等 3m”，运行中显示本轮用时，其余显示“5m 前”）· 悬停显示 ⌄。todo `3/7`（F12，只有数字）、`context 62%`（F11，≥ 80% 加重、不带 /compact）在摘要之后、`+N −M` 之前（宽 48 / 100）：任何一个会话有这项数据，这一列就出现并在每一行占位，没有数据的行（Codex 没有 todo、普通终端都没有）留空。顶栏右侧、过滤框之前每个厂商一个额度标签（F11）。PR `#123 ✓`（F16）以后接入。
 - **列表 · 原地展开（点行 / Space）**：在该行下方展开这个会话**完整、可交互的终端**——就是主区里同一个 xterm、同一个 PTY，搬到总览里显示，不新建进程，也不是快照。同一时间只展开一行，上方的行不动，下方的行顺延。托盘 `bg/hover` 底、圆角 5、内边距 4；终端默认高 420，拖托盘底边可调到 240 – 窗口高度 70%（会保存）。展开行隐藏 `+N −M` 和时间，换成“进入会话 ↵”和 ⌃。会话状态变化时托盘跟着它移到新分组，不会收起。收起：再点一次行、点 ⌃，或 Esc。
 - **看板**：同一套分组画成列，列内是无描边的状态色块卡片（`card/<状态>` 底色，次要文字用同色相的 `card/<状态>-meta`，悬停换 `-hover`）；状态同时由 StatusGlyph 形状和列标题表达，不只靠颜色。列表和看板的分组永远一致。
 - **看板 · 会话浮层（点卡片 / Space）**：居中模态浮层，宽 `min(窗口 − 240, 1200)`、高 `min(窗口 − 120, 780)`，圆角 10，1px `border/default` + Overlay 阴影；遮罩 `overlay/scrim` 盖住整个窗口（含侧栏）。48 高的标题栏：状态图形 · 会话名（13/600）· `项目 › 分支` ｜ 状态文字与时长 · 进入会话 ↵ · 关闭 ×；下面全部是该会话完整、可交互的终端。关闭：Esc、点遮罩、点 ×。
@@ -230,12 +231,16 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - 时间列的含义随状态切换：运行中显示本轮用时；等你处理显示“已等 3m”，超过 5 分钟后字重加粗，颜色不变；空闲 / 已完成显示“5m 前”。
 - 通知：标题写“项目 · 会话”，正文写问题、待确认的命令或最后一句回复；多个会话同时完成时合并成一条。
 
-### F11 上下文占用与额度 · P1
-- 在按次注入的 `--settings` 里加一条 statusLine 命令，把 Claude Code statusLine JSON 中的 `context_window.used_percentage` 和 `rate_limits.five_hour / seven_day` 转发给 HookServer。如果用户已经配置了自己的 statusLine，必须串联调用它并原样输出它的结果，不能覆盖。
-- 会话头显示 `ctx 62%`，超过 80% 时提示可以 `/compact`。额度显示在总览顶栏右侧，悬停可看重置时间。Codex 的接法待预研。
+### F11 上下文占用与额度 · P1 · Figma 17（Section `260:8989`）
+- **数据**：Claude 在按次注入的 `--settings` 里加一条 statusLine 命令（`resources/hooks/tr-statusline.sh`），把 statusLine JSON 中的 `context_window`（`used_percentage`、`context_window_size`、`current_usage`）和 `rate_limits.five_hour / seven_day` 转发给 HookServer。用户已经配置了自己的 statusLine（按 Claude 的优先级读 `.claude/settings.local.json` → `.claude/settings.json` → `~/.claude/settings.json`，只读）时，必须串联调用它并原样输出它的结果，不能覆盖。Codex 没有 statusLine：在它的 hook（SessionStart / UserPromptSubmit / PostToolUse / Stop）之后读 payload 里 `transcript_path` 指向的 rollout 尾部，取最后一个 `token_count`（§6.7），只接受 `$CODEX_HOME/sessions` 下的文件。拿不到的字段就不画对应的标签。
+- **会话头**（17A / 17B）：分支名之后、右侧栏图标之前依次是 TodoChip（F12）· ContextChip · UsageChip，只放数字，不用状态色；没有数据的标签整块不出现。会话头变窄时依次去掉 todo 当前项 → 额度的厂商名 → 分支名。
+- **上下文**：写 `context 62%`（不写 ctx）。≥ 80% 时数字改 `text/primary` 中粗，旁边出现 `/compact`，点它只把 `/compact` 放进 agent 的输入行、不回车（同其他“放进输入行”）。悬停 0.5 s 出 ContextTooltip：`context 172k / 200k · 86%`，≥ 80% 时再加一行说明。Codex 的百分比按它自己 TUI 的算法（扣掉 12k 基线），与 Codex 里看到的一致。/clear 后清空。
+- **额度**：账号级，同一厂商的所有会话共用，由主进程保存（`plan-usage.json`），所以新会话第一轮之前、重启之后都能显示。每个会话头显示本会话厂商用得最多的窗口（`Claude 5h 13%`、`Codex 5h 40%`、`Claude 7d 84%`），≥ 80% 加重。点开 UsagePopover：每个拿到过数据的厂商一段（本会话的排第一，标“当前会话”），每个窗口一行：名称（Claude 5 小时 / 7 天，Codex 5 小时 / 每周）· 中性色进度条 · 已用 % · 重置时间（今天写 `18:30 重置`，其余 `10 月 20 日重置`），顶部写“N 分钟前更新”，底部说明数据来源。重置时间已过的窗口不再显示。普通终端会话没有额度标签。总览顶栏（17C）每个厂商一个标签，点开同一个面板。
 
-### F12 todo 进度 · P1
-- 解析 PreToolUse 中 TodoWrite / Task* 的 `tool_input`，得出 `完成数 / 总数` 和当前项。侧栏行以文字或 1px 细进度线显示，总览显示 `3/7 · 当前项`。具体工具名需要先在当前版本的 Claude 上实测。
+### F12 todo 进度 · P1 · Figma 17
+- 解析 PostToolUse 中 TodoWrite / TaskCreate / TaskUpdate 的 `tool_input`（TaskCreate 的 id 只在 `tool_response` 里），在主进程里维护每个会话的列表，得出 `完成数 / 总数` 和当前项（进行中的，否则下一个待办）。Claude 2.1.303 对 Claude 5 模型默认不开这些工具（§6.6），Wavi 不替用户打开，所以多数会话没有 todo，标签不出现。
+- 会话头 TodoChip：`3/7 · 当前项`；点开 TodoPopover（完成 ✓ / 当前高亮 / 待办，底部“来自 Claude 的 TodoWrite · 只读”），Esc 或点外面关闭。全部完成时保留 `7/7` 和最后一项，直到下一次 TodoWrite 或 /clear。点标签不抢终端的键盘。
+- 侧栏会话行底部一条 1px 进度线；总览只显示 `3/7`。Codex 和普通终端没有 todo。
 
 ### F13 AI 审阅 · P1
 - **谁来审**：Wavi 在主进程里单独起一个审阅进程，用会话本身的 CLI 和用户自己的登录 / 额度——Claude 用 `claude -p --output-format json --json-schema …`，Codex 用 `codex exec --output-schema …`（`--sandbox read-only`）。全新上下文，不碰写代码的会话；agent 正在运行时也能审。
@@ -292,7 +297,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 
 ## 5. 设计规范
 
-- 唯一的设计来源是 Figma 文件中的 Foundations、Components、Screens 三页。屏幕节点：01 运行中 `14:2` · 02 等你处理 `16:178` · 03 变更审阅 `16:405` · 04 Git 图谱 `18:591` · 05 合并预检 `19:814` · 06 新任务 `19:940`（已被 15 取代）· 07 设置·外观 `21:1223` · 08 浅色模式 `24:1790` · 09 侧栏入口 `51:1460` · 10 会话生命周期 `64:2225` · 11 v2 总览（Section `106:3639`；深色 A 列表收起 `106:3640` · B 列表原地展开 `106:4038` · C 看板色块 `108:4091` · D 看板浮层 `108:4366`；浅色 `108:5704` / `108:5757` / `108:5814` / `108:5866`；状态色块卡片与交互说明 `110:5348`；组件 OverviewGroupHeader v2 `104:145` · OverviewRow v2 `104:191` · StatusCard `104:286` · SessionOverlayBar `104:287`）。旧版 11 / 11b / 11c（`71:2635` / `72:2918` / `72:2617`）已被 v2 取代。13 右侧栏 v2 浮层（Section `134:5521`；A 浏览器 `147:6926` · B Git 图谱 `154:6902` · B2 Git 变更 `147:7126` · H Git 图谱浅色 `155:8584` · C Worktree `149:5973` · D 文件 `149:6307`；E 浏览器空状态 `151:7248` · F 文件预览 `151:7333` · G 文件浅色 `151:7550`；组件 FileTreeRow `130:259` · WorktreeRow `130:282` · BrowserBar `130:283` · GraphRef `153:210`，新图标在 Components 页 Section `130:152`；新增 token `bg/float`（深色 gray/900、浅色 gray/0）和效果样式 `Elevation/Pane`）。14 欢迎页（Section `159:7315`；A 第一次打开 `159:7317` · B 有项目没选会话 `159:7423` · C 没装 agent `159:7616` · D 拖入文件夹 `159:7733` · E 浅色 `159:7833`；组件 Logo/Mark `158:248`，在 Logo 页）。15 新建会话（Section `170:7853`；A 新 worktree（默认）`170:7854` · B 当前目录 `171:7784` · C 选择基于的分支 `171:8030` · D 高级展开 `174:8178` · E 分支名已存在 `174:8467` · F 文件夹不是 git 仓库 `174:8739` · G 浅色 `174:8971`）。
+- 唯一的设计来源是 Figma 文件中的 Foundations、Components、Screens 三页。屏幕节点：01 运行中 `14:2` · 02 等你处理 `16:178` · 03 变更审阅 `16:405` · 04 Git 图谱 `18:591` · 05 合并预检 `19:814` · 06 新任务 `19:940`（已被 15 取代）· 07 设置·外观 `21:1223` · 08 浅色模式 `24:1790` · 09 侧栏入口 `51:1460` · 10 会话生命周期 `64:2225` · 11 v2 总览（Section `106:3639`；深色 A 列表收起 `106:3640` · B 列表原地展开 `106:4038` · C 看板色块 `108:4091` · D 看板浮层 `108:4366`；浅色 `108:5704` / `108:5757` / `108:5814` / `108:5866`；状态色块卡片与交互说明 `110:5348`；组件 OverviewGroupHeader v2 `104:145` · OverviewRow v2 `104:191` · StatusCard `104:286` · SessionOverlayBar `104:287`）。旧版 11 / 11b / 11c（`71:2635` / `72:2918` / `72:2617`）已被 v2 取代。13 右侧栏 v2 浮层（Section `134:5521`；A 浏览器 `147:6926` · B Git 图谱 `154:6902` · B2 Git 变更 `147:7126` · H Git 图谱浅色 `155:8584` · C Worktree `149:5973` · D 文件 `149:6307`；E 浏览器空状态 `151:7248` · F 文件预览 `151:7333` · G 文件浅色 `151:7550`；组件 FileTreeRow `130:259` · WorktreeRow `130:282` · BrowserBar `130:283` · GraphRef `153:210`，新图标在 Components 页 Section `130:152`；新增 token `bg/float`（深色 gray/900、浅色 gray/0）和效果样式 `Elevation/Pane`）。14 欢迎页（Section `159:7315`；A 第一次打开 `159:7317` · B 有项目没选会话 `159:7423` · C 没装 agent `159:7616` · D 拖入文件夹 `159:7733` · E 浅色 `159:7833`；组件 Logo/Mark `158:248`，在 Logo 页）。15 新建会话（Section `170:7853`；A 新 worktree（默认）`170:7854` · B 当前目录 `171:7784` · C 选择基于的分支 `171:8030` · D 高级展开 `174:8178` · E 分支名已存在 `174:8467` · F 文件夹不是 git 仓库 `174:8739` · G 浅色 `174:8971`）。17 会话指标 + F5 并排 diff（Section `260:8989`；A 运行中 · todo 展开 `260:8990` · B 会话头八种状态 `264:9929` · C 总览 todo / context 列和分厂商额度 `260:9067` · F 并排深色 `260:9118` · G 并排浅色 `267:14132` · H 右侧栏 < 720 `267:14197`；新组件在 `261:9953`：TodoChip `261:9961` · ContextChip `261:9968` · TodoItem `261:9985` · TodoPopover `261:9986` · ContextTooltip `261:10030` · DiffSplitRow `262:10029` · UsageChip `269:10194` · UsageWindowRow `269:10195` · UsagePopover `269:10201`；OverviewRow v2 `104:191` 加了 TodoCell / ContextCell）。
 - 侧栏层级以 Components 页的 `ProjectHeader`（Default / Hover / Collapsed）和 `SessionRow` 为准，规则见 §3.3。总览组件在 Components 页的 Overview 分区：`OverviewGroupHeader` `70:222` · `OverviewRow` `70:324` · `BoardRow` `70:608`；`NavItem` 新增 `Show count` / `Count` 属性。
 - 字体：UI 使用系统字体 SF Pro（Figma 中的 Instrument Sans 只是替身）；等宽字体默认 JetBrains Mono；中文默认思源黑体 SC / 苹方，并逐段显式指定。
 - 风格约束：零彩度中性色；颜色只用于表达状态（“等你处理”用品红，是唯一高亮的颜色，色相要和出错的红、已完成的绿、运行中的蓝拉开）；用排版、对齐和细分隔线建立层级；小圆角（3 / 5 / 窗口 10）；不使用卡片堆叠、渐变或装饰性小字。少用边框：输入框、下拉框（Select）、分段按钮（Segment）只用色块，不加描边（Figma 组件已改）；弹窗里的行与行之间不画分隔线。
@@ -324,6 +329,7 @@ Renderer（React 19 + zustand）：侧栏 · 总览 · TerminalSurface(xterm.js)
 - hook 命令是 `/bin/sh '<tr-hook.sh>' <Event> <agent>`：读取 stdin 的 JSON，用 `curl --unix-socket` 带上 `TR_SESSION_ID` 和 `X-TR-Token` 发给 hook socket；应用不可达时 exit 0、不输出。PTY 环境里的 `TR_SESSION_ID / TR_HOOK_SOCK / TR_HOOK_TOKEN` 由 main 设置，覆盖 renderer 传来的同名变量。
 - 服务端拒绝没有 token 的请求（403）和不是自己启动的 PTY 的请求（404）。只转发规范化后的事件，从不转发原始 payload。
 - Codex 启动时用 `-c check_for_update_on_startup=false` 和按次的 `projects` 信任跳过启动弹窗。Claude 的目录信任框不预写，检测到时把会话标为“等你确认：信任此文件夹”。
+- 同一个 `--settings` 文件里还有 statusLine（F11），它替换而不是合并用户的 statusLine，所以中继脚本串联用户自己的：PTY 环境里的 `TR_USER_STATUSLINE` 由 main 按会话目录解析（只读）。守护进程补放的 hook 日志里 StatusLine 只留最新一条。
 - 待做：用户自己在 alias 里追加的 `--settings` 需要和我们的深合并成一个。
 
 ### 6.3 终端
@@ -337,9 +343,9 @@ src/main/        app、窗口、IPC、hooks/、pty/（守护进程客户端）�
 src/pty-daemon/  守护进程入口、wire 协议、hook socket、空闲退出、磁盘快照
 src/pty-host/    session-host、HeadlessMirror、流控；utilityProcess 后备入口
 src/preload/     window.tr（TrApi）
-src/renderer/    app-shell、sidebar、overview、terminal、session-header、command-palette、settings、status、lifecycle、panels、state、ui、styles/tokens.css
+src/renderer/    app-shell、sidebar、overview、terminal、session-header、session-meta、command-palette、settings、status、lifecycle、panels、state、ui、styles/tokens.css
 src/shared/      types、ipc、session-state-machine、current-action、send-protocol、agent-launch、settings、lifecycle
-resources/hooks/ tr-hook.sh
+resources/hooks/ tr-hook.sh · tr-statusline.sh（statusLine 中继，F11）
 scripts/spikes/  实测脚本（不打包），复测 §6.6–§6.9 的结论
 ```
 `src/shared` 中都是纯逻辑，全部用 Vitest 覆盖。
@@ -361,6 +367,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 用户默认的 auto 模式下，无害的 Bash 不会触发 PermissionRequest。
 - PostToolUse 带完整的工具输出（可能几 MB），服务端上限 32 MB。
 - 延迟：每个 hook 15–25 ms（SessionStart 冷启动约 75 ms）；UserPromptSubmit 在回车写入约 75 ms 后到达。`SessionEnd` 的 hooks 一共只有 1.5 s。
+- **statusLine 与 todo 工具**（2.1.301 实测，2026-10-16；2.1.303 二进制核对，2026-10-19）：statusLine 命令的 stdin 有 `context_window`（`used_percentage` 0–100，第一次 API 响应之前是 null；`context_window_size`；`current_usage` 的 input / cache_creation / cache_read）和 `rate_limits.five_hour / seven_day`（`used_percentage`、`resets_at` 为**秒**；API key 登录和第一次响应之前没有这个字段）。轮次进行中约 1–2 s 调一次，空闲时不调。`--settings` 里的 statusLine 是**整个替换**（不是像 hooks 那样合并），所以中继脚本串联用户自己的 statusLine：同一份 stdin 交给 `$TR_USER_STATUSLINE`，原样打印它的输出（已验证）。todo 工具：`TaskCreate { subject }` → 响应 `{ task: { id } }`、`TaskUpdate { taskId, status }`（`deleted` 为删除）、`TodoWrite { todos: [{ content, status, activeForm }] }`（整表）；都不触发 PermissionRequest。对 Claude 5 模型默认**关闭**（只对旧模型、非交互模式或 `CLAUDE_CODE_ENABLE_TODO_TOOLS=true` 打开，`CLAUDE_CODE_ENABLE_TASKS=false` 时用 TodoWrite），2.1.303 未变。脚本 `scripts/spikes/31-statusline-todo-lab.mjs`（在 `claude/ctx-todo-ports` 分支）。
 - **会话标题**（2.1.302，2026-10-18，`30-hooks-lab.mjs title`）：hook payload 里**没有**标题字段，只有 `transcript_path`。Claude 在第一条 prompt 后约 4 s、和回复并行，用小模型生成标题，写进 transcript：`{"type":"ai-title","aiTitle":"…"}`；/rename 写 `{"type":"custom-title","customTitle":"…"}`，显示规则是 `customTitle ?? aiTitle`。两种条目每一轮都会在文件尾部重新追加一遍，所以只读文件尾部（4 MB）就够。标题之后不会随对话变化。本机 80 个会话里 74 个在第一条回复之前就有了 ai-title。Wavi 在 SessionStart（含 --resume）、Stop 时读，第一条 prompt 后 3 / 8 / 20 s 再读；只接受 `~/.claude/projects`（或 `$CLAUDE_CONFIG_DIR/projects`）下的 `.jsonl`。
 
 ### 6.7 实测结论 · Codex（0.142.5，2026-10-14）
@@ -375,6 +382,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 空 prompt 下按一次 Ctrl+C 就开始退出；运行中 Ctrl+C 和 Esc 都只是中断回合。
 - 工具映射到 Claude 的词汇：shell → `Bash {command}`；`apply_patch` → `Write` / `Edit`；`request_user_input` → `AskUserQuestion`。PostToolUse 的 `tool_response` 是纯字符串，没有退出码。
 - 延迟：UserPromptSubmit 在回车约 100 ms 后到达，PermissionRequest 比 PreToolUse 晚约 21 ms。
+- **上下文与额度**（2026-10-19，`scripts/spikes/42-codex-usage-lab.mjs` + 本地模拟模型发 `x-codex-primary-used-percent / -window-minutes / -reset-at` 和 `secondary` 同名响应头）：每次模型响应后 rollout 追加一行 `{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"total_tokens":…},"model_context_window":258400,…},"rate_limits":{"limit_id":"codex","primary":{"used_percent":40.5,"window_minutes":300,"resets_at":<秒>},"secondary":{"used_percent":12,"window_minutes":10080,"resets_at":<秒>},…}}}`。没有这些响应头时（API key、第三方服务商，本机历史 rollout 全部如此）`primary` / `secondary` 是 null，只能显示上下文；第一次响应之前 `info` 是 null。**所有 hook payload 的 `transcript_path` 就是这个 rollout 文件**（SessionStart / UserPromptSubmit / Stop 实测）。rollout 由 Codex 的写线程追加，hook 之后 0.3 s / 2 s 各读一次尾部（512 KB）。上下文百分比照 Codex TUI 的“% context left”：窗口和已用都先扣 12,000 基线。真实 ChatGPT 账号的响应头没有在本机验证（服务商 503）。
 - **会话标题**（2026-10-18，`41-codex-hooks-lab.mjs title` + 本地模拟模型）：0.142.5 的 TUI 不会自动起名，只有 Codex 桌面版会。**0.163.0** 的 TUI 在第一轮 Stop 后约 60 ms 发一个结构化输出请求（`{title}`，≤ 36 字，用用户的语言）；没登录 ChatGPT 时发给会话当前的模型服务商。结果追加到 `$CODEX_HOME/session_index.jsonl`：`{"id":<session_id>,"thread_name":"…","updated_at":"…"}`，**`id` 就是 hook payload 里的 `session_id`**；同一 id 以最后一行为准（改名会再追加一行）。终端标题同时变成 `<标题> | <目录>`，不以 spinner 开头，状态规则照常按空闲处理。Hook payload 里没有标题字段。Wavi 在 Stop 后 0 / 2 / 6 / 15 / 30 s、SessionStart 和 UserPromptSubmit 时读这个文件，只读不写。用户的模型服务商不可用时（本机第三方服务一直 503）就没有标题，保留首条 prompt。注意：0.163 第一次启动会弹“Meet GPT-6 Sol”，并在 `~/.codex/config.toml` 的 `[tui.model_availability_nux]` 里给计数加一，这是 Codex 自己的行为。
 
 ### 6.8 PTY 守护进程（2026-10-16 实现）

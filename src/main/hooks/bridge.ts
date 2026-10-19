@@ -2,8 +2,10 @@
 // holds PermissionRequests until they are answered. Electron-free: the glue in ./index.ts supplies
 // the emitter, so this is unit-tested with a fake one.
 import { randomUUID } from 'node:crypto'
-import type { AgentEventEnvelope, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
+import type { AgentEvent, AgentEventEnvelope, HookAgent, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
 import { describeAllowAlways, type AllowAlwaysScope } from '@shared/permission-scope'
+import { sameContext, type ContextUsage, type MetaReading, type VendorUsage } from '@shared/session-meta'
+import { applyTodoTool, sameTodos, type TodoItem } from '@shared/todo-progress'
 import type { AgentTitleWatcher } from './agent-title'
 import { normalizeHook } from './normalize'
 import { PermissionRegistry, type Scheduler } from './permission-registry'
@@ -15,6 +17,14 @@ export interface BridgeEmitter {
   resolved(resolution: PromptResolution): void
   /** False when nobody could answer a prompt for this session (window closed): don't hold the agent. */
   canDeliver(sessionId: string): boolean
+  /** Plan usage from any session: account-level, for every window (PRD F11). */
+  usage?(usage: VendorUsage): void
+}
+
+/** What the session last reported about its context window and todo list; only changes are emitted. */
+interface SessionMeta {
+  context: ContextUsage | null
+  todos: TodoItem[]
 }
 
 type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
@@ -22,6 +32,9 @@ type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
 export class HookBridge {
   private readonly sessions = new Set<string>()
   private readonly questions = new Map<string, QuestionPrompt>()
+  private readonly meta = new Map<string, SessionMeta>()
+  /** Which agent last spoke for a session (metrics replayed on reattach carry it). */
+  private readonly agents = new Map<string, HookAgent>()
   private readonly registry: PermissionRegistry
 
   constructor(
@@ -37,6 +50,8 @@ export class HookBridge {
       holdPermissions?: boolean
       /** Follows hook traffic to report the agent's own session title (./agent-title.ts). */
       titles?: Pick<AgentTitleWatcher, 'observe' | 'forget'>
+      /** Follows Codex hooks to read context and plan usage from its rollout (./codex-usage.ts). */
+      rollouts?: { observe(sessionId: string, agent: HookAgent, event: string, payload: unknown): void; forget(sessionId: string): void }
     } = {}
   ) {
     this.registry = new PermissionRegistry((resolution) => emitter.resolved(resolution), options.scheduler, options.permissionTimeoutMs)
@@ -47,10 +62,18 @@ export class HookBridge {
   }
 
   /** Only sessions the app spawned may report; this is what makes a foreign hook caller a 404. */
-  attach(sessionId: string): void {
-    // A re-spawned id starts clean: whatever the previous process had pending is gone.
+  attach(sessionId: string, options: { adopt?: boolean } = {}): void {
+    // A re-spawned id starts clean: whatever the previous process had pending is gone. A window that reattached to
+    // the same process (reload, app restart with the daemon) keeps its metrics and gets them again.
+    const meta = options.adopt ? this.meta.get(sessionId) : undefined
     this.detach(sessionId)
     this.sessions.add(sessionId)
+    if (!meta) return
+    this.meta.set(sessionId, meta)
+    const agent: HookAgent = this.agents.get(sessionId) ?? 'claude'
+    const at = this.now()
+    if (meta.context) this.emitMeta(sessionId, agent, at, { type: 'context', context: meta.context })
+    if (meta.todos.length > 0) this.emitMeta(sessionId, agent, at, { type: 'todos', items: meta.todos })
   }
 
   /** The session's PTY ended: release every hold and withdraw its prompts. */
@@ -58,7 +81,46 @@ export class HookBridge {
     this.registry.resolveSession(sessionId, 'session-ended')
     this.resolveQuestion(sessionId, 'session-ended')
     this.options.titles?.forget(sessionId)
+    this.options.rollouts?.forget(sessionId)
+    this.meta.delete(sessionId)
+    this.agents.delete(sessionId)
     this.sessions.delete(sessionId)
+  }
+
+  /** A reading taken outside a hook call (Codex's rollout, read after its hooks). */
+  applyReading(sessionId: string, agent: HookAgent, reading: MetaReading): void {
+    if (!this.sessions.has(sessionId)) return
+    const at = this.now()
+    if (reading.context) this.setContext(sessionId, agent, at, reading.context)
+    if (reading.usage) this.emitter.usage?.(reading.usage)
+  }
+
+  private metaOf(sessionId: string): SessionMeta {
+    let meta = this.meta.get(sessionId)
+    if (!meta) {
+      meta = { context: null, todos: [] }
+      this.meta.set(sessionId, meta)
+    }
+    return meta
+  }
+
+  private emitMeta(sessionId: string, agent: HookAgent, at: number, event: AgentEvent): void {
+    this.emitter.event({ sessionId, agent, at, event })
+  }
+
+  /** The statusLine runs every second or two while a turn runs: only a different reading crosses IPC. */
+  private setContext(sessionId: string, agent: HookAgent, at: number, context: ContextUsage | null): void {
+    const meta = this.metaOf(sessionId)
+    if (context === null ? meta.context === null : meta.context !== null && sameContext(meta.context, context)) return
+    meta.context = context
+    this.emitMeta(sessionId, agent, at, { type: 'context', context })
+  }
+
+  private setTodos(sessionId: string, agent: HookAgent, at: number, todos: TodoItem[]): void {
+    const meta = this.metaOf(sessionId)
+    if (sameTodos(meta.todos, todos)) return
+    meta.todos = todos
+    this.emitMeta(sessionId, agent, at, { type: 'todos', items: todos })
   }
 
   /** Answers a permission prompt in the UI. Returns false for unknown / already-resolved ids. */
@@ -87,9 +149,24 @@ export class HookBridge {
     if (!this.sessions.has(sessionId)) throw new UnknownSessionError(sessionId)
 
     this.options.titles?.observe(sessionId, agent, event, request.payload)
-    const normalized = normalizeHook(agent, event, request.payload)
+    this.options.rollouts?.observe(sessionId, agent, event, request.payload)
+    this.agents.set(sessionId, agent)
     const at = request.receivedAt ?? this.now()
-    for (const e of normalized.events) this.emitter.event({ sessionId, agent, at, event: e })
+    const normalized = normalizeHook(agent, event, request.payload, at)
+    for (const e of normalized.events) {
+      if (e.type === 'context') this.setContext(sessionId, agent, at, e.context)
+      else this.emitter.event({ sessionId, agent, at, event: e })
+    }
+    if (normalized.cleared) {
+      this.setTodos(sessionId, agent, at, [])
+      this.setContext(sessionId, agent, at, null)
+    }
+    if (normalized.todoCall) {
+      const { tool, input, response } = normalized.todoCall
+      const next = applyTodoTool(this.metaOf(sessionId).todos, tool, input, response)
+      if (next) this.setTodos(sessionId, agent, at, next)
+    }
+    if (normalized.usage) this.emitter.usage?.(normalized.usage)
 
     // The user answered in the TUI (or the turn moved on): withdraw what we were still showing.
     if (normalized.clears === 'all') {

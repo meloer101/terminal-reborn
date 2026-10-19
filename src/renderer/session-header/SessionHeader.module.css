@@ -1,5 +1,6 @@
 .header {
   flex: none;
+  container: session-header / inline-size;
   height: var(--titlebar-height);
   display: flex;
   align-items: center;
@@ -112,4 +113,23 @@
 
 .waitingGlyph {
   display: flex;
+}
+
+/* Figma 17B narrow header: as it narrows, the todo's current item goes first, then the usage vendor, then the branch. */
+@container session-header (max-width: 900px) {
+  .header [data-part='todo-current'] {
+    display: none;
+  }
+}
+
+@container session-header (max-width: 800px) {
+  .header [data-part='usage-vendor'] {
+    display: none;
+  }
+}
+
+@container session-header (max-width: 720px) {
+  .branch {
+    display: none;
+  }
 }

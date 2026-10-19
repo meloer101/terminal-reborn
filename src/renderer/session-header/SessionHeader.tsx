@@ -9,6 +9,7 @@ import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
+import { SessionMetaChips } from '../session-meta/MetaChips'
 import styles from './SessionHeader.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
@@ -91,6 +92,8 @@ export function SessionHeader() {
             </span>
           )}
           <span className={styles.spacer} />
+          {/* Figma 17A: todo · context · usage, after the branch and before the pane icons (PRD F11 / F12). */}
+          <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? null : active.session.kind} />
           {agentUp && hooks === 'unavailable' && (
             <span className={styles.hooks} data-testid="hooks-unavailable" title="hooks 不可用，状态只能按终端标题判断">
               <CircleAlert size={16} strokeWidth={1.75} />

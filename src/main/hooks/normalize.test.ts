@@ -225,3 +225,25 @@ describe('summarizeToolUse', () => {
     expect(summary.endsWith('…')).toBe(true)
   })
 })
+
+describe('normalizeHook · metrics (PRD F11 / F12)', () => {
+  it('reads the statusLine relay into a context event and plan usage', () => {
+    const result = normalizeHook(
+      'claude',
+      'StatusLine',
+      { context_window: { used_percentage: 62, context_window_size: 200000 }, rate_limits: { seven_day: { used_percentage: 84 } } },
+      5
+    )
+    expect(result.events).toEqual([{ type: 'context', context: { percent: 62, usedTokens: 124000, windowTokens: 200000 } }])
+    expect(result.usage).toEqual({ vendor: 'claude', at: 5, windows: [{ minutes: 10080, percent: 84 }] })
+    expect(result.clears).toBe('none')
+  })
+
+  it('hands todo-tool results to the bridge and flags /clear', () => {
+    const post = normalizeHook('claude', 'PostToolUse', { tool_name: 'TodoWrite', tool_input: { todos: [] }, tool_response: { newTodos: [] } })
+    expect(post.todoCall).toEqual({ tool: 'TodoWrite', input: { todos: [] }, response: { newTodos: [] } })
+    expect(normalizeHook('claude', 'PostToolUse', { tool_name: 'Bash', tool_input: {} }).todoCall).toBeUndefined()
+    expect(normalizeHook('claude', 'SessionStart', { session_id: 'abc', source: 'clear' }).cleared).toBe(true)
+    expect(normalizeHook('claude', 'SessionStart', { session_id: 'abc', source: 'resume' }).cleared).toBeUndefined()
+  })
+})

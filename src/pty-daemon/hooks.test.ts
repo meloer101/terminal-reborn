@@ -22,6 +22,17 @@ describe('HookJournal', () => {
     expect(taken[0]?.event).toBe('E10')
   })
 
+  it('keeps only the newest statusLine reading', () => {
+    const journal = new HookJournal()
+    journal.record('s1', entry('StatusLine', { n: 1 }))
+    journal.record('s1', entry('PostToolUse'))
+    journal.record('s1', entry('StatusLine', { n: 2 }))
+    expect(journal.take('s1').map((e) => [e.event, e.payload])).toEqual([
+      ['PostToolUse', { n: 1 }],
+      ['StatusLine', { n: 2 }]
+    ])
+  })
+
   it('drops large payloads but keeps the event', () => {
     const journal = new HookJournal()
     journal.record('s1', entry('PostToolUse', { output: 'x'.repeat(JOURNAL_PAYLOAD_MAX_CHARS) }))

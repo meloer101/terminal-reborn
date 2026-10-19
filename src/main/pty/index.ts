@@ -332,8 +332,8 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   // Agent sessions get their hook environment and the per-launch `--settings` file. Our TR_* keys
   // come last so the renderer cannot spoof them. Every terminal of a worktree gets the worktree's TR_PORT (PRD F4).
   const setup = options.script === 'setup' && agent !== undefined
-  const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent, { deferStartWatchdog: setup }) : null
   const realCwd = realCwdOf(options.cwd)
+  const hooks = options.command === undefined ? await prepareAgentLaunch(id, owner, options.agent, { deferStartWatchdog: setup, cwd: realCwd ?? options.cwd }) : null
   const port = realCwd ? portFor(realCwd) : null
   const env = { ...options.env, ...hooks?.env, ...(port !== null ? { TR_PORT: String(port) } : {}) }
   let launch: { command: string; args: string[] } | null

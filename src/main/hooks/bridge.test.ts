@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentEventEnvelope, PendingPrompt, PromptResolution } from '@shared/agent-events'
+import type { VendorUsage } from '@shared/session-meta'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { claudeFixtures as fx } from './fixtures'
 import { type HookRequest, UnknownSessionError } from './server'
@@ -8,11 +9,13 @@ function setup(canDeliver = true, holdPermissions?: boolean) {
   const events: AgentEventEnvelope[] = []
   const prompts: PendingPrompt[] = []
   const resolutions: PromptResolution[] = []
+  const usage: VendorUsage[] = []
   const emitter: BridgeEmitter = {
     event: (e) => events.push(e),
     prompt: (p) => prompts.push(p),
     resolved: (r) => resolutions.push(r),
-    canDeliver: () => canDeliver
+    canDeliver: () => canDeliver,
+    usage: (u) => usage.push(u)
   }
   const bridge = new HookBridge(emitter, { now: () => 1000, ...(holdPermissions === undefined ? {} : { holdPermissions }) })
   bridge.attach('s1')
@@ -23,7 +26,7 @@ function setup(canDeliver = true, holdPermissions?: boolean) {
     payload,
     signal
   })
-  return { bridge, events, prompts, resolutions, req }
+  return { bridge, events, prompts, resolutions, usage, req }
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve))
@@ -181,5 +184,70 @@ describe('HookBridge · agent titles', () => {
     await expect(bridge.handle({ event: 'Stop', sessionId: 'nope', agent: 'claude', payload: {}, signal: new AbortController().signal })).rejects.toThrow()
     bridge.detach('s1')
     expect(calls).toEqual(['forget s1', 'observe s1 claude Stop', 'forget s1'])
+  })
+})
+
+describe('HookBridge · session metrics (PRD F11 / F12)', () => {
+  const statusLine = (percent: number | null, fiveHour = 13) => ({
+    session_id: 'x',
+    context_window: { used_percentage: percent, context_window_size: 200000, current_usage: percent === null ? null : { input_tokens: percent * 2000 } },
+    rate_limits: { five_hour: { used_percentage: fiveHour, resets_at: 1792191000 } }
+  })
+
+  it('turns the statusLine into a context event (only on change) and account usage', async () => {
+    const { bridge, events, req, usage } = setup()
+    await bridge.handle(req('StatusLine', statusLine(null)))
+    await bridge.handle(req('StatusLine', statusLine(62)))
+    await bridge.handle(req('StatusLine', statusLine(62)))
+    await bridge.handle(req('StatusLine', statusLine(63, 14)))
+    expect(events.map((e) => e.event)).toEqual([
+      { type: 'context', context: { percent: 62, usedTokens: 124000, windowTokens: 200000 } },
+      { type: 'context', context: { percent: 63, usedTokens: 126000, windowTokens: 200000 } }
+    ])
+    expect(usage).toHaveLength(4)
+    expect(usage[3]).toEqual({ vendor: 'claude', at: 1000, windows: [{ minutes: 300, percent: 14, resetsAt: 1792191000_000 }] })
+  })
+
+  it('keeps the todo list from PostToolUse and clears it (and the context) on /clear', async () => {
+    const { bridge, events, req } = setup()
+    const post = (tool_name: string, tool_input: unknown, tool_response?: unknown) => req('PostToolUse', { tool_name, tool_input, tool_response })
+    await bridge.handle(req('StatusLine', statusLine(40)))
+    await bridge.handle(post('TaskCreate', { subject: 'alpha' }, { task: { id: '1' } }))
+    await bridge.handle(post('TaskUpdate', { taskId: '1', status: 'in_progress' }, { success: true }))
+    await bridge.handle(post('TaskUpdate', { taskId: '9', status: 'completed' }, { success: true }))
+    await bridge.handle(req('SessionStart', { session_id: 'abc', source: 'clear' }))
+    await bridge.handle(req('SessionStart', { session_id: 'abc', source: 'clear' }))
+    const meta = events.map((e) => e.event).filter((e) => e.type === 'todos' || e.type === 'context')
+    expect(meta).toEqual([
+      { type: 'context', context: { percent: 40, usedTokens: 80000, windowTokens: 200000 } },
+      { type: 'todos', items: [{ id: '1', text: 'alpha', status: 'pending' }] },
+      { type: 'todos', items: [{ id: '1', text: 'alpha', status: 'in_progress' }] },
+      { type: 'todos', items: [] },
+      { type: 'context', context: null }
+    ])
+  })
+
+  it('applies readings taken outside hooks only for attached sessions', () => {
+    const { bridge, events } = setup()
+    bridge.applyReading('s1', 'codex', { context: { percent: 41 } })
+    bridge.applyReading('stranger', 'codex', { context: { percent: 41 } })
+    bridge.detach('s1')
+    bridge.applyReading('s1', 'codex', { context: { percent: 42 } })
+    expect(events.map((e) => [e.sessionId, e.event])).toEqual([['s1', { type: 'context', context: { percent: 41 } }]])
+  })
+})
+
+describe('HookBridge · reattach', () => {
+  it('replays the metrics to a window that adopted the same process, but not to a re-spawn', async () => {
+    const { bridge, events, req } = setup()
+    await bridge.handle(req('StatusLine', { context_window: { used_percentage: 30 } }))
+    await bridge.handle(req('PostToolUse', { tool_name: 'TodoWrite', tool_input: { todos: [{ content: 'a', status: 'pending' }] } }))
+    events.length = 0
+    bridge.attach('s1', { adopt: true })
+    expect(events.map((e) => e.event.type)).toEqual(['context', 'todos'])
+    events.length = 0
+    bridge.attach('s1')
+    bridge.attach('s1', { adopt: true })
+    expect(events).toEqual([])
   })
 })
