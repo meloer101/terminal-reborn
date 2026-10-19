@@ -60,7 +60,7 @@ jobs:
             found { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then echo "Wavi $version" > release-notes.md; fi
-          files=(release/$version/Terminal-Reborn-$version-arm64.dmg release/$version/Terminal-Reborn-$version-arm64.zip release/$version/Terminal-Reborn-$version-x64.dmg release/$version/Terminal-Reborn-$version-x64.zip)
+          files=(release/$version/Wavi-$version-arm64.dmg release/$version/Wavi-$version-arm64.zip release/$version/Wavi-$version-x64.dmg release/$version/Wavi-$version-x64.zip)
           flags=(--draft --verify-tag --title "Wavi $version" --notes-file release-notes.md)
           case "$version" in *-*) flags+=(--prerelease) ;; esac
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
