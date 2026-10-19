@@ -141,7 +141,11 @@ const api: TrApi = {
     mergePrecheck: (root, worktree) => ipcRenderer.invoke(IPC.gitWorktreesMergePrecheck, root, worktree),
     merge: (request) => ipcRenderer.invoke(IPC.gitWorktreesMerge, request)
   },
-  browser: browserApi
+  browser: browserApi,
+  repoScripts: {
+    get: (dir) => ipcRenderer.invoke(IPC.repoScriptsGet, dir),
+    approve: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsApprove, dir, name)
+  }
 }
 
 contextBridge.exposeInMainWorld('tr', api)

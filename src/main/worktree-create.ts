@@ -20,6 +20,7 @@ import {
   type WorktreeCreateResult
 } from '@shared/new-session'
 import { gitAvailable, sshCommandFor } from './git-graph'
+import { readRepoSettings } from './repo-scripts'
 import { isProjectRoot } from './workspace-store'
 import { isInside, normalizeRelative } from './worktree-files'
 
@@ -117,7 +118,8 @@ export async function newSessionInfo(root: unknown): Promise<NewSessionInfo> {
     worktreesDir: '',
     takenFolders: [],
     includeFiles: [],
-    includeCount: 0
+    includeCount: 0,
+    hasSetup: false
   }
   if (!top) return none
   let porcelain
@@ -132,13 +134,14 @@ export async function newSessionInfo(root: unknown): Promise<NewSessionInfo> {
   for (const entry of porcelain) if (entry.branch && !entry.bare) checkedOut.set(entry.branch, { path: entry.path, main: entry === mainCheckout })
 
   const worktreesDir = worktreesDirFor(top)
-  const [localNames, remoteNames, originHead, userName, taken, include] = await Promise.all([
+  const [localNames, remoteNames, originHead, userName, taken, include, settings] = await Promise.all([
     refNames(top, 'refs/heads/'),
     refNames(top, 'refs/remotes/'),
     orEmpty(git(top, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])),
     orEmpty(git(top, ['config', '--get', 'user.name'])),
     readdir(worktreesDir).catch(() => [] as string[]),
-    includedFiles(top)
+    includedFiles(top),
+    readRepoSettings(top).catch(() => ({ scripts: {} as { setup?: string } }))
   ])
   let login = ''
   try {
@@ -163,7 +166,8 @@ export async function newSessionInfo(root: unknown): Promise<NewSessionInfo> {
     worktreesDir,
     takenFolders: taken,
     includeFiles: include.slice(0, MAX_INCLUDE_LISTED),
-    includeCount: include.length
+    includeCount: include.length,
+    hasSetup: settings.scripts.setup !== undefined
   }
 }
 

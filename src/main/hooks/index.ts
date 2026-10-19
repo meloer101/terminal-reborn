@@ -195,7 +195,13 @@ export function registerHookHandlers(): void {
  * (then the owner gets a `SessionHooksSignal` of kind 'unavailable'). Claude gets a `--settings` file; Codex gets
  * `-c` overrides (PRD §6.7).
  */
-export async function prepareAgentLaunch(sessionId: string, owner: WebContents, agent: AgentKind | undefined): Promise<AgentLaunchHooks | null> {
+export async function prepareAgentLaunch(
+  sessionId: string,
+  owner: WebContents,
+  agent: AgentKind | undefined,
+  /** The agent starts only after something else (the repository's setup script): armStartWatchdog() then. */
+  options: { deferStartWatchdog?: boolean } = {}
+): Promise<AgentLaunchHooks | null> {
   if (agent !== 'claude' && agent !== 'codex') return null
   const rt = await runtime
   // A cheap self-check per launch: an agent must not inherit a socket that is already gone.
@@ -208,7 +214,7 @@ export async function prepareAgentLaunch(sessionId: string, owner: WebContents, 
   if (agent === 'claude') {
     owners.set(sessionId, owner)
     rt.bridge.attach(sessionId)
-    watchdog.arm(sessionId)
+    if (!options.deferStartWatchdog) watchdog.arm(sessionId)
     return { env, settingsPath: rt.supervisor.settingsPath }
   }
   const codex = await rt.codex.get()
@@ -219,8 +225,13 @@ export async function prepareAgentLaunch(sessionId: string, owner: WebContents, 
   }
   owners.set(sessionId, owner)
   rt.bridge.attach(sessionId)
-  watchdog.arm(sessionId)
+  if (!options.deferStartWatchdog) watchdog.arm(sessionId)
   return { env, codexConfig: codex.config }
+}
+
+/** Starts the SessionStart countdown of a launch prepared with `deferStartWatchdog` (its setup script finished). */
+export function armStartWatchdog(sessionId: string): void {
+  if (owners.has(sessionId)) watchdog.arm(sessionId)
 }
 
 /**

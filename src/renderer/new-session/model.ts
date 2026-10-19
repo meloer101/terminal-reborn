@@ -84,11 +84,13 @@ export function branchProblemText(problem: BranchNameProblem | null, name: strin
   }
 }
 
-/** 准备 row: what it would copy (setup scripts come with `.tr/settings.toml`); null when there is nothing to do. */
-export function prepareText(info: Pick<NewSessionInfo, 'includeFiles' | 'includeCount'>): string | null {
-  if (info.includeCount === 0) return null
+/** 准备 row: what it would copy and whether it runs the setup script (PRD F4); null when there is nothing to do. */
+export function prepareText(info: Pick<NewSessionInfo, 'includeFiles' | 'includeCount' | 'hasSetup'>): string | null {
+  const setup = info.hasSetup ? '运行 setup 脚本' : null
+  if (info.includeCount === 0) return setup
   const shown = info.includeFiles.slice(0, 2).join('、')
-  return info.includeCount > 2 ? `复制 ${shown} 等 ${info.includeCount} 项` : `复制 ${shown}`
+  const copy = info.includeCount > 2 ? `复制 ${shown} 等 ${info.includeCount} 项` : `复制 ${shown}`
+  return setup ? `${copy}，${setup}` : copy
 }
 
 /** `/Users/x/…` → `~/…` for display. */

@@ -3,6 +3,7 @@ import { useWorkspace } from '../state/workspace'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
 import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
+import { SetupStrip } from '../scripts/SetupStrip'
 import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { TerminalArea } from '../terminal/TerminalArea'
@@ -63,6 +64,7 @@ export function AppShell() {
         <div className={styles.sessionOnly} data-hidden={overview}>
           <EngineRestartedCard />
           <SessionErrorBar />
+          <SetupStrip />
         </div>
       </main>
       {rightPanel && (

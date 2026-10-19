@@ -34,6 +34,11 @@ export interface AgentLaunchOptions {
    * `codex resume <id>` (Codex 0.142.5 `codex resume [OPTIONS] [SESSION_ID]`). Ignored unless it is a safe id.
    */
   resumeAgentSessionId?: string
+  /**
+   * A command (sh / zsh / bash / fish syntax alike) to run first in the same login shell, e.g. the repository's setup
+   * script (script-launch.ts `setupCommand`). The agent starts when it returns, whatever its exit code.
+   */
+  before?: string
 }
 
 export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, options: AgentLaunchOptions = {}): string[] {
@@ -81,7 +86,8 @@ export function parseAgentMarker(payload: string): AgentMarker | null {
  * `exit;<code>` once the agent process is gone, so the app knows the shell prompt is back (A3).
  */
 export function agentShellArgs(kind: AgentKind, realCwd: string, shell: string, options: AgentLaunchOptions = {}): string[] {
-  if (kind === 'shell') return ['-l']
+  const before = options.before ? `${options.before}; ` : ''
+  if (kind === 'shell') return before ? ['-l', '-i', '-c', `${before}exec ${shellQuote(shell)} -l`] : ['-l']
   const line = agentArgv(kind, realCwd, options).map(shellQuote).join(' ')
   const marker = (payload: string) => `printf '\\033]${AGENT_MARKER_OSC};${payload}\\007'`
   const check = `command -v ${kind} >/dev/null 2>&1`
@@ -89,5 +95,5 @@ export function agentShellArgs(kind: AgentKind, realCwd: string, shell: string, 
   const script = fish
     ? `if ${check}; ${line}; ${marker('exit;%s')} $status; else; ${marker('missing')}; end`
     : `if ${check}; then ${line}; ${marker('exit;%s')} "$?"; else ${marker('missing')}; fi`
-  return ['-l', '-i', '-c', `${script}; exec ${shellQuote(shell)} -l`]
+  return ['-l', '-i', '-c', `${before}${script}; exec ${shellQuote(shell)} -l`]
 }

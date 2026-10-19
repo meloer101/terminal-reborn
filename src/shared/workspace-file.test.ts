@@ -111,6 +111,22 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.sessions.map((s) => s.agentSessionId)).toEqual([undefined, undefined, '0199aaaa-bbbb-7ccc-8ddd-eeeeffff0000', undefined])
   })
 
+  it("keeps the Run button's terminal marker on shell sessions only (PRD F4)", () => {
+    const file = sanitizeWorkspaceFile(
+      {
+        ...valid,
+        sessions: [
+          { id: 'a', worktreeId: 'w1', kind: 'shell', title: 'run', script: 'run' },
+          { id: 'b', worktreeId: 'w1', kind: 'claude', title: 't', script: 'run' },
+          { id: 'c', worktreeId: 'w1', kind: 'shell', title: 't', script: 'setup' }
+        ],
+        drafts: {}
+      },
+      0
+    ) as WorkspaceFile
+    expect(file.sessions.map((s) => s.script)).toEqual(['run', undefined, undefined])
+  })
+
   it('defaults UI fields and drops empty drafts', () => {
     const file = sanitizeWorkspaceFile(
       { ...valid, sidebarCollapsed: 'yes', rightPanel: 'bogus', collapsedProjectIds: 'p1', drafts: { s1: '' } },

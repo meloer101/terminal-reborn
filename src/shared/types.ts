@@ -70,6 +70,8 @@ export interface Session {
   statusSince?: number
   /** Epoch ms the current turn began (running time). Transient. */
   turnStartedAt?: number
+  /** A shell session made by the Run button for the worktree's `run` script (PRD F4). Persisted. */
+  script?: 'run'
 }
 
 /**

@@ -3,6 +3,7 @@ import { sanitizeWorkspaceFile } from '@shared/workspace-file'
 import {
   rememberRecentProject,
   addProject,
+  addRunSession,
   addSession,
   addSessionInWorktree,
   closeSession,
@@ -84,6 +85,20 @@ describe('addSessionInWorktree', () => {
 
   it('returns null for an unknown project', () => {
     expect(addSessionInWorktree(EMPTY_WORKSPACE, 'nope', { path: '/x', branch: 'x' }, 'claude', 0)).toBeNull()
+  })
+})
+
+describe('addRunSession', () => {
+  it("adds the worktree's run terminal, selected, and it survives a save and restore", () => {
+    const makeId = ids()
+    const { data } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const result = addRunSession(data, 'w-2', 1000, makeId)!
+    expect(result.data.sessions.at(-1)).toMatchObject({ id: result.sessionId, worktreeId: 'w-2', kind: 'shell', title: 'run', script: 'run' })
+    expect(result.data.activeSessionId).toBe(result.sessionId)
+    const file = serializeWorkspace(result.data, { sidebarCollapsed: false, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 560, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }, {})
+    const restored = restoreWorkspace(sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0))
+    expect(restored.sessions.at(-1)?.script).toBe('run')
+    expect(addRunSession(data, 'nope', 0, makeId)).toBeNull()
   })
 })
 

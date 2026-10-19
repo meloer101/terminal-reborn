@@ -35,6 +35,14 @@ describe('applySettingsPatch', () => {
     expect(next.appearance.latinFont).toBe(DEFAULT_SETTINGS.appearance.latinFont)
   })
 
+  it('keeps the TR_PORT base whole and in range (PRD F4)', () => {
+    expect(DEFAULT_SETTINGS.ports.base).toBe(41000)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { ports: { base: 50000 } }).ports.base).toBe(50000)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { ports: { base: 80 } }).ports.base).toBe(1024)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { ports: { base: 'x' } }).ports.base).toBe(41000)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).ports).toEqual(DEFAULT_SETTINGS.ports)
+  })
+
   it('ignores junk patches', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, 'x')).toEqual(DEFAULT_SETTINGS)
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 'big' } })).toEqual(DEFAULT_SETTINGS)

@@ -34,6 +34,8 @@ export interface NewSessionInfo {
   includeFiles: string[]
   /** All of them; 0 when there is no `.worktreeinclude`. */
   includeCount: number
+  /** `.tr/settings.toml` of the main checkout has a setup script (PRD F4); 准备 then also runs it. */
+  hasSetup: boolean
 }
 
 export interface WorktreeCreateRequest {
@@ -45,7 +47,7 @@ export interface WorktreeCreateRequest {
   base: string
   /** Single folder name inside NewSessionInfo.worktreesDir. */
   folder: string
-  /** Copy the files `.worktreeinclude` lists. */
+  /** Copy the files `.worktreeinclude` lists (and, in the renderer, run the setup script). */
   prepare: boolean
 }
 

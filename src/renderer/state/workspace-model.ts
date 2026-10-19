@@ -2,7 +2,7 @@
 // M1 has no git integration: a project is a folder with a single "main" worktree.
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
-import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree } from '@shared/types'
+import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
 import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
 export interface WorkspaceData {
@@ -85,6 +85,20 @@ export function addSessionInWorktree(
     ...(target.baseBranch ? { baseBranch: target.baseBranch } : {})
   }
   return startSessionIn({ ...data, worktrees: [...data.worktrees, worktree] }, worktree, kind, now, makeId)
+}
+
+/** The Run button's terminal for a worktree (PRD F4): a shell session titled `run`, selected. Null if the worktree is gone. */
+export function addRunSession(
+  data: WorkspaceData,
+  worktreeId: WorktreeId,
+  now: number,
+  makeId: MakeId = randomId
+): { data: WorkspaceData; sessionId: SessionId } | null {
+  const worktree = data.worktrees.find((w) => w.id === worktreeId)
+  if (!worktree) return null
+  const result = startSessionIn(data, worktree, 'shell', now, makeId)
+  const sessions = result.data.sessions.map((s) => (s.id === result.sessionId ? { ...s, title: 'run', script: 'run' as const } : s))
+  return { data: { ...result.data, sessions }, sessionId: result.sessionId }
 }
 
 function startSessionIn(
@@ -177,7 +191,7 @@ export function serializeWorkspace(
       isMain,
       ...(baseBranch ? { baseBranch } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script }) => ({
       id,
       worktreeId,
       kind,
@@ -187,7 +201,8 @@ export function serializeWorkspace(
       startedAt,
       lastActivityAt,
       ...(lastReply ? { lastReply } : {}),
-      ...(finishedAt !== undefined ? { finishedAt } : {})
+      ...(finishedAt !== undefined ? { finishedAt } : {}),
+      ...(script ? { script } : {})
     })),
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
@@ -228,6 +243,7 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       ...(s.agentSessionId ? { agentSessionId: s.agentSessionId } : {}),
       ...(s.lastReply ? { lastReply: s.lastReply } : {}),
       ...(s.finishedAt !== undefined ? { finishedAt: s.finishedAt } : {}),
+      ...(s.script ? { script: s.script } : {}),
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
     activeSessionId: file.activeSessionId

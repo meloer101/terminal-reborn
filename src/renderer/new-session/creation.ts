@@ -1,10 +1,12 @@
 // What 创建 does (PRD F4 · L1): the sheet closes at once and the session appears in the sidebar right away (starting).
 // For a new worktree, main fetches, adds the worktree and copies the `.worktreeinclude` files in the background; the
-// session's terminal is held until the folder exists, and a failure is reported on the session itself.
+// session's terminal is held until the folder exists, and a failure is reported on the session itself. With 准备 on,
+// the repository's setup script (`.tr/settings.toml`) is approved next and runs in that terminal before the agent.
 import { create } from 'zustand'
 import type { Workdir } from '@shared/new-session'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
+import { prepareSetup } from '../scripts/setup-runs'
 import { useWorkspace } from '../state/workspace'
 import { createFailureText, type CreatePlan } from './model'
 
@@ -39,9 +41,13 @@ export function runCreatePlan(projectId: ProjectId, plan: CreatePlan, kind: Agen
   setHeld(id, 'creating')
   window.tr.gitWorktrees
     .create(request)
-    .then((result) => {
-      if (result.ok) setHeld(id, undefined)
-      else fail(id, kind, createFailureText(result))
+    .then(async (result) => {
+      if (!result.ok) {
+        fail(id, kind, createFailureText(result))
+        return
+      }
+      if (request.prepare) await prepareSetup(id, result.path)
+      setHeld(id, undefined)
     })
     .catch((error: unknown) => fail(id, kind, error instanceof Error ? error.message : String(error)))
   return id

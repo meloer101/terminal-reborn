@@ -1,8 +1,11 @@
 // Binds one XtermSurface to one PTY session through window.tr.pty.
 import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
+import { parseScriptMarker, SCRIPT_MARKER_OSC } from '@shared/script-launch'
 import type { AgentKind, SessionId } from '@shared/types'
 import { handleTerminalLink, resolveSessionPaths } from '../state/link-actions'
 import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
+import { takeRunStart } from '../scripts/run-script'
+import { forgetSetup, handleScriptMarker, takeSetup } from '../scripts/setup-runs'
 import { loadLiveSessions, takeReattach } from './live-sessions'
 import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
@@ -103,6 +106,11 @@ export class SessionTerminal {
       if (marker.type === 'missing' && this.agent !== 'shell') this.surface.write(dim(INSTALL_HINT[this.agent]))
       emitAgentMarker(id, marker)
     })
+    // The repository's setup script reports through its own marker (PRD F4).
+    const scriptMarkers = this.surface.onOsc(SCRIPT_MARKER_OSC, (payload) => {
+      const marker = parseScriptMarker(payload)
+      if (marker) handleScriptMarker(id, marker)
+    })
     this.cleanups.push(
       pty.onExit(id, ({ exitCode }) => {
         this.exited = true
@@ -110,7 +118,8 @@ export class SessionTerminal {
       }),
       () => input.dispose(),
       () => resize.dispose(),
-      () => markers.dispose()
+      () => markers.dispose(),
+      () => scriptMarkers.dispose()
     )
   }
 
@@ -165,6 +174,8 @@ export class SessionTerminal {
     const pty = window.tr.pty
     const id = this.sessionId
     const { cols, rows } = this.surface.fit()
+    // A new worktree's first launch runs the repository's setup script first; the Run button's terminal runs `run`.
+    const script = takeSetup(id) ? 'setup' : takeRunStart(id) ? 'run' : undefined
     try {
       await pty.spawn({
         sessionId: id,
@@ -172,9 +183,11 @@ export class SessionTerminal {
         agent: this.agent,
         cols,
         rows,
-        ...(resumeAgentSessionId ? { resumeAgentSessionId } : {})
+        ...(resumeAgentSessionId ? { resumeAgentSessionId } : {}),
+        ...(script ? { script } : {})
       })
     } catch (error) {
+      if (script === 'setup') forgetSetup(id)
       this.exited = true
       const issue = issueFromSpawnError(error)
       this.surface.write(dim(issue.kind === 'cwd-missing' ? `[项目目录不存在：${issue.path}]` : `[无法启动终端：${issue.kind === 'spawn-failed' ? issue.message : String(error)}]`))

@@ -41,6 +41,8 @@ export interface PersistedSession {
   lastReply?: string
   /** Epoch ms the last turn finished. */
   finishedAt?: number
+  /** The Run button's terminal for the worktree's `run` script (PRD F4). */
+  script?: 'run'
 }
 
 export type PersistedWorktree = Pick<Worktree, 'id' | 'projectId' | 'branch' | 'path' | 'isMain'> & { baseBranch?: string }
@@ -150,7 +152,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           startedAt,
           lastActivityAt: isTime(s.lastActivityAt) ? s.lastActivityAt : startedAt,
           ...(isText(s.lastReply, MAX_REPLY) && s.lastReply !== '' ? { lastReply: s.lastReply } : {}),
-          ...(isTime(s.finishedAt) ? { finishedAt: s.finishedAt } : {})
+          ...(isTime(s.finishedAt) ? { finishedAt: s.finishedAt } : {}),
+          ...(s.kind === 'shell' && s.script === 'run' ? { script: 'run' as const } : {})
         }
       })
   )

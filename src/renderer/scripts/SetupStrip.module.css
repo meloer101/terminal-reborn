@@ -1,0 +1,67 @@
+/* Same floating strip as the session error bar (lifecycle/SessionErrorBar): under the terminal, never over it. */
+.bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin: 0 var(--space-12) var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  -webkit-app-region: no-drag;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.title {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primary,
+.secondary {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-md);
+  font: var(--text-caption-strong);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.primary {
+  border: 0;
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.secondary {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.secondary:hover {
+  background: var(--bg-hover);
+}
+
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
