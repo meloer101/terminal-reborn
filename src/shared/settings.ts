@@ -31,15 +31,33 @@ export interface PortSettings {
   base: number
 }
 
+/** 设置 · 自动化 · 代码审阅 (PRD F13). Every switch starts off: a review spends the user's own quota. */
+export interface ReviewSettings {
+  /** Open the merge sheet → start a review. The checklist gains a line; the merge is not blocked. */
+  beforeMerge: boolean
+  /** Before Wavi pushes the base to origin. The push is not blocked. */
+  beforePush: boolean
+  /** A Stop hook, and this worktree gained a commit during the turn. */
+  afterTurnWithCommits: boolean
+  /** `builtin` parses a background process into comments. `agent-command` types `/code-review` or `/review` into the terminal. */
+  mode: 'builtin' | 'agent-command'
+  rules: 'default' | 'custom'
+  customRules: string
+  /** Empty uses the CLI's own model. */
+  model: string
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
   ports: PortSettings
+  review: ReviewSettings
 }
 
 export interface SettingsPatch {
   appearance?: Partial<AppearanceSettings>
   ports?: Partial<PortSettings>
+  review?: Partial<ReviewSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -57,8 +75,20 @@ export const DEFAULT_SETTINGS: AppSettings = {
     sidebarVibrancy: false,
     screenReader: false
   },
-  ports: { base: DEFAULT_PORT_BASE }
+  ports: { base: DEFAULT_PORT_BASE },
+  review: {
+    beforeMerge: false,
+    beforePush: false,
+    afterTurnWithCommits: false,
+    mode: 'builtin',
+    rules: 'default',
+    customRules: '',
+    model: ''
+  }
 }
+
+const MAX_REVIEW_RULES = 8000
+const REVIEW_MODEL = /^[A-Za-z0-9._:@/-]{1,64}$/
 
 export const LIMITS = {
   fontSize: { min: 9, max: 28 },
@@ -99,10 +129,26 @@ function ports(value: unknown): PortSettings {
   return { base: Math.round(num(v.base, DEFAULT_PORT_BASE, PORT_BASE_LIMITS)) }
 }
 
+function review(value: unknown): ReviewSettings {
+  const d = DEFAULT_SETTINGS.review
+  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const customRules = typeof v.customRules === 'string' ? v.customRules.slice(0, MAX_REVIEW_RULES) : d.customRules
+  const model = typeof v.model === 'string' && (v.model === '' || REVIEW_MODEL.test(v.model)) ? v.model : d.model
+  return {
+    beforeMerge: typeof v.beforeMerge === 'boolean' ? v.beforeMerge : d.beforeMerge,
+    beforePush: typeof v.beforePush === 'boolean' ? v.beforePush : d.beforePush,
+    afterTurnWithCommits: typeof v.afterTurnWithCommits === 'boolean' ? v.afterTurnWithCommits : d.afterTurnWithCommits,
+    mode: v.mode === 'agent-command' ? 'agent-command' : d.mode,
+    rules: v.rules === 'custom' ? 'custom' : d.rules,
+    customRules,
+    model
+  }
+}
+
 /** Any JSON value → valid settings. */
 export function sanitizeSettings(raw: unknown): AppSettings {
   const v = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
-  return { version: 1, appearance: appearance(v.appearance), ports: ports(v.ports) }
+  return { version: 1, appearance: appearance(v.appearance), ports: ports(v.ports), review: review(v.review) }
 }
 
 /** Applies a (possibly untrusted) patch and re-sanitizes the result. */
@@ -111,5 +157,6 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const nextAppearance =
     typeof p.appearance === 'object' && p.appearance !== null ? { ...current.appearance, ...(p.appearance as object) } : current.appearance
   const nextPorts = typeof p.ports === 'object' && p.ports !== null ? { ...current.ports, ...(p.ports as object) } : current.ports
-  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts })
+  const nextReview = typeof p.review === 'object' && p.review !== null ? { ...current.review, ...(p.review as object) } : current.review
+  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview })
 }
