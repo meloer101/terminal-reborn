@@ -17,13 +17,15 @@ export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: numb
         const url = portUrl(p)
         return (
           <button
-            key={p.port}
+            key={`${p.host}:${p.port}:${p.pid}`}
             type="button"
             className={styles.port}
             title={`${p.label ? `${p.label} · ` : ''}在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`}
             aria-label={`打开 ${url}`}
             onClick={(e) => {
               e.stopPropagation()
+              // ctrl-click is the context-menu gesture on macOS; that path ends the process.
+              if (e.button !== 0 || e.ctrlKey) return
               openLink(sessionId, url, e.altKey ? 'external' : 'internal')
             }}
             onDoubleClick={(e) => e.stopPropagation()}

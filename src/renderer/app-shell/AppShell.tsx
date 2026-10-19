@@ -46,9 +46,19 @@ export function AppShell() {
   const panelWidth = useWorkspace((s) => s.rightPanelWidth)
   const width = useSyncExternalStore(subscribeResize, windowWidth)
   const mode = rightPanel ? panelMode(width, !sidebarCollapsed, panelWidth) : null
+  // Every session id, so a new or removed session resubscribes. The string compares by value.
+  const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
   useEffect(() => startActivityReporting(), [])
-  // Port tags in the sidebar and the overview need the scan even when the browser tab is closed.
-  useEffect(() => listenForBrowser(), [])
+  // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
+  // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
+  useEffect(() => {
+    listenForBrowser()
+    const ids = sessionPortKey.length === 0 ? [] : sessionPortKey.split('\n')
+    for (const id of ids) window.tr.browser.watchPorts(id)
+    return () => {
+      for (const id of ids) window.tr.browser.unwatchPorts(id)
+    }
+  }, [sessionPortKey])
 
   return (
     <div className={styles.shell}>
