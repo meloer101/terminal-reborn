@@ -2,7 +2,7 @@
 // (group headers, files, diff lines, notes, review comments and the comment editor) the view renders through a window.
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
-import type { CommentSide, ReviewComment } from '@shared/review-comments'
+import { reviewCommentFolded, type CommentSide, type ReviewComment } from '@shared/review-comments'
 
 export type ChangeGroup = 'uncommitted' | 'committed'
 
@@ -12,8 +12,9 @@ export const MAX_DIFF_LINES = 20_000
 /**
  * Figma 13B2 heights: group header 12 + 16 + 4, file row 8 + 16 + 8, DiffLine 20, a note line 4 + 16 + 8. Figma 03:
  * a saved comment 8 + 16 (location) + 2 × 18 (text, clamped) + 8; the editor 8 + 72 (text) + 8 + 28 (buttons) + 8.
+ * A folded review comment (P2 / P3, PRD F13) is its head line only: 8 + 16 + 8.
  */
-export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, note: 28, comment: 68, editor: 124 } as const
+export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, note: 28, comment: 68, commentFolded: 32, editor: 124 } as const
 
 export const changeKey = (group: ChangeGroup, path: string): string => `${group}:${path}`
 
@@ -53,7 +54,7 @@ export type ChangeItem =
   | { kind: 'group'; title: string; meta: string }
   | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number }
   | { kind: 'diff'; key: string; group: ChangeGroup; path: string; row: DiffRow }
-  | { kind: 'comment'; key: string; comment: ReviewComment }
+  | { kind: 'comment'; key: string; comment: ReviewComment; folded: boolean }
   | { kind: 'editor'; key: string }
   /** `open`: offer to open the file in the default editor. */
   | { kind: 'note'; key: string; text: string; open?: string }
@@ -86,7 +87,8 @@ export function changeItems(
   expanded: ReadonlySet<string>,
   diffs: Readonly<Record<string, DiffView>>,
   comments: readonly ReviewComment[] = [],
-  draft: DraftPlace | null = null
+  draft: DraftPlace | null = null,
+  opened: Readonly<Record<string, true>> = {}
 ): ChangeItem[] {
   const items: ChangeItem[] = []
   const files = (group: ChangeGroup, list: GitFileChange[]) => {
@@ -115,7 +117,7 @@ export function changeItems(
           if (draftHere?.id === comment.id) {
             draftPlaced = true
             items.push({ kind: 'editor', key })
-          } else items.push({ kind: 'comment', key, comment })
+          } else items.push({ kind: 'comment', key, comment, folded: reviewCommentFolded(comment, opened) })
         }
         for (const row of diff.rows) {
           items.push({ kind: 'diff', key, group, path: change.path, row })
@@ -149,4 +151,5 @@ export function changeItems(
   return items
 }
 
-export const itemHeight = (item: ChangeItem): number => ITEM_HEIGHT[item.kind]
+export const itemHeight = (item: ChangeItem): number =>
+  item.kind === 'comment' && item.folded ? ITEM_HEIGHT.commentFolded : ITEM_HEIGHT[item.kind]

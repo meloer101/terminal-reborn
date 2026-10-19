@@ -1,7 +1,14 @@
 // Inline review comments (PRD F5) by worktree root, and the one comment being written. Saved with the workspace
 // (`workspace.json`, see ./persistence) until they are sent to the agent or discarded.
 import { create } from 'zustand'
-import { MAX_COMMENT_TEXT, MAX_COMMENTS_PER_WORKTREE, type CommentGroup, type CommentSide, type ReviewComment } from '@shared/review-comments'
+import {
+  MAX_COMMENT_TEXT,
+  MAX_COMMENTS_PER_WORKTREE,
+  replaceReviewComments,
+  type CommentGroup,
+  type CommentSide,
+  type ReviewComment
+} from '@shared/review-comments'
 import { initialWorkspaceFile, requestSave } from './persistence'
 
 /** Where a comment is anchored, with the code it quotes. */
@@ -24,11 +31,14 @@ export interface CommentDraft extends CommentAnchor {
 interface State {
   byRoot: Record<string, ReviewComment[]>
   draft: CommentDraft | null
+  /** Folded (P2 / P3) review comments the user opened. Not saved: they start folded again next launch. */
+  opened: Record<string, true>
 }
 
 export const useReviewComments = create<State>()(() => ({
   byRoot: initialWorkspaceFile()?.reviewComments ?? {},
-  draft: null
+  draft: null,
+  opened: {}
 }))
 
 /** For the workspace snapshot. */
@@ -122,4 +132,36 @@ export function removeComment(root: string, id: string): void {
 export function clearComments(root: string): void {
   setComments(root, [])
   if (useReviewComments.getState().draft?.root === root) cancelDraft()
+}
+
+/** A background review landed (PRD F13): its comments replace the previous review's; the user's own stay. */
+export function landReviewComments(root: string, comments: readonly ReviewComment[]): void {
+  setComments(root, replaceReviewComments(commentsOf(root), comments))
+}
+
+/** Whether 发给 … includes this review comment. */
+export function setCommentPicked(root: string, id: string, picked: boolean): void {
+  setComments(
+    root,
+    commentsOf(root).map((c) => (c.id === id ? { ...c, picked } : c))
+  )
+}
+
+export function toggleCommentFolded(id: string): void {
+  useReviewComments.setState((s) => {
+    const opened = { ...s.opened }
+    if (opened[id]) delete opened[id]
+    else opened[id] = true
+    return { opened }
+  })
+}
+
+/** After sending: only the comments that went. */
+export function removeComments(root: string, ids: ReadonlySet<string>): void {
+  setComments(
+    root,
+    commentsOf(root).filter((c) => !ids.has(c.id))
+  )
+  const draft = useReviewComments.getState().draft
+  if (draft?.id && ids.has(draft.id)) cancelDraft()
 }

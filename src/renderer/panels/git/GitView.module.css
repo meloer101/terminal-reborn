@@ -517,6 +517,117 @@ button.pill:hover {
   height: 16px;
 }
 
+.comment[data-folded] {
+  height: 32px;
+}
+
+/* Background review (PRD F13): severity as text first; only P0 takes the error color. */
+.commentSeverity {
+  flex: none;
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+}
+
+.comment[data-severity='P0'] .commentSeverity {
+  color: var(--status-error);
+}
+
+.comment[data-severity='P2'] .commentSeverity,
+.comment[data-severity='P3'] .commentSeverity {
+  color: var(--text-secondary);
+}
+
+.commentFoldedTitle {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.commentFoldedTitle:hover {
+  color: var(--text-primary);
+}
+
+.commentPick {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-inverse);
+}
+
+.commentPick[aria-checked='true'] {
+  border-color: var(--fill-primary);
+  background: var(--fill-primary);
+}
+
+.commentPick:focus-visible,
+.commentFold:focus-visible,
+.commentFoldedTitle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.commentFold {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.commentFold:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* The latest background review of this worktree, above the footer. */
+.reviewStatus {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 28px;
+  margin: 0;
+  padding: var(--space-4) var(--space-16) 0 calc(var(--space-12) + var(--space-2));
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.reviewStatus[data-tone='error'] {
+  color: var(--status-error);
+}
+
+.reviewStatusText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewStatusMeta {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
 .commentWhere {
   font: var(--text-mono-s);
   color: var(--text-tertiary);

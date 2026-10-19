@@ -101,8 +101,8 @@
 - [ ] F5 split 视图；“创建 PR”按钮暂为禁用（等 F16）。还没测：1 万行 diff 实际滚动帧率（行已窗口化）
 - [x] F17 Worktree 页签（2026-10-17）：`git worktree list` + 会话状态、未提交 `+N −M`、领先 / 落后，选中行展开详情和操作（打开文件夹 · 在此新建会话 · 复制路径 · 删除），可清理分组一键清理（只碰没有会话、已合并的）、没有会话分组逐个删除；删除在有改动、git 检查失败、分离 HEAD 有孤立提交、变基中、会话在跑时拒绝；监听 `.git` 变化 + 可见时轮询；e2e `worktree-panel.spec.ts`。以后：`worktree list -z`、lock 原因、squash / rebase 合并识别、删除时可选删分支（`branch -d`）、手动刷新和逐行错误、`core.fsmonitor=false`、我们 PTY 之外 cwd 在 worktree 里的进程。+ 已打开新建会话面板（2026-10-18）；“合并到 main…”已接上 F4（2026-10-18）；端口段显示预留的 TR_PORT 段（2026-10-18，PRD v1.28）
 - [x] F17 文件页签（2026-10-17）：按需加载的目录树 + git 状态、筛选和“有改动 N”、只读预览（行号 + 改动标记）、用默认编辑器打开、右键菜单、`fs.watch` 增量刷新；e2e `right-panel.spec.ts`。还没测：1 万文件仓库首屏 < 200 ms、切换会话 100 ms 内换内容
-- [x] F13 一键 AI 审阅（2026-10-18）：“让 agent 审阅”在变更视图底部和总览“待审阅”行（展开后 / 浮层），向 Claude 发 `/code-review`、Codex 发 `/review`；agent 忙或未就绪时置灰写明原因，已退出的先 `--resume`；e2e 在 `merge-sheet.spec.ts`。2026-10-18 起改为后台审阅（PRD v1.25），这个按钮将改走新的审阅方式
-- [ ] F13 后台审阅（PRD v1.27）：主进程审阅进程（`claude -p` / `codex exec`，Wavi 控制上下文和规则）、结果落成带严重程度的 F5 评论、用时和花费、按 diff 哈希去重和取消；合并面板“先审阅”；设置 · 自动化 · 代码审阅（默认全关）；大 diff 按 §6.10 分段。§6.10 的三项待测已补（2026-10-19）
+- [x] F13 一键 AI 审阅（2026-10-18）：“让 agent 审阅”在变更视图底部和总览“待审阅”行（展开后 / 浮层），向 Claude 发 `/code-review`、Codex 发 `/review`；agent 忙或未就绪时置灰写明原因，已退出的先 `--resume`；e2e 在 `merge-sheet.spec.ts`。2026-10-19 起默认走后台审阅，这条路径留作“审阅方式 · agent 自带命令”
+- [x] F13 后台审阅（2026-10-19，PRD v1.29）：主进程 `src/main/background-review.ts` 起只读的 `claude -p` / `codex exec`（登录 shell 的 PATH、提示走 stdin），diff 含未提交、未跟踪文本文件和对比基线的已提交，每段最多 40 万字符；结果落成带 P0–P3 和置信度的 F5 评论（P2 / P3 折叠、默认不勾，只发勾选的），变更视图底部显示状态、用时和花费、可取消；按 diff 哈希去重，新 diff 取消旧审阅；合并面板一行审阅状态和“先审阅”；设置 · 自动化 · 代码审阅（三个时机默认关，一轮结束用 prompt-submit / Stop + HEAD 比对）。测试：`src/main/background-review.test.ts`（真 git 仓库 + 假 CLI），e2e 在 `merge-sheet.spec.ts`、`settings.spec.ts`。以后：真实 Codex 服务商上的结构化输出仍没跑通（§6.10）；审阅结果没有持久化，重启后同一 diff 会再审一次
 - [ ] F15 归档（含运行 `.tr/settings.toml` 的 `archive`，已能解析）
 - 可以并行（与 git 无关）：
   - [ ] F11 上下文占用与额度

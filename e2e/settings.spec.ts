@@ -8,6 +8,7 @@ interface TrWindow {
       get(): Promise<{
         appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean }
         ports: { base: number }
+        review: { beforeMerge: boolean; beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; model: string }
       }>
     }
   }
@@ -115,6 +116,44 @@ test('Worktree pane sets the port block base', async () => {
   await app.close()
 })
 
+test('自动化 pane: every automatic review starts off; switches, method, rules and model persist (F13)', async () => {
+  const app = await launchApp()
+  const settings = await openSettings(app)
+  await settings.getByRole('tab', { name: '自动化' }).click()
+  const toggles = ['合并前自动审阅', 'Wavi 推送前自动审阅', '一轮结束且有新提交时自动审阅']
+  for (const name of toggles) await expect(settings.getByRole('switch', { name })).toHaveAttribute('aria-checked', 'false')
+  await expect(settings.getByText(/自动审阅会用你自己的登录和额度/)).toBeVisible()
+  await settings.getByRole('switch', { name: '合并前自动审阅' }).click()
+  await expect.poll(async () => (await readSettings(settings)).review.beforeMerge).toBe(true)
+
+  await settings.getByRole('radio', { name: '自定义' }).click()
+  const rules = settings.getByRole('textbox', { name: '自定义审阅规则' })
+  await rules.fill('只看安全问题')
+  await rules.blur()
+  await expect.poll(async () => (await readSettings(settings)).review.customRules).toBe('只看安全问题')
+  const model = settings.getByRole('textbox', { name: '审阅模型' })
+  await model.fill('bad model!')
+  await model.press('Enter')
+  await model.fill('haiku')
+  await model.press('Enter')
+  await expect.poll(async () => (await readSettings(settings)).review.model).toBe('haiku')
+
+  const shot = process.env.TR_SCREENSHOT_DIR
+  if (shot) {
+    for (const theme of ['dark', 'light'] as const) {
+      await settings.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(settings.locator('html')).toHaveAttribute('data-theme', theme)
+      await settings.waitForTimeout(300)
+      await settings.screenshot({ path: `${shot}/settings-automation-${theme}.png` })
+    }
+  }
+
+  await settings.getByRole('radio', { name: 'agent 自带命令' }).click()
+  await expect.poll(async () => (await readSettings(settings)).review.mode).toBe('agent-command')
+  await expect(settings.getByRole('textbox', { name: '审阅模型' })).toHaveCount(0)
+  await app.close()
+})
+
 test('about pane shows the version and checks for updates', async () => {
   const app = await launchApp()
   const settings = await openSettings(app)
@@ -122,7 +161,7 @@ test('about pane shows the version and checks for updates', async () => {
   await expect(settings.getByTestId('app-version')).not.toBeEmpty()
   await expect(settings.getByRole('button', { name: '检查更新' })).toBeVisible()
   // Panes without content yet are not listed (B11): no 即将推出 dead ends.
-  await expect(settings.getByRole('tab')).toHaveText(['外观', 'Worktree', '关于'])
+  await expect(settings.getByRole('tab')).toHaveText(['外观', 'Worktree', '自动化', '关于'])
   await app.close()
 })
 
