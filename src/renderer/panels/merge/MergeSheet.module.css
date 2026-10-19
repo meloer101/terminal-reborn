@@ -103,6 +103,38 @@
   color: var(--status-error);
 }
 
+.line[data-tone='working'] .lineIcon {
+  color: var(--status-working);
+}
+
+.output {
+  margin: 0 0 var(--space-4) var(--space-24);
+  max-height: 120px;
+  padding: var(--space-8) var(--space-12);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font: var(--text-mono-s);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rerun {
+  align-self: flex-start;
+  margin: 0 0 var(--space-4) var(--space-24);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font: var(--text-caption);
+  cursor: default;
+}
+
+.rerun:hover {
+  color: var(--text-primary);
+}
+
 .lineText {
   flex: 1;
   min-width: 0;

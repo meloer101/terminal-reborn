@@ -163,6 +163,7 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(feature.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
     await expect(feature).toContainText('基线main · 领先 1，落后 4')
     await expect(feature).toContainText('未提交README.md')
+    await expect(feature).toContainText(/端口段\d+\u2013\d+/)
     await expect(feature.getByRole('button', { name: /合并到 main/ })).toBeEnabled()
     await shoot('13c-worktree')
 

@@ -6,6 +6,7 @@ import {
   cleanupPlan,
   deleteBlocker,
   detailLines,
+  portBlockLabel,
   formatDiff,
   formatSync,
   keptText,
@@ -207,6 +208,12 @@ describe('formatting', () => {
       { label: '基线', value: 'main · 领先 2，落后 0' },
       { label: '未提交', value: 'a, b, c 等 5 个' }
     ])
+    expect(detailLines(info({ path: '/x', branch: 'jacob/x', ahead: 2, behind: 0, dirtyCount: 0, dirtyFiles: [] }), 41010)).toContainEqual({
+      label: '端口段',
+      value: portBlockLabel(41010),
+      mono: true
+    })
+    expect(portBlockLabel(41010)).toBe('41010\u201341019')
     expect(detailLines(info({ path: '/x', head: 'abcdef123', base: null, ahead: null, behind: null, dirtyCount: null, unreachableCommits: 1 }))).toEqual([
       { label: '分支', value: '分离的 HEAD · abcdef1 · 1 个提交不在分支上' },
       { label: '基线', value: '—' },

@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { delimiter, isAbsolute, join } from 'node:path'
 import { app, BrowserWindow, ipcMain, type WebContents } from 'electron'
-import { IPC, type RepoScriptsInfo, type ScriptApproval } from '@shared/ipc'
+import { IPC, type RepoScriptsInfo, type ScriptApproval, type ScriptRunResult } from '@shared/ipc'
 import { allocatePortBlock, portOf } from '@shared/ports'
 import {
   approvalDetail,
@@ -18,10 +18,12 @@ import {
   REPO_SETTINGS_FILE,
   sanitizeRepoScriptsStore,
   withApproval,
+  type CapturedScript,
   type RepoScripts,
   type RepoScriptsStore,
   type RunnableScript
 } from '@shared/repo-scripts'
+import { cancelAllCapturedScripts, cancelCapturedScript, startCapturedScript } from './script-run'
 import { confirm } from './confirm'
 import { getSettings } from './settings'
 import { resolveRoot } from './worktree-files'
@@ -151,9 +153,33 @@ export function rememberApproval(key: string, scripts: RepoScripts, target: Repo
 /** Sheets already on screen, by repository + content: a second session asking at the same time waits for the first. */
 const asking = new Map<string, Promise<boolean>>()
 
-function parseScriptName(value: unknown): RunnableScript {
-  if (value !== 'setup' && value !== 'run') throw new Error('invalid script name')
+function parseScriptName(value: unknown): RunnableScript | CapturedScript {
+  if (value !== 'setup' && value !== 'run' && value !== 'test') throw new Error('invalid script name')
   return value
+}
+
+function parseCapturedScript(value: unknown): CapturedScript {
+  if (value !== 'test') throw new Error('invalid script name')
+  return value
+}
+
+/**
+ * Cancel and run for one directory stay in order. The renderer fires cancel as a sheet closes and run as the next
+ * one opens; without a queue the cancel can land on the run that just started.
+ */
+const runQueues = new Map<string, Promise<unknown>>()
+
+function enqueue<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = runQueues.get(key) ?? Promise.resolve()
+  const run = prev.then(fn, fn)
+  runQueues.set(
+    key,
+    run.then(
+      () => undefined,
+      () => undefined
+    )
+  )
+  return run
 }
 
 async function repoInfo(dirRaw: unknown): Promise<RepoScriptsInfo> {
@@ -194,7 +220,7 @@ async function approve(owner: WebContents, dirRaw: unknown, nameRaw: unknown): P
  * The approved script for a spawn in `realCwd` (PtySpawnOptions.script). Throws when the file has no such script or
  * it is not approved as it is now, so nothing runs that the user has not seen.
  */
-export async function approvedScript(realCwd: string, name: RunnableScript): Promise<string> {
+export async function approvedScript(realCwd: string, name: RunnableScript | CapturedScript): Promise<string> {
   const { top, key } = await locateRepo(realCwd)
   const { scripts } = await readRepoSettings(top)
   const script = scripts[name]
@@ -203,7 +229,38 @@ export async function approvedScript(realCwd: string, name: RunnableScript): Pro
   return script
 }
 
+async function runCaptured(dirRaw: unknown, nameRaw: unknown): Promise<ScriptRunResult> {
+  const name = parseCapturedScript(nameRaw)
+  const dir = await resolveRoot(dirRaw)
+  const script = await approvedScript(dir, name)
+  const port = portFor(dir)
+  return startCapturedScript({
+    key: dir,
+    cwd: dir,
+    script,
+    baseEnv: process.env,
+    ...(port !== null ? { extraEnv: { TR_PORT: String(port) } } : {})
+  })
+}
+
+async function cancelCaptured(dirRaw: unknown): Promise<void> {
+  try {
+    cancelCapturedScript(await resolveRoot(dirRaw))
+  } catch {
+    if (typeof dirRaw === 'string') cancelCapturedScript(dirRaw)
+  }
+}
+
 export function registerRepoScriptHandlers(): void {
   ipcMain.handle(IPC.repoScriptsGet, (_event, dir: unknown) => repoInfo(dir))
   ipcMain.handle(IPC.repoScriptsApprove, (event, dir: unknown, name: unknown) => approve(event.sender, dir, name))
+  ipcMain.handle(IPC.repoScriptsRun, (_event, dir: unknown, name: unknown) => {
+    const key = typeof dir === 'string' ? dir : ''
+    return enqueue(key, () => runCaptured(dir, name))
+  })
+  ipcMain.handle(IPC.repoScriptsCancel, (_event, dir: unknown) => {
+    const key = typeof dir === 'string' ? dir : ''
+    return enqueue(key, () => cancelCaptured(dir))
+  })
+  app.on('before-quit', () => cancelAllCapturedScripts())
 }

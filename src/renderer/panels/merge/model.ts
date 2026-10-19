@@ -2,7 +2,7 @@
 import type { GitOperation, MergeBlocker, MergeConflict, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
 
-export type CheckTone = 'ok' | 'warn' | 'error'
+export type CheckTone = 'ok' | 'warn' | 'error' | 'working'
 
 export interface CheckLine {
   tone: CheckTone
@@ -60,6 +60,51 @@ export function checkLines(check: MergePrecheck): CheckLine[] {
     lines.push({ tone: 'warn', text: `${check.upstream} 有 ${check.upstreamAhead} 个提交还没拉到本地 ${check.base}` })
   }
   return lines
+}
+
+/** One line of the merge checklist for `[scripts] test` (Figma 16B). Absent when the file has no test. */
+export type MergeTestState =
+  | { status: 'running'; command: string }
+  | { status: 'passed'; command: string }
+  | { status: 'failed'; command: string; code: number | null; output: string }
+  | { status: 'declined'; command: string }
+
+export interface TestCheckLine extends CheckLine {
+  /** Captured tail, under the line, when the test failed and printed something. */
+  output?: string
+  /** Ghost “重新运行”. */
+  rerun?: boolean
+}
+
+/** The command as one line of meta (a multi-line script collapses). */
+export function testMeta(script: string): string {
+  return script.replace(/\s+/g, ' ').trim()
+}
+
+export function testLine(state: MergeTestState): TestCheckLine {
+  const meta = testMeta(state.command)
+  switch (state.status) {
+    case 'running':
+      return { tone: 'working', text: '正在运行测试…', meta }
+    case 'passed':
+      return { tone: 'ok', text: '测试通过', meta }
+    case 'failed':
+      return {
+        tone: 'error',
+        text: state.code === null ? '测试没能运行' : `测试没通过（退出码 ${state.code}）`,
+        meta,
+        ...(state.output.trim() !== '' ? { output: state.output.trim() } : {}),
+        rerun: true
+      }
+    case 'declined':
+      return { tone: 'error', text: '没有允许运行测试', meta, rerun: true }
+  }
+}
+
+/** A configured test blocks 合并 until it exits 0. No test does not. */
+export function testBlocksMerge(state: MergeTestState | null, hasTest: boolean): boolean {
+  if (!hasTest) return false
+  return state?.status !== 'passed'
 }
 
 const CONFLICT_TYPE: Record<string, string> = {

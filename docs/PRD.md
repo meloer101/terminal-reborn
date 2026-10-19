@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.26 · 2026-10-19 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.28 · 2026-10-18 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.28 | 2026-10-18 | F4 脚本与端口补上闭环里的三块界面（Figma 16A `249:8874` / 16B `249:9089`，13C 端口段改成预留段）：设置新增 **Worktree** 页，可改端口段起点（`ports.base`，默认 41000，已分过的目录不动）；Worktree 详情在「未提交」下面显示 **端口段**（`TR_PORT–TR_PORT+9`，不是正在监听的端口）。`.tr/settings.toml` 增加可选 `[scripts] test`。合并预检在 git 检查能合并之后跑它（同样的登录 shell 和 `TR_PORT`，先走原来的确认框）；没有 test 就不出现这一行，也不因此重新询问已经批准过、且文件里没有 test 的仓库（批准哈希只在 test 存在时多带这一项）。跑的时候合并按钮不可用，取消或关掉面板会停掉测试；退出码 0 显示「测试通过」；非 0 显示退出码和输出尾部，不能合并，可「重新运行」。`archive` 仍等 F15 |
 | v1.26 | 2026-10-19 | F4 脚本与端口实现时定下的细节：`.tr/settings.toml` 只读 `[scripts]` 的 `setup` / `run` / `archive`（字符串或字符串数组，数组按行拼接），其他键忽略，从各 worktree 自己的检出里读；脚本一律用 `/bin/sh -e` 在用户的交互式登录 shell 里运行（PATH 同终端），遇到第一条失败的命令就停。仓库的脚本第一次要运行时、以及三个脚本任何一个改动后，弹确认框列出全部命令；批准的内容哈希按仓库（git common dir）记在 Wavi 自己的 `repo-scripts.json`，每个仓库最多记 20 个版本，不同分支各自的脚本不会来回重复询问；拒绝就不运行。setup 在新 worktree 第一个终端里先于 agent 运行（准备开关同时管复制和 setup）；失败时终端停在输出处，会话下方写“setup 脚本失败（退出码 N）”，点“仍然启动 …”或在终端按回车后 agent 照常启动；`.tr/settings.toml` 写错时会话下方说明、不运行。Run 按钮（▶）只在 worktree 有 `run` 时出现：没运行 → 新开一个名为 `run` 的普通终端会话运行它并切过去；在别的会话里运行中 → 切过去；正在看 run 会话 → ■ 停止（结束进程）；再按一次在同一会话里重跑、保留之前的输出；重启 Wavi 后 run 会话不会自己重跑。TR_PORT：每个工作目录一段 10 个端口，默认从 41000 起（设置文件 `ports.base`，暂无界面），持久保存，文件夹不在了就收回；注入该目录下每个终端（agent、shell、setup、run），由主进程设置、不能被覆盖。`archive` 只解析，等 F15 运行 |
 | v1.25 | 2026-10-18 | F13 改为**后台审阅**：Wavi 自己起一个独立的审阅进程（`claude -p` / `codex exec`，全新上下文、只读、Wavi 控制上下文和审阅规则），结果按固定格式（P0–P3、行范围、置信度）落成 F5 行内评论，由用户勾选后放进 agent 输入行；不再默认往会话里发 `/code-review`（结果读不出来、会和同名插件撞名），“agent 自带命令”保留为可选方式。新增设置 · 自动化 · 代码审阅：合并前 / Wavi 推送前 / 一轮结束且有新提交时，**默认都关**；合并面板加“先审阅”。hook 只当触发信号，永远不拦 agent。依据：同类产品与 Claude / Codex 自带审阅都用独立审阅者，Stop hook 拦截有循环烧额度的案例，实测见 §6.10 |
 | v1.24 | 2026-10-18 | “等你处理”的颜色从琥珀改为**品红**：深色 `#ff5fb0`、浅色 `#c0237a`（Figma 新增原色 `magenta/400`、`magenta/600`、`magenta-a/12`，`status/attention` 和 `status/attention-bg` 改指向它们）；总览看板的 `card/attention*` 按同样的明度和彩度换到品红色相。原因：琥珀在浅色下发棕、对比度只有 3.99:1，不到 4.5:1。琥珀只留给图谱第 4 条 lane 和终端黄色 |
@@ -166,14 +167,15 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
   - **不写任务描述**：创建后直接进入会话，用户在终端里自己发第一句话。面板里只在出错或有限制时显示说明文字，平时不加解释。
 - **入口**：⌘N 和项目标题的 ＋ 打开面板（＋ 预选那个项目；还没有项目时 ⌘N 先打开项目）。会话右键和 Worktree 视图的“在此新建会话”不弹面板，直接在那个 worktree 里再开一个会话。
 - 点“创建”后面板立即关闭，侧栏马上出现该会话。新 worktree 的后台执行：`git fetch` → `git worktree add --no-track -b <branch> ~/.tr/worktrees/<repo>/<name> <base>` → 记录 `branch.<name>.base` → 按 `.worktreeinclude` 用 `cp -c`（APFS 写时复制）复制被忽略文件 → 在可见终端里运行 setup 脚本 → 启动 agent（不送 prompt）。
-- **脚本与端口**：可以提交进仓库的 `.tr/settings.toml`，配置 `setup`、`run`、`archive` 三个脚本；会话头放一个 Run 按钮；按工作区分配端口段，注入 `TR_PORT`。
+- **脚本与端口**：可以提交进仓库的 `.tr/settings.toml`，配置 `setup`、`run`、`archive` 和可选的 `test`；会话头放一个 Run 按钮；按工作区分配端口段，注入 `TR_PORT`。起点在设置 · Worktree（默认 41000）；Worktree 详情显示分到的端口段。
   ```toml
   [scripts]
   setup = ["npm ci", "cp .env.example .env"]   # 新 worktree 的终端里、agent 之前
   run = "npm run dev -- --port $TR_PORT"         # 会话头 ▶，单独的 run 终端
+  test = "pnpm test"                             # 合并前；失败则不能合并
   archive = "docker compose down"                # 归档时（F15）
   ```
-  仓库的脚本是仓库里的代码：第一次运行、以及内容改变后都先弹确认框列出全部命令（细节见 v1.26）。
+  仓库的脚本是仓库里的代码：第一次运行、以及内容改变后都先弹确认框列出全部命令（细节见 v1.26、v1.28）。没有 `test` 时不跑测试、也不因此重新确认。
 - 本地合并：预检（落后基线的提交数、`git merge-tree --write-tree` 冲突检测、可选测试命令）→ 选择 merge `--no-ff` / squash / rebase + `--ff-only` → 可选“合并后删除 worktree（保留分支）”和“推送到 origin”。
 - 冲突处理：列出冲突文件和原因 →「交给 agent 解决」会自动生成说明（冲突类型、分支、文件列表、提醒设置 `GIT_EDITOR=true`），放进该会话的输入行、不按回车（§2 不替用户花 token）；或者选择「中止」。能识别仓库处于 merge / rebase / cherry-pick 进行中的状态。
 - 清理：合并后提示删除；列出孤儿 worktree（P2：按 TTL 自动回收）。

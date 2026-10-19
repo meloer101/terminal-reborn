@@ -29,6 +29,8 @@ function setup() {
     git(cwd, 'commit', '-q', '-m', message)
   }
   writeFileSync(join(project, 'README.md'), '# demo\n')
+  mkdirSync(join(project, '.tr'))
+  writeFileSync(join(project, '.tr', 'settings.toml'), '[scripts]\ntest = "exit 0"\n')
   git(project, 'init', '-q', '-b', 'main')
   git(project, 'add', '.')
   git(project, 'commit', '-q', '-m', 'init')
@@ -122,6 +124,8 @@ test.describe('F4 merge sheet · F13 review', () => {
     await expect(sheet()).toContainText('jacob/clean')
     await expect(sheet()).toContainText('领先 main 2 个提交')
     await expect(sheet()).toContainText('main 有 1 个新提交，可以自动合并')
+    await expect(sheet()).toContainText('测试通过', WITHIN)
+    await expect(sheet()).toContainText('exit 0')
     await expect(sheet().getByRole('radio', { name: 'Squash' })).toHaveAttribute('aria-checked', 'true')
     await expect(sheet().getByRole('checkbox', { name: '合并后删除 worktree（保留分支）' })).toHaveAttribute('aria-checked', 'true')
     await expect(sheet().getByRole('checkbox', { name: '合并后推送到 origin' })).toBeDisabled()
@@ -148,6 +152,7 @@ test.describe('F4 merge sheet · F13 review', () => {
     await page.keyboard.press('Meta+Shift+M')
     await expect(sheet()).toBeVisible()
     await expect(sheet()).toContainText('main 有 2 个新提交，与本分支冲突')
+    await expect(sheet()).not.toContainText('测试通过')
     await expect(sheet().getByRole('list', { name: '冲突的文件' })).toContainText('README.md两边都改了同一处')
     await expect(sheet().getByRole('radio', { name: 'Squash' })).toHaveCount(0)
 

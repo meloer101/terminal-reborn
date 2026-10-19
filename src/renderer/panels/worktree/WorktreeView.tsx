@@ -14,6 +14,7 @@ import { IconButton } from '../../ui/IconButton'
 import { formatAccelerator } from '../../ui/menu-model'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { openMergeSheet } from '../merge/store'
+import { useRepoScripts } from '../../scripts/run-script'
 import { PaneHeader } from '../PaneHeader'
 import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
 import { buildRows, detailLines, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
@@ -184,6 +185,7 @@ interface RowProps {
 /** Figma component WorktreeRow (130:282); the selected one expands into "Details" (149:6262). */
 function Row({ row, selected, projectId, root, refresh }: RowProps) {
   const { info } = row
+  const scripts = useRepoScripts(selected ? info.path : undefined)
   return (
     <li className={styles.item} data-selected={selected} data-path={info.path}>
       <button type="button" className={styles.row} aria-expanded={selected} onClick={() => selectRow(root, row)}>
@@ -209,10 +211,12 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
       {selected && (
         <div className={styles.details}>
           <dl className={styles.kv}>
-            {detailLines(info).map((line) => (
+            {detailLines(info, scripts?.port ?? null).map((line) => (
               <div key={line.label} className={styles.kvRow}>
                 <dt className={styles.kvLabel}>{line.label}</dt>
-                <dd className={styles.kvValue}>{line.value}</dd>
+                <dd className={styles.kvValue} data-mono={line.mono || undefined}>
+                  {line.value}
+                </dd>
               </div>
             ))}
           </dl>
