@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
@@ -155,6 +156,10 @@ const api: TrApi = {
     turnStarted: (root) => ipcRenderer.send(REVIEW_IPC.turnStarted, root),
     turnEnded: (root, agent) => ipcRenderer.send(REVIEW_IPC.turnEnded, root, agent),
     onStatus: (listener) => listen(REVIEW_IPC.status, listener)
+  },
+  archive: {
+    capture: (root, worktree, id) => ipcRenderer.invoke(ARCHIVE_IPC.capture, root, worktree, id),
+    restore: (request) => ipcRenderer.invoke(ARCHIVE_IPC.restore, request)
   }
 }
 

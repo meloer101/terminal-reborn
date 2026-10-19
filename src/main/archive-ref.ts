@@ -151,3 +151,14 @@ export async function restoreWorktreeArchive(dir: string, id: string): Promise<v
   await git(dir, ['stash', 'apply', '--index', commit])
   await restoreUntracked(dir, commit)
 }
+
+/** The snapshot commit, or null when the ref is gone. */
+export async function archiveCommit(dir: string, id: string): Promise<string | null> {
+  const found = await git(dir, ['rev-parse', '--verify', '--quiet', `${refFor(id)}^{commit}`]).catch(() => null)
+  return found?.stdout.trim() || null
+}
+
+/** Deletes the private ref once the worktree is back. */
+export async function dropWorktreeArchive(dir: string, id: string): Promise<void> {
+  await git(dir, ['update-ref', '-d', refFor(id)])
+}

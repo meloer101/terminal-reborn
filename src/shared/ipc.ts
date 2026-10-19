@@ -4,6 +4,7 @@
 
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
+import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { AppSettings, SettingsPatch } from './settings'
@@ -345,6 +346,8 @@ export interface TrApi {
   repoScripts: RepoScriptsApi
   /** Background code review (PRD F13); channels in REVIEW_IPC. */
   review: BackgroundReviewApi
+  /** Archiving a worktree (PRD F15); channels in ARCHIVE_IPC. */
+  archive: ArchiveApi
 }
 
 export const IPC = {
