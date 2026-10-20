@@ -60,8 +60,17 @@ function Sheet({ target }: { target: MergeTarget }) {
   const [push, setPush] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  // 交给 … 解决 in flight: the agent may have to start first, and the text may be refused while a menu is open.
+  const [handing, setHanding] = useState(false)
   const sheetRef = useRef<HTMLDivElement>(null)
+  const mounted = useRef(true)
   const titleId = useId()
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   const ids = target.worktreeIds
   const sessions = useWorkspace((s) => s.sessions)
@@ -221,21 +230,28 @@ function Sheet({ target }: { target: MergeTarget }) {
     setPhase({ kind: 'done', check: ready, lines })
   }
 
+  // The sheet stays until the text is in the agent's input line: when it cannot go there (a menu is open in the
+  // terminal, the agent did not start) the failure line says so and 交给 … 解决 can be pressed again.
   const handToAgent = async (): Promise<void> => {
-    if (!ready || !agent) return
+    if (!ready || !agent || handing) return
     setFailure(null)
+    setHanding(true)
     const prompt = conflictPrompt(ready)
-    closeMergeSheet(false)
-    const state = useWorkspace.getState()
-    state.setActiveSession(agent.id)
+    useWorkspace.getState().setActiveSession(agent.id)
     try {
       await ensureAgentUp(agent.id)
       // Into the input line only: resolving conflicts can cost a lot of tokens, so the user sends it (PRD §2).
       await insertIntoTerminal(agent.id, prompt)
-      useWorkspace.getState().requestTerminalFocus()
-    } catch {
-      // The terminal shows what happened; the sheet is gone by now.
+    } catch (error) {
+      if (mounted.current) {
+        setFailure(`没有交给 ${agentLabel(agent.kind)}：${error instanceof Error ? error.message : String(error)}`)
+        setHanding(false)
+      }
+      return
     }
+    if (!mounted.current) return
+    closeMergeSheet(false)
+    useWorkspace.getState().requestTerminalFocus()
   }
 
   const primary = (): void => {
@@ -271,7 +287,7 @@ function Sheet({ target }: { target: MergeTarget }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-busy={phase.kind === 'checking' || busy}
+        aria-busy={phase.kind === 'checking' || busy || handing}
         tabIndex={-1}
         onKeyDown={onKeyDown}
         data-testid="merge-sheet"
@@ -394,8 +410,8 @@ function Sheet({ target }: { target: MergeTarget }) {
             </button>
           ) : conflicts.length > 0 && !shown?.blocker ? (
             agent && (
-              <button type="button" className={styles.primary} onClick={() => void handToAgent()}>
-                交给 {agentLabel(agent.kind)} 解决
+              <button type="button" className={styles.primary} disabled={handing} onClick={() => void handToAgent()}>
+                {handing ? `正在交给 ${agentLabel(agent.kind)}…` : `交给 ${agentLabel(agent.kind)} 解决`}
                 <span className={styles.shortcut}>⌘↵</span>
               </button>
             )

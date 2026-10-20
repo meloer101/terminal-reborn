@@ -80,6 +80,16 @@
   outline-offset: -2px;
 }
 
+/* What the last action could not do (a refused 插入路径到终端), under the header. */
+.notice {
+  flex: none;
+  margin: 0;
+  padding: 0 var(--space-12) var(--space-6);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .empty {
   margin: 0;
   padding: var(--space-16);

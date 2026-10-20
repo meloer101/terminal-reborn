@@ -195,6 +195,14 @@ button.chip:hover {
   white-space: nowrap;
 }
 
+/* A one-line refusal hung under the button that was clicked. */
+.refusal {
+  margin: 0;
+  padding: var(--space-12) var(--space-16);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
 .popoverFooter {
   margin: 0;
   padding: var(--space-12) var(--space-16) var(--space-8);

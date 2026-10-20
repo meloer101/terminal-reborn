@@ -15,7 +15,7 @@ const SHOTS = join(process.cwd(), 'test-results', 'merge-sheet')
 const WITHIN = { timeout: 30_000 }
 
 function setup() {
-  const fake = fakeClaude('tr-e2e-merge-')
+  const fake = fakeClaude('tr-e2e-merge-', { printable: true })
   const project = join(fake.root, 'demo')
   const clean = join(fake.root, 'wt-clean')
   const conflict = join(fake.root, 'wt-conflict')
@@ -60,6 +60,11 @@ test.describe('F4 merge sheet · F13 review', () => {
   const panel = () => page.locator('[data-region="panel"]')
   const sheet = () => page.getByTestId('merge-sheet')
   const { logged, typed } = repo
+  const screen = () =>
+    page.evaluate(
+      (id) => (globalThis as unknown as { __trTerminals?: { readScreen(id: string, scrollbackLines?: number): string } }).__trTerminals?.readScreen(id, 50) ?? '',
+      's-conflict'
+    )
   const setTheme = async (theme: 'dark' | 'light') => {
     await page.evaluate(
       (t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }),
@@ -100,6 +105,11 @@ test.describe('F4 merge sheet · F13 review', () => {
     )
     app = await launchApp(repo.env, { userDataDir: profile })
     page = await app.firstWindow()
+    // Reading the screen (to know when a printed menu is there) is opt-in, and set before the page's scripts run.
+    await page.addInitScript(() => {
+      ;(globalThis as unknown as { __TR_TERMINAL_PROBE__: boolean }).__TR_TERMINAL_PROBE__ = true
+    })
+    await page.reload()
     await setWindowSize(app, page, 1440, 900)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
   })
@@ -211,6 +221,24 @@ test.describe('F4 merge sheet · F13 review', () => {
     await expect(handOff).toBeVisible()
     await expect(sheet()).toContainText('说明会放进 Claude 的输入行，看过后按回车发送')
     await shoot('05c-conflict')
+
+    // A menu is open over the agent's input line (Claude's /rate-limit-options): nothing is typed, the sheet stays
+    // and says why (PRD §6.7, §6.9). Once the menu is gone the same button hands the text over.
+    repo.print(
+      repo.conflict,
+      '\r\n What do you want to do?\r\n ❯ 1. Wait here, then continue automatically at 5:22pm\r\n   2. Stop and wait for limit to reset\r\n\r\n Enter to confirm · Esc to cancel\r\n'
+    )
+    await expect.poll(screen, WITHIN).toContain('What do you want to do?')
+    const untouched = typed()
+    await page.keyboard.press('Meta+Enter')
+    await expect(sheet().getByRole('alert')).toHaveText('没有交给 Claude：终端里有选择框，请先在终端中处理')
+    await expect(handOff).toBeEnabled()
+    await page.waitForTimeout(500)
+    expect(typed()).toBe(untouched)
+    await shoot('05d-conflict-refused')
+    repo.print(repo.conflict, '\x1b[2J\x1b[H❯ ')
+    await expect.poll(screen, WITHIN).not.toContain('What do you want to do?')
+
     await page.keyboard.press('Meta+Enter')
     await expect(sheet()).toHaveCount(0)
     // Put into the input line, not sent: the text arrives without an Enter after it until the user presses one.

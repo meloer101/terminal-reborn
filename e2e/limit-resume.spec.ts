@@ -3,7 +3,8 @@
 // sent for a plan-limit 429 (PRD §6.6, scripts/spikes/60-rate-limit-lab.mjs) — so the stop travels the real path
 // (relay → hook socket → main → renderer). The send itself is the real send protocol into the fake's PTY. Waits are
 // shortened through `__TR_LIMIT_RESUME_TIMING__`; the account is never polled (TR_ACCOUNT_USAGE=off), so after the
-// reset the passed reset time is what lets the send go. Screenshots in both themes go to test-results/limit-resume/.
+// reset the passed reset time is what lets the send go. The menu that holds the send also refuses every other click
+// that would type into the agent (PRD §6.7 / §6.9). Screenshots in both themes go to test-results/limit-resume/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -15,6 +16,9 @@ const SHOTS = join(process.cwd(), 'test-results', 'limit-resume')
 const ID = 's-limit'
 const MESSAGE = "You've hit your session limit · resets 5:22pm (America/Bogota)"
 const TIMING = { marginMs: 1_500, freshWaitMs: 300, pollMs: 200 }
+const MENU =
+  '\r\n What do you want to do?\r\n ❯ 1. Wait here, then continue automatically at 5:22pm\r\n   2. Stop and wait for limit to reset\r\n\r\n Enter to confirm · Esc to cancel\r\n'
+const REFUSAL = '终端里有选择框，请先在终端中处理'
 
 interface Shown {
   title: string
@@ -38,9 +42,14 @@ test.describe('continue after the plan limit resets', () => {
   const errorBar = () => page.getByTestId('session-error')
   const row = () => page.locator(`[data-region="sidebar"] [data-session-id="${ID}"]`)
   const shown = () => app.evaluate(() => (globalThis as unknown as { __shown: Shown[] }).__shown)
+  const screen = () =>
+    page.evaluate((id) => (globalThis as unknown as { __trTerminals?: { readScreen(id: string, n?: number): string } }).__trTerminals?.readScreen(id, 50) ?? '', ID)
   /** How many times 继续 + Enter reached the agent (the send protocol pastes the text, then presses Enter). */
   // eslint-disable-next-line no-control-regex
   const continues = () => agent.typed().replace(/\x1b\[20[01]~/g, '').split('继续<ENTER>').length - 1
+  /** What reached the agent, without the bracketed-paste markers the send protocol wraps text in. */
+  // eslint-disable-next-line no-control-regex
+  const typedText = () => agent.typed().replace(/\x1b\[20[01]~/g, '')
   const clock = (ms: number) => {
     const d = new Date(ms)
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -65,6 +74,7 @@ test.describe('continue after the plan limit resets', () => {
 
   test.beforeAll(async () => {
     mkdirSync(profile, { recursive: true })
+    writeFileSync(join(agent.path, 'notes.txt'), 'notes\n')
     mkdirSync(claudeConfig, { recursive: true })
     writeFileSync(
       join(profile, 'workspace.json'),
@@ -89,6 +99,11 @@ test.describe('continue after the plan limit resets', () => {
       }
     })
     page = await app.firstWindow()
+    // Reading the screen (to know when a printed menu is there) is opt-in, and set before the page's scripts run.
+    await page.addInitScript(() => {
+      ;(globalThis as unknown as { __TR_TERMINAL_PROBE__: boolean }).__TR_TERMINAL_PROBE__ = true
+    })
+    await page.reload()
     await expect(row()).toBeVisible(WITHIN)
     await row().click()
     await expect.poll(agent.pid, WITHIN).not.toBeNull()
@@ -199,6 +214,64 @@ test.describe('continue after the plan limit resets', () => {
     await page.waitForTimeout(500)
     expect(agent.typed()).toBe(typed)
     agent.step({ print: '\x1b[2J\x1b[H❯ ' })
+  })
+
+  test('with the menu open, /compact and 插入路径到终端 are refused too: each says so where it was clicked, and nothing is typed', async () => {
+    agent.step({
+      statusLine: {
+        model: { display_name: 'Opus 5.5' },
+        context_window: { context_window_size: 200000, used_percentage: 86, current_usage: { input_tokens: 2, cache_creation_input_tokens: 1998, cache_read_input_tokens: 170000 } }
+      }
+    })
+    const compact = header().getByTestId('context-chip').getByRole('button', { name: '/compact' })
+    await expect(compact).toBeVisible(WITHIN)
+    await header().getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
+    const panel = page.locator('[data-region="panel"]')
+    const notes = panel.getByRole('tree', { name: '文件' }).locator('[role="treeitem"][data-path="notes.txt"]')
+    await expect(notes).toBeVisible(WITHIN)
+
+    agent.step({ print: MENU })
+    await expect.poll(screen, WITHIN).toContain('What do you want to do?')
+    const before = typedText()
+    mkdirSync(SHOTS, { recursive: true })
+
+    await compact.click()
+    await expect(page.getByTestId('compact-refusal')).toHaveText(REFUSAL)
+    for (const theme of ['dark', 'light'] as const) {
+      await setTheme(theme)
+      await page.waitForTimeout(150)
+      await page.screenshot({ path: join(SHOTS, `compact-refused-${theme}.png`) })
+    }
+    await setTheme('dark')
+
+    await notes.click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: /插入路径到终端/ }).click()
+    await expect(panel.getByTestId('files-notice')).toHaveText(`没有插入路径：${REFUSAL}`)
+    for (const theme of ['dark', 'light'] as const) {
+      await setTheme(theme)
+      await page.waitForTimeout(150)
+      await page.screenshot({ path: join(SHOTS, `insert-path-refused-${theme}.png`) })
+    }
+    await setTheme('dark')
+
+    await page.waitForTimeout(500)
+    expect(typedText()).toBe(before)
+
+    // The menu is dealt with: both buttons type again, and the notices are gone.
+    agent.step({ print: '\x1b[2J\x1b[H❯ ' })
+    await expect.poll(screen, WITHIN).not.toContain('What do you want to do?')
+    await compact.click()
+    await expect.poll(typedText, WITHIN).toContain('/compact')
+    await expect(page.getByTestId('compact-refusal')).toHaveCount(0)
+    await notes.click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: /插入路径到终端/ }).click()
+    await expect.poll(typedText, WITHIN).toContain('@notes.txt')
+    await expect(panel.getByTestId('files-notice')).toHaveCount(0)
+    await header().getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
+    await expect(panel).toHaveCount(0)
+    // Leave the input line empty again.
+    await page.locator('[data-region="terminal"] [data-active="true"]').click()
+    await page.keyboard.press('Control+U')
   })
 
   test('a reading after the reset that still says used up moves the send to the later reset', async () => {

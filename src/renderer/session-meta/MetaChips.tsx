@@ -170,6 +170,14 @@ export function ContextChip({ sessionId, context, compact = true }: { sessionId:
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => setOpen(false), [])
+  // Why /compact did not reach the input line (a menu is open in the terminal); the popover hangs under the button.
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const compactButton = useRef<HTMLButtonElement>(null)
+  const closeRefusal = useCallback(() => setRefusal(null), [])
+  const insertCompact = (): void => {
+    setRefusal(null)
+    insertSlashCommand(sessionId, '/compact').catch((error: unknown) => setRefusal(error instanceof Error ? error.message : '没有放进输入行'))
+  }
   return (
     <span className={styles.chipGroup} data-testid="context-chip" data-level={high ? 'high' : 'normal'}>
       <button
@@ -190,14 +198,22 @@ export function ContextChip({ sessionId, context, compact = true }: { sessionId:
       </button>
       {high && compact && (
         <button
+          ref={compactButton}
           type="button"
           className={styles.compact}
           title="把 /compact 放进输入行（不回车）"
           onMouseDown={keepFocus}
-          onClick={() => void insertSlashCommand(sessionId, '/compact')}
+          onClick={insertCompact}
         >
           /compact
         </button>
+      )}
+      {refusal && (
+        <Popover anchor={compactButton} label="/compact" onClose={closeRefusal} testId="compact-refusal">
+          <p className={styles.refusal} role="status">
+            {refusal}
+          </p>
+        </Popover>
       )}
       {open && (
         <Popover anchor={anchor} label="context" onClose={close} testId="context-popover">

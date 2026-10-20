@@ -7,6 +7,7 @@ import { IconButton } from '../../ui/IconButton'
 import { popupMenu } from '../../ui/menu'
 import { PaneHeader } from '../PaneHeader'
 import { FilePreview } from './FilePreview'
+import { FilesNotice } from './FilesNotice'
 import { FileTree } from './FileTree'
 import { collapseAll, filesOf, listenForChanges, openRoot, refreshAll, setChangedOnly, setFilter, useFiles } from './store'
 import { baseName, filterPaths, pathRows, treeRows, type TreeRow } from './tree-model'
@@ -135,6 +136,7 @@ export function FilesView({ root, sessionId }: { root: string; sessionId: Sessio
           </button>
         </label>
       </div>
+      <FilesNotice root={root} />
       {empty && rows.length === 0 ? (
         <p className={styles.empty}>{empty}</p>
       ) : (

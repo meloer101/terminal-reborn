@@ -64,11 +64,13 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
 
 /**
  * Puts a slash command (`/compact`, PRD F11) into the agent's input line the way the send protocol types one — the
- * `/` key, then the rest — and stops before Enter: the user presses it after reading.
+ * `/` key, then the rest — and stops before Enter: the user presses it after reading. Rejects with a user-facing
+ * message while a menu is open (§6.7): the `/` would pick from it.
  */
 export async function insertSlashCommand(sessionId: SessionId, command: string): Promise<void> {
   const kind = agentIn(sessionId)
   if (!kind) return
+  refuseOverMenu(sessionId)
   const steps = planSend(command, kind)
   const submit = steps.findIndex((step) => step.type === 'waitForText')
   await sendQueued(queue, sessionId, submit >= 0 ? steps.slice(0, submit) : steps, getSendIo(sessionId))
