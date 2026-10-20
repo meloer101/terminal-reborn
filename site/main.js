@@ -527,6 +527,224 @@
 
   $('[data-grid-toggle]').addEventListener('change', (e) => tty.classList.toggle('show-grid', e.target.checked))
 
+  /* ───────── Download: the orbit mark as ASCII particles ───────── */
+  // The mark is sampled into a grid of monospace cells, denser glyphs where the stroke is solid. Each glyph is a
+  // particle that springs to its cell, so the orbit can gather and turn with the scroll and scatter under the pointer.
+  const asciiOrbit = (() => {
+    const box = $('[data-orbit]')
+    const section = $('[data-download]')
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!box || !section || !ctx) return null
+
+    const RAMP = '.:-=+*#%@'
+    const NOISE = '01/\\<>{}[]|_+~^;'
+    const pick = (s) => s[(Math.random() * s.length) | 0]
+    const state = { p: 1 } // 0: scattered and turned back · 1: gathered
+    const live = () => !reduce.matches
+    let parts = []
+    let font = ''
+    let W = 0
+    let H = 0
+    let ink = '#000'
+    let ptr = null
+    let raf = 0
+    let visible = false
+    let placed = false
+
+    const img = new Image()
+    img.src = 'assets/orbit.svg?v=3'
+
+    function sample() {
+      const bw = box.clientWidth
+      const bh = box.clientHeight
+      if (!bw || !bh || !img.naturalWidth) return false
+      const size = Math.max(7, Math.min(11, bw / 56))
+      const cw = size * 0.62
+      const rh = size * 1.05
+      const cols = Math.round(bw / cw)
+      const rows = Math.round(bh / rh)
+      const S = 4
+      const off = document.createElement('canvas')
+      off.width = cols * S
+      off.height = rows * S
+      const octx = off.getContext('2d', { willReadFrequently: true })
+      octx.drawImage(img, 0, 0, off.width, off.height)
+      let data
+      try {
+        data = octx.getImageData(0, 0, off.width, off.height).data
+      } catch {
+        return false // file:// taints the canvas; the CSS mask stays
+      }
+
+      const pad = Math.round(Math.max(bw, bh) * 0.3)
+      W = bw + pad * 2
+      H = bh + pad * 2
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.round(W * dpr)
+      canvas.height = Math.round(H * dpr)
+      canvas.style.width = `${W}px`
+      canvas.style.height = `${H}px`
+      canvas.style.left = `${-pad}px`
+      canvas.style.top = `${-pad}px`
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      font = `500 ${size}px ${getComputedStyle(root).getPropertyValue('--font-mono') || 'monospace'}`
+
+      const old = parts
+      parts = []
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let sum = 0
+          for (let y = 0; y < S; y++) {
+            const row = ((r * S + y) * off.width + c * S) * 4 + 3
+            for (let x = 0; x < S; x++) sum += data[row + x * 4]
+          }
+          const cov = sum / (S * S * 255)
+          if (cov < 0.1) continue
+          const ang = Math.random() * Math.PI * 2
+          const far = (0.35 + Math.random() * 0.65) * Math.max(bw, bh) * 0.7
+          const prev = old[parts.length]
+          parts.push({
+            hx: (c + 0.5) * cw - bw / 2,
+            hy: (r + 0.5) * rh - bh / 2,
+            cov,
+            sx: Math.cos(ang) * far,
+            sy: Math.sin(ang) * far,
+            d: Math.random() * 0.35,
+            x: prev ? prev.x : W / 2,
+            y: prev ? prev.y : H / 2,
+            vx: 0,
+            vy: 0,
+            g: 0,
+            gch: ''
+          })
+        }
+      }
+      return true
+    }
+
+    function frame(settle) {
+      const p = state.p
+      const gather = Math.min(1, p / 0.7)
+      const a = ((-30 + 28 * p) * Math.PI) / 180
+      const k = 0.86 + 0.14 * p
+      const cos = Math.cos(a) * k
+      const sin = Math.sin(a) * k
+      const cx = W / 2
+      const cy = H / 2
+      const R = 70
+      const now = live() ? performance.now() : 0
+      ctx.clearRect(0, 0, W, H)
+      ctx.font = font
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = ink
+      let moving = false
+      for (const q of parts) {
+        const t = Math.max(0, Math.min(1, (gather - q.d) / (1 - 0.35)))
+        const e = 1 - (1 - t) ** 3
+        const tx = cx + cos * q.hx - sin * q.hy + q.sx * (1 - e)
+        const ty = cy + sin * q.hx + cos * q.hy + q.sy * (1 - e)
+        if (settle) {
+          q.x = tx
+          q.y = ty
+        } else {
+          if (ptr) {
+            const dx = q.x - ptr.x
+            const dy = q.y - ptr.y
+            const d2 = dx * dx + dy * dy
+            if (d2 < R * R) {
+              const d = Math.sqrt(d2) || 1
+              const f = (1 - d / R) * 3.2
+              q.vx += (dx / d) * f
+              q.vy += (dy / d) * f
+              q.g = 1
+            }
+          }
+          if (q.g <= 0 && Math.random() < 0.0015) q.g = 0.6
+          q.vx = (q.vx + (tx - q.x) * 0.09) * 0.78
+          q.vy = (q.vy + (ty - q.y) * 0.09) * 0.78
+          q.x += q.vx
+          q.y += q.vy
+          if (Math.abs(q.vx) + Math.abs(q.vy) > 0.05) moving = true
+        }
+        // A slow band of light sweeps across the stroke, so the glyph density keeps shifting like the reference loops.
+        const shade = 0.5 + 0.5 * Math.sin(now * 0.0011 - (q.hx * 0.6 + q.hy) / 70)
+        const level = q.cov * (0.4 + 0.6 * shade)
+        let ch = RAMP[Math.min(RAMP.length - 1, Math.floor(level * RAMP.length))]
+        if (q.g > 0) {
+          if (!q.gch || Math.random() < 0.3) q.gch = pick(NOISE)
+          ch = q.gch
+          q.g -= 0.025
+        }
+        ctx.globalAlpha = (0.12 + 0.88 * e) * (0.45 + 0.55 * level)
+        ctx.fillText(ch, q.x, q.y)
+      }
+      ctx.globalAlpha = 1
+      return moving
+    }
+
+    function loop() {
+      raf = 0
+      if (!visible) return
+      frame(false)
+      raf = requestAnimationFrame(loop)
+    }
+    function kick() {
+      if (!live()) frame(true)
+      else if (visible && !raf) raf = requestAnimationFrame(loop)
+    }
+    function readInk() {
+      ink = getComputedStyle(box).color
+      if (!live()) frame(true)
+    }
+    function layout() {
+      if (!sample()) return
+      box.classList.add('is-ascii')
+      if (!box.contains(canvas)) box.appendChild(canvas)
+      readInk()
+      frame(!live() || !placed) // first draw: glyphs start where they belong, not in a burst from the centre
+      placed = true
+      kick()
+    }
+
+    img.addEventListener('load', () => {
+      layout()
+      if (document.fonts) document.fonts.ready.then(layout)
+      // The box can still be settling (styles, fonts) when the image lands; re-sample whenever its size changes.
+      let t = 0
+      let size = `${box.clientWidth}x${box.clientHeight}`
+      const relayout = () => {
+        const next = `${box.clientWidth}x${box.clientHeight}`
+        if (next === size) return
+        size = next
+        clearTimeout(t)
+        t = setTimeout(layout, 120)
+      }
+      if ('ResizeObserver' in window) new ResizeObserver(relayout).observe(box)
+      else window.addEventListener('resize', relayout)
+      new MutationObserver(readInk).observe(root, { attributes: true, attributeFilter: ['data-theme'] })
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(([en]) => {
+          visible = en.isIntersecting
+          kick()
+        }, { rootMargin: '120px' }).observe(box)
+      } else {
+        visible = true
+        kick()
+      }
+    })
+
+    section.addEventListener('pointermove', (e) => {
+      if (!live()) return
+      const r = canvas.getBoundingClientRect()
+      ptr = { x: e.clientX - r.left, y: e.clientY - r.top }
+    })
+    section.addEventListener('pointerleave', () => { ptr = null })
+
+    return { state, update: kick }
+  })()
+
   /* ───────── Scroll choreography ───────── */
   if (G && ST) {
     const mm = G.matchMedia()
@@ -534,6 +752,8 @@
     mm.add({ motion: '(prefers-reduced-motion: no-preference)', wide: '(min-width: 901px)' }, (ctx) => {
       const { motion, wide } = ctx.conditions
 
+      // One-shot reveals use toggleActions, not `once`: a reload that lands mid-page fires them during the first
+      // refresh, and a `once` trigger killing itself there leaves every later trigger (the download orbit) unmeasured.
       // Headlines settle in character by character, out of a blur.
       if (motion) {
         for (const el of $$('[data-reveal-words]')) {
@@ -549,30 +769,38 @@
             duration: 1.1,
             ease: 'expo.out',
             stagger: 0.035,
-            scrollTrigger: { trigger: el, start: 'top 82%', once: true }
+            scrollTrigger: { trigger: el, start: 'top 82%', toggleActions: 'play none none none' }
           })
         }
 
         // Principles: hairlines draw across before each rule speaks.
         for (const rule of $$('[data-rule]')) {
-          const tl = G.timeline({ scrollTrigger: { trigger: rule, start: 'top 88%', once: true } })
+          const tl = G.timeline({ scrollTrigger: { trigger: rule, start: 'top 88%', toggleActions: 'play none none none' } })
           tl.fromTo(rule, { '--rule-s': 0 }, { '--rule-s': 1, duration: 1.1, ease: 'expo.inOut' }, 0)
             .from($$('dt, dd', rule), { opacity: 0, y: 14, duration: 0.9, stagger: 0.08, ease: 'expo.out' }, 0.3)
         }
 
         // Keyboard: the shortcuts rise in a wave, then each cap gets pressed once.
-        G.timeline({ scrollTrigger: { trigger: '.key-grid', start: 'top 80%', once: true } })
+        G.timeline({ scrollTrigger: { trigger: '.key-grid', start: 'top 80%', toggleActions: 'play none none none' } })
           .from('.key-grid li', { opacity: 0, y: 24, duration: 0.9, ease: 'expo.out', stagger: { each: 0.06, grid: 'auto', from: 'start' } })
           .to('.key-grid kbd', { y: 3, boxShadow: 'inset 0 0 0 rgba(0,0,0,0)', duration: 0.09, ease: 'power2.out', yoyo: true, repeat: 1, stagger: 0.035 }, 0.35)
 
-        // Download: the orbit mark turns with the page.
-        G.fromTo('[data-orbit]', { rotate: -16, scale: 0.86, opacity: 0.4 }, {
-          rotate: 12,
-          scale: 1,
-          opacity: 1,
-          ease: 'none',
-          scrollTrigger: { trigger: '[data-download]', start: 'top bottom', end: 'bottom bottom', scrub: 0.8 }
-        })
+        // Download: the orbit gathers out of scattered glyphs and turns with the page.
+        const orbitScroll = { trigger: '[data-download]', start: 'top bottom', end: 'bottom bottom', scrub: 0.8 }
+        if (asciiOrbit) {
+          G.fromTo(asciiOrbit.state, { p: 0 }, { p: 1, ease: 'none', onUpdate: asciiOrbit.update, scrollTrigger: orbitScroll })
+        } else {
+          G.fromTo('[data-orbit]', { rotate: -16, scale: 0.86, opacity: 0.4 }, {
+            rotate: 12,
+            scale: 1,
+            opacity: 1,
+            ease: 'none',
+            scrollTrigger: orbitScroll
+          })
+        }
+      } else if (asciiOrbit) {
+        asciiOrbit.state.p = 1
+        asciiOrbit.update()
       }
 
       // Worktree: the graph draws itself as you scroll; the six steps light up in order.
