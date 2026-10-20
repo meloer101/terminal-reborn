@@ -82,6 +82,30 @@ describe('phase tracking', () => {
     expect(r.controller.stateOf('r')?.phase).toBe('starting')
   })
 
+  it('a restored session the pty daemon kept running follows its hooks again once adopted', () => {
+    const r = harness([session('r', { phase: 'not-started' })])
+    r.controller.handleEvent('r', { type: 'prompt-submit', prompt: 'x' })
+    expect(status(r, 'r')).toBe('idle')
+    r.sessions = r.sessions.map((s) => ({ ...s, phase: 'ready' as const })) // adoptLiveSessions() patch
+    r.controller.sync()
+    expect(r.controller.stateOf('r')?.phase).toBe('ready')
+    expect(r.launched).toEqual([])
+    r.controller.handleEvent('r', { type: 'notification', kind: 'permission', message: 'm' })
+    expect(status(r, 'r')).toBe('needs_you')
+    // Quiet at its prompt is not silent hooks: they reported in the run that launched it.
+    r.screens.r = CLAUDE_UI
+    r.clock.now += 7_000
+    r.controller.tick()
+    expect(r.silent.r).toBeUndefined()
+  })
+
+  it('a restored session whose terminal ended while the app was closed is exited once adopted', () => {
+    const r = harness([session('r', { phase: 'not-started' })])
+    r.sessions = r.sessions.map((s) => ({ ...s, phase: 'exited' as const, status: 'exited' as const }))
+    r.controller.sync()
+    expect(r.controller.stateOf('r')).toMatchObject({ phase: 'exited', status: 'exited', ended: true })
+  })
+
   it('the trust dialog on screen moves the session to blocked / needs_you and notifies', () => {
     h.screens.a = TRUST
     h.controller.handleOutput('a')

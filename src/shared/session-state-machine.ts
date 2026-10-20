@@ -46,6 +46,11 @@ export type Signal =
   | { type: 'screen'; text: string }
   /** The hook watchdog reports silence after launch (the agent may be blocked, or hooks cannot reach us). */
   | { type: 'hooks-silent' }
+  /**
+   * After an app restart the session's agent was still in the pty daemon: it is up (`ready`), or its terminal ended
+   * while the app was closed (`exited`). Only moves a `not-started` session.
+   */
+  | { type: 'reattached'; exited: boolean }
 
 export interface SessionState {
   kind: AgentKind
@@ -426,6 +431,13 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
 
     case 'screen':
       return agent ? reduceScreen(state, signal.text, now) : state
+
+    case 'reattached':
+      if (state.phase !== 'not-started') return state
+      return signal.exited
+        ? { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, ended: true, phase: 'exited', phaseSince: now, blocked: undefined }
+        : // Its hooks reported in the run that launched it; a quiet idle agent is not a silent-hooks one.
+          { ...state, phase: 'ready', phaseSince: now, hooksSeen: true }
 
     case 'hooks-silent':
       return state.kind === 'claude' && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent
