@@ -18,6 +18,7 @@ import {
   normalizeSendText,
   pasteTimeoutMs,
   planSend,
+  sendRefusal,
   utf8ByteLength,
   type SendStep
 } from './send-protocol'
@@ -343,5 +344,54 @@ describe('detectBlockingDialog', () => {
   it('returns null for a normal screen', () => {
     expect(detectBlockingDialog('❯ Try "how do I log an error?"')).toBeNull()
     expect(detectBlockingDialog('› Write tests for @filename')).toBeNull()
+  })
+})
+
+describe('sendRefusal', () => {
+  const MENU = '终端里有选择框，请先在终端中处理'
+  // Captured screens (Claude Code 2.1.304, Codex 0.142.5; PRD §6.6 / §6.7), as in limit-resume.test.ts.
+  const claudeLimitOptions = [
+    "  ⎿  You've hit your session limit · resets 5:22pm (America/Bogota)",
+    '',
+    ' What do you want to do?',
+    ' ❯ 1. Wait here, then continue automatically at 5:22pm',
+    '   2. Stop and wait for limit to reset',
+    '',
+    ' Enter to confirm · Esc to cancel'
+  ].join('\n')
+  const codexSwitchModel = [
+    "■ You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit",
+    'https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 5:23 PM.',
+    '  Switch to gpt-5.4-mini for lower credit usage?',
+    '› 1. Switch to gpt-5.4-mini                 Small, fast, and cost-efficient model for simpler coding tasks.',
+    '  2. Keep current model',
+    '  3. Keep current model (never show again)  Hide future rate limit reminders about switching models.',
+    '  Press enter to confirm or esc to go back'
+  ].join('\n')
+
+  it("refuses Claude's /rate-limit-options dialog and its permission dialog", () => {
+    expect(sendRefusal('claude', claudeLimitOptions)).toBe(MENU)
+    expect(sendRefusal('claude', 'Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel · Tab to amend')).toBe(MENU)
+  })
+
+  it("refuses Codex's switch-model pop-up (typing 继续 + Enter there switched the model)", () => {
+    expect(sendRefusal('codex', codexSwitchModel)).toBe(MENU)
+  })
+
+  it('lets prose through that only reads like a question, and a plain input line', () => {
+    expect(sendRefusal('claude', '⏺ Do you want to keep the old API, or what do you want to do next?\n\n❯ ')).toBeNull()
+    expect(sendRefusal('codex', "■ You've hit your usage limit. … try again at 5:23 PM.\n\n› Summarize recent commits")).toBeNull()
+  })
+
+  it('never refuses a screen without the input line, nor a plain terminal', () => {
+    expect(sendRefusal('claude', 'some shell output\n$ ')).toBeNull()
+    expect(sendRefusal('codex', '')).toBeNull()
+    expect(sendRefusal('shell', claudeLimitOptions)).toBeNull()
+    expect(sendRefusal(undefined, codexSwitchModel)).toBeNull()
+  })
+
+  it('keeps refusing the startup dialogs, for every kind', () => {
+    expect(sendRefusal('shell', ' ❯ No, exit\n   Yes, I trust this folder')).toBe('终端里有确认框，请先在终端中处理')
+    expect(sendRefusal('codex', '✨  Update available! 0.142.5 -> 0.154.0\n 3. Skip until next version')).toBe('终端里有确认框，请先在终端中处理')
   })
 })

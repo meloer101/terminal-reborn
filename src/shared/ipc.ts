@@ -312,6 +312,11 @@ export interface AppInfoApi {
   checkForUpdates(): Promise<UpdateInfo | null>
   /** Keeps main informed about live sessions (quit confirmation). */
   reportActivity(summary: ActivitySummary): void
+  /**
+   * While a send is scheduled (恢复后发送“继续”, PRD F11) this window's timers keep full speed when it is hidden:
+   * Chromium otherwise slows a hidden page's timers to about once a minute, and the send protocol polls the screen.
+   */
+  keepTimers(on: boolean): void
   /** Which agent CLIs are installed. Never throws (a failed check reports both as missing). */
   detectAgents(): Promise<AgentAvailability>
   /** The account's full name for the welcome greeting (PRD F18); '' when unknown. Never throws. */
@@ -436,6 +441,8 @@ export const IPC = {
   appVersion: 'app:version',
   appCheckForUpdates: 'app:check-for-updates',
   appReportActivity: 'app:report-activity',
+  /** renderer → main, payload boolean */
+  appKeepTimers: 'app:keep-timers',
   /** invoke → AgentAvailability */
   appDetectAgents: 'app:detect-agents',
   appUserName: 'app:user-name',

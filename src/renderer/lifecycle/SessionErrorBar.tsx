@@ -4,6 +4,9 @@ import { submitPrompt } from '../session-io'
 import { startSession } from '../state/session-start'
 import { useActiveSession, useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { stopNote } from '@shared/limit-resume'
+import { useLimitStop } from '../limit-resume/store'
+import { useMetaNow } from '../session-meta/MetaChips'
 import { ensureAgentUp } from './agent-up'
 import { CONTINUE_PROMPT, errorNextSteps, fixPrompt, type RetryKind } from './error-next-steps'
 import { useLaunchIssues } from './launch-issues'
@@ -27,8 +30,10 @@ export function SessionErrorBar() {
   const active = useActiveSession()
   const id = active?.session.id ?? null
   const issue = useLaunchIssues((s) => (id ? s.issues[id] : undefined))
+  const limit = useLimitStop(id ?? '')
+  const now = useMetaNow()
   if (!active) return null
-  const steps = errorNextSteps(active.session, issue)
+  const steps = errorNextSteps(active.session, issue, limit ? stopNote(limit, now) : undefined)
   if (!steps) return null
   return <Bar key={id} sessionId={active.session.id} summary={steps.summary} canFix={steps.canFix} retryKind={steps.retry} />
 }

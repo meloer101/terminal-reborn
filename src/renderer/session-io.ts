@@ -1,8 +1,8 @@
 // Integration seam between UI features and live agent sessions: typing a prompt into an agent's TUI with the
 // measured send protocol (PRD §6.9). Callers never touch PTYs or protocols.
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
-import { detectBlockingDialog, inputLineText, normalizeSendText, planSend } from '@shared/send-protocol'
-import type { SessionId } from '@shared/types'
+import { inputLineText, normalizeSendText, planSend, sendRefusal } from '@shared/send-protocol'
+import type { AgentKind, SessionId } from '@shared/types'
 import { useSessionMeta } from './session-meta/store'
 import { useWorkspace } from './state/workspace'
 import { attachmentInput } from './terminal/attachments'
@@ -11,11 +11,23 @@ import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/regis
 // One serial queue per session: two sends to the same PTY must never interleave.
 const queue = createSendQueue()
 
+/** The session's agent; for a plain terminal, the one started in it by hand, if one is running. */
+function agentIn(sessionId: SessionId): Exclude<AgentKind, 'shell'> | undefined {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  return session?.kind === 'shell' ? useSessionMeta.getState().bySession[sessionId]?.agent : session?.kind
+}
+
+/** Rejects, before anything is typed, while a dialog or a menu is on the session's screen (PRD §6.7). */
+function refuseOverMenu(sessionId: SessionId): void {
+  const refusal = sendRefusal(agentIn(sessionId), readViewport(sessionId))
+  if (refusal) throw new Error(refusal)
+}
+
 /** Types `text` into the session's agent and presses Enter once the agent shows it. Rejects with a user-facing message. */
 export async function submitPrompt(sessionId: SessionId, text: string): Promise<void> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session) throw new Error('会话不存在')
-  if (detectBlockingDialog(readViewport(sessionId))) throw new Error('终端里有确认框，请先在终端中处理')
+  refuseOverMenu(sessionId)
   const steps = planSend(text, session.kind)
   if (steps.length === 0) return
   try {
@@ -29,11 +41,12 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
 /**
  * Puts `text` into the session's input line without pressing Enter (the 文件 view's 插入路径到终端, PRD F17):
  * one bracketed paste — or one line when the program does not take bracketed paste, so no newline submits it —
- * queued behind any send in flight (§6.9).
+ * queued behind any send in flight (§6.9). Rejects with a user-facing message while a menu is open.
  */
 export async function insertIntoTerminal(sessionId: SessionId, text: string): Promise<void> {
   const body = normalizeSendText(text)
   if (!body) return
+  refuseOverMenu(sessionId)
   const data = inputLineText(body, acceptsBracketedPaste(sessionId))
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
 }
@@ -43,11 +56,8 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
  * image paths into attachments (terminal/attachments.ts). Not Enter.
  */
 export async function insertPaths(sessionId: SessionId, paths: readonly string[]): Promise<void> {
-  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  if (!session) return
-  // A plain terminal: the agent started in it by hand, if one is running.
-  const agent = session.kind === 'shell' ? (useSessionMeta.getState().bySession[sessionId]?.agent ?? null) : session.kind
-  const data = attachmentInput(paths, agent, acceptsBracketedPaste(sessionId))
+  if (!useWorkspace.getState().sessions.some((s) => s.id === sessionId)) return
+  const data = attachmentInput(paths, agentIn(sessionId) ?? null, acceptsBracketedPaste(sessionId))
   if (!data) return
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
 }
@@ -57,9 +67,7 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
  * `/` key, then the rest — and stops before Enter: the user presses it after reading.
  */
 export async function insertSlashCommand(sessionId: SessionId, command: string): Promise<void> {
-  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
-  // A plain terminal: the agent started in it by hand, if one is running.
-  const kind = session?.kind === 'shell' ? useSessionMeta.getState().bySession[sessionId]?.agent : session?.kind
+  const kind = agentIn(sessionId)
   if (!kind) return
   const steps = planSend(command, kind)
   const submit = steps.findIndex((step) => step.type === 'waitForText')
