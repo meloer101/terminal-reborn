@@ -179,6 +179,8 @@ export interface MetaReading {
   /** Null: the agent says it does not know right now (Claude after /compact, until its next response). */
   context?: ContextUsage | null
   usage?: VendorUsage
+  /** False when the session is off the vendor's plan (see AgentEvent `billing`); absent when not known from this reading. */
+  plan?: boolean
 }
 
 /**

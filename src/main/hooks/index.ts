@@ -6,7 +6,7 @@ import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
-import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
+import type { AgentEvent, HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
@@ -152,11 +152,27 @@ function createUsageStore(): UsageStore {
   })
 }
 
+/** Sessions whose agent is off its vendor's plan (AgentEvent `billing`): they say nothing about the account's use. */
+const offPlan = new Set<string>()
+
+function trackBilling(sessionId: string, event: AgentEvent): void {
+  if (event.type === 'billing') {
+    if (event.plan) offPlan.delete(sessionId)
+    else offPlan.add(sessionId)
+    transcripts.setPlan(sessionId, event.plan)
+  } else if (event.type === 'agent-exit') {
+    offPlan.delete(sessionId)
+    transcripts.setPlan(sessionId, true)
+  }
+}
+
 const emitter: BridgeEmitter = {
   event: (envelope) => {
     // Any hook traffic proves the hooks reach us; withdraw the "silent since launch" countdown.
     watchdog.disarm(envelope.sessionId)
-    pollers[envelope.agent]?.nudge()
+    trackBilling(envelope.sessionId, envelope.event)
+    // A session on a third-party endpoint does not make the account "in use" (it would be asked far more often).
+    if (!offPlan.has(envelope.sessionId)) pollers[envelope.agent]?.nudge()
     ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope)
   },
   prompt: (prompt) => ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt),
@@ -430,6 +446,7 @@ export async function handleRelayedHook(request: {
 /** The session's PTY ended (exit, kill, host crash): release holds and withdraw its prompts. */
 export function endAgentSession(sessionId: string): void {
   watchdog.disarm(sessionId)
+  offPlan.delete(sessionId)
   const owner = owners.get(sessionId)
   if (!owner || !runtime) return
   void runtime.then((rt) => {

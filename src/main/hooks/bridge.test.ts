@@ -236,6 +236,41 @@ describe('HookBridge · session metrics (PRD F11 / F12)', () => {
     expect(events.map((e) => e.event)).toEqual([{ type: 'todos', items: [] }, { type: 'context', context: null }, { type: 'agent-exit' }])
   })
 
+  it('a session off the plan (third-party endpoint) reports no account usage, until it is back on', async () => {
+    const { bridge, events, req, usage } = setup()
+    expect(bridge.usesPlan('s1')).toBe(true)
+    expect(await bridge.handle(req('AgentBilling', { plan: false }))).toBe('')
+    await bridge.handle(req('AgentBilling', { plan: false }))
+    await bridge.handle(req('StatusLine', statusLine(40)))
+    bridge.applyReading('s1', 'claude', { usage: { vendor: 'claude', at: 1000, windows: [] } })
+    expect(bridge.usesPlan('s1')).toBe(false)
+    expect(usage).toEqual([])
+    // Context is still the session's own.
+    expect(events.map((e) => e.event.type)).toEqual(['billing', 'context'])
+    expect(events[0]!.event).toEqual({ type: 'billing', plan: false })
+    await bridge.handle(req('AgentBilling', { plan: 'nope' }))
+    await bridge.handle(req('AgentBilling', { plan: true }))
+    await bridge.handle(req('StatusLine', statusLine(41)))
+    expect(usage).toHaveLength(1)
+  })
+
+  it('a hand-started agent ending puts the session back on the plan', async () => {
+    const { bridge, req } = setup()
+    await bridge.handle(req('AgentBilling', { plan: false }))
+    await bridge.handle(req('AgentExit', {}))
+    expect(bridge.usesPlan('s1')).toBe(true)
+  })
+
+  it('a Codex rollout reading says whether it is on the plan before its usage counts', () => {
+    const { bridge, events, usage } = setup()
+    const windows = [{ minutes: 300, percent: 9, resetsAt: 2000 }]
+    bridge.applyReading('s1', 'codex', { plan: false, usage: { vendor: 'codex', at: 1000, windows } })
+    expect(usage).toEqual([])
+    expect(events.map((e) => e.event)).toEqual([{ type: 'billing', plan: false }])
+    bridge.applyReading('s1', 'codex', { plan: true, usage: { vendor: 'codex', at: 1000, windows } })
+    expect(usage).toHaveLength(1)
+  })
+
   it('applies readings taken outside hooks only for attached sessions', () => {
     const { bridge, events } = setup()
     bridge.applyReading('s1', 'codex', { context: { percent: 41 } })
@@ -252,8 +287,11 @@ describe('HookBridge · reattach', () => {
     await bridge.handle(req('StatusLine', { context_window: { used_percentage: 30 } }))
     await bridge.handle(req('PostToolUse', { tool_name: 'TodoWrite', tool_input: { todos: [{ content: 'a', status: 'pending' }] } }))
     events.length = 0
+    await bridge.handle(req('AgentBilling', { plan: false }))
+    events.length = 0
     bridge.attach('s1', { adopt: true })
-    expect(events.map((e) => e.event.type)).toEqual(['context', 'todos'])
+    expect(events.map((e) => e.event.type)).toEqual(['context', 'todos', 'billing'])
+    expect(bridge.usesPlan('s1')).toBe(false)
     events.length = 0
     bridge.attach('s1')
     bridge.attach('s1', { adopt: true })

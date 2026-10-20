@@ -31,6 +31,12 @@ export type AgentEvent =
   | { type: 'todos'; items: TodoItem[] }
   /** An agent started by hand in a plain terminal ended (resources/hooks/agent-shim.sh): its metrics are gone. */
   | { type: 'agent-exit' }
+  /**
+   * Whether the agent bills the vendor's plan (its subscription login) or something else: a third-party endpoint such
+   * as one CC Switch writes into ~/.claude/settings.json, a cloud provider, a custom Codex model provider. Off the
+   * plan, the account's plan usage says nothing about this session (PRD F11). Not activity.
+   */
+  | { type: 'billing'; plan: boolean }
 
 export interface AgentEventEnvelope {
   sessionId: SessionId

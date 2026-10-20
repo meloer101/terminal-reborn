@@ -118,6 +118,11 @@ describe('TranscriptMeter', () => {
     expect((await meter.history('s1'))?.turns.map((t) => t.tokens)).toEqual([100, 300])
     expect(await meter.spend('claude', T0)).toEqual([{ sessionId: 's1', tokens: 100 + 5 + 300 + 10 }])
     expect(await meter.spend('codex', T0)).toEqual([])
+    // On a third-party endpoint its tokens are not the account's.
+    meter.setPlan('s1', false)
+    expect(await meter.spend('claude', T0)).toEqual([])
+    meter.setPlan('s1', true)
+    expect(await meter.spend('claude', T0)).toHaveLength(1)
   })
 
   it('starts the history over for a new transcript file, but keeps the spend; keeps spend after the session ends', async () => {
