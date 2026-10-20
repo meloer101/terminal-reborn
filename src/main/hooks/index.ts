@@ -7,9 +7,10 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
-import type { ContextHistory, SessionSpend, UsageAlert, VendorUsage } from '@shared/session-meta'
+import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
+import { CodexAccountClient, readClaudeAccountUsage } from './account-usage'
 import { AgentTitleWatcher } from './agent-title'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
@@ -22,6 +23,7 @@ import { shellIntegrationEnv, writeCodexOverrides, writeShims, type ShimDirs } f
 import { StartWatchdog } from './start-watchdog'
 import { TranscriptMeter } from './transcript-meter'
 import { HookSupervisor } from './supervisor'
+import { claudeInterval, codexInterval, PlanUsagePoller } from './plan-usage-poller'
 import { UsageStore } from './usage-store'
 import { userStatusLineFor } from './user-statusline'
 import { appWindows } from '../app-windows'
@@ -86,6 +88,32 @@ function broadcastHealth(health: HooksHealth): void {
 /** Plan usage is the account's (PRD F11): every window gets it, and it is kept across runs. Created once userData is known. */
 let usageStore: UsageStore | null = null
 
+/** The account asked directly, per vendor (./plan-usage-poller.ts); none when `TR_ACCOUNT_USAGE=off` (e2e). */
+let pollers: Partial<Record<UsageVendor, PlanUsagePoller>> = {}
+let codexAccount: CodexAccountClient | null = null
+
+function createPollers(): void {
+  if (process.env.TR_ACCOUNT_USAGE === 'off') return
+  const shell = process.env.SHELL || '/bin/zsh'
+  const apply = (usage: VendorUsage) => usageStore?.update(usage)
+  const log = (message: string) => console.log(`[usage] ${message}`)
+  codexAccount = new CodexAccountClient(shell, apply)
+  const codex = codexAccount
+  pollers = {
+    claude: new PlanUsagePoller({ vendor: 'claude', fetch: () => readClaudeAccountUsage(shell), apply, interval: claudeInterval, minRefreshGapMs: 60_000, log }),
+    codex: new PlanUsagePoller({ vendor: 'codex', fetch: () => codex.read(), apply, interval: codexInterval, minRefreshGapMs: 15_000, log })
+  }
+  // Used before (held from an earlier run): keep it fresh at the slow pace until a session says more.
+  for (const usage of usageStore?.list() ?? []) pollers[usage.vendor]?.start()
+}
+
+function stopPollers(): void {
+  for (const poller of Object.values(pollers)) poller.stop()
+  pollers = {}
+  codexAccount?.close()
+  codexAccount = null
+}
+
 function readJson(file: string): unknown {
   try {
     return JSON.parse(readFileSync(file, 'utf8')) as unknown
@@ -118,6 +146,7 @@ function createUsageStore(): UsageStore {
       win?.webContents.send(IPC.agentUsageAlert, alert)
     },
     broadcast: (usage: VendorUsage) => {
+      pollers[usage.vendor]?.observe(usage)
       for (const win of appWindows()) if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentUsage, usage)
     }
   })
@@ -127,12 +156,16 @@ const emitter: BridgeEmitter = {
   event: (envelope) => {
     // Any hook traffic proves the hooks reach us; withdraw the "silent since launch" countdown.
     watchdog.disarm(envelope.sessionId)
+    pollers[envelope.agent]?.nudge()
     ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope)
   },
   prompt: (prompt) => ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt),
   resolved: (resolution) => ownerOf(resolution.sessionId)?.send(IPC.agentPromptResolved, resolution),
   canDeliver: (sessionId) => ownerOf(sessionId) !== null,
-  usage: (usage) => usageStore?.update(usage)
+  usage: (usage) => {
+    usageStore?.update(usage)
+    pollers[usage.vendor]?.nudge()
+  }
 }
 
 /** The agents' own session titles, read back from their data files after hooks (PRD F2). */
@@ -226,6 +259,7 @@ function agentShimScriptPath(): string {
 
 export function registerHookHandlers(): void {
   usageStore = createUsageStore()
+  createPollers()
   runtime = start()
   try {
     shims = writeShims(join(app.getPath('userData'), 'agent-shims'), agentShimScriptPath())
@@ -234,6 +268,11 @@ export function registerHookHandlers(): void {
   }
 
   ipcMain.handle(IPC.agentGetUsage, (): VendorUsage[] => usageStore?.list() ?? [])
+
+  // The usage popover opened: ask the account now (each poller keeps its own minimum gap).
+  ipcMain.on(IPC.agentRefreshUsage, () => {
+    for (const poller of Object.values(pollers)) poller.refresh()
+  })
 
   ipcMain.handle(IPC.agentContextHistory, async (_event, sessionId: unknown): Promise<ContextHistory | null> => {
     if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 128) return null
@@ -266,6 +305,7 @@ export function registerHookHandlers(): void {
     runtime = null
     owners.clear()
     watchdog.clear()
+    stopPollers()
     void pending?.then((rt) => rt?.supervisor.stop())
   })
 }
@@ -283,6 +323,7 @@ export async function prepareAgentLaunch(
   options: { deferStartWatchdog?: boolean; cwd?: string } = {}
 ): Promise<AgentLaunchHooks | null> {
   if (agent !== 'claude' && agent !== 'codex') return null
+  pollers[agent]?.nudge()
   const rt = await runtime
   // A cheap self-check per launch: an agent must not inherit a socket that is already gone.
   const health = rt ? await rt.supervisor.check() : startFailure

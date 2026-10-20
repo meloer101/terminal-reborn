@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  autoCompactRuleFromEnv,
+  claudeCompactAt,
+  codexCompactAt,
   codexContextPercent,
   contextDetail,
+  contextHigh,
+  contextMark,
   contextProjection,
   contextSegments,
   formatClock,
@@ -22,10 +27,13 @@ import {
   formatUpdated,
   lastCodexTokenCount,
   orderVendors,
+  parseClaudeAccountUsage,
   parseClaudeStatusLine,
+  parseCodexAccountRateLimits,
   parseCodexTokenCount,
   sameUsage,
   topWindow,
+  windowKey,
   windowLabel,
   windowShort,
   type VendorUsage
@@ -69,7 +77,18 @@ const TOKEN_COUNT = {
 describe('parseClaudeStatusLine', () => {
   it('reads the context window and both plan windows', () => {
     expect(parseClaudeStatusLine(STATUSLINE, AT)).toEqual({
-      context: { percent: 86, usedTokens: 172000, windowTokens: 200000, cacheRead: 146116, cacheWrite: 25882, freshInput: 2, model: 'Opus 5.5' },
+      context: {
+        percent: 86,
+        usedTokens: 172000,
+        windowTokens: 200000,
+        cacheRead: 146116,
+        cacheWrite: 25882,
+        freshInput: 2,
+        model: 'Opus 5.5',
+        // Claude Code 2.1.304 compacts at 200k − 20k − 13k.
+        compactAt: 167000,
+        compactPercent: 84
+      },
       usage: {
         vendor: 'claude',
         at: AT,
@@ -81,9 +100,22 @@ describe('parseClaudeStatusLine', () => {
     })
   })
 
-  it('has nothing before the first response (null percentage, no rate_limits)', () => {
-    expect(parseClaudeStatusLine({ context_window: { used_percentage: null, current_usage: null, context_window_size: 200000 } }, AT)).toEqual({})
+  it('says "unknown" before the first response and after /compact (null percentage and usage), nothing for junk', () => {
+    expect(parseClaudeStatusLine({ context_window: { used_percentage: null, current_usage: null, context_window_size: 200000 } }, AT)).toEqual({ context: null })
+    expect(parseClaudeStatusLine({ context_window: { context_window_size: 200000 } }, AT)).toEqual({})
     expect(parseClaudeStatusLine('nope', AT)).toEqual({})
+  })
+
+  it('places the compaction point by the launch environment', () => {
+    expect(claudeCompactAt(200_000)).toBe(167_000)
+    expect(claudeCompactAt(1_000_000)).toBe(967_000)
+    expect(claudeCompactAt(1_000_000, autoCompactRuleFromEnv({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400k' }))).toBe(367_000)
+    expect(claudeCompactAt(200_000, autoCompactRuleFromEnv({ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '50' }))).toBe(90_000)
+    expect(claudeCompactAt(200_000, autoCompactRuleFromEnv({ DISABLE_AUTO_COMPACT: '1' }))).toBeNull()
+    expect(claudeCompactAt(undefined)).toBeNull()
+    expect(autoCompactRuleFromEnv({ DISABLE_COMPACT: 'false', CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'lots' })).toEqual({ enabled: true })
+    const off = parseClaudeStatusLine(STATUSLINE, AT, { enabled: false }).context
+    expect(off?.compactAt).toBeUndefined()
   })
 
   it('estimates tokens from the percentage when current_usage is missing, and drops bad reset times', () => {
@@ -91,7 +123,7 @@ describe('parseClaudeStatusLine', () => {
       { context_window: { used_percentage: 50, context_window_size: 1_000_000 }, rate_limits: { five_hour: { used_percentage: 3, resets_at: 'soon' } } },
       AT
     )
-    expect(reading.context).toEqual({ percent: 50, usedTokens: 500000, windowTokens: 1000000 })
+    expect(reading.context).toEqual({ percent: 50, usedTokens: 500000, windowTokens: 1000000, compactAt: 967000, compactPercent: 97 })
     expect(reading.usage?.windows).toEqual([{ minutes: 300, percent: 3 }])
   })
 })
@@ -99,7 +131,17 @@ describe('parseClaudeStatusLine', () => {
 describe('Codex rollout', () => {
   it('reads context and plan windows from token_count', () => {
     expect(parseCodexTokenCount(TOKEN_COUNT, AT)).toEqual({
-      context: { percent: codexContextPercent(100005, 258400), usedTokens: 100005, windowTokens: 258400, cacheRead: 0, freshInput: 100000, outputTotal: 5 },
+      context: {
+        percent: codexContextPercent(100005, 258400),
+        usedTokens: 100005,
+        windowTokens: 258400,
+        cacheRead: 0,
+        freshInput: 100000,
+        outputTotal: 5,
+        // 90 % of the 272k model window, i.e. 94 % on Codex's own scale.
+        compactAt: 244800,
+        compactPercent: 94
+      },
       usage: {
         vendor: 'codex',
         at: AT,
@@ -109,6 +151,12 @@ describe('Codex rollout', () => {
         ]
       }
     })
+  })
+
+  it('counts only the plan’s own bucket, not a model-specific one', () => {
+    const spark = { ...TOKEN_COUNT, rate_limits: { ...TOKEN_COUNT.rate_limits, limit_id: 'codex_bengalfox' } }
+    expect(parseCodexTokenCount(spark, AT).usage).toBeUndefined()
+    expect(codexCompactAt(258_400)).toBe(244_800)
   })
 
   it('leaves usage out without plan headers and context out before the first response', () => {
@@ -218,6 +266,89 @@ describe('Figma 18 · context details', () => {
   })
 })
 
+describe('the accounts asked directly', () => {
+  it('reads Codex’s account/rateLimits/read, preferring the codex bucket', () => {
+    const result = {
+      rateLimits: { limitId: 'codex_bengalfox', primary: { usedPercent: 90, windowDurationMins: 300, resetsAt: 1792420883 } },
+      rateLimitsByLimitId: {
+        codex: {
+          limitId: 'codex',
+          primary: { usedPercent: 41, windowDurationMins: 300, resetsAt: 1792420883 },
+          secondary: { usedPercent: 12, windowDurationMins: 10080, resetsAt: 1792766483 }
+        }
+      }
+    }
+    expect(parseCodexAccountRateLimits(result, AT)).toEqual({
+      vendor: 'codex',
+      at: AT,
+      complete: true,
+      windows: [
+        { minutes: 300, percent: 41, resetsAt: 1792420883_000 },
+        { minutes: 10080, percent: 12, resetsAt: 1792766483_000 }
+      ]
+    })
+    // An older Codex has only the single-bucket view; a foreign bucket alone says nothing about the plan.
+    expect(parseCodexAccountRateLimits({ rateLimits: result.rateLimitsByLimitId.codex }, AT)?.windows).toHaveLength(2)
+    expect(parseCodexAccountRateLimits({ rateLimits: result.rateLimits }, AT)).toBeNull()
+    expect(parseCodexAccountRateLimits('nope', AT)).toBeNull()
+  })
+
+  it('reads Claude’s get_usage: limits[] with model-scoped weeks, else the named windows', () => {
+    // Claude Code 2.1.304 get_usage answer (Max plan, PRD §6.6), trimmed.
+    const answer = {
+      subscription_type: 'max',
+      rate_limits_available: true,
+      rate_limits: {
+        five_hour: { utilization: 20, resets_at: '2026-10-20T07:39:59.742399+00:00' },
+        seven_day: { utilization: 3, resets_at: '2026-10-27T01:59:59.742421+00:00' },
+        seven_day_sonnet: null,
+        limits: [
+          { kind: 'session', group: 'session', percent: 20, resets_at: '2026-10-20T07:39:59.742399+00:00', scope: null },
+          { kind: 'weekly_all', group: 'weekly', percent: 3, resets_at: '2026-10-27T01:59:59.742421+00:00', scope: null },
+          { kind: 'weekly_scoped', group: 'weekly', percent: 41, resets_at: '2026-10-27T02:00:00+00:00', scope: { model: { display_name: 'Fable' } } },
+          { kind: 'weekly_scoped', group: 'weekly', percent: 0, resets_at: '2026-10-27T02:00:00+00:00', scope: { model: { display_name: 'Opus' } } },
+          { kind: 'something_new', group: 'monthly', percent: 5 }
+        ]
+      }
+    }
+    expect(parseClaudeAccountUsage(answer, AT)).toEqual({
+      vendor: 'claude',
+      at: AT,
+      complete: true,
+      windows: [
+        { minutes: 300, percent: 20, resetsAt: Date.parse('2026-10-20T07:39:59.742Z') },
+        { minutes: 10080, percent: 3, resetsAt: Date.parse('2026-10-27T01:59:59.742Z') },
+        { minutes: 10080, scope: 'Fable', percent: 41, resetsAt: Date.parse('2026-10-27T02:00:00Z') }
+      ]
+    })
+    const older = { rate_limits: { five_hour: { utilization: 7, resets_at: '2026-10-20T07:39:59Z' }, seven_day_sonnet: { utilization: 30, resets_at: '2026-10-27T02:00:00Z' } } }
+    expect(parseClaudeAccountUsage(older, AT)?.windows.map(windowKey)).toEqual(['300', '10080:Sonnet'])
+    expect(parseClaudeAccountUsage({ rate_limits: null }, AT)).toBeNull()
+  })
+
+  it('names scoped windows', () => {
+    expect(windowLabel('claude', 10080, 'Sonnet')).toBe('7 天 · Sonnet')
+    expect(usageChipText({ minutes: 10080, scope: 'Sonnet', percent: 84 }, AT)).toBe('7d Sonnet 84%')
+    expect(usageAlertText({ vendor: 'claude', minutes: 10080, scope: 'Fable', percent: 90, level: 90 }, AT).title).toBe('Claude 7 天 · Fable 额度已用 90%')
+  })
+})
+
+describe('context near its compaction', () => {
+  it('is high where the agent starts warning (20k before it compacts), else at 80 %', () => {
+    const at = (usedTokens: number) => ({ percent: Math.round(usedTokens / 2000), usedTokens, windowTokens: 200_000, compactAt: 167_000, compactPercent: 84 })
+    expect(contextHigh(at(146_000))).toBe(false)
+    expect(contextHigh(at(147_000))).toBe(true)
+    expect(contextHigh({ percent: 80 })).toBe(true)
+    expect(contextMark(at(1))).toBe(84)
+    expect(contextMark({})).toBe(80)
+  })
+
+  it('projects to the compaction point when it is known', () => {
+    expect(contextProjection([40, 50, 60, 70], { compactPercent: 84 })).toBe('按最近 3 轮的增速，大约 1–2 轮后自动压缩')
+    expect(contextProjection([70, 80, 90], { compactPercent: 84 })).toBeNull()
+  })
+})
+
 describe('Figma 18 · plan window pace', () => {
   const HOUR = 3_600_000
   const reset = AT + 3 * HOUR
@@ -225,13 +356,26 @@ describe('Figma 18 · plan window pace', () => {
 
   it('measures elapsed time and projects the average forward only when it runs out before the reset', () => {
     // 2 of 5 hours gone (40 %).
-    expect(windowPace(fiveHour(20), AT)).toEqual({ exhausted: false, elapsed: 0.4 })
+    expect(windowPace(fiveHour(20), AT)).toEqual({ exhausted: false, elapsed: 0.4, basis: 'average' })
     const ahead = windowPace(fiveHour(62), AT)
     expect(ahead.elapsed).toBe(0.4)
     // 62 % in 2 h → the last 38 % takes ~1.23 h.
     expect(ahead.runsOutAt).toBe(Math.round(AT + (38 / 62) * 2 * HOUR))
     expect(windowPace(fiveHour(100), AT)).toEqual({ exhausted: true, elapsed: 0.4 })
     expect(windowPace({ minutes: 300, percent: 50 }, AT)).toEqual({ exhausted: false })
+  })
+
+  it('projects the recent slope when there is one: a burst shows at once, a pause stops the alarm', () => {
+    // 30 % after 2 h is on pace on average, but 20 %/h lately runs out in 3.5 h — after the reset in 3 h, so fine;
+    // 40 %/h runs out in 1.75 h, before it.
+    expect(windowPace({ ...fiveHour(30), rate: 20 }, AT)).toEqual({ exhausted: false, elapsed: 0.4, basis: 'recent' })
+    expect(windowPace({ ...fiveHour(30), rate: 40 }, AT).runsOutAt).toBe(AT + 1.75 * HOUR)
+    expect(paceNote({ ...fiveHour(30), rate: 40 }, AT)).toMatch(/^时间过了 40%，用得比时间快 · 按最近的速度约 .+ 用完$/)
+    // 62 % on average would run out, but nothing was used lately.
+    expect(windowPace({ ...fiveHour(62), rate: 0 }, AT).runsOutAt).toBeUndefined()
+    expect(paceNote({ ...fiveHour(62), rate: 0 }, AT)).toBe('时间过了 40% · 按最近的速度用得完')
+    // Below 10 % no projection at all.
+    expect(paceNote({ ...fiveHour(8), rate: 50 }, AT)).toBe('时间过了 40%')
   })
 
   it('does not project from the first minutes of a window', () => {

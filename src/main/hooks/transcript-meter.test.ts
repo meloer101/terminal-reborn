@@ -41,9 +41,10 @@ describe('parseLines · Claude transcript', () => {
       ],
       compactions: [T0 + 6 * 60_000]
     })
-    // m1 1010 + 80, m2 505 + 20, m3 7 + 3, m4 1 + 10, m5 8002 + 4.
-    expect(spendSince(state, T0)).toBe(1090 + 525 + 10 + 11 + 8006)
-    expect(spendSince(state, T0 + 5 * 60_000)).toBe(11 + 8006)
+    // At API prices (input 1, cache write 1.25, cache read 0.1, output 5), each message once:
+    // m1 10 + 1250 + 2000 + 80·5, m2 5 + 625 + 2100 + 100, m3 7 + 9000 + 15, m4 1 + 3000 + 50, m5 2 + 10000 + 20.
+    expect(spendSince(state, T0)).toBe(3660 + 2830 + 9022 + 3051 + 10022)
+    expect(spendSince(state, T0 + 5 * 60_000)).toBe(3051 + 10022)
   })
 })
 
@@ -80,7 +81,8 @@ describe('parseLines · Codex rollout', () => {
       compactions: [T0 + 4 * 60_000],
       windowTokens: 258_400
     })
-    expect(spendSince(state, 0)).toBe(2_000 + 300 + 15_000 + 700)
+    // Fresh input 1, cached input 0.1, output 8: 2000 + 1000 + 2400, then 15000 + 1200 + 5600.
+    expect(spendSince(state, 0)).toBe(5_400 + 21_800)
   })
 })
 
@@ -114,7 +116,7 @@ describe('TranscriptMeter', () => {
 
     files.set(path, files.get(path)! + [prompt(2), assistant(3, 'b', { input_tokens: 300, output_tokens: 2 })].join('\n') + '\n')
     expect((await meter.history('s1'))?.turns.map((t) => t.tokens)).toEqual([100, 300])
-    expect(await meter.spend('claude', T0)).toEqual([{ sessionId: 's1', tokens: 403 }])
+    expect(await meter.spend('claude', T0)).toEqual([{ sessionId: 's1', tokens: 100 + 5 + 300 + 10 }])
     expect(await meter.spend('codex', T0)).toEqual([])
   })
 

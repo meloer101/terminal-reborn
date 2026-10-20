@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { UsageAlert, VendorUsage } from '@shared/session-meta'
-import { crossedAlert, parseStoredMarks, parseStoredUsage, UNCHANGED_REFRESH_MS, UsageStore, type AlertMark } from './usage-store'
+import { crossedAlert, mergeUsage, parseStoredMarks, parseStoredUsage, RATE_MIN_SPAN_MS, recentRate, UNCHANGED_REFRESH_MS, UsageStore, type AlertMark } from './usage-store'
 
 const claude = (percent: number, at: number): VendorUsage => ({ vendor: 'claude', at, windows: [{ minutes: 300, percent, resetsAt: 1_800_000_000_000 }] })
 
@@ -95,5 +95,59 @@ describe('UsageStore · alerts (Figma 18D)', () => {
   it('names the crossing for a window', () => {
     expect(crossedAlert('codex', { minutes: 10080, percent: 74 }, undefined)).toBeNull()
     expect(crossedAlert('codex', { minutes: 10080, percent: 75 }, undefined)).toEqual({ vendor: 'codex', minutes: 10080, percent: 75, level: 75 })
+  })
+})
+
+describe('mergeUsage · readings from sessions and from the account', () => {
+  const RESET = 1_800_000_000_000
+  const five = (percent: number, resetsAt = RESET) => ({ minutes: 300, percent, resetsAt })
+  const sonnet = (percent: number) => ({ minutes: 10080, scope: 'Sonnet', percent, resetsAt: RESET + 86_400_000 })
+
+  it('keeps the higher figure within a period: a session that has not heard of the latest use reports less', () => {
+    const polled: VendorUsage = { vendor: 'claude', at: 2000, complete: true, windows: [five(20)] }
+    const stale: VendorUsage = { vendor: 'claude', at: 3000, windows: [five(3)] }
+    expect(mergeUsage(polled, stale)).toEqual({ vendor: 'claude', at: 3000, windows: [five(20)] })
+    expect(mergeUsage(polled, { ...stale, windows: [five(25)] }).windows).toEqual([five(25)])
+  })
+
+  it('takes a later reset as a new period, and ignores a reading of an older one', () => {
+    const held: VendorUsage = { vendor: 'codex', at: 1, windows: [five(90)] }
+    expect(mergeUsage(held, { vendor: 'codex', at: 2, windows: [five(4, RESET + 5 * 3_600_000)] }).windows).toEqual([five(4, RESET + 5 * 3_600_000)])
+    expect(mergeUsage(held, { vendor: 'codex', at: 2, windows: [five(1, RESET - 5 * 3_600_000)] }).windows).toEqual([five(90)])
+  })
+
+  it('keeps windows a session does not name, drops those a complete answer leaves out', () => {
+    const polled: VendorUsage = { vendor: 'claude', at: 1, complete: true, windows: [five(20), sonnet(40)] }
+    expect(mergeUsage(polled, { vendor: 'claude', at: 2, windows: [five(21)] }).windows).toEqual([five(21), sonnet(40)])
+    expect(mergeUsage(polled, { vendor: 'claude', at: 2, complete: true, windows: [five(21)] }).windows).toEqual([five(21)])
+  })
+})
+
+describe('UsageStore · recent pace', () => {
+  const RESET = 1_800_000_000_000
+  const MIN = 60_000
+  const at = (minute: number, percent: number): VendorUsage => ({ vendor: 'claude', at: RESET - 4 * 3_600_000 + minute * MIN, windows: [{ minutes: 300, percent, resetsAt: RESET }] })
+
+  it('measures the slope over the last hour once the readings span 15 minutes', () => {
+    const { usage, broadcasts } = store()
+    usage.update(at(0, 10))
+    usage.update(at(10, 12))
+    expect(broadcasts.at(-1)?.windows[0]?.rate).toBeUndefined()
+    usage.update(at(20, 20))
+    // 10 → 20 % in 20 minutes.
+    expect(broadcasts.at(-1)?.windows[0]?.rate).toBe(30)
+    // An hour later with no use in between: the slope since the last reading before the hour is 0.
+    usage.update(at(90, 20))
+    expect(broadcasts.at(-1)?.windows[0]?.rate).toBe(0)
+  })
+
+  it('weighs only readings that named the window, and starts over in a new period', () => {
+    expect(recentRate([{ at: 0, percent: 5 }, { at: RATE_MIN_SPAN_MS - 1, percent: 9 }])).toBeUndefined()
+    expect(recentRate([{ at: 0, percent: 5 }, { at: 30 * MIN, percent: 10 }])).toBe(10)
+    const { usage, broadcasts } = store()
+    usage.update(at(0, 50))
+    usage.update(at(30, 80))
+    usage.update({ vendor: 'claude', at: RESET + MIN, windows: [{ minutes: 300, percent: 2, resetsAt: RESET + 300 * MIN }] })
+    expect(broadcasts.at(-1)?.windows[0]).toEqual({ minutes: 300, percent: 2, resetsAt: RESET + 300 * MIN })
   })
 })

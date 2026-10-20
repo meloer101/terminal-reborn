@@ -91,6 +91,7 @@ const api: TrApi = {
     getUsage: () => ipcRenderer.invoke(IPC.agentGetUsage),
     onUsage: (listener) => listen(IPC.agentUsage, listener),
     onUsageAlert: (listener) => listen(IPC.agentUsageAlert, listener),
+    refreshUsage: () => ipcRenderer.send(IPC.agentRefreshUsage),
     getContextHistory: (sessionId) => ipcRenderer.invoke(IPC.agentContextHistory, sessionId),
     getUsageShares: (vendor, since) => ipcRenderer.invoke(IPC.agentUsageShares, vendor, since)
   },

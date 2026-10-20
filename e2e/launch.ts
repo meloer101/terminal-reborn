@@ -22,6 +22,8 @@ export function launchApp(
     TR_USER_DATA_DIR: userData,
     TR_E2E_DIALOGS: '1',
     TR_KILL_SESSIONS_ON_QUIT: '1',
+    // Never ask the real Claude / Codex account for its plan usage from a test run.
+    TR_ACCOUNT_USAGE: 'off',
     ...envOverrides
   }
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key]

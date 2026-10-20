@@ -201,8 +201,8 @@ describe('HookBridge · session metrics (PRD F11 / F12)', () => {
     await bridge.handle(req('StatusLine', statusLine(62)))
     await bridge.handle(req('StatusLine', statusLine(63, 14)))
     expect(events.map((e) => e.event)).toEqual([
-      { type: 'context', context: { percent: 62, usedTokens: 124000, windowTokens: 200000, freshInput: 124000 } },
-      { type: 'context', context: { percent: 63, usedTokens: 126000, windowTokens: 200000, freshInput: 126000 } }
+      { type: 'context', context: { percent: 62, usedTokens: 124000, windowTokens: 200000, freshInput: 124000, compactAt: 167000, compactPercent: 84 } },
+      { type: 'context', context: { percent: 63, usedTokens: 126000, windowTokens: 200000, freshInput: 126000, compactAt: 167000, compactPercent: 84 } }
     ])
     expect(usage).toHaveLength(4)
     expect(usage[3]).toEqual({ vendor: 'claude', at: 1000, windows: [{ minutes: 300, percent: 14, resetsAt: 1792191000_000 }] })
@@ -219,7 +219,7 @@ describe('HookBridge · session metrics (PRD F11 / F12)', () => {
     await bridge.handle(req('SessionStart', { session_id: 'abc', source: 'clear' }))
     const meta = events.map((e) => e.event).filter((e) => e.type === 'todos' || e.type === 'context')
     expect(meta).toEqual([
-      { type: 'context', context: { percent: 40, usedTokens: 80000, windowTokens: 200000, freshInput: 80000 } },
+      { type: 'context', context: { percent: 40, usedTokens: 80000, windowTokens: 200000, freshInput: 80000, compactAt: 167000, compactPercent: 84 } },
       { type: 'todos', items: [{ id: '1', text: 'alpha', status: 'pending' }] },
       { type: 'todos', items: [{ id: '1', text: 'alpha', status: 'in_progress' }] },
       { type: 'todos', items: [] },

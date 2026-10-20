@@ -234,7 +234,7 @@ describe('normalizeHook · metrics (PRD F11 / F12)', () => {
       { context_window: { used_percentage: 62, context_window_size: 200000 }, rate_limits: { seven_day: { used_percentage: 84 } } },
       5
     )
-    expect(result.events).toEqual([{ type: 'context', context: { percent: 62, usedTokens: 124000, windowTokens: 200000 } }])
+    expect(result.events).toEqual([{ type: 'context', context: { percent: 62, usedTokens: 124000, windowTokens: 200000, compactAt: 167000, compactPercent: 84 } }])
     expect(result.usage).toEqual({ vendor: 'claude', at: 5, windows: [{ minutes: 10080, percent: 84 }] })
     expect(result.clears).toBe('none')
   })

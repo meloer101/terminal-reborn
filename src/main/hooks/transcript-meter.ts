@@ -81,6 +81,14 @@ function isClaudePrompt(entry: Rec): boolean {
   return Array.isArray(content) && content.some((block) => isRec(block) && block.type === 'text') && !content.some((b) => isRec(b) && b.type === 'tool_result')
 }
 
+/**
+ * Spend in input-token equivalents at the vendor's API prices, so sessions compare the way the plan meters them more
+ * than raw counts do (a long cached prefix is cheap). Claude: cache write 1.25×, cache read 0.1×, output 5× input;
+ * Codex (GPT-5 family): cached input 0.1×, output 8×. Within one vendor's own price list only; an estimate.
+ */
+export const CLAUDE_WEIGHT = { write: 1.25, read: 0.1, output: 5 } as const
+export const CODEX_WEIGHT = { cached: 0.1, output: 8 } as const
+
 function claudeLine(state: MeterState, entry: Rec, now: number): void {
   const at = timeOf(entry, now)
   if (entry.type === 'assistant' && isRec(entry.message) && isRec(entry.message.usage)) {
@@ -92,13 +100,13 @@ function claudeLine(state: MeterState, entry: Rec, now: number): void {
     const output = count(usage.output_tokens)
     const seen = id ? state.counted.get(id) : undefined
     if (seen === undefined) {
-      addSpend(state, at, input + write + output)
+      addSpend(state, at, Math.round(input + write * CLAUDE_WEIGHT.write + read * CLAUDE_WEIGHT.read + output * CLAUDE_WEIGHT.output))
       if (id) {
         state.counted.set(id, output)
         if (state.counted.size > MAX_IDS) state.counted.delete(state.counted.keys().next().value!)
       }
     } else if (output > seen) {
-      addSpend(state, at, output - seen)
+      addSpend(state, at, (output - seen) * CLAUDE_WEIGHT.output)
       state.counted.set(id, output)
     }
     // Subagents run in their own context; only the main conversation's fill counts.
@@ -135,7 +143,9 @@ function codexLine(state: MeterState, entry: Rec, now: number): void {
   // The same token_count is repeated (e.g. when rate limits update); only a larger running total is new spend.
   if (last && total > state.cumulative) {
     state.cumulative = total
-    addSpend(state, at, Math.max(0, count(last.input_tokens) - count(last.cached_input_tokens)) + count(last.output_tokens))
+    const cached = count(last.cached_input_tokens)
+    const fresh = Math.max(0, count(last.input_tokens) - cached)
+    addSpend(state, at, Math.round(fresh + cached * CODEX_WEIGHT.cached + count(last.output_tokens) * CODEX_WEIGHT.output))
   }
   if (last && count(last.total_tokens) > 0) state.pending = { at, tokens: count(last.total_tokens) }
 }

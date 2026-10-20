@@ -306,12 +306,14 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(popover).toBeVisible()
     await expect(popover).toContainText('Opus 5.5 · 200k 窗口')
     await expect(popover).toContainText('172k/ 200k86%')
-    await expect(popover).toContainText('刻度 = 80%，超过后建议 /compact')
+    // Claude Code compacts a 200k window at 167k by itself; the fake reports 172k.
+    await expect(popover.getByTestId('context-mark-note')).toHaveText('刻度 = 自动压缩点 167k · 已到')
     const trend = popover.getByTestId('context-trend')
     await expect(trend).toContainText('最近 7 轮', WITHIN)
     await expect(trend).toContainText('本轮 +26%')
     await expect(trend).toContainText('虚线处压缩过')
-    await expect(trend).toContainText('按最近 3 轮的增速，大约 1 轮后用满')
+    // 86 % is already past where Claude compacts (84 %): no "N 轮后" projection.
+    await expect(trend).not.toContainText('轮后')
     await expect(trend.locator('path')).toHaveCount(2)
     await expect(popover).not.toContainText('缓存读取')
     await expect(popover.getByRole('button', { name: '/compact' })).toHaveCount(0)
@@ -348,10 +350,10 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(popover.getByTestId('usage-window-claude-300')).toContainText('时间过了 40% · 按这个速度用得完')
     await expect(popover.getByTestId('usage-window-claude-10080')).toContainText('用得比时间快 · 按这个速度约')
     await expect(popover.getByTestId('usage-window-claude-10080')).toHaveAttribute('data-level', 'ahead')
-    // Cookie: 7 replies × 5000; nav: 2 × 4000 → 81 % / 19 %.
+    // At API prices (cache write 1.25, cache read 0.1, output 5): cookie's 7 replies 106,138, nav's 2 15,968 → 87 % / 13 %.
     const shares = popover.getByTestId('usage-shares-claude')
     await expect(shares).toContainText('这 5 小时里各会话的用量', WITHIN)
-    await expect(shares.getByRole('button')).toHaveText([/^Cookie 会话迁移acme-web81%$/, /^修复移动端导航抖动acme-web19%$/])
+    await expect(shares.getByRole('button')).toHaveText([/^Cookie 会话迁移acme-web87%$/, /^修复移动端导航抖动acme-web13%$/])
     await expect(popover).not.toContainText('只统计 Wavi 里的会话')
     await shoot('18B-usage-popover')
     await shares.getByRole('button', { name: /修复移动端导航抖动/ }).click()

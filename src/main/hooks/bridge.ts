@@ -103,7 +103,7 @@ export class HookBridge {
   applyReading(sessionId: string, agent: HookAgent, reading: MetaReading): void {
     if (!this.sessions.has(sessionId)) return
     const at = this.now()
-    if (reading.context) this.setContext(sessionId, agent, at, reading.context)
+    if (reading.context !== undefined) this.setContext(sessionId, agent, at, reading.context)
     if (reading.usage) this.emitter.usage?.(reading.usage)
   }
 

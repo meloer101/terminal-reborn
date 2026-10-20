@@ -5,7 +5,7 @@
 // (Bash, Edit/Write, AskUserQuestion) so the status, prompt-bar and permission code stays agent-agnostic.
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
-import { parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
+import { autoCompactRuleFromEnv, parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
 import { isTodoTool } from '@shared/todo-progress'
 
 export interface PermissionDraft {
@@ -174,6 +174,9 @@ function sessionStart(payload: Rec): AgentEvent {
   return id && isSafeAgentSessionId(id) ? { type: 'session-start', agentSessionId: id } : { type: 'session-start' }
 }
 
+/** Claude inherits Wavi's environment, so its auto-compaction rule is read from ours (PRD §6.6). */
+const CLAUDE_COMPACT_RULE = autoCompactRuleFromEnv(process.env)
+
 function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHook {
   const tool = str(payload.tool_name) ?? 'unknown'
   const input = isRec(payload.tool_input) ? payload.tool_input : {}
@@ -183,9 +186,9 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
       return { events: [sessionStart(payload)], clears: 'none', ...(payload.source === 'clear' ? { cleared: true as const } : {}) }
     // Not a hook: our statusLine relay (resources/hooks/tr-statusline.sh) posts the statusLine JSON under this name.
     case 'StatusLine': {
-      const reading = parseClaudeStatusLine(payload, at)
+      const reading = parseClaudeStatusLine(payload, at, CLAUDE_COMPACT_RULE)
       return {
-        events: reading.context ? [{ type: 'context', context: reading.context }] : [],
+        events: reading.context !== undefined ? [{ type: 'context', context: reading.context }] : [],
         clears: 'none',
         ...(reading.usage ? { usage: reading.usage } : {})
       }

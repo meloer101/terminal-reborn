@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyn
 import { ChevronDown, ChevronRight, ChevronUp, PanelLeft, Search } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'
-import { isHigh, orderVendors } from '@shared/session-meta'
+import { contextHigh, orderVendors } from '@shared/session-meta'
 import { todoProgress } from '@shared/todo-progress'
 import type { SessionId } from '@shared/types'
 import { subscribeClock } from '../sidebar/clock'
@@ -243,7 +243,7 @@ function MetaCells({ sessionId }: { sessionId: SessionId }) {
         </span>
       )}
       {columns.context && (
-        <span className={styles.contextCell} data-level={context && isHigh(context.percent) ? 'high' : 'normal'} data-testid="overview-context">
+        <span className={styles.contextCell} data-level={context && contextHigh(context) ? 'high' : 'normal'} data-testid="overview-context">
           {context && `context ${context.percent}%`}
         </span>
       )}

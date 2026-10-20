@@ -330,6 +330,8 @@ export interface AgentApi {
   onUsage(listener: (usage: VendorUsage) => void): Unsubscribe
   /** A plan window crossed 75 / 90 / 100 % for the first time this period (sent to one window; Figma 18D). */
   onUsageAlert(listener: (alert: UsageAlert) => void): Unsubscribe
+  /** Someone is looking at the usage (the popover opened): main asks the accounts now, within its own limits. */
+  refreshUsage(): void
   /** The session's context over its turns, from the agent's transcript (null: nothing read yet). Figma 18A. */
   getContextHistory(sessionId: string): Promise<ContextHistory | null>
   /** Tokens each of the vendor's sessions spent since `since` (epoch ms), closed ones included. Figma 18B. */
@@ -402,6 +404,8 @@ export const IPC = {
   agentUsage: 'agent:usage',
   /** main → one window, payload UsageAlert */
   agentUsageAlert: 'agent:usage-alert',
+  /** renderer → main (send), no payload: poll the accounts now */
+  agentRefreshUsage: 'agent:refresh-usage',
   /** invoke(sessionId) → ContextHistory | null */
   agentContextHistory: 'agent:context-history',
   /** invoke(vendor, since) → SessionSpend[] */

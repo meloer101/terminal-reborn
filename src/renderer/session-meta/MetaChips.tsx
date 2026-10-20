@@ -1,16 +1,17 @@
 // Session metrics in the session header and the overview (PRD F11 / F12, Figma 17 + 18): TodoChip 261:9961 +
 // TodoPopover, ContextChip v2 274:10418 + ContextPopover 276:10395, UsageChip v2 274:10443 + UsagePopover v2
-// 277:10437. Neutral meters and numbers only — no status colors; ≥ 80 % is drawn heavier. No data, no chip.
+// 277:10437. Neutral meters and numbers only — no status colors; near the limit is drawn heavier. No data, no chip.
 import { Check } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
+  contextHigh,
+  contextMark,
   contextProjection,
   contextSegments,
   formatClock,
   formatReset,
   formatTokens,
   formatUpdatedNote,
-  HIGH_PERCENT,
   isHigh,
   liveWindows,
   orderVendors,
@@ -21,6 +22,7 @@ import {
   topWindow,
   usageChipText,
   VENDOR_LABEL,
+  windowKey,
   windowLabel,
   windowPace,
   type ContextHistory,
@@ -160,10 +162,11 @@ function MiniMeter({ percent, elapsed }: { percent: number; elapsed?: number | u
 
 /**
  * ContextChip v2 (Figma 18 274:10418): always shown once the agent reported it; a click opens ContextPopover.
- * At 80 % and above the number is heavier and /compact puts the command into the input line.
+ * Where the agent itself starts warning (20k before it compacts by itself; else 80 %) the number is heavier and
+ * /compact puts the command into the input line.
  */
 export function ContextChip({ sessionId, context, compact = true }: { sessionId: SessionId; context: ContextUsage; compact?: boolean }) {
-  const high = isHigh(context.percent)
+  const high = contextHigh(context)
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -232,8 +235,9 @@ function ContextPanel({ sessionId, context }: { sessionId: SessionId; context: C
   const turns = segments.reduce((n, s) => n + s.length, 0)
   const lastSegment = segments[segments.length - 1] ?? []
   const delta = lastSegment.length >= 2 ? lastSegment[lastSegment.length - 1]! - lastSegment[lastSegment.length - 2]! : null
-  const projection = contextProjection(lastSegment)
-  const high = isHigh(context.percent)
+  const mark = contextMark(context)
+  const projection = contextProjection(lastSegment, context.compactPercent !== undefined ? { compactPercent: context.compactPercent } : {})
+  const high = contextHigh(context)
   return (
     <div className={styles.contextPanel}>
       <div className={styles.popoverHeader}>
@@ -256,9 +260,11 @@ function ContextPanel({ sessionId, context }: { sessionId: SessionId; context: C
         </div>
         <span className={styles.bigBar} data-level={high ? 'high' : 'normal'} aria-hidden>
           <span className={styles.bigBarUsed} style={{ width: `${context.percent}%` }} />
-          <span className={styles.bigBarMark} style={{ left: `${HIGH_PERCENT}%` }} />
+          <span className={styles.bigBarMark} style={{ left: `${mark}%` }} />
         </span>
-        <span className={styles.figureNote}>刻度 = 80%，超过后建议 /compact</span>
+        <span className={styles.figureNote} data-testid="context-mark-note">
+          {compactNote(context)}
+        </span>
       </div>
       {turns >= 2 && (
         <div className={styles.trend} data-testid="context-trend">
@@ -266,7 +272,7 @@ function ContextPanel({ sessionId, context }: { sessionId: SessionId; context: C
             <span className={styles.trendTitle}>最近 {turns} 轮</span>
             {delta !== null && <span className={styles.trendDelta}>本轮 {delta >= 0 ? '+' : '−'}{Math.abs(delta)}%</span>}
           </div>
-          <Sparkline segments={segments} />
+          <Sparkline segments={segments} guide={mark} />
           {segments.length > 1 && <span className={styles.trendNote}>虚线处压缩过</span>}
           {projection && <span className={styles.projection}>{projection}</span>}
         </div>
@@ -275,8 +281,17 @@ function ContextPanel({ sessionId, context }: { sessionId: SessionId; context: C
   )
 }
 
-function Sparkline({ segments }: { segments: number[][] }) {
-  const { paths, breaks, last, guideY } = sparkline(segments, SPARK_WIDTH, SPARK_HEIGHT)
+/** What the bar's mark is: where the agent compacts by itself and how far that is, else the 80 % suggestion. */
+function compactNote(context: ContextUsage): string {
+  if (context.compactAt === undefined) return '刻度 = 80%，超过后建议 /compact'
+  const at = `刻度 = 自动压缩点 ${formatTokens(context.compactAt)}`
+  if (context.usedTokens === undefined) return at
+  const left = context.compactAt - context.usedTokens
+  return left > 0 ? `${at} · 还差 ${formatTokens(left)}` : `${at} · 已到`
+}
+
+function Sparkline({ segments, guide }: { segments: number[][]; guide: number }) {
+  const { paths, breaks, last, guideY } = sparkline(segments, SPARK_WIDTH, SPARK_HEIGHT, guide)
   return (
     <svg className={styles.sparkline} width={SPARK_WIDTH} height={SPARK_HEIGHT} viewBox={`-3 -3 ${SPARK_WIDTH + 6} ${SPARK_HEIGHT + 6}`} aria-hidden>
       <line className={styles.sparkGuide} x1={0} x2={SPARK_WIDTH} y1={guideY} y2={guideY} />
@@ -333,7 +348,7 @@ export function UsageChip({ usage, current, all, opensOnRequest = false }: { usa
         data-testid={`usage-chip-${usage.vendor}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${label} 额度 ${windowLabel(usage.vendor, top.minutes)}${pace.exhausted ? '已用完' : `已用 ${top.percent}%`}`}
+        aria-label={`${label} 额度 ${windowLabel(usage.vendor, top.minutes, top.scope)}${pace.exhausted ? '已用完' : `已用 ${top.percent}%`}`}
         onMouseDown={keepFocus}
         onClick={() => setOpen((v) => !v)}
       >
@@ -355,6 +370,8 @@ export function UsageChip({ usage, current, all, opensOnRequest = false }: { usa
 /** Figma 18 UsagePopover v2 277:10437. */
 function UsageList({ all, current, now, onPick }: { all: VendorUsage[]; current: UsageVendor | null; now: number; onPick(): void }) {
   const vendors = orderVendors(all, current, now)
+  // Opening the list asks the accounts for fresh figures (main keeps its own minimum gap per vendor).
+  useEffect(() => window.tr.agent.refreshUsage(), [])
   const newest = Math.max(...vendors.map((u) => u.at))
   return (
     <div className={styles.usagePanel}>
@@ -371,7 +388,7 @@ function UsageList({ all, current, now, onPick }: { all: VendorUsage[]; current:
             {usage.vendor === current && <span className={styles.vendorCurrent}>当前会话</span>}
           </div>
           {liveWindows(usage, now).map((w) => (
-            <WindowBlock key={w.minutes} vendor={usage.vendor} w={w} now={now} />
+            <WindowBlock key={windowKey(w)} vendor={usage.vendor} w={w} now={now} />
           ))}
           <Shares usage={usage} now={now} onPick={onPick} />
         </section>
@@ -386,9 +403,9 @@ function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; 
   const level = pace.exhausted ? 'exhausted' : pace.runsOutAt !== undefined || isHigh(w.percent) ? 'ahead' : 'normal'
   const note = paceNote(w, now)
   return (
-    <div className={styles.windowBlock} data-level={level} data-testid={`usage-window-${vendor}-${w.minutes}`}>
+    <div className={styles.windowBlock} data-level={level} data-testid={`usage-window-${vendor}-${windowKey(w).replace(':', '-')}`}>
       <div className={styles.windowHead}>
-        <span className={styles.windowLabel}>{windowLabel(vendor, w.minutes)}</span>
+        <span className={styles.windowLabel}>{windowLabel(vendor, w.minutes, w.scope)}</span>
         <span className={styles.windowValue}>{w.percent}%</span>
         <span className={styles.windowReset}>
           {w.resetsAt !== undefined ? (pace.exhausted ? `${formatClock(w.resetsAt, now)} 恢复` : formatReset(w.resetsAt, now)) : ''}
@@ -435,7 +452,7 @@ function Shares({ usage, now, onPick }: { usage: VendorUsage; now: number; onPic
     <div className={styles.shares} data-testid={`usage-shares-${usage.vendor}`}>
       <div className={styles.sharesHead}>
         <span className={styles.sharesTitle}>这 {windowLabel(usage.vendor, w.minutes)}里各会话的用量</span>
-        <span className={styles.sharesNote}>按 token 估算</span>
+        <span className={styles.sharesNote}>按 API 价格估算</span>
       </div>
       {rows.map((row) => {
         const body = (

@@ -68,7 +68,7 @@ describe('CodexUsageWatcher', () => {
     expect(readings[0]).toEqual([
       's1',
       {
-        context: { percent: 50, usedTokens: 135200, windowTokens: 258400 },
+        context: { percent: 50, usedTokens: 135200, windowTokens: 258400, compactAt: 244800, compactPercent: 94 },
         usage: { vendor: 'codex', at: 7, windows: [{ minutes: 300, percent: 40, resetsAt: 1792420883_000 }] }
       }
     ])
