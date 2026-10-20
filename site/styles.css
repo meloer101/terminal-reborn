@@ -218,14 +218,14 @@ p { text-wrap: pretty; }
 }
 .skip:focus { transform: none; }
 
-/* Brand mark: the app icon's brush orbits, tinted by the theme. */
+/* Brand mark: the app icon's orbits, tinted by the theme. */
 .mark {
   display: inline-block;
-  width: 22px;
+  width: 23px;
   height: 28px;
   background: currentColor;
-  -webkit-mask: url('assets/orbit.svg') center / contain no-repeat;
-  mask: url('assets/orbit.svg') center / contain no-repeat;
+  -webkit-mask: url('assets/orbit.svg?v=3') center / contain no-repeat;
+  mask: url('assets/orbit.svg?v=3') center / contain no-repeat;
 }
 
 .lead {
@@ -983,10 +983,15 @@ kbd {
   margin-left: calc(var(--gutter) * -1 - 7vw);
   color: var(--ink);
   width: min(42vw, 600px);
-  aspect-ratio: 544 / 680;
+  aspect-ratio: 562 / 680;
   rotate: -14deg;
+  position: relative;
 }
 .orbit .mark { width: 100%; height: 100%; }
+/* With JS the mark is drawn as ASCII particles (main.js), which do their own turning. */
+.orbit.is-ascii { rotate: none; }
+.orbit.is-ascii .mark { visibility: hidden; }
+.orbit canvas { position: absolute; pointer-events: none; }
 .dl-copy { grid-column: 2; grid-row: 1; display: grid; gap: 28px; align-content: start; }
 .install {
   margin-top: 28px;
@@ -1082,7 +1087,8 @@ kbd {
   .key-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 16px; }
 
   .download { grid-template-columns: 1fr; row-gap: 40px; }
-  .orbit { width: min(70vw, 300px); margin-left: calc(var(--gutter) * -1 - 24px); }
+  /* One column: the ASCII orbit sits whole in the column (a glyph grid cut by the page edge reads as broken). */
+  .orbit { width: min(64vw, 320px); margin-left: 0; }
   .dl-copy { grid-column: 1; grid-row: 2; }
 }
 
