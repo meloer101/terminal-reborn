@@ -30,6 +30,44 @@
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 
+  /* ───────── Appearance ───────── */
+  const themeBtn = $('[data-theme-toggle]')
+  const THEME_KEY = 'wavi-theme'
+  const THEME_ORDER = ['system', 'light', 'dark']
+  const THEME_LABEL = { system: '跟随系统', light: '浅色', dark: '深色' }
+  const darkMq = window.matchMedia('(prefers-color-scheme: dark)')
+  const themePref = () => {
+    const p = root.dataset.themePref
+    return THEME_ORDER.includes(p) ? p : 'system'
+  }
+
+  function applyTheme(pref) {
+    const dark = pref === 'dark' || (pref === 'system' && darkMq.matches)
+    root.classList.add('theming')
+    root.dataset.theme = dark ? 'dark' : 'light'
+    root.dataset.themePref = pref
+    if (themeBtn) {
+      themeBtn.dataset.mode = pref
+      const label = `外观：${THEME_LABEL[pref]}`
+      themeBtn.setAttribute('aria-label', `${label}（点击切换）`)
+      themeBtn.title = label
+    }
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.content = dark ? '#0a0a0a' : '#ffffff'
+    requestAnimationFrame(() => root.classList.remove('theming'))
+    setTimeout(() => root.classList.remove('theming'), 50)
+  }
+
+  if (themeBtn) {
+    applyTheme(themePref())
+    themeBtn.addEventListener('click', () => {
+      const next = THEME_ORDER[(THEME_ORDER.indexOf(themePref()) + 1) % THEME_ORDER.length]
+      try { localStorage.setItem(THEME_KEY, next) } catch { /* storage blocked: the choice lasts this visit */ }
+      applyTheme(next)
+    })
+    darkMq.addEventListener('change', () => { if (themePref() === 'system') applyTheme('system') })
+  }
+
   /* ───────── Hero: live window ───────── */
   const SESSIONS = [
     { project: 'acme-web', count: 4 },
@@ -603,4 +641,16 @@
     }
     setTimeout(() => { copyBtn.textContent = '复制' }, 1600)
   })
+
+  /* ───────── Latest release: the hero's version follows GitHub; the authored one stays if it can't be reached ───────── */
+  const version = $('[data-version]')
+  if (version && root.dataset.repo) {
+    fetch(`https://api.github.com/repos/${root.dataset.repo}/releases/latest`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((release) => {
+        const tag = release && release.tag_name
+        if (typeof tag === 'string' && /^v\d+\.\d+\.\d+$/.test(tag)) version.textContent = tag
+      })
+      .catch(() => {})
+  }
 })()

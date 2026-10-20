@@ -5,26 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Wavi — 为并行 agent 而做的 macOS 终端</title>
   <meta name="description" content="Wavi 是为并行运行 Claude Code 和 Codex 而做的 macOS 终端：保留 agent 原生界面，告诉你哪个在干活、哪个在等你，并把每个 worktree 合回主干。免费、开源、无遥测。">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#f4f4f4">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0a0a0a">
   <meta property="og:title" content="Wavi — 为并行 agent 而做的 macOS 终端">
   <meta property="og:description" content="同时跑十个 agent，只在需要你时叫你。">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
-  <link rel="preload" href="fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/jetbrains-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css">
   <script>
-    document.documentElement.classList.add('js')
-    // If the motion library never arrives, show everything as authored.
-    setTimeout(function () { if (!window.gsap) document.documentElement.classList.remove('js') }, 2500)
+    (function () {
+      var root = document.documentElement
+      var pref = 'system'
+      try { pref = localStorage.getItem('wavi-theme') || 'system' } catch (e) {}
+      if (pref !== 'light' && pref !== 'dark') pref = 'system'
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      root.dataset.theme = dark ? 'dark' : 'light'
+      root.dataset.themePref = pref
+      root.classList.add('js')
+      var meta = document.querySelector('meta[name="theme-color"]')
+      if (meta) meta.content = dark ? '#0a0a0a' : '#ffffff'
+      // If the motion library never arrives, show everything as authored.
+      setTimeout(function () { if (!window.gsap) root.classList.remove('js') }, 2500)
+    })()
   </script>
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <a class="skip" href="#main">跳到正文</a>
 
-  <!-- Status glyphs: same shapes as the app's StatusGlyph. -->
+  <!-- Status glyphs: same shapes as the app's StatusGlyph (Figma 9:14). -->
   <svg width="0" height="0" class="defs" aria-hidden="true">
     <symbol id="g-running" viewBox="0 0 14 14">
       <circle cx="7" cy="7" r="5.1" fill="none" stroke="var(--line-3)" stroke-width="1.8"/>
@@ -40,152 +50,78 @@
   </svg>
 
   <header class="nav" data-nav>
-    <div class="wrap nav-inner">
-      <a class="brand" href="#top" aria-label="Wavi 首页">
-        <span class="mark" aria-hidden="true"></span>
-        <span class="brand-name">Wavi</span>
-      </a>
-      <nav class="nav-links" aria-label="主导航">
-        <a href="#status">状态</a>
-        <a href="#terminal">终端</a>
-        <a href="#worktree">Worktree</a>
-        <a href="#principles">原则</a>
-        <a href="https://github.com/meloer101/terminal-reborn" rel="noopener">GitHub</a>
-      </nav>
-      <a class="btn btn-sm" href="#download">下载</a>
+    <a class="brand" href="#top" aria-label="Wavi 首页">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="brand-name">Wavi</span>
+    </a>
+    <nav class="nav-links" aria-label="主导航">
+      <a href="#status">状态</a>
+      <a href="#terminal">终端</a>
+      <a href="#worktree">Worktree</a>
+      <a href="#principles">原则</a>
+      <a class="nav-gh" data-gh="" rel="noopener">GitHub</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="theme" type="button" data-theme-toggle data-mode="system" aria-label="外观：跟随系统（点击切换）" title="外观：跟随系统">
+        <svg class="i-auto" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="9" rx="1.5"/><path d="M5.5 14h5M8 11.5V14"/></svg>
+        <svg class="i-sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06"/></svg>
+        <svg class="i-moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg>
+      </button>
+      <a class="nav-download" href="#download">下载</a>
     </div>
   </header>
 
   <main id="main">
     <!-- ───────────── Hero ───────────── -->
     <section class="hero" id="top">
-      <div class="wrap">
-        <div class="hero-head">
-          <h1 class="hero-title">
-            <span class="line"><span data-rise>同时跑十个 agent，</span></span>
-            <span class="line"><span data-rise>只在需要你时<em>叫你</em>。</span></span>
-          </h1>
-          <p class="hero-signal mono" data-fade>
-            <span class="dot" aria-hidden="true"></span>
-            <span>8 个会话在跑</span>
-            <span class="slash" aria-hidden="true">/</span>
-            <span class="lit">1 个在等你</span>
-          </p>
-        </div>
-
-        <div class="hero-body">
-          <div class="hero-copy" data-fade>
-            <p class="lead">Wavi 是为并行运行 Claude Code 和 Codex 而做的 macOS 终端。agent 的原生界面原样保留，Wavi 补上它们缺的：谁在干活、谁在等你、每个 worktree 怎么合回主干。</p>
-            <div class="cta-row">
-              <a class="btn" href="#download">下载 macOS 版</a>
-              <a class="link-arrow" href="https://github.com/meloer101/terminal-reborn" rel="noopener">在 GitHub 查看源码</a>
-            </div>
-            <p class="meta mono">v0.1.1 · macOS 13+ · Apple 芯片与 Intel · MIT 开源</p>
+      <div class="hero-copy">
+        <h1 class="hero-title">
+          <span class="line"><span data-rise>同时跑十个 agent，</span></span>
+          <span class="line"><span data-rise>只在需要你时<em>叫你</em>。</span></span>
+        </h1>
+        <div class="hero-side" data-fade>
+          <p class="lead">Wavi 是为并行运行 Claude Code 和 Codex 而做的 macOS 终端。agent 的原生界面原样保留，Wavi 补上它们缺的：谁在干活、谁在等你、每个 worktree 怎么合回主干。</p>
+          <div class="cta-row">
+            <a class="btn" href="#download">下载 macOS 版</a>
+            <a class="link-arrow" data-gh="" rel="noopener">在 GitHub 查看源码</a>
           </div>
+          <p class="meta"><span data-version>v0.3.0</span> · macOS 13+ · Apple 芯片与 Intel · MIT 开源</p>
+        </div>
+      </div>
 
-          <figure class="window-wrap" data-window>
-            <div class="window" role="img" aria-label="Wavi 主窗口：左侧栏按项目列出六个会话和它们的状态，其中“Cookie 会话迁移”正在等你确认一条命令；右侧是该会话的 Claude Code 终端。">
-              <aside class="w-sidebar" aria-hidden="true">
-                <div class="w-titlebar">
-                  <span class="lights"><i></i><i></i><i></i></span>
-                </div>
-                <div class="w-nav">
-                  <div class="w-nav-item"><span>打开项目…</span><kbd>⌘O</kbd></div>
-                  <div class="w-nav-item"><span>跳转到…</span><kbd>⌘K</kbd></div>
-                  <div class="w-nav-item"><span>总览</span><span class="w-count" data-count hidden><svg><use href="#g-needs_you"/></svg><b>1</b></span></div>
-                </div>
-                <div class="w-tree" data-tree></div>
-                <div class="w-nav w-foot"><div class="w-nav-item"><span>设置</span><kbd>⌘,</kbd></div></div>
-              </aside>
-              <div class="w-main" aria-hidden="true">
-                <div class="w-head">
-                  <span class="w-title">Cookie 会话迁移</span>
-                  <span class="w-branch">jacob/session-cookie</span>
-                  <span class="w-agent" data-agent><svg><use href="#g-running"/></svg><span>Claude Code · 运行中</span></span>
-                </div>
-                <div class="w-term" data-term></div>
-              </div>
+      <figure class="window-wrap" data-window>
+        <div class="window" role="img" aria-label="Wavi 主窗口：左侧栏按项目列出六个会话和它们的状态，其中“Cookie 会话迁移”正在等你确认一条命令；右侧是该会话的 Claude Code 终端。">
+          <aside class="w-sidebar" aria-hidden="true">
+            <div class="w-titlebar">
+              <span class="lights"><i></i><i></i><i></i></span>
             </div>
-          </figure>
+            <div class="w-nav">
+              <div class="w-nav-item"><span>打开项目…</span><kbd>⌘O</kbd></div>
+              <div class="w-nav-item"><span>跳转到…</span><kbd>⌘K</kbd></div>
+              <div class="w-nav-item"><span>总览</span><span class="w-count" data-count hidden><svg><use href="#g-needs_you"/></svg><b>1</b></span></div>
+            </div>
+            <div class="w-tree" data-tree></div>
+            <div class="w-nav w-foot"><div class="w-nav-item"><span>设置</span><kbd>⌘,</kbd></div></div>
+          </aside>
+          <div class="w-main" aria-hidden="true">
+            <div class="w-head">
+              <span class="w-title">Cookie 会话迁移</span>
+              <span class="w-branch">jacob/session-cookie</span>
+              <span class="w-agent" data-agent><svg><use href="#g-running"/></svg><span>Claude Code · 运行中</span></span>
+            </div>
+            <div class="w-term" data-term></div>
+          </div>
         </div>
-      </div>
-    </section>
-
-    <!-- ───────────── Fleet board ───────────── -->
-    <section class="fleet" aria-label="会话信号牌">
-      <div class="wrap">
-        <div class="fleet-head" data-fleet-head>
-          <span class="mono">FLEET / 8 SESSIONS</span>
-          <span class="fleet-lit mono"><span class="dot" aria-hidden="true"></span>1 个在等你</span>
-        </div>
-        <ol class="fleet-rows" data-fleet>
-          <li class="fr" data-status="needs_you">
-            <span class="fr-glyph"><svg><use href="#g-needs_you"/></svg></span>
-            <span class="fr-name">Cookie 会话迁移</span>
-            <span class="fr-branch">jacob/session-cookie</span>
-            <span class="fr-state">等你处理</span>
-            <span class="fr-time">已等 1m</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-running"/></svg></span>
-            <span class="fr-name">结算页性能优化</span>
-            <span class="fr-branch">feat/checkout-perf</span>
-            <span class="fr-state">运行中</span>
-            <span class="fr-time">12m</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-done_unread"/></svg></span>
-            <span class="fr-name">修复移动端导航抖动</span>
-            <span class="fr-branch">fix/nav-jitter</span>
-            <span class="fr-state">待审阅</span>
-            <span class="fr-time">2m 前</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-running"/></svg></span>
-            <span class="fr-name">侧边栏状态聚合</span>
-            <span class="fr-branch">feat/sidebar-status</span>
-            <span class="fr-state">运行中</span>
-            <span class="fr-time">6m</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-error"/></svg></span>
-            <span class="fr-name">Git 图谱布局算法</span>
-            <span class="fr-branch">feat/git-graph</span>
-            <span class="fr-state">出错</span>
-            <span class="fr-time">1m 前</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-running"/></svg></span>
-            <span class="fr-name">支付回调重试</span>
-            <span class="fr-branch">feat/webhook-retry</span>
-            <span class="fr-state">运行中</span>
-            <span class="fr-time">9m</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-done_unread"/></svg></span>
-            <span class="fr-name">迁移到 Vite 7</span>
-            <span class="fr-branch">chore/vite-7</span>
-            <span class="fr-state">已完成</span>
-            <span class="fr-time">20m 前</span>
-          </li>
-          <li class="fr">
-            <span class="fr-glyph"><svg><use href="#g-idle"/></svg></span>
-            <span class="fr-name">文档站搜索</span>
-            <span class="fr-branch">feat/docs-search</span>
-            <span class="fr-state">空闲</span>
-            <span class="fr-time">7m</span>
-          </li>
-        </ol>
-      </div>
+      </figure>
     </section>
 
     <!-- ───────────── Status / Overview (sticky scrollytelling) ───────────── -->
     <section class="status" id="status" data-status-sec>
-      <div class="wrap status-sticky">
+      <div class="status-sticky">
         <div class="overview" aria-label="总览：按状态分组的会话列表" role="img">
           <div class="ov-head" aria-hidden="true">
             <span class="ov-title">总览</span>
-            <span class="ov-sub mono" data-ov-sub>8 个会话 · 1 个等你处理</span>
+            <span class="ov-sub" data-ov-sub>8 个会话 · 1 个等你处理</span>
             <span class="ov-seg"><span class="on">列表</span><span>看板</span></span>
           </div>
           <div class="ov-list" data-ov aria-hidden="true"></div>
@@ -203,7 +139,7 @@
             </div>
             <div class="step is-active" data-step="2">
               <h2>只有一个，<br><em>在等你。</em></h2>
-              <p>“等你处理”是整个界面里唯一高亮的信号。按 <kbd>⌘J</kbd> 直接跳过去，在终端里作答，agent 接着跑。</p>
+              <p>“等你处理”是整个界面里唯一高亮的颜色。按 <kbd>⌘J</kbd> 直接跳过去，在终端里作答，agent 接着跑。</p>
             </div>
           </div>
           <div class="status-progress" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -211,25 +147,30 @@
       </div>
     </section>
 
-    <!-- ───────────── Terminal + CJK (ink) ───────────── -->
-    <section class="ink-sec term-sec" id="terminal">
-      <div class="wrap term-intro">
+    <!-- ───────────── Terminal + CJK ───────────── -->
+    <section class="term-sec" id="terminal">
+      <div class="term-intro">
         <h2 class="display" data-reveal-words>终端就是全部界面。</h2>
         <p class="lead">Wavi 不重画聊天窗口。Claude Code 和 Codex 的界面原样运行，你的每个按键都直接进入它们；关掉窗口、按 ⌘Q，agent 也照样在后台跑，回来时接上同一个进程。</p>
       </div>
 
-      <div class="wrap cjk">
+      <div class="cjk">
+        <div class="cjk-copy">
+          <h3>中文占两格，<br>一格不差。</h3>
+          <p>英文字体和中文字体分开设置。每个汉字严格占两个单元格，换成什么字体，表格的列都对得齐。</p>
+        </div>
+
         <div class="cjk-demo">
           <div class="controls" role="group" aria-label="终端演示设置">
             <div class="ctl">
-              <span class="ctl-label mono" id="lbl-mode">渲染</span>
+              <span class="ctl-label" id="lbl-mode">渲染</span>
               <div class="seg" role="radiogroup" aria-labelledby="lbl-mode" data-seg="mode">
                 <button role="radio" aria-checked="true" data-v="wavi">两格对齐</button>
                 <button role="radio" aria-checked="false" data-v="plain">不对齐</button>
               </div>
             </div>
             <div class="ctl">
-              <span class="ctl-label mono" id="lbl-cjk">中文字体</span>
+              <span class="ctl-label" id="lbl-cjk">中文字体</span>
               <div class="seg" role="radiogroup" aria-labelledby="lbl-cjk" data-seg="cjk">
                 <button role="radio" aria-checked="true" data-v="sans">苹方</button>
                 <button role="radio" aria-checked="false" data-v="serif">宋体</button>
@@ -257,21 +198,16 @@
     购物车/总价缓存.ts      +42 −0   待审阅
     结算页/首屏.tsx         +7 −11   待审阅
 
-<span class="t-signal">✻</span> 正在复测 LCP… <span class="t-dim">(1m 12s · esc 中断)</span></pre>
+<span class="t-accent">✻</span> 正在复测 LCP… <span class="t-dim">(1m 12s · esc 中断)</span></pre>
           </div>
-          <p class="tty-note mono" data-tty-note>Wavi：每个汉字占两格，三列对齐。</p>
-        </div>
-
-        <div class="cjk-copy">
-          <h3>中文占两格，<br>一格不差。</h3>
-          <p>英文字体和中文字体分开设置。每个汉字严格占两个单元格，换成什么字体，表格的列都对得齐。</p>
+          <p class="tty-note" data-tty-note>Wavi：每个汉字占两格，三列对齐。</p>
         </div>
       </div>
     </section>
 
     <!-- ───────────── Worktree lifecycle ───────────── -->
     <section class="wt" id="worktree" data-wt>
-      <div class="wrap wt-sticky">
+      <div class="wt-sticky">
         <div class="wt-head">
           <h2 class="display">从开工到合并，<br>不离开 Wavi。</h2>
           <p class="lead">一个 agent 一条分支、一个 worktree。图谱上标着每条分支此刻是哪个 agent、在做什么。</p>
@@ -279,7 +215,9 @@
 
         <div class="graph" aria-hidden="true">
           <svg viewBox="0 0 1200 300" preserveAspectRatio="xMidYMid meet" data-graph>
+            <!-- main -->
             <path class="lane lane-main" pathLength="1" d="M0 250 H1200"/>
+            <!-- branches: fork, run, merge -->
             <path class="lane lane-1" pathLength="1" d="M110 250 C150 250 150 60 200 60 H820 C870 60 870 250 920 250"/>
             <path class="lane lane-2" pathLength="1" d="M230 250 C270 250 270 130 320 130 H960 C1010 130 1010 250 1060 250"/>
             <path class="lane lane-3" pathLength="1" d="M350 250 C390 250 390 195 430 195 H640 C680 195 680 250 720 250"/>
@@ -296,9 +234,9 @@
               <circle class="c c-merge c-m2" cx="1060" cy="250" r="6"/>
             </g>
             <g class="chips">
-              <g class="chip chip-1" transform="translate(212 34)"><rect width="196" height="26" rx="3"/><use href="#g-running" x="8" y="6" width="14" height="14"/><text x="30" y="17.5">session-cookie</text></g>
-              <g class="chip chip-2" transform="translate(332 104)"><rect width="184" height="26" rx="3"/><use href="#g-needs_you" x="8" y="6" width="14" height="14"/><text x="30" y="17.5">checkout-perf</text></g>
-              <g class="chip chip-3" transform="translate(442 169)"><rect width="150" height="26" rx="3"/><use href="#g-done_unread" x="8" y="6" width="14" height="14"/><text x="30" y="17.5">mobile-nav</text></g>
+              <g class="chip chip-1" transform="translate(212 34)"><rect width="196" height="26" rx="4"/><use href="#g-running" x="8" y="6" width="14" height="14"/><text x="30" y="17.5">session-cookie</text></g>
+              <g class="chip chip-2" transform="translate(332 104)"><rect width="184" height="26" rx="4"/><use href="#g-running" x="8" y="6" width="14" height="14"/><text x="30" y="17.5">checkout-perf</text></g>
+              <g class="chip chip-3" transform="translate(442 169)"><rect width="150" height="26" rx="4"/><use href="#g-done_unread" x="8" y="6" width="14" height="14"/><text x="30" y="17.5">mobile-nav</text></g>
               <g class="chip chip-main" transform="translate(0 266)"><text x="0" y="17.5">main</text></g>
             </g>
           </svg>
@@ -317,89 +255,98 @@
 
     <!-- ───────────── Principles ───────────── -->
     <section class="principles" id="principles">
-      <div class="wrap">
-        <h2 class="manifesto" data-reveal-words>Wavi <em>不替你</em>花 token。</h2>
-        <p class="lead manifesto-sub">只有你点了按钮，Wavi 才会给 agent 发消息，按钮上写明会发什么。可能很贵的任务只放进输入行，等你看过、自己按回车。</p>
+      <h2 class="manifesto" data-reveal-words>Wavi 不替你花 token。</h2>
+      <p class="lead manifesto-sub">只有你点了按钮，Wavi 才会给 agent 发消息，按钮上写明会发什么。可能很贵的任务只放进输入行，等你看过、自己按回车。</p>
 
-        <dl class="rules">
-          <div class="rule" data-rule>
-            <dt>不碰你的全局配置</dt>
-            <dd>hooks 在每次启动 agent 时注入，<code>~/.claude</code> 和 <code>~/.codex</code> 原封不动。</dd>
-          </div>
-          <div class="rule" data-rule>
-            <dt>关掉窗口，agent 照跑</dt>
-            <dd>⌘Q 之后会话在后台继续运行，重新打开接回同一个进程；重启电脑后用 <code>--resume</code> 接上原对话。</dd>
-          </div>
-          <div class="rule" data-rule>
-            <dt>没有账号，没有遥测</dt>
-            <dd>有新版本时提示一次，点开是发布页。不自动下载，不自动安装。</dd>
-          </div>
-          <div class="rule" data-rule>
-            <dt>开源，MIT</dt>
-            <dd>每一行代码都在 GitHub 上，欢迎读，也欢迎改。</dd>
-          </div>
-        </dl>
-      </div>
+      <dl class="rules">
+        <div class="rule" data-rule>
+          <dt>没有账号，没有遥测</dt>
+          <dd>Wavi 本身不用注册，也不用登录。有新版本时提示一次，点开是发布页，不自动下载，不自动安装。</dd>
+        </div>
+        <div class="rule" data-rule>
+          <dt>不碰你的全局配置</dt>
+          <dd>hooks 在每次启动 agent 时注入，不写进 <code>~/.claude</code> 和 <code>~/.codex</code>。也不绕过 agent 的 hook 信任：Wavi 只放行自己注入的那几条，仓库和插件里的 hook 照旧由 agent 把关。</dd>
+        </div>
+        <div class="rule" data-rule>
+          <dt>归档不用 git stash</dt>
+          <dd>归档把 worktree 里没提交的改动存进 Wavi 自己的 <code>refs/wavi/archive/…</code>，你的 stash 列表、分支、暂存区和 git 配置都不动。</dd>
+        </div>
+        <div class="rule" data-rule>
+          <dt>不替你发消息，不替你恢复会话</dt>
+          <dd>重启电脑后，会话停在“未启动”，等你打开才用 <code>--resume</code> 接上原对话。发给 agent 的每一句，都来自你按的回车或你点的按钮。</dd>
+        </div>
+        <div class="rule" data-rule>
+          <dt>关掉窗口，agent 照跑</dt>
+          <dd>⌘Q 之后会话在后台继续运行，重新打开接回同一个进程和屏幕。</dd>
+        </div>
+        <div class="rule" data-rule>
+          <dt>开源，MIT</dt>
+          <dd>每一行代码都在 GitHub 上，欢迎读，也欢迎改。</dd>
+        </div>
+      </dl>
     </section>
 
     <!-- ───────────── Keyboard ───────────── -->
     <section class="keys" id="keys">
-      <div class="wrap keys-grid">
-        <h2 class="display keys-title">手不用离开键盘。</h2>
-        <ul class="key-list">
-          <li><span class="combo"><kbd>⌘</kbd><kbd>J</kbd></span><span class="what">下一个需要你的会话</span></li>
-          <li><span class="combo"><kbd>⌘</kbd><kbd>N</kbd></span><span class="what">新建会话</span></li>
-          <li><span class="combo"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>A</kbd></span><span class="what">总览</span></li>
-          <li><span class="combo"><kbd>⌘</kbd><kbd>K</kbd></span><span class="what">跳转到会话、项目或操作</span></li>
-          <li><span class="combo"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>M</kbd></span><span class="what">合并到基线</span></li>
-          <li><span class="combo"><kbd>⌘</kbd><kbd>1–9</kbd></span><span class="what">切换会话</span></li>
-          <li><span class="combo"><kbd>⌘</kbd><kbd>B</kbd></span><span class="what">收起侧栏</span></li>
-          <li><span class="combo"><kbd>⌘</kbd><kbd>F</kbd></span><span class="what">在终端里查找</span></li>
-        </ul>
-      </div>
+      <h2 class="display">手不用离开键盘。</h2>
+      <ul class="key-grid">
+        <li><span class="combo"><kbd>⌘</kbd><kbd>J</kbd></span><span class="what">下一个需要你的会话</span></li>
+        <li><span class="combo"><kbd>⌘</kbd><kbd>N</kbd></span><span class="what">新建会话</span></li>
+        <li><span class="combo"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>A</kbd></span><span class="what">总览</span></li>
+        <li><span class="combo"><kbd>⌘</kbd><kbd>K</kbd></span><span class="what">跳转到会话、项目或操作</span></li>
+        <li><span class="combo"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>M</kbd></span><span class="what">合并到基线</span></li>
+        <li><span class="combo"><kbd>⌘</kbd><kbd>1–9</kbd></span><span class="what">切换会话</span></li>
+        <li><span class="combo"><kbd>⌘</kbd><kbd>B</kbd></span><span class="what">收起侧栏</span></li>
+        <li><span class="combo"><kbd>⌘</kbd><kbd>F</kbd></span><span class="what">在终端里查找</span></li>
+      </ul>
     </section>
 
     <!-- ───────────── Download ───────────── -->
     <section class="download" id="download" data-download>
-      <div class="wrap download-grid">
-        <div class="orbit" aria-hidden="true" data-orbit><span class="mark"></span></div>
-        <div class="dl-copy">
-          <h2 class="display">把 agent 们<br>交给 Wavi。</h2>
-          <div class="cta-row">
-            <a class="btn btn-lg" href="https://github.com/meloer101/terminal-reborn/releases/latest" rel="noopener">下载 macOS 版</a>
-            <a class="link-arrow" href="https://github.com/meloer101/terminal-reborn" rel="noopener">GitHub</a>
-          </div>
-          <p class="meta">免费 · macOS 13 或更高 · Apple 芯片选 arm64，Intel 选 x64<br>需要已安装并登录 Claude Code 或 Codex 命令行</p>
+      <div class="orbit" aria-hidden="true" data-orbit><span class="mark mark-xl"></span></div>
+      <div class="dl-copy">
+        <h2 class="display">把 agent 们<br>交给 Wavi。</h2>
+        <div class="cta-row">
+          <a class="btn btn-lg" data-gh="/releases/latest" rel="noopener">下载 macOS 版</a>
+          <a class="link-arrow" data-gh="" rel="noopener">GitHub</a>
+        </div>
+        <p class="meta">免费 · macOS 13 或更高 · Apple 芯片选 arm64，Intel 选 x64<br>需要已安装并登录 Claude Code 或 Codex 命令行</p>
 
-          <div class="install">
-            <p>发布版本还没有 Apple 公证。拖进「应用程序」后，第一次打开前运行一次：</p>
-            <div class="cmd">
-              <code data-cmd>xattr -cr "/Applications/Wavi.app"</code>
-              <button class="copy" type="button" data-copy aria-label="复制命令">复制</button>
-            </div>
-            <p class="hint">也可以先打开一次，再到「系统设置 → 隐私与安全性」点“仍要打开”。</p>
+        <div class="install">
+          <p>发布版本还没有 Apple 公证。拖进「应用程序」后，第一次打开前运行一次：</p>
+          <div class="cmd">
+            <code data-cmd>xattr -cr "/Applications/Wavi.app"</code>
+            <button class="copy" type="button" data-copy aria-label="复制命令">复制</button>
           </div>
+          <p class="hint">也可以先打开一次，再到「系统设置 → 隐私与安全性」点“仍要打开”。</p>
         </div>
       </div>
     </section>
   </main>
 
   <footer class="foot">
-    <div class="wrap foot-inner">
-      <span class="brand"><span class="mark" aria-hidden="true"></span><span class="brand-name">Wavi</span></span>
-      <nav aria-label="页脚">
-        <a href="https://github.com/meloer101/terminal-reborn" rel="noopener">GitHub</a>
-        <a href="https://github.com/meloer101/terminal-reborn/releases" rel="noopener">版本记录</a>
-        <a href="https://github.com/meloer101/terminal-reborn/blob/main/docs/ROADMAP.md" rel="noopener">路线图</a>
-        <a href="https://github.com/meloer101/terminal-reborn/blob/main/LICENSE" rel="noopener">MIT 许可</a>
-      </nav>
-      <span class="foot-note mono">没有遥测 · 没有账号</span>
-    </div>
+    <span class="brand"><span class="mark" aria-hidden="true"></span><span class="brand-name">Wavi</span></span>
+    <nav aria-label="页脚">
+      <a data-gh="" rel="noopener">GitHub</a>
+      <a data-gh="/releases" rel="noopener">版本记录</a>
+      <a data-gh="/blob/main/docs/ROADMAP.md" rel="noopener">路线图</a>
+      <a data-gh="/blob/main/LICENSE" rel="noopener">MIT 许可</a>
+    </nav>
+    <span class="foot-note">没有遥测 · 没有账号</span>
   </footer>
 
+  <script>
+    // The only place the GitHub repository is named: every [data-gh] link is built from it here,
+    // before the CDN scripts, so the download link works even when the motion library is slow.
+    ;(function (repo) {
+      document.documentElement.dataset.repo = repo
+      var links = document.querySelectorAll('[data-gh]')
+      for (var i = 0; i < links.length; i++) links[i].href = 'https://github.com/' + repo + links[i].dataset.gh
+    })('meloer101/terminal-reborn')
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/Flip.min.js" defer></script>
-  <script src="main.js" defer></script>
+  <script src="main.js?v=5" defer></script>
 </body>
 </html>
