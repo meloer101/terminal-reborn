@@ -50,10 +50,12 @@ export function TerminalSearch({ sessionId }: { sessionId: SessionId }) {
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
+    // Enter / Esc while an input method is composing confirm / cancel the composition.
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'Escape') {
       e.preventDefault()
       close()
-    } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+    } else if (e.key === 'Enter') {
       e.preventDefault()
       find(e.shiftKey ? 'next' : 'previous')
     }

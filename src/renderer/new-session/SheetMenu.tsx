@@ -88,6 +88,8 @@ export function SheetMenu({
   }, [active])
 
   const onKeyDown = (event: KeyboardEvent): void => {
+    // Keys of an input method composing in the search field are its own (Enter confirms, Esc cancels).
+    if (event.nativeEvent.isComposing) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()

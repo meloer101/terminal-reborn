@@ -39,8 +39,8 @@ export function SettingsDialog() {
   if (!open) return null
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // Menus inside the sheet handle (and stop) their own Esc first.
-    if (event.key === 'Escape' && !event.defaultPrevented) {
+    // Menus inside the sheet handle (and stop) their own Esc first; Esc while an input method composes cancels that.
+    if (event.key === 'Escape' && !event.defaultPrevented && !event.nativeEvent.isComposing) {
       event.preventDefault()
       closeSettings()
     }

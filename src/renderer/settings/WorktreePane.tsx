@@ -71,6 +71,8 @@ function PortField({ value, onCommit }: { value: number; onCommit: (base: number
         commit(shown)
       }}
       onKeyDown={(event) => {
+        // Enter / Esc while an input method composes confirm / cancel the composition.
+        if (event.nativeEvent.isComposing) return
         if (event.key === 'Enter') event.currentTarget.blur()
         else if (event.key === 'Escape') {
           skipBlur.current = true
