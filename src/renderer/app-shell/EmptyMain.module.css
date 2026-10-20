@@ -42,7 +42,7 @@
 /* The orbit mark (build/icon.svg, Figma Logo/Mark) as a mask, so it takes the theme's text colour. */
 .mark {
   flex: none;
-  width: 28px;
+  width: 30px;
   height: 36px;
   background: var(--text-primary);
   mask: url('../assets/logo-mark.svg') center / contain no-repeat;
