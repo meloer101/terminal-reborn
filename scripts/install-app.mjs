@@ -78,6 +78,8 @@ const config = {
     identity: '-',
     // node-pty's .node is loaded from the checkout, signed apart from this bundle: library validation would refuse it.
     hardenedRuntime: false,
+    // Never sent to Apple, even when the APPLE_API_* env vars of a release build are around.
+    notarize: false,
     target: [{ target: 'dir', arch: [process.arch] }]
   }
 }

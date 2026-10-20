@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for Contents/MacOS/Wavi: the main process and the PTY daemon, which is the same
+  binary run with ELECTRON_RUN_AS_NODE (src/main/pty/daemon-client.ts). Helpers get entitlements.mac.inherit.plist.
+
+  Not here, on purpose:
+  - cs.allow-unsigned-executable-memory: Electron's V8 allocates JIT pages with MAP_JIT, which allow-jit covers
+    (the only cs.* key in @electron/osx-sign's own defaults).
+  - cs.disable-library-validation: every Mach-O we load (node-pty's pty.node, spawn-helper) sits inside the bundle
+    and is signed with the same Developer ID, so library validation passes. Only the ad-hoc fallback would need it,
+    and that build turns the hardened runtime off instead (scripts/dist.mjs).
+-->
+<plist version="1.0">
+  <dict>
+    <!-- V8's JIT, in the app and in the ELECTRON_RUN_AS_NODE daemon. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!--
+      A terminal: TCC attributes what its child processes ask for to Wavi, and the hardened runtime silently refuses
+      a protected resource the responsible app has no entitlement for. These keep `osascript`, voice input and the
+      like working in Wavi's shells as they did before the hardened runtime (each still asks the user first; the
+      prompt text is in electron-builder.yml extendInfo).
+    -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
+  </dict>
+</plist>

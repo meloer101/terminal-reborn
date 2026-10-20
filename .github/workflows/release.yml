@@ -1,8 +1,16 @@
 name: Release
 
-# Push a tag like v0.1.0 (see CONTRIBUTING.md). Builds unsigned (ad-hoc) dmg + zip for arm64 and x64
-# and attaches them to a DRAFT GitHub Release; a human publishes it after a look. No secrets are used
-# beyond the workflow's own GITHUB_TOKEN.
+# Push a tag like v0.1.0 (see CONTRIBUTING.md). Builds dmg + zip for arm64 and x64, signed with the Developer ID
+# certificate, notarized and stapled (the .apps by electron-builder, the dmgs here), checks them as Gatekeeper will,
+# and attaches them to a DRAFT GitHub Release; a human publishes it after a look.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   CSC_LINK          base64 of the "Developer ID Application" certificate + private key exported as .p12
+#   CSC_KEY_PASSWORD  the password set when exporting that .p12
+#   APPLE_API_KEY     contents of the App Store Connect API key file AuthKey_<id>.p8 (notarytool)
+#   APPLE_API_KEY_ID  that key's ID
+#   APPLE_API_ISSUER  the Issuer ID shown above the keys list
+# Without all five the job stops before building: a release is never shipped unsigned.
 on:
   push:
     tags: ['v*']
@@ -17,7 +25,8 @@ concurrency:
 jobs:
   release:
     runs-on: macos-14
-    timeout-minutes: 45
+    # Notarization usually takes minutes per upload (2 apps + 2 dmgs) but Apple's queue is sometimes slow.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -34,19 +43,76 @@ jobs:
             exit 1
           fi
 
+      - name: Signing secrets are set
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          missing=0
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [ -z "${!name}" ]; then echo "::error::repository secret $name is not set (see CONTRIBUTING.md, 签名和公证)"; missing=1; fi
+          done
+          exit "$missing"
+
       - run: npm ci
       - run: npm run check
 
-      - name: Build dmg + zip (arm64, x64)
+      # notarytool reads the key from a file; it lives in the runner's temp dir and is deleted at the end.
+      - name: Write the notarization key
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          key="$RUNNER_TEMP/notarytool/AuthKey.p8"
+          mkdir -p "$(dirname "$key")"
+          printf '%s\n' "$APPLE_API_KEY" > "$key"
+          chmod 600 "$key"
+          echo "NOTARY_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      # electron-builder imports CSC_LINK into a temporary keychain, signs every Mach-O with the hardened runtime
+      # and build/entitlements.mac*.plist, then notarizes and staples each .app before making the dmg and zip.
+      - name: Build, sign and notarize dmg + zip (arm64, x64)
+        env:
+          WAVI_REQUIRE_NOTARIZATION: '1'
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ env.NOTARY_KEY_PATH }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: npm run dist
 
-      - name: Verify signatures and launch the arm64 app
+      # The app inside is already stapled; notarizing the signed dmg too lets Gatekeeper accept the download itself,
+      # also offline.
+      - name: Notarize and staple the dmgs
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           version="$(node -p "require('./package.json').version")"
-          for app in "release/$version/mac-arm64/Wavi.app" "release/$version/mac/Wavi.app"; do
-            codesign --verify --deep --strict --verbose=2 "$app"
+          for dmg in release/$version/*.dmg; do
+            echo "== $dmg"
+            # A rejected submission is reported (with its log) below rather than by the exit code.
+            result="$(xcrun notarytool submit "$dmg" --key "$NOTARY_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait --timeout 45m --output-format json)" || true
+            echo "$result"
+            status="$(jq -r '.status // "no status"' <<<"$result" 2>/dev/null || echo 'no status')"
+            if [ "$status" != "Accepted" ]; then
+              id="$(jq -r '.id // empty' <<<"$result" 2>/dev/null || true)"
+              [ -n "$id" ] && xcrun notarytool log "$id" --key "$NOTARY_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" || true
+              echo "::error::notarization of $dmg: $status"
+              exit 1
+            fi
+            xcrun stapler staple "$dmg"
           done
-          npm run test:packaged
+
+      - name: Verify signatures, notarization and Gatekeeper
+        run: scripts/verify-mac-release.sh
+
+      # Launches the signed, notarized arm64 build: the hardened runtime and entitlements are what run here, the PTY
+      # daemon included (the test checks that the shell runs in it).
+      - name: Launch the arm64 app
+        run: npm run test:packaged
 
       - name: Create or update the draft release
         env:
@@ -68,3 +134,7 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" "${files[@]}" "${flags[@]}"
           fi
+
+      - name: Remove the notarization key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/notarytool"
