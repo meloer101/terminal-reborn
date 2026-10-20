@@ -7,6 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { whenAppearanceKnown } from './appearance-ready'
+import { atlasAction } from './atlas-guard'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { defersToTextInput, macKeyToBytes } from './keymap'
 import { isAutoPeriod } from './ime'
@@ -30,6 +31,15 @@ export interface SurfaceDebugInfo {
   ligatures: boolean
   cols: number
   rows: number
+  /** Widths of the WebGL glyph atlas pages in device pixels (merged pages are wider); null without WebGL. */
+  atlasPages: number[] | null
+  /** How often the atlas guard recreated the WebGL renderers or fell back to DOM (all terminals). */
+  atlasResets: { recreated: number; overflowed: number }
+}
+
+/** The one addon internal the atlas guard reads (the atlas's pages); every step may be missing in another version. */
+interface AtlasInternals {
+  _core?: { _renderService?: { _renderer?: { value?: { _charAtlas?: { pages?: { canvas: HTMLCanvasElement }[] } } } } }
 }
 
 const SCROLLBACK_LINES = 10_000
@@ -59,6 +69,14 @@ export interface XtermSurfaceOptions {
  * next frame. So a clear always goes to all of them (see clearAtlas).
  */
 const webglSurfaces = new Set<XtermSurface>()
+
+/** A check is queued for after the current task (the atlas reports pages from inside a render). */
+let atlasCheckQueued = false
+let atlasMerged = false
+/** Set by a reset until the frame after it has been drawn (see atlasAction's `dom`). */
+let atlasJustReset = false
+/** What the guard did, for the e2e stress test. */
+const atlasResets = { recreated: 0, overflowed: 0 }
 
 /** A soft-wrapped line is searched for paths at most this many rows above (and twice this many in all). */
 const WRAPPED_ROWS_MAX = 16
@@ -327,6 +345,9 @@ export class XtermSurface implements TerminalSurface {
         else this.webglLost = true
         this.unloadWebgl()
       })
+      // Reset the atlas before addon-webgl 0.19 would merge its pages and garble the text (atlas-guard.ts).
+      addon.onAddTextureAtlasCanvas(() => XtermSurface.queueAtlasCheck(false))
+      addon.onRemoveTextureAtlasCanvas(() => XtermSurface.queueAtlasCheck(true))
       this.term.loadAddon(addon)
       this.webgl = addon
       webglSurfaces.add(this)
@@ -354,6 +375,43 @@ export class XtermSurface implements TerminalSurface {
       return
     }
     for (const surface of webglSurfaces) surface.term.clearTextureAtlas()
+  }
+
+  /** An atlas grew (`merged`: pages were merged away); checks the atlases once the current task is done. */
+  private static queueAtlasCheck(merged: boolean): void {
+    if (merged) atlasMerged = true
+    if (atlasCheckQueued) return
+    atlasCheckQueued = true
+    queueMicrotask(() => XtermSurface.checkAtlases())
+  }
+
+  /** Starts the renderers on a new atlas once one nears the merge point or merged pages (atlas-guard.ts). */
+  private static checkAtlases(): void {
+    atlasCheckQueued = false
+    const merged = atlasMerged
+    atlasMerged = false
+    const surfaces = [...webglSurfaces]
+    const pages = Math.max(0, ...surfaces.map((surface) => surface.atlasPageWidths()?.length ?? 0))
+    const action = atlasAction({ merged, pages, justReset: atlasJustReset })
+    if (action === 'none') return
+    if (action === 'dom') {
+      atlasResets.overflowed++
+      for (const surface of surfaces) {
+        surface.webglLost = true
+        surface.unloadWebgl()
+      }
+    } else {
+      atlasResets.recreated++
+      // All of them first: the old atlas goes away with its last renderer.
+      for (const surface of surfaces) surface.unloadWebgl()
+      for (const surface of surfaces) surface.syncRenderer()
+    }
+    for (const surface of surfaces) {
+      if (!surface.disposed) surface.term.refresh(0, surface.term.rows - 1)
+    }
+    // The redraw is the next frame's render; this flag outlives it by one frame.
+    atlasJustReset = true
+    requestAnimationFrame(() => requestAnimationFrame(() => (atlasJustReset = false)))
   }
 
   private applyTheme(): void {
@@ -646,8 +704,27 @@ export class XtermSurface implements TerminalSurface {
       renderer: this.webgl ? 'webgl' : 'dom',
       ligatures: this.ligatureJoinerId !== null,
       cols: this.term.cols,
-      rows: this.term.rows
+      rows: this.term.rows,
+      atlasPages: this.webgl ? this.atlasPageWidths() : null,
+      atlasResets: { ...atlasResets }
     }
+  }
+
+  private atlasPageWidths(): number[] | null {
+    const pages = (this.term as unknown as AtlasInternals)._core?._renderService?._renderer?.value?._charAtlas?.pages
+    return pages ? pages.map((page) => page.canvas.width) : null
+  }
+
+  /**
+   * Test hook (e2e/webgl-cjk-stress.spec.ts). 'rebind' re-uploads every atlas page to the GPU and rebuilds the cell
+   * model from the atlas as it is (a theme change does both), so it draws what the current atlas says without
+   * resetting it; 'rebuild' clears the atlas and rasterizes the screen from scratch.
+   */
+  debugRedraw(mode: 'rebind' | 'rebuild'): void {
+    if (this.disposed || !this.term.element) return
+    if (mode === 'rebind') this.term.options.theme = { ...this.term.options.theme }
+    else this.clearAtlas()
+    this.term.refresh(0, this.term.rows - 1)
   }
 
   dispose(): void {
