@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cellText, findPathCandidates, MAX_CANDIDATES_PER_LINE, pathLabel } from './file-links'
+import { cellText, findPathCandidates, MAX_CANDIDATES_PER_LINE, pathLabel, resolvedCandidates } from './file-links'
 
 /** The candidates as `[link text, path, line, column]`. */
 const found = (text: string) => findPathCandidates(text).map((c) => [text.slice(c.start, c.end), c.path, c.line, c.column])
@@ -37,6 +37,39 @@ describe('findPathCandidates', () => {
 
   it('keeps CJK in paths', () => {
     expect(found('docs/说明.md:2')).toEqual([['docs/说明.md:2', 'docs/说明.md', 2, null]])
+    expect(found('说明/README.md 和 docs/说明')).toEqual([
+      ['说明/README.md', '说明/README.md', null, null],
+      ['docs/说明', 'docs/说明', null, null]
+    ])
+  })
+
+  it('ends a path at full-width punctuation after it', () => {
+    expect(found('改好了src/app.ts:12，现在可以了')).toEqual([
+      ['改好了src/app.ts:12', '改好了src/app.ts', 12, null],
+      ['src/app.ts:12', 'src/app.ts', 12, null]
+    ])
+    expect(found('见（src/app.ts）、「lib/x.js」；docs/a.md：完')).toEqual([
+      ['src/app.ts', 'src/app.ts', null, null],
+      ['lib/x.js', 'lib/x.js', null, null],
+      ['docs/a.md', 'docs/a.md', null, null]
+    ])
+  })
+
+  it('also offers the path without CJK prose glued to it, after the whole run', () => {
+    expect(found('修改了src/app.ts中的函数')).toEqual([
+      ['修改了src/app.ts中的函数', '修改了src/app.ts中的函数', null, null],
+      ['src/app.ts', 'src/app.ts', null, null]
+    ])
+    expect(found('src/app.ts:12现在可以了')).toEqual([['src/app.ts:12', 'src/app.ts', 12, null]])
+    expect(found('打开docs/说明.md查看')).toEqual([
+      ['打开docs/说明.md查看', '打开docs/说明.md查看', null, null],
+      ['docs/说明.md', 'docs/说明.md', null, null]
+    ])
+    expect(found('看一下@src/app.ts。')).toEqual([
+      ['看一下@src/app.ts', '看一下@src/app.ts', null, null],
+      ['src/app.ts', 'src/app.ts', null, null]
+    ])
+    expect(found('只有中文没有路径')).toEqual([])
   })
 
   it('skips URLs, numbers, plain words and bare dots', () => {
@@ -55,6 +88,22 @@ describe('findPathCandidates', () => {
 
   it('caps the candidates per line', () => {
     expect(findPathCandidates(Array.from({ length: 100 }, (_, i) => `f${i}.ts`).join(' '))).toHaveLength(MAX_CANDIDATES_PER_LINE)
+  })
+})
+
+describe('resolvedCandidates', () => {
+  it('takes the confirmed candidates in order and skips one overlapping a candidate already taken', () => {
+    const text = '修改了src/app.ts中的函数 和 lib/x.js'
+    const candidates = findPathCandidates(text)
+    const taken = (resolved: (string | null)[]) =>
+      resolvedCandidates(candidates, resolved).map(({ candidate, path }) => [text.slice(candidate.start, candidate.end), path])
+    expect(taken([null, 'src/app.ts', 'lib/x.js'])).toEqual([
+      ['src/app.ts', 'src/app.ts'],
+      ['lib/x.js', 'lib/x.js']
+    ])
+    // The whole run wins when it is a file too.
+    expect(taken(['修改了src/app.ts中的函数', 'src/app.ts', null])).toEqual([['修改了src/app.ts中的函数', '修改了src/app.ts中的函数']])
+    expect(taken([null, null, null])).toEqual([])
   })
 })
 

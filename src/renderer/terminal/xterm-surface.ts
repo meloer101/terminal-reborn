@@ -10,8 +10,8 @@ import { whenAppearanceKnown } from './appearance-ready'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { macKeyToBytes } from './keymap'
 import { findLigatureRanges } from './ligatures'
-import { cellText, findPathCandidates, type Cell } from './file-links'
-import { linkHint, type LinkRef, type PathResolver, type TerminalLink } from './links'
+import { cellText, findPathCandidates, resolvedCandidates, type Cell } from './file-links'
+import { linkHint, URL_PATTERN, type LinkRef, type PathResolver, type TerminalLink } from './links'
 import { readBufferText } from './screen-text'
 import { reattachPayload } from './reattach-payload'
 import { restorePayload, SNAPSHOT_MAX_CHARS, SNAPSHOT_SCROLLBACK_STEPS } from './snapshot-payload'
@@ -119,7 +119,9 @@ export class XtermSurface implements TerminalSurface {
     this.term.loadAddon(
       new WebLinksAddon((event, uri) => this.activateUrl(event, uri), {
         hover: (_event, uri) => this.hoverLink({ kind: 'url', url: uri }),
-        leave: () => this.leaveLink()
+        leave: () => this.leaveLink(),
+        // Ends a URL at CJK text and full-width punctuation too (Chinese prose has no space after a URL).
+        urlRegex: URL_PATTERN
       })
     )
     // File paths that main finds inside the session's worktree (PRD F17).
@@ -445,18 +447,15 @@ export class XtermSurface implements TerminalSurface {
     if (candidates.length === 0) return callback(undefined)
     resolve(candidates.map((c) => c.path)).then(
       (resolved) => {
-        const links: ILink[] = []
-        candidates.forEach((candidate, i) => {
-          const path = resolved[i]
-          if (!path) return
+        const links: ILink[] = resolvedCandidates(candidates, resolved).map(({ candidate, path }) => {
           const ref: LinkRef = { kind: 'file', path, line: candidate.line, column: candidate.column }
-          links.push({
+          return {
             range: this.cellRange(firstRow, cells[candidate.start]!, cells[candidate.end]! - 1),
             text: text.slice(candidate.start, candidate.end),
             activate: (event) => this.emitLink({ ...ref, action: 'open', metaKey: event.metaKey, x: event.clientX, y: event.clientY }),
             hover: () => this.hoverLink(ref),
             leave: () => this.leaveLink()
-          })
+          }
         })
         callback(links.length > 0 ? links : undefined)
       },
