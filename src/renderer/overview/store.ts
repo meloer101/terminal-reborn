@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 import { TRAY_HEIGHT, type OverviewGroupKey } from './model'
-import { addToLayout, removeFromLayout, singleLayout, type PaneLayout, type Rect } from './pane-layout'
+import { addToLayout, layoutIds, PICKER_SLOT, removeFromLayout, replaceInLayout, singleLayout, type PaneLayout, type Rect } from './pane-layout'
 
 export type OverviewView = 'list' | 'board'
 
@@ -57,7 +57,7 @@ interface OverviewState extends Prefs {
   openId: SessionId | null
   /** The sessions tiled in the overlay over the board (at most four, pane-layout.ts); null = closed. */
   layout: PaneLayout | null
-  /** The overlay shows one more tile for picking the next session to add. */
+  /** The overlay shows one more tile for picking the next session to add; it sits in `layout` as PICKER_SLOT. */
   picking: boolean
   filter: string
 
@@ -100,16 +100,22 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
   openOverlay: (id) => set({ layout: id ? singleLayout(id) : null, picking: false, ...(id ? { selectedId: id } : {}) }),
   setLayout: (layout) => set({ layout }),
   addPane(id) {
-    const layout = get().layout
-    set({ layout: layout ? addToLayout(layout, id) : singleLayout(id), picking: false, selectedId: id })
+    const { layout, picking } = get()
+    const next = !layout ? singleLayout(id) : picking ? replaceInLayout(layout, PICKER_SLOT, id) : addToLayout(layout, id)
+    set({ layout: next, picking: false, selectedId: id })
   },
   closePane(id) {
     const layout = get().layout
     const next = layout ? removeFromLayout(layout, id) : null
     // Closing the last terminal closes the overlay, picker included.
-    set(next && next.columns.length > 0 ? { layout: next } : { layout: null, picking: false })
+    set(next && layoutIds(next).length > 0 ? { layout: next } : { layout: null, picking: false })
   },
-  setPicking: (picking) => set({ picking }),
+  setPicking(picking) {
+    const layout = get().layout
+    if (!layout || picking === get().picking) return
+    // The picker is a tile of the layout while it shows, so the gaps around it resize like any other.
+    set({ picking, layout: picking ? addToLayout(layout, PICKER_SLOT) : removeFromLayout(layout, PICKER_SLOT) })
+  },
   setFilter: (filter) => set({ filter }),
   setTrayHeight(trayHeight) {
     set({ trayHeight })

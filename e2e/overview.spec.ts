@@ -187,9 +187,22 @@ test('board overlay tiles up to four sessions side by side', async () => {
   await add().click()
   await pick(0).click()
   await expect(terminals()).toHaveCount(3)
+  // Three windows and the picker make a 2×2 grid whose middle gap still resizes; the picked session keeps the
+  // picker's tile as it was left.
   await add().click()
+  const picker = overlay().getByRole('region', { name: '添加会话' })
+  const pickerBefore = await picker.boundingBox()
+  const gap = await overlay().getByRole('separator', { name: '调整宽度' }).boundingBox()
+  if (!pickerBefore || !gap) throw new Error('no picker or split')
+  await page.mouse.move(gap.x + gap.width / 2, gap.y + gap.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(gap.x + gap.width / 2 + 100, gap.y + gap.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await picker.boundingBox())?.width).toBeCloseTo(pickerBefore.width + 100, 0)
+  const pickerAfter = await picker.boundingBox()
   await pick(0).click()
   await expect(terminals()).toHaveCount(4)
+  await expect.poll(async () => (await overlay().locator('[data-pane-id]').nth(1).boundingBox())?.width).toBeCloseTo(pickerAfter?.width ?? 0, 0)
   // Four is the most: no more add button.
   await expect(add()).toHaveCount(0)
   await shoot('board-overlay-four')

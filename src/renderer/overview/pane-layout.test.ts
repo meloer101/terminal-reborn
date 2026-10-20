@@ -10,7 +10,9 @@ import {
   MIN_SHARE,
   PANEL_MARGIN,
   moveInLayout,
+  PICKER_SLOT,
   removeFromLayout,
+  replaceInLayout,
   resizeColumns,
   resizeRect,
   fitRect,
@@ -129,6 +131,24 @@ it('the top-right tile carries the add button', () => {
   expect(cornerTile(build('a'))).toBe('a')
   expect(cornerTile(build('a', 'b', 'c'))).toBe('b')
   expect(layoutIds(build('a', 'b', 'c'))).toEqual(['a', 'b', 'c'])
+})
+
+describe('the picker slot', () => {
+  it('takes a tile but is not a session', () => {
+    const picking = addToLayout(build('a', 'b', 'c'), PICKER_SLOT)
+    expect(shape(picking)).toEqual([['a', PICKER_SLOT], ['b', 'c']])
+    expect(layoutIds(picking)).toEqual(['a', 'b', 'c'])
+    expect(addToLayout(picking, 'd')).toBe(picking)
+  })
+
+  it('hands its tile, as resized, to the picked session', () => {
+    const picking = resizeRows(resizeColumns(addToLayout(build('a', 'b', 'c'), PICKER_SLOT), 0, 0.1), 0, 0, -0.2)
+    const picked = replaceInLayout(picking, PICKER_SLOT, 'd')
+    expect(shape(picked)).toEqual([['a', 'd'], ['b', 'c']])
+    expect(picked.sizes).toEqual(picking.sizes)
+    expect(picked.columns[0]?.sizes).toEqual(picking.columns[0]?.sizes)
+    expect(replaceInLayout(picking, PICKER_SLOT, 'a')).toBe(picking)
+  })
 })
 
 describe('resizeRect', () => {

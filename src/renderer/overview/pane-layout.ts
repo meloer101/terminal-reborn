@@ -4,6 +4,8 @@
 import type { SessionId } from '@shared/types'
 
 export const MAX_PANES = 4
+/** The picker's slot while the overlay offers one more session; never a session id (those are UUIDs). */
+export const PICKER_SLOT: SessionId = 'overlay:picker'
 /** No column or tile gets narrower / shorter than this share of its parent when resizing. */
 export const MIN_SHARE = 0.15
 
@@ -45,8 +47,11 @@ export function singleLayout(id: SessionId): PaneLayout {
   return { columns: [{ ids: [id], sizes: [1] }], sizes: [1] }
 }
 
+const slots = (layout: PaneLayout): SessionId[] => layout.columns.flatMap((c) => c.ids)
+
+/** The sessions in a layout; the picker's slot is not one. */
 export function layoutIds(layout: PaneLayout): SessionId[] {
-  return layout.columns.flatMap((c) => c.ids)
+  return slots(layout).filter((id) => id !== PICKER_SLOT)
 }
 
 /**
@@ -54,7 +59,7 @@ export function layoutIds(layout: PaneLayout): SessionId[] {
  * tie) — 1 fills the overlay, 2 side by side, 3 one tall on the left and two stacked on the right, 4 a 2×2 grid.
  */
 export function addToLayout(layout: PaneLayout, id: SessionId): PaneLayout {
-  const ids = layoutIds(layout)
+  const ids = slots(layout)
   if (ids.includes(id) || ids.length >= MAX_PANES) return layout
   if (layout.columns.length < 2) {
     return { columns: [...layout.columns, { ids: [id], sizes: [1] }], sizes: equal(layout.columns.length + 1) }
@@ -67,6 +72,13 @@ export function addToLayout(layout: PaneLayout, id: SessionId): PaneLayout {
     ...layout,
     columns: layout.columns.map((c, i) => (i === at ? { ids: [...c.ids, id], sizes: equal(c.ids.length + 1) } : c))
   }
+}
+
+/** Puts `id` where `slot` is, at its size: the picked session takes the picker's tile as the user left it. */
+export function replaceInLayout(layout: PaneLayout, slot: SessionId, id: SessionId): PaneLayout {
+  const ids = slots(layout)
+  if (!ids.includes(slot) || ids.includes(id)) return layout
+  return { ...layout, columns: layout.columns.map((c) => ({ ...c, ids: c.ids.map((x) => (x === slot ? id : x)) })) }
 }
 
 /** Takes a session out; the space it leaves goes to its neighbours in proportion, and an empty column goes away. */

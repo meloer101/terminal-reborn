@@ -16,7 +16,6 @@ import { EnterButton } from './EnterButton'
 import enterStyles from './EnterButton.module.css'
 import type { OverviewRow } from './model'
 import {
-  addToLayout,
   cornerTile,
   dropRect,
   dropZone,
@@ -24,6 +23,7 @@ import {
   MAX_PANES,
   measureLayout,
   moveInLayout,
+  PICKER_SLOT,
   fitRect,
   resizeColumns,
   resizeRect,
@@ -45,9 +45,6 @@ const GAP = 12
 
 /** How far the pointer moves on a bar before it becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4
-
-/** The picker's place in the layout while it shows; never a session id (those are UUIDs). */
-const PICKER: SessionId = 'overlay:picker'
 
 /** How long to wait for an added session's terminal to open before giving up on focusing it (~1 s at 60 fps). */
 const FOCUS_WAIT_FRAMES = 60
@@ -86,15 +83,15 @@ export function SessionOverlay({
   const panelRect = stored ? fitRect(stored, viewport) : null
   const { setPicking, addPane, closePane, setLayout, setOverlayRect } = useOverviewStore.getState()
 
+  // While picking, the layout holds the picker's slot too (store.ts), so it resizes and moves like a window.
   const ids = layoutIds(layout)
-  const shown = picking ? addToLayout(layout, PICKER) : layout
-  const { tiles, handles } = measureLayout(shown, size.width, size.height, GAP)
+  const { tiles, handles } = measureLayout(layout, size.width, size.height, GAP)
   const tilesRef = useRef<TileBox[]>(tiles)
   useEffect(() => {
     tilesRef.current = tiles
   })
   const canAdd = !picking && ids.length < MAX_PANES
-  const corner = cornerTile(shown)
+  const corner = cornerTile(layout)
   const byId = new Map(rows.map((r) => [r.session.id, r]))
 
   useLayoutEffect(() => {
@@ -138,7 +135,7 @@ export function SessionOverlay({
     if (!panel) return null
     const x = clientX - panel.left
     const y = clientY - panel.top
-    const tile = tilesRef.current.find((t) => t.id !== dragged && t.id !== PICKER && x >= t.x && x < t.x + t.width && y >= t.y && y < t.y + t.height)
+    const tile = tilesRef.current.find((t) => t.id !== dragged && t.id !== PICKER_SLOT && x >= t.x && x < t.x + t.width && y >= t.y && y < t.y + t.height)
     return tile ? { id: tile.id, zone: dropZone((x - tile.x) / tile.width, (y - tile.y) / tile.height) } : null
   }
 
@@ -239,8 +236,8 @@ export function SessionOverlay({
         onKeyDown={onKeyDown}
       >
         {tiles.map((tile) => {
-          if (tile.id === PICKER) {
-            return <Picker key={PICKER} style={box(tile)} rows={candidates} onPick={onPick} onCancel={() => setPicking(false)} />
+          if (tile.id === PICKER_SLOT) {
+            return <Picker key={PICKER_SLOT} style={box(tile)} rows={candidates} onPick={onPick} onCancel={() => setPicking(false)} />
           }
           const row = byId.get(tile.id)
           if (!row) return null
@@ -257,20 +254,18 @@ export function SessionOverlay({
             />
           )
         })}
-        {/* Resizing waits for the picker: its tile is not part of the stored layout. */}
-        {!picking &&
-          handles.map((h) => (
-            <div
-              key={h.kind === 'column' ? `c${h.index}` : `r${h.column}-${h.index}`}
-              className={styles.split}
-              style={box(h)}
-              data-kind={h.kind}
-              role="separator"
-              aria-orientation={h.kind === 'column' ? 'vertical' : 'horizontal'}
-              aria-label={h.kind === 'column' ? '调整宽度' : '调整高度'}
-              onPointerDown={(e) => onSplitPointerDown(h, e)}
-            />
-          ))}
+        {handles.map((h) => (
+          <div
+            key={h.kind === 'column' ? `c${h.index}` : `r${h.column}-${h.index}`}
+            className={styles.split}
+            style={box(h)}
+            data-kind={h.kind}
+            role="separator"
+            aria-orientation={h.kind === 'column' ? 'vertical' : 'horizontal'}
+            aria-label={h.kind === 'column' ? '调整宽度' : '调整高度'}
+            onPointerDown={(e) => onSplitPointerDown(h, e)}
+          />
+        ))}
         {dropTile && target && <div className={styles.drop} style={box(dropRect(dropTile, target.zone))} aria-hidden />}
         {EDGES.map((edge) => (
           <div
