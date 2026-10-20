@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
 import { listenForBrowser } from '../panels/browser/store'
 import { listenForBackgroundReview } from '../review/background'
 import { startSessionMetaBridge } from '../session-meta/store'
@@ -22,7 +22,9 @@ import { Overview } from '../overview/Overview'
 import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
 import './menu-commands'
-import { panelMode } from './layout'
+import { SIDEBAR_WIDTH_DEFAULT } from '@shared/workspace-file'
+import { startColumnResize } from '../ui/column-resize'
+import { panelMode, sidebarWidthFor } from './layout'
 import styles from './AppShell.module.css'
 
 const subscribeResize = (onChange: () => void) => {
@@ -33,11 +35,12 @@ const windowWidth = () => window.innerWidth
 
 /**
  * Window layout (Figma Screens 01–08):
- *   sidebar 264 │ main: header 44 / terminal — or the overview │ right panel card (F17, 480 by default, user-sized)
+ *   sidebar (264 by default, user-sized) │ main: header 44 / terminal — or the overview │ right panel card (F17, 480 by default, user-sized)
  * The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal.
  * Each region is owned by one feature directory; this file only arranges them.
  * Main never gets narrower than --main-min-width: when docking the panel would squeeze it, the panel floats
- * over main's right edge instead (B13, layout.ts).
+ * over main's right edge instead (B13, layout.ts). Main and the panel share one surface (rounded where it meets the
+ * sidebar), so the card always floats on the terminal's colour, never on the window or the sidebar's vibrancy.
  */
 export function AppShell() {
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
@@ -48,7 +51,8 @@ export function AppShell() {
   const rightPanel = hasSession && !overview ? savedPanel : null
   const panelWidth = useWorkspace((s) => s.rightPanelWidth)
   const width = useSyncExternalStore(subscribeResize, windowWidth)
-  const mode = rightPanel ? panelMode(width, !sidebarCollapsed, panelWidth) : null
+  const sidebarWidth = sidebarWidthFor(width, useWorkspace((s) => s.sidebarWidth))
+  const mode = rightPanel ? panelMode(width, sidebarCollapsed ? 0 : sidebarWidth, panelWidth) : null
   // Every session id, so a new or removed session resubscribes. The string compares by value.
   const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
   useEffect(() => startActivityReporting(), [])
@@ -68,33 +72,36 @@ export function AppShell() {
   return (
     <div className={styles.shell}>
       {!sidebarCollapsed && (
-        <aside className={styles.sidebar} data-region="sidebar">
+        <aside className={styles.sidebar} data-region="sidebar" style={{ width: `${sidebarWidth}px` }}>
           <Sidebar />
+          <SidebarResizeHandle width={sidebarWidth} />
         </aside>
       )}
-      <main className={styles.main} data-region="main">
-        {/* The overview (PRD F9) takes the main area; the terminals stay mounted (hidden) behind it. */}
-        {overview ? <Overview /> : <SessionHeader />}
-        <section className={styles.terminal} data-region="terminal" data-hidden={overview}>
-          <TerminalArea />
-          {!hasSession && <EmptyMain />}
-        </section>
-        <div className={styles.sessionOnly} data-hidden={overview}>
-          <EngineRestartedCard />
-          <SessionErrorBar />
-          <SetupStrip />
-        </div>
-      </main>
-      {rightPanel && (
-        <aside
-          className={styles.panel}
-          data-region="panel"
-          data-mode={mode}
-          style={{ width: `calc(${panelWidth}px + var(--panel-inset))` }}
-        >
-          <RightPanel view={rightPanel} />
-        </aside>
-      )}
+      <div className={styles.surface}>
+        <main className={styles.main} data-region="main">
+          {/* The overview (PRD F9) takes the main area; the terminals stay mounted (hidden) behind it. */}
+          {overview ? <Overview /> : <SessionHeader />}
+          <section className={styles.terminal} data-region="terminal" data-hidden={overview}>
+            <TerminalArea />
+            {!hasSession && <EmptyMain />}
+          </section>
+          <div className={styles.sessionOnly} data-hidden={overview}>
+            <EngineRestartedCard />
+            <SessionErrorBar />
+            <SetupStrip />
+          </div>
+        </main>
+        {rightPanel && (
+          <aside
+            className={styles.panel}
+            data-region="panel"
+            data-mode={mode}
+            style={{ width: `calc(${panelWidth}px + var(--panel-inset))` }}
+          >
+            <RightPanel view={rightPanel} />
+          </aside>
+        )}
+      </div>
       <CommandPalette />
       <StatusBridge />
       <AppearanceBridge />
@@ -104,5 +111,22 @@ export function AppShell() {
       <ArchiveSheet />
       <MenuHost />
     </div>
+  )
+}
+
+/** The sidebar's right edge (where main's rounded corner starts): drag to resize (200–480, saved), double-click for 264. */
+function SidebarResizeHandle({ width }: { width: number }) {
+  const setWidth = useWorkspace((s) => s.setSidebarWidth)
+  // Starts from the width as shown, which can be narrower than the saved one in a small window (layout.ts).
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => startColumnResize(e, 'right', width, setWidth)
+  return (
+    <div
+      className={styles.sidebarResize}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整侧栏宽度"
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => setWidth(SIDEBAR_WIDTH_DEFAULT)}
+    />
   )
 }

@@ -139,6 +139,13 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.recentProjects).toBeUndefined()
   })
 
+  it('keeps the sidebar width within its limits', () => {
+    expect(sanitizeWorkspaceFile({ ...valid, sidebarWidth: 301.6 }, 0)!.sidebarWidth).toBe(302)
+    expect(sanitizeWorkspaceFile({ ...valid, sidebarWidth: 40 }, 0)!.sidebarWidth).toBe(200)
+    expect(sanitizeWorkspaceFile({ ...valid, sidebarWidth: 9000 }, 0)!.sidebarWidth).toBe(480)
+    expect(sanitizeWorkspaceFile({ ...valid, sidebarWidth: 'wide' }, 0)).not.toHaveProperty('sidebarWidth')
+  })
+
   it('reads the pre-F17 panel names as the Git view and keeps the last view and width', () => {
     expect(sanitizeWorkspaceFile({ ...valid, rightPanel: 'changes' }, 0)!.rightPanel).toBe('git')
     expect(sanitizeWorkspaceFile({ ...valid, rightPanel: 'graph' }, 0)!.rightPanel).toBe('git')

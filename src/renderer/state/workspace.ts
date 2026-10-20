@@ -26,7 +26,7 @@ import {
 } from './workspace-model'
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
 import { reviewCommentsSnapshot } from './review-comments'
-import { clampPanelWidth, PANEL_WIDTH_DEFAULT, type DiffLayout, type PersistedRightPanel } from '@shared/workspace-file'
+import { clampPanelWidth, clampSidebarWidth, PANEL_WIDTH_DEFAULT, SIDEBAR_WIDTH_DEFAULT, type DiffLayout, type PersistedRightPanel } from '@shared/workspace-file'
 
 /** The right panel's views (PRD F17), switched by the icons in the session header. */
 export type PanelView = PersistedRightPanel
@@ -36,6 +36,8 @@ export type MainView = 'session' | 'overview'
 
 interface WorkspaceState extends WorkspaceData {
   sidebarCollapsed: boolean
+  /** Sidebar width in px (dragged by its right edge). */
+  sidebarWidth: number
   /** null = right panel closed */
   rightPanel: PanelView | null
   /** The view ⇧⌘B reopens. */
@@ -63,6 +65,7 @@ interface WorkspaceState extends WorkspaceData {
   requestRename(): void
   setMainView(view: MainView): void
   toggleSidebar(): void
+  setSidebarWidth(width: number): void
   setRightPanel(view: PanelView | null): void
   /** Header icon: opens that view, or closes the panel when it is the one showing. */
   togglePanelView(view: PanelView): void
@@ -132,6 +135,7 @@ const pick = (s: WorkspaceState): WorkspaceData => ({
 export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   ...initialData(),
   sidebarCollapsed: saved?.sidebarCollapsed ?? false,
+  sidebarWidth: saved?.sidebarWidth ?? SIDEBAR_WIDTH_DEFAULT,
   rightPanel: saved?.rightPanel ?? null,
   lastRightPanel: saved?.rightPanel ?? saved?.lastRightPanel ?? 'files',
   rightPanelWidth: saved?.rightPanelWidth ?? PANEL_WIDTH_DEFAULT,
@@ -148,6 +152,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => ({
   requestRename: () => set((s) => ({ renameRequest: s.renameRequest + 1 })),
   setMainView: (view) => set({ mainView: view }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
   setRightPanel: (view) => set((s) => ({ rightPanel: view, lastRightPanel: view ?? s.lastRightPanel })),
   togglePanelView: (view) => get().setRightPanel(get().rightPanel === view ? null : view),
   toggleRightPanel: () => get().setRightPanel(get().rightPanel ? null : get().lastRightPanel),
@@ -210,6 +215,7 @@ setSnapshotProvider(() => {
     pick(state),
     {
       sidebarCollapsed: state.sidebarCollapsed,
+      sidebarWidth: state.sidebarWidth,
       rightPanel: state.rightPanel,
       lastRightPanel: state.lastRightPanel,
       rightPanelWidth: state.rightPanelWidth,

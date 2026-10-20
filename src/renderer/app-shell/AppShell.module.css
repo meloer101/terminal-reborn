@@ -3,16 +3,28 @@
   display: flex;
   overflow: hidden;
   height: 100%;
-  background: var(--bg-app);
+  /* Shows through the surface's rounded left corners, so it matches the sidebar. */
+  background: var(--bg-sidebar);
 }
 
 .sidebar {
+  position: relative;
   flex: none;
+  /* The user's width is set inline (AppShell); this is the default. */
   width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
+}
+
+/* Main and the right panel share one surface: the panel card floats on it, the sidebar sits beside it. */
+.surface {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  /* Opaque even when the shell behind it is see-through (sidebar vibrancy). */
+  background: var(--bg-app);
 }
 
 .main {
@@ -20,8 +32,26 @@
   min-width: var(--main-min-width);
   display: flex;
   flex-direction: column;
-  /* Opaque even when the shell behind it is see-through (sidebar vibrancy). */
   background: var(--bg-app);
+}
+
+/* The sidebar's right edge: a 6px grab strip centred on it, above the surface's rounded corner. */
+.sidebarResize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(-0.5 * var(--space-6));
+  z-index: 1;
+  width: var(--space-6);
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+
+/* Next to the sidebar, the surface's left edge is rounded instead of a hairline. */
+.sidebar + .surface {
+  overflow: hidden;
+  border-top-left-radius: var(--radius-main);
+  border-bottom-left-radius: var(--radius-main);
 }
 
 .terminal {
@@ -58,7 +88,8 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  /* The card (panels/RightPanel) sits 8 in from the window's top, right and bottom; its width is the user's. */
+  /* The card (panels/RightPanel) sits 8 in from the window's top, right and bottom; its width is the user's.
+     The inset shows the surface, never the window behind it. */
   padding: var(--panel-inset) var(--panel-inset) var(--panel-inset) 0;
 }
 

@@ -199,6 +199,7 @@ export function projectOfSession(data: WorkspaceData, sessionId: SessionId | nul
 /** UI state saved next to the workspace. */
 export interface WorkspaceUi {
   sidebarCollapsed: boolean
+  sidebarWidth: number
   rightPanel: PersistedRightPanel | null
   lastRightPanel: PersistedRightPanel
   rightPanelWidth: number
@@ -244,6 +245,7 @@ export function serializeWorkspace(
     })),
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
+    sidebarWidth: ui.sidebarWidth,
     rightPanel: ui.rightPanel,
     lastRightPanel: ui.lastRightPanel,
     rightPanelWidth: ui.rightPanelWidth,
@@ -298,6 +300,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.worktrees !== prev.worktrees ||
     next.activeSessionId !== prev.activeSessionId ||
     next.sidebarCollapsed !== prev.sidebarCollapsed ||
+    next.sidebarWidth !== prev.sidebarWidth ||
     next.rightPanel !== prev.rightPanel ||
     next.lastRightPanel !== prev.lastRightPanel ||
     next.rightPanelWidth !== prev.rightPanelWidth ||

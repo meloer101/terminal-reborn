@@ -20,6 +20,8 @@
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-window: 10px;
+  /* Main's left corners where it meets the sidebar. */
+  --radius-main: 16px;
   /* Glass overlays (PRD §5, Figma 15): sheet 16 · its menus 12 · their primary button 8. */
   --radius-sheet: 16px;
   --radius-popover: 12px;

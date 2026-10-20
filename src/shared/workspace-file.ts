@@ -18,6 +18,11 @@ export const PANEL_WIDTH_DEFAULT = 480
 export const PANEL_WIDTH_MIN = 400
 export const PANEL_WIDTH_MAX = 1200
 
+/** Sidebar width (PRD §5): dragged by its right edge. */
+export const SIDEBAR_WIDTH_DEFAULT = 264
+export const SIDEBAR_WIDTH_MIN = 200
+export const SIDEBAR_WIDTH_MAX = 480
+
 export function sanitizeRightPanel(value: unknown): PersistedRightPanel | null {
   if (value === 'changes' || value === 'graph') return 'git'
   return RIGHT_PANEL_VIEWS.includes(value as PersistedRightPanel) ? (value as PersistedRightPanel) : null
@@ -25,6 +30,10 @@ export function sanitizeRightPanel(value: unknown): PersistedRightPanel | null {
 
 export function clampPanelWidth(value: number): number {
   return Math.round(Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, value)))
+}
+
+export function clampSidebarWidth(value: number): number {
+  return Math.round(Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, value)))
 }
 
 export interface PersistedSession {
@@ -70,6 +79,8 @@ export interface WorkspaceFile {
   sessions: PersistedSession[]
   activeSessionId: string | null
   sidebarCollapsed: boolean
+  /** Sidebar width in px. Absent = SIDEBAR_WIDTH_DEFAULT. */
+  sidebarWidth?: number
   rightPanel: PersistedRightPanel | null
   /** The view ⇧⌘B reopens. Absent = files. */
   lastRightPanel?: PersistedRightPanel
@@ -205,6 +216,9 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     sessions,
     activeSessionId: active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null),
     sidebarCollapsed: value.sidebarCollapsed === true,
+    ...(typeof value.sidebarWidth === 'number' && Number.isFinite(value.sidebarWidth)
+      ? { sidebarWidth: clampSidebarWidth(value.sidebarWidth) }
+      : {}),
     rightPanel: sanitizeRightPanel(value.rightPanel),
     ...(lastRightPanel ? { lastRightPanel } : {}),
     ...(typeof value.rightPanelWidth === 'number' && Number.isFinite(value.rightPanelWidth)
