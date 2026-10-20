@@ -1,7 +1,7 @@
 {
   "name": "wavi",
   "productName": "Wavi",
-  "version": "0.3.0",
+  "version": "0.3.1-rc.1",
   "description": "A macOS terminal built for running many CLI coding agents in parallel",
   "license": "MIT",
   "repository": "github:meloer101/terminal-reborn",
