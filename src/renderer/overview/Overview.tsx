@@ -17,6 +17,8 @@ import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { EnterButton } from './EnterButton'
 import { PortTags } from '../panels/browser/PortTags'
 import { ReviewButton } from '../review/ReviewButton'
+import { SessionPrTag } from '../pull-requests/PrTag'
+import { usePullRequests } from '../pull-requests/store'
 import { UsageChip, useMetaNow, useUsageList } from '../session-meta/MetaChips'
 import { useSessionMeta } from '../session-meta/store'
 import metaStyles from '../session-meta/SessionMeta.module.css'
@@ -42,10 +44,11 @@ const ICON = { size: 16, strokeWidth: 1.75 } as const
 const TICK_MS = 15_000
 
 /**
- * Which metric columns the list draws (Figma 17C TodoCell / ContextCell): a column appears once any session has that
- * metric and then keeps its place in every row, blank where a session has none (Codex has no todo; shells have neither).
+ * Which metric columns the list draws (Figma 17C TodoCell / ContextCell, and the PR of F16): a column appears once any
+ * session has that metric and then keeps its place in every row, blank where a session has none (Codex has no todo;
+ * shells have neither; a branch without a PR has no PR).
  */
-const MetaColumns = createContext<{ todo: boolean; context: boolean }>({ todo: false, context: false })
+const MetaColumns = createContext<{ todo: boolean; context: boolean; pr: boolean }>({ todo: false, context: false, pr: false })
 
 /** "Now" on the shared 15 s clock, so "已等 3m" keeps counting without re-rendering on every frame. */
 function useClockNow(): number {
@@ -82,12 +85,18 @@ export function Overview() {
   const attention = shown.filter((s) => needsAttention(s.status)).length
   const rows = useMemo(() => groups.flatMap((g) => g.rows), [groups])
   const paneIds = useMemo(() => (layout ? layoutIds(layout) : []), [layout])
-  const metaColumns = useSessionMeta(
+  const metrics = useSessionMeta(
     useShallow((m) => {
       const live = shown.map((x) => m.bySession[x.id])
       return { todo: live.some((x) => x?.todos !== undefined), context: live.some((x) => x?.context !== undefined) }
     })
   )
+  const prColumn = usePullRequests((p) => {
+    if (p.gh !== 'ready') return false
+    const paths = new Map(worktrees.map((w) => [w.id, w.path]))
+    return shown.some((x) => Boolean(p.byWorktree[paths.get(x.worktreeId) ?? '']?.pr))
+  })
+  const metaColumns = useMemo(() => ({ ...metrics, pr: prColumn }), [metrics, prColumn])
 
   // Keep a selection that exists; default to the first row so ↵ / Space work right away.
   useEffect(() => {
@@ -241,7 +250,7 @@ function PlanUsage() {
   )
 }
 
-/** TodoCell (48) and ContextCell (100) of OverviewRow v2: the count only, and context without /compact. */
+/** TodoCell (48) and ContextCell (100) of OverviewRow v2: the count only, and context without /compact; then the PR (F16). */
 function MetaCells({ sessionId }: { sessionId: SessionId }) {
   const columns = useContext(MetaColumns)
   const metrics = useSessionMeta((m) => m.bySession[sessionId])
@@ -257,6 +266,11 @@ function MetaCells({ sessionId }: { sessionId: SessionId }) {
       {columns.context && (
         <span className={styles.contextCell} data-level={context && contextHigh(context) ? 'high' : 'normal'} data-testid="overview-context">
           {context && `context ${context.percent}%`}
+        </span>
+      )}
+      {columns.pr && (
+        <span className={styles.prCell} data-testid="overview-pr">
+          <SessionPrTag sessionId={sessionId} />
         </span>
       )}
     </>

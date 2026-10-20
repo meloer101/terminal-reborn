@@ -1,10 +1,10 @@
 // Git · 变更 (PRD F17 13B2 / F5): the worktree's files grouped 未提交 (working tree) and 已提交 (vs the base branch),
 // each expandable to a unified diff. Every row has a fixed height, so long diffs render only the visible window.
 // Diff lines take inline review comments (F5): ＋ on a line opens an editor under it; saved comments stay there until
-// the footer puts them into the agent's input line together. The footer also asks the session's agent to review (F13)
-// and opens the merge sheet (F4).
+// the footer puts them into the agent's input line together. The footer also asks the session's agent to review (F13),
+// creates or opens the branch's PR (F16) and opens the merge sheet (F4).
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
 import { SHORTCUTS } from '@shared/shortcuts'
@@ -22,6 +22,7 @@ import { useReviewComments, type CommentDraft } from '../../state/review-comment
 import { agentLabel } from '../merge/model'
 import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
+import { PrButton, PrStatusLine } from './PullRequest'
 import { commentTarget, discardComments, sendComments } from './comments'
 import { toggleFile, type RootGit } from './store'
 import { offsetsOf, useViewport, visibleRange } from './virtual'
@@ -55,6 +56,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const [sendError, setSendError] = useState<string | null>(null)
   const offsets = useMemo(() => offsetsOf(items.map(itemHeight)), [items])
   const viewport = useViewport(scroller, Boolean(changes))
+  // Opening 变更 asks about the branch's PR now rather than at the next poll (main throttles it).
+  useEffect(() => window.tr.pr.refresh(worktree.path), [worktree.path])
 
   if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
   if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
@@ -74,6 +77,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         </div>
       </div>
       <ReviewStatus root={root} />
+      <PrStatusLine worktree={worktree} target={target} />
       <div className={styles.footer}>
         {count > 0 ? (
           <>
@@ -106,10 +110,12 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         )}
         <span className={styles.spacer} />
         {count === 0 && (
-          // PRs wait for F16; disabled with a reason rather than hidden.
-          <button type="button" className={styles.ghostButton} disabled title="即将支持">
-            创建 PR
-          </button>
+          <PrButton
+            worktree={worktree}
+            projectRoot={projectRoot}
+            title={(active?.session.worktreeId === worktree.id ? active.session.title : target?.title) ?? ''}
+            sessionId={active?.session.id ?? null}
+          />
         )}
         <button
           type="button"

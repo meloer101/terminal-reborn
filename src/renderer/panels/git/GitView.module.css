@@ -615,6 +615,10 @@ button.pill:hover {
   color: var(--status-error);
 }
 
+.reviewStatus[data-tone='muted'] {
+  color: var(--text-tertiary);
+}
+
 .reviewStatusText {
   min-width: 0;
   overflow: hidden;

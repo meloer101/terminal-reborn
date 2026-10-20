@@ -1,0 +1,30 @@
+/* PR tag (PRD F16): row metadata, so mono-s tertiary like `+N −M`; only the checks mark is colored. */
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.state {
+  font: var(--text-caption);
+}
+
+.mark {
+  display: inline-flex;
+}
+
+.mark[data-checks='passing'] {
+  color: var(--status-done);
+}
+
+.mark[data-checks='failing'] {
+  color: var(--status-error);
+}
+
+.mark[data-checks='pending'] {
+  color: var(--status-working);
+}

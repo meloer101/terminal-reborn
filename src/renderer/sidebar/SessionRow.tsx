@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
+import { SessionPrTag } from '../pull-requests/PrTag'
 import { TodoLine } from '../session-meta/MetaChips'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -18,7 +19,7 @@ interface Props {
   onContextMenu?(id: string, anchor: MenuAnchor): void
 }
 
-/** Figma component `SessionRow` (11:51): 52px, glyph · title/activity · time/diff. */
+/** Figma component `SessionRow` (11:51): 52px, glyph · title/activity (+ ports, PR) · time/diff. */
 export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onSelect, onContextMenu }: Props) {
   const { session, secondary, attention, stat } = row
   const ref = useRef<HTMLDivElement>(null)
@@ -63,6 +64,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
         <span className={styles.activityLine}>
           <span className={styles.activity}>{secondary}</span>
           <PortTags sessionId={session.id} />
+          <SessionPrTag sessionId={session.id} />
         </span>
       </span>
       <span className={styles.meta}>

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
+import { PR_IPC } from '@shared/pull-requests'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -168,6 +169,16 @@ const api: TrApi = {
   archive: {
     capture: (root, worktree, id) => ipcRenderer.invoke(ARCHIVE_IPC.capture, root, worktree, id),
     restore: (request) => ipcRenderer.invoke(ARCHIVE_IPC.restore, request)
+  },
+  pr: {
+    gh: () => ipcRenderer.invoke(PR_IPC.gh),
+    onGh: (listener) => listen(PR_IPC.ghChanged, listener),
+    watch: (targets) => ipcRenderer.send(PR_IPC.watch, targets),
+    refresh: (worktree) => ipcRenderer.send(PR_IPC.refresh, worktree),
+    statuses: () => ipcRenderer.invoke(PR_IPC.statuses),
+    onStatus: (listener) => listen(PR_IPC.status, listener),
+    create: (request) => ipcRenderer.invoke(PR_IPC.create, request),
+    failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree)
   }
 }
 
