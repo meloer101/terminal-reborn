@@ -216,3 +216,4 @@ export function clampTrayHeight(height: number, viewportHeight: number): number 
   const max = Math.max(TRAY_HEIGHT.min, Math.floor(viewportHeight * TRAY_HEIGHT.maxShare))
   return Math.round(Math.min(max, Math.max(TRAY_HEIGHT.min, height)))
 }
+

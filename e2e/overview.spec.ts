@@ -171,6 +171,95 @@ test('board: status cards; a card opens the session in an overlay that Esc, the 
   await row('s-graph').click()
   await overlay().getByRole('button', { name: '关闭' }).click()
   await expect(overlay()).toBeHidden()
+})
+
+test('board overlay tiles up to four sessions side by side', async () => {
+  const terminals = () => overlay().locator('[data-overview-terminal] .xterm')
+  const add = () => overlay().getByRole('button', { name: '并排添加会话' })
+  const pick = (n: number) => overlay().locator('[data-pick-id]').nth(n)
+
+  await row('s-graph').click()
+  await add().click()
+  await expect(overlay().getByRole('region', { name: '添加会话' })).toBeVisible()
+  await shoot('board-overlay-picker')
+  await pick(0).click()
+  await expect(terminals()).toHaveCount(2)
+  await add().click()
+  await pick(0).click()
+  await expect(terminals()).toHaveCount(3)
+  await add().click()
+  await pick(0).click()
+  await expect(terminals()).toHaveCount(4)
+  // Four is the most: no more add button.
+  await expect(add()).toHaveCount(0)
+  await shoot('board-overlay-four')
+
+  await overlay().locator('[data-pane-id]').last().getByRole('button', { name: '关闭' }).click()
+  await expect(terminals()).toHaveCount(3)
+  await expect(add()).toHaveCount(1)
+
+  // Three windows: two stacked on the left (the fourth closed), one tall on the right. Drag the top-left one onto the
+  // right one's middle: they swap, so it takes the right column.
+  const pane = (n: number) => overlay().locator('[data-pane-id]').nth(n)
+  const boxOf = async (n: number) => {
+    const b = await pane(n).boundingBox()
+    if (!b) throw new Error('no box')
+    return b
+  }
+  const left = await boxOf(0)
+  const right = await boxOf(2)
+  const leftId = await pane(0).getAttribute('data-pane-id')
+  await page.mouse.move(left.x + 40, left.y + 24)
+  await page.mouse.down()
+  await page.mouse.move(right.x + right.width / 2, right.y + right.height / 2, { steps: 8 })
+  await shoot('board-overlay-drag')
+  await page.mouse.up()
+  const moved = overlay().locator(`[data-pane-id="${leftId}"]`)
+  await expect.poll(async () => (await moved.boundingBox())?.x).toBeCloseTo(right.x, 0)
+  await expect.poll(async () => (await moved.boundingBox())?.y).toBeCloseTo(right.y, 0)
+
+  // The gap between the columns resizes them.
+  const split = overlay().getByRole('separator', { name: '调整宽度' })
+  const s = await split.boundingBox()
+  if (!s) throw new Error('no split')
+  const before = (await boxOf(0)).width
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(s.x + s.width / 2 + 120, s.y + s.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await boxOf(0)).width).toBeCloseTo(before + 120, 0)
+  await shoot('board-overlay-resized')
+
+  // The gap between the two stacked windows on the left changes their heights.
+  const rowSplit = overlay().getByRole('separator', { name: '调整高度' })
+  const r = await rowSplit.boundingBox()
+  if (!r) throw new Error('no row split')
+  const topBefore = (await boxOf(0)).height
+  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2 - 80, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await boxOf(0)).height).toBeCloseTo(topBefore - 80, 0)
+
+  // Each edge of the overlay moves on its own: the right edge 100 to the left narrows it by 100, the left edge stays.
+  const panel = overlay().getByRole('dialog')
+  const p = await panel.boundingBox()
+  if (!p) throw new Error('no panel')
+  await page.mouse.move(p.x + p.width, p.y + p.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(p.x + p.width - 100, p.y + p.height / 2, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(async () => (await panel.boundingBox())?.width).toBeCloseTo(p.width - 100, 0)
+  await expect.poll(async () => (await panel.boundingBox())?.x).toBeCloseTo(p.x, 0)
+  await shoot('board-overlay-smaller')
+  // Double-clicking an edge restores the default.
+  await overlay().locator('[data-edge="e"]').dblclick()
+  await expect.poll(async () => (await panel.boundingBox())?.width).toBeCloseTo(p.width, 0)
+  await overlay().getByRole('dialog').focus()
+  await page.keyboard.press('Escape')
+  await expect(overlay()).toBeHidden()
+  // Every borrowed terminal went back home.
+  await expect(page.locator('[data-region="terminal"] .xterm')).not.toHaveCount(0)
   await overview().getByRole('radio', { name: '列表' }).click()
 })
 

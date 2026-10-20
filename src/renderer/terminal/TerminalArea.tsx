@@ -32,7 +32,7 @@ interface PaneProps {
 function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   // The overview may show this terminal in its own host for a while (borrow.ts).
-  const borrowedHost = useBorrowedTerminal((s) => (s.sessionId === sessionId ? s.host : null))
+  const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
   const shown = active || borrowedHost !== null
   // Spawn lazily: nothing is created until the session has been shown once (a live process is attached at once).
   const [everActive, setEverActive] = useState(active || live)

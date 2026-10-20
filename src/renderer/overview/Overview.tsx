@@ -30,6 +30,7 @@ import {
   type OverviewGroup,
   type OverviewRow
 } from './model'
+import { layoutIds } from './pane-layout'
 import { SessionOverlay } from './SessionOverlay'
 import { enterSession, useOverviewStore, type OverviewView } from './store'
 import styles from './Overview.module.css'
@@ -63,7 +64,7 @@ export function Overview() {
     }))
   )
   const now = useClockNow()
-  const { view, collapsed, selectedId, openId, filter, setView, toggleGroup, select, setOpen, setFilter } = useOverviewStore()
+  const { view, collapsed, selectedId, openId, layout, filter, setView, toggleGroup, select, setOpen, openOverlay, closePane, setFilter } = useOverviewStore()
   const bodyRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
 
@@ -79,7 +80,8 @@ export function Overview() {
     return sessions.filter((s) => !archived.has(s.worktreeId))
   }, [sessions, worktrees])
   const attention = shown.filter((s) => needsAttention(s.status)).length
-  const openRow = openId ? groups.flatMap((g) => g.rows).find((r) => r.session.id === openId) : undefined
+  const rows = useMemo(() => groups.flatMap((g) => g.rows), [groups])
+  const paneIds = useMemo(() => (layout ? layoutIds(layout) : []), [layout])
   const metaColumns = useSessionMeta(
     useShallow((m) => {
       const live = shown.map((x) => m.bySession[x.id])
@@ -94,8 +96,11 @@ export function Overview() {
   // A session that was closed or filtered out takes its open terminal with it. One that changes status keeps it
   // open and moves with it, even into a folded group (answering in the tray moves 等你处理 → 运行中).
   useEffect(() => {
-    if (openId && !groups.some((g) => g.rows.some((r) => r.session.id === openId))) setOpen(null)
-  }, [openId, groups, setOpen])
+    if (openId && !rows.some((r) => r.session.id === openId)) setOpen(null)
+  }, [openId, rows, setOpen])
+  useEffect(() => {
+    for (const id of paneIds) if (!rows.some((r) => r.session.id === id)) closePane(id)
+  }, [paneIds, rows, closePane])
   useEffect(() => bodyRef.current?.focus(), [])
   useEffect(() => {
     if (selectedId) bodyRef.current?.querySelector(`[data-session-id="${CSS.escape(selectedId)}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -103,6 +108,10 @@ export function Overview() {
 
   const closeOpen = () => {
     setOpen(null)
+    bodyRef.current?.focus()
+  }
+  const closeOverlay = () => {
+    openOverlay(null)
     bodyRef.current?.focus()
   }
 
@@ -133,7 +142,8 @@ export function Overview() {
       enterSession(selectedId)
     } else if (e.key === ' ' && selectedId) {
       e.preventDefault()
-      setOpen(openId === selectedId ? null : selectedId)
+      if (view === 'board') openOverlay(selectedId)
+      else setOpen(openId === selectedId ? null : selectedId)
     } else if (e.key === '/') {
       e.preventDefault()
       filterRef.current?.focus()
@@ -142,7 +152,8 @@ export function Overview() {
 
   const onRowClick = (id: SessionId) => {
     // A click opens the session's terminal (in place, or in the overlay); 进入会话 / ↵ / a double-click go there.
-    setOpen(openId === id ? null : id)
+    if (view === 'board') openOverlay(id)
+    else setOpen(openId === id ? null : id)
     bodyRef.current?.focus()
   }
 
@@ -206,8 +217,9 @@ export function Overview() {
           )}
           {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
         </div>
-        {/* Keyed by session: switching sessions starts a fresh overlay (focus, borrow). */}
-        {view === 'board' && openRow && <SessionOverlay key={openRow.session.id} row={openRow} onClose={closeOpen} />}
+        {view === 'board' && layout && (
+          <SessionOverlay layout={layout} rows={rows} candidates={rows.filter((r) => !paneIds.includes(r.session.id))} onClose={closeOverlay} />
+        )}
       </div>
     </MetaColumns.Provider>
   )
