@@ -1087,7 +1087,8 @@ kbd {
   .key-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 16px; }
 
   .download { grid-template-columns: 1fr; row-gap: 40px; }
-  .orbit { width: min(70vw, 300px); margin-left: calc(var(--gutter) * -1 - 24px); }
+  /* One column: the ASCII orbit sits whole in the column (a glyph grid cut by the page edge reads as broken). */
+  .orbit { width: min(64vw, 320px); margin-left: 0; }
   .dl-copy { grid-column: 1; grid-row: 2; }
 }
 

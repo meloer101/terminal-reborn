@@ -786,7 +786,9 @@
           .to('.key-grid kbd', { y: 3, boxShadow: 'inset 0 0 0 rgba(0,0,0,0)', duration: 0.09, ease: 'power2.out', yoyo: true, repeat: 1, stagger: 0.035 }, 0.35)
 
         // Download: the orbit gathers out of scattered glyphs and turns with the page.
-        const orbitScroll = { trigger: '[data-download]', start: 'top bottom', end: 'bottom bottom', scrub: 0.8 }
+        // Keyed to the orbit, not the section: in one column the section is taller than the screen, so it would
+        // only finish gathering after the orbit had scrolled away.
+        const orbitScroll = { trigger: '[data-orbit]', start: 'top bottom', end: 'bottom 85%', scrub: 0.8 }
         if (asciiOrbit) {
           G.fromTo(asciiOrbit.state, { p: 0 }, { p: 1, ease: 'none', onUpdate: asciiOrbit.update, scrollTrigger: orbitScroll })
         } else {
