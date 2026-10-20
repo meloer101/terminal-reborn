@@ -466,4 +466,24 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(header().getByTestId('context-chip')).toHaveCount(0, WITHIN)
     await expect(header().getByTestId('usage-chip-claude')).toHaveCount(0)
   })
+
+  test('a claude on a third-party endpoint (CC Switch) shows its context, not the account’s usage', async () => {
+    await sidebarRow('s-main').click()
+    const terminal = page.locator('[data-region="terminal"] .xterm:visible').first()
+    await expect(terminal).toBeVisible(WITHIN)
+    // A fresh script: the fake replays its steps file from the top.
+    writeFileSync(join(repo.project, '.fake-steps'), '')
+    await terminal.click()
+    // What CC Switch puts in ~/.claude/settings.json reaches the hooks as the agent's environment.
+    await page.keyboard.type('ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic claude')
+    await page.keyboard.press('Enter')
+    repo.shellStep(statusLine(30, { five: 20, seven: 85 }))
+    await expect(header().getByTestId('context-chip')).toHaveText('context30%', WITHIN)
+    await expect(header().getByTestId('usage-chip-claude')).toHaveCount(0)
+    // The account's usage is still there for the sessions on it.
+    await expect(page.locator('[data-region="sidebar"]')).toBeVisible()
+    await sidebarRow('s-cookie').click()
+    await expect(header().getByTestId('usage-chip-claude')).toBeVisible(WITHIN)
+    repo.shellStep({ exit: 0 })
+  })
 })

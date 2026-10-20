@@ -496,7 +496,8 @@ export function SessionMetaChips({ sessionId, vendor }: { sessionId: SessionId; 
   const metrics = useSessionMeta((s) => s.bySession[sessionId])
   const all = useUsageList()
   const now = useMetaNow()
-  const usage = vendor ? all.find((u) => u.vendor === vendor) : undefined
+  // Off the plan (a third-party endpoint), the account's usage is not this session's.
+  const usage = vendor && metrics?.plan !== false ? all.find((u) => u.vendor === vendor) : undefined
   const showsUsage = usage !== undefined && topWindow(usage, now) !== null
   if (!metrics?.todos && !metrics?.context && !showsUsage) return null
   return (

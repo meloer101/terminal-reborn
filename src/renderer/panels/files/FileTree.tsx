@@ -1,7 +1,8 @@
 // The tree itself: FileTreeRow (Figma 130:259) rows with keyboard navigation, double-click preview and the context menu.
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from 'lucide-react'
-import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent, type Ref } from 'react'
+import { useEffect, useId, useRef, type DragEvent, type KeyboardEvent, type MouseEvent, type Ref } from 'react'
 import type { SessionId } from '@shared/types'
+import { PATHS_DRAG_TYPE } from '../../terminal/attachments'
 import { pointerAnchor } from '../../ui/menu'
 import { openFileMenu, runFileAction, type FileTarget } from './actions'
 import { fileActionForKey } from './keys'
@@ -79,6 +80,15 @@ export function FileTree({ ref, root, sessionId, rows, selected }: Props) {
     if (row.dir && e.detail === 1) toggleDir(root, row.path)
   }
 
+  // Drag an entry onto a terminal to put its absolute path in (PRD F19); other apps get the path as text.
+  const onDragStart = (e: DragEvent<HTMLDivElement>, row: TreeRow) => {
+    const absolute = `${root.replace(/\/+$/, '')}/${row.path}`
+    e.dataTransfer.setData(PATHS_DRAG_TYPE, JSON.stringify([absolute]))
+    e.dataTransfer.setData('text/plain', absolute)
+    e.dataTransfer.effectAllowed = 'copy'
+    select(root, row.path)
+  }
+
   const onContextMenu = (e: MouseEvent<HTMLDivElement>, row: TreeRow) => {
     e.preventDefault()
     select(root, row.path)
@@ -121,6 +131,8 @@ export function FileTree({ ref, root, sessionId, rows, selected }: Props) {
             if (!row.dir) showPreview(root, row.path)
           }}
           onContextMenu={(e) => onContextMenu(e, row)}
+          draggable
+          onDragStart={(e) => onDragStart(e, row)}
         >
           <span className={styles.chevron} aria-hidden>
             {row.dir && (row.expanded ? <ChevronDown size={16} strokeWidth={1.75} /> : <ChevronRight size={16} strokeWidth={1.75} />)}

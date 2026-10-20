@@ -37,17 +37,17 @@
 这期间修好的（2026-10-20，都来自竞品 issue 或自动化检查）：
 - [x] 中文输入和链接：网址和文件路径碰到中文、全角标点就截断（o#30213）；全角标点被打成半角（o#6147）；双空格自动句号；输入法组合中按 Enter / Esc 误触发终端查找、设置里的字体搜索、新建会话面板等（o#17820 一类）。e2e `cjk-input.spec.ts`，单元测试 `links` / `file-links` / `ime` / `keymap`。取舍：路径里直接带中文的网址（如 `/wiki/中文`）会在 `/wiki/` 处截断
 - [x] 8 个中文会话下的 WebGL 乱码（s#3572，上游修复 xterm.js#5883 在 7.0.0）：v0.3.0 确实会在字形图集合并后叠字、错字；`atlas-guard.ts` 让图集永远不合并（见 PRD §6.3）。压测 `TR_STRESS=1 npx playwright test e2e/webgl-cjk-stress.spec.ts`，修复前 56 次检查 34 次画错，修复后 0 次
+- [x] 和 CC Switch 共存：Claude 被指到第三方端点（settings.json 的 `ANTHROPIC_BASE_URL`、Bedrock / Vertex）或 Codex 用非 `openai` 的 provider 时，会话头不再显示官方账号的额度，token 不计入份额，也不让账号算“在用”（PRD v1.46）。之前同时有官方登录的用户会在 Kimi 会话上看到“Claude 5h 12%”。单元测试 `bridge` / `server`（真实中继脚本）/ `codex-usage` / `transcript-meter`，e2e `session-meta` 新增一条（去掉渲染端的判断它会失败）
 - [x] ⌘Q 后重开，守护进程保住的 agent 状态不再卡在“空闲”；弹窗里用真键盘按 ⌘F 不再在弹窗背后打开查找栏。新 e2e：`tui-apps`、`menu-keys`、`quit-keeps-agents`、`notifications`，另加随机事件序列下状态不卡死的性质测试
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset）：
-- [ ] 按项目 / 会话的启动配置：环境变量、`CLAUDE_CONFIG_DIR`（多账号）、`ANTHROPIC_BASE_URL`（第三方端点）。o#11557（17 👍）、o#9496（13 👍）、o#9239、c#3317、s#8179。证据最强，用按次注入实现，不写全局配置
-- [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示，接在上一条之后。o#18506、o#21757
+- [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
 - [ ] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”。c#1027（44 👍）、c#2322（22 👍）、o#13600
-- [ ] 把文件和图片拖进或粘贴进运行中的会话（现在只有欢迎页接收拖入）。c#3435（22 👍）、o#15377
+- [x] 把文件和图片拖进或粘贴进运行中的会话（2026-10-20，PRD F19）：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴截图、会话头的回形针（文件和文件夹），都把转义后的路径放进输入行，agent 自己把图片变成附件。c#3435（22 👍）、o#15377。e2e `attachments.spec.ts`；从 Finder 真实拖入还没在真机上走一遍（拖入用的 `pathForFile` 和欢迎页拖文件夹是同一个）
 - [ ] Option 当 Meta 的设置项（现在只映射了 ⌥← / ⌥→）。s#1359、c#2120
 - [ ] 中文文案通读，统一术语。o#29320、o#8553（Orca 的机翻）
 - [ ] 排查中文分支名在旧版 Apple Git 上被截断（Wavi 也用了 `%(refname:short)`，本机没复现）。o#19515
-- 先访谈再定：多仓库任务（o#7568、s#2364，各 21 👍）、非 GitHub 主机的 PR（o#4703、o#21181、o#15421）、繁体中文界面（o#10592）、国内网络下的安装和更新（三家 tracker 里几乎没人提）
+- 先访谈再定：多账号 / 按会话的启动配置（o#11557 17 👍、o#9496、o#9239、c#3317、s#8179；2026-10-20 搁置：换服务商大家用 CC Switch，它改的 `~/.claude/settings.json` Wavi 的会话本来就读；换订阅账号 /logout 再 /login；只剩“两个账号同时跑”，等有用户提出。设计稿留在 Figma 第 19 节，标了搁置）、多仓库任务（o#7568、s#2364，各 21 👍）、非 GitHub 主机的 PR（o#4703、o#21181、o#15421）、繁体中文界面（o#10592）、国内网络下的安装和更新（三家 tracker 里几乎没人提）
 
 待验证想法（作者自己想到、还没有外部来源，到期再看）：
 - 暂无
@@ -208,6 +208,7 @@
 - [ ] 真实键盘按菜单里的快捷键（⌘N、⌘\、⌘F、⌘J 等）只触发一次（菜单和渲染进程都接这些键，重复的一次会被丢掉）。`menu-keys.spec.ts` 已覆盖，剩清单 C：用真键盘按 30 秒
 - [ ] 下载后 Gatekeeper 提示与 `xattr -cr` 流程（清单 A）。结果决定 README 里“仍要打开”那句备选说法对不对
 - [ ] Codex 在真实模型下的表现（`TR_E2E_AGENTS=codex TR_E2E_CODEX_REAL=1`）。用例已有，会花额度，跑之前要作者同意
+- [ ] F19 真机：从 Finder 把一张图和一个文件拖进 Claude 会话、再拖进 Codex 会话；⌃⇧⌘4 截到剪贴板后 ⌘V；⌘⇧4 截图后直接拖角落的缩略图（应放进 `wavi/attachments/drop-*` 下的副本）。应各出 `[Image #N]`，文件保留成路径
 - [ ] 连续自用一周，状态没有卡死（2026-10-20 修了一个必现的卡死：⌘Q 后重开）
 
 ## 已知问题

@@ -1,4 +1,4 @@
-import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Play, Square, type LucideIcon } from 'lucide-react'
+import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
@@ -10,6 +10,7 @@ import { useActiveSession, useWorkspace, type PanelView } from '../state/workspa
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
 import { SessionMetaChips } from '../session-meta/MetaChips'
+import { addFiles } from '../terminal/file-input'
 import { useSessionMeta } from '../session-meta/store'
 import styles from './SessionHeader.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -117,6 +118,20 @@ export function SessionHeader() {
               if (active.worktree) void pressRun(active.worktree, action)
             }}
           />
+        )}
+        {/* PRD F19: the files' paths go into the input line; the agent makes images attachments. */}
+        {active && (
+          <IconButton
+            label="添加文件或文件夹"
+            title="添加文件或文件夹 · 也可以拖进终端，或 ⌘V 粘贴截图"
+            data-testid="add-files"
+            onClick={() => {
+              const id = active.session.id
+              void window.tr.ui.pickFiles(active.worktree?.path).then((paths) => addFiles(id, paths))
+            }}
+          >
+            <Paperclip size={16} strokeWidth={1.75} />
+          </IconButton>
         )}
         {active && (
           <span className={styles.panes} role="group" aria-label="右侧栏">

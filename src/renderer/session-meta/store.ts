@@ -13,6 +13,8 @@ export interface SessionMetrics {
   todos?: TodoItem[]
   /** The agent reporting for the session; for a plain terminal, the one started in it by hand (until it exits). */
   agent?: UsageVendor
+  /** False while the agent is off its vendor's plan (a third-party endpoint): the account's usage is not shown for it. */
+  plan?: false
 }
 
 interface SessionMetaState {
@@ -26,6 +28,7 @@ interface SessionMetaState {
   setTodos(sessionId: SessionId, items: TodoItem[]): void
   setUsage(usage: VendorUsage): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
+  setPlan(sessionId: SessionId, plan: boolean): void
   /** The hand-started agent of a plain terminal ended: everything it reported goes. */
   clearSession(sessionId: SessionId): void
   /** Drops sessions that are gone. */
@@ -62,6 +65,17 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
     ),
   setAgent: (sessionId, agent) =>
     set((s) => (s.bySession[sessionId]?.agent === agent ? {} : patchSession(s, sessionId, (current) => ({ ...current, agent })))),
+  setPlan: (sessionId, plan) =>
+    set((s) =>
+      (s.bySession[sessionId]?.plan ?? true) === plan
+        ? {}
+        : patchSession(s, sessionId, (current) => {
+            const next: SessionMetrics = { ...current }
+            if (plan) delete next.plan
+            else next.plan = false
+            return next
+          })
+    ),
   clearSession: (sessionId) =>
     set((s) => {
       if (!(sessionId in s.bySession)) return {}
@@ -91,6 +105,7 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
   if (agent === 'claude' || agent === 'codex') state.setAgent(sessionId, agent)
   if (event.type === 'context') state.setContext(sessionId, event.context)
   else if (event.type === 'todos') state.setTodos(sessionId, event.items)
+  else if (event.type === 'billing') state.setPlan(sessionId, event.plan)
 }
 
 /** Clicking a usage notification lands here: the overview, with its usage popover open. */

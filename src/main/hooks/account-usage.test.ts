@@ -67,7 +67,8 @@ done`
     )
     expect(await readClaudeAccountUsage(old)).toMatchObject({ kind: 'unsupported', detail: expect.stringContaining('Unsupported') })
     expect(await readClaudeAccountUsage(fakeShell('claude-missing', 'exit 127'))).toMatchObject({ kind: 'unsupported' })
-  })
+    // Three login shells in a row: more than the default 5 s when the whole suite runs at once.
+  }, 15_000)
 
   it('reports a plan whose limits could not be read now, a crash and a silence as errors (retried later)', async () => {
     const busy = fakeShell('claude-busy', claude(answer({ subscription_type: 'pro', rate_limits_available: false, rate_limits: null })))

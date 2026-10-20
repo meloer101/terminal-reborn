@@ -65,10 +65,12 @@ const api: TrApi = {
   },
   files: {
     pathForFile: (file) => webUtils.getPathForFile(file),
-    saveTempImage: (data, extension) => ipcRenderer.invoke(IPC.filesSaveTempImage, data, extension)
+    saveTempImage: (data, extension) => ipcRenderer.invoke(IPC.filesSaveTempImage, data, extension),
+    keepDroppedFile: (path) => ipcRenderer.invoke(IPC.filesKeepDropped, path)
   },
   ui: {
     pickFolder: () => ipcRenderer.invoke(IPC.uiPickFolder),
+    pickFiles: (defaultPath) => ipcRenderer.invoke(IPC.uiPickFiles, defaultPath),
     setBadge: (count) => ipcRenderer.send(IPC.uiSetBadge, count),
     notify: (notification) => ipcRenderer.send(IPC.uiNotify, notification),
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),

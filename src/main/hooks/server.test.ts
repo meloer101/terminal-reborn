@@ -61,6 +61,29 @@ describe('hook relay script + server', () => {
     expect(seen[0]).toMatchObject({ event: 'Notification', sessionId: 's1', agent: 'claude', payload: fx.Notification_idle })
   })
 
+  it('before Claude’s SessionStart, says whether the session is on the plan (PRD F11, CC Switch)', async () => {
+    const seen: HookRequest[] = []
+    server = await startHookServer((req) => {
+      seen.push(req)
+      return ''
+    })
+    const billing = async (env: Record<string, string>) => {
+      seen.length = 0
+      await relay('SessionStart', fx.SessionStart, { ...hookEnv(server!), ...env })
+      expect(seen.map((r) => r.event)).toEqual(['AgentBilling', 'SessionStart'])
+      return (seen[0]!.payload as { plan: boolean }).plan
+    }
+    expect(await billing({})).toBe(true)
+    expect(await billing({ ANTHROPIC_BASE_URL: 'https://api.anthropic.com' })).toBe(true)
+    expect(await billing({ ANTHROPIC_BASE_URL: 'https://api.moonshot.cn/anthropic' })).toBe(false)
+    expect(await billing({ CLAUDE_CODE_USE_BEDROCK: '1' })).toBe(false)
+    expect(await billing({ CLAUDE_CODE_USE_VERTEX: '0' })).toBe(true)
+    // Only SessionStart carries it.
+    seen.length = 0
+    await relay('Stop', {}, hookEnv(server))
+    expect(seen.map((r) => r.event)).toEqual(['Stop'])
+  })
+
   it('end to end through the bridge: a held PermissionRequest prints the decision when answered', async () => {
     const prompts: string[] = []
     const bridge = new HookBridge({

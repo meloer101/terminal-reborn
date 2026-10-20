@@ -210,6 +210,8 @@ interface Tracked {
 
 export class TranscriptMeter {
   private readonly sessions = new Map<string, Tracked>()
+  /** Sessions off their vendor's plan (a third-party endpoint): their tokens are not the account's to share. */
+  private readonly offPlan = new Set<string>()
   private readonly dirs: AgentDataDirs
   private readonly read: RangeReader
   private readonly scheduler: Scheduler
@@ -266,11 +268,17 @@ export class TranscriptMeter {
     return historyOf(tracked.state)
   }
 
-  /** Every session of `vendor` that spent tokens since `since` (closed ones too). */
+  /** The session's agent said whether it bills its vendor's plan (AgentEvent `billing`). */
+  setPlan(sessionId: string, plan: boolean): void {
+    if (plan) this.offPlan.delete(sessionId)
+    else this.offPlan.add(sessionId)
+  }
+
+  /** Every session of `vendor` on its plan that spent tokens since `since` (closed ones too). */
   async spend(vendor: UsageVendor, since: number): Promise<SessionSpend[]> {
     const out: SessionSpend[] = []
     for (const [sessionId, tracked] of this.sessions) {
-      if (tracked.agent !== vendor) continue
+      if (tracked.agent !== vendor || this.offPlan.has(sessionId)) continue
       if (tracked.detachedAt === undefined) await this.pull(tracked)
       const tokens = spendSince(tracked.state, since)
       if (tokens > 0) out.push({ sessionId, tokens })
@@ -281,8 +289,10 @@ export class TranscriptMeter {
   private prune(): void {
     const cutoff = this.now() - SPEND_KEEP_MS
     for (const [id, tracked] of this.sessions) {
-      if (tracked.detachedAt !== undefined && tracked.detachedAt < cutoff) this.sessions.delete(id)
-      else {
+      if (tracked.detachedAt !== undefined && tracked.detachedAt < cutoff) {
+        this.sessions.delete(id)
+        this.offPlan.delete(id)
+      } else {
         const spend = tracked.state.spend
         let drop = 0
         while (drop < spend.length && spend[drop]!.at < cutoff) drop++

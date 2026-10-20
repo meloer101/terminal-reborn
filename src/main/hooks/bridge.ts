@@ -25,12 +25,16 @@ export interface BridgeEmitter {
 interface SessionMeta {
   context: ContextUsage | null
   todos: TodoItem[]
+  /** False once the agent said it is off the vendor's plan (AgentEvent `billing`); its plan usage is then not ours. */
+  plan: boolean
 }
 
 type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
 
 /** resources/hooks/agent-shim.sh reports this through the hook relay when the agent it started has exited. */
 export const AGENT_EXIT_EVENT = 'AgentExit'
+/** resources/hooks/tr-hook.sh reports this right before Claude's SessionStart: `{"plan": boolean}`. */
+export const AGENT_BILLING_EVENT = 'AgentBilling'
 
 /** Something that follows a session's hook traffic until the session ends. */
 interface HookObserver {
@@ -85,6 +89,12 @@ export class HookBridge {
     const at = this.now()
     if (meta.context) this.emitMeta(sessionId, agent, at, { type: 'context', context: meta.context })
     if (meta.todos.length > 0) this.emitMeta(sessionId, agent, at, { type: 'todos', items: meta.todos })
+    if (!meta.plan) this.emitMeta(sessionId, agent, at, { type: 'billing', plan: false })
+  }
+
+  /** False while the session's agent is off its vendor's plan (a third-party endpoint): its spend is not the account's. */
+  usesPlan(sessionId: string): boolean {
+    return this.meta.get(sessionId)?.plan ?? true
   }
 
   /** The session's PTY ended: release every hold and withdraw its prompts. */
@@ -103,14 +113,15 @@ export class HookBridge {
   applyReading(sessionId: string, agent: HookAgent, reading: MetaReading): void {
     if (!this.sessions.has(sessionId)) return
     const at = this.now()
+    if (reading.plan !== undefined) this.setPlan(sessionId, agent, at, reading.plan)
     if (reading.context !== undefined) this.setContext(sessionId, agent, at, reading.context)
-    if (reading.usage) this.emitter.usage?.(reading.usage)
+    if (reading.usage && this.usesPlan(sessionId)) this.emitter.usage?.(reading.usage)
   }
 
   private metaOf(sessionId: string): SessionMeta {
     let meta = this.meta.get(sessionId)
     if (!meta) {
-      meta = { context: null, todos: [] }
+      meta = { context: null, todos: [], plan: true }
       this.meta.set(sessionId, meta)
     }
     return meta
@@ -126,6 +137,13 @@ export class HookBridge {
     if (context === null ? meta.context === null : meta.context !== null && sameContext(meta.context, context)) return
     meta.context = context
     this.emitMeta(sessionId, agent, at, { type: 'context', context })
+  }
+
+  private setPlan(sessionId: string, agent: HookAgent, at: number, plan: boolean): void {
+    const meta = this.metaOf(sessionId)
+    if (meta.plan === plan) return
+    meta.plan = plan
+    this.emitMeta(sessionId, agent, at, { type: 'billing', plan })
   }
 
   private setTodos(sessionId: string, agent: HookAgent, at: number, todos: TodoItem[]): void {
@@ -169,7 +187,13 @@ export class HookBridge {
     if (event === AGENT_EXIT_EVENT) {
       this.setTodos(sessionId, agent, at, [])
       this.setContext(sessionId, agent, at, null)
+      this.metaOf(sessionId).plan = true
       this.emitter.event({ sessionId, agent, at, event: { type: 'agent-exit' } })
+      return ''
+    }
+    if (event === AGENT_BILLING_EVENT) {
+      const plan = (request.payload as { plan?: unknown } | undefined)?.plan
+      if (typeof plan === 'boolean') this.setPlan(sessionId, agent, at, plan)
       return ''
     }
     const normalized = normalizeHook(agent, event, request.payload, at)
@@ -186,7 +210,7 @@ export class HookBridge {
       const next = applyTodoTool(this.metaOf(sessionId).todos, tool, input, response)
       if (next) this.setTodos(sessionId, agent, at, next)
     }
-    if (normalized.usage) this.emitter.usage?.(normalized.usage)
+    if (normalized.usage && this.usesPlan(sessionId)) this.emitter.usage?.(normalized.usage)
 
     // The user answered in the TUI (or the turn moved on): withdraw what we were still showing.
     if (normalized.clears === 'all') {

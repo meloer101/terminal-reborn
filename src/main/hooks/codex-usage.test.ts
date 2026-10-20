@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MetaReading } from '@shared/session-meta'
-import { CodexUsageWatcher, codexRolloutPath } from './codex-usage'
+import { CodexUsageWatcher, codexRolloutOnPlan, codexRolloutPath } from './codex-usage'
 import type { AgentDataDirs } from './agent-title'
 import type { Scheduler } from './permission-registry'
 
@@ -47,7 +47,44 @@ describe('codexRolloutPath', () => {
   })
 })
 
+// The rollout's first line (0.142.5): model_provider comes before the long base_instructions.
+const sessionMeta = (provider: string) =>
+  JSON.stringify({ timestamp: 't', type: 'session_meta', payload: { id: 'x', cwd: '/p', originator: 'codex_cli_rs', cli_version: '0.142.5', model_provider: provider, base_instructions: { text: 'x'.repeat(100) } } })
+
+describe('codexRolloutOnPlan', () => {
+  it('is on the ChatGPT plan only with the built-in openai provider', () => {
+    expect(codexRolloutOnPlan(sessionMeta('openai') + '\n' + tokenCount(1))).toBe(true)
+    expect(codexRolloutOnPlan(sessionMeta('custom'))).toBe(false)
+    expect(codexRolloutOnPlan(sessionMeta('ollama'))).toBe(false)
+  })
+
+  it('knows nothing from a head that is not a session_meta line', () => {
+    expect(codexRolloutOnPlan('')).toBeNull()
+    expect(codexRolloutOnPlan(tokenCount(1))).toBeNull()
+    expect(codexRolloutOnPlan('{"type":"session_meta","payload":{}}\n{"model_provider":"custom"}')).toBeNull()
+  })
+})
+
 describe('CodexUsageWatcher', () => {
+  it('says once per rollout whether the session is on the plan', async () => {
+    const { scheduler, runAll } = fakeScheduler()
+    const readings: MetaReading[] = []
+    const heads: string[] = []
+    const watcher = new CodexUsageWatcher((_id, r) => readings.push(r), {
+      dirs,
+      scheduler,
+      now: () => 7,
+      read: async () => '',
+      readHead: async (path) => (heads.push(path), sessionMeta('custom'))
+    })
+    watcher.observe('s1', 'codex', 'SessionStart', { transcript_path: ROLLOUT })
+    await runAll()
+    watcher.observe('s1', 'codex', 'Stop', { transcript_path: ROLLOUT })
+    await runAll()
+    expect(heads).toEqual([ROLLOUT])
+    expect(readings).toEqual([{ plan: false }])
+  })
+
   it('reads the rollout named by the hook after the hooks that follow a response', async () => {
     const { scheduler, runAll, queue } = fakeScheduler()
     const readings: Array<[string, MetaReading]> = []
