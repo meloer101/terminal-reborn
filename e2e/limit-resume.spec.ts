@@ -179,7 +179,7 @@ test.describe('continue after the plan limit resets', () => {
     expect(continues()).toBe(1)
   })
 
-  test('with a menu over the input line (Claude’s /rate-limit-options) it does not type, and says so', async () => {
+  test('with a menu over the input line (Claude’s /rate-limit-options) neither the send nor 重试这一轮 types, and both say so', async () => {
     const reset2 = Date.now() + 6_000
     hitLimit(reset2)
     await expect(toggle()).toBeVisible(WITHIN)
@@ -192,6 +192,12 @@ test.describe('continue after the plan limit resets', () => {
     expect((await shown()).at(-1)?.title).toBe('acme-api · 登录页中文化')
     await expect(toggle()).toHaveCount(0, WITHIN)
     expect(continues()).toBe(1)
+    // The menu is still on screen: a click on the error bar is refused before anything is typed (PRD §6.7).
+    const typed = agent.typed()
+    await errorBar().getByRole('button', { name: '重试这一轮' }).click()
+    await expect(errorBar()).toContainText('没能完成：终端里有选择框，请先在终端中处理')
+    await page.waitForTimeout(500)
+    expect(agent.typed()).toBe(typed)
     agent.step({ print: '\x1b[2J\x1b[H❯ ' })
   })
 

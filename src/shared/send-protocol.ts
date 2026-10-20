@@ -2,6 +2,7 @@
 // Evidence for every constant below: PRD §6.9 (Claude Code 2.1.296, Codex 0.142.5).
 // Pure and synchronous: this file only decides WHAT to write; send-executor.ts performs it.
 
+import { resumeScreen } from './limit-resume'
 import type { AgentKind } from './types'
 
 export type SendStep =
@@ -235,7 +236,7 @@ export const planSend: PlanSend = (rawText, agent) => {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Startup blockers: do not send while one of these dialogs is on screen
+// Blockers: do not type while a dialog or a menu is on screen
 // ---------------------------------------------------------------------------------------------
 
 export type BlockingDialog = 'claude-trust' | 'codex-trust' | 'codex-update'
@@ -245,5 +246,18 @@ export function detectBlockingDialog(screen: string): BlockingDialog | null {
   if (screen.includes('Yes, I trust this folder')) return 'claude-trust'
   if (screen.includes('Do you trust the contents of this directory?')) return 'codex-trust'
   if (screen.includes('Update available!') && screen.includes('Skip until next version')) return 'codex-update'
+  return null
+}
+
+/**
+ * Why nothing may be typed into the session now, or null (PRD §2: Wavi never sends anything the user did not ask for).
+ * A startup dialog swallows the keys; a menu over the agent's input line — Claude's `/rate-limit-options` or a
+ * permission dialog, Codex's switch-model pop-up (`resumeScreen()`) — takes them as a choice: §6.7, 继续 + Enter there
+ * switched Codex's model. Only a menu is refused, not a screen without the agent's input line (a shell has none).
+ * The menus stay out of `detectBlockingDialog()`: they are not startup states.
+ */
+export function sendRefusal(agent: AgentKind | undefined, screen: string): string | null {
+  if (detectBlockingDialog(screen)) return '终端里有确认框，请先在终端中处理'
+  if ((agent === 'claude' || agent === 'codex') && resumeScreen(agent, screen) === 'dialog') return '终端里有选择框，请先在终端中处理'
   return null
 }
