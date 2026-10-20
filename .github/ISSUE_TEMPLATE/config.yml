@@ -1,0 +1,10 @@
+blank_issues_enabled: true
+# TODO(author): enable GitHub Discussions and set up the user group, then replace this comment with
+# the real links, for example:
+# contact_links:
+#   - name: 讨论区 / Discussions
+#     url: <Discussions URL>
+#     about: 使用问题、想法和经验 / Questions, ideas and tips
+#   - name: 用户群 / User group
+#     url: <group invite link>
+#     about: 和作者、其他用户直接聊 / Talk to the author and other users

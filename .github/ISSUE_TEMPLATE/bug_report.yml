@@ -1,0 +1,115 @@
+name: Bug 报告 / Bug report
+description: Wavi 里有地方不对 / Something in Wavi does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢你来报告。中文、英文都可以。提交前请先搜一下有没有人报过同样的问题。
+        请不要贴 API key、token、私有代码或你不想公开的路径。
+
+        Chinese or English are both fine. Please search existing issues first, and leave out API keys, tokens and private code.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么 / What happened
+      description: 你看到了什么，和你预期的有什么不同。
+      placeholder: 例：Codex 会话已经在等我确认，侧栏还显示“运行中”。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎样复现 / Steps to reproduce
+      description: 尽量从打开 Wavi 开始写。偶尔才出现的也请写上大概多久一次。
+      placeholder: |
+        1. ⌘N 新建一个 Codex 会话（新 worktree）
+        2. 让它运行一条需要确认的命令
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望的结果 / Expected behavior
+    validations:
+      required: false
+
+  - type: input
+    id: wavi-version
+    attributes:
+      label: Wavi 版本 / Wavi version
+      description: 菜单「Wavi → 关于 Wavi」里能看到。
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS 版本 / macOS version
+      placeholder: "15.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chip
+    attributes:
+      label: 芯片 / Chip
+      options:
+        - Apple 芯片 / Apple silicon (arm64)
+        - Intel (x64)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agents
+    attributes:
+      label: 涉及的会话 / Session type
+      multiple: true
+      options:
+        - Claude Code
+        - Codex
+        - 普通终端 / Plain terminal
+        - 和会话无关 / Not session-specific
+    validations:
+      required: true
+
+  - type: input
+    id: agent-version
+    attributes:
+      label: agent 版本 / Agent version
+      description: "`claude --version` 或 `codex --version` 的输出。"
+      placeholder: "2.1.303 (Claude Code)"
+    validations:
+      required: false
+
+  - type: input
+    id: input-method
+    attributes:
+      label: 输入法 / Input method
+      description: 和中文或其他输入法有关时填写。
+      placeholder: 例：系统简体拼音、搜狗输入法、微信输入法
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图或录屏 / Screenshots or recording
+      description: 直接拖进这里。
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: |
+        终端或会话相关的问题，可以贴上 `~/Library/Application Support/Wavi/daemon/daemon.log` 的最后几十行。里面可能有你的文件路径，贴之前看一眼。
+      render: text
+    validations:
+      required: false
