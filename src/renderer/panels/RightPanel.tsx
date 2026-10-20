@@ -8,6 +8,7 @@ import { FilesView } from './files/FilesView'
 import { GitView } from './git/GitView'
 import { WorktreeView } from './worktree/WorktreeView'
 import { PaneHeader } from './PaneHeader'
+import { startColumnResize } from '../ui/column-resize'
 import styles from './RightPanel.module.css'
 
 export const PANEL_VIEW_LABEL: Record<PanelView, string> = { browser: '浏览器', git: 'Git', worktree: 'Worktree', files: '文件' }
@@ -45,28 +46,9 @@ export function RightPanel({ view }: { view: PanelView }) {
 /** The card's left edge: drag to resize (min 400, saved), double-click for the default width. */
 function ResizeHandle() {
   const setWidth = useWorkspace((s) => s.setRightPanelWidth)
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    const handle = e.currentTarget
-    handle.setPointerCapture(e.pointerId)
-    // The card is anchored on the right: moving the edge left by n px makes it n px wider.
-    const startX = e.clientX
-    const startWidth = useWorkspace.getState().rightPanelWidth
-    const move = (event: PointerEvent) => setWidth(startWidth + startX - event.clientX)
-    // The release point counts too: Chromium can drop the last rAF-aligned move before pointerup.
-    const up = (event: PointerEvent) => {
-      move(event)
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', up)
-    }
-    // On the window, not the handle: Chromium sometimes drops the capture mid-drag (lostpointercapture with no
-    // pointerup), and the rest of the drag then never reached the handle.
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    window.addEventListener('pointercancel', up)
-  }
+  // The card is anchored on the right: moving the edge left by n px makes it n px wider.
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) =>
+    startColumnResize(e, 'left', useWorkspace.getState().rightPanelWidth, setWidth)
   return (
     <div
       className={styles.resize}
