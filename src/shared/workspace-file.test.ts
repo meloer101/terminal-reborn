@@ -158,6 +158,31 @@ describe('sanitizeWorkspaceFile', () => {
     expect(sanitizeWorkspaceFile({ ...valid, diffLayout: 'sideways' }, 0)).not.toHaveProperty('diffLayout')
   })
 
+  it('keeps the main-area split (F20), only with sessions the sidebar lists, and the keyboard in one of its panes', () => {
+    const split = { type: 'split', dir: 'row', sizes: [0.6, 0.4], children: [{ type: 'pane', id: 's1' }, { type: 'pane', id: 's2' }] }
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), split }, 0)?.split).toEqual(split)
+    // The active session is not shown: the keyboard goes to the first pane.
+    const three = { type: 'split', dir: 'row', sizes: [1, 1], children: [{ type: 'pane', id: 's1' }, { type: 'pane', id: 's3' }] }
+    const withThird = {
+      ...structuredClone(valid),
+      sessions: [...valid.sessions, { id: 's3', worktreeId: 'w1', kind: 'shell', title: '终端', startedAt: 1, lastActivityAt: 1 }],
+      split: three
+    }
+    expect(sanitizeWorkspaceFile(withThird, 0)?.activeSessionId).toBe('s1')
+    // A pane of a session that is gone closes; one pane left is no split.
+    const gone = { ...split, children: [{ type: 'pane', id: 's1' }, { type: 'pane', id: 'nope' }] }
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), split: gone }, 0)).not.toHaveProperty('split')
+    // Archived worktrees' sessions are not listed, so they are not shown either.
+    const archived = {
+      ...structuredClone(valid),
+      worktrees: [...valid.worktrees, { id: 'w2', projectId: 'p1', branch: 'b', path: '/code/b', isMain: false, archived: { id: 'a1b2c3d4', at: 1, commit: 'a'.repeat(40), dirty: false } }],
+      sessions: [...valid.sessions, { id: 's3', worktreeId: 'w2', kind: 'shell', title: '终端', startedAt: 1, lastActivityAt: 1 }],
+      split: three
+    }
+    expect(sanitizeWorkspaceFile(archived, 0)).not.toHaveProperty('split')
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), split: 'row' }, 0)).not.toHaveProperty('split')
+  })
+
   it('keeps recent project folders: absolute, unique, at most 8', () => {
     const recent = ['/a', 'relative', '/a', 7, '/b', ...Array.from({ length: 10 }, (_, i) => `/r${i}`)]
     const file = sanitizeWorkspaceFile({ ...valid, recentProjects: recent }, 0) as WorkspaceFile

@@ -9,6 +9,11 @@
   -webkit-app-region: drag;
 }
 
+/* In a split (PRD F20) only the panes along the window's top edge drag the window. */
+.header[data-drag-region='false'] {
+  -webkit-app-region: no-drag;
+}
+
 /* Leave room for the traffic lights when the sidebar is hidden. */
 .header[data-sidebar-collapsed='true'] {
   padding-left: 80px;
@@ -25,6 +30,16 @@
      not draggable; the space after it still is. Playwright's CDP clicks skip the region, so e2e cannot see this. */
   -webkit-app-region: no-drag;
   cursor: default;
+}
+
+/* Side by side, the pane the keyboard is in keeps the primary title; the others step back (Figma 21 PaneHeader). */
+.header[data-focused='false'] .title {
+  color: var(--text-secondary);
+}
+
+/* The session name drags its pane to another place (PRD F20). */
+.title[data-movable='true'] {
+  cursor: grab;
 }
 
 .titleInput {
@@ -130,6 +145,20 @@
 
 @container session-header (max-width: 720px) {
   .branch {
+    display: none;
+  }
+}
+
+/* Narrower still, as a pane of a split (Figma 21F): the account's usage goes, then the context. */
+@container session-header (max-width: 640px) {
+  .header [data-testid^='usage-chip-'] {
+    display: none;
+  }
+}
+
+@container session-header (max-width: 480px) {
+  .header [data-testid='context-chip'],
+  .header [data-testid='todo-chip'] {
     display: none;
   }
 }

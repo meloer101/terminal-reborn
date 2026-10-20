@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef, type PointerEvent } from 'react'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
 import { TodoLine } from '../session-meta/MetaChips'
@@ -12,6 +12,10 @@ import styles from './SessionRow.module.css'
 interface Props {
   row: SessionRowModel
   selected: boolean
+  /** Shown in another pane of the main area's split (PRD F20): a hairline outline, lighter than `selected`. */
+  shown?: boolean
+  /** A press that may become a drag into the terminal area (PRD F20). */
+  onPress?(e: PointerEvent<HTMLElement>, id: string): void
   /** Roving tabindex: exactly one row in the list is reachable with Tab. */
   tabStop: boolean
   onSelect(id: string): void
@@ -19,7 +23,7 @@ interface Props {
 }
 
 /** Figma component `SessionRow` (11:51): 52px, glyph · title/activity · time/diff. */
-export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onSelect, onContextMenu }: Props) {
+export const SessionRow = memo(function SessionRow({ row, selected, shown = false, onPress, tabStop, onSelect, onContextMenu }: Props) {
   const { session, secondary, attention, stat } = row
   const ref = useRef<HTMLDivElement>(null)
   const status = glyphStatus(session)
@@ -35,11 +39,13 @@ export const SessionRow = memo(function SessionRow({ row, selected, tabStop, onS
       role="button"
       className={styles.row}
       data-selected={selected}
+      data-shown={shown}
       data-attention={attention}
       data-session-id={session.id}
       aria-current={selected ? 'true' : undefined}
       tabIndex={tabStop ? 0 : -1}
       onClick={() => onSelect(session.id)}
+      onPointerDown={onPress && ((e) => onPress(e, session.id))}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
         if (e.key !== 'Enter' && e.key !== ' ') return

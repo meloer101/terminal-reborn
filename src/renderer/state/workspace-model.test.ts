@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { pane, PICKER_PANE, sessionsIn, splitPane, type SplitNode } from '@shared/split-layout'
 import { sanitizeWorkspaceFile } from '@shared/workspace-file'
 import {
   rememberRecentProject,
@@ -13,6 +14,7 @@ import {
   unarchiveWorktrees,
   persistedStateChanged,
   projectOfSession,
+  reconcileSplit,
   removedSessionIds,
   removeProject,
   restoreWorkspace,
@@ -343,5 +345,76 @@ describe('titleFromAgent', () => {
   it('never replaces a rename made in Wavi, and never names a shell', () => {
     expect(titleFromAgent({ kind: 'claude', title: '我的名字', titleSource: 'user' }, 'AI 标题')).toBeNull()
     expect(titleFromAgent({ kind: 'shell', title: '终端' }, 'AI 标题')).toBeNull()
+  })
+})
+
+describe('reconcileSplit (PRD F20)', () => {
+  const ui = { sidebarCollapsed: false, sidebarWidth: 264, rightPanel: null, lastRightPanel: 'files' as const, rightPanelWidth: 480, diffLayout: 'unified' as const, collapsedProjectIds: [], recentProjects: [] as string[], newSessionWorkdir: {} }
+  /** Four sessions s-3…s-6; s-3 and s-4 side by side, the keyboard in s-3. */
+  function split(): WorkspaceData {
+    const data = withSessions('claude', 'claude', 'shell', 'codex')
+    return { ...data, activeSessionId: 's-3', split: splitPane(pane('s-3'), 's-3', 'right', 's-4') }
+  }
+  const shape = (node: SplitNode | null | undefined): string[] => sessionsIn(node)
+
+  it('lets a session already shown keep its pane', () => {
+    const prev = split()
+    const next = reconcileSplit({ ...prev, activeSessionId: 's-4' }, prev)
+    expect(shape(next.split)).toEqual(['s-3', 's-4'])
+    expect(next.activeSessionId).toBe('s-4')
+  })
+
+  it('shows another session in the focused pane, or in the picker’s pane when one is open', () => {
+    const prev = split()
+    expect(shape(reconcileSplit({ ...prev, activeSessionId: 's-5' }, prev).split)).toEqual(['s-5', 's-4'])
+    const picking = { ...prev, split: splitPane(prev.split!, 's-4', 'bottom', PICKER_PANE) }
+    const next = reconcileSplit({ ...picking, activeSessionId: 's-6' }, picking)
+    expect(shape(next.split)).toEqual(['s-3', 's-4', 's-6'])
+    expect(next.activeSessionId).toBe('s-6')
+  })
+
+  it('closes the pane of a closed session; the keyboard goes to the pane that took over', () => {
+    const three = { ...split(), split: splitPane(split().split!, 's-4', 'bottom', 's-5') }
+    const closed = reconcileSplit(closeSession(three, 's-3'), three)
+    expect(shape(closed.split)).toEqual(['s-4', 's-5'])
+    expect(closed.activeSessionId).toBe('s-4')
+  })
+
+  it('ends the split when one pane is left, keeping the remaining session', () => {
+    const prev = split()
+    const closedFocused = reconcileSplit(closeSession(prev, 's-3'), prev)
+    expect(closedFocused.split).toBeNull()
+    expect(closedFocused.activeSessionId).toBe('s-4')
+    const closedOther = reconcileSplit(closeSession(prev, 's-4'), prev)
+    expect(closedOther.split).toBeNull()
+    expect(closedOther.activeSessionId).toBe('s-3')
+  })
+
+  it('closes the panes of archived worktrees', () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/r', makeId)
+    const a = addSessionInWorktree(data, projectId, { path: '/r/a', branch: 'a' }, 'claude', 1, makeId)!
+    const b = addSessionInWorktree(a.data, projectId, { path: '/r/b', branch: 'b' }, 'claude', 1, makeId)!
+    const c = addSessionInWorktree(b.data, projectId, { path: '/r/c', branch: 'c' }, 'claude', 1, makeId)!
+    const prev: WorkspaceData = { ...c.data, activeSessionId: a.sessionId, split: splitPane(splitPane(pane(a.sessionId), a.sessionId, 'right', b.sessionId), b.sessionId, 'right', c.sessionId) }
+    const worktreeA = prev.sessions.find((s) => s.id === a.sessionId)!.worktreeId
+    const next = reconcileSplit(archiveWorktrees(prev, [worktreeA], { id: 'abcd1234', at: 1, commit: 'a'.repeat(40), dirty: false }), prev)
+    expect(shape(next.split)).toEqual([b.sessionId, c.sessionId])
+    expect(next.activeSessionId).toBe(b.sessionId)
+  })
+
+  it('leaves a workspace without a split alone, and drops the split when nothing is selected', () => {
+    const plain = withSessions('claude')
+    expect(reconcileSplit(plain, plain)).toBe(plain)
+    const prev = split()
+    expect(reconcileSplit({ ...prev, activeSessionId: null }, prev).split).toBeNull()
+  })
+
+  it('saves the split without the picker and restores it', () => {
+    const prev = { ...split(), split: splitPane(split().split!, 's-4', 'bottom', PICKER_PANE) }
+    const file = serializeWorkspace(prev, ui, {})
+    expect(sessionsIn(file.split)).toEqual(['s-3', 's-4'])
+    expect(shape(restoreWorkspace(sanitizeWorkspaceFile(file, 0)).split)).toEqual(['s-3', 's-4'])
+    expect(persistedStateChanged({ ...prev, ...ui }, { ...prev, ...ui, split: null })).toBe(true)
   })
 })

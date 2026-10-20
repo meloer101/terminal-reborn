@@ -4,6 +4,7 @@
 import { archiveRefName, type WorktreeArchive } from './archive'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
+import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
 import type { AgentKind, Project, TitleSource, Worktree } from './types'
 
 export const WORKSPACE_FILE_VERSION = 2
@@ -98,6 +99,8 @@ export interface WorkspaceFile {
   newSessionWorkdir?: Record<string, Workdir>
   /** Unsent inline review comments (PRD F5) by worktree path; only worktrees that exist. Absent when empty. */
   reviewComments?: Record<string, ReviewComment[]>
+  /** The main area's split (PRD F20): two to four sessions, `activeSessionId` among them. Absent = one session. */
+  split?: SplitNode
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -209,12 +212,19 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
 
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
   const lastRightPanel = sanitizeRightPanel(value.lastRightPanel)
+  // Only sessions the sidebar lists can be shown: an archived worktree's are folded away until restored (PRD F15).
+  const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
+  const listed = new Set(sessions.filter((s) => !archived.has(s.worktreeId)).map((s) => s.id))
+  const split = sanitizeSplit(value.split, (id) => listed.has(id))
+  const activeSessionId = active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null)
+  // The keyboard is always in one of the split's panes.
+  const shown = sessionsIn(split)
   return {
     version: WORKSPACE_FILE_VERSION,
     projects,
     worktrees,
     sessions,
-    activeSessionId: active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null),
+    activeSessionId: split && (activeSessionId === null || !shown.includes(activeSessionId)) ? (shown[0] ?? null) : activeSessionId,
     sidebarCollapsed: value.sidebarCollapsed === true,
     ...(typeof value.sidebarWidth === 'number' && Number.isFinite(value.sidebarWidth)
       ? { sidebarWidth: clampSidebarWidth(value.sidebarWidth) }
@@ -231,7 +241,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     drafts,
     ...(recentProjects.length > 0 ? { recentProjects } : {}),
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
-    ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {})
+    ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
+    ...(split ? { split } : {})
   }
 }
 

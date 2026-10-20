@@ -85,7 +85,18 @@ const MODIFIERS: Record<string, { symbol: string; order: number }> = {
 }
 
 /** Electron key names drawn as the symbol on the key. */
-const KEY_SYMBOL: Record<string, string> = { plus: '+', enter: '↵', return: '↵', escape: 'esc', backspace: '⌫', delete: '⌦' }
+const KEY_SYMBOL: Record<string, string> = {
+  plus: '+',
+  enter: '↵',
+  return: '↵',
+  escape: 'esc',
+  backspace: '⌫',
+  delete: '⌦',
+  left: '←',
+  right: '→',
+  up: '↑',
+  down: '↓'
+}
 
 /** 'CmdOrCtrl+Shift+A' → '⇧⌘A', in macOS modifier order (⌃⌥⇧⌘). */
 export function formatAccelerator(accelerator: string): string {

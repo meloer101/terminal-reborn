@@ -9,7 +9,7 @@ import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
 import { SetupStrip } from '../scripts/SetupStrip'
 import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
-import { TerminalArea } from '../terminal/TerminalArea'
+import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
 import { StatusBridge } from '../status/StatusBridge'
 import { AppearanceBridge } from '../appearance/AppearanceBridge'
@@ -36,7 +36,8 @@ const windowWidth = () => window.innerWidth
 /**
  * Window layout (Figma Screens 01–08):
  *   sidebar (264 by default, user-sized) │ main: header 44 / terminal — or the overview │ right panel card (F17, 480 by default, user-sized)
- * The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal.
+ * The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal. The terminal
+ * area can hold two to four sessions side by side, each with its own header (PRD F20, split/SplitArea).
  * Each region is owned by one feature directory; this file only arranges them.
  * Main never gets narrower than --main-min-width: when docking the panel would squeeze it, the panel floats
  * over main's right edge instead (B13, layout.ts). Main and the panel share one surface (rounded where it meets the
@@ -79,10 +80,11 @@ export function AppShell() {
       )}
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
-          {/* The overview (PRD F9) takes the main area; the terminals stay mounted (hidden) behind it. */}
-          {overview ? <Overview /> : <SessionHeader />}
-          <section className={styles.terminal} data-region="terminal" data-hidden={overview}>
-            <TerminalArea />
+          {/* The overview (PRD F9) takes the main area; the terminals stay mounted (hidden) behind it. The panes have
+              their own headers (F20); the welcome page keeps the bare one (drag region, sidebar button). */}
+          {overview ? <Overview /> : !hasSession && <SessionHeader />}
+          <section className={styles.terminal} data-region="split" data-hidden={overview}>
+            <SplitArea />
             {!hasSession && <EmptyMain />}
           </section>
           <div className={styles.sessionOnly} data-hidden={overview}>
@@ -110,6 +112,7 @@ export function AppShell() {
       <MergeSheet />
       <ArchiveSheet />
       <MenuHost />
+      <SessionDragGhost />
     </div>
   )
 }

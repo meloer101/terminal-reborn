@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useRef, type KeyboardEvent } from 'react'
+import { useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { Folder, LayoutList, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useWorkspace } from '../state/workspace'
+import { shownSessionIds, useWorkspace } from '../state/workspace'
+import { pressSession } from '../split/drag'
 import { newSessionInProject, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
 import type { MenuAnchor } from '../ui/menu'
@@ -37,8 +38,11 @@ export function Sidebar() {
         overview: s.mainView === 'overview'
       }))
     )
+  // Sessions shown in the main area's other panes (PRD F20); the active one is `selected`.
+  const shown = useWorkspace((s) => shownSessionIds(s).join('\n'))
   const listRef = useRef<HTMLDivElement>(null)
   const onRowContextMenu = useCallback((id: string, anchor: MenuAnchor) => void openSessionContextMenu(id, anchor), [])
+  const onRowPress = useCallback((e: PointerEvent<HTMLElement>, id: string) => pressSession(e, id, 'sidebar'), [])
 
   const groups = useMemo(
     () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds }),
@@ -109,6 +113,8 @@ export function Sidebar() {
                 key={row.session.id}
                 row={row}
                 selected={!overview && row.session.id === activeSessionId}
+                shown={!overview && row.session.id !== activeSessionId && shown.split('\n').includes(row.session.id)}
+                onPress={onRowPress}
                 tabStop={row.session.id === tabStopId}
                 onSelect={setActiveSession}
                 onContextMenu={onRowContextMenu}

@@ -5,7 +5,7 @@ import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHe
 import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
-import { launchKind, useWorkspace } from '../state/workspace'
+import { launchKind, shownSessionIds, useWorkspace } from '../state/workspace'
 import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
@@ -30,6 +30,7 @@ export function startStatusBridge(): () => void {
     now: () => hook?.now() ?? Date.now(),
     sessions: () => useWorkspace.getState().sessions,
     activeSessionId: () => useWorkspace.getState().activeSessionId,
+    shownSessionIds: () => shownSessionIds(useWorkspace.getState()),
     windowFocused: () => hook?.focused() ?? windowFocused(),
     patch: (id, patch) => useWorkspace.getState().patchSession(id, patch),
     launchesAgent: (session) => launchKind(session) !== 'shell',
@@ -142,7 +143,7 @@ export function startStatusBridge(): () => void {
   schedule()
 
   const unsubscribeStore = useWorkspace.subscribe((state, prev) => {
-    if (state.sessions !== prev.sessions || state.activeSessionId !== prev.activeSessionId) sync()
+    if (state.sessions !== prev.sessions || state.activeSessionId !== prev.activeSessionId || state.split !== prev.split) sync()
   })
   // A plain terminal's hand-started agent reports metrics only (session-meta); its status stays a terminal's.
   const isShell = (sessionId: string) => useWorkspace.getState().sessions.find((s) => s.id === sessionId)?.kind === 'shell'

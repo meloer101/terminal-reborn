@@ -208,6 +208,23 @@ describe('StatusController', () => {
       expect(status(h, 'a')).toBe('idle')
     })
 
+    it('every pane of a split counts as looked at (PRD F20): no unread, no notification', () => {
+      const shown = { ids: ['a', 'b'] }
+      const split = harness([session('a'), session('b'), session('c')], 'a')
+      const deps = (split.controller as unknown as { deps: StatusDeps }).deps
+      deps.shownSessionIds = () => shown.ids
+      split.controller.refreshViewing()
+      split.controller.handleEvent('b', { type: 'prompt-submit', prompt: 'x' })
+      split.controller.handleEvent('b', { type: 'stop' })
+      expect(status(split, 'b')).toBe('idle')
+      split.controller.handleEvent('c', { type: 'stop' })
+      expect(status(split, 'c')).toBe('done_unread')
+      // Showing c in a pane marks it seen.
+      shown.ids = ['a', 'c']
+      split.controller.refreshViewing()
+      expect(status(split, 'c')).toBe('idle')
+    })
+
     it('leaving a session makes its next stop unread', () => {
       h.active.id = 'b'
       h.controller.refreshViewing()

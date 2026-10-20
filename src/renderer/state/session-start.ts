@@ -11,7 +11,7 @@ import type { SessionId } from '@shared/types'
 import { loadLiveSessions, useLiveSessions } from '../terminal/live-sessions'
 import { disposeTerminal, isTerminalAlive } from '../terminal/registry'
 import { agentSessionIdPatch, planStart, shouldAutoStart, type StartOptions } from './session-start-plan'
-import { useWorkspace } from './workspace'
+import { shownSessionIds, useWorkspace } from './workspace'
 
 export { AUTO_START_ON_VIEW, hasStartChoice, type StartOptions } from './session-start-plan'
 
@@ -83,14 +83,21 @@ export function useSessionStartup(): void {
     void loadLiveSessions().then(adoptLiveSessions)
   }, [])
 
-  const active = useWorkspace((s) => s.sessions.find((x) => x.id === s.activeSessionId))
-  const start = liveLoaded && shouldAutoStart(active) && !useLiveSessions.getState().live[active?.id ?? '']
-  const activeId = active?.id
+  // Every session shown in the main area is viewed: the active one, and the others in a split (PRD F20).
+  const due = useWorkspace((s) => {
+    const live = useLiveSessions.getState().live
+    return shownSessionIds(s)
+      .filter((id) => shouldAutoStart(s.sessions.find((x) => x.id === id)) && !live[id])
+      .join('\n')
+  })
   useEffect(() => {
-    // Re-checked here: effects can run twice (StrictMode) and a start in between already moved the phase on.
-    const current = useWorkspace.getState().sessions.find((s) => s.id === activeId)
-    if (start && activeId && current?.phase === 'not-started') void startSession(activeId, { resume: true })
-  }, [start, activeId])
+    if (!liveLoaded || due === '') return
+    for (const id of due.split('\n')) {
+      // Re-checked here: effects can run twice (StrictMode) and a start in between already moved the phase on.
+      const current = useWorkspace.getState().sessions.find((s) => s.id === id)
+      if (current?.phase === 'not-started' && !useLiveSessions.getState().live[id]) void startSession(id, { resume: true })
+    }
+  }, [liveLoaded, due])
 }
 
 /**

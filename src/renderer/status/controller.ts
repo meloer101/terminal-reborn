@@ -23,6 +23,8 @@ export interface StatusDeps {
   /** Current sessions from the workspace store. */
   sessions(): readonly Session[]
   activeSessionId(): SessionId | null
+  /** Every session the main area shows (PRD F20: the panes of a split); default: the active one. */
+  shownSessionIds?(): readonly SessionId[]
   /** Whether the app window is focused and visible. */
   windowFocused(): boolean
   patch(id: SessionId, patch: StatusPatch): void
@@ -194,11 +196,18 @@ export class StatusController {
 
   /** Re-evaluates which session is being looked at (selection, window focus or visibility changed). */
   refreshViewing(): void {
-    const active = this.deps.windowFocused() ? this.deps.activeSessionId() : null
+    const shown = this.deps.windowFocused() ? this.shown() : []
     for (const [id, state] of [...this.states]) {
-      const viewing = id === active
+      const viewing = shown.includes(id)
       if (viewing !== state.viewing) this.apply(id, { type: viewing ? 'viewed' : 'unviewed' })
     }
+  }
+
+  /** "Visible" = shown in any pane of the main area (PRD F20), with the window focused (checked by the caller). */
+  private shown(): readonly SessionId[] {
+    if (this.deps.shownSessionIds) return this.deps.shownSessionIds()
+    const active = this.deps.activeSessionId()
+    return active ? [active] : []
   }
 
   /** A system notification was clicked: jump to its session, or to the overview for a merged one. */
@@ -269,7 +278,7 @@ export class StatusController {
   }
 
   private isLookedAt(id: SessionId): boolean {
-    return this.deps.windowFocused() && this.deps.activeSessionId() === id
+    return this.deps.windowFocused() && this.shown().includes(id)
   }
 
   /** "项目 · 会话" (PRD F10). */
