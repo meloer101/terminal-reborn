@@ -103,7 +103,8 @@ describe('normalizeHook · tools', () => {
 describe('normalizeHook · PermissionRequest', () => {
   it('a Bash request becomes a draft with a Chinese summary and the offered suggestions', () => {
     const result = claude('PermissionRequest', fx.PermissionRequest_Bash)
-    expect(result.events).toEqual([])
+    // The event is what turns the session to needs_you; it names the call so two dialogs at once stay two asks.
+    expect(result.events).toEqual([{ type: 'permission-request', tool: 'Bash', input: fx.PermissionRequest_Bash.tool_input }])
     expect(result.permission).toEqual({
       tool: 'Bash',
       input: fx.PermissionRequest_Bash.tool_input,
@@ -135,14 +136,43 @@ describe('normalizeHook · PermissionRequest', () => {
     ])
   })
 
-  it('AskUserQuestion is left to the TUI: no permission draft', () => {
+  it('AskUserQuestion is left to the TUI: no permission draft, no event (its PreToolUse already waits)', () => {
     const result = claude('PermissionRequest', fx.PermissionRequest_AskUserQuestion)
     expect(result.permission).toBeUndefined()
     expect(result.events).toEqual([])
   })
 
-  it('ExitPlanMode is left to the TUI too', () => {
-    expect(claude('PermissionRequest', { tool_name: 'ExitPlanMode', tool_input: { plan: 'x' } }).permission).toBeUndefined()
+  it('ExitPlanMode is left to the TUI too, but the plan approval still waits on the user', () => {
+    const result = claude('PermissionRequest', { tool_name: 'ExitPlanMode', tool_input: { plan: 'x' } })
+    expect(result.permission).toBeUndefined()
+    expect(result.events).toEqual([{ type: 'permission-request', tool: 'ExitPlanMode', input: { plan: 'x' } }])
+  })
+})
+
+// Claude 2.1.304 adds `agent_id` to every hook fired inside a subagent (a Task-tool worker, an in-process teammate).
+describe('normalizeHook · subagents', () => {
+  const sub = { agent_id: 'a1b2c3', agent_type: 'general-purpose' }
+
+  it('tool calls and permission requests carry the subagent; main-thread ones do not', () => {
+    expect(claude('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 't1', ...sub }).events).toEqual([
+      { type: 'tool-start', tool: 'Bash', input: { command: 'ls' }, agentId: 'a1b2c3' }
+    ])
+    expect(claude('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_response: {}, ...sub }).events[0]).toMatchObject({ agentId: 'a1b2c3' })
+    expect(claude('PostToolUseFailure', { tool_name: 'Bash', tool_input: { command: 'ls' }, error: 'x', ...sub }).events[0]).toMatchObject({ ok: false, agentId: 'a1b2c3' })
+    expect(claude('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'ls' }, ...sub }).events).toEqual([
+      { type: 'permission-request', tool: 'Bash', input: { command: 'ls' }, agentId: 'a1b2c3' }
+    ])
+    expect(claude('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' } }).events[0]).not.toHaveProperty('agentId')
+  })
+
+  it('SubagentStop ends that subagent; without an agent_id it means nothing', () => {
+    expect(claude('SubagentStop', { stop_hook_active: false, agent_transcript_path: '/x.jsonl', ...sub }).events).toEqual([{ type: 'subagent-stop', agentId: 'a1b2c3' }])
+    expect(claude('SubagentStop', { stop_hook_active: false }).events).toEqual([])
+  })
+
+  it('an odd agent_id is dropped, not carried along', () => {
+    expect(claude('PreToolUse', { tool_name: 'Read', tool_input: {}, agent_id: 'x'.repeat(200) }).events[0]).not.toHaveProperty('agentId')
+    expect(claude('PreToolUse', { tool_name: 'Read', tool_input: {}, agent_id: 42 }).events[0]).not.toHaveProperty('agentId')
   })
 })
 
@@ -161,6 +191,10 @@ describe('normalizeHook · Notification', () => {
     expect(classifyNotification(undefined, 'Claude has a question for you')).toBe('question')
     expect(classifyNotification(undefined, 'Claude is waiting for your input')).toBe('idle')
     expect(classifyNotification(undefined, 'Build finished')).toBe('other')
+  })
+
+  it('a teammate asking the lead for permission is a permission prompt (agent teams)', () => {
+    expect(classifyNotification('worker_permission_prompt', 'reviewer needs permission for Bash')).toBe('permission')
   })
 
   it('maps elicitation dialogs to question and unknown types to other', () => {

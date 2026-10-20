@@ -4,6 +4,7 @@ import { currentAction } from './current-action'
 import type { AgentEvent } from './agent-events'
 import type { AgentMarker } from './agent-launch'
 import { blockedAction, blockedReasonOf, readScreen, type BlockedReason } from './startup-screen'
+import { toolCallKey } from './tool-call'
 import type { AgentKind, AgentPhase, SessionStatus } from './types'
 
 /**
@@ -24,6 +25,31 @@ const MESSAGE_MAX_CHARS = 80
  * Stop. A turn whose title went idle and that has been silent this long is over (PRD §6.7).
  */
 export const CODEX_IDLE_HEAL_MS = 4_000
+/**
+ * An agent that starts another tool call this long after asking about one has had that ask settled. A denial in the
+ * TUI sends no PostToolUse (Claude 2.1.304: the call never runs) and the agent carries on after one with feedback, as
+ * a subagent always does; the next call needs the user to answer and the model to reply, so it comes seconds later.
+ * Calls of one batch start together: their PreToolUse hooks arrive within a few hook round trips (tens of ms).
+ */
+export const ASK_SETTLE_MS = 1_500
+
+/**
+ * Something the agent waits on the user for: a permission dialog or a question for one tool call (`key` =
+ * toolCallKey), or a Notification that names no call (`key` = ''). `agent` is the subagent that asked, '' for the
+ * main thread. The TUI queues them and shows the oldest first.
+ */
+export interface Ask {
+  key: string
+  agent: string
+  label: string
+  at: number
+}
+
+/** What a session does apart from its asks: its status once the last ask is answered. */
+export interface Underneath {
+  status: SessionStatus
+  action?: string
+}
 
 export type Signal =
   | { type: 'event'; event: AgentEvent }
@@ -93,6 +119,17 @@ export interface SessionState {
   statusSince: number
   /** Epoch ms the current turn began: `running` entered from anything but `needs_you`. */
   turnStartedAt?: number
+  /** Pending asks, oldest first; `needs_you` holds while any is left (PRD §3.1). */
+  asks: Ask[]
+  /** While asks are pending: what the session goes back to once they are answered. */
+  under?: Underneath
+  /**
+   * The TUI's title showed a dialog since the newest ask (Claude's `✳`, Codex's `Action Required`). A busy title
+   * after that means every dialog was answered: Claude 2.1.304 animates its title only while it works with no
+   * dialog up, and runs an approved tool without a hook until its PostToolUse (a long build would stay needs_you).
+   * A busy frame from before the dialog, parsed late, comes before this is set and is ignored.
+   */
+  dialogSeen?: boolean
 }
 
 export function initialState(
@@ -126,7 +163,8 @@ export function initialState(
     hooksSilent: false,
     ...(options.lastReply ? { lastReply: options.lastReply } : {}),
     ...(options.finishedAt !== undefined ? { finishedAt: options.finishedAt } : {}),
-    statusSince: options.statusSince ?? options.lastActivityAt ?? now
+    statusSince: options.statusSince ?? options.lastActivityAt ?? now,
+    asks: []
   }
 }
 
@@ -163,11 +201,71 @@ export function replyLine(text: string | undefined): string | undefined {
 }
 
 function running(state: SessionState, now: number, action: string | undefined): SessionState {
-  return { ...state, status: 'running', currentAction: action, toolAction: action, lastEventAt: now, lastActivityAt: now }
+  return { ...state, status: 'running', currentAction: action, toolAction: action, lastEventAt: now, lastActivityAt: now, asks: NO_ASKS, under: undefined }
 }
 
-function waiting(state: SessionState, now: number, action: string): SessionState {
-  return { ...state, status: 'needs_you', currentAction: action, lastEventAt: now, lastActivityAt: now }
+const NO_ASKS: Ask[] = []
+
+/** `needs_you` names the oldest ask (the one the TUI shows) and how many wait. */
+function askLabel(asks: Ask[]): string {
+  const first = asks[0]
+  if (!first) return '等你确认'
+  return asks.length > 1 ? `${first.label}（共 ${asks.length} 项）` : first.label
+}
+
+/** What the session is doing apart from its asks. */
+function underneath(state: SessionState): Underneath {
+  if (state.status !== 'needs_you') return { status: state.status, action: state.currentAction }
+  return state.under ?? { status: 'running', action: state.toolAction }
+}
+
+/**
+ * Adds an ask (once per call). A main-thread call that asks proves the main turn runs; a subagent's or an unnamed
+ * one keeps whatever the session was doing, so a background agent asking after the turn ended returns it there.
+ */
+function addAsk(state: SessionState, ask: Ask, now: number): SessionState {
+  const known = ask.key !== '' ? state.asks.some((a) => a.agent === ask.agent && a.key === ask.key) : state.asks.some((a) => a.agent === ask.agent && a.key === '')
+  const asks = known ? state.asks : [...state.asks, ask]
+  const under: Underneath = ask.key !== '' && ask.agent === '' ? { status: 'running', action: state.toolAction } : underneath(state)
+  // Claude's title is `✳` while a dialog is up; one already idle may be that dialog's.
+  const dialogSeen = known ? state.dialogSeen : state.kind === 'claude' && state.titleIdle
+  return { ...state, status: 'needs_you', asks, under, dialogSeen, currentAction: askLabel(asks), lastEventAt: now, lastActivityAt: now }
+}
+
+/** A busy title after the dialog was seen: every ask was answered and the agent works again. */
+function dialogsAnswered(state: SessionState, now: number): SessionState | null {
+  if (state.status !== 'needs_you' || state.asks.length === 0 || !state.dialogSeen) return null
+  const under = state.under?.status === 'running' ? state.under.action : undefined
+  return { ...state, status: 'running', currentAction: under ?? state.toolAction, asks: NO_ASKS, under: undefined, dialogSeen: false, titleIdle: false, lastActivityAt: now }
+}
+
+/** The asks left after some were answered: still `needs_you`, or back to what the session does underneath. */
+function withAsks(state: SessionState, asks: Ask[]): SessionState {
+  if (asks.length > 0) return { ...state, status: 'needs_you', asks, currentAction: askLabel(asks) }
+  if (state.status !== 'needs_you') return state.asks.length === 0 ? state : { ...state, asks: NO_ASKS, under: undefined }
+  const under = underneath(state)
+  return { ...state, status: under.status, currentAction: under.action, asks: NO_ASKS, under: undefined }
+}
+
+/**
+ * Nothing waits on the user and no turn runs (the idle footer is back, Claude's idle_prompt, Codex's idle title):
+ * idle, or what a finished turn left underneath its asks (unread reply, error).
+ */
+function settledIdle(state: SessionState): SessionState {
+  const under = state.status === 'needs_you' ? state.under : undefined
+  const status: SessionStatus = under && (under.status === 'done_unread' || under.status === 'error') ? under.status : 'idle'
+  return { ...state, status, currentAction: status === 'error' ? under?.action : undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
+}
+
+/** Asks the agent's own calls no longer back: the oldest ask of this call, else (input rewritten) of this tool. */
+function answered(asks: Ask[], agent: string, tool: string, input: Record<string, unknown>): Ask[] {
+  if (asks.length === 0) return asks
+  const key = toolCallKey(tool, input)
+  let at = asks.findIndex((a) => a.agent === agent && a.key === key)
+  if (at < 0) at = asks.findIndex((a) => a.agent === agent && a.key.startsWith(`${tool}:`))
+  const left = at < 0 ? asks : asks.filter((_, i) => i !== at)
+  // A main-thread call also answers what a Notification asked without naming a call.
+  return agent === '' ? left.filter((a) => !(a.agent === '' && a.key === '')) : left
 }
 
 function reduceEvent(state: SessionState, event: AgentEvent, now: number): SessionState {
@@ -176,47 +274,80 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     case 'session-start':
       // A fresh agent is idle; a restart after a failure clears the error. Compaction mid-turn stays running.
       return state.status === 'error' || state.status === 'exited'
-        ? { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined }
+        ? { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
         : touched
 
-    case 'prompt-submit':
-      return { ...running(state, now, undefined), lastReply: undefined }
+    case 'prompt-submit': {
+      // A new turn: a dialog of the main thread cannot be up while a prompt is sent. A subagent's still may be.
+      const asks = state.asks.filter((a) => a.agent !== '')
+      if (asks.length === 0) return { ...running(state, now, undefined), lastReply: undefined }
+      return { ...touched, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running' }, toolAction: undefined, lastReply: undefined }
+    }
 
     case 'tool-start': {
       const action = currentAction(event.tool, event.input)
-      if (event.tool === 'AskUserQuestion') return { ...waiting(state, now, action), toolAction: action }
+      const agent = event.agentId ?? ''
+      // Its own earlier asks are settled now (see ASK_SETTLE_MS); an unnamed one by any main-thread call.
+      const asks = state.asks.filter((a) => a.agent !== agent || (a.key !== '' && now - a.at < ASK_SETTLE_MS))
+      if (event.tool === 'AskUserQuestion') {
+        return { ...addAsk({ ...withAsks(state, asks), lastEventAt: now }, { key: toolCallKey(event.tool, event.input), agent, label: action, at: now }, now), toolAction: action }
+      }
+      // A subagent's work says nothing about the main turn (it runs on after the turn ended); only its asks count.
+      if (agent !== '') return asks.length === state.asks.length ? state : withAsks(state, asks)
+      if (asks.length > 0) return { ...touched, asks, status: 'needs_you', currentAction: askLabel(asks), under: { status: 'running', action }, toolAction: action }
       return running(state, now, action)
     }
 
-    case 'tool-end':
+    case 'tool-end': {
+      const agent = event.agentId ?? ''
+      const asks = answered(state.asks, agent, event.tool, event.input)
+      if (agent !== '') return asks.length === state.asks.length ? state : withAsks(state, asks)
+      // Another ask still waits (a parallel call's, a subagent's): needs_you stays, the main turn runs underneath.
+      if (asks.length > 0) return { ...touched, asks, status: 'needs_you', currentAction: askLabel(asks), under: { status: 'running', action: state.toolAction } }
       return running(state, now, state.toolAction)
+    }
+
+    case 'permission-request': {
+      const label = `等你确认：${currentAction(event.tool, event.input)}`
+      return addAsk(state, { key: toolCallKey(event.tool, event.input), agent: event.agentId ?? '', label, at: now }, now)
+    }
+
+    case 'subagent-stop': {
+      const asks = state.asks.filter((a) => a.agent !== event.agentId)
+      return asks.length === state.asks.length ? state : withAsks(state, asks)
+    }
 
     case 'notification':
-      if (event.kind === 'permission') {
-        return waiting(state, now, state.toolAction ? `等你确认：${state.toolAction}` : '等你确认')
+      if (event.kind === 'permission' || event.kind === 'question') {
+        // Its PermissionRequest (about 6 s earlier) already named what is asked.
+        if (state.asks.length > 0) return touched
+        const label = event.kind === 'permission' ? (state.toolAction ? `等你确认：${state.toolAction}` : '等你确认') : (state.toolAction ?? '等你回答')
+        return addAsk(state, { key: '', agent: '', label, at: now }, now)
       }
-      if (event.kind === 'question') return waiting(state, now, state.toolAction ?? '等你回答')
+      // Claude sends idle_prompt only while its prompt is idle: no turn, no dialog up, no background agent (PRD §6.6).
+      if (event.kind === 'idle' && (state.status === 'running' || state.status === 'needs_you')) return settledIdle(touched)
       return touched
 
-    case 'stop':
-      return {
-        ...touched,
-        status: state.viewing ? 'idle' : 'done_unread',
-        currentAction: undefined,
-        toolAction: undefined,
-        lastReply: replyLine(event.message),
-        finishedAt: now
-      }
+    case 'stop': {
+      const finished = { ...touched, currentAction: undefined, toolAction: undefined, lastReply: replyLine(event.message), finishedAt: now }
+      const status: SessionStatus = state.viewing ? 'idle' : 'done_unread'
+      // A background subagent may still wait on the user after the main turn ended.
+      const asks = state.asks.filter((a) => a.agent !== '')
+      if (asks.length > 0) return { ...finished, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status } }
+      return { ...finished, status, asks: NO_ASKS, under: undefined }
+    }
 
     case 'stop-failure': {
       const message = clip(event.message)
-      return { ...touched, status: 'error', currentAction: message, toolAction: undefined }
+      const asks = state.asks.filter((a) => a.agent !== '')
+      if (asks.length > 0) return { ...touched, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'error', action: message }, toolAction: undefined }
+      return { ...touched, status: 'error', currentAction: message, toolAction: undefined, asks: NO_ASKS, under: undefined }
     }
 
     case 'session-end':
       // /clear and /resume end the old conversation and start another a moment later (SessionStart revives it).
       if (event.reason === 'clear' || event.reason === 'resume') {
-        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined }
+        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
       }
       // Only the PTY exiting is final: a SessionStart after this (a new agent in the same shell) revives the session.
       return {
@@ -224,6 +355,8 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         status: 'exited',
         currentAction: undefined,
         toolAction: undefined,
+        asks: NO_ASKS,
+        under: undefined,
         ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
       }
 
@@ -255,7 +388,9 @@ function launched(state: SessionState, now: number): SessionState {
     titleRun: false,
     titleAction: false,
     lastEventAt: now,
-    lastActivityAt: now
+    lastActivityAt: now,
+    asks: NO_ASKS,
+    under: undefined
   }
 }
 
@@ -302,6 +437,11 @@ function reduceScreen(state: SessionState, text: string, now: number): SessionSt
 
   if (state.phase === 'ready' || state.phase === undefined) {
     let next = state
+    // A dialog no hook announced (its PermissionRequest and the Notification after it both lost, or hooks silent):
+    // the title went idle mid-turn and the screen shows the dialog. Without hooks also a background agent's, after it.
+    if (claude && state.titleIdle && reading.askDialog && (state.status === 'running' || (state.hooksSilent && (state.status === 'idle' || state.status === 'done_unread')))) {
+      return addAsk(state, { key: '', agent: '', label: state.toolAction ? `等你确认：${state.toolAction}` : '等你确认', at: now }, now)
+    }
     // Claude is up and its hooks stayed silent: the header says status follows the title only.
     if (claude && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent && now - state.phaseSince >= STARTUP_TIMEOUT_MS) {
       next = { ...next, hooksSilent: true }
@@ -312,7 +452,7 @@ function reduceScreen(state: SessionState, text: string, now: number): SessionSt
       if (reading.idleFooter) {
         if (next.footerSince === undefined) return { ...next, footerSince: now }
         if (now - next.footerSince >= NEEDS_YOU_HEAL_MS && now - next.lastEventAt >= NEEDS_YOU_HEAL_MS) {
-          return { ...next, status: 'idle', currentAction: undefined, toolAction: undefined, footerSince: undefined }
+          return { ...settledIdle(next), footerSince: undefined }
         }
       } else if (next.footerSince !== undefined) {
         return { ...next, footerSince: undefined }
@@ -328,7 +468,7 @@ function healCodex(state: SessionState, now: number): SessionState {
   if (!state.titleIdle) return state
   const active = state.status === 'running' || state.status === 'needs_you'
   if (!active || now - state.lastEventAt < CODEX_IDLE_HEAL_MS) return state
-  return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined, titleRun: false, titleAction: false }
+  return { ...settledIdle(state), titleRun: false, titleAction: false }
 }
 
 /**
@@ -338,6 +478,7 @@ function healCodex(state: SessionState, now: number): SessionState {
  */
 function reduceCodexTitle(state: SessionState, title: string, now: number): SessionState {
   if (CODEX_ACTION_TITLE.test(title)) {
+    if (state.status === 'needs_you' && state.asks.length > 0 && !state.dialogSeen) return { ...state, titleIdle: false, dialogSeen: true }
     if (state.status === 'needs_you' || state.status === 'exited') return state.titleIdle ? { ...state, titleIdle: false } : state
     if (state.status === 'error') return state
     return {
@@ -345,6 +486,7 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
       titleIdle: false,
       status: 'needs_you',
       currentAction: state.toolAction ? `等你确认：${state.toolAction}` : '等你确认',
+      under: underneath(state),
       titleAction: true,
       titleRun: false,
       lastActivityAt: now
@@ -352,9 +494,11 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
   }
 
   if (BUSY_TITLE.test(title)) {
+    const answered = dialogsAnswered(state, now)
+    if (answered) return answered
     // The dialog was answered (in the TUI): the turn goes on.
     if (state.titleAction && state.status === 'needs_you') {
-      return { ...state, titleIdle: false, status: 'running', currentAction: state.toolAction, titleAction: false, lastActivityAt: now }
+      return { ...state, titleIdle: false, status: 'running', currentAction: state.toolAction, titleAction: false, lastActivityAt: now, asks: NO_ASKS, under: undefined }
     }
     if (state.status === 'idle' && now - state.lastEventAt > TITLE_SETTLE_MS) {
       return { ...state, titleIdle: false, status: 'running', titleRun: true, lastActivityAt: now }
@@ -368,7 +512,7 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
     return { ...idle, status: 'idle', currentAction: undefined, toolAction: undefined, titleRun: false }
   }
   if (idle.titleAction && idle.status === 'needs_you') {
-    return { ...idle, status: 'idle', currentAction: undefined, toolAction: undefined, titleAction: false }
+    return { ...settledIdle(idle), titleAction: false }
   }
   return healCodex(idle, now)
 }
@@ -398,10 +542,13 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
       const base: SessionState = waking
         ? {
             ...ready(state, now),
-            ...(state.phase !== 'starting' && state.status !== 'error' ? { status: 'idle' as const, currentAction: undefined } : {})
+            ...(state.phase !== 'starting' && state.status !== 'error' ? { status: 'idle' as const, currentAction: undefined, asks: NO_ASKS, under: undefined } : {})
           }
         : state
-      const next = { ...reduceEvent(base, signal.event, now), hooksSeen: true, hooksSilent: false, footerSince: undefined }
+      const reduced = reduceEvent(base, signal.event, now)
+      // A subagent's call that changed nothing (it does not wait on the user) leaves the session untouched.
+      if (reduced === base && !waking) return state
+      const next = { ...reduced, hooksSeen: true, hooksSilent: false, footerSince: undefined }
       // A hook event is authoritative: whatever the title alone had inferred is settled now.
       return state.titleRun || state.titleAction ? { ...next, titleRun: false, titleAction: false } : next
     }
@@ -409,7 +556,7 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
     case 'launch-failed':
       return state.phase === undefined
         ? state
-        : { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, phase: 'exited', phaseSince: now, blocked: undefined }
+        : { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, phase: 'exited', phaseSince: now, blocked: undefined, asks: NO_ASKS, under: undefined }
 
     case 'agent-marker': {
       if (!agent || state.phase === undefined) return state
@@ -426,7 +573,9 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         phase: 'exited',
         phaseSince: now,
         blocked: undefined,
-        lastActivityAt: now
+        lastActivityAt: now,
+        asks: NO_ASKS,
+        under: undefined
       }
     }
 
@@ -436,7 +585,7 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
     case 'reattached':
       if (state.phase !== 'not-started') return state
       return signal.exited
-        ? { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, ended: true, phase: 'exited', phaseSince: now, blocked: undefined }
+        ? { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, ended: true, phase: 'exited', phaseSince: now, blocked: undefined, asks: NO_ASKS, under: undefined }
         : // Its hooks reported in the run that launched it; a quiet idle agent is not a silent-hooks one.
           { ...state, phase: 'ready', phaseSince: now, hooksSeen: true }
 
@@ -454,6 +603,8 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         toolAction: undefined,
         lastActivityAt: now,
         ended: true,
+        asks: NO_ASKS,
+        under: undefined,
         ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
       }
     }
@@ -471,6 +622,12 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
       }
       if (state.kind === 'codex') return reduceCodexTitle(state, signal.title, now)
       const titleIdle = IDLE_TITLE.test(signal.title)
+      if (BUSY_TITLE.test(signal.title)) {
+        const answered = dialogsAnswered(state, now)
+        if (answered) return answered
+      } else if (titleIdle && state.asks.length > 0 && !state.dialogSeen) {
+        return { ...state, titleIdle, dialogSeen: true }
+      }
       // Lowest-priority signal for "working": only when hooks have been quiet and we think we are idle.
       if (BUSY_TITLE.test(signal.title) && state.status === 'idle' && now - state.lastEventAt > TITLE_SETTLE_MS) {
         return { ...state, titleIdle: false, status: 'running', lastActivityAt: now }
@@ -479,7 +636,13 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
     }
 
     case 'viewed': {
-      const next = state.status === 'done_unread' ? { ...state, status: 'idle' as const } : state
+      // A reply the user now sees is read, also one waiting underneath a background agent's ask.
+      const next =
+        state.status === 'done_unread'
+          ? { ...state, status: 'idle' as const }
+          : state.under?.status === 'done_unread'
+            ? { ...state, under: { status: 'idle' as const } }
+            : state
       return next.viewing ? next : { ...next, viewing: true }
     }
 
@@ -492,8 +655,30 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         if (healed !== state) return healed
       }
       if (state.status === 'running' && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
-        return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined }
+        return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
       }
       return state
   }
+}
+
+/** A tick can heal the session: a running turn (Claude's idle-title heal), a Codex wait (Esc on its own dialog). */
+export function healsOnTick(state: SessionState): boolean {
+  return state.status === 'running' || (state.kind === 'codex' && state.status === 'needs_you')
+}
+
+/** Whether the session needs the 1 s tick: a tick can heal it, or its screen can change its state. */
+export function ticksFast(state: SessionState): boolean {
+  return healsOnTick(state) || watchesScreen(state)
+}
+
+/** Whether the session's terminal screen can change its state right now (the controller reads it only then). */
+export function watchesScreen(state: SessionState): boolean {
+  if (state.phase === 'starting' || state.phase === 'blocked') return true
+  if (state.kind !== 'claude') return false
+  if (state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent) return true
+  if (!state.titleIdle) return false
+  // An idle title while waiting (has the dialog gone?) or mid-turn (is a dialog up that no hook announced?); with
+  // silent hooks also between turns (a background agent's dialog).
+  if (state.status === 'needs_you' || state.status === 'running') return true
+  return state.hooksSilent && (state.status === 'idle' || state.status === 'done_unread')
 }

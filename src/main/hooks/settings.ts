@@ -15,7 +15,9 @@ export const CLAUDE_HOOK_EVENTS = [
   'Notification',
   'Stop',
   'StopFailure',
-  'SessionEnd'
+  'SessionEnd',
+  // A subagent finished: nothing of it waits on the user any more (two dialogs up at once, PRD §3.1).
+  'SubagentStop'
 ] as const
 
 export type ClaudeHookEvent = (typeof CLAUDE_HOOK_EVENTS)[number]

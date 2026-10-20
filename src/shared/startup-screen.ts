@@ -14,20 +14,25 @@ export interface ScreenReading {
   blank: boolean
   /** Claude's idle input footer is showing, i.e. no permission / question dialog covers it. */
   idleFooter: boolean
+  /** Claude's permission / question dialog is up: a numbered choice above its `Esc to cancel` footer. */
+  askDialog: boolean
 }
 
 /** Question markers at the end of a shell startup (rc files, version managers, oh-my-zsh). */
 const SHELL_PROMPT = /\[[Yy]\/[Nn]\]|\[[Nn]\/[Yy]\]|\([Yy]\/[Nn]\)|\(yes\/no\)|Would you like to update|Press (?:any key|enter) to continue/i
 const TAIL_LINES = 6
+/** A dialog with many options pushes its selected first one further up. */
+const DIALOG_TAIL_LINES = 12
+const CLAUDE_CHOICE = /❯\s*\d+\.\s/
 
 const CLAUDE_UI = /Claude Code v\d|\? for shortcuts|\bmode on\b|bypass permissions on|esc to interrupt/
 const CODEX_UI = /OpenAI Codex|^\s*›/m
 /** What Claude draws in place of the mode footer while a permission / question dialog is up. */
 const CLAUDE_DIALOG_FOOTER = /Esc to cancel|Do you want to|Enter to (?:select|confirm)/
 
-function tail(screen: string): string {
+function tail(screen: string, count = TAIL_LINES): string {
   const lines = screen.split('\n').filter((line) => line.trim() !== '')
-  return lines.slice(-TAIL_LINES).join('\n')
+  return lines.slice(-count).join('\n')
 }
 
 export function readScreen(kind: AgentKind, screen: string): ScreenReading {
@@ -38,7 +43,8 @@ export function readScreen(kind: AgentKind, screen: string): ScreenReading {
     prompt: dialog === null && SHELL_PROMPT.test(tail(screen)),
     agentUi: kind === 'shell' ? false : (claude ? CLAUDE_UI : CODEX_UI).test(screen),
     blank: screen.trim() === '',
-    idleFooter: claude && /\? for shortcuts|\bmode on\b|bypass permissions on/.test(tail(screen)) && !CLAUDE_DIALOG_FOOTER.test(tail(screen))
+    idleFooter: claude && /\? for shortcuts|\bmode on\b|bypass permissions on/.test(tail(screen)) && !CLAUDE_DIALOG_FOOTER.test(tail(screen)),
+    askDialog: claude && /Esc to cancel/.test(tail(screen)) && CLAUDE_CHOICE.test(tail(screen, DIALOG_TAIL_LINES))
   }
 }
 

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from './agent-events'
 import {
+  ASK_SETTLE_MS,
   CODEX_IDLE_HEAL_MS,
   initialState,
   reduce,
   replyLine,
   CLAUDE_IDLE_HEAL_MS,
+  NEEDS_YOU_HEAL_MS,
   type SessionState,
   type Signal
 } from './session-state-machine'
@@ -20,6 +22,16 @@ const promptSubmit = ev({ type: 'prompt-submit', prompt: 'hi' })
 const stop = ev({ type: 'stop' })
 const notification = (kind: 'permission' | 'question' | 'idle' | 'other') =>
   ev({ type: 'notification', kind, message: 'm' })
+const permission = (tool: string, input: Record<string, unknown>, agentId?: string) =>
+  ev({ type: 'permission-request', tool, input, ...(agentId ? { agentId } : {}) })
+const subStart = (agentId: string, tool: string, input: Record<string, unknown> = {}) => ev({ type: 'tool-start', tool, input, agentId })
+const subEnd = (agentId: string, tool: string, input: Record<string, unknown> = {}) => ev({ type: 'tool-end', tool, input, ok: true, agentId })
+const toolEndOf = (tool: string, input: Record<string, unknown>) => ev({ type: 'tool-end', tool, input, ok: true })
+
+/** Applies signals one millisecond apart from `at`. */
+function run(state: SessionState, signals: Signal[], at = T0 + 10): SessionState {
+  return signals.reduce((s, signal, i) => reduce(s, signal, at + i), state)
+}
 
 function make(status: SessionStatus, options: { kind?: AgentKind; viewing?: boolean; action?: string } = {}): SessionState {
   return initialState(options.kind ?? 'claude', T0, { status, viewing: options.viewing, currentAction: options.action })
@@ -39,7 +51,10 @@ describe('status transitions', () => {
     ['AskUserQuestion tool-start', 'running', toolStart('AskUserQuestion', { questions: [] }), 'needs_you'],
     ['permission notification', 'running', notification('permission'), 'needs_you'],
     ['question notification', 'running', notification('question'), 'needs_you'],
-    ['idle notification does not change status', 'running', notification('idle'), 'running'],
+    // Claude sends idle_prompt only while its prompt is idle (no turn, no dialog, no background agent; PRD §6.6).
+    ['idle notification ends a turn that lost its Stop', 'running', notification('idle'), 'idle'],
+    ['idle notification ends a wait whose dialog went away', 'needs_you', notification('idle'), 'idle'],
+    ['idle notification leaves an unread reply alone', 'done_unread', notification('idle'), 'done_unread'],
     ['other notification does not change status', 'idle', notification('other'), 'idle'],
     ['stop-failure from running', 'running', ev({ type: 'stop-failure', message: 'rate limited' }), 'error'],
     ['stop-failure from needs_you', 'needs_you', ev({ type: 'stop-failure' }), 'error'],
@@ -168,8 +183,8 @@ describe('turn and status times', () => {
     expect(s.statusSince).toBe(T0 + 1_000)
     s = reduce(s, notification('permission'), T0 + 3_000)
     expect(s.statusSince).toBe(T0 + 3_000)
-    // An idle_prompt notification is activity, not a new wait.
-    s = reduce(s, notification('idle'), T0 + 60_000)
+    // Another notification is activity, not a new wait.
+    s = reduce(s, notification('other'), T0 + 60_000)
     expect(s.statusSince).toBe(T0 + 3_000)
   })
 
@@ -282,6 +297,152 @@ describe('self-heal', () => {
   })
 })
 
+// Known issue until 2026-10-20: two calls waiting on the user at once overwrote each other; answering the first
+// turned the session back to running while the second dialog was still up. Every dialog is its own ask now.
+describe('asks: several dialogs at once (PRD §3.1)', () => {
+  const A = { url: 'https://a.example' }
+  const B = { url: 'https://b.example' }
+
+  it('two parallel permission requests keep needs_you until both are answered, in either order', () => {
+    for (const order of [[A, B], [B, A]] as const) {
+      let s = run(make('running'), [toolStart('WebFetch', A), toolStart('WebFetch', B), permission('WebFetch', A), permission('WebFetch', B)])
+      expect(s).toMatchObject({ status: 'needs_you', currentAction: '等你确认：抓取 a.example（共 2 项）' })
+      s = reduce(s, toolEndOf('WebFetch', order[0]), T0 + 30_000)
+      expect(s.status).toBe('needs_you')
+      expect(s.asks).toHaveLength(1)
+      expect(s.currentAction).toBe(`等你确认：抓取 ${order[1] === A ? 'a' : 'b'}.example`)
+      s = reduce(s, toolEndOf('WebFetch', order[1]), T0 + 40_000)
+      expect(s.status).toBe('running')
+      expect(s.asks).toEqual([])
+    }
+  })
+
+  it('the same request twice is one ask', () => {
+    const s = run(make('running'), [permission('Bash', { command: 'ls' }), permission('Bash', { command: 'ls' })])
+    expect(s.asks).toHaveLength(1)
+  })
+
+  it('a PostToolUse whose input was rewritten still answers the oldest ask of its tool', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'ls' })])
+    s = reduce(s, toolEndOf('Bash', { command: 'ls', description: 'list' }), T0 + 5_000)
+    expect(s.status).toBe('running')
+  })
+
+  it('the Notification that follows a PermissionRequest (~6 s later) is the same dialog, not another ask', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'ls' })])
+    s = reduce(s, notification('permission'), T0 + 6_000)
+    expect(s.asks).toHaveLength(1)
+    s = reduce(s, toolEndOf('Bash', { command: 'ls' }), T0 + 9_000)
+    expect(s.status).toBe('running')
+  })
+
+  it('a call of the same batch starting right after an ask does not settle it; one started seconds later does', () => {
+    let s = run(make('running'), [permission('WebFetch', A), toolStart('Grep', { pattern: 'x' })])
+    expect(s.status).toBe('needs_you')
+    // Denied with feedback: no PostToolUse, the agent carries on with its next call.
+    s = reduce(s, toolStart('Read', { file_path: '/r.ts' }), T0 + 10 + ASK_SETTLE_MS + 1_000)
+    expect(s).toMatchObject({ status: 'running', currentAction: '读取 r.ts', asks: [] })
+  })
+
+  it('plan approval (ExitPlanMode) waits on the user', () => {
+    expect(reduce(make('running'), permission('ExitPlanMode', { plan: 'x' }), T0 + 1)).toMatchObject({ status: 'needs_you', currentAction: '等你确认：确认计划' })
+  })
+
+  it('a turn boundary ends the main thread\'s asks', () => {
+    for (const signal of [promptSubmit, stop, ev({ type: 'stop-failure' }), ev({ type: 'session-end', reason: 'clear' })]) {
+      const s = run(make('running'), [permission('Bash', { command: 'ls' }), signal])
+      expect(s.asks).toEqual([])
+      expect(s.status).not.toBe('needs_you')
+    }
+  })
+
+  it('a dialog dismissed in the TUI (footer back, title idle) settles every ask', () => {
+    const idleFooter: Signal = { type: 'screen', text: '❯ \n  ? for shortcuts' }
+    let s = run(initialState('claude', T0, { status: 'running', phase: 'ready' }), [permission('Bash', { command: 'a' }), permission('Bash', { command: 'b' }), { type: 'title', title: '✳ Claude Code' }])
+    s = reduce(s, idleFooter, T0 + 1_000)
+    s = reduce(s, idleFooter, T0 + 1_000 + NEEDS_YOU_HEAL_MS)
+    expect(s).toMatchObject({ status: 'idle', asks: [] })
+  })
+})
+
+// Claude 2.1.304 marks hooks fired inside a subagent with `agent_id`. A subagent's work is not the main turn: it
+// never starts or ends a turn (background agents run on after Stop); only its asks count.
+describe('subagents and background agents', () => {
+  it('a subagent asking while the main turn runs is needs_you; its answer returns to running', () => {
+    let s = run(make('running'), [toolStart('Task', { description: '调查' }), subStart('w1', 'Bash', { command: 'make' }), permission('Bash', { command: 'make' }, 'w1')])
+    expect(s).toMatchObject({ status: 'needs_you', currentAction: '等你确认：运行 make' })
+    s = reduce(s, subEnd('w1', 'Bash', { command: 'make' }), T0 + 9_000)
+    expect(s).toMatchObject({ status: 'running', currentAction: '子任务：调查' })
+  })
+
+  it('two subagents asking at once: answering one keeps needs_you for the other', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'a' }, 'w1'), permission('Bash', { command: 'b' }, 'w2')])
+    s = reduce(s, subEnd('w1', 'Bash', { command: 'a' }), T0 + 9_000)
+    expect(s).toMatchObject({ status: 'needs_you', currentAction: '等你确认：运行 b' })
+    s = reduce(s, subEnd('w2', 'Bash', { command: 'b' }), T0 + 9_500)
+    expect(s.status).toBe('running')
+  })
+
+  it('a subagent\'s calls never start a turn or bring back running after Stop', () => {
+    let s = reduce(make('running'), stop, T0 + 1)
+    expect(s.status).toBe('done_unread')
+    const before = s
+    s = run(s, [subStart('bg', 'Bash', { command: 'pnpm test' }), subEnd('bg', 'Bash', { command: 'pnpm test' })], T0 + 60_000)
+    expect(s).toBe(before)
+  })
+
+  it('a background agent asking after the turn ended is needs_you, and goes back to the unread reply when answered', () => {
+    let s = reduce(make('running'), ev({ type: 'stop', message: '已完成' }), T0 + 1)
+    s = reduce(s, permission('Bash', { command: 'rm -rf dist' }, 'bg'), T0 + 30_000)
+    expect(s).toMatchObject({ status: 'needs_you', currentAction: '等你确认：运行 rm -rf dist' })
+    s = reduce(s, subEnd('bg', 'Bash', { command: 'rm -rf dist' }), T0 + 40_000)
+    expect(s).toMatchObject({ status: 'done_unread', lastReply: '已完成' })
+  })
+
+  it('…or to idle if the user saw the reply meanwhile', () => {
+    let s = reduce(make('running'), stop, T0 + 1)
+    s = reduce(s, permission('Bash', { command: 'x' }, 'bg'), T0 + 2)
+    s = reduce(s, { type: 'viewed' }, T0 + 3)
+    expect(s.status).toBe('needs_you')
+    s = reduce(s, ev({ type: 'subagent-stop', agentId: 'bg' }), T0 + 4)
+    expect(s.status).toBe('idle')
+  })
+
+  it('Stop keeps a background agent\'s ask; a new prompt keeps it too', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'x' }, 'bg'), stop])
+    expect(s).toMatchObject({ status: 'needs_you', asks: [{ agent: 'bg' }] })
+    s = reduce(s, promptSubmit, T0 + 100)
+    expect(s).toMatchObject({ status: 'needs_you', under: { status: 'running' } })
+    s = reduce(s, subEnd('bg', 'Bash', { command: 'x' }), T0 + 200)
+    expect(s.status).toBe('running')
+  })
+
+  it('SubagentStop drops that subagent\'s asks (it was denied, then finished)', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'x' }, 'w1'), permission('Bash', { command: 'y' }, 'w2')])
+    s = reduce(s, ev({ type: 'subagent-stop', agentId: 'w1' }), T0 + 100)
+    expect(s.asks).toMatchObject([{ agent: 'w2' }])
+  })
+
+  it('a subagent that carries on seconds after asking settles its own ask, not another one\'s', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'x' }, 'w1'), permission('Bash', { command: 'y' }, 'w2')])
+    s = reduce(s, subStart('w1', 'Read', { file_path: '/a' }), T0 + 10 + ASK_SETTLE_MS + 500)
+    expect(s.asks).toMatchObject([{ agent: 'w2' }])
+    expect(s.status).toBe('needs_you')
+  })
+
+  it('the main thread moving on does not settle a subagent\'s ask', () => {
+    let s = run(make('running'), [permission('Bash', { command: 'x' }, 'w1')])
+    s = reduce(s, toolStart('Read', { file_path: '/a' }), T0 + 60_000)
+    expect(s).toMatchObject({ status: 'needs_you', under: { status: 'running', action: '读取 a' } })
+  })
+
+  it('idle_prompt (sent only with no dialog up) settles everything, keeping an unread reply', () => {
+    let s = run(make('running'), [stop, permission('Bash', { command: 'x' }, 'bg')])
+    s = reduce(s, notification('idle'), T0 + 60_000)
+    expect(s).toMatchObject({ status: 'done_unread', asks: [] })
+  })
+})
+
 describe('shell sessions', () => {
   const shell = () => make('idle', { kind: 'shell' })
 
@@ -322,44 +483,85 @@ describe('exited is final', () => {
   })
 })
 
-// Hooks arrive in any order and some never arrive. Seeded random runs of a live Claude session must still settle:
-// a Stop ends the turn, and with the Stop lost an idle title heals it (the "never stuck" half of PRD §3.1).
+// Hooks arrive in any order and some never arrive. Seeded random runs of a live Claude session — with parallel
+// permission dialogs, subagents and background agents (`agent_id`) — must still settle: a Stop ends the main turn,
+// a lost Stop heals from the idle title or idle_prompt, and needs_you holds exactly while some ask is pending
+// (the "never stuck" half of PRD §3.1; the timed half is src/main/hooks/status-sim.test.ts).
 describe('never stuck', () => {
+  const CALLS = [
+    { tool: 'Bash', input: { command: 'pnpm test' } },
+    { tool: 'WebFetch', input: { url: 'https://a.example' } },
+    { tool: 'WebFetch', input: { url: 'https://b.example' } }
+  ]
+  const AGENTS = ['w1', 'w2']
   const SIGNALS: Signal[] = [
     promptSubmit,
     toolStart('Bash', { command: 'pnpm test' }),
     toolStart('Edit', { file_path: '/repo/a.ts' }),
     toolEnd(),
+    ...CALLS.flatMap((c) => [permission(c.tool, c.input), toolEndOf(c.tool, c.input)]),
+    ...AGENTS.flatMap((a) => [
+      subStart(a, 'Bash', { command: 'make' }),
+      permission('Bash', { command: 'make' }, a),
+      subEnd(a, 'Bash', { command: 'make' }),
+      ev({ type: 'subagent-stop', agentId: a })
+    ]),
+    toolStart('AskUserQuestion', { questions: [{ question: '用哪个库？' }] }),
+    ev({ type: 'tool-end', tool: 'AskUserQuestion', input: { questions: [{ question: '用哪个库？' }] }, ok: true }),
     notification('permission'),
     notification('question'),
     notification('idle'),
     ev({ type: 'session-start' }),
     ev({ type: 'session-end', reason: 'clear' }),
     ev({ type: 'stop-failure', message: 'API 额度已用完' }),
+    stop,
     { type: 'viewed' },
     { type: 'unviewed' },
     { type: 'tick' },
     { type: 'title', title: '✳ Claude Code' },
-    { type: 'title', title: '⠂ Claude Code' }
+    { type: 'title', title: '⠂ Claude Code' },
+    { type: 'screen', text: '❯ \n  ? for shortcuts' },
+    { type: 'screen', text: 'Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel' }
   ]
+  const name = (signal: Signal): string => {
+    if (signal.type !== 'event') return signal.type === 'title' ? `title:${signal.title[0]}` : signal.type
+    const e = signal.event
+    const agent = 'agentId' in e && e.agentId ? `@${e.agentId}` : ''
+    const what = 'kind' in e ? `:${e.kind}` : 'tool' in e ? `:${e.tool}` : ''
+    return `${e.type}${what}${agent}`
+  }
 
-  it('500 random runs: Stop always ends the turn; a lost Stop heals from the idle title', () => {
+  it('600 random runs: needs_you exactly while asks wait; Stop, idle_prompt and the idle title always settle', () => {
     let seed = 20261020
     const random = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31
-    for (let run = 0; run < 500; run++) {
+    for (let run = 0; run < 600; run++) {
       let now = T0
       let state = reduce(initialState('claude', T0, { status: 'idle', phase: 'starting' }), ev({ type: 'session-start' }), now)
       const trail: string[] = []
-      for (let i = 1 + Math.floor(random() * 40); i > 0; i--) {
+      for (let i = 1 + Math.floor(random() * 50); i > 0; i--) {
         const signal = SIGNALS[Math.floor(random() * SIGNALS.length)] as Signal
         now += Math.floor(random() * 4_000)
         state = reduce(state, signal, now)
-        trail.push(signal.type === 'event' ? `${signal.event.type}${'kind' in signal.event ? `:${signal.event.kind}` : ''}` : signal.type === 'title' ? `title:${signal.title[0]}` : signal.type)
+        trail.push(name(signal))
+        const why = `run ${run}: ${trail.join(' → ')}`
+        expect(state.status === 'needs_you', why).toBe(state.asks.length > 0)
+        if (state.status === 'needs_you') expect(state.currentAction, why).toBeTruthy()
+        // One ask per call and agent at most: nothing piles up.
+        expect(state.asks.length, why).toBeLessThanOrEqual(CALLS.length + AGENTS.length + 2)
       }
       const why = `run ${run}: ${trail.join(' → ')}`
-      expect(['idle', 'done_unread'], why).toContain(reduce(state, stop, now + 1).status)
+      // Stop ends the main turn; once every subagent is done too, nothing waits.
+      const done = AGENTS.reduce((s, a, i) => reduce(s, ev({ type: 'subagent-stop', agentId: a }), now + 2 + i), reduce(state, stop, now + 1))
+      expect(['idle', 'done_unread'], why).toContain(done.status)
+      // Claude's idle_prompt comes only when nothing runs and no dialog is up.
+      expect(['running', 'needs_you'], why).not.toContain(reduce(state, notification('idle'), now + 1).status)
+      // A lost Stop: the idle title heals a running turn.
       const idleTitle = reduce(state, { type: 'title', title: '✳ Claude Code' }, now + 1)
       expect(reduce(idleTitle, { type: 'tick' }, now + 1 + CLAUDE_IDLE_HEAL_MS).status, why).not.toBe('running')
+      // A dialog answered or dismissed in the TUI: the idle footer heals a wait.
+      const footer: Signal = { type: 'screen', text: '❯ \n  ? for shortcuts' }
+      const healed = reduce(reduce(idleTitle, footer, now + 2), footer, now + 2 + NEEDS_YOU_HEAL_MS + 2_000)
+      expect(healed.status, why).not.toBe('needs_you')
     }
   })
 })

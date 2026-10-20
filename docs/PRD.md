@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.47 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.48 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.48 | 2026-10-20 | **状态在多个确认、子 agent、后台 agent 下也准确**（§3.1，外部来源 c#1027 44 👍、c#2322 22 👍、o#13600）：每个权限对话框 / 提问 / 计划确认是一个**待确认项**（agent + 工具调用），全部回答完才离开“等你处理”，第二行写最早的一项和总数（`等你确认：抓取 a.example（共 2 项）`），修掉“两个同时确认的调用互相顶替”；带 `agent_id` 的子 agent / 后台 agent 的调用不开始也不结束一轮，只有它们的对话框算等你处理，一轮结束后后台 agent 请求权限、回答后回到“已完成”；新增自愈信号：`idle_prompt`、对话框标题之后标题重新转动（批准后工具还在跑）、屏幕上出现没有 hook 报告的对话框；Codex 等你处理时也按 1 s 检查。实测 Claude Code 2.1.304 的 hook 字段见 §6.6 |
 | v1.47 | 2026-10-20 | 新增 **F19 把文件和图片放进会话**：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴（剪贴板里的图片先存成临时文件）、会话头的回形针选文件或文件夹，都把转义后的路径放进输入行、不按回车；agent 自己把图片路径变成 `[Image #N]`。外部来源 c#3435（22 👍）、o#15377 |
 | v1.46 | 2026-10-20 | F11 **走第三方端点的会话不显示账号额度**：用 CC Switch 等把 Claude 指到 Kimi / GLM（settings.json 的 `ANTHROPIC_BASE_URL`）、用 Bedrock / Vertex，或 Codex 用非 `openai` 的 model provider 时，会话头不显示该厂商的额度标签，它的 token 不计入份额，它的 hook 也不让账号算作“在用”（不会因此更常去问官方账号）；context 照常显示。不做多账号 / 按会话的启动配置（见 ROADMAP：换服务商有 CC Switch，换账号 /logout 再 /login，只剩“两个账号并行”，等有用户提出） |
 | v1.45 | 2026-10-20 | 主区和右侧栏共用**一块主界面底板**（左侧圆角在这块底板上）：右侧栏卡片浮在主界面之上，四周 8 的留白是终端同色的 `bg/app`，开侧栏毛玻璃时也不再透出毛玻璃；侧栏是唯一和主界面分开的一栏 |
@@ -154,7 +155,7 @@ Project（git 仓库根目录）
 | 状态 | 含义 | 进入信号（优先级从高到低） |
 |---|---|---|
 | `running` 运行中 | agent 正在工作 | hook `UserPromptSubmit` / `PreToolUse` / `PostToolUse`；标题出现 spinner 字符 |
-| `needs_you` 等你处理 | 等待权限确认或回答提问 | hook `PermissionRequest`、`Notification(permission_prompt / elicitation_dialog)`、AskUserQuestion 对应的 `PreToolUse`；Codex 标题 `Action Required` |
+| `needs_you` 等你处理 | 等待权限确认或回答提问（可能同时有几项） | hook `PermissionRequest`（每个对话框一项）、`Notification(permission_prompt / elicitation_dialog / worker_permission_prompt)`、AskUserQuestion 对应的 `PreToolUse`；运行中 Claude 标题停在 `✳` 且屏幕上是对话框；Codex 标题 `Action Required` |
 | `done_unread` 已完成·未读 | 一轮对话结束，用户还没看 | hook `Stop`，且该会话当前不可见 |
 | `idle` 空闲 | 已完成且已看过，或刚启动 | 用户看过 `done_unread` 的会话；`SessionStart` |
 | `error` 出错 | 本轮失败 | hook `StopFailure`；进程非零退出 |
@@ -162,7 +163,10 @@ Project（git 仓库根目录）
 
 - `needsAttention = needs_you || error || done_unread`，总览计数、⌘J 和 Dock 角标按这个条件筛选。
 - 生命周期阶段与状态并列：正在启动 / 未启动 · 点击恢复 / 被首次弹窗挡住（“等你确认：信任此文件夹”）/ 已退出 / 找不到命令。只有 PTY 退出才算终止；`SessionEnd`（如 `/clear`）之后等待下一个 `SessionStart`。
-- **自愈**：hook 可能丢事件，所以定期检查进程是否存活。`running` 超过 3 分钟没有收到任何 hook 且标题显示空闲字符（Claude 为 `✳`）时降级为 `idle`；Codex 空闲标题持续 4 s 且没有 hook 时降级（§6.7）。`needs_you` 被用户在 TUI 中直接回答后（随后收到 `PostToolUse` 或 `UserPromptSubmit`），立即恢复为 `running`。
+- **同时等你处理的几件事**：每个权限对话框、提问、计划确认是一个待确认项，按“agent + 工具名 + 输入”区分（PermissionRequest 没有 tool_use_id）。还有没回答的就保持 `needs_you`，第二行写最早的一项（TUI 先显示它）和总数。一项在这些时候算回答了：同一调用的 `PostToolUse` / `PostToolUseFailure`（输入被改写时取同一工具最早的一项）；同一 agent 在它 1.5 s 之后开始了另一个调用（TUI 里拒绝不发 PostToolUse，主线程带反馈的拒绝和子 agent 被拒后都会接着做；同一批调用的 PreToolUse 只差几十毫秒）；该子 agent 的 `SubagentStop`；一轮的边界——主线程的项随 `UserPromptSubmit` / `Stop` / `StopFailure` 结束，子 agent 的项留着。没有点名调用的 Notification 只在没有别的项时算一项，由主线程的下一个调用回答。
+- **子 agent 与后台 agent**（Claude 2.1.304 的 `agent_id`，§6.6）：它们的调用不开始、不结束、不延长一轮，只有它们的对话框算 `needs_you`。主线程 `Stop` 之后后台 agent 请求权限 → `needs_you`，回答后回到 `done_unread`（期间看过则 `idle`）；后台任务完成后 Claude 自己用 `UserPromptSubmit`（source `system`）唤醒主线程，按新的一轮处理。后台的 Bash（dev server 等）不影响状态。
+- **自愈**：hook 可能丢，TUI 里的操作（回答、Esc）本身没有 hook。`running` 而 Claude 标题是 `✳`、6 s 没有 hook → `idle`（Esc 中断；先读屏幕，屏幕上是对话框时改为下一条）；`running` 而 Claude 标题是 `✳`、屏幕上是带编号选项和 `Esc to cancel` 的对话框 → `needs_you`（PermissionRequest 和 6 s 后的 Notification 都丢了，或 hooks 不工作；hooks 不工作时两轮之间也看屏幕，接住后台 agent 的对话框）；Codex 空闲标题 4 s 且没有 hook → `idle`（§6.7）；`needs_you` 时 Claude 的空闲输入框底栏回到屏幕 2 s → 对话框被取消，`idle`（或一轮已结束时的 `done_unread` / `error`）；看到对话框标题（Claude `✳`、Codex `Action Required`）之后标题又转起来 → 对话框都回答了、agent 在干活，`running`（批准后工具在跑，PostToolUse 要等它跑完）；`idle_prompt` 到达 → 不在运行也不在等待（Claude 只在没有对话框、没有后台 agent 时发）。会运行、会等待或要看屏幕的会话按 1 s 检查，一进入这种状态就把 15 s 的检查提前。
+- **压测**（2026-10-20）：`src/shared/agent-sim.ts` 按实测行为模拟整段会话（真实状态 + agent 发出的 hook、标题、屏幕：并行对话框、前台 / 后台子 agent、agent teams、提问、计划确认、Esc、拒绝、API 报错、/clear、压缩），`src/main/hooks/status-sim.test.ts` 按真实时间回放进状态机、每 250 ms 对照：Claude 300 段 / 48 小时，显示错误的最长一段 7 s，超过 1 s 的错误占 0.6% 的时间（改动前最长 266 s、5.5%）；Codex 最长 4.5 s（之前 39.5 s）；丢 5% hook 时 Claude 最长 7 s（之前 230 s），完全没有 hook 时 Claude 最长 2.75 s、Codex 0（模拟里屏幕和标题与真实一致时）。`TR_STATUS_STRESS=1 npx playwright test e2e/status-stress.spec.ts` 把同样的会话交给假 agent 在应用里跑一遍、对照侧栏。
 - 状态从不只靠颜色表达：每种状态都有独立的 StatusGlyph 形状和文字。
 
 ### 3.2 当前动作
@@ -434,6 +438,9 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - **不改全局配置时能怎样把设置交给手动启动的 Claude**（2.1.303 二进制核对，2026-10-19）：只有命令行 `--settings`（只认最后一个）；没有“额外设置文件”的环境变量。`CLAUDE_CODE_MANAGED_SETTINGS_PATH` 会让 Claude 改读这个目录作为策略设置、不再读本机的 managed-settings，等于绕过管理员策略，不用。所以用 PATH 上的 shim 补 `--settings`（cmux 同样做法）。本机用户的 zsh 配置实测：`whence -a claude` 第一个是 shim，`~/.local/bin/claude` 在后，ZDOTDIR 被放回。
 - **transcript 里的用量**（2.1.299 本机 transcript，2026-10-19）：每条 assistant 消息的 `message.usage`（`input_tokens`、`cache_creation_input_tokens`、`cache_read_input_tokens`、`output_tokens`）；同一条消息按内容块写成多行、`message.id` 相同，按 id 只算一次（后一行 output 更大时补差）；`isSidechain: true` 是子 agent，算花费不算 context；用户输入是 `type: user` 且 `message.content` 为字符串或含 text 块（`tool_result`、`isMeta`、`isCompactSummary` 不算一轮）；压缩是 `type: system, subtype: compact_boundary`（带 `compactMetadata.preTokens`）。每行有 ISO `timestamp`。
 - **会话标题**（2.1.302，2026-10-18，`30-hooks-lab.mjs title`）：hook payload 里**没有**标题字段，只有 `transcript_path`。Claude 在第一条 prompt 后约 4 s、和回复并行，用小模型生成标题，写进 transcript：`{"type":"ai-title","aiTitle":"…"}`；/rename 写 `{"type":"custom-title","customTitle":"…"}`，显示规则是 `customTitle ?? aiTitle`。两种条目每一轮都会在文件尾部重新追加一遍，所以只读文件尾部（4 MB）就够。标题之后不会随对话变化。本机 80 个会话里 74 个在第一条回复之前就有了 ai-title。Wavi 在 SessionStart（含 --resume）、Stop 时读，第一条 prompt 后 3 / 8 / 20 s 再读；只接受 `~/.claude/projects`（或 `$CLAUDE_CONFIG_DIR/projects`）下的 `.jsonl`。
+- **子 agent、后台任务、agent teams 与对话框**（2.1.304 二进制核对，2026-10-20，不花额度）：在子 agent 里触发的 hook 都带 `agent_id`、`agent_type`（主线程没有）。`Stop` / `SubagentStop` 带 `background_tasks`（仍在跑的后台任务：`local_bash` / `local_agent` / … 的 id、类型、状态）和 `session_crons`；`UserPromptSubmit` 带 `source`（`user` / `sdk` / `system` / `loop_wakeup` / `schedule_wakeup` / `poll_event`，后台任务完成的通知以 `system` 唤醒主线程）；`PostToolUseFailure` 带 `is_interrupt`。新事件 `PostToolBatch`（一批调用全部结束后、下一次请求前一次）、`PermissionDenied`（Auto mode 分类器拒绝，带 reason）、agent teams 的 `TeammateIdle` / `TaskCreated` / `TaskCompleted`；Notification 新类型 `worker_permission_prompt`（成员向 lead 请求权限，在 lead 的 TUI 里确认，lead 这边没有 PermissionRequest）。`--settings` 里不认识的事件名只忽略那一条。Wavi 只多注册了 `SubagentStop`。
+- PermissionRequest 只在真要问人时运行（Auto mode 由分类器先判，放行的调用不触发）。在 TUI 里拒绝：调用不执行，**没有** PostToolUse / PostToolUseFailure；主线程不带反馈的拒绝中断整轮（没有 Stop），带反馈的拒绝和子 agent 里的拒绝都接着做。`Notification(permission_prompt)` 在对话框显示 6 s 后发（`Dtn = 6000`），回答了就取消；`idle_prompt` 在一轮结束 60 s 后发，前提是没有对话框、没有后台 agent、其间用户没操作。
+- **终端标题**：`✳ <标题>` 表示空闲或在等（任何对话框：权限、提问、成员请求、沙箱、elicitation 都算等），只有在跑且没有对话框时才以 960 ms 交替 `◐` / `◑`（更早的版本是盲文）。所以“出现过 `✳` 之后又转起来”= 对话框都被回答了。另有 `showStatusInTerminalTab`（把忙 / 等 / 空闲报给终端标签），在功能开关和用户设置后面，Wavi 不依赖。
 
 ### 6.7 实测结论 · Codex（0.142.5，2026-10-14）
 脚本 `scripts/spikes/40-codex-hooks-list.mjs`、`41-codex-hooks-lab.mjs`、`codex-mock-provider.mjs`（本地模拟模型）；payload 在 `src/main/hooks/codex-fixtures.ts`。当时第三方模型服务一直返回 503，所以依赖真实模型的行为没有验证。

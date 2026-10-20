@@ -42,7 +42,7 @@
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset）：
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
-- [ ] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”。c#1027（44 👍）、c#2322（22 👍）、o#13600
+- [x] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”（2026-10-20，PRD v1.48）。c#1027（44 👍：Running / Needs Input 时对时错）、c#2322（22 👍：通知时快时慢）、o#13600（Codex 自动批准后仍提示需要处理）。先核对了 Claude Code 2.1.304 二进制（`agent_id`、`background_tasks`、拒绝不发 PostToolUse、标题 `✳` = 有对话框，PRD §6.6），再按它写了会话模拟器 `src/shared/agent-sim.ts`，回放进状态机对照真实状态（`src/main/hooks/status-sim.test.ts`）。改动前：Claude 48 小时模拟里显示错误最长 266 s、超过 1 s 的错误占 5.5% 的时间，丢 5% hook 时最长 230 s，Codex 最长 39.5 s——主要是两个对话框互相顶替、子 agent 的调用把“等你处理 / 已完成”改回运行中、批准后工具在跑却还显示等你处理、空闲时 15 s 才检查一次。改后：每个对话框一个待确认项、子 agent 只算它的对话框、`idle_prompt` / 对话框后标题转动 / 屏幕上的对话框参与自愈、需要时立刻改用 1 s 检查（PRD §3.1）；最长 7 s、0.6%，丢 5% hook 时最长 7 s，Codex 最长 4.5 s。Claude 的 PermissionRequest 只在真要问人时触发（Auto mode 放行的不触发），所以 o#13600 那种误报在 Claude 上不会出现；Codex 的“Approve for me”没在真 CLI 上验证。测试：`status-sim.test.ts`（含丢 hook、完全没有 hook）、`session-state-machine.test.ts`（600 段随机序列：等你处理 ⇔ 有待确认项）、`normalize.test.ts`，e2e `asks.spec.ts`（真实 hook 链路），可选的 `TR_STATUS_STRESS=1 … e2e/status-stress.spec.ts`（假 agent 在应用里回放、对照侧栏）。真 CLI 下的并行对话框、后台 agent 请求权限和 agent teams 没跑（花额度，列在“待作者手动确认”）
 - [x] 把文件和图片拖进或粘贴进运行中的会话（2026-10-20，PRD F19）：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴截图、会话头的回形针（文件和文件夹），都把转义后的路径放进输入行，agent 自己把图片变成附件。c#3435（22 👍）、o#15377。e2e `attachments.spec.ts`；从 Finder 真实拖入还没在真机上走一遍（拖入用的 `pathForFile` 和欢迎页拖文件夹是同一个）
 - [ ] Option 当 Meta 的设置项（现在只映射了 ⌥← / ⌥→）。s#1359、c#2120
 - [ ] 中文文案通读，统一术语。o#29320、o#8553（Orca 的机翻）
@@ -209,11 +209,13 @@
 - [ ] 下载后 Gatekeeper 提示与 `xattr -cr` 流程（清单 A）。结果决定 README 里“仍要打开”那句备选说法对不对
 - [ ] Codex 在真实模型下的表现（`TR_E2E_AGENTS=codex TR_E2E_CODEX_REAL=1`）。用例已有，会花额度，跑之前要作者同意
 - [ ] F19 真机：从 Finder 把一张图和一个文件拖进 Claude 会话、再拖进 Codex 会话；⌃⇧⌘4 截到剪贴板后 ⌘V；⌘⇧4 截图后直接拖角落的缩略图（应放进 `wavi/attachments/drop-*` 下的副本）。应各出 `[Image #N]`，文件保留成路径
-- [ ] 连续自用一周，状态没有卡死（2026-10-20 修了一个必现的卡死：⌘Q 后重开）
+- [ ] 连续自用一周，状态没有卡死（2026-10-20 修了一个必现的卡死：⌘Q 后重开；同日按模拟压测修了多个对话框、子 agent、后台 agent 下的错状态，PRD §3.1）
+- [ ] 真实 Claude Code 下核对模拟器的几条假设（会花额度，跑之前要作者同意）：一批里两个新域名的 WebFetch 同时请求权限、依次回答；前台 Task 的子 agent 请求权限时标题是否停在 `✳`；后台 agent 在一轮结束后请求权限；agent teams 成员的 `worker_permission_prompt`，以及 tmux / iTerm 分屏模式的成员进程的 hook 会不会记到 lead 的会话上
 
 ## 已知问题
 
-- 两个同时需要确认的工具调用会互相顶替，较早的那个回到 TUI 里确认。
+- 没有 hook 时（Codex 的 hook 信任没拿到、Claude 的 hooks 不工作）API 报错看起来和一轮正常结束一样（都是空闲）。
+- 状态规则依赖 Claude Code 2.1.304 的标题：有对话框时 `✳`、在跑时 `◐` / `◑`（PRD §6.6）。CLI 改了要用 `scripts/spikes/` 和模拟器复测。
 - 用户自己在 alias 里追加 `--settings` 会让我们的 hooks 失效（只认最后一个）。
 - Codex 只在第一条 prompt 时才发 SessionStart，也没有 SessionEnd / Interrupt 事件；它的启动和中断靠屏幕与标题判断。
 - 启动标记（OSC 7771）没有鉴权，恶意输出最多伪造一张“已退出”卡片。
@@ -230,7 +232,7 @@
 | 风险 / 待定项 | 应对 | 状态 |
 |---|---|---|
 | Claude / Codex 新版本改变 hook 或 TUI 行为 | 按 CLI 版本区分策略；保留实测脚本 `scripts/spikes/` 和 fixtures 以便复测 | 持续 |
-| hook 丢事件导致状态卡死 | 进程存活检查、超时降级、标题兜底、守护进程补放 | 已处理，靠自用验证 |
+| hook 丢事件导致状态卡死 | 进程存活检查、超时降级、标题和屏幕兜底、`idle_prompt`、守护进程补放；会话模拟器回放（丢 5% hook 时显示错误最长 7 s） | 已处理，模拟压测 + 自用验证 |
 | Codex hook 信任机制 | 用 `-c hooks.state` 按次固定我们自己的 hash | 已决定（PRD §6.7） |
 | Apple Developer 账号 | 外部验证阶段的第一道路障（公证和 brew 都要等它）；拿到之前继续发布未签名版本 | 待作者准备 |
 | xterm 7.0 正式版 | 发布后升级 xterm 和全部 addon（含守护进程用的 headless），删掉 `atlas-guard.ts`（PRD §6.3） | 等上游 |

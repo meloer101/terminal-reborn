@@ -2,7 +2,7 @@
 // dependencies so it can be unit-tested; StatusBridge wires it to the store, window.tr and the DOM.
 import type { AgentEvent } from '@shared/agent-events'
 import type { AgentMarker } from '@shared/agent-launch'
-import { initialState, reduce, type SessionState, type Signal } from '@shared/session-state-machine'
+import { healsOnTick, initialState, reduce, ticksFast, watchesScreen, type SessionState, type Signal } from '@shared/session-state-machine'
 import { needsAttention, STATUS_LABEL } from '@shared/session-status'
 import type { AgentPhase, Session, SessionId, SessionStatus } from '@shared/types'
 
@@ -43,6 +43,8 @@ export interface StatusDeps {
   openOverview?(): void
   /** Runs `fn` after `ms` (default setTimeout); injected so tests control time. */
   later?(fn: () => void, ms: number): void
+  /** A session now needs the fast tick (it runs, or its screen is watched): self-heal must not wait for a slow one. */
+  needsFastTicks?(): void
 }
 
 /** Tag of a notification that stands for several sessions: clicking it opens the overview. */
@@ -69,15 +71,15 @@ export class StatusController {
     return this.states.get(id)
   }
 
-  /** True while some session could change by itself soon (a running turn that may need self-healing). */
+  /** True while some session could change by itself soon (a running turn or a wait that may need self-healing). */
   hasRunning(): boolean {
-    for (const state of this.states.values()) if (state.status === 'running') return true
+    for (const state of this.states.values()) if (healsOnTick(state)) return true
     return false
   }
 
   /** True while some session's screen can change its state (starting up, blocked, waiting on a dialog). */
   watchesScreens(): boolean {
-    for (const state of this.states.values()) if (needsScreen(state)) return true
+    for (const state of this.states.values()) if (watchesScreen(state)) return true
     return false
   }
 
@@ -162,7 +164,7 @@ export class StatusController {
   /** Terminal output arrived for a session: look at its screen again if that can matter. */
   handleOutput(sessionId: SessionId): void {
     const state = this.states.get(sessionId)
-    if (state && needsScreen(state)) this.checkScreen(sessionId)
+    if (state && watchesScreen(state)) this.checkScreen(sessionId)
   }
 
   handleTitle(sessionId: SessionId, title: string): void {
@@ -171,9 +173,12 @@ export class StatusController {
 
   tick(): void {
     for (const id of [...this.states.keys()]) {
+      // The screen first: a dialog up mid-turn is needs_you, not the idle a time-based heal would make of it.
+      const before = this.states.get(id)
+      if (before && watchesScreen(before)) this.checkScreen(id)
       this.apply(id, { type: 'tick' })
-      const state = this.states.get(id)
-      if (state && needsScreen(state)) this.checkScreen(id)
+      const after = this.states.get(id)
+      if (after && after !== before && watchesScreen(after)) this.checkScreen(id)
     }
   }
 
@@ -213,6 +218,7 @@ export class StatusController {
     const next = reduce(prev, signal, this.deps.now())
     if (next === prev) return
     this.states.set(id, next)
+    if (ticksFast(next)) this.deps.needsFastTicks?.()
 
     if (next.hooksSilent !== prev.hooksSilent) this.deps.setHooksSilent?.(id, next.hooksSilent)
 
@@ -298,10 +304,3 @@ function defaultLater(fn: () => void, ms: number): void {
   setTimeout(fn, ms)
 }
 
-/** Whether the session's terminal screen can change its state right now. */
-function needsScreen(state: SessionState): boolean {
-  if (state.phase === 'starting' || state.phase === 'blocked') return true
-  if (state.kind !== 'claude') return false
-  if (state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent) return true
-  return state.status === 'needs_you' && state.titleIdle
-}

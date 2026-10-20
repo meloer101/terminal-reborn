@@ -69,6 +69,8 @@ export function currentAction(tool: string, input: Record<string, unknown>): str
       const question = typeof first?.question === 'string' ? first.question : undefined
       return question ? `提问：${oneLine(question, DETAIL_PREVIEW_CHARS)}` : '提问'
     }
+    case 'ExitPlanMode':
+      return '确认计划'
     default:
       return tool
   }

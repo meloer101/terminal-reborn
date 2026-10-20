@@ -149,7 +149,9 @@ test.describe('codex hooks', () => {
     await expect.poll(status, { timeout: 15_000 }).toMatch(/^(idle|done_unread)$/)
   })
 
-  test('a shell approval is held in the app, answered through respondPermission, and the command runs', async () => {
+  // Since v1.2 a permission request only marks the session (the hook answers at once); it is answered in Codex's own
+  // dialog in the terminal (PRD §3.1, §6.7).
+  test('a shell approval: needs_you while Codex shows its dialog, y in the terminal runs the command', async () => {
     test.skip(real, 'the real provider run only checks delivery and status')
     const marker = `codex-e2e-${Date.now()}`
     const file = `${lab}/${marker}.txt`
@@ -161,53 +163,31 @@ test.describe('codex hooks', () => {
     const prompt = (await permissionPrompts()).at(-1)!
     expect(prompt.sessionId).toBe(sessionId)
     expect(prompt.tool).toBe('Bash')
-    expect(prompt.summary).toContain('运行')
     expect(prompt.summary).toContain(marker)
     expect(prompt.canAllowAlways).toBe(false) // Codex's "don't ask again" would write ~/.codex rules
     await expect.poll(status, { timeout: 5_000 }).toBe('needs_you')
-    expect(existsSync(file)).toBe(false) // blocked in the hook; Codex does not even show its own dialog yet
-    expect(await screen()).not.toMatch(/Would you like to run the following command\?/)
+    await expect.poll(screen, { timeout: 15_000 }).toMatch(/Would you like to run the following command\?/)
+    expect(existsSync(file)).toBe(false)
 
-    await page.evaluate((id) => (globalThis as unknown as Hooks).tr.agent.respondPermission(id, 'allow-once'), prompt.id)
-
+    await write('y')
     await expect.poll(() => existsSync(file), { timeout: 30_000 }).toBe(true)
     expect(readFileSync(file, 'utf8').trim()).toBe(marker)
-    await expect.poll(async () => (await seen()).resolved.find((r) => r.id === prompt.id)?.by).toBe('gui')
     await expect.poll(async () => (await seen()).events.filter((e) => e.event.type === 'tool-end').length, { timeout: 30_000 }).toBeGreaterThanOrEqual(1)
     await expect.poll(status, { timeout: 30_000 }).toMatch(/^(idle|done_unread)$/)
     rmSync(file, { force: true })
   })
 
-  test('denying from the app stops the command and lets the turn finish', async () => {
+  test('Esc on Codex\'s dialog cancels the turn: no hook says so, the idle title brings the status back', async () => {
     test.skip(real, 'the real provider run only checks delivery and status')
-    const marker = `codex-e2e-deny-${Date.now()}`
-    const file = `${lab}/${marker}.txt`
-    const before = (await permissionPrompts()).length
-    await send(`RUN: echo ${marker} > ${file}`)
-    await expect.poll(async () => (await permissionPrompts()).length, { timeout: 60_000, intervals: [300] }).toBe(before + 1)
-    const prompt = (await permissionPrompts()).at(-1)!
-    const stops = (await seen()).events.filter((e) => e.event.type === 'stop').length
-    await page.evaluate((id) => (globalThis as unknown as Hooks).tr.agent.respondPermission(id, 'deny'), prompt.id)
-    await expect.poll(async () => (await seen()).events.filter((e) => e.event.type === 'stop').length, { timeout: 30_000 }).toBe(stops + 1)
-    expect(existsSync(file)).toBe(false)
-  })
-
-  test('interrupting in the terminal while a request is held withdraws the stale prompt on the next turn', async () => {
-    test.skip(real, 'the real provider run only checks delivery and status')
-    // Codex hides its own dialog while our hook holds the request, and Esc cancels the whole turn without any hook
-    // event (0.142.5 has no Interrupt hook). The prompt stays until something proves the turn moved on.
     const marker = `codex-e2e-esc-${Date.now()}`
     const file = `${lab}/${marker}.txt`
     const before = (await permissionPrompts()).length
     await send(`RUN: echo ${marker} > ${file}`)
     await expect.poll(async () => (await permissionPrompts()).length, { timeout: 60_000, intervals: [300] }).toBe(before + 1)
-    const prompt = (await permissionPrompts()).at(-1)!
-    await page.evaluate(([id, data]) => (globalThis as unknown as Hooks).tr.pty.write(id!, data!), [sessionId, '\x1b'])
-    await expect.poll(screen, { timeout: 15_000 }).toMatch(/Conversation interrupted/)
-    // The idle title heals the status even though no Stop arrived.
+    await expect.poll(status, { timeout: 5_000 }).toBe('needs_you')
+    await expect.poll(screen, { timeout: 15_000 }).toMatch(/Would you like to run the following command\?/)
+    await write('\x1b')
     await expect.poll(status, { timeout: 20_000 }).toMatch(/^(idle|done_unread)$/)
-    await send('REPLY: OK')
-    await expect.poll(async () => (await seen()).resolved.find((r) => r.id === prompt.id)?.by, { timeout: 30_000 }).toBe('terminal')
     expect(existsSync(file)).toBe(false)
   })
 })
