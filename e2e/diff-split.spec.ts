@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fakeClaude } from './fake-claude'
-import { launchApp } from './launch'
+import { launchApp, setWindowSize } from './launch'
 
 const SHOTS = join(process.cwd(), 'test-results', 'diff-split')
 
@@ -124,7 +124,7 @@ test.describe('F5 并排 diff', () => {
     )
     app = await launchApp(repo.env, { userDataDir: profile })
     page = await app.firstWindow()
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
+    await setWindowSize(app, page, 1440, 900)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
     await panel().getByRole('tab', { name: /^变更/ }).click()
     const file = panel().locator('[data-path="MobileNav.tsx"][data-group="committed"] button')

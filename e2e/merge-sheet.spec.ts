@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fakeClaude } from './fake-claude'
-import { launchApp } from './launch'
+import { launchApp, setWindowSize } from './launch'
 
 const SHOTS = join(process.cwd(), 'test-results', 'merge-sheet')
 const WITHIN = { timeout: 30_000 }
@@ -100,7 +100,7 @@ test.describe('F4 merge sheet · F13 review', () => {
     )
     app = await launchApp(repo.env, { userDataDir: profile })
     page = await app.firstWindow()
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
+    await setWindowSize(app, page, 1440, 900)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
   })
 

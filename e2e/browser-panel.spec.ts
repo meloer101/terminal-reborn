@@ -10,7 +10,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, setWindowSize } from './launch'
 
 const SHOTS = join(process.cwd(), 'test-results', 'browser-panel')
 const SESSION = 's-browser'
@@ -140,7 +140,7 @@ test.describe('F17 right panel · 浏览器', () => {
         opened.push(url)
       }
     })
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
+    await setWindowSize(app, page, 1440, 900)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
   })
 

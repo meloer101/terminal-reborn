@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { launchApp } from './launch'
+import { launchApp, setWindowSize } from './launch'
 
 test('app window opens with the shell regions', async () => {
   const app = await launchApp()
@@ -24,6 +24,8 @@ test('app window opens with the shell regions', async () => {
 test('the sidebar resizes from its right edge (200–480) and main follows', async () => {
   const app = await launchApp()
   const page = await app.firstWindow()
+  // Wide enough for the 480 maximum next to main's 560 minimum, whatever the screen.
+  await setWindowSize(app, page, 1440, 900)
   const sidebar = page.locator('[data-region="sidebar"]')
   const main = page.locator('[data-region="main"]')
   const width = async () => Math.round((await sidebar.boundingBox())!.width)
@@ -44,6 +46,12 @@ test('the sidebar resizes from its right edge (200–480) and main follows', asy
   await drag(-400)
   await expect.poll(width).toBe(200)
   await drag(600)
+  await expect.poll(width).toBe(480)
+  // A narrower window shows less of the saved width, so main keeps its minimum.
+  await setWindowSize(app, page, 1000, 700)
+  await expect.poll(width).toBe(440)
+  expect(Math.round((await main.boundingBox())!.width)).toBe(560)
+  await setWindowSize(app, page, 1440, 900)
   await expect.poll(width).toBe(480)
   await handle.dblclick()
   await expect.poll(width).toBe(264)

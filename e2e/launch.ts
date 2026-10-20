@@ -1,4 +1,4 @@
-import { _electron as electron, type ElectronApplication } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -28,4 +28,15 @@ export function launchApp(
   }
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key]
   return electron.launch({ args: ['.', ...(options.args ?? [])], env: env as Record<string, string> })
+}
+
+/**
+ * Sizes the main window and waits until the page has the new width. macOS fits a window into the screen when it is
+ * first shown (the CI runner's is 1024×768), which undoes a size set before that; set once the window is on screen,
+ * the width sticks even when it is wider than the screen. So this waits for the window to be visible first.
+ */
+export async function setWindowSize(app: ElectronApplication, page: Page, width: number, height: number): Promise<void> {
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible() ?? false)).toBe(true)
+  await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0]?.setSize(w!, h!), [width, height])
+  await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBe(width)
 }
