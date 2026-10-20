@@ -1,0 +1,61 @@
+name: 功能建议 / Feature request
+description: 你在用 Wavi 时缺了什么 / Something you need that Wavi does not do yet
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        比起具体方案，我们更想知道你在做什么、卡在哪里、现在怎么绕过去。中文、英文都可以。
+        Wavi 目前只做 macOS 上的 Claude Code / Codex，不做账号、云同步、远程 / SSH 和内置编辑器。
+
+        Tell us what you are trying to do and how you get around it today; the solution can come later. Chinese or English are both fine.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想做成什么 / What are you trying to do
+      description: 你在做的事，以及哪一步不顺。
+      placeholder: 例：同时开了 6 个 Codex，想知道哪几个已经改完、可以合并了。
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 现在怎么绕过去 / How do you handle it today
+      description: 用了别的工具、脚本，还是手动几步？大概每次花多少时间？如果暂时没办法，也请写上。
+      placeholder: 例：每个 worktree 里手动跑 git status 和 git diff main，大约 5 分钟。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: 多久遇到一次 / How often
+      options:
+        - 每天好几次 / Several times a day
+        - 每天一次左右 / About once a day
+        - 每周几次 / A few times a week
+        - 偶尔 / Rarely
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你设想的做法 / How you imagine it
+      description: 可选。可以是界面、快捷键或别的产品里的类似做法。
+    validations:
+      required: false
+
+  - type: dropdown
+    id: parallel
+    attributes:
+      label: 你通常同时跑几个 agent / How many agents you usually run at once
+      options:
+        - 1–2
+        - 3–5
+        - 6–10
+        - 10 个以上 / More than 10
+    validations:
+      required: false
