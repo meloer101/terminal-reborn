@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Every other Mach-O in the bundle: the Electron helpers (renderer, GPU, the pty-host utilityProcess that loads
+  pty.node when the daemon is unavailable), the frameworks, pty.node and spawn-helper. Only V8 needs anything.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+  </dict>
+</plist>

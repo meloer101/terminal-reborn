@@ -58,10 +58,12 @@ test.describe.configure({ mode: 'serial' })
 
 let app: ElectronApplication
 let page: Page
+let userData: string
 
 test.beforeAll(async () => {
   expect(existsSync(executable), `build the app first (${executable})`).toBe(true)
-  app = await electron.launch({ executablePath: executable, args: [], env: cleanEnv(mkdtempSync(join(tmpdir(), 'tr-packaged-'))) })
+  userData = mkdtempSync(join(tmpdir(), 'tr-packaged-'))
+  app = await electron.launch({ executablePath: executable, args: [], env: cleanEnv(userData) })
   page = await app.firstWindow()
   await page.addInitScript(() => {
     const g = globalThis as unknown as Hooks & { __TR_E2E__: boolean }
@@ -74,6 +76,13 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close()
+  // The daemon outlives the app by design; this profile is a throwaway, so is its daemon.
+  if (!userData) return
+  try {
+    execFileSync('pkill', ['-f', join(userData, 'daemon')], { stdio: 'ignore' })
+  } catch {
+    // Nothing matched: no daemon was started.
+  }
 })
 
 const screen = (id: string) => page.evaluate((s) => (globalThis as unknown as Hooks).__trTerminals.readScreen(s, 2000), id)
@@ -118,6 +127,13 @@ test('a shell session runs through pty-host and node-pty', async () => {
   await page.keyboard.type('echo packaged-$((6*7))')
   await page.keyboard.press('Enter')
   await expect.poll(() => screen(id), { timeout: 20_000, intervals: [300] }).toMatch(/^packaged-42$/m)
+  // The PTYs live in the daemon (the bundle's executable under ELECTRON_RUN_AS_NODE, so the hardened runtime and
+  // its entitlements apply), not in the fallback utilityProcess.
+  const processes = execFileSync('ps', ['-axww', '-o', 'command='], { encoding: 'utf8' })
+  const daemon = processes.split('\n').find((line) => line.includes('pty-daemon.js') && line.includes(join(userData, 'daemon')))
+  expect(daemon, 'pty daemon for this profile').toBeDefined()
+  // ps escapes non-ASCII in the checkout path, so match the part inside the bundle.
+  expect(daemon).toContain(`${join('Wavi.app', 'Contents', 'MacOS', 'Wavi')} `)
 })
 
 test('a Claude session starts and its hooks arrive (launch only, no prompts)', async () => {

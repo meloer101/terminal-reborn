@@ -4,6 +4,10 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+### Changed / 变更
+- Release builds are signed with a Developer ID and notarized by Apple: a downloaded Wavi opens without `xattr -cr`.
+  发布版改用 Developer ID 签名并经 Apple 公证，下载后直接打开，不再需要 `xattr -cr`。
+
 ## [0.3.0] - 2026-10-19
 
 Worktrees, review and a view over every agent. There is no separate 0.2.0: its work ships here.

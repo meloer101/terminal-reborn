@@ -26,8 +26,8 @@
     "postinstall": "electron-builder install-app-deps && (chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true)",
     "icon": "scripts/make-icon.sh",
     "app:install": "electron-vite build && node scripts/install-app.mjs",
-    "dist": "electron-vite build && electron-builder --mac --publish never",
-    "dist:dir": "electron-vite build && electron-builder --mac --dir --publish never",
+    "dist": "electron-vite build && node scripts/dist.mjs",
+    "dist:dir": "electron-vite build && node scripts/dist.mjs --dir",
     "test:packaged": "playwright test -c playwright.packaged.config.ts"
   },
   "dependencies": {
