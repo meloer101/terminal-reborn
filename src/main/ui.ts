@@ -43,4 +43,20 @@ export function registerUiHandlers(): void {
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
+
+  // The session header's paperclip: files whose paths go into the terminal (renderer/terminal/attachments.ts).
+  ipcMain.handle(IPC.uiPickFiles, async (event, defaultPath: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const start = typeof defaultPath === 'string' && defaultPath.length <= 4096 && isAbsolute(defaultPath) && !defaultPath.includes('\0') ? defaultPath : undefined
+    const options = {
+      // Files and folders alike (macOS lets one panel pick both).
+      properties: ['openFile', 'openDirectory', 'multiSelections', 'treatPackageAsDirectory'] as Array<
+        'openFile' | 'openDirectory' | 'multiSelections' | 'treatPackageAsDirectory'
+      >,
+      buttonLabel: '添加',
+      ...(start ? { defaultPath: start } : {})
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? [] : result.filePaths
+  })
 }

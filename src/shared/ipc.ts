@@ -109,11 +109,18 @@ export interface FilesApi {
   pathForFile(file: File): string
   /** Writes pasted image bytes to a temp file and resolves to its absolute path. */
   saveTempImage(data: ArrayBuffer, extension: ImageExtension): Promise<string>
+  /**
+   * Copies a dropped file that only the app may read (macOS's `TemporaryItems/NSIRD_*`, e.g. a screenshot thumbnail)
+   * next to the pasted images and resolves to the copy; any other path comes back unchanged.
+   */
+  keepDroppedFile(path: string): Promise<string>
 }
 
 export interface UiApi {
   /** Native folder picker; resolves to an absolute path, or null when cancelled. */
   pickFolder(): Promise<string | null>
+  /** Native picker for files and folders (several) opening in `defaultPath`; resolves to absolute paths, [] when cancelled. */
+  pickFiles(defaultPath?: string): Promise<string[]>
   /** Dock badge; 0 clears it. */
   setBadge(count: number): void
   /** System notification. Clicking it focuses the window and fires onNotificationClick with `tag`. */
@@ -380,7 +387,9 @@ export const IPC = {
   /** main → renderer, payload HostRestartedEvent */
   ptyHostRestarted: 'pty:host-restarted',
   filesSaveTempImage: 'files:save-temp-image',
+  filesKeepDropped: 'files:keep-dropped',
   uiPickFolder: 'ui:pick-folder',
+  uiPickFiles: 'ui:pick-files',
   uiSetBadge: 'ui:set-badge',
   uiNotify: 'ui:notify',
   /** main → renderer, payload tag */

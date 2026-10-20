@@ -5,6 +5,7 @@ import { detectBlockingDialog, inputLineText, normalizeSendText, planSend } from
 import type { SessionId } from '@shared/types'
 import { useSessionMeta } from './session-meta/store'
 import { useWorkspace } from './state/workspace'
+import { attachmentInput } from './terminal/attachments'
 import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
 
 // One serial queue per session: two sends to the same PTY must never interleave.
@@ -34,6 +35,20 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
   const body = normalizeSendText(text)
   if (!body) return
   const data = inputLineText(body, acceptsBracketedPaste(sessionId))
+  await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
+}
+
+/**
+ * Files dropped on, pasted into or picked for a session: their paths go into its input line, the way each agent turns
+ * image paths into attachments (terminal/attachments.ts). Not Enter.
+ */
+export async function insertPaths(sessionId: SessionId, paths: readonly string[]): Promise<void> {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (!session) return
+  // A plain terminal: the agent started in it by hand, if one is running.
+  const agent = session.kind === 'shell' ? (useSessionMeta.getState().bySession[sessionId]?.agent ?? null) : session.kind
+  const data = attachmentInput(paths, agent, acceptsBracketedPaste(sessionId))
+  if (!data) return
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
 }
 

@@ -11,6 +11,7 @@ import { launchKind, useWorkspace } from '../state/workspace'
 import { useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
+import { attachFileInput } from './file-input'
 import { closeTerminalSearch } from './search-store'
 import { TerminalSearch } from './TerminalSearch'
 import styles from './TerminalArea.module.css'
@@ -43,6 +44,13 @@ function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSe
     if (!everActive || held || !host) return
     ensureTerminal(sessionId, cwd, agent, resumeAgentSessionId).attach(host)
   }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation, borrowedHost])
+
+  // Files dropped on or pasted into the terminal (PRD F19), wherever it is shown.
+  useEffect(() => {
+    const host = borrowedHost ?? hostRef.current
+    if (!everActive || held || !host) return
+    return attachFileInput(host, sessionId)
+  }, [everActive, held, sessionId, borrowedHost])
 
   // Refit + resize on show (and on moving between hosts), and release the WebGL context while hidden.
   useEffect(() => {

@@ -31,3 +31,16 @@
 .host :global(.xterm-viewport) {
   background: var(--tr-term-surface, var(--term-bg)) !important;
 }
+
+/* Files dragged over a terminal (PRD F19): the same dashed frame as the welcome page's drop target, above xterm's
+   layers. It is placed against the nearest positioned box (the pane, or the overview's window when borrowed). */
+:global([data-file-drop='true'])::after {
+  content: '';
+  position: absolute;
+  inset: var(--space-8);
+  z-index: 10;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-window);
+  background: var(--bg-selected);
+  pointer-events: none;
+}
