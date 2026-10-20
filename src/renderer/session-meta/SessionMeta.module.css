@@ -468,62 +468,6 @@ button.chip:hover {
   color: var(--text-secondary);
 }
 
-.details {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: var(--space-12) var(--space-16);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.detailRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.detailRow dt {
-  flex: 1;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.detailRow dd {
-  margin: 0;
-  font: var(--text-mono-s);
-  color: var(--text-secondary);
-}
-
-.contextFooter {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-8) var(--space-16);
-  border-top: 1px solid var(--border-subtle);
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.contextFooter > span {
-  flex: 1;
-}
-
-.footerButton {
-  padding: var(--space-4) var(--space-8);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-primary);
-  font: var(--text-mono-s);
-  cursor: default;
-}
-
-.footerButton:hover {
-  background: var(--bg-hover);
-}
-
-.footerButton:focus-visible,
 .shareRow:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;

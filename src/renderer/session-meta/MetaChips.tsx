@@ -7,11 +7,9 @@ import {
   contextProjection,
   contextSegments,
   formatClock,
-  formatDuration,
   formatReset,
   formatTokens,
   formatUpdatedNote,
-  formatUsd,
   HIGH_PERCENT,
   isHigh,
   liveWindows,
@@ -200,7 +198,7 @@ export function ContextChip({ sessionId, context, compact = true }: { sessionId:
       )}
       {open && (
         <Popover anchor={anchor} label="context" onClose={close} testId="context-popover">
-          <ContextPanel sessionId={sessionId} context={context} compact={compact} onCompact={close} />
+          <ContextPanel sessionId={sessionId} context={context} />
         </Popover>
       )}
     </span>
@@ -211,8 +209,8 @@ const HISTORY_REFRESH_MS = 3_000
 const SPARK_WIDTH = 308
 const SPARK_HEIGHT = 56
 
-/** Figma 18 ContextPopover 276:10395: how full, how it got there, what is in it. */
-function ContextPanel({ sessionId, context, compact, onCompact }: { sessionId: SessionId; context: ContextUsage; compact: boolean; onCompact(): void }) {
+/** Figma 18 ContextPopover 276:10395: how full and how it got there. */
+function ContextPanel({ sessionId, context }: { sessionId: SessionId; context: ContextUsage }) {
   const [history, setHistory] = useState<ContextHistory | null>(null)
   // Main reads only what the transcript gained since last time, so the open panel simply asks again now and then
   // (and at once when the figure moves).
@@ -235,7 +233,6 @@ function ContextPanel({ sessionId, context, compact, onCompact }: { sessionId: S
   const lastSegment = segments[segments.length - 1] ?? []
   const delta = lastSegment.length >= 2 ? lastSegment[lastSegment.length - 1]! - lastSegment[lastSegment.length - 2]! : null
   const projection = contextProjection(lastSegment)
-  const details = contextRows(context)
   const high = isHigh(context.percent)
   return (
     <div className={styles.contextPanel}>
@@ -274,32 +271,6 @@ function ContextPanel({ sessionId, context, compact, onCompact }: { sessionId: S
           {projection && <span className={styles.projection}>{projection}</span>}
         </div>
       )}
-      {details.length > 0 && (
-        <dl className={styles.details}>
-          {details.map(([key, value]) => (
-            <div key={key} className={styles.detailRow}>
-              <dt>{key}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {compact && (
-        <div className={styles.contextFooter}>
-          <span>放进输入行，不会回车</span>
-          <button
-            type="button"
-            className={styles.footerButton}
-            onMouseDown={keepFocus}
-            onClick={() => {
-              onCompact()
-              void insertSlashCommand(sessionId, '/compact')
-            }}
-          >
-            /compact
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -318,21 +289,6 @@ function Sparkline({ segments }: { segments: number[][] }) {
       {last && <circle className={styles.sparkNow} cx={last.x} cy={last.y} r={2.5} />}
     </svg>
   )
-}
-
-/** Only the figures the CLI gave, in Figma order. */
-function contextRows(context: ContextUsage): [string, string][] {
-  const rows: [string, string][] = []
-  if (context.cacheRead !== undefined) rows.push(['缓存读取', formatTokens(context.cacheRead)])
-  if (context.cacheWrite !== undefined) rows.push(['缓存写入', formatTokens(context.cacheWrite)])
-  if (context.freshInput !== undefined) rows.push(['新输入', formatTokens(context.freshInput)])
-  if (context.outputTotal !== undefined) rows.push(['本会话输出', formatTokens(context.outputTotal)])
-  if (context.cacheWarm !== undefined) {
-    const left = context.cacheExpiresAt !== undefined ? context.cacheExpiresAt - Date.now() : undefined
-    rows.push(['提示缓存', context.cacheWarm ? (left !== undefined && left > 0 ? `热 · ${formatDuration(left)}后过期` : '热') : '冷'])
-  }
-  if (context.costUsd !== undefined) rows.push(['按 API 价折算', formatUsd(context.costUsd)])
-  return rows
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -396,8 +352,6 @@ export function UsageChip({ usage, current, all, opensOnRequest = false }: { usa
   )
 }
 
-const FOOTER_SOURCE: Record<UsageVendor, string> = { claude: 'Claude 来自 statusLine', codex: 'Codex 来自会话日志' }
-
 /** Figma 18 UsagePopover v2 277:10437. */
 function UsageList({ all, current, now, onPick }: { all: VendorUsage[]; current: UsageVendor | null; now: number; onPick(): void }) {
   const vendors = orderVendors(all, current, now)
@@ -422,7 +376,6 @@ function UsageList({ all, current, now, onPick }: { all: VendorUsage[]; current:
           <Shares usage={usage} now={now} onPick={onPick} />
         </section>
       ))}
-      <p className={styles.popoverFooter}>只统计 Wavi 里的会话 · {vendors.map((u) => FOOTER_SOURCE[u.vendor]).join('，')}</p>
     </div>
   )
 }
