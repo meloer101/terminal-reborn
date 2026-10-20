@@ -110,6 +110,9 @@ export class StatusController {
       } else if (session.phase === 'starting' && (known.phase === 'not-started' || known.phase === 'exited')) {
         // The user (or the host-restart recovery) started the agent: startSession() patched the store's phase.
         this.relaunch(session.id)
+      } else if (known.phase === 'not-started' && (session.phase === 'ready' || session.phase === 'exited')) {
+        // Still in the pty daemon after an app restart (session-start.ts adopted it): its hooks and title count again.
+        this.apply(session.id, { type: 'reattached', exited: session.phase === 'exited' })
       }
     }
     for (const id of [...this.states.keys()]) if (!live.has(id)) this.states.delete(id)

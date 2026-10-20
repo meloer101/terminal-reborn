@@ -322,6 +322,68 @@ describe('exited is final', () => {
   })
 })
 
+// Hooks arrive in any order and some never arrive. Seeded random runs of a live Claude session must still settle:
+// a Stop ends the turn, and with the Stop lost an idle title heals it (the "never stuck" half of PRD §3.1).
+describe('never stuck', () => {
+  const SIGNALS: Signal[] = [
+    promptSubmit,
+    toolStart('Bash', { command: 'pnpm test' }),
+    toolStart('Edit', { file_path: '/repo/a.ts' }),
+    toolEnd(),
+    notification('permission'),
+    notification('question'),
+    notification('idle'),
+    ev({ type: 'session-start' }),
+    ev({ type: 'session-end', reason: 'clear' }),
+    ev({ type: 'stop-failure', message: 'API 额度已用完' }),
+    { type: 'viewed' },
+    { type: 'unviewed' },
+    { type: 'tick' },
+    { type: 'title', title: '✳ Claude Code' },
+    { type: 'title', title: '⠂ Claude Code' }
+  ]
+
+  it('500 random runs: Stop always ends the turn; a lost Stop heals from the idle title', () => {
+    let seed = 20261020
+    const random = () => (seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31
+    for (let run = 0; run < 500; run++) {
+      let now = T0
+      let state = reduce(initialState('claude', T0, { status: 'idle', phase: 'starting' }), ev({ type: 'session-start' }), now)
+      const trail: string[] = []
+      for (let i = 1 + Math.floor(random() * 40); i > 0; i--) {
+        const signal = SIGNALS[Math.floor(random() * SIGNALS.length)] as Signal
+        now += Math.floor(random() * 4_000)
+        state = reduce(state, signal, now)
+        trail.push(signal.type === 'event' ? `${signal.event.type}${'kind' in signal.event ? `:${signal.event.kind}` : ''}` : signal.type === 'title' ? `title:${signal.title[0]}` : signal.type)
+      }
+      const why = `run ${run}: ${trail.join(' → ')}`
+      expect(['idle', 'done_unread'], why).toContain(reduce(state, stop, now + 1).status)
+      const idleTitle = reduce(state, { type: 'title', title: '✳ Claude Code' }, now + 1)
+      expect(reduce(idleTitle, { type: 'tick' }, now + 1 + CLAUDE_IDLE_HEAL_MS).status, why).not.toBe('running')
+    }
+  })
+})
+
+describe('reattached after an app restart', () => {
+  const restored = () => initialState('claude', T0, { status: 'idle', phase: 'not-started' })
+
+  it('a not-started session ignores events until it is reattached, then follows them', () => {
+    expect(reduce(restored(), promptSubmit, T0 + 1).status).toBe('idle')
+    const up = reduce(restored(), { type: 'reattached', exited: false }, T0 + 1)
+    expect(up).toMatchObject({ phase: 'ready', hooksSeen: true, status: 'idle' })
+    expect(reduce(up, notification('permission'), T0 + 2).status).toBe('needs_you')
+  })
+
+  it('a terminal that ended meanwhile comes back exited', () => {
+    expect(reduce(restored(), { type: 'reattached', exited: true }, T0 + 1)).toMatchObject({ phase: 'exited', status: 'exited', ended: true })
+  })
+
+  it('only moves a not-started session', () => {
+    const running = reduce(reduce(restored(), { type: 'launch' }, T0 + 1), promptSubmit, T0 + 2)
+    expect(reduce(running, { type: 'reattached', exited: true }, T0 + 3)).toBe(running)
+  })
+})
+
 describe('referential stability', () => {
   it('returns the same state for a no-op signal', () => {
     const s = make('idle', { viewing: true })
