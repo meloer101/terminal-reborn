@@ -8,10 +8,11 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { whenAppearanceKnown } from './appearance-ready'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
-import { macKeyToBytes } from './keymap'
+import { defersToTextInput, macKeyToBytes } from './keymap'
+import { isAutoPeriod } from './ime'
 import { findLigatureRanges } from './ligatures'
-import { cellText, findPathCandidates, type Cell } from './file-links'
-import { linkHint, type LinkRef, type PathResolver, type TerminalLink } from './links'
+import { cellText, findPathCandidates, resolvedCandidates, type Cell } from './file-links'
+import { linkHint, URL_PATTERN, type LinkRef, type PathResolver, type TerminalLink } from './links'
 import { readBufferText } from './screen-text'
 import { reattachPayload } from './reattach-payload'
 import { restorePayload, SNAPSHOT_MAX_CHARS, SNAPSHOT_SCROLLBACK_STEPS } from './snapshot-payload'
@@ -88,6 +89,12 @@ export class XtermSurface implements TerminalSurface {
   private hoveredLink: LinkRef | null = null
   /** Which printed paths are files of the session; without one, paths are not links. */
   private pathResolver: PathResolver | null = null
+  /** From compositionstart until xterm has sent the committed text (it does so a task after compositionend). */
+  private composing = false
+  /** The keydown was left to its keypress (defersToTextInput). */
+  private keyDeferred = false
+  /** The last input sent to the PTY and when (performance.now()), for telling typed text from the text system's. */
+  private lastInput = { data: '', at: 0 }
 
   constructor(options: XtermSurfaceOptions = {}) {
     this.webglUnavailable = options.webgl === false
@@ -119,7 +126,9 @@ export class XtermSurface implements TerminalSurface {
     this.term.loadAddon(
       new WebLinksAddon((event, uri) => this.activateUrl(event, uri), {
         hover: (_event, uri) => this.hoverLink({ kind: 'url', url: uri }),
-        leave: () => this.leaveLink()
+        leave: () => this.leaveLink(),
+        // Ends a URL at CJK text and full-width punctuation too (Chinese prose has no space after a URL).
+        urlRegex: URL_PATTERN
       })
     )
     // File paths that main finds inside the session's worktree (PRD F17).
@@ -127,11 +136,21 @@ export class XtermSurface implements TerminalSurface {
     this.attachTuiWheel()
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
+      this.keyDeferred = false
       const bytes = macKeyToBytes(event)
-      if (bytes === null) return true
-      event.preventDefault()
-      this.term.input(bytes, true)
-      return false
+      if (bytes !== null) {
+        event.preventDefault()
+        this.term.input(bytes, true)
+        return false
+      }
+      // A printable key is sent from its keypress, which carries what the input method typed (`，` for `,`). Right
+      // after a composition xterm's keydown path first sends the committed text, so the order stays; screen reader
+      // mode keeps that path too, as it leaves the character in the textarea for the reader.
+      this.keyDeferred = defersToTextInput(event) && !this.composing && this.term.options.screenReaderMode !== true
+      return !this.keyDeferred
+    })
+    this.term.onData((data) => {
+      this.lastInput = { data, at: performance.now() }
     })
 
     // Re-theme when <html data-theme> flips (theme.ts also follows the system setting).
@@ -198,11 +217,58 @@ export class XtermSurface implements TerminalSurface {
       if (this.disposed || !this.container) return
       this.term.open(this.container)
       this.term.element?.addEventListener('contextmenu', (event) => this.onContextMenu(event))
+      this.watchTextInput()
       this.syncLigatures()
       this.syncRenderer()
       this.fit()
       void document.fonts.ready.then(() => this.refreshGlyphs())
     })
+  }
+
+  /**
+   * Follows IME composition on xterm's textarea, and drops text the macOS input system inserts on its own (ime.ts).
+   * Listens on the terminal element in the capture phase, so it sees input before xterm's textarea handlers do.
+   */
+  private watchTextInput(): void {
+    const element = this.term.element
+    const textarea = this.term.textarea
+    if (!element || !textarea) return
+    let compositions = 0
+    textarea.addEventListener('compositionstart', () => {
+      compositions += 1
+      this.composing = true
+    })
+    // Registered after xterm's own listener, so this runs after the task in which xterm sends the committed text.
+    textarea.addEventListener('compositionend', () => {
+      const ended = compositions
+      setTimeout(() => {
+        if (ended === compositions) this.composing = false
+      }, 0)
+    })
+    // xterm sends a keypress's character but does not cancel the event, so it would also land in the textarea, where
+    // xterm reads composed text from; cancelled, the textarea only holds what the IME composes, as with keydown input.
+    textarea.addEventListener('keypress', (event) => {
+      if (this.keyDeferred) event.preventDefault()
+    })
+    const held = new Set<string>()
+    element.addEventListener('keydown', (event) => held.add(event.code), true)
+    element.addEventListener('keyup', (event) => held.delete(event.code), true)
+    textarea.addEventListener('blur', () => held.clear())
+    const dropAutoPeriod = (event: Event): void => {
+      if (event.target !== textarea || !(event instanceof InputEvent)) return
+      const insertion = {
+        inputType: event.inputType,
+        data: event.data,
+        keyHeld: held.size > 0,
+        lastInput: this.lastInput.data,
+        msSinceLastInput: performance.now() - this.lastInput.at
+      }
+      if (!isAutoPeriod(insertion)) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    element.addEventListener('beforeinput', dropAutoPeriod, true)
+    element.addEventListener('input', dropAutoPeriod, true)
   }
 
   /** xterm measures cells at open(); make sure the web font is in so they are right. */
@@ -445,18 +511,15 @@ export class XtermSurface implements TerminalSurface {
     if (candidates.length === 0) return callback(undefined)
     resolve(candidates.map((c) => c.path)).then(
       (resolved) => {
-        const links: ILink[] = []
-        candidates.forEach((candidate, i) => {
-          const path = resolved[i]
-          if (!path) return
+        const links: ILink[] = resolvedCandidates(candidates, resolved).map(({ candidate, path }) => {
           const ref: LinkRef = { kind: 'file', path, line: candidate.line, column: candidate.column }
-          links.push({
+          return {
             range: this.cellRange(firstRow, cells[candidate.start]!, cells[candidate.end]! - 1),
             text: text.slice(candidate.start, candidate.end),
             activate: (event) => this.emitLink({ ...ref, action: 'open', metaKey: event.metaKey, x: event.clientX, y: event.clientY }),
             hover: () => this.hoverLink(ref),
             leave: () => this.leaveLink()
-          })
+          }
         })
         callback(links.length > 0 ? links : undefined)
       },

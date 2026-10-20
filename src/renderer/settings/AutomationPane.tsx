@@ -121,6 +121,8 @@ function ModelField({ value, onCommit }: { value: string; onCommit: (model: stri
         setDraft(null)
       }}
       onKeyDown={(event) => {
+        // Enter / Esc while an input method composes confirm / cancel the composition.
+        if (event.nativeEvent.isComposing) return
         if (event.key === 'Enter') event.currentTarget.blur()
         else if (event.key === 'Escape') {
           setDraft(null)

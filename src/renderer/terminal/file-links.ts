@@ -23,16 +23,49 @@ const DELIMITERS = String.raw`\s'"\x60()\[\]{}<>,;|=\u2026\u2190-\u23ff\u2500-\u
 /** A run of path characters, then an optional compiler-style `(line,col)`. */
 const RUN = new RegExp(String.raw`[^${DELIMITERS}]+(?:\((\d+)(?:,(\d+))?\))?`, 'gu')
 const TRAILING_PUNCTUATION = /[.:!?]+$/
+// CJK text is allowed in paths (`docs/说明.md`), so Chinese prose with no space around a path makes one run of it:
+// `修改了src/app.ts中的函数`. Such a run also yields the path without the CJK glued to its ends. A CJK directory or file
+// name (`说明/a.md`, `docs/说明`) is next to a `/`, not glued, and stays.
+const CJK = String.raw`\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3005\u30fc`
+const GLUED_BEFORE = new RegExp(`^[${CJK}]+(?=[^${CJK}/])`, 'u')
+const GLUED_AFTER = new RegExp(`(?<=[^${CJK}/])[${CJK}]+$`, 'u')
 const LINE_SUFFIX = /^(.*?)(?::(\d+)(?::(\d+))?|#L(\d+))$/
 const EXTENSION = /\.[A-Za-z0-9]{1,12}$/
 
+/**
+ * Path-looking runs in a line, in order. A run with CJK prose glued to it is followed by the same run without that
+ * prose, overlapping it; the run itself goes first, so it wins when both name a file (see resolvedCandidates).
+ */
 export function findPathCandidates(text: string): PathCandidate[] {
   const out: PathCandidate[] = []
+  const add = (candidate: PathCandidate | null): void => {
+    if (candidate && out.length < MAX_CANDIDATES_PER_LINE) out.push(candidate)
+  }
   for (const match of text.matchAll(RUN)) {
     if (out.length >= MAX_CANDIDATES_PER_LINE) break
-    const candidate = parseRun(match[0], match.index)
-    if (candidate) out.push(candidate)
+    const run = match[0]
+    add(parseRun(run, match.index))
+    const before = GLUED_BEFORE.exec(run)?.[0].length ?? 0
+    const unglued = run.slice(before).replace(GLUED_AFTER, '')
+    if (unglued.length < run.length && unglued !== '') add(parseRun(unglued, match.index + before))
   }
+  return out
+}
+
+/**
+ * The candidates main confirmed as files (`resolved[i]` for `candidates[i]`), in order, each with its file; a
+ * candidate overlapping one taken before it is left out, so a run and its unglued form never both become links.
+ */
+export function resolvedCandidates(
+  candidates: readonly PathCandidate[],
+  resolved: readonly (string | null)[]
+): Array<{ candidate: PathCandidate; path: string }> {
+  const out: Array<{ candidate: PathCandidate; path: string }> = []
+  candidates.forEach((candidate, i) => {
+    const path = resolved[i]
+    if (!path || out.some((taken) => candidate.start < taken.candidate.end && taken.candidate.start < candidate.end)) return
+    out.push({ candidate, path })
+  })
   return out
 }
 

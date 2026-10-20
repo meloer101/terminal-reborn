@@ -26,6 +26,27 @@ export type PathResolver = (paths: readonly string[]) => Promise<(string | null)
 /** URLs longer than this are not opened (they are not something an agent prints by accident). */
 const MAX_URL_LENGTH = 8192
 
+// Characters that end a plain-text URL besides the ASCII ones @xterm/addon-web-links already stops at: CJK text
+// (Hangul jamo, CJK radicals through compatibility, unified ideographs, Hangul syllables, compatibility ideographs,
+// supplementary ideographs), CJK / full-width punctuation (、。「」（），！？ …), general punctuation (“” … ——), arrows,
+// box drawing and the symbols agents' TUIs draw. Chinese prose puts no space after a URL, so without these
+// `https://x.com/a。现在可以了` was one link (orca#30213). A raw CJK path segment ends the link too; agents print such
+// URLs percent-encoded.
+const NOT_URL = String.raw`\u1100-\u11ff\u2000-\u206f\u2190-\u23ff\u2500-\u27bf\u2e80-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef\u{20000}-\u{3fffd}`
+const STOP = String.raw`\s"'\x60<>{}|\\^${NOT_URL}`
+/** Anywhere in the URL (like the addon: no `!`, `*` or parentheses outside a balanced pair). */
+const URL_CHAR = `[^${STOP}()!*]`
+/** The last character: not trailing punctuation or a bracket. */
+const URL_LAST = String.raw`[^${STOP}():,.!?~\[\]]`
+/** `/wiki/Foo_(bar)`: a balanced pair of ASCII parentheses stays in the URL, a lone `)` closing prose does not. */
+const URL_PARENS = String.raw`\(${URL_CHAR}*\)`
+
+/**
+ * Plain-text http(s) URLs, for WebLinksAddon's `urlRegex` (it adds the `g` flag itself, so there is none here). Same
+ * as the addon's default pattern for ASCII text, except that balanced parentheses are kept.
+ */
+export const URL_PATTERN = new RegExp(`(?:https?|HTTPS?)://(?:${URL_CHAR}|${URL_PARENS})*(?:${URL_LAST}|${URL_PARENS})`, 'u')
+
 /** The URL to open, normalized; null for anything but http(s) (file:, javascript:, a bare word …). */
 export function openableUrl(text: string): string | null {
   const value = text.trim()

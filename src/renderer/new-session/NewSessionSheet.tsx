@@ -114,8 +114,8 @@ function Sheet() {
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
-    // The menus handle (and stop) their own Esc / Enter first.
-    if (event.defaultPrevented) return
+    // The menus handle (and stop) their own Esc / Enter first; an input method composing (分支名) owns them too.
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return
     if (event.key === 'Escape') {
       event.preventDefault()
       closeNewSessionSheet(true)
