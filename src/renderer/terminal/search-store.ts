@@ -12,10 +12,15 @@ interface TerminalSearchState {
 
 export const useTerminalSearch = create<TerminalSearchState>()(() => ({ open: false, focusToken: 0 }))
 
-/** Opens the find bar over the active session's terminal (or focuses it again). False when there is no terminal to search. */
+/**
+ * Opens the find bar over the active session's terminal (or focuses it again). False when there is no terminal to
+ * search, or a dialog (settings, palette, a sheet) is in front: a real ⌘F the page leaves alone reaches the app menu,
+ * whose 在终端中查找… lands here too, and must not open the bar behind the dialog.
+ */
 export function openTerminalSearch(): boolean {
   const { activeSessionId, mainView } = useWorkspace.getState()
   if (!activeSessionId || mainView !== 'session') return false
+  if (document.querySelector('[role="dialog"][aria-modal="true"]')) return false
   useTerminalSearch.setState((s) => ({ open: true, focusToken: s.focusToken + 1 }))
   return true
 }
@@ -26,8 +31,7 @@ export function closeTerminalSearch(): void {
 
 // Capture phase on window: wins over xterm, which would otherwise swallow the key.
 const onKeyDown = (e: KeyboardEvent): void => {
-  if (!isFindShortcut(e) || document.querySelector('[role="dialog"][aria-modal="true"]')) return
-  if (!openTerminalSearch()) return
+  if (!isFindShortcut(e) || !openTerminalSearch()) return
   e.preventDefault()
   e.stopPropagation()
   noteKeyCommand('find')
