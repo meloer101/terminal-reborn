@@ -195,7 +195,8 @@ test.describe('with the keyboard in the terminal', () => {
     expect(await press('Meta+Shift+KeyB')).toBe('page')
     await page.waitForTimeout(400)
     await expect(panel).toHaveCount(open ? 0 : 1)
-    await page.locator('[data-region="terminal"] [data-active="true"]').click()
+    // Top left: in a window too narrow to dock it (the CI runner's 1024 screen) the panel floats over main's right side.
+    await terminal().click({ position: { x: 40, y: 40 } })
     expect(await press('Meta+Shift+KeyB')).toBe('page')
     await expect(panel).toHaveCount(open ? 1 : 0)
   })

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, setWindowSize } from './launch'
 
 const RESULTS = join(process.cwd(), 'test-results', 'git-panel')
 const BRANCHES = 200
@@ -70,7 +70,7 @@ test.describe('F6 graph performance', () => {
     )
     app = await launchApp({}, { userDataDir: profile })
     page = await app.firstWindow()
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900))
+    await setWindowSize(app, page, 1440, 900)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
   })
 
