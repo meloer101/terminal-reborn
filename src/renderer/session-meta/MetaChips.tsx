@@ -2,7 +2,7 @@
 // TodoPopover, ContextChip v2 274:10418 + ContextPopover 276:10395, UsageChip v2 274:10443 + UsagePopover v2
 // 277:10437. Neutral meters and numbers only — no status colors; near the limit is drawn heavier. No data, no chip.
 import { Check } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import {
   contextHigh,
   contextMark,
@@ -491,20 +491,21 @@ function Shares({ usage, now, onPick }: { usage: VendorUsage; now: number; onPic
 // Session header group
 // ---------------------------------------------------------------------------------------------
 
-/** The header's metrics, in Figma 17A order: todo · context · usage (this session's vendor). */
-export function SessionMetaChips({ sessionId, vendor }: { sessionId: SessionId; vendor: UsageVendor | null }) {
+/** The header's metrics, in Figma 17A order: todo · context · usage (this session's vendor) · `children` (actions on them). */
+export function SessionMetaChips({ sessionId, vendor, children }: { sessionId: SessionId; vendor: UsageVendor | null; children?: ReactNode }) {
   const metrics = useSessionMeta((s) => s.bySession[sessionId])
   const all = useUsageList()
   const now = useMetaNow()
   // Off the plan (a third-party endpoint), the account's usage is not this session's.
   const usage = vendor && metrics?.plan !== false ? all.find((u) => u.vendor === vendor) : undefined
   const showsUsage = usage !== undefined && topWindow(usage, now) !== null
-  if (!metrics?.todos && !metrics?.context && !showsUsage) return null
+  if (!metrics?.todos && !metrics?.context && !showsUsage && !children) return null
   return (
     <span className={styles.headerChips} data-testid="session-meta">
       {metrics?.todos && <TodoChip items={metrics.todos} />}
       {metrics?.context && <ContextChip sessionId={sessionId} context={metrics.context} />}
       {usage && showsUsage && <UsageChip usage={usage} current={vendor} all={all} />}
+      {children}
     </span>
   )
 }

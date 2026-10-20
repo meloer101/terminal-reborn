@@ -40,4 +40,9 @@ export function registerActivityHandlers(): void {
     if (!reports.has(id)) sender.once('destroyed', () => reports.delete(id))
     reports.set(id, summary.active)
   })
+  // A scheduled 继续 (PRD F11) must keep time in a hidden window; only while one waits, so hidden windows stay cheap.
+  ipcMain.on(IPC.appKeepTimers, (event, raw: unknown) => {
+    if (typeof raw !== 'boolean' || event.sender.isDestroyed()) return
+    event.sender.setBackgroundThrottling(!raw)
+  })
 }

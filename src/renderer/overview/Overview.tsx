@@ -17,6 +17,7 @@ import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { EnterButton } from './EnterButton'
 import { PortTags } from '../panels/browser/PortTags'
 import { ReviewButton } from '../review/ReviewButton'
+import { LimitResumeSummary } from '../limit-resume/LimitResumeButton'
 import { UsageChip, useMetaNow, useUsageList } from '../session-meta/MetaChips'
 import { useSessionMeta } from '../session-meta/store'
 import metaStyles from '../session-meta/SessionMeta.module.css'
@@ -340,7 +341,9 @@ function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProp
       </span>
       <span className={styles.rowTitle}>{row.title}</span>
       <span className={styles.where}>{row.where}</span>
-      <span className={styles.summaryCell}>{row.summary}</span>
+      <span className={styles.summaryCell}>
+        <LimitResumeSummary sessionId={id} fallback={row.summary} />
+      </span>
       <PortTags sessionId={id} />
       <MetaCells sessionId={id} />
       {trailing ?? (

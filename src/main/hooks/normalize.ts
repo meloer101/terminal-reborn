@@ -231,7 +231,8 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
       return { events: [stopEvent(payload)], clears: 'all' }
     case 'StopFailure': {
       const message = str(payload.last_assistant_message) ?? str(payload.error)
-      return { events: [{ type: 'stop-failure', ...(message ? { message } : {}) }], clears: 'all' }
+      const reason = str(payload.error)
+      return { events: [{ type: 'stop-failure', ...(message ? { message } : {}), ...(reason ? { reason } : {}) }], clears: 'all' }
     }
     case 'SessionEnd': {
       const reason = str(payload.reason)

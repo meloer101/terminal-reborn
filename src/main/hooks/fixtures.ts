@@ -31,6 +31,18 @@ export const claudeFixtures = {
     "background_tasks": [],
     "session_crons": []
   },
+  // Claude Code 2.1.304 against a local 429 with the plan-limit headers (scripts/spikes/60-rate-limit-lab.mjs).
+  "StopFailure_rate_limit": {
+    "session_id": "00000000-0000-4000-8000-000000000000",
+    "cwd": "/work/project",
+    "prompt_id": "00000000-0000-4000-8000-000000000000",
+    "effort": {
+      "level": "xhigh"
+    },
+    "hook_event_name": "StopFailure",
+    "error": "rate_limit",
+    "last_assistant_message": "You've hit your session limit · resets 5:22pm (America/Bogota)"
+  },
   "SessionEnd": {
     "session_id": "00000000-0000-4000-8000-000000000000",
     "cwd": "/work/project",
