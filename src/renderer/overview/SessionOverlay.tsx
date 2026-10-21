@@ -4,7 +4,7 @@
 // windows, and each edge of the overlay moves on its own (remembered; double-click restores the default). The
 // top-right window's bar adds a session through a picker tile. Esc (outside a terminal) and the scrim close the
 // overlay; a window's × closes that window, and the last one closes the overlay.
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import { Columns2, X } from 'lucide-react'
 import type { SessionId } from '@shared/types'
 import { IconButton } from '../ui/IconButton'
@@ -13,6 +13,7 @@ import { getXtermSurface } from '../terminal/registry'
 import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { ReviewButton } from '../review/ReviewButton'
 import { SessionRadarTag } from '../conflict-radar/RadarTag'
+import { CompareBar } from '../attempts/AttemptGroups'
 import { EnterButton } from './EnterButton'
 import enterStyles from './EnterButton.module.css'
 import type { OverviewRow } from './model'
@@ -76,6 +77,8 @@ export function SessionOverlay({
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [drag, setDrag] = useState<Drag | null>(null)
   const picking = useOverviewStore((s) => s.picking)
+  // 一题多解: the group being compared; its members' windows get a compare bar.
+  const compareGroup = useOverviewStore((s) => s.compareGroup)
   const overlayRect = useOverviewStore((s) => s.overlayRect)
   /** The rect while an edge is being dragged; stored (and remembered) on release. */
   const [liveRect, setLiveRect] = useState<Rect | null>(null)
@@ -252,6 +255,7 @@ export function SessionOverlay({
               onBarPointerDown={(e) => onBarPointerDown(tile.id, e)}
               onAdd={canAdd && corner === tile.id ? () => setPicking(true) : undefined}
               onClose={() => (ids.length === 1 ? onClose() : closePane(tile.id))}
+              below={compareGroup ? <CompareBar groupId={compareGroup} sessionId={tile.id} /> : null}
             />
           )
         })}
@@ -291,7 +295,8 @@ function Pane({
   dragged,
   onBarPointerDown,
   onAdd,
-  onClose
+  onClose,
+  below
 }: {
   row: OverviewRow
   style: CSSProperties
@@ -300,6 +305,8 @@ function Pane({
   onBarPointerDown(e: PointerEvent<HTMLElement>): void
   onAdd?: () => void
   onClose(): void
+  /** Under the title bar, above the terminal (一题多解's compare bar). */
+  below?: ReactNode
 }) {
   const id = row.session.id
   return (
@@ -326,6 +333,7 @@ function Pane({
           <X {...ICON} />
         </IconButton>
       </header>
+      {below}
       <div className={styles.terminal}>
         <BorrowedTerminal session={row.session} variant="overlay" />
       </div>

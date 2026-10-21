@@ -28,6 +28,13 @@ describe('sanitizeWorkspaceFile', () => {
     expect(sanitizeWorkspaceFile({ ...structuredClone(valid), reviewComments: { '/elsewhere': [note] } }, 0)).not.toHaveProperty('reviewComments')
   })
 
+  it('keeps 一题多解 groups of sessions that exist; files without them stay as they were', () => {
+    const group = { id: 'g1', prompt: '改登录页', base: 'main', createdAt: 5, members: ['s1', 'gone'] }
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), attemptGroups: [group] }, 0)?.attemptGroups).toEqual([{ ...group, members: ['s1'] }])
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), attemptGroups: [{ ...group, members: ['gone'] }] }, 0)).not.toHaveProperty('attemptGroups')
+    expect(sanitizeWorkspaceFile(structuredClone(valid), 0)).not.toHaveProperty('attemptGroups')
+  })
+
   it('rejects anything that is not a version-2 object', () => {
     expect(sanitizeWorkspaceFile(null, 0)).toBeNull()
     expect(sanitizeWorkspaceFile([], 0)).toBeNull()

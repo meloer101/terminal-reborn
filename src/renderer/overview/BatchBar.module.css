@@ -1,0 +1,122 @@
+/* 总览批量操作: a strip at the bottom of the overview while sessions are picked — a hairline above it, ghost buttons,
+ * and the message box under the line when 发送消息… is open. No Figma frame yet. */
+.bar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  height: 28px;
+}
+
+.count {
+  flex: none;
+  margin-right: var(--space-8);
+  font: var(--text-caption-strong);
+  line-height: 20px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.result {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.compose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 52px;
+  max-height: 200px;
+  padding: var(--space-6) var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  resize: vertical;
+  outline: none;
+  user-select: text;
+}
+
+.textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.textarea:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.composeFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.recipients {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skipped {
+  color: var(--text-tertiary);
+}
+
+/* The committing action, glass like the sheets' primary button. */
+.primary {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-button-glass);
+  background: var(--glass-primary-bg);
+  box-shadow: var(--glass-highlight), var(--shadow-glass-button);
+  font: var(--text-body-strong);
+  color: var(--glass-primary-fg);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.primary:disabled {
+  opacity: 0.4;
+}
+
+.primary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.shortcut {
+  font: var(--text-mono-s);
+  opacity: 0.55;
+}

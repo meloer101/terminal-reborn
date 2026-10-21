@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 import { TRAY_HEIGHT, type OverviewGroupKey } from './model'
-import { addToLayout, layoutIds, PICKER_SLOT, removeFromLayout, replaceInLayout, singleLayout, type PaneLayout, type Rect } from './pane-layout'
+import { addToLayout, layoutIds, MAX_PANES, PICKER_SLOT, removeFromLayout, replaceInLayout, singleLayout, type PaneLayout, type Rect } from './pane-layout'
 
 export type OverviewView = 'list' | 'board'
 
@@ -60,6 +60,12 @@ interface OverviewState extends Prefs {
   /** The overlay shows one more tile for picking the next session to add; it sits in `layout` as PICKER_SLOT. */
   picking: boolean
   filter: string
+  /** 一题多解: the attempt group the overlay compares (its members' tiles get a compare bar); null otherwise. */
+  compareGroup: string | null
+  /** Sessions picked with ⌘ / ⇧ for a batch action (F9 批量操作), in the order they were picked. */
+  picked: SessionId[]
+  /** Where a ⇧-click range starts: the last session clicked with or without ⌘. */
+  pickAnchor: SessionId | null
 
   setView(view: OverviewView): void
   toggleGroup(key: OverviewGroupKey): void
@@ -74,6 +80,9 @@ interface OverviewState extends Prefs {
   setFilter(filter: string): void
   setTrayHeight(height: number): void
   setOverlayRect(rect: Rect | null): void
+  /** Opens the overlay on an attempt group's members, side by side. */
+  openCompare(groupId: string, ids: readonly SessionId[]): void
+  setPicked(ids: SessionId[], anchor?: SessionId | null): void
 }
 
 export const useOverviewStore = create<OverviewState>()((set, get) => ({
@@ -83,10 +92,13 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
   layout: null,
   picking: false,
   filter: '',
+  compareGroup: null,
+  picked: [],
+  pickAnchor: null,
 
   setView(view) {
     // The list's tray and the board's overlay are different things: switching closes whichever is open.
-    set({ view, openId: null, layout: null, picking: false })
+    set({ view, openId: null, layout: null, picking: false, compareGroup: null })
     savePrefs({ ...prefsOf(get()), view })
   },
   toggleGroup(key) {
@@ -97,7 +109,7 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
   // Moving the selection leaves the open terminal where it is (a 420 px tray jumping with every ↓ is disorienting).
   select: (id) => set({ selectedId: id }),
   setOpen: (id) => set({ openId: id, ...(id ? { selectedId: id } : {}) }),
-  openOverlay: (id) => set({ layout: id ? singleLayout(id) : null, picking: false, ...(id ? { selectedId: id } : {}) }),
+  openOverlay: (id) => set({ layout: id ? singleLayout(id) : null, picking: false, compareGroup: null, ...(id ? { selectedId: id } : {}) }),
   setLayout: (layout) => set({ layout }),
   addPane(id) {
     const { layout, picking } = get()
@@ -108,7 +120,7 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
     const layout = get().layout
     const next = layout ? removeFromLayout(layout, id) : null
     // Closing the last terminal closes the overlay, picker included.
-    set(next && layoutIds(next).length > 0 ? { layout: next } : { layout: null, picking: false })
+    set(next && layoutIds(next).length > 0 ? { layout: next } : { layout: null, picking: false, compareGroup: null })
   },
   setPicking(picking) {
     const layout = get().layout
@@ -124,7 +136,14 @@ export const useOverviewStore = create<OverviewState>()((set, get) => ({
   setOverlayRect(overlayRect) {
     set({ overlayRect })
     savePrefs({ ...prefsOf(get()), overlayRect })
-  }
+  },
+  openCompare(groupId, ids) {
+    const [first, ...rest] = ids.slice(0, MAX_PANES)
+    if (!first) return
+    // The overlay borrows the members' terminals: the list's tray gives its one back first.
+    set({ layout: rest.reduce(addToLayout, singleLayout(first)), picking: false, openId: null, compareGroup: groupId, selectedId: first })
+  },
+  setPicked: (picked, anchor) => set({ picked, ...(anchor !== undefined ? { pickAnchor: anchor } : {}) })
 }))
 
 function prefsOf({ view, collapsed, trayHeight, overlayRect }: Prefs): Prefs {
@@ -139,6 +158,12 @@ export function toggleOverview(): void {
 
 /** Leaves the overview for a session's terminal. */
 export function enterSession(id: SessionId): void {
-  useOverviewStore.setState({ openId: null, layout: null, picking: false })
+  useOverviewStore.setState({ openId: null, layout: null, picking: false, compareGroup: null })
   useWorkspace.getState().setActiveSession(id)
+}
+
+/** 一题多解: the overview, with the overlay comparing the group's members (the main window comes forward). */
+export function showCompare(groupId: string, ids: readonly SessionId[]): void {
+  useOverviewStore.getState().openCompare(groupId, ids)
+  useWorkspace.getState().setMainView('overview')
 }

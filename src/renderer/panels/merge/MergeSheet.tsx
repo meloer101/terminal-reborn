@@ -19,6 +19,9 @@ import { StatusGlyph } from '../../ui/StatusGlyph'
 import { CheckMark, useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { runNote, type TurnCheckView } from '@shared/turn-checks'
 import { removeFailureText, removeWorktreeWithSessions } from '../worktree/actions'
+import { AfterMerge } from '../../attempts/AfterMerge'
+import { attemptForWorktrees } from '../../attempts/actions'
+import { markGroupMerged } from '../../state/attempt-groups'
 import {
   agentLabel,
   agentSessionFor,
@@ -80,6 +83,8 @@ function Sheet({ target }: { target: MergeTarget }) {
   const activeId = useWorkspace((s) => s.activeSessionId)
   const here = sessions.filter((s) => ids.includes(s.worktreeId))
   const agent = agentSessionFor(here, activeId)
+  // 一题多解: read when the sheet opens — removing the worktree after the merge closes its session.
+  const [attemptGroup] = useState(() => attemptForWorktrees(ids))
 
   // The precheck: once when the sheet opens, again after recheck() (the sheet opens in 'checking').
   const [attempt, setAttempt] = useState(0)
@@ -216,6 +221,7 @@ function Sheet({ target }: { target: MergeTarget }) {
         removal = error instanceof Error ? error.message : String(error)
       }
     }
+    if (attemptGroup) markGroupMerged(attemptGroup.groupId, attemptGroup.sessionId, ready.branch)
     const lines = resultLines(result, ready.base, removal)
     // 设置 · Worktree · 合并后自动归档 (PRD F15): a worktree the merge kept is folded away; its archive script runs
     // after the usual approval, and a failing one does not stop the archive.
@@ -314,6 +320,7 @@ function Sheet({ target }: { target: MergeTarget }) {
           {phase.kind === 'checking' && <p className={styles.muted}>正在检查…</p>}
           {phase.kind === 'failed-check' && <Line line={{ tone: 'error', text: `没能检查：${phase.message}` }} />}
           {phase.kind === 'done' && phase.lines.map((line) => <Line key={line.text} line={line} />)}
+          {phase.kind === 'done' && attemptGroup && <AfterMerge groupId={attemptGroup.groupId} />}
           {shown && phase.kind !== 'done' && checkLines(shown).map((line) => <Line key={line.text} line={line} />)}
           {shown && phase.kind !== 'done' && reviewCheck && (
             <Line

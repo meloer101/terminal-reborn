@@ -53,6 +53,7 @@ import {
 } from './workspace-model'
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
 import { reviewCommentsSnapshot } from './review-comments'
+import { attemptGroupsSnapshot, pruneGroups } from './attempt-groups'
 import { clampPanelWidth, clampSidebarWidth, PANEL_WIDTH_DEFAULT, SIDEBAR_WIDTH_DEFAULT, type DiffLayout, type PersistedRightPanel } from '@shared/workspace-file'
 
 /** The right panel's views (PRD F17), switched by the icons in the session header. */
@@ -134,6 +135,11 @@ interface WorkspaceState extends WorkspaceData {
   addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
   /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
   addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind): SessionId | null
+  /**
+   * 一题多解: starts a session in a new worktree folder without selecting it (the overview shows the group). The
+   * selection stays where it was; with none, the new session takes it.
+   */
+  addBackgroundSession(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind): SessionId | null
   /** Adds the Run button's terminal for a worktree (PRD F4) and selects it. */
   addRunSession(worktreeId: WorktreeId): SessionId | null
   /** Remembers the new-session sheet's 工作目录 for a git project. */
@@ -358,6 +364,12 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       commit(result.data, { mainView: 'session', focusRequest: get().focusRequest + 1 })
       return result.sessionId
     },
+    addBackgroundSession(projectId, target, kind) {
+      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now())
+      if (!result) return null
+      commit({ ...result.data, activeSessionId: get().activeSessionId ?? result.sessionId })
+      return result.sessionId
+    },
     addRunSession(worktreeId) {
       const result = addRunSession(pick(get()), worktreeId, Date.now())
       if (!result) return null
@@ -448,7 +460,8 @@ setSnapshotProvider(() => {
       diffLayout: state.diffLayout,
       collapsedProjectIds: state.collapsedProjectIds,
       recentProjects: state.recentProjects,
-      newSessionWorkdir: state.newSessionWorkdir
+      newSessionWorkdir: state.newSessionWorkdir,
+      attemptGroups: attemptGroupsSnapshot()
     },
     drafts.snapshot(),
     reviewCommentsSnapshot()
@@ -456,7 +469,9 @@ setSnapshotProvider(() => {
 })
 useWorkspace.subscribe((state, prev) => {
   if (!persistedStateChanged(state, prev) && state.windows === prev.windows && state.windowViews === prev.windowViews) return
-  for (const id of removedSessionIds(state, prev)) drafts.remove(id)
+  const removed = removedSessionIds(state, prev)
+  for (const id of removed) drafts.remove(id)
+  if (removed.length > 0) pruneGroups(new Set(state.sessions.map((s) => s.id)))
   requestSave()
 })
 

@@ -1,0 +1,174 @@
+/* 一题多解 in the overview: a section like the overview's status groups (32 header, 40 rows, no rules), and the bar
+ * under each member's title bar in the compare overlay. No Figma frame yet; sizes and type follow Figma 11 v2. */
+
+.section {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 32px;
+  padding: 0 var(--space-16) 0 var(--space-12);
+}
+
+.header h2 {
+  margin: 0;
+  font: var(--text-caption-strong);
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.count {
+  font: var(--text-mono-s);
+  line-height: 20px;
+  color: var(--text-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  height: 40px;
+  padding: 0 var(--space-12) 0 var(--space-16);
+  border-radius: var(--radius-md);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.icon {
+  flex: none;
+  display: flex;
+  color: var(--text-tertiary);
+}
+
+.task {
+  flex: 0 1 320px;
+  min-width: 80px;
+  overflow: hidden;
+  font: var(--text-body);
+  line-height: 20px;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.base {
+  flex: none;
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.members {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.member {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.merged,
+.mergedTag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.merged svg,
+.mergedTag svg {
+  color: var(--status-done);
+}
+
+.notice {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Under a member's title bar: 32 high, the bar's insets, no rule between it and the bar. */
+.compare {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  height: 32px;
+  margin-top: -8px;
+  padding: 0 10px var(--space-4) var(--space-16);
+  background: var(--bg-app);
+  user-select: none;
+}
+
+.compareLabel {
+  flex: none;
+  font: var(--text-caption-strong);
+  line-height: 20px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.diff {
+  flex: none;
+  font: var(--text-mono-s);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.launch {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failed svg {
+  flex: none;
+  color: var(--status-error);
+}

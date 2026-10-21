@@ -1,6 +1,7 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
 import type { WorktreeArchive } from '@shared/archive'
+import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
 import { hasPane, paneIds, persistedSplit, PICKER_PANE, removePane, replacePane, sessionsIn, type SplitNode } from '@shared/split-layout'
@@ -249,6 +250,8 @@ export interface WorkspaceUi {
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
   /** Secondary windows (F20 · 多窗口); `data` holds the main window's panes. */
   secondaryWindows?: readonly PersistedWindow[]
+  /** 一题多解 groups; members are kept only while their session exists. */
+  attemptGroups?: readonly AttemptGroup[]
 }
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
@@ -260,6 +263,7 @@ export function serializeWorkspace(
 ): WorkspaceFile {
   const comments = Object.entries(reviewComments).filter(([path, list]) => list.length > 0 && data.worktrees.some((w) => w.path === path))
   const split = persistedSplit(data.split)
+  const attemptGroups = pruneAttemptGroups(ui.attemptGroups ?? [], new Set(data.sessions.map((s) => s.id)))
   return {
     version: WORKSPACE_FILE_VERSION,
     projects: data.projects.map(({ id, name, rootPath }) => ({ id, name, rootPath })),
@@ -302,7 +306,8 @@ export function serializeWorkspace(
     ),
     ...(comments.length > 0 ? { reviewComments: Object.fromEntries(comments.map(([path, list]) => [path, [...list]])) } : {}),
     ...(split ? { split } : {}),
-    ...(ui.secondaryWindows && ui.secondaryWindows.length > 0 ? { windows: [...ui.secondaryWindows] } : {})
+    ...(ui.secondaryWindows && ui.secondaryWindows.length > 0 ? { windows: [...ui.secondaryWindows] } : {}),
+    ...(attemptGroups.length > 0 ? { attemptGroups: attemptGroups.map((g) => ({ ...g, members: [...g.members] })) } : {})
   }
 }
 

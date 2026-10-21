@@ -76,6 +76,15 @@ export async function insertSlashCommand(sessionId: SessionId, command: string):
   await sendQueued(queue, sessionId, submit >= 0 ? steps.slice(0, submit) : steps, getSendIo(sessionId))
 }
 
+/**
+ * 总览 · 停止 (PRD F9 batch): one Esc to the agent, as the user would press it in the terminal — it ends the turn and
+ * keeps the conversation. Queued behind any send in flight. Not for plain terminals (no agent to interrupt).
+ */
+export async function interruptAgent(sessionId: SessionId): Promise<void> {
+  if (!agentIn(sessionId)) throw new Error('不是 agent 会话')
+  await sendQueued(queue, sessionId, [{ type: 'write', data: '\x1b' }], getSendIo(sessionId))
+}
+
 const READY_TIMEOUT_MS = 30_000
 
 /** Resolves once the session's agent is up and idle (after a start or resume); rejects after a while. */
@@ -88,7 +97,7 @@ export function whenAgentReady(sessionId: SessionId, timeoutMs = READY_TIMEOUT_M
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       unsubscribe()
-      reject(new Error('agent 没有在 30 秒内启动'))
+      reject(new Error(`agent 没有在 ${timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} 分钟` : `${Math.round(timeoutMs / 1000)} 秒`}内启动`))
     }, timeoutMs)
     const unsubscribe = useWorkspace.subscribe(() => {
       if (!ready()) return
