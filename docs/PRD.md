@@ -499,7 +499,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 脚本 `e2e/scale.spec.ts`（`TR_SCALE=1`；`TR_SCALE_SOAK_MIN=480` 跑长跑，`TR_SCALE_PROFILE=1` 存渲染进程的 CPU profile 和长任务，`TR_SCALE_APP` 指向一份冻结的构建）和假 agent `e2e/scale-agent.mjs`（真实的按次 hooks、statusLine、transcript）；Apple M4、16 GB、macOS 26.3。数字在 ROADMAP D1。
 - 冷启动（启动到侧栏出现全部会话）0.45–0.72 s，不随会话数变：恢复的会话看到时才启动，守护进程里的会话只是接回。
 - 内存两种口径：Electron `getAppMetrics` 的工作集之和加守护进程 RSS，以及同一组进程的 phys_footprint（活动监视器的“内存”）。两者能差一半，输出多时 footprint 更高（压缩内存和 GPU 内存记在进程上），§1.3 的 1.5 GB 按 footprint 判断。回滚填满之前内存会涨：每个终端 1 万行，守护进程的镜像另有 5000 行，20 个会话持续输出时大约一小时填满。之后（长跑 3.96 小时）JS 堆和各进程工作集都不涨，footprint 在 1.2–1.5 GB 之间来回、大头记在 GPU 进程上（工作集约 0.1 GB 的 GPU 进程 footprint 有 0.4 GB 以上）——20 个会话都填满回滚时已经贴着 1.5 GB，回滚长度是主要变量。
-- 长跑两次被外部结束，都在 macOS 会话活动的同一刻、没有崩溃报告；守护进程被 SIGTERM 时应用 0.1 s 内拉起新的、继续运行（20 个会话工作时复测）。
+- 长跑三次都在合盖睡眠时被结束（电池供电时 `caffeinate -s` 不阻止合盖睡眠），睡眠事件之后 50–400 ms 测试启动的应用或守护进程收到 SIGTERM / 退出，没有崩溃报告。守护进程被 SIGTERM 时会结束全部会话（按注销处理），应用 0.1 s 内拉起新的守护进程、继续运行（20 个会话工作时复测）。长跑要接电源、开着盖子。
 - 输入延迟的下限是一帧：按键 → 主进程 → 守护进程 → PTY → agent 回显 → 渲染进程 → 下一帧。一个会话空闲时 p95 就是 18 ms，20 个会话、19 个在输出时也只到 20 ms；p50 10–12 ms。
 - 让会话数不影响前台的前提是隐藏的终端不花渲染时间，见 §6.3。
 
