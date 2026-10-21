@@ -5,7 +5,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
-import type { ReviewStatus } from '@shared/background-review'
+import { dismissKey, type ReviewStatus } from '@shared/background-review'
 import { DEFAULT_SETTINGS, type ReviewSettings } from '@shared/settings'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-review-')))
@@ -19,7 +19,10 @@ vi.mock('./agents-installed', async (original) => ({
   userLoginPath: async () => `${bin}:/usr/bin:/bin`
 }))
 
-const { parseReviewRequest, startReview, cancelReview, triggerAllowed, turnStarted, turnEnded } = await import('./background-review')
+const { parseReviewRequest, startReview, cancelReview, triggerAllowed, turnStarted, turnEnded, ReviewResultsFile, useReviewResultsFile, latestReview, dismissFindings, pickReviewer } =
+  await import('./background-review')
+const resultsPath = join(base, 'review-results.json')
+useReviewResultsFile(new ReviewResultsFile(resultsPath))
 
 Object.assign(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' })
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] }).toString()
@@ -107,8 +110,54 @@ describe('startReview', () => {
     const argv = readFileSync(join(bin, 'claude.argv'), 'utf8').split('\n')
     expect(argv).toEqual(expect.arrayContaining(['-p', '--tools', 'Read,Grep,Glob', '--strict-mcp-config', 'project,local']))
 
+    // The same diff again: the saved result stands, also after a restart (PRD F13 v1.63).
     const again = await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })
-    expect(again).toMatchObject({ phase: 'skipped', message: '这份改动已经审过' })
+    expect(again).toMatchObject({ phase: 'done', cached: true, found: 1, counts: { P1: 1 }, message: '看过了' })
+    const saved = new ReviewResultsFile(resultsPath)
+    useReviewResultsFile(saved)
+    await vi.waitFor(() => expect(saved.get()[root]?.records).toHaveLength(1))
+    expect(await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })).toMatchObject({ phase: 'done', cached: true, found: 1 })
+    expect(latestReview(root)).toMatchObject({ phase: 'done', hash: done.hash, found: 1, costUsd: 0.039 })
+    expect(latestReview(join(base, 'never-reviewed'))).toBeNull()
+  })
+
+  it('does not land a finding the user ignored before, and says how many were left out', async () => {
+    const root = repo('dismissed')
+    const finding = { path: 'a.ts', startLine: 1, endLine: 1, side: 'new', group: 'uncommitted', severity: 'P2', confidence: 0.6 }
+    fake('claude', `printf '%s' '${claudeJson([{ ...finding, title: '命名不清', explanation: 'a 太短' }, { ...finding, title: '少了测试', explanation: '没有测试' }])}'`)
+    dismissFindings(root, [dismissKey('a.ts', '  命名不清 ')])
+    writeFileSync(join(root, 'a.ts'), 'export const a = 6\n')
+    const o = owner()
+    await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })
+    const done = await settled(o, root)
+    expect(done.comments?.map((c) => c.text.split('\n')[0])).toEqual(['少了测试'])
+    expect(done.hidden).toBe(1)
+    // Ticked again: it comes back next time.
+    dismissFindings(root, [dismissKey('a.ts', '命名不清')], true)
+    writeFileSync(join(root, 'a.ts'), 'export const a = 7\n')
+    await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })
+    await vi.waitFor(() => expect(o.sent.at(-1)?.comments).toHaveLength(2), { timeout: 10_000 })
+  })
+
+  it('reviews a Claude session with Codex when 另一家来审 is chosen', async () => {
+    const root = repo('other')
+    writeFileSync(join(root, 'a.ts'), 'export const a = 8\n')
+    fake('codex', `while [ $# -gt 0 ]; do if [ "$1" = "-o" ]; then printf '%s' '{"findings":[],"summary":"Codex 看过了"}' > "$2"; fi; shift; done`)
+    review = { ...DEFAULT_SETTINGS.review, reviewer: 'other', codexModel: 'gpt-5.5', model: 'opus' }
+    const o = owner()
+    expect(await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })).toMatchObject({ phase: 'running', agent: 'codex', message: '正在用 Codex 审阅…' })
+    expect(await settled(o, root)).toMatchObject({ phase: 'done', agent: 'codex', message: 'Codex 看过了' })
+    const argv = readFileSync(join(bin, 'codex.argv'), 'utf8').split('\n')
+    expect(argv[argv.indexOf('--model') + 1]).toBe('gpt-5.5')
+    review = { ...DEFAULT_SETTINGS.review }
+  })
+
+  it('falls back to the session\'s own CLI when the other one is missing', () => {
+    const only = (agent: string) => (agent === 'claude' ? '/bin/claude' : null)
+    expect(pickReviewer('claude', 'other', only)).toEqual({ agent: 'claude', binary: '/bin/claude', fellBack: true })
+    expect(pickReviewer('codex', 'other', only)).toEqual({ agent: 'claude', binary: '/bin/claude', fellBack: false })
+    expect(pickReviewer('claude', 'same', only)).toEqual({ agent: 'claude', binary: '/bin/claude', fellBack: false })
+    expect(pickReviewer('codex', 'same', only)).toBeNull()
   })
 
   it('fails without comments when the reviewer does not return the schema', async () => {

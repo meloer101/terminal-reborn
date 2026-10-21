@@ -20,6 +20,17 @@ import {
   repoArg,
   repoFromRemoteUrl,
   summarizeChecks,
+  mergeArgs,
+  mergeBlockers,
+  parsePrDetails,
+  parsePrMergeRequest,
+  parsePrPostReviewRequest,
+  parsePrResolveRequest,
+  prReviewSummary,
+  readyToMerge,
+  reviewBodyWithFindings,
+  reviewThreadsInput,
+  type PrDetails,
   type PullRequestInfo
 } from './pull-requests'
 
@@ -225,5 +236,189 @@ describe('words', () => {
     const pr: PullRequestInfo = { number: 12, state: 'open', url: 'https://github.com/a/b/pull/12', title: 't', checks }
     expect(prDescription(pr)).toBe('PR #12 · 已打开 · 1 项检查失败：test')
     expect(prDescription({ ...pr, state: 'merged' })).toBe('PR #12 · 已合并')
+  })
+})
+
+describe('PR details (PRD F16 v1.63)', () => {
+  const oid = 'a'.repeat(40)
+  const raw = (pr: Record<string, unknown> = {}, repo: Record<string, unknown> = {}) => ({
+    data: {
+      viewer: { login: 'jacob' },
+      repository: {
+        autoMergeAllowed: true,
+        deleteBranchOnMerge: true,
+        squashMergeAllowed: false,
+        mergeCommitAllowed: true,
+        rebaseMergeAllowed: true,
+        viewerDefaultMergeMethod: 'SQUASH',
+        ...repo,
+        pullRequest: {
+          id: 'PR_1',
+          headRefOid: oid,
+          reviewDecision: 'CHANGES_REQUESTED',
+          mergeStateStatus: 'HAS_HOOKS',
+          isInMergeQueue: false,
+          autoMergeRequest: { mergeMethod: 'REBASE' },
+          commits: {
+            nodes: [
+              {
+                commit: {
+                  statusCheckRollup: {
+                    contexts: {
+                      nodes: [
+                        { __typename: 'CheckRun', name: 'test', status: 'COMPLETED', conclusion: 'FAILURE', isRequired: true },
+                        { __typename: 'StatusContext', context: 'ci/build', state: 'PENDING', isRequired: true },
+                        { __typename: 'CheckRun', name: 'optional', status: 'COMPLETED', conclusion: 'FAILURE', isRequired: false }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          reviewThreads: {
+            nodes: [
+              {
+                id: 'T1',
+                isResolved: false,
+                isOutdated: true,
+                path: 'src/a.ts',
+                line: null,
+                startLine: null,
+                originalLine: 12,
+                originalStartLine: 10,
+                diffSide: 'LEFT',
+                comments: { nodes: [{ author: { login: 'copilot', __typename: 'Bot' }, body: 'Use const\r\n\u001b[31mred\u001b[0m', url: 'https://github.com/x', createdAt: '2026-10-21T00:00:00Z' }] }
+              },
+              { id: 'T2', isResolved: true, path: 'b.ts', comments: { nodes: [{ body: 'x' }] } },
+              { id: 'T3', isResolved: false, path: '/etc/passwd', comments: { nodes: [{ body: 'x' }] } },
+              { id: 'T4', isResolved: false, path: 'c.ts', line: 3, comments: { nodes: [] } }
+            ]
+          },
+          comments: { nodes: [{ id: 'C1', author: null, body: 'LGTM', url: 'https://github.com/c', createdAt: '2026-10-21T02:00:00Z' }] },
+          reviews: {
+            nodes: [
+              { id: 'R1', author: { login: 'coderabbitai', __typename: 'Bot' }, body: 'Summary', state: 'COMMENTED', url: 'https://github.com/r', submittedAt: '2026-10-21T01:00:00Z' },
+              { id: 'R2', author: { login: 'amy', __typename: 'User' }, body: '', state: 'APPROVED', url: 'https://github.com/r2', submittedAt: '2026-10-21T03:00:00Z' }
+            ]
+          },
+          ...pr
+        }
+      }
+    }
+  })
+
+  it('reads the review, merge and repository state', () => {
+    const details = parsePrDetails(raw())!
+    expect(details).toMatchObject({
+      id: 'PR_1',
+      headOid: oid,
+      reviewDecision: 'changes-requested',
+      mergeState: 'has-hooks',
+      autoMerge: 'rebase',
+      required: { total: 2, failing: ['test'], pending: 1 },
+      repo: { autoMergeAllowed: true, deleteBranchOnMerge: true, methods: ['merge', 'rebase'], defaultMethod: 'merge' },
+      viewer: 'jacob'
+    })
+  })
+
+  it('keeps unresolved threads with a relative path and a comment, at their original place when outdated', () => {
+    const [thread, ...rest] = parsePrDetails(raw())!.threads
+    expect(rest).toEqual([])
+    expect(thread).toEqual({
+      id: 'T1',
+      path: 'src/a.ts',
+      line: 12,
+      startLine: 10,
+      side: 'old',
+      outdated: true,
+      comments: [{ author: { login: 'copilot', bot: true }, body: 'Use const\nred', url: 'https://github.com/x', createdAt: '2026-10-21T00:00:00Z' }]
+    })
+  })
+
+  it('lists PR comments and non-empty review bodies oldest first, with ghost for deleted users', () => {
+    expect(parsePrDetails(raw())!.notes.map((n) => [n.id, n.kind, n.author.login, n.reviewState ?? ''])).toEqual([
+      ['R1', 'review', 'coderabbitai', 'COMMENTED'],
+      ['C1', 'comment', 'ghost', '']
+    ])
+  })
+
+  it('refuses output that is not the query shape', () => {
+    expect(parsePrDetails({ data: null })).toBeNull()
+    expect(parsePrDetails(raw({ headRefOid: 'nope' }))).toBeNull()
+    expect(parsePrDetails({ errors: [{ message: 'x' }] })).toBeNull()
+  })
+
+  it('says what stands between the PR and merging', () => {
+    const details = parsePrDetails(raw({ mergeStateStatus: 'DIRTY' }))!
+    expect(prReviewSummary(details)).toBe('1 条评论没解决 · 要求修改 · 和基线冲突 · 检查通过后自动合并')
+    expect(prReviewSummary({ ...details, threads: [], reviewDecision: 'approved', mergeState: 'clean', autoMerge: null })).toBe('')
+  })
+})
+
+describe('merging (PRD F16 v1.63)', () => {
+  const details: PrDetails = {
+    id: 'PR_1',
+    headOid: 'a'.repeat(40),
+    reviewDecision: null,
+    mergeState: 'clean',
+    inMergeQueue: false,
+    autoMerge: null,
+    required: { total: 1, failing: [], pending: 0 },
+    threads: [],
+    notes: [],
+    repo: { autoMergeAllowed: false, deleteBranchOnMerge: false, methods: ['squash'], defaultMethod: 'squash' },
+    viewer: 'jacob'
+  }
+  const pr: PullRequestInfo = { number: 7, state: 'open', url: 'https://github.com/a/b/pull/7', title: 't', checks: { state: 'passing', total: 1, passed: 1, pending: 0, failing: [] }, details }
+
+  it('blocks a draft, remote-only commits, failing required checks, a method the repo forbids and a queued PR', () => {
+    expect(mergeBlockers({ pr, method: 'squash', remoteAhead: false })).toEqual([])
+    expect(mergeBlockers({ pr: { ...pr, state: 'draft' }, method: 'squash', remoteAhead: false })[0]).toContain('草稿')
+    expect(mergeBlockers({ pr, method: 'squash', remoteAhead: true })[0]).toContain('先拉取')
+    expect(mergeBlockers({ pr: { ...pr, details: { ...details, required: { total: 1, failing: ['test'], pending: 0 } } }, method: 'squash', remoteAhead: false })).toEqual([
+      '必需的检查没通过：test'
+    ])
+    expect(mergeBlockers({ pr, method: 'rebase', remoteAhead: false })).toEqual(['这个仓库不允许这种合并方式'])
+    expect(mergeBlockers({ pr: { ...pr, details: { ...details, inMergeQueue: true } }, method: 'squash', remoteAhead: false })).toEqual(['已经在合并队列里'])
+    const { details: _gone, ...bare } = pr
+    expect(mergeBlockers({ pr: bare, method: 'squash', remoteAhead: false })).toEqual(['没能读到 PR 的合并状态，稍后再试'])
+  })
+
+  it('pins the merge to the checked head and never adds --admin', () => {
+    const args = mergeArgs({ host: 'github.com', owner: 'a', name: 'b' }, 7, 'squash', 'f'.repeat(40), true)
+    expect(args).toEqual(['pr', 'merge', '7', '--repo=github.com/a/b', '--squash', `--match-head-commit=${'f'.repeat(40)}`, '--auto'])
+  })
+
+  it('is ready when required checks passed (or every check, when none is required)', () => {
+    expect(readyToMerge(pr)).toBe(true)
+    expect(readyToMerge({ ...pr, details: { ...details, required: { total: 1, failing: [], pending: 1 } } })).toBe(false)
+    expect(readyToMerge({ ...pr, checks: { ...pr.checks, state: 'pending' }, details: { ...details, required: { total: 0, failing: [], pending: 0 } } })).toBe(false)
+    expect(readyToMerge({ ...pr, details: { ...details, mergeState: 'dirty' } })).toBe(false)
+    expect(readyToMerge({ ...pr, state: 'draft' })).toBe(false)
+  })
+
+  it('validates what the window asks for', () => {
+    const where = { root: '/r', worktree: '/r/w' }
+    expect(parsePrMergeRequest({ ...where, method: 'squash', when: 'now', deleteRemoteBranch: false })).toEqual({ ...where, method: 'squash', when: 'now', deleteRemoteBranch: false })
+    expect(parsePrMergeRequest({ ...where, method: 'octopus', when: 'now', deleteRemoteBranch: false })).toBeNull()
+    expect(parsePrResolveRequest({ ...where, threadIds: ['a', 'a', 'b'], reply: '  done ' })).toEqual({ ...where, threadIds: ['a', 'b'], reply: 'done' })
+    expect(parsePrResolveRequest({ ...where, threadIds: [], reply: '' })).toBeNull()
+    const comment = { path: 'a.ts', side: 'new', line: 2, endLine: 3, body: 'x' }
+    expect(parsePrPostReviewRequest({ ...where, reviewer: 'Codex', comments: [comment] })).toEqual({ ...where, reviewer: 'Codex', comments: [comment] })
+    expect(parsePrPostReviewRequest({ ...where, reviewer: 'Codex', comments: [{ ...comment, path: '/abs' }] })).toBeNull()
+    expect(parsePrPostReviewRequest({ ...where, reviewer: 'Codex', comments: [{ ...comment, endLine: 1 }] })).toBeNull()
+  })
+
+  it('puts findings on their lines, and into one body as a fallback', () => {
+    const comments = [
+      { path: 'a.ts', side: 'new' as const, line: 2, endLine: 2, body: 'one' },
+      { path: 'b.ts', side: 'old' as const, line: 4, endLine: 6, body: 'two\nlines' }
+    ]
+    expect(reviewThreadsInput(comments)).toEqual([
+      { path: 'a.ts', line: 2, side: 'RIGHT', body: 'one' },
+      { path: 'b.ts', line: 6, side: 'LEFT', body: 'two\nlines', startLine: 4, startSide: 'LEFT' }
+    ])
+    expect(reviewBodyWithFindings('Claude', comments)).toBe('Wavi 审阅（Claude）：2 条。\n\n1. `a.ts:2`\n   one\n\n2. `b.ts:4-6（旧文件）`\n   two\n   lines')
   })
 })

@@ -6,6 +6,8 @@
 // 创建 PR pushes the branch (asking in a native sheet first when it was never pushed) and runs `gh pr create`.
 // 让 agent 修复 reads the failing jobs' `gh run view --log-failed`. Everything from the renderer is validated: project
 // roots must be the workspace's, worktrees theirs, and no value reaches git or gh where it could be read as an option.
+// v1.63 adds the writes (PRD F16 · L2): merging the PR (pinned to the head Wavi checked, GitHub auto-merge or Wavi's own
+// wait), resolving threads and posting Wavi's review. Each runs only on a button the user clicked; several at once ask.
 import { spawn } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -22,10 +24,25 @@ import {
   nextPollDelay,
   parseCreatedUrl,
   parsePrCreateRequest,
+  parsePrDetails,
+  parsePrMergeRequest,
+  parsePrPostReviewRequest,
+  parsePrResolveRequest,
+  parsePrTarget,
+  mergeArgs,
+  mergeBlockers,
+  readyToMerge,
+  ADD_REVIEW_MUTATION,
+  REPLY_THREAD_MUTATION,
+  RESOLVE_THREAD_MUTATION,
+  reviewBody,
+  reviewBodyWithFindings,
+  reviewThreadsInput,
   parsePrTargets,
   pickPullRequest,
   prBody,
   prTitle,
+  PR_DETAILS_QUERY,
   PR_IPC,
   PR_JSON_FIELDS,
   PR_POLL,
@@ -36,6 +53,9 @@ import {
   type GhState,
   type GitHubRepo,
   type PrCreateResult,
+  type PrDetails,
+  type PrMergeRequest,
+  type PrWriteResult,
   type PrStatus,
   type PrTarget,
   type PullRequestInfo
@@ -74,7 +94,7 @@ interface Ran {
 }
 
 /** Runs a program; never rejects (a spawn error is code -1). `tail` keeps only the end of stdout. */
-function runProcess(bin: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv; timeout: number; tail?: number }): Promise<Ran> {
+function runProcess(bin: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv; timeout: number; tail?: number; input?: string }): Promise<Ran> {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
@@ -82,7 +102,11 @@ function runProcess(bin: string, args: string[], options: { cwd: string; env: No
     let settled = false
     const out = new StringDecoder('utf8')
     const err = new StringDecoder('utf8')
-    const child = spawn(bin, args, { cwd: options.cwd, env: options.env, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(bin, args, { cwd: options.cwd, env: options.env, stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
+    if (options.input !== undefined) {
+      child.stdin?.on('error', () => {})
+      child.stdin?.end(options.input)
+    }
     const timer = setTimeout(() => {
       stderr += `\n超过 ${Math.round(options.timeout / 1000)} 秒没有结束，已停止`
       child.kill('SIGTERM')
@@ -94,7 +118,7 @@ function runProcess(bin: string, args: string[], options: { cwd: string; env: No
       stdout += out.end()
       resolve({ code: overflow ? -1 : code, stdout, stderr: (stderr + err.end()).slice(-MAX_STDERR) })
     }
-    child.stdout.on('data', (chunk: Buffer) => {
+    child.stdout?.on('data', (chunk: Buffer) => {
       stdout += out.write(chunk)
       if (options.tail !== undefined) {
         if (stdout.length > options.tail * 2) stdout = stdout.slice(-options.tail)
@@ -103,7 +127,7 @@ function runProcess(bin: string, args: string[], options: { cwd: string; env: No
         child.kill('SIGTERM')
       }
     })
-    child.stderr.on('data', (chunk: Buffer) => {
+    child.stderr?.on('data', (chunk: Buffer) => {
       stderr = (stderr + err.write(chunk)).slice(-MAX_STDERR)
     })
     child.once('error', (error) => {
@@ -159,13 +183,13 @@ async function ghEnv(): Promise<Record<string, string>> {
 let ghSlots = GH_CONCURRENCY
 const ghQueue: (() => void)[] = []
 
-async function gh(args: string[], options: { cwd?: string; tail?: number; timeout?: number } = {}): Promise<Ran> {
+async function gh(args: string[], options: { cwd?: string; tail?: number; timeout?: number; input?: string } = {}): Promise<Ran> {
   const bin = ghBin
   if (!bin) return { code: -1, stdout: '', stderr: 'gh not found' }
   if (ghSlots === 0) await new Promise<void>((resolve) => ghQueue.push(resolve))
   else ghSlots--
   try {
-    return await runProcess(bin, args, { cwd: options.cwd ?? homedir(), env: await ghEnv(), timeout: options.timeout ?? GH_TIMEOUT_MS, tail: options.tail })
+    return await runProcess(bin, args, { cwd: options.cwd ?? homedir(), env: await ghEnv(), timeout: options.timeout ?? GH_TIMEOUT_MS, tail: options.tail, input: options.input })
   } finally {
     const next = ghQueue.shift()
     if (next) next()
@@ -287,6 +311,29 @@ async function listPr(repo: GitHubRepo, headOwner: string | null, headBranch: st
   }
 }
 
+/** Review threads, merge state and the repository's merge options of an open PR (PRD F16 v1.63); null when gh failed. */
+async function prDetails(repo: GitHubRepo, number: number): Promise<{ details: PrDetails | null } | { error: string }> {
+  const ran = await gh([
+    'api',
+    'graphql',
+    `--hostname=${repo.host}`,
+    '-f',
+    `query=${PR_DETAILS_QUERY}`,
+    '-f',
+    `owner=${repo.owner}`,
+    '-f',
+    `name=${repo.name}`,
+    '-F',
+    `number=${number}`
+  ])
+  if (ran.code !== 0) return { error: lastLines(ran.stderr || ran.stdout) || `gh exited with ${ran.code}` }
+  try {
+    return { details: parsePrDetails(JSON.parse(ran.stdout) as unknown) }
+  } catch {
+    return { error: 'gh printed no JSON' }
+  }
+}
+
 // ── watching ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** A window watching worktrees (WebContents in the app; a stub in tests). */
@@ -304,6 +351,8 @@ interface Entry {
   lastCheck: number
   /** From the last check that reached gh: where `failure()` reads logs. */
   repo: GitHubRepo | null
+  /** 检查通过后由 Wavi 合并 (auto-merge off in the repository): merged by the first check that finds it ready. */
+  waiting: { method: PrMergeRequest['method']; headOid: string } | null
 }
 
 const entries = new Map<string, Entry>()
@@ -362,7 +411,20 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     return entry.status
   }
   entry.failures = 0
-  return setStatus(entry, info.branch, found.pr)
+  let pr = found.pr
+  if (pr && (pr.state === 'open' || pr.state === 'draft')) {
+    const more = await prDetails(where.repo, pr.number)
+    if ('details' in more && more.details) pr = { ...pr, details: more.details }
+    else {
+      // Keep what the last check knew about the same PR rather than flashing its threads away.
+      const known = entry.status?.pr
+      if (known?.number === pr.number && known.details) pr = { ...pr, details: known.details }
+      if ('error' in more && isRateLimited(more.error)) pausedUntil = Date.now() + PR_POLL.rateLimitMs
+    }
+  }
+  const status = setStatus(entry, info.branch, pr)
+  if (entry.waiting) void mergeWhenReady(entry)
+  return status
 }
 
 /** Checks one worktree now (one check per worktree at a time) and schedules the next. */
@@ -409,7 +471,7 @@ export function watchTargets(watcher: PrWatcher, raw: unknown): void {
       if (known.target.root !== target.root) known.target = target
       continue
     }
-    const entry: Entry = { target, status: null, failures: 0, timer: null, inFlight: null, lastCheck: 0, repo: null }
+    const entry: Entry = { target, status: null, failures: 0, timer: null, inFlight: null, lastCheck: 0, repo: null, waiting: null }
     entries.set(target.worktree, entry)
     schedule(entry, 300 * fresh++)
   }
@@ -586,6 +648,240 @@ export async function ciFailure(worktree: unknown): Promise<CiFailure | null> {
   return { number: pr.number, checks: pr.checks.failing.map((check) => check.name), log: logs.join('\n') }
 }
 
+// ── writing to GitHub (v1.63) ───────────────────────────────────────────────────────────────────────────────────
+
+const writing = new Set<string>()
+
+const writeBlocked = (message: string): PrWriteResult => ({ ok: false, reason: 'blocked', message })
+const writeFailed = (what: string, ran: Ran): PrWriteResult => ({ ok: false, reason: 'failed', message: `${what}：${lastLines(ran.stderr || ran.stdout) || `退出码 ${ran.code}`}` })
+
+/** The watched entry of a validated target, freshly checked, with gh ready. */
+async function freshEntry(where: { root: string; worktree: string }): Promise<Entry | PrWriteResult> {
+  if (!isProjectRoot(where.root)) return writeBlocked('请求无效')
+  const state = await detectGh()
+  if (state === 'missing') return writeBlocked('没有找到 gh：装好 GitHub CLI 并运行 gh auth login')
+  if (state !== 'ready') return writeBlocked('gh 还没有登录：在终端运行 gh auth login')
+  const entry = entries.get(where.worktree)
+  if (!entry || entry.target.root !== where.root) return writeBlocked('这个 worktree 没有在 Wavi 里显示')
+  if (entry.inFlight) await entry.inFlight
+  await checkEntry(entry)
+  return entry
+}
+
+/** One GraphQL request with its variables on stdin (nothing user-written lands in argv). */
+function graphql(host: string, query: string, variables: Record<string, unknown>): Promise<Ran> {
+  return gh(['api', 'graphql', `--hostname=${host}`, '--input', '-'], { input: JSON.stringify({ query, variables }), timeout: 60_000 })
+}
+
+/** Whether `oid` is a commit the local branch already has (fetching the remote branch first is the user's call). */
+async function localHas(cwd: string, oid: string, branch: string): Promise<boolean> {
+  if (!(await refExists(cwd, oid))) return false
+  return (await git(cwd, ['merge-base', '--is-ancestor', oid, `refs/heads/${branch}`])).code === 0
+}
+
+/** After a merge: fetch the base, and fast-forward the local base branch when nothing is in the way. */
+async function catchUpBase(cwd: string, remote: string, base: string): Promise<void> {
+  const env = await pushEnv(cwd)
+  const fetched = await git(cwd, ['fetch', '--quiet', '--', remote, `refs/heads/${base}:refs/remotes/${remote}/${base}`], { timeout: PUSH_TIMEOUT_MS, env })
+  if (fetched.code !== 0) return
+  const listing = parseWorktreePorcelain(await gitOut(cwd, ['worktree', 'list', '--porcelain']))
+  const holder = listing.find((e) => e.branch === base)
+  if (holder) {
+    // Checked out: only a clean checkout moves, and only forward.
+    if ((await gitOut(holder.path, ['status', '--porcelain', '--untracked-files=no'])).trim() !== '') return
+    await git(holder.path, ['merge', '--ff-only', '--quiet', `refs/remotes/${remote}/${base}`])
+    return
+  }
+  const old = (await gitOut(cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${base}`])).trim()
+  if (!old || (await git(cwd, ['merge-base', '--is-ancestor', old, `refs/remotes/${remote}/${base}`])).code !== 0) return
+  await git(cwd, ['update-ref', `refs/heads/${base}`, `refs/remotes/${remote}/${base}`, old])
+}
+
+async function runMerge(entry: Entry, method: PrMergeRequest['method'], headOid: string, auto: boolean): Promise<Ran | null> {
+  const pr = entry.status?.pr
+  if (!pr || !entry.repo) return null
+  return gh(mergeArgs(entry.repo, pr.number, method, headOid, auto), { timeout: 120_000 })
+}
+
+/** Wavi's own wait: the first check that finds the PR ready merges it — still pinned to the head the user merged. */
+async function mergeWhenReady(entry: Entry): Promise<void> {
+  const waiting = entry.waiting
+  const pr = entry.status?.pr
+  if (!waiting || !pr) return
+  if (pr.state !== 'open' || !pr.details || pr.details.headOid !== waiting.headOid) {
+    // Merged elsewhere, closed, or new commits: the wait is over (the user merges again after looking).
+    entry.waiting = null
+    if (entry.status) broadcast({ ...entry.status, checkedAt: Date.now() })
+    return
+  }
+  if (!readyToMerge(pr)) return
+  entry.waiting = null
+  const ran = await runMerge(entry, waiting.method, waiting.headOid, false)
+  if (ran && ran.code === 0) await afterMerge(entry, false)
+}
+
+async function afterMerge(entry: Entry, deleteRemoteBranch: boolean): Promise<void> {
+  const info = await branchInfo(entry.target)
+  if (info?.remote && info.base) {
+    if (deleteRemoteBranch && info.remoteRef) {
+      await git(info.cwd, ['push', '--quiet', '--', info.remote, `:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(info.cwd) })
+    }
+    await catchUpBase(info.cwd, info.remote, info.base)
+  }
+  await checkEntry(entry)
+}
+
+/**
+ * 合并 PR (PRD F16 v1.63): checks the PR fresh, refuses what GitHub would refuse anyway or what the user has not seen
+ * (commits on the PR that are not local), pushes local commits first, then `gh pr merge` pinned to that head. With
+ * `when-ready`, GitHub auto-merge when the repository allows it, else Wavi merges at the first check that finds the
+ * checks passed (only while Wavi runs).
+ */
+export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
+  const request = parsePrMergeRequest(raw)
+  if (!request) return writeBlocked('请求无效')
+  if (writing.has(request.worktree)) return writeBlocked('正在处理这个 PR')
+  writing.add(request.worktree)
+  try {
+    const entry = await freshEntry(request)
+    if ('ok' in entry) return entry
+    const pr = entry.status?.pr
+    const info = await branchInfo(entry.target)
+    if (!pr || !info?.branch || !info.remote || !info.remoteRef || !entry.repo) return writeBlocked('这个分支没有打开的 PR')
+    const details = pr.details
+    const localHead = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
+    const remoteAhead = details ? details.headOid !== localHead && !(await localHas(info.cwd, details.headOid, info.branch)) : false
+    const blockers = mergeBlockers({ pr, method: request.method, remoteAhead })
+    if (blockers.length > 0 || !details) return writeBlocked(blockers.join('；'))
+
+    let headOid = details.headOid
+    let when = request.when
+    if (localHead && localHead !== headOid) {
+      // Local commits the PR does not have yet: push them; the checks start over, so the merge waits for them.
+      const pushed = await git(info.cwd, ['push', '--quiet', '--', info.remote, `refs/heads/${info.branch}:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(info.cwd) })
+      if (pushed.code !== 0) return writeFailed('推送失败', pushed)
+      headOid = localHead
+      when = 'when-ready'
+    }
+
+    if (when === 'when-ready') {
+      if (details.repo.autoMergeAllowed) {
+        const ran = await runMerge(entry, request.method, headOid, true)
+        if (!ran || ran.code !== 0) return writeFailed('没能打开自动合并', ran ?? { code: -1, stdout: '', stderr: '' })
+        await checkEntry(entry)
+        const queued = entry.status?.pr?.details?.inMergeQueue === true
+        return { ok: true, outcome: queued ? 'queued' : 'auto-merge', message: queued ? `PR #${pr.number} 已进入合并队列` : `检查通过后 GitHub 会合并 PR #${pr.number}` }
+      }
+      entry.waiting = { method: request.method, headOid }
+      if (entry.status) broadcast({ ...entry.status, checkedAt: Date.now() })
+      schedule(entry, 5_000)
+      return { ok: true, outcome: 'waiting', message: `检查通过后由 Wavi 合并 PR #${pr.number}（Wavi 要开着）` }
+    }
+
+    const ran = await runMerge(entry, request.method, headOid, false)
+    if (!ran || ran.code !== 0) return writeFailed('GitHub 没有合并', ran ?? { code: -1, stdout: '', stderr: '' })
+    await afterMerge(entry, request.deleteRemoteBranch)
+    const merged = entry.status?.pr?.state === 'merged'
+    if (!merged && entry.status?.pr?.details?.inMergeQueue) return { ok: true, outcome: 'queued', message: `PR #${pr.number} 已进入合并队列` }
+    return { ok: true, outcome: 'merged', message: `已合并 PR #${pr.number}` }
+  } finally {
+    writing.delete(request.worktree)
+  }
+}
+
+export async function cancelMerge(raw: unknown): Promise<PrWriteResult> {
+  const where = parsePrTarget(raw)
+  if (!where) return writeBlocked('请求无效')
+  const entry = entries.get(where.worktree)
+  if (!entry || entry.target.root !== where.root) return writeBlocked('这个 worktree 没有在 Wavi 里显示')
+  if (entry.waiting) {
+    entry.waiting = null
+    if (entry.status) broadcast({ ...entry.status, checkedAt: Date.now() })
+    return { ok: true, outcome: 'cancelled', message: '不再等检查通过后合并' }
+  }
+  const pr = entry.status?.pr
+  if (!pr || !entry.repo) return writeBlocked('这个分支没有打开的 PR')
+  const ran = await gh(['pr', 'merge', String(pr.number), `--repo=${repoArg(entry.repo)}`, '--disable-auto'])
+  if (ran.code !== 0) return writeFailed('没能取消自动合并', ran)
+  await checkEntry(entry)
+  return { ok: true, outcome: 'cancelled', message: `已取消 PR #${pr.number} 的自动合并` }
+}
+
+/** Resolves threads Wavi showed (ids must be among the PR's unresolved threads), each with the reply first. */
+export async function resolveThreads(raw: unknown, parent?: BrowserWindow | null): Promise<PrWriteResult> {
+  const request = parsePrResolveRequest(raw)
+  if (!request) return writeBlocked('请求无效')
+  const entry = await freshEntry(request)
+  if ('ok' in entry) return entry
+  const details = entry.status?.pr?.details
+  if (!details || !entry.repo) return writeBlocked('没能读到 PR 的评论')
+  const open = new Set(details.threads.map((t) => t.id))
+  const ids = request.threadIds.filter((id) => open.has(id))
+  if (ids.length === 0) return { ok: true, outcome: 'resolved', message: '这些评论已经解决了' }
+  if (ids.length > 1) {
+    const yes = await confirm(
+      {
+        message: `以 @${details.viewer || '你的账号'} 把 ${ids.length} 条评论标记为已解决？`,
+        detail: request.reply ? `每条先回复：${request.reply.slice(0, 200)}` : '会在 GitHub 上标记为已解决，不附回复。',
+        confirmLabel: '标记已解决'
+      },
+      parent
+    )
+    if (!yes) return { ok: false, reason: 'declined', message: '没有改动 GitHub 上的评论' }
+  }
+  let done = 0
+  for (const id of ids) {
+    if (request.reply) {
+      const replied = await graphql(entry.repo.host, REPLY_THREAD_MUTATION, { id, body: request.reply })
+      if (replied.code !== 0) return writeFailed(`回复失败（已处理 ${done} 条）`, replied)
+    }
+    const resolved = await graphql(entry.repo.host, RESOLVE_THREAD_MUTATION, { id })
+    if (resolved.code !== 0) return writeFailed(`标记已解决失败（已处理 ${done} 条）`, resolved)
+    done++
+  }
+  await checkEntry(entry)
+  return { ok: true, outcome: 'resolved', message: `已把 ${done} 条评论标记为已解决` }
+}
+
+/**
+ * 把 Wavi 审阅发到 PR: one review with event COMMENT (never an approval or a request for changes), each finding on
+ * its lines. GitHub refuses lines outside the PR's diff; then the same findings go out as one body instead.
+ */
+export async function postReview(raw: unknown, parent?: BrowserWindow | null): Promise<PrWriteResult> {
+  const request = parsePrPostReviewRequest(raw)
+  if (!request) return writeBlocked('请求无效')
+  const entry = await freshEntry(request)
+  if ('ok' in entry) return entry
+  const pr = entry.status?.pr
+  const details = pr?.details
+  if (!pr || !details || !entry.repo || (pr.state !== 'open' && pr.state !== 'draft')) return writeBlocked('这个分支没有打开的 PR')
+  const yes = await confirm(
+    {
+      message: `以 @${details.viewer || '你的账号'} 在 PR #${pr.number} 上发 ${request.comments.length} 条审阅评论？`,
+      detail: '发成一次“评论”审阅，不会批准也不会要求修改。别人能在 PR 上看到。',
+      confirmLabel: '发到 PR'
+    },
+    parent
+  )
+  if (!yes) return { ok: false, reason: 'declined', message: '没有发到 PR' }
+  const variables = { pr: details.id, oid: details.headOid }
+  let ran = await graphql(entry.repo.host, ADD_REVIEW_MUTATION, {
+    ...variables,
+    body: reviewBody(request.reviewer, request.comments.length),
+    threads: reviewThreadsInput(request.comments)
+  })
+  if (ran.code !== 0 && /line|diff|position|path/i.test(ran.stderr || ran.stdout)) {
+    ran = await graphql(entry.repo.host, ADD_REVIEW_MUTATION, { ...variables, body: reviewBodyWithFindings(request.reviewer, request.comments), threads: [] })
+    if (ran.code === 0) {
+      await checkEntry(entry)
+      return { ok: true, outcome: 'posted', message: `有的行不在 PR 的改动里，已作为一条总评论发到 PR #${pr.number}` }
+    }
+  }
+  if (ran.code !== 0) return writeFailed('没能发到 PR', ran)
+  await checkEntry(entry)
+  return { ok: true, outcome: 'posted', message: `已在 PR #${pr.number} 上发了 ${request.comments.length} 条审阅评论` }
+}
+
 // ── IPC ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 const hooked = new WeakSet<object>()
@@ -604,6 +900,10 @@ export function registerPullRequestHandlers(): void {
   ipcMain.handle(PR_IPC.statuses, (event) => statusesFor(event.sender))
   ipcMain.handle(PR_IPC.create, (event, raw: unknown) => createPullRequest(raw, hostWindowFor(event.sender)))
   ipcMain.handle(PR_IPC.failure, (_event, worktree: unknown) => ciFailure(worktree))
+  ipcMain.handle(PR_IPC.merge, (_event, raw: unknown) => mergePullRequest(raw))
+  ipcMain.handle(PR_IPC.cancelMerge, (_event, raw: unknown) => cancelMerge(raw))
+  ipcMain.handle(PR_IPC.resolveThreads, (event, raw: unknown) => resolveThreads(raw, hostWindowFor(event.sender)))
+  ipcMain.handle(PR_IPC.postReview, (event, raw: unknown) => postReview(raw, hostWindowFor(event.sender)))
   app.on('browser-window-focus', onFocus)
   app.on('before-quit', () => {
     for (const entry of entries.values()) if (entry.timer) clearTimeout(entry.timer)

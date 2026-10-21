@@ -590,6 +590,8 @@ export interface ReviewDriveResult {
   costUsd?: number
   /** Segments that would have been sent. */
   segments: number
+  /** Findings dropped because the user had ignored the same one before. */
+  hidden?: number
 }
 
 export interface DriveReviewInput {
@@ -602,6 +604,8 @@ export interface DriveReviewInput {
   model?: string
   schemaPath: string
   outputPath: (index: number) => string
+  /** dismissKey()s of findings the user ignored before in this worktree: not landed again. */
+  dismissed?: ReadonlySet<string>
   now?: number
   isCancelled?: () => boolean
   /** Called before each segment is sent. */
@@ -676,7 +680,10 @@ export async function driveReview(input: DriveReviewInput): Promise<ReviewDriveR
       sawCost = true
     }
   }
-  const findings = parsed.flatMap((item) => (item.ok ? item.findings : []))
+  const all = parsed.flatMap((item) => (item.ok ? item.findings : []))
+  const dismissed = input.dismissed
+  const findings = dismissed && dismissed.size > 0 ? all.filter((f) => !dismissed.has(dismissKey(f.path, f.title))) : all
+  const hidden = all.length - findings.length
   const comments = findingsToComments(findings, input.diffText, input.now ?? Date.now(), input.hash)
   const summary = parsed.map((item) => (item.ok ? item.summary : '')).filter(Boolean).join('\n')
   return {
@@ -684,6 +691,7 @@ export async function driveReview(input: DriveReviewInput): Promise<ReviewDriveR
     message: summary || (comments.length === 0 ? '没有发现问题' : `找到 ${comments.length} 条`),
     comments,
     segments: segments.length,
+    ...(hidden > 0 ? { hidden } : {}),
     ...(sawDuration ? { durationMs } : {}),
     ...(sawCost ? { costUsd } : {})
   }
@@ -722,6 +730,14 @@ export interface ReviewStatus {
   costUsd?: number
   /** Only on `done`: the comments to put into Git · 变更 (replacing the previous review's). */
   comments?: ReviewComment[]
+  /** `done` from the saved record of an earlier run: how many comments it landed (they are already in the window). */
+  found?: number
+  /** Findings not landed because the user ignored the same one before (PRD F13 v1.63). */
+  hidden?: number
+  /** Severity totals of what landed, for F16's evidence block. */
+  counts?: Partial<Record<ReviewSeverity, number>>
+  /** This diff was reviewed before: the saved result is what stands. */
+  cached?: true
 }
 
 export interface BackgroundReviewApi {
@@ -733,6 +749,10 @@ export interface BackgroundReviewApi {
   turnStarted(root: string): void
   /** The turn ended (Stop): review when HEAD moved and 一轮结束且有新提交时 is on. */
   turnEnded(root: string, agent: ReviewAgent): void
+  /** The saved result of the worktree's last finished review (survives a restart), or null. */
+  latest(root: string): Promise<ReviewStatus | null>
+  /** The user deleted or unticked these review comments: the same findings are not landed again in `root`. `undo`: ticked again. */
+  dismiss(root: string, keys: string[], undo?: boolean): void
   onStatus(listener: (status: ReviewStatus) => void): () => void
 }
 
@@ -745,6 +765,10 @@ export const REVIEW_IPC = {
   turnStarted: 'review:turn-started',
   /** send(root, agent) */
   turnEnded: 'review:turn-ended',
+  /** invoke(root) → ReviewStatus | null */
+  latest: 'review:latest',
+  /** send(root, keys: string[], undo: boolean) */
+  dismiss: 'review:dismiss',
   /** main → renderer, payload ReviewStatus */
   status: 'review:status'
 } as const
@@ -787,4 +811,151 @@ export function untrackedFileDiff(path: string, content: string): string {
     body,
     ''
   ].join('\n')
+}
+
+/** A finding the user ignored is the same finding again when path and title match (whitespace and case aside). */
+export function dismissKey(path: string, title: string): string {
+  return `${path}\u0000${title.split('\n')[0]!.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 300)}`
+}
+
+/** dismissKey() of a landed review comment: its text starts with the finding's title. */
+export const commentDismissKey = (comment: Pick<ReviewComment, 'path' | 'text'>): string => dismissKey(comment.path, comment.text)
+
+/** Severity totals of a review's comments. */
+export function countSeverities(comments: readonly Pick<ReviewComment, 'severity'>[]): Partial<Record<ReviewSeverity, number>> {
+  const counts: Partial<Record<ReviewSeverity, number>> = {}
+  for (const c of comments) if (c.severity) counts[c.severity] = (counts[c.severity] ?? 0) + 1
+  return counts
+}
+
+/** The other CLI: 另一家来审 (PRD F13 v1.63). */
+export const otherAgent = (agent: ReviewAgent): ReviewAgent => (agent === 'claude' ? 'codex' : 'claude')
+
+// Saved results (PRD F13 v1.63): `review-results.json` in Wavi's data directory, by worktree root. A diff reviewed
+// before a restart is not reviewed again, and F16's evidence block reads the latest record.
+
+/** One finished review as saved. Failed and cancelled runs are not recorded. */
+export interface ReviewRecord {
+  hash: string
+  /** The CLI that reviewed. */
+  agent: ReviewAgent
+  trigger: ReviewTrigger
+  message: string
+  startedAt: number
+  endedAt: number
+  found: number
+  hidden?: number
+  counts: Partial<Record<ReviewSeverity, number>>
+  durationMs?: number
+  costUsd?: number
+}
+
+export interface RootReviews {
+  /** Newest last, at most MAX_REVIEW_RECORDS. */
+  records: ReviewRecord[]
+  /** dismissKey()s, oldest first, at most MAX_DISMISSED. */
+  dismissed: string[]
+}
+
+export type ReviewResultsStore = Record<string, RootReviews>
+
+export const MAX_REVIEW_RECORDS = 10
+export const MAX_DISMISSED = 300
+const MAX_ROOTS = 500
+
+const isRec = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const TRIGGER_SET: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
+
+function sanitizeCounts(value: unknown): Partial<Record<ReviewSeverity, number>> {
+  const counts: Partial<Record<ReviewSeverity, number>> = {}
+  if (!isRec(value)) return counts
+  for (const severity of ['P0', 'P1', 'P2', 'P3'] as const) {
+    const n = value[severity]
+    if (finite(n) && n > 0) counts[severity] = Math.floor(n)
+  }
+  return counts
+}
+
+function sanitizeRecord(value: unknown): ReviewRecord | null {
+  if (!isRec(value)) return null
+  const { hash, agent, trigger, message, startedAt, endedAt, found } = value
+  if (typeof hash !== 'string' || !/^[0-9a-f]{8,64}$/.test(hash)) return null
+  if (agent !== 'claude' && agent !== 'codex') return null
+  if (!TRIGGER_SET.has(trigger) || !finite(startedAt) || !finite(endedAt) || !finite(found) || found < 0) return null
+  return {
+    hash,
+    agent,
+    trigger: trigger as ReviewTrigger,
+    message: typeof message === 'string' ? message.slice(0, 4000) : '',
+    startedAt,
+    endedAt,
+    found: Math.floor(found),
+    ...(finite(value.hidden) && value.hidden > 0 ? { hidden: Math.floor(value.hidden) } : {}),
+    counts: sanitizeCounts(value.counts),
+    ...(finite(value.durationMs) ? { durationMs: value.durationMs } : {}),
+    ...(finite(value.costUsd) ? { costUsd: value.costUsd } : {})
+  }
+}
+
+/** Any JSON value → a valid store. */
+export function sanitizeReviewResults(raw: unknown): ReviewResultsStore {
+  const store: ReviewResultsStore = {}
+  if (!isRec(raw)) return store
+  for (const [root, value] of Object.entries(raw).slice(0, MAX_ROOTS)) {
+    if (!root.startsWith('/') || root.includes('\0') || !isRec(value)) continue
+    const records = Array.isArray(value.records) ? value.records.map(sanitizeRecord).filter((r): r is ReviewRecord => r !== null).slice(-MAX_REVIEW_RECORDS) : []
+    const dismissed = Array.isArray(value.dismissed)
+      ? value.dismissed.filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 5000).slice(-MAX_DISMISSED)
+      : []
+    if (records.length > 0 || dismissed.length > 0) store[root] = { records, dismissed }
+  }
+  return store
+}
+
+const rootOf = (store: ReviewResultsStore, root: string): RootReviews => store[root] ?? { records: [], dismissed: [] }
+
+/** Adds a finished review; the same hash replaces its older record. */
+export function addReviewRecord(store: ReviewResultsStore, root: string, record: ReviewRecord): ReviewResultsStore {
+  const current = rootOf(store, root)
+  const records = [...current.records.filter((r) => r.hash !== record.hash), record].slice(-MAX_REVIEW_RECORDS)
+  return { ...store, [root]: { ...current, records } }
+}
+
+export function addDismissed(store: ReviewResultsStore, root: string, keys: readonly string[]): ReviewResultsStore {
+  const current = rootOf(store, root)
+  const fresh = [...new Set(keys)].filter((k) => k.length > 0 && k.length <= 5000 && !current.dismissed.includes(k))
+  if (fresh.length === 0) return store
+  return { ...store, [root]: { ...current, dismissed: [...current.dismissed, ...fresh].slice(-MAX_DISMISSED) } }
+}
+
+export function removeDismissed(store: ReviewResultsStore, root: string, keys: readonly string[]): ReviewResultsStore {
+  const current = store[root]
+  if (!current || !keys.some((k) => current.dismissed.includes(k))) return store
+  return { ...store, [root]: { ...current, dismissed: current.dismissed.filter((k) => !keys.includes(k)) } }
+}
+
+export const latestRecord = (store: ReviewResultsStore, root: string): ReviewRecord | null => store[root]?.records.at(-1) ?? null
+
+export const recordFor = (store: ReviewResultsStore, root: string, hash: string): ReviewRecord | null =>
+  store[root]?.records.find((r) => r.hash === hash) ?? null
+
+/** A saved record as the status the window shows (`done`, comments already in the workspace file). */
+export function recordStatus(root: string, record: ReviewRecord, cached: boolean): ReviewStatus {
+  return {
+    root,
+    phase: 'done',
+    trigger: record.trigger,
+    agent: record.agent,
+    hash: record.hash,
+    message: record.message,
+    startedAt: record.startedAt,
+    endedAt: record.endedAt,
+    found: record.found,
+    counts: record.counts,
+    ...(record.hidden ? { hidden: record.hidden } : {}),
+    ...(record.durationMs !== undefined ? { durationMs: record.durationMs } : {}),
+    ...(record.costUsd !== undefined ? { costUsd: record.costUsd } : {}),
+    ...(cached ? { cached: true as const } : {})
+  }
 }

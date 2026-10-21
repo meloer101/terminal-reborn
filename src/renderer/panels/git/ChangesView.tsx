@@ -12,7 +12,7 @@ import type { Worktree } from '@shared/types'
 import type { DiffLayout } from '@shared/workspace-file'
 import { severityCounts } from '@shared/background-review'
 import { commentPicked } from '@shared/review-comments'
-import { cancelBackgroundReview, reviewLine, useBackgroundReview } from '../../review/background'
+import { cancelBackgroundReview, loadSavedReview, reviewLine, useBackgroundReview } from '../../review/background'
 import { ReviewButton } from '../../review/ReviewButton'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { formatAccelerator } from '../../ui/menu-model'
@@ -76,7 +76,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
           {rendered}
         </div>
       </div>
-      <ReviewStatus root={root} />
+      <ReviewStatus root={root} agent={target?.kind === 'claude' || target?.kind === 'codex' ? target.kind : undefined} />
       <PrStatusLine worktree={worktree} target={target} />
       <div className={styles.footer}>
         {count > 0 ? (
@@ -133,11 +133,12 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
 }
 
 /** The worktree's latest background review (PRD F13): progress with 取消, the result, or why it failed. */
-function ReviewStatus({ root }: { root: string }) {
+function ReviewStatus({ root, agent }: { root: string; agent: 'claude' | 'codex' | undefined }) {
   const status = useBackgroundReview((s) => s.byRoot[root])
   const comments = useReviewComments((s) => s.byRoot[root])
+  useEffect(() => loadSavedReview(root), [root])
   if (!status) return null
-  const line = reviewLine(status, severityCounts((comments ?? []).filter((c) => c.origin === 'review')))
+  const line = reviewLine(status, severityCounts((comments ?? []).filter((c) => c.origin === 'review')), agent)
   return (
     <p className={styles.reviewStatus} data-tone={line.tone} role="status" data-testid="review-status">
       {line.tone === 'working' && <StatusGlyph status="running" />}

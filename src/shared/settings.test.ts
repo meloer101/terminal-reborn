@@ -56,7 +56,9 @@ describe('applySettingsPatch', () => {
       mode: 'builtin',
       rules: 'default',
       customRules: '',
-      model: ''
+      reviewer: 'same',
+      model: '',
+      codexModel: ''
     })
     const next = applySettingsPatch(DEFAULT_SETTINGS, { review: { beforeMerge: true, mode: 'agent-command', model: 'haiku', customRules: '只看空指针' } })
     expect(next.review.beforeMerge).toBe(true)
@@ -67,6 +69,16 @@ describe('applySettingsPatch', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { model: 'not a model', mode: 'nope' } }).review.model).toBe('')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { mode: 'nope' } }).review.mode).toBe('builtin')
     expect(applySettingsPatch(DEFAULT_SETTINGS, { appearance: { fontSize: 14 } }).review).toEqual(DEFAULT_SETTINGS.review)
+  })
+
+  it('picks the other CLI as reviewer only when asked, and moves an old OpenAI model to Codex (PRD F13 v1.63)', () => {
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { reviewer: 'other' } }).review.reviewer).toBe('other')
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { review: { reviewer: 'nope' as 'other' } }).review.reviewer).toBe('same')
+    const legacy = sanitizeSettings({ review: { model: 'gpt-5.5-codex' } }).review
+    expect([legacy.model, legacy.codexModel]).toEqual(['', 'gpt-5.5-codex'])
+    const claude = sanitizeSettings({ review: { model: 'opus' } }).review
+    expect([claude.model, claude.codexModel]).toEqual(['opus', ''])
+    expect(sanitizeSettings({ review: { model: 'gpt-5', codexModel: '' } }).review.model).toBe('gpt-5')
   })
 })
 

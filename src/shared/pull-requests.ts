@@ -30,6 +30,78 @@ export interface PullRequestInfo {
   url: string
   title: string
   checks: ChecksSummary
+  /** Open and draft PRs only, from one `gh api graphql` per check (PRD F16 v1.63). Missing when that call failed. */
+  details?: PrDetails
+}
+
+export type MergeMethod = 'squash' | 'merge' | 'rebase'
+
+export type ReviewDecision = 'approved' | 'changes-requested' | 'review-required'
+
+/** GitHub's `mergeStateStatus`, lower-cased: `dirty` = conflicts, `behind` = base moved, `blocked` = protection. */
+export type MergeStateStatus = 'clean' | 'blocked' | 'behind' | 'dirty' | 'unstable' | 'has-hooks' | 'draft' | 'unknown'
+
+export interface PrAuthor {
+  login: string
+  /** A GitHub App or other bot account (`__typename: Bot`). */
+  bot: boolean
+}
+
+export interface PrThreadComment {
+  author: PrAuthor
+  /** Markdown as written on GitHub, control characters removed, capped. Untrusted: quoted as data. */
+  body: string
+  url: string
+  createdAt: string
+}
+
+/** An unresolved review thread on a line of the PR's diff. */
+export interface PrThread {
+  /** GraphQL node id (resolveReviewThread / addPullRequestReviewThreadReply). */
+  id: string
+  path: string
+  /** Line in the side's file; null for a thread on a whole file or one GitHub can no longer place. */
+  line: number | null
+  startLine: number | null
+  side: 'new' | 'old'
+  /** The code it was written on has changed since. */
+  outdated: boolean
+  comments: PrThreadComment[]
+}
+
+/** A comment on the PR itself, or the body of a review (CodeRabbit's or Copilot's summary, a human's verdict). */
+export interface PrNote {
+  id: string
+  kind: 'comment' | 'review'
+  author: PrAuthor
+  body: string
+  url: string
+  createdAt: string
+  /** Reviews: APPROVED / CHANGES_REQUESTED / COMMENTED. */
+  reviewState?: string
+}
+
+export interface PrDetails {
+  /** GraphQL node id of the PR (addPullRequestReview). */
+  id: string
+  headOid: string
+  reviewDecision: ReviewDecision | null
+  mergeState: MergeStateStatus
+  inMergeQueue: boolean
+  /** Auto-merge is on, with this method. */
+  autoMerge: MergeMethod | null
+  /** Checks branch protection requires, by the same buckets as ChecksSummary. */
+  required: { total: number; failing: string[]; pending: number }
+  threads: PrThread[]
+  notes: PrNote[]
+  repo: {
+    autoMergeAllowed: boolean
+    deleteBranchOnMerge: boolean
+    methods: MergeMethod[]
+    defaultMethod: MergeMethod
+  }
+  /** The gh user: whose name Wavi's writes on GitHub go out under. */
+  viewer: string
 }
 
 /** One worktree's branch and its PR, pushed to the windows that watch the worktree. */
@@ -81,7 +153,48 @@ export interface PullRequestApi {
   create(request: PrCreateRequest): Promise<PrCreateResult>
   /** The failing checks of a watched worktree's PR and the tail of `gh run view --log-failed`; null when none fail. */
   failure(worktree: string): Promise<CiFailure | null>
+  /** Merges the worktree's open PR on GitHub (PRD F16 v1.63), now or once its checks pass. */
+  merge(request: PrMergeRequest): Promise<PrWriteResult>
+  /** Turns off GitHub auto-merge, or Wavi's own wait, for the worktree's PR. */
+  cancelMerge(target: PrTarget): Promise<PrWriteResult>
+  /** Resolves unresolved threads of the worktree's PR, each with an optional reply. Asks first for more than one. */
+  resolveThreads(request: PrResolveRequest): Promise<PrWriteResult>
+  /** Posts ticked Wavi review findings to the worktree's PR as one COMMENT review, after asking. */
+  postReview(request: PrPostReviewRequest): Promise<PrWriteResult>
 }
+
+export interface PrMergeRequest extends PrTarget {
+  method: MergeMethod
+  /** `now`: merge if GitHub lets it; `when-ready`: GitHub auto-merge, or Wavi waits when the repository has it off. */
+  when: 'now' | 'when-ready'
+  /** After a merge that happened now: delete the branch on the remote (never the local one). */
+  deleteRemoteBranch: boolean
+}
+
+export interface PrResolveRequest extends PrTarget {
+  threadIds: string[]
+  /** Posted as a reply on each thread before it is resolved; '' for none. */
+  reply: string
+}
+
+/** One Wavi finding as a PR review comment. */
+export interface PrReviewComment {
+  path: string
+  side: 'new' | 'old'
+  line: number
+  endLine: number
+  body: string
+}
+
+export interface PrPostReviewRequest extends PrTarget {
+  /** Which CLI reviewed, for the heading. */
+  reviewer: string
+  comments: PrReviewComment[]
+}
+
+export type PrWriteResult =
+  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'waiting' | 'cancelled' | 'resolved' | 'posted'; message: string }
+  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string }
 
 export const PR_IPC = {
   /** invoke → GhState */
@@ -99,7 +212,15 @@ export const PR_IPC = {
   /** invoke(PrCreateRequest) → PrCreateResult */
   create: 'pr:create',
   /** invoke(worktree) → CiFailure | null */
-  failure: 'pr:failure'
+  failure: 'pr:failure',
+  /** invoke(PrMergeRequest) → PrWriteResult */
+  merge: 'pr:merge',
+  /** invoke(PrTarget) → PrWriteResult */
+  cancelMerge: 'pr:cancel-merge',
+  /** invoke(PrResolveRequest) → PrWriteResult */
+  resolveThreads: 'pr:resolve-threads',
+  /** invoke(PrPostReviewRequest) → PrWriteResult */
+  postReview: 'pr:post-review'
 } as const
 
 /** Fields of `gh pr list --json` (gh 2.92). */
@@ -418,4 +539,277 @@ export function prDescription(pr: PullRequestInfo): string {
   // A closed PR's checks no longer matter.
   if (pr.state === 'open' || pr.state === 'draft') parts.push(checksLabel(pr.checks))
   return parts.join(' · ')
+}
+
+// ── PR details (PRD F16 v1.63) ──────────────────────────────────────────────────────────────────────────────────
+
+/** Unresolved threads, PR comments and reviews read per PR; GitHub pages beyond these are not fetched. */
+export const PR_DETAIL_LIMITS = { threads: 100, threadComments: 20, notes: 30, checks: 100, body: 4000 } as const
+
+/**
+ * What one PR check asks GitHub besides `gh pr list`: review state, merge state, required checks, unresolved threads,
+ * PR-level comments and review bodies, the repository's merge options and the gh user. Variables: owner, name, number.
+ */
+export const PR_DETAILS_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  viewer { login }
+  repository(owner: $owner, name: $name) {
+    autoMergeAllowed deleteBranchOnMerge squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed viewerDefaultMergeMethod
+    pullRequest(number: $number) {
+      id headRefOid reviewDecision mergeStateStatus isInMergeQueue
+      autoMergeRequest { mergeMethod }
+      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: ${PR_DETAIL_LIMITS.checks}) { nodes {
+        __typename
+        ... on CheckRun { name status conclusion isRequired(pullRequestNumber: $number) }
+        ... on StatusContext { context state isRequired(pullRequestNumber: $number) }
+      } } } } } }
+      reviewThreads(first: ${PR_DETAIL_LIMITS.threads}) { nodes {
+        id isResolved isOutdated path line startLine originalLine originalStartLine diffSide
+        comments(first: ${PR_DETAIL_LIMITS.threadComments}) { nodes { author { login __typename } body url createdAt } }
+      } }
+      comments(last: ${PR_DETAIL_LIMITS.notes}) { nodes { id author { login __typename } body url createdAt } }
+      reviews(last: ${PR_DETAIL_LIMITS.notes}) { nodes { id author { login __typename } body state url submittedAt } }
+    }
+  }
+}`
+
+const asString = (value: unknown, max = 300): string => (typeof value === 'string' ? stripControl(value).trim().slice(0, max) : '')
+/** Markdown keeps its newlines; other control characters go. */
+const asBody = (value: unknown): string =>
+  typeof value === 'string' ? value.replace(/\r\n?/g, '\n').split('\n').map(stripControl).join('\n').trim().slice(0, PR_DETAIL_LIMITS.body) : ''
+const asLine = (value: unknown): number | null => (typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null)
+const asUrl = (value: unknown): string => (typeof value === 'string' && /^https:\/\/\S+$/.test(value) && value.length <= 2048 ? value : '')
+const nodes = (value: unknown): unknown[] => (isRecord(value) && Array.isArray(value.nodes) ? value.nodes : [])
+
+function author(value: unknown): PrAuthor {
+  if (!isRecord(value)) return { login: 'ghost', bot: false }
+  return { login: asString(value.login, 100) || 'ghost', bot: value.__typename === 'Bot' }
+}
+
+const METHOD: Record<string, MergeMethod> = { SQUASH: 'squash', MERGE: 'merge', REBASE: 'rebase' }
+const DECISION: Record<string, ReviewDecision> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes-requested', REVIEW_REQUIRED: 'review-required' }
+const MERGE_STATES = new Set<MergeStateStatus>(['clean', 'blocked', 'behind', 'dirty', 'unstable', 'has-hooks', 'draft', 'unknown'])
+
+function requiredChecks(pr: Record<string, unknown>): PrDetails['required'] {
+  const required = { total: 0, failing: [] as string[], pending: 0 }
+  const commit = nodes(pr.commits)[0]
+  const rollup = isRecord(commit) && isRecord(commit.commit) ? commit.commit.statusCheckRollup : null
+  for (const item of nodes(isRecord(rollup) ? rollup.contexts : null)) {
+    if (!isRecord(item) || item.isRequired !== true) continue
+    const isContext = item.__typename === 'StatusContext'
+    const verdict = isContext
+      ? String(item.state ?? '').toUpperCase()
+      : String(item.status ?? '').toUpperCase() === 'COMPLETED'
+        ? String(item.conclusion ?? '').toUpperCase()
+        : String(item.status ?? '').toUpperCase()
+    required.total++
+    if (FAILED.has(verdict)) required.failing.push(asString(isContext ? item.context : item.name, 120) || '未命名检查')
+    else if (!PASSED.has(verdict)) required.pending++
+  }
+  return required
+}
+
+function thread(value: unknown): PrThread | null {
+  if (!isRecord(value) || value.isResolved === true) return null
+  const id = asString(value.id, 200)
+  const path = typeof value.path === 'string' ? value.path : ''
+  if (!id || !path || path.length > 4096 || path.startsWith('/') || path.includes('\0')) return null
+  const outdated = value.isOutdated === true
+  const comments = nodes(value.comments)
+    .filter(isRecord)
+    .map((c) => ({ author: author(c.author), body: asBody(c.body), url: asUrl(c.url), createdAt: asString(c.createdAt, 40) }))
+    .filter((c) => c.body !== '')
+  if (comments.length === 0) return null
+  // An outdated thread keeps only its original position.
+  const line = asLine(value.line) ?? asLine(value.originalLine)
+  const startLine = asLine(value.startLine) ?? asLine(value.originalStartLine)
+  return { id, path, line, startLine: startLine !== null && line !== null && startLine < line ? startLine : null, side: value.diffSide === 'LEFT' ? 'old' : 'new', outdated, comments }
+}
+
+function notesOf(pr: Record<string, unknown>): PrNote[] {
+  const comments = nodes(pr.comments)
+    .filter(isRecord)
+    .map((c): PrNote => ({ id: asString(c.id, 200), kind: 'comment', author: author(c.author), body: asBody(c.body), url: asUrl(c.url), createdAt: asString(c.createdAt, 40) }))
+  const reviews = nodes(pr.reviews)
+    .filter(isRecord)
+    .map(
+      (r): PrNote => ({
+        id: asString(r.id, 200),
+        kind: 'review',
+        author: author(r.author),
+        body: asBody(r.body),
+        url: asUrl(r.url),
+        createdAt: asString(r.submittedAt, 40),
+        reviewState: asString(r.state, 40)
+      })
+    )
+  return [...comments, ...reviews]
+    .filter((n) => n.id !== '' && n.body !== '')
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(-PR_DETAIL_LIMITS.notes)
+}
+
+/** `gh api graphql` output for PR_DETAILS_QUERY → PrDetails; null when it is not that shape (or errors only). */
+export function parsePrDetails(raw: unknown): PrDetails | null {
+  if (!isRecord(raw) || !isRecord(raw.data)) return null
+  const repo = raw.data.repository
+  if (!isRecord(repo) || !isRecord(repo.pullRequest)) return null
+  const pr = repo.pullRequest
+  const id = asString(pr.id, 200)
+  const headOid = typeof pr.headRefOid === 'string' && /^[0-9a-f]{40,64}$/.test(pr.headRefOid) ? pr.headRefOid : ''
+  if (!id || !headOid) return null
+  const methods = (
+    [
+      ['squash', repo.squashMergeAllowed],
+      ['merge', repo.mergeCommitAllowed],
+      ['rebase', repo.rebaseMergeAllowed]
+    ] as const
+  )
+    .filter(([, allowed]) => allowed === true)
+    .map(([method]) => method)
+  const preferred = METHOD[String(repo.viewerDefaultMergeMethod ?? '')]
+  const mergeState = String(pr.mergeStateStatus ?? '').toLowerCase().replace(/_/g, '-') as MergeStateStatus
+  const autoMethod = isRecord(pr.autoMergeRequest) ? METHOD[String(pr.autoMergeRequest.mergeMethod ?? '')] : undefined
+  return {
+    id,
+    headOid,
+    reviewDecision: DECISION[String(pr.reviewDecision ?? '')] ?? null,
+    mergeState: MERGE_STATES.has(mergeState) ? mergeState : 'unknown',
+    inMergeQueue: pr.isInMergeQueue === true,
+    autoMerge: isRecord(pr.autoMergeRequest) ? (autoMethod ?? 'merge') : null,
+    required: requiredChecks(pr),
+    threads: nodes(pr.reviewThreads)
+      .map(thread)
+      .filter((t): t is PrThread => t !== null),
+    notes: notesOf(pr),
+    repo: {
+      autoMergeAllowed: repo.autoMergeAllowed === true,
+      deleteBranchOnMerge: repo.deleteBranchOnMerge === true,
+      methods,
+      defaultMethod: preferred && methods.includes(preferred) ? preferred : (methods[0] ?? 'merge')
+    },
+    viewer: isRecord(raw.data.viewer) ? asString(raw.data.viewer.login, 100) : ''
+  }
+}
+
+/** "3 条评论没解决 · 需要审批": what still stands between an open PR and merging, in words; '' when nothing. */
+export function prReviewSummary(details: PrDetails): string {
+  const parts: string[] = []
+  if (details.threads.length > 0) parts.push(`${details.threads.length} 条评论没解决`)
+  if (details.reviewDecision === 'review-required') parts.push('需要审批')
+  else if (details.reviewDecision === 'changes-requested') parts.push('要求修改')
+  if (details.mergeState === 'dirty') parts.push('和基线冲突')
+  if (details.inMergeQueue) parts.push('排队中')
+  else if (details.autoMerge) parts.push('检查通过后自动合并')
+  return parts.join(' · ')
+}
+
+// ── writing to GitHub (PRD F16 v1.63) ───────────────────────────────────────────────────────────────────────────
+
+const METHODS: ReadonlySet<unknown> = new Set<MergeMethod>(['squash', 'merge', 'rebase'])
+const MAX_REPLY = 2000
+const MAX_REVIEW_COMMENTS = 50
+
+function target(raw: Record<string, unknown>): PrTarget | null {
+  return isPath(raw.root) && isPath(raw.worktree) ? { root: raw.root, worktree: raw.worktree } : null
+}
+
+export function parsePrTarget(raw: unknown): PrTarget | null {
+  return isRecord(raw) ? target(raw) : null
+}
+
+export function parsePrMergeRequest(raw: unknown): PrMergeRequest | null {
+  if (!isRecord(raw)) return null
+  const where = target(raw)
+  if (!where || !METHODS.has(raw.method) || (raw.when !== 'now' && raw.when !== 'when-ready') || typeof raw.deleteRemoteBranch !== 'boolean') return null
+  return { ...where, method: raw.method as MergeMethod, when: raw.when, deleteRemoteBranch: raw.deleteRemoteBranch }
+}
+
+export function parsePrResolveRequest(raw: unknown): PrResolveRequest | null {
+  if (!isRecord(raw)) return null
+  const where = target(raw)
+  if (!where || !Array.isArray(raw.threadIds) || raw.threadIds.length === 0 || raw.threadIds.length > PR_DETAIL_LIMITS.threads) return null
+  if (!raw.threadIds.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 200)) return null
+  if (typeof raw.reply !== 'string' || raw.reply.length > MAX_REPLY) return null
+  return { ...where, threadIds: [...new Set(raw.threadIds as string[])], reply: raw.reply.trim() }
+}
+
+export function parsePrPostReviewRequest(raw: unknown): PrPostReviewRequest | null {
+  if (!isRecord(raw)) return null
+  const where = target(raw)
+  if (!where || typeof raw.reviewer !== 'string' || raw.reviewer.length > 40) return null
+  if (!Array.isArray(raw.comments) || raw.comments.length === 0 || raw.comments.length > MAX_REVIEW_COMMENTS) return null
+  const comments: PrReviewComment[] = []
+  for (const c of raw.comments) {
+    if (!isRecord(c) || typeof c.path !== 'string' || c.path.length === 0 || c.path.length > 4096 || c.path.startsWith('/') || c.path.includes('\0')) return null
+    if ((c.side !== 'new' && c.side !== 'old') || asLine(c.line) === null || asLine(c.endLine) === null || (c.endLine as number) < (c.line as number)) return null
+    if (typeof c.body !== 'string' || c.body.trim() === '' || c.body.length > PR_DETAIL_LIMITS.body) return null
+    comments.push({ path: c.path, side: c.side, line: c.line as number, endLine: c.endLine as number, body: c.body })
+  }
+  return { ...where, reviewer: stripControl(raw.reviewer).trim(), comments }
+}
+
+/** What stops a merge now, from the PR as last read and where the local branch stands. Empty: GitHub decides. */
+export function mergeBlockers(input: {
+  pr: PullRequestInfo
+  method: MergeMethod
+  /** The PR head is not in the local branch: someone pushed to it. */
+  remoteAhead: boolean
+}): string[] {
+  const { pr } = input
+  const blockers: string[] = []
+  if (pr.state === 'draft') blockers.push('PR 还是草稿：先在 GitHub 上标记为可审阅')
+  else if (pr.state !== 'open') blockers.push(`PR ${prStateLabel(pr.state)}`)
+  const details = pr.details
+  if (!details) {
+    blockers.push('没能读到 PR 的合并状态，稍后再试')
+    return blockers
+  }
+  if (input.remoteAhead) blockers.push('PR 上有本地没有的提交：先拉取，看过再合并')
+  if (details.required.failing.length > 0) blockers.push(`必需的检查没通过：${details.required.failing.slice(0, 3).join('、')}`)
+  if (!details.repo.methods.includes(input.method)) blockers.push('这个仓库不允许这种合并方式')
+  if (details.inMergeQueue) blockers.push('已经在合并队列里')
+  return blockers
+}
+
+/** `gh pr merge` arguments. Always pinned to the head Wavi checked; never `--admin` or `--delete-branch`. */
+export function mergeArgs(repo: GitHubRepo, number: number, method: MergeMethod, headOid: string, auto: boolean): string[] {
+  return ['pr', 'merge', String(number), `--repo=${repoArg(repo)}`, `--${method}`, `--match-head-commit=${headOid}`, ...(auto ? ['--auto'] : [])]
+}
+
+/** Whether Wavi's own wait (auto-merge off in the repository) may merge now: required checks passed, none pending. */
+export function readyToMerge(pr: PullRequestInfo): boolean {
+  const details = pr.details
+  if (pr.state !== 'open' || !details) return false
+  if (details.required.failing.length > 0 || details.required.pending > 0) return false
+  // Without required checks, all checks count.
+  if (details.required.total === 0 && (pr.checks.state === 'pending' || pr.checks.state === 'failing')) return false
+  return details.mergeState !== 'dirty' && details.mergeState !== 'draft'
+}
+
+export const RESOLVE_THREAD_MUTATION = `mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }`
+export const REPLY_THREAD_MUTATION = `mutation($id: ID!, $body: String!) { addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $id, body: $body }) { comment { id } } }`
+export const ADD_REVIEW_MUTATION = `mutation($pr: ID!, $oid: GitObjectID!, $body: String!, $threads: [DraftPullRequestReviewThread!]) {
+  addPullRequestReview(input: { pullRequestId: $pr, commitOID: $oid, event: COMMENT, body: $body, threads: $threads }) { pullRequestReview { id url } }
+}`
+
+/** The review's own body: who reviewed, and how many findings follow inline. */
+export function reviewBody(reviewer: string, count: number): string {
+  return `Wavi 审阅（${reviewer || 'agent'}）：${count} 条，见行内评论。`
+}
+
+/** The same findings as one body, for when GitHub will not place them on lines (not in the PR's diff). */
+export function reviewBodyWithFindings(reviewer: string, comments: readonly PrReviewComment[]): string {
+  const items = comments.map((c, i) => {
+    const where = `${c.path}:${c.endLine > c.line ? `${c.line}-${c.endLine}` : c.line}${c.side === 'old' ? '（旧文件）' : ''}`
+    return `${i + 1}. \`${where}\`\n${c.body.split('\n').map((l) => `   ${l}`).join('\n')}`
+  })
+  return `Wavi 审阅（${reviewer || 'agent'}）：${comments.length} 条。\n\n${items.join('\n\n')}`.slice(0, 60_000)
+}
+
+/** DraftPullRequestReviewThread inputs: RIGHT is the new file, LEFT the old one. */
+export function reviewThreadsInput(comments: readonly PrReviewComment[]): Record<string, unknown>[] {
+  return comments.map((c) => {
+    const side = c.side === 'old' ? 'LEFT' : 'RIGHT'
+    return { path: c.path, line: c.endLine, side, body: c.body, ...(c.endLine > c.line ? { startLine: c.line, startSide: side } : {}) }
+  })
 }

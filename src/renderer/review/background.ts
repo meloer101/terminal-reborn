@@ -22,7 +22,8 @@ export function nextReviewState(prev: ReviewState | undefined, next: ReviewStatu
   // start()'s reply can arrive after the run already ended.
   if (prev && prev.startedAt === next.startedAt && prev.hash === next.hash && prev.phase !== 'running' && next.phase === 'running') return null
   if (next.phase === 'skipped' && prev && prev.hash === next.hash && prev.phase === 'done') return { ...prev, note: next.message }
-  const { comments, ...rest } = next
+  const { comments, cached, ...rest } = next
+  if (cached) return { ...rest, note: '这份改动已经审过' }
   return comments ? { ...rest, found: comments.length } : rest
 }
 
@@ -37,6 +38,17 @@ export async function startBackgroundReview(root: string, agent: ReviewAgent, tr
   const status = await window.tr.review.start({ root, agent, trigger, ...(base ? { base } : {}) })
   acceptReviewStatus(status)
   return status
+}
+
+const loaded = new Set<string>()
+
+/** After a restart: the worktree's saved result, unless this window already has a status for it. */
+export function loadSavedReview(root: string): void {
+  if (loaded.has(root)) return
+  loaded.add(root)
+  void window.tr.review.latest(root).then((status) => {
+    if (status && !useBackgroundReview.getState().byRoot[root]) acceptReviewStatus(status)
+  })
 }
 
 export function cancelBackgroundReview(root: string): void {
@@ -80,16 +92,20 @@ export interface ReviewLine {
 }
 
 /** One line for the status of a review. `counts` are the comments it landed (for P0–P3 totals). */
-export function reviewLine(status: ReviewState, counts: string): ReviewLine {
+export function reviewLine(status: ReviewState, counts: string, sessionAgent?: ReviewAgent): ReviewLine {
   const meta = formatReviewStats(status.durationMs, status.costUsd)
+  // Named only when 另一家来审 picked a different CLI than the session's.
+  const reviewerName = sessionAgent && sessionAgent !== status.agent ? (status.agent === 'claude' ? 'Claude' : 'Codex') : ''
   switch (status.phase) {
     case 'running':
       return { tone: 'working', text: status.message || '正在审阅…', meta: '' }
     case 'done': {
       const found = status.found ?? 0
+      const who = reviewerName ? `${reviewerName} ` : ''
+      const hidden = status.hidden ? ` · 另有 ${status.hidden} 条你之前忽略过` : ''
       return {
         tone: found > 0 ? 'warn' : 'ok',
-        text: `${status.note ? `${status.note}：` : ''}${found > 0 ? `审阅找到 ${found} 条${counts ? `（${counts}）` : ''}` : '审阅完成，没有发现问题'}`,
+        text: `${status.note ? `${status.note}：` : ''}${found > 0 ? `${who}审阅找到 ${found} 条${counts ? `（${counts}）` : ''}` : `${who}审阅完成，没有发现问题`}${hidden}`,
         meta,
         ...(status.message ? { detail: status.message } : {})
       }

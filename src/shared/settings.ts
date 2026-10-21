@@ -43,8 +43,12 @@ export interface ReviewSettings {
   mode: 'builtin' | 'agent-command'
   rules: 'default' | 'custom'
   customRules: string
-  /** Empty uses the CLI's own model. */
+  /** `other`: Claude sessions are reviewed by Codex and the other way round (PRD F13 v1.63). */
+  reviewer: 'same' | 'other'
+  /** Model for reviews Claude runs. Empty uses the CLI's own model. */
   model: string
+  /** Model for reviews Codex runs. Empty uses the CLI's own model. */
+  codexModel: string
 }
 
 /** 设置 · Worktree · 归档 (PRD F15). */
@@ -99,7 +103,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     mode: 'builtin',
     rules: 'default',
     customRules: '',
-    model: ''
+    reviewer: 'same',
+    model: '',
+    codexModel: ''
   },
   archive: { afterMerge: false },
   alerts: { usage: true }
@@ -151,7 +157,13 @@ function review(value: unknown): ReviewSettings {
   const d = DEFAULT_SETTINGS.review
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   const customRules = typeof v.customRules === 'string' ? v.customRules.slice(0, MAX_REVIEW_RULES) : d.customRules
-  const model = typeof v.model === 'string' && (v.model === '' || REVIEW_MODEL.test(v.model)) ? v.model : d.model
+  let model = typeof v.model === 'string' && (v.model === '' || REVIEW_MODEL.test(v.model)) ? v.model : d.model
+  let codexModel = typeof v.codexModel === 'string' && (v.codexModel === '' || REVIEW_MODEL.test(v.codexModel)) ? v.codexModel : d.codexModel
+  // Before v1.63 one model served whichever CLI reviewed: an OpenAI model name moves to Codex.
+  if (!('codexModel' in v) && /^(gpt|o\d|codex)/i.test(model)) {
+    codexModel = model
+    model = ''
+  }
   return {
     beforeMerge: typeof v.beforeMerge === 'boolean' ? v.beforeMerge : d.beforeMerge,
     beforePush: typeof v.beforePush === 'boolean' ? v.beforePush : d.beforePush,
@@ -159,7 +171,9 @@ function review(value: unknown): ReviewSettings {
     mode: v.mode === 'agent-command' ? 'agent-command' : d.mode,
     rules: v.rules === 'custom' ? 'custom' : d.rules,
     customRules,
-    model
+    reviewer: v.reviewer === 'other' ? 'other' : d.reviewer,
+    model,
+    codexModel
   }
 }
 

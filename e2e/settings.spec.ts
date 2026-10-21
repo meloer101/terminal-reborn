@@ -8,7 +8,7 @@ interface TrWindow {
       get(): Promise<{
         appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean }
         ports: { base: number }
-        review: { beforeMerge: boolean; beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; model: string }
+        review: { beforeMerge: boolean; beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; reviewer: string; model: string; codexModel: string }
       }>
     }
   }
@@ -131,12 +131,19 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
   await rules.fill('只看安全问题')
   await rules.blur()
   await expect.poll(async () => (await readSettings(settings)).review.customRules).toBe('只看安全问题')
-  const model = settings.getByRole('textbox', { name: '审阅模型' })
+  const model = settings.getByRole('textbox', { name: 'Claude 审阅模型' })
   await model.fill('bad model!')
   await model.press('Enter')
   await model.fill('haiku')
   await model.press('Enter')
   await expect.poll(async () => (await readSettings(settings)).review.model).toBe('haiku')
+  const codexModel = settings.getByRole('textbox', { name: 'Codex 审阅模型' })
+  await codexModel.fill('gpt-5.5')
+  await codexModel.press('Enter')
+  await expect.poll(async () => (await readSettings(settings)).review.codexModel).toBe('gpt-5.5')
+  await settings.getByRole('radio', { name: '另一家' }).click()
+  await expect.poll(async () => (await readSettings(settings)).review.reviewer).toBe('other')
+  await expect(settings.getByText(/Claude 会话的改动由 Codex 审/)).toBeVisible()
 
   const shot = process.env.TR_SCREENSHOT_DIR
   if (shot) {
@@ -150,7 +157,7 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
 
   await settings.getByRole('radio', { name: 'agent 自带命令' }).click()
   await expect.poll(async () => (await readSettings(settings)).review.mode).toBe('agent-command')
-  await expect(settings.getByRole('textbox', { name: '审阅模型' })).toHaveCount(0)
+  await expect(settings.getByRole('textbox', { name: 'Claude 审阅模型' })).toHaveCount(0)
   await app.close()
 })
 

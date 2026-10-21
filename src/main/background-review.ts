@@ -2,26 +2,39 @@
 // context with the user's own login — over the diff Wavi computed, and turns the JSON it returns into F5 comments.
 // One review per diff hash, one in flight per worktree (a new diff cancels the old run). Automatic triggers run only
 // when their switch in 设置 · 自动化 · 代码审阅 is on. Nothing here ever types into the coding session.
+// Finished results and the findings the user ignored are saved in `review-results.json` (v1.63), so a restart neither
+// reviews the same diff again nor lands an ignored finding again.
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
+import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { app, ipcMain, type WebContents } from 'electron'
 import {
+  addDismissed,
+  addReviewRecord,
   beginReview,
+  countSeverities,
   decideReview,
   DEFAULT_REVIEW_RULES,
   diffHash,
   driveReview,
   emptyReviewMemory,
+  latestRecord,
+  otherAgent,
   parseUnifiedDiffFiles,
+  recordFor,
+  recordStatus,
   rememberReview,
+  removeDismissed,
   REVIEW_IPC,
+  sanitizeReviewResults,
   type ReviewAgent,
   type ReviewCommandResult,
   type ReviewMemory,
   type ReviewRequest,
+  type ReviewResultsStore,
   type ReviewStatus,
   type ReviewTrigger
 } from '@shared/background-review'
@@ -57,12 +70,64 @@ interface RootState {
   turnHead: string | null
 }
 
+/** `review-results.json`: saved records and ignored findings by worktree root. Writes are queued and atomic. */
+export class ReviewResultsFile {
+  private data: ReviewResultsStore | null = null
+  private chain: Promise<void> = Promise.resolve()
+
+  constructor(private readonly path: string) {}
+
+  get(): ReviewResultsStore {
+    if (!this.data) {
+      let raw: unknown = null
+      try {
+        raw = JSON.parse(readFileSync(this.path, 'utf8'))
+      } catch {
+        // missing or unreadable: start empty
+      }
+      this.data = sanitizeReviewResults(raw)
+    }
+    return this.data
+  }
+
+  update(change: (data: ReviewResultsStore) => ReviewResultsStore): void {
+    const next = change(this.get())
+    if (next === this.data) return
+    this.data = next
+    const snapshot = JSON.stringify(next)
+    const tmp = `${this.path}.tmp`
+    this.chain = this.chain
+      .then(() => writeFile(tmp, snapshot))
+      .then(() => rename(tmp, this.path))
+      .catch((error: unknown) => console.error(`[review] could not save ${this.path}`, error))
+  }
+
+  /** Resolves once every queued write settled (tests). */
+  flushed(): Promise<void> {
+    return this.chain
+  }
+}
+
+let results: ReviewResultsFile | null = null
+function resultsFile(): ReviewResultsFile {
+  results ??= new ReviewResultsFile(join(app.getPath('userData'), 'review-results.json'))
+  return results
+}
+
+/** Tests point the store at a temporary file. */
+export function useReviewResultsFile(file: ReviewResultsFile): void {
+  results = file
+  roots.clear()
+}
+
 const roots = new Map<string, RootState>()
 
 function stateOf(root: string): RootState {
   let state = roots.get(root)
   if (!state) {
-    state = { memory: emptyReviewMemory(), job: null, turnHead: null }
+    // Diffs reviewed before a restart count as reviewed.
+    const saved = resultsFile().get()[root]?.records ?? []
+    state = { memory: { ...emptyReviewMemory(), reviewed: new Set(saved.map((r) => r.hash)) }, job: null, turnHead: null }
     roots.set(root, state)
   }
   return state
@@ -162,20 +227,32 @@ function finishJob(state: RootState, job: Job, patch: Partial<ReviewStatus>, out
   state.memory = rememberReview(state.memory, job.hash, outcome)
   job.status = { ...job.status, ...patch, endedAt: Date.now() }
   if (state.job === job) state.job = null
-  send(job.owner, job.status)
+  const status = job.status
+  if (outcome === 'done') {
+    resultsFile().update((store) =>
+      addReviewRecord(store, status.root, {
+        hash: status.hash,
+        agent: status.agent,
+        trigger: status.trigger,
+        message: status.message.slice(0, 4000),
+        startedAt: status.startedAt,
+        endedAt: status.endedAt ?? Date.now(),
+        found: status.comments?.length ?? 0,
+        counts: status.counts ?? {},
+        ...(status.hidden ? { hidden: status.hidden } : {}),
+        ...(status.durationMs !== undefined ? { durationMs: status.durationMs } : {}),
+        ...(status.costUsd !== undefined ? { costUsd: status.costUsd } : {})
+      })
+    )
+  }
+  send(job.owner, status)
 }
 
-async function drive(state: RootState, job: Job, cwd: string, text: string, settings: ReviewSettings): Promise<void> {
+async function drive(state: RootState, job: Job, cwd: string, text: string, settings: ReviewSettings, binary: string, path: string): Promise<void> {
   const agent = job.status.agent
   const started = Date.now()
   let dir: string | null = null
   try {
-    const path = await searchPath()
-    const binary = executableOnPath(path, agent)
-    if (!binary) {
-      finishJob(state, job, { phase: 'failed', message: `找不到 ${agent} 命令，没有审阅` }, 'failed')
-      return
-    }
     dir = await mkdtemp(join(tmpdir(), 'wavi-review-'))
     const schemaPath = join(dir, 'schema.json')
     const env = buildPtyEnv(process.env, { PATH: path })
@@ -186,7 +263,8 @@ async function drive(state: RootState, job: Job, cwd: string, text: string, sett
       files: parseUnifiedDiffFiles(text),
       diffText: text,
       hash: job.hash,
-      ...(settings.model ? { model: settings.model } : {}),
+      ...(modelFor(agent, settings) ? { model: modelFor(agent, settings) } : {}),
+      dismissed: new Set(resultsFile().get()[job.status.root]?.dismissed ?? []),
       schemaPath,
       outputPath: (index) => join(dir!, `out-${index}.json`),
       isCancelled: () => job.cancelled,
@@ -217,7 +295,15 @@ async function drive(state: RootState, job: Job, cwd: string, text: string, sett
     finishJob(
       state,
       job,
-      { phase: 'done', message: result.message, comments: result.comments, durationMs, ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {}) },
+      {
+        phase: 'done',
+        message: result.message,
+        comments: result.comments,
+        counts: countSeverities(result.comments),
+        durationMs,
+        ...(result.hidden ? { hidden: result.hidden } : {}),
+        ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {})
+      },
       'done'
     )
   } catch (error) {
@@ -226,6 +312,28 @@ async function drive(state: RootState, job: Job, cwd: string, text: string, sett
     if (dir) void rm(dir, { recursive: true, force: true }).catch(() => {})
   }
 }
+
+const modelFor = (agent: ReviewAgent, settings: ReviewSettings): string => (agent === 'codex' ? settings.codexModel : settings.model)
+
+/**
+ * The CLI that reviews: the session's own, or with 另一家来审 the other one — falling back to the session's when the
+ * other is not on PATH. Null when neither is found.
+ */
+export function pickReviewer(
+  sessionAgent: ReviewAgent,
+  reviewer: ReviewSettings['reviewer'],
+  find: (agent: ReviewAgent) => string | null
+): { agent: ReviewAgent; binary: string; fellBack: boolean } | null {
+  if (reviewer === 'other') {
+    const other = otherAgent(sessionAgent)
+    const binary = find(other)
+    if (binary) return { agent: other, binary, fellBack: false }
+  }
+  const binary = find(sessionAgent)
+  return binary ? { agent: sessionAgent, binary, fellBack: reviewer === 'other' } : null
+}
+
+const AGENT_NAME: Record<ReviewAgent, string> = { claude: 'Claude', codex: 'Codex' }
 
 function quick(request: ReviewRequest, phase: ReviewStatus['phase'], message: string, hash = ''): ReviewStatus {
   const now = Date.now()
@@ -249,22 +357,43 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   const decision = decideReview(state.memory, hash)
   if (decision.kind === 'skip') {
     if (decision.reason === 'in-flight' && state.job) return state.job.status
-    return quick(request, 'skipped', '这份改动已经审过', hash)
+    const record = recordFor(resultsFile().get(), request.root, hash)
+    return record ? recordStatus(request.root, record, true) : quick(request, 'skipped', '这份改动已经审过', hash)
   }
-  if (decision.kind === 'replace' && state.job) cancelJob(state, state.job, '改动变了，已取消上一次审阅')
+  const path = await searchPath()
+  const reviewer = pickReviewer(request.agent, settings.reviewer, (agent) => executableOnPath(path, agent))
+  if (!reviewer) return quick(request, 'failed', `找不到 ${request.agent} 命令，没有审阅`, hash)
+  // The await above let another start() through: it owns the run now.
+  if (state.memory.inFlightHash === hash && state.job) return state.job.status
+  if (state.job) cancelJob(state, state.job, '改动变了，已取消上一次审阅')
   state.memory = beginReview(state.memory, hash)
+  const message = reviewer.fellBack
+    ? `没找到 ${otherAgent(request.agent)} 命令，改用 ${AGENT_NAME[reviewer.agent]} 审阅…`
+    : reviewer.agent !== request.agent
+      ? `正在用 ${AGENT_NAME[reviewer.agent]} 审阅…`
+      : '正在审阅…'
   const job: Job = {
     hash,
     owner,
     cancelled: false,
     child: null,
-    status: { root: request.root, phase: 'running', trigger: request.trigger, agent: request.agent, hash, message: '正在审阅…', startedAt: Date.now() }
+    status: { root: request.root, phase: 'running', trigger: request.trigger, agent: reviewer.agent, hash, message, startedAt: Date.now() }
   }
   state.job = job
   hookOwner(owner)
   send(owner, job.status)
-  void drive(state, job, diff.cwd, diff.text, settings)
+  void drive(state, job, diff.cwd, diff.text, settings, reviewer.binary, path)
   return job.status
+}
+
+/** The saved status of the worktree's last finished review. */
+export function latestReview(root: string): ReviewStatus | null {
+  const record = latestRecord(resultsFile().get(), root)
+  return record ? recordStatus(root, record, false) : null
+}
+
+export function dismissFindings(root: string, keys: readonly string[], undo = false): void {
+  resultsFile().update((store) => (undo ? removeDismissed(store, root, keys) : addDismissed(store, root, keys)))
 }
 
 function cancelJob(state: RootState, job: Job, message: string): void {
@@ -318,6 +447,12 @@ export function registerBackgroundReviewHandlers(): void {
   })
   ipcMain.on(REVIEW_IPC.turnEnded, (event, root: unknown, agent: unknown) => {
     if (isRoot(root) && AGENTS.has(agent)) void turnEnded(event.sender, root, agent as ReviewAgent)
+  })
+  ipcMain.handle(REVIEW_IPC.latest, (_event, root: unknown) => (isRoot(root) ? latestReview(root) : null))
+  ipcMain.on(REVIEW_IPC.dismiss, (_event, root: unknown, keys: unknown, undo: unknown) => {
+    if (!isRoot(root) || !Array.isArray(keys)) return
+    const valid = keys.filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 5000).slice(0, 200)
+    if (valid.length > 0) dismissFindings(root, valid, undo === true)
   })
   app.on('before-quit', () => {
     for (const state of roots.values()) if (state.job) cancelJob(state, state.job, '已退出')

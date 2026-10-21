@@ -349,7 +349,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **设置 · 自动化 · 代码审阅**：自动审阅时机 □ 合并前（打开合并面板时开始，清单里多一行审阅结果，不阻止合并）□ Wavi 推送前 □ 一轮结束且有新提交时（用 Stop hook 事件当信号），**默认都不勾**，并写明会用用户自己的额度；审阅方式 ● Wavi 内置审阅 ○ agent 自带命令（如 `/code-review`，结果留在终端、不解析）；审阅规则 ● 默认 ○ 自定义。
 - **创建 PR 也算推送**（v1.63）：“Wavi 推送前”打开时，F16 的创建 PR 面板先审阅再推送（同一份 diff 已审过直接用结果），审阅中可“跳过，直接创建”；有 P0 / P1 时只写数量、不拦。
 - **另一家来审**（v1.63，设置 · 自动化 · 代码审阅）：审阅用的 agent ● 和会话相同 ○ 另一家——Claude 会话的改动由 `codex exec` 审、Codex 会话的由 `claude -p` 审，规则、schema 和结果格式不变，结果标明是谁审的（`Codex 审阅`）。另一家没装或没登录时退回相同的一家并写明原因。审阅模型按审阅用的那一家另选。
-- **结果存盘、复审不重复**（v1.63）：每次审阅的结果（diff 哈希、发现、用户勾掉或忽略了哪些）按 worktree 存在 Wavi 的数据目录，每个 worktree 留最近 10 次，重启后同一份 diff 不再重审；F16 的证据块从这里读。同一 worktree 复审时，用户之前忽略过的发现（同一文件 + 同一标题）不再列出，底部写“另有 N 条你之前忽略过”。
+- **结果存盘、复审不重复**（v1.63）：每次审阅的结果（diff 哈希、谁审的、摘要、各级条数、用时和花费）按 worktree 存在 Wavi 的数据目录（`review-results.json`），每个 worktree 留最近 10 次，重启后同一份 diff 不再重审、直接显示存下的结果；F16 的证据块从这里读。**忽略** = 删掉一条审阅评论，或取消勾选它（再勾上就恢复）。同一 worktree 复审时，忽略过的发现（同一文件 + 同一标题，不分大小写和空白）不再列出，状态行写“另有 N 条你之前忽略过”。
 - **不做**：用 Stop hook 拦住 agent 让它改（有循环烧额度的案例）；拦 agent 自己在终端里跑的 `git push`。
 
 ### F14 端口检测 · P1
@@ -379,7 +379,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
   - 不在 Wavi 里开新的评论 thread：要写就在内置浏览器里打开 PR。
 - **合并 PR**（L2；合并面板多一种去处）：分支有打开的 PR 时，合并面板顶部“合并到”分段 `GitHub PR #12`（默认）/ `本地 main`（F4 原来的流程）。PR 方式的预检：
   - **checks**：必需的检查失败 → 挡合并，附“让 agent 修复”；还在跑 → 主按钮变成“检查通过后合并”；只有可选检查失败 → 提示、不挡（设置“可选检查也挡合并”默认关）。
-  - **本地和 PR 是不是同一份代码**：本地有没推送的提交 → 写明，合并时先推送；PR 上有本地没有的提交（`headRefOid` 不在本地）→ 挡合并，“先拉取”。合并命令总带 `--match-head-commit=<本地 HEAD>`，期间 PR 被别人改了 GitHub 会拒绝。
+  - **本地和 PR 是不是同一份代码**：本地有没推送的提交 → 写明，合并时先推送，推送后检查重新开始，所以这次合并自动改成“检查通过后合并”；PR 上有本地没有的提交（`headRefOid` 不在本地）→ 挡合并，“先拉取”。合并命令总带 `--match-head-commit=<检查过的 head>`，期间 PR 被别人改了 GitHub 会拒绝；Wavi 等待合并时 PR 的 head 变了，等待就作废，由用户看过后再合并。
   - **只提示不挡**：审批状态、没解决的评论数、Wavi 审阅、这一轮的检查、冲突（`mergeStateStatus` = DIRTY 时写“和 main 冲突”并给“让 agent rebase”）。分支保护照样由 GitHub 执行，被挡时原样写出 gh 的输出。
   - **合并方式**只列仓库允许的（`squashMergeAllowed` / `mergeCommitAllowed` / `rebaseMergeAllowed`），默认 `viewerDefaultMergeMethod`；□ 合并后删除远程分支（默认跟仓库的 `deleteBranchOnMerge`；Wavi 自己 `git push origin --delete`，不用 `gh pr merge -d`，它会删本地分支并切换检出）；□ 合并后归档 worktree（同 F15 设置）。不提供 `--admin`。
   - **检查通过后合并**：仓库开了 auto-merge（GraphQL `autoMergeAllowed`）→ `gh pr merge --auto`，由 GitHub 合并，Wavi 关了也照样；没开 → Wavi 自己等，PR 那一行写“检查通过后由 Wavi 合并 · 取消”，只在 Wavi 开着时有效。基线要求合并队列时 `gh pr merge` 直接进队列（检查没过先开 auto-merge），PR 那一行写“排队中”。都可以取消（`--disable-auto`）。

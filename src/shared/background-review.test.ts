@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDismissed,
+  addReviewRecord,
   beginReview,
+  commentDismissKey,
+  countSeverities,
+  dismissKey,
+  latestRecord,
+  MAX_REVIEW_RECORDS,
+  otherAgent,
+  recordFor,
+  recordStatus,
+  removeDismissed,
+  sanitizeReviewResults,
+  type ReviewRecord,
+  type ReviewResultsStore,
   CLAUDE_PROMPT_CHAR_LIMIT,
   CODEX_PROMPT_CHAR_LIMIT,
   decideReview,
@@ -322,5 +336,51 @@ describe('formatReviewStats', () => {
   it('prints duration and cost when the CLI reported them', () => {
     expect(formatReviewStats(11000, 0.039)).toBe('用时 11 秒 · 花费 $0.039')
     expect(formatReviewStats(undefined, undefined)).toBe('')
+  })
+})
+
+describe('saved results and ignored findings (PRD F13 v1.63)', () => {
+  const record = (hash: string, found = 0): ReviewRecord => ({ hash, agent: 'claude', trigger: 'manual', message: 'ok', startedAt: 1, endedAt: 2, found, counts: {} })
+
+  it('matches an ignored finding by path and title, whatever the spacing and case', () => {
+    expect(dismissKey('a.ts', '  Null  check\nlong explanation')).toBe(dismissKey('a.ts', 'null check'))
+    expect(dismissKey('a.ts', 'x')).not.toBe(dismissKey('b.ts', 'x'))
+    expect(commentDismissKey({ path: 'a.ts', text: '越界\ni 可能越界' })).toBe(dismissKey('a.ts', '越界'))
+  })
+
+  it('keeps the last ten records per worktree, one per diff', () => {
+    let store: ReviewResultsStore = {}
+    for (let i = 0; i < 12; i++) store = addReviewRecord(store, '/w', record(`0000000${i.toString(16)}`))
+    store = addReviewRecord(store, '/w', record('0000000b', 3))
+    expect(store['/w']!.records).toHaveLength(MAX_REVIEW_RECORDS)
+    expect(latestRecord(store, '/w')).toMatchObject({ hash: '0000000b', found: 3 })
+    expect(store['/w']!.records.filter((r) => r.hash === '0000000b')).toHaveLength(1)
+    expect(recordFor(store, '/w', '00000000')).toBeNull()
+    expect(recordStatus('/w', latestRecord(store, '/w')!, true)).toMatchObject({ phase: 'done', found: 3, cached: true })
+  })
+
+  it('adds and removes ignored keys without duplicates', () => {
+    let store = addDismissed({}, '/w', ['k1', 'k1', 'k2'])
+    expect(store['/w']!.dismissed).toEqual(['k1', 'k2'])
+    expect(addDismissed(store, '/w', ['k1'])).toBe(store)
+    store = removeDismissed(store, '/w', ['k1'])
+    expect(store['/w']!.dismissed).toEqual(['k2'])
+  })
+
+  it('reads back only valid data from the file', () => {
+    const store = sanitizeReviewResults({
+      '/w': { records: [record('abcdef12', 2), { hash: 'nope' }, { ...record('abcdef13'), agent: 'bash' }], dismissed: ['k', 3, ''] },
+      relative: { records: [record('abcdef14')] },
+      '/empty': { records: [], dismissed: [] }
+    })
+    expect(Object.keys(store)).toEqual(['/w'])
+    expect(store['/w']).toEqual({ records: [record('abcdef12', 2)], dismissed: ['k'] })
+    expect(sanitizeReviewResults('garbage')).toEqual({})
+  })
+
+  it('counts severities and names the other CLI', () => {
+    expect(countSeverities([{ severity: 'P1' }, { severity: 'P1' }, { severity: 'P3' }, {}])).toEqual({ P1: 2, P3: 1 })
+    expect(otherAgent('claude')).toBe('codex')
+    expect(otherAgent('codex')).toBe('claude')
   })
 })

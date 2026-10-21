@@ -8,7 +8,7 @@ import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import { archiveTargetFor, archiveWorktree } from '../../archive/actions'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { severityCounts } from '@shared/background-review'
-import { cancelBackgroundReview, reviewLine, startBackgroundReview, useBackgroundReview } from '../../review/background'
+import { cancelBackgroundReview, loadSavedReview, reviewLine, startBackgroundReview, useBackgroundReview } from '../../review/background'
 import { useRepoScripts } from '../../scripts/run-script'
 import { useSettings } from '../../settings/useSettings'
 import { useReviewComments } from '../../state/review-comments'
@@ -174,11 +174,12 @@ function Sheet({ target }: { target: MergeTarget }) {
   const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
   const autoTrigger = !settingsLoaded || !builtin ? null : settings.review.beforeMerge ? 'merge' : settings.review.beforePush && willPush ? 'push' : null
   const reviewBase = ready?.base
+  useEffect(() => loadSavedReview(target.worktreePath), [target.worktreePath])
   useEffect(() => {
     if (!autoTrigger || !reviewAgent || !reviewBase) return
     void startBackgroundReview(target.worktreePath, reviewAgent, autoTrigger, reviewBase).catch(() => {})
   }, [autoTrigger, reviewAgent, reviewBase, target.worktreePath])
-  const reviewCheck = review ? reviewLine(review, severityCounts((reviewComments ?? []).filter((c) => c.origin === 'review'))) : null
+  const reviewCheck = review ? reviewLine(review, severityCounts((reviewComments ?? []).filter((c) => c.origin === 'review')), reviewAgent ?? undefined) : null
   const reviewRunning = review?.phase === 'running'
   const checksView = useTurnCheckView(agent?.id)
 

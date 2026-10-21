@@ -179,6 +179,8 @@ const api: TrApi = {
     cancel: (root) => ipcRenderer.send(REVIEW_IPC.cancel, root),
     turnStarted: (root) => ipcRenderer.send(REVIEW_IPC.turnStarted, root),
     turnEnded: (root, agent) => ipcRenderer.send(REVIEW_IPC.turnEnded, root, agent),
+    latest: (root) => ipcRenderer.invoke(REVIEW_IPC.latest, root),
+    dismiss: (root, keys, undo = false) => ipcRenderer.send(REVIEW_IPC.dismiss, root, keys, undo),
     onStatus: (listener) => listen(REVIEW_IPC.status, listener)
   },
   archive: {
@@ -193,7 +195,11 @@ const api: TrApi = {
     statuses: () => ipcRenderer.invoke(PR_IPC.statuses),
     onStatus: (listener) => listen(PR_IPC.status, listener),
     create: (request) => ipcRenderer.invoke(PR_IPC.create, request),
-    failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree)
+    failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree),
+    merge: (request) => ipcRenderer.invoke(PR_IPC.merge, request),
+    cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target),
+    resolveThreads: (request) => ipcRenderer.invoke(PR_IPC.resolveThreads, request),
+    postReview: (request) => ipcRenderer.invoke(PR_IPC.postReview, request)
   },
   radar: {
     watch: (targets) => ipcRenderer.send(RADAR_IPC.watch, targets),

@@ -65,8 +65,27 @@ export function AutomationPane({
                 />
               </Row>
               {review.rules === 'custom' && <RulesField value={review.customRules} onCommit={(customRules) => update({ customRules })} />}
-              <Row label="审阅模型">
-                <ModelField value={review.model} onCommit={(model) => update({ model })} />
+              <Row label="谁来审">
+                <Segmented
+                  label="谁来审"
+                  value={review.reviewer}
+                  options={[
+                    { value: 'same', label: '和会话相同' },
+                    { value: 'other', label: '另一家' }
+                  ]}
+                  onChange={(reviewer) => update({ reviewer })}
+                />
+              </Row>
+              <p className={styles.hint}>
+                {review.reviewer === 'other'
+                  ? 'Claude 会话的改动由 Codex 审，Codex 会话的由 Claude 审；另一家没装时改用会话自己的。'
+                  : '用会话自己的 Claude / Codex 审阅。'}
+              </p>
+              <Row label="Claude 审阅模型">
+                <ModelField label="Claude 审阅模型" value={review.model} onCommit={(model) => update({ model })} />
+              </Row>
+              <Row label="Codex 审阅模型">
+                <ModelField label="Codex 审阅模型" value={review.codexModel} onCommit={(codexModel) => update({ codexModel })} />
               </Row>
               <p className={styles.hint}>留空用 CLI 自己的默认模型。</p>
             </>
@@ -101,14 +120,14 @@ function RulesField({ value, onCommit }: { value: string; onCommit: (text: strin
   )
 }
 
-function ModelField({ value, onCommit }: { value: string; onCommit: (model: string) => void }) {
+function ModelField({ label, value, onCommit }: { label: string; value: string; onCommit: (model: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null)
   const shown = draft ?? value
   const valid = MODEL.test(shown.trim())
   return (
     <input
       className={styles.model}
-      aria-label="审阅模型"
+      aria-label={label}
       aria-invalid={!valid || undefined}
       autoComplete="off"
       spellCheck={false}

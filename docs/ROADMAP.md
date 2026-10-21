@@ -78,12 +78,12 @@
 
 PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外部来源：Conductor、Orca、Superset 在应用里看 PR 评论、发回 agent、合并 PR，Claude Code 桌面版的 Auto-fix 和 Merge when ready，Cursor Bugbot 自动修复限 3 次，o#9512 15 👍，GitHub community#189767）：
 - [ ] Figma：创建 PR 面板、变更视图的 PR 评论、合并面板的“合并到 GitHub PR”、PR 那一行的两个自动化开关（先画再做界面）
-- [ ] F13 审阅结果按 worktree 存盘（每个留最近 10 次），复审不再报已忽略的发现
-- [ ] F13 另一家来审（Claude 写的由 Codex 审，反之亦然），设置 · 自动化 · 代码审阅
+- [x] F13 审阅结果按 worktree 存盘（每个留最近 10 次），复审不再报已忽略的发现（2026-10-21）：主进程 `review-results.json`（`ReviewResultsFile`），重启后同一份 diff 直接给存下的结果（`cached`），变更视图和合并面板打开时读回；删掉或取消勾选一条审阅评论算忽略（再勾上恢复），复审按“文件 + 标题”滤掉并写“另有 N 条你之前忽略过”。测试：`src/main/background-review.test.ts`（重启后不重审、忽略的不再落、再勾上回来）、`src/shared/background-review.test.ts`、`src/renderer/review/background.test.ts`
+- [x] F13 另一家来审（Claude 写的由 Codex 审，反之亦然），设置 · 自动化 · 代码审阅（2026-10-21）：「谁来审」分段、Claude / Codex 两个审阅模型（旧的单个模型名是 OpenAI 的就挪到 Codex）；另一家没装时改用会话自己的并写明；状态行写“Codex 审阅找到 N 条”。测试：`background-review.test.ts`（假 codex 审 Claude 会话、`pickReviewer`）、`settings.test.ts`，e2e `settings.spec.ts`
 - [ ] L2 创建 PR 面板：标题、正文（PR 模板 / 提交说明）+ 证据块、草稿；“推送前审阅”打开时创建 PR 也先审
-- [ ] L2 PR 评论回到 Wavi：一次 `gh api graphql` 取 checks、审批、合并状态和没解决的 thread；行内落成 F5 评论、PR 级评论列在 PR 行下；勾选“发给 agent”（不按回车）
-- [ ] L2 回到 GitHub：标记已解决（可附回复）、把 Wavi 审阅发到 PR（只发 COMMENT）
-- [ ] L2 合并 GitHub PR：合并面板“合并到”分段，预检（必需检查、本地和 PR 是否同一份、`--match-head-commit`）、仓库允许的方式、删除远程分支、检查通过后合并（GitHub auto-merge / Wavi 等待 / 合并队列）、合并后拉基线和归档
+- [ ] L2 PR 评论回到 Wavi：一次 `gh api graphql` 取 checks、审批、合并状态和没解决的 thread；行内落成 F5 评论、PR 级评论列在 PR 行下；勾选“发给 agent”（不按回车）。主进程已接上（2026-10-21）：打开 / 草稿 PR 每次查询多一次 GraphQL（`PR_DETAILS_QUERY`），结果在 `PullRequestInfo.details`（thread、PR 评论和 review 正文、审批、`mergeStateStatus`、必需检查、仓库允许的合并方式、gh 用户），失败时沿用上次的；界面待做
+- [ ] L2 回到 GitHub：标记已解决（可附回复）、把 Wavi 审阅发到 PR（只发 COMMENT）。主进程已接上（2026-10-21）：`pr.resolveThreads`（只认 PR 上还没解决的 id，多条先确认）、`pr.postReview`（确认写明 @账号；行不在 PR 的改动里时改成一条总评论），GraphQL 变量走 stdin；界面待做
+- [ ] L2 合并 GitHub PR：合并面板“合并到”分段，预检（必需检查、本地和 PR 是否同一份、`--match-head-commit`）、仓库允许的方式、删除远程分支、检查通过后合并（GitHub auto-merge / Wavi 等待 / 合并队列）、合并后拉基线和归档。主进程已接上（2026-10-21）：`pr.merge` / `pr.cancelMerge`，本地有没推送的提交时先推送再等检查；合并后删远程分支（不碰本地）、拉取基线并在干净时快进。测试：`src/main/pull-requests.test.ts`（假 gh 认 `api graphql` 和 `pr merge`，真推送到本地 bare 仓库）、`src/shared/pull-requests.test.ts`。合并队列只按 gh 帮助实现，没在真实仓库上试过；界面（合并面板的“合并到”分段）待做
 - [ ] L3 自动修复：按 PR 打开，必需检查失败或允许名单里的新评论 → agent 空闲时发出；每个 PR 最多 3 次、同一失败只发一次、agent 没推送就停，停下时提醒
 - [ ] L3 通过后合并：检查通过、没有没解决的允许名单评论、审阅没有 P0 / P1、不是草稿 → 合并
 - [ ] 真实 GitHub 仓库上走一遍：创建 → 机器人评论 → 发给 agent → 修复推送 → 标记已解决 → auto-merge / 合并队列（同时补 M5 里“还没在真实仓库上走一遍”）

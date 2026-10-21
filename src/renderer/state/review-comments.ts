@@ -1,6 +1,7 @@
 // Inline review comments (PRD F5) by worktree root, and the one comment being written. Saved with the workspace
 // (`workspace.json`, see ./persistence) until they are sent to the agent or discarded.
 import { create } from 'zustand'
+import { commentDismissKey } from '@shared/background-review'
 import {
   MAX_COMMENT_TEXT,
   MAX_COMMENTS_PER_WORKTREE,
@@ -119,7 +120,16 @@ export function saveDraft(): boolean {
   return true
 }
 
+/** A review finding the user deleted or unticked is not landed again in this worktree (PRD F13 v1.63). */
+function rememberDismissed(root: string, comment: ReviewComment | undefined, undo = false): void {
+  if (comment?.origin === 'review') window.tr.review.dismiss(root, [commentDismissKey(comment)], undo)
+}
+
 export function removeComment(root: string, id: string): void {
+  rememberDismissed(
+    root,
+    commentsOf(root).find((c) => c.id === id)
+  )
   setComments(
     root,
     commentsOf(root).filter((c) => c.id !== id)
@@ -141,6 +151,11 @@ export function landReviewComments(root: string, comments: readonly ReviewCommen
 
 /** Whether 发给 … includes this review comment. */
 export function setCommentPicked(root: string, id: string, picked: boolean): void {
+  rememberDismissed(
+    root,
+    commentsOf(root).find((c) => c.id === id),
+    picked
+  )
   setComments(
     root,
     commentsOf(root).map((c) => (c.id === id ? { ...c, picked } : c))
