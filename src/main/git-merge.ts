@@ -22,6 +22,7 @@ import {
   trackedDirtyPaths,
   type GitOperation,
   type MergeBlocker,
+  type MergeConflict,
   type MergePrecheck,
   type MergeResult
 } from '@shared/git-merge'
@@ -118,6 +119,19 @@ async function operationIn(path: string): Promise<GitOperation | null> {
 async function commitOf(cwd: string, ref: string): Promise<string | null> {
   return (await orEmpty(git(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]))).trim() || null
 }
+
+/**
+ * `git merge-tree --write-tree` of two commits (git ≥ 2.38): merges in memory, writing only objects — never a working
+ * tree, an index or a ref. The merged tree and the files that would conflict ([] when clean). Rejects with git's
+ * message; `isOldGit()` tells a git without `--write-tree`. Also used by the conflict radar.
+ */
+export async function mergeTreeConflicts(cwd: string, ours: string, theirs: string): Promise<{ tree: string; conflicts: MergeConflict[] }> {
+  const merged = await run(cwd, ['-c', 'core.quotePath=false', 'merge-tree', '--write-tree', '--name-only', ours, theirs], { ok: [0, 1] })
+  return parseMergeTree(merged.stdout, merged.code === 1)
+}
+
+/** Whether a merge-tree error means git is too old for `--write-tree`. */
+export const isOldGit = (message: string): boolean => /write-tree|usage: git merge-tree/i.test(message)
 
 /** One precheck's findings plus what the merge itself needs. */
 interface Inspection {
@@ -224,14 +238,14 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
 
   if (check.ahead === 0) return done({ kind: 'nothing' })
 
-  let merged: RunResult
+  let merged: { tree: string; conflicts: MergeConflict[] }
   try {
-    merged = await run(realRoot, ['-c', 'core.quotePath=false', 'merge-tree', '--write-tree', '--name-only', baseHead, head], { ok: [0, 1] })
+    merged = await mergeTreeConflicts(realRoot, baseHead, head)
   } catch (error) {
     const message = errorText(error)
-    return done(/write-tree|usage: git merge-tree/i.test(message) ? { kind: 'old-git' } : { kind: 'unverified', message })
+    return done(isOldGit(message) ? { kind: 'old-git' } : { kind: 'unverified', message })
   }
-  const { tree, conflicts } = parseMergeTree(merged.stdout, merged.code === 1)
+  const { tree, conflicts } = merged
   check.conflicts = conflicts
   if (conflicts.length > 0) return done(null)
 

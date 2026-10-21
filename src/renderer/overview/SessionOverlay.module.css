@@ -186,6 +186,17 @@
   min-width: 0;
 }
 
+.radar {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 2;
+  overflow: hidden;
+}
+
+.radar:empty {
+  display: none;
+}
+
 .where {
   font: var(--text-caption);
   line-height: 20px;

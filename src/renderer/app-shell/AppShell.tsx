@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore, type PointerEvent as ReactPointerEvent
 import { listenForBrowser } from '../panels/browser/store'
 import { listenForBackgroundReview } from '../review/background'
 import { startPullRequestBridge } from '../pull-requests/store'
+import { startConflictRadarBridge } from '../conflict-radar/store'
 import { startSessionMetaBridge } from '../session-meta/store'
 import { startLimitResumeBridge } from '../limit-resume/bridge'
 import { useWorkspace } from '../state/workspace'
@@ -63,6 +64,7 @@ export function AppShell() {
   useEffect(() => startSessionMetaBridge(), [])
   useEffect(() => startLimitResumeBridge(), [])
   useEffect(() => startPullRequestBridge(), [])
+  useEffect(() => startConflictRadarBridge(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
   useEffect(() => {

@@ -7,6 +7,7 @@ import type { BrowserApi } from './browser'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { PullRequestApi } from './pull-requests'
+import type { ConflictRadarApi } from './conflict-radar'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
 import type { AppSettings, SettingsPatch } from './settings'
@@ -376,6 +377,8 @@ export interface TrApi {
   archive: ArchiveApi
   /** PR / CI status and 创建 PR through the user's gh login (PRD F16); channels in PR_IPC. */
   pr: PullRequestApi
+  /** Background pairwise / base merge-tree checks of active worktrees (冲突雷达); channels in RADAR_IPC. */
+  radar: ConflictRadarApi
 }
 
 export const IPC = {

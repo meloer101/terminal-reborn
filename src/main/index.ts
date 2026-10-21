@@ -28,6 +28,7 @@ import { registerRepoScriptHandlers } from './repo-scripts'
 import { registerBackgroundReviewHandlers } from './background-review'
 import { registerArchiveHandlers } from './archive'
 import { registerPullRequestHandlers } from './pull-requests'
+import { registerConflictRadarHandlers } from './conflict-radar'
 
 // Before anything reads userData (the single-instance lock included): dev runs, e2e runs (TR_USER_DATA_DIR) and the
 // installed app each get their own profile; the pre-rename "Terminal Reborn" profile moves to Wavi.
@@ -86,6 +87,7 @@ function boot(): void {
   registerBackgroundReviewHandlers()
   registerArchiveHandlers()
   registerPullRequestHandlers()
+  registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()
   registerPtyHandlers()

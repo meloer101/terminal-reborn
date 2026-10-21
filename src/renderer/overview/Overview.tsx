@@ -20,6 +20,8 @@ import { ReviewButton } from '../review/ReviewButton'
 import { LimitResumeSummary } from '../limit-resume/LimitResumeButton'
 import { SessionPrTag } from '../pull-requests/PrTag'
 import { usePullRequests } from '../pull-requests/store'
+import { SessionRadarTag } from '../conflict-radar/RadarTag'
+import { anyRadarMark, useRadar } from '../conflict-radar/store'
 import { UsageChip, useMetaNow, useUsageList } from '../session-meta/MetaChips'
 import { useSessionMeta } from '../session-meta/store'
 import metaStyles from '../session-meta/SessionMeta.module.css'
@@ -47,9 +49,9 @@ const TICK_MS = 15_000
 /**
  * Which metric columns the list draws (Figma 17C TodoCell / ContextCell, and the PR of F16): a column appears once any
  * session has that metric and then keeps its place in every row, blank where a session has none (Codex has no todo;
- * shells have neither; a branch without a PR has no PR).
+ * shells have neither; a branch without a PR has no PR). The conflict radar's mark comes first, by the same rule.
  */
-const MetaColumns = createContext<{ todo: boolean; context: boolean; pr: boolean }>({ todo: false, context: false, pr: false })
+const MetaColumns = createContext<{ radar: boolean; todo: boolean; context: boolean; pr: boolean }>({ radar: false, todo: false, context: false, pr: false })
 
 /** "Now" on the shared 15 s clock, so "已等 3m" keeps counting without re-rendering on every frame. */
 function useClockNow(): number {
@@ -97,7 +99,8 @@ export function Overview() {
     const paths = new Map(worktrees.map((w) => [w.id, w.path]))
     return shown.some((x) => Boolean(p.byWorktree[paths.get(x.worktreeId) ?? '']?.pr))
   })
-  const metaColumns = useMemo(() => ({ ...metrics, pr: prColumn }), [metrics, prColumn])
+  const radarColumn = useRadar((r) => anyRadarMark(r.byRoot, { projects, worktrees }, shown))
+  const metaColumns = useMemo(() => ({ ...metrics, pr: prColumn, radar: radarColumn }), [metrics, prColumn, radarColumn])
 
   // Keep a selection that exists; default to the first row so ↵ / Space work right away.
   useEffect(() => {
@@ -251,7 +254,10 @@ function PlanUsage() {
   )
 }
 
-/** TodoCell (48) and ContextCell (100) of OverviewRow v2: the count only, and context without /compact; then the PR (F16). */
+/**
+ * The conflict radar's mark; TodoCell (48) and ContextCell (100) of OverviewRow v2: the count only, and context
+ * without /compact; then the PR (F16).
+ */
 function MetaCells({ sessionId }: { sessionId: SessionId }) {
   const columns = useContext(MetaColumns)
   const metrics = useSessionMeta((m) => m.bySession[sessionId])
@@ -259,6 +265,11 @@ function MetaCells({ sessionId }: { sessionId: SessionId }) {
   const context = metrics?.context
   return (
     <>
+      {columns.radar && (
+        <span className={styles.radarCell} data-testid="overview-radar">
+          <SessionRadarTag sessionId={sessionId} />
+        </span>
+      )}
       {columns.todo && (
         <span className={styles.todoCell} data-testid="overview-todo">
           {progress && `${progress.done}/${progress.total}`}

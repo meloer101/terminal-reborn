@@ -66,7 +66,7 @@
 
 第二批（Wavi 的差异化：审得完、合得进）：
 - [x] F20 主区分屏（2026-10-20，Figma 21 Section `301:15658`，PRD v1.49）：从侧栏把会话拖进终端区域（中间替换、边上多一格，已在显示的是挪动 / 互换），拖会话名挪格，细线拖动调大小、双击等分；⌘D / ⇧⌘D 新格先选会话（可过滤），⌥⌘ 方向键换格，⌥⌘W 关格，菜单「显示」里都有；右侧栏、⌘F、回形针、⌘V 跟着键盘所在的格，分屏时 ⌘+ / ⌘- 只调这一格；侧栏标出所有在显示的会话；“看得见”= 任何一格里显示；排法存进 workspace.json，重启恢复，会话关闭 / 归档后其余格补位；总览浮层不变。拆分树在 `src/shared/split-layout.ts`（总览浮层的落点判断也改用它），界面在 `src/renderer/split/`。测试：`split-layout.test.ts`、`workspace-model.test.ts`、`workspace-file.test.ts`、`controller.test.ts`、`split/model.test.ts`，e2e `split.spec.ts`（21A–21H 两种主题截图）、`split-restore.spec.ts`、`menu-keys.spec.ts`。4 格同时输出时的打字延迟见 D1。以后：一格拖出成独立窗口（下面“多窗口第二步”）。cc#30154（264 👍）、o#8377（合并了 o#6197 等）、cc#27725（70）、c#3297（25）
-- [ ] 冲突雷达和合并顺序：后台对活跃的 worktree 两两跑 `merge-tree`（复用合并预检），在总览和 Worktree 视图标出“和 xxx 会冲突”；合并一个之后标出其余哪些落后或会冲突，rebase 说明放进那个会话的输入行。不花 token。讨论很多（HN 47866750 279 分、r/ClaudeCode 1vtfawm），但几乎没人开 issue（o#18487、cc#74532），所以先做最小版，看用的人多不多
+- [x] 冲突雷达和合并顺序（2026-10-21，最小版，PRD F4 v1.56、§6.13）：主进程 `src/main/conflict-radar.ts` 对同一仓库的活跃 worktree 两两、以及各自对基线跑 `merge-tree --write-tree`（和合并预检共用 `mergeTreeConflicts`），未提交改动在临时 index 里快照后也算；只在 ref 变化（防抖 1.5 s）、一轮结束、窗口获得焦点时重算，按两边的提交缓存，最多 2 个 git 进程，git < 2.38 时隐藏。总览列表的“冲突”列、看板浮层标题栏、Worktree 行和详情写“和 xxx 会冲突” / “和 main 会冲突” / “main 已前进 · 落后 N”，悬停列文件；Worktree 详情“让 agent rebase”把 rebase 说明放进输入行、不按回车。纯逻辑 `src/shared/conflict-radar.ts`（排程、合并后谁落后、标记文字）和 `src/renderer/conflict-radar/model.ts`（rebase 说明）。测试：`src/main/conflict-radar.test.ts`（临时仓库：冲突的一对、未提交改动且 index 不变、缓存只重跑受影响的、squash 合并后被合并的退出 / 其余落后或和 main 冲突、20 个 worktree 首次约 1.1 s），`src/shared/conflict-radar.test.ts`、`model.test.ts`，e2e `conflict-radar.spec.ts`（3 个 worktree，截图在 `test-results/conflict-radar/`，两种主题）。**Figma 还没有画面**（总览的冲突列、浮层标题栏、Worktree 行和详情、“让 agent rebase”），现在照 PrTag 和 Worktree 详情的样式。以后：合并面板合并完成后列出受影响的 worktree、建议的合并顺序；没在真实大仓库上测快照耗时。讨论很多（HN 47866750 279 分、r/ClaudeCode 1vtfawm），但几乎没人开 issue（o#18487、cc#74532），先看用的人多不多
 - [ ] “这一轮跑过哪些检查”：从 PostToolUse 的 Bash 调用和退出码列出 agent 这一轮跑过的测试 / lint / typecheck 和结果，放在总览“待审阅”行和合并面板。回应“agent 说做完了，其实没过”（社区里有人审计过：报告做完 10 个，能用的 7 个）和 OpenAI 的“瓶颈变成人工 QA”。不花 token
 - [ ] 一题多解 + 广播（PRD P2 的 best-of-N 和 F9 批量操作一起做）：同一句话发给 N 个新 worktree（如 Claude 对 Codex），在总览浮层里并排比 diff，合并一个、其余归档。按钮写明会发什么（§2）。Orca、Emdash 已有；HN 上“同一句澄清发给几个 agent”的需求
 - [ ] 多窗口第二步：把一格拖出窗口成为独立窗口、在新窗口打开项目（多显示器、每个 macOS 桌面一个项目）。排在 F20 之后。o#6074（38 👍，原话“多窗口是基本盘”；Orca 至今没有）、cc#30154、cc#27725
@@ -296,3 +296,4 @@
 | 13 右侧栏：浏览器 · Git · Worktree · 文件 | M4 | 已设计，待作者确认 |
 | 15 新建会话（⌘N，玻璃材质） | M4 | 已实现，待验收（2026-10-18） |
 | 21 主区分屏（F20；Figma 的 20 节是 F19） | 多 agent 第二批 | 已实现，待验收（2026-10-20） |
+| 冲突雷达：总览冲突列、浮层标题栏、Worktree 行和详情、“让 agent rebase”（还没有 Figma 节） | 多 agent 第二批 | 未设计，照现有样式实现（2026-10-21），待补 Figma |
