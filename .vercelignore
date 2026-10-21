@@ -1,0 +1,7 @@
+# Vercel deploys run from the repository root (the project's Root Directory is site/); upload only the site.
+/*
+!/site
+/site/node_modules
+/site/dist
+/site/.astro
+/site/.vercel
