@@ -11,6 +11,20 @@
         "site"
       ],
       "port": 4321
+    },
+    {
+      "name": "mood-lab",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4399",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "/private/tmp/claude-501/-Users-m------01-AI----terminal-reborn/a02762a6-c3cd-44fa-82dc-6d3c71498404/scratchpad/wavi-mood-lab"
+      ],
+      "port": 4399
     }
   ]
 }
