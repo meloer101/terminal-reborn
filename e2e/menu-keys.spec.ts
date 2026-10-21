@@ -24,6 +24,7 @@ type Owner = readonly [string, string] | 'quit'
 const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+KeyN', accelerator: 'CmdOrCtrl+N', item: ['文件', '新建会话'] },
   { key: 'Meta+KeyO', accelerator: 'CmdOrCtrl+O', item: ['文件', '打开项目…'] },
+  { key: 'Meta+Shift+KeyO', accelerator: 'Shift+CmdOrCtrl+O', item: ['文件', '在新窗口中打开项目…'] },
   { key: 'Meta+KeyW', accelerator: 'CmdOrCtrl+W', item: ['文件', '关闭会话'] },
   { key: 'Meta+KeyF', accelerator: 'CmdOrCtrl+F', item: ['编辑', '在终端中查找…'] },
   { key: 'Meta+KeyK', accelerator: 'CmdOrCtrl+K', item: ['会话', '跳转到…'] },

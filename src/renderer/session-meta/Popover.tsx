@@ -2,6 +2,7 @@
 // right-aligned to the chip, kept inside the window, closed by Esc, a click elsewhere, a resize or the window losing
 // focus. `data-covers-page` takes the built-in browser's native page away while it is open (it draws above all DOM).
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useWindowScope } from '../state/window-scope'
 import styles from './SessionMeta.module.css'
 
 const EDGE = 8
@@ -21,6 +22,8 @@ export function Popover({
   testId?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  // The window the chip is in (F20 · 多窗口).
+  const { win } = useWindowScope()
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
 
   useLayoutEffect(() => {
@@ -28,9 +31,9 @@ export function Popover({
     const box = anchor.current?.getBoundingClientRect()
     if (!panel || !box) return
     const width = panel.offsetWidth
-    const left = Math.max(EDGE, Math.min(box.right - width, window.innerWidth - EDGE - width))
+    const left = Math.max(EDGE, Math.min(box.right - width, win.innerWidth - EDGE - width))
     setPosition({ left, top: box.bottom + GAP })
-  }, [anchor])
+  }, [anchor, win])
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -45,17 +48,17 @@ export function Popover({
       event.stopPropagation()
       onClose()
     }
-    document.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('keydown', onKeyDown, true)
-    window.addEventListener('resize', onClose)
-    window.addEventListener('blur', onClose)
+    win.document.addEventListener('pointerdown', onPointerDown, true)
+    win.addEventListener('keydown', onKeyDown, true)
+    win.addEventListener('resize', onClose)
+    win.addEventListener('blur', onClose)
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('keydown', onKeyDown, true)
-      window.removeEventListener('resize', onClose)
-      window.removeEventListener('blur', onClose)
+      win.document.removeEventListener('pointerdown', onPointerDown, true)
+      win.removeEventListener('keydown', onKeyDown, true)
+      win.removeEventListener('resize', onClose)
+      win.removeEventListener('blur', onClose)
     }
-  }, [anchor, onClose])
+  }, [anchor, onClose, win])
 
   return (
     <div

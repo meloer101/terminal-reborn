@@ -69,7 +69,11 @@
 - [ ] 冲突雷达和合并顺序：后台对活跃的 worktree 两两跑 `merge-tree`（复用合并预检），在总览和 Worktree 视图标出“和 xxx 会冲突”；合并一个之后标出其余哪些落后或会冲突，rebase 说明放进那个会话的输入行。不花 token。讨论很多（HN 47866750 279 分、r/ClaudeCode 1vtfawm），但几乎没人开 issue（o#18487、cc#74532），所以先做最小版，看用的人多不多
 - [ ] “这一轮跑过哪些检查”：从 PostToolUse 的 Bash 调用和退出码列出 agent 这一轮跑过的测试 / lint / typecheck 和结果，放在总览“待审阅”行和合并面板。回应“agent 说做完了，其实没过”（社区里有人审计过：报告做完 10 个，能用的 7 个）和 OpenAI 的“瓶颈变成人工 QA”。不花 token
 - [ ] 一题多解 + 广播（PRD P2 的 best-of-N 和 F9 批量操作一起做）：同一句话发给 N 个新 worktree（如 Claude 对 Codex），在总览浮层里并排比 diff，合并一个、其余归档。按钮写明会发什么（§2）。Orca、Emdash 已有；HN 上“同一句澄清发给几个 agent”的需求
-- [ ] 多窗口第二步：把一格拖出窗口成为独立窗口、在新窗口打开项目（多显示器、每个 macOS 桌面一个项目）。排在 F20 之后。o#6074（38 👍，原话“多窗口是基本盘”；Orca 至今没有）、cc#30154、cc#27725
+- [x] 多窗口第二步（2026-10-21，PRD F20 · 多窗口 v1.56）：把一格的会话名或侧栏里的会话拖到窗口外松开，在松开处成为新窗口；项目菜单「在新窗口中打开」、「文件 › 在新窗口中打开项目…」⇧⌘O 给项目开自己的窗口（侧栏只列这个项目），「显示 › 把这一格移到新窗口」和会话的右键 / … 菜单「移到新窗口」。每个窗口自己的拆分和键盘所在的格，会话共用、只在一处显示，跳到会话时把它所在的窗口调到前面；关副窗口不结束 agent；所有窗口、位置、全屏存进 workspace.json（可选的 `windows`，旧文件不用迁移），重启恢复。所有窗口由同一个渲染进程绘制（`window.open('about:blank')`），终端换窗口只挪 DOM，回滚和 PTY 流不断，所以 20 会话的规模基线不受影响。纯逻辑 `src/shared/window-layout.ts`，main 在 `src/main/secondary-windows.ts`，渲染端 `src/renderer/app-shell/secondary-windows.tsx`、`SecondaryShell.tsx`。测试：`window-layout.test.ts`、`workspace-file.test.ts`、`split/model.test.ts`，e2e `multi-window.spec.ts`（在新窗口打开项目、拖出一格、关副窗口、菜单移到新窗口，副窗口两种主题截图）、`multi-window-restore.spec.ts`（重启恢复、关掉的不再恢复）。o#6074（38 👍，原话“多窗口是基本盘”；Orca 至今没有）、cc#30154、cc#27725
+  - [ ] 副窗口里的右侧栏和总览（这一版只在主窗口，从副窗口打开会把主窗口调到前面）；浏览器视图是挂在主窗口上的原生视图，要先能换窗口
+  - [ ] 拖到另一个已经打开的 Wavi 窗口上松开 = 挪进那个窗口（现在一律新开窗口）
+  - [ ] Figma 补副窗口、拖出时的提示和空窗口的帧（现在沿用 21 的组件）
+  - [ ] 真机走一遍：两块显示器（不同缩放）、副窗口全屏成为单独桌面、合盖 / 拔显示器后恢复位置；e2e 只在一块屏上跑
 
 第三批（先实测或先访谈）：
 - [ ] agent teams 的队友显示成侧栏里的会话：学 cmux 用 shim 接住 tmux 分屏请求，先实测 Claude Code 当前版本能不能接。cc#24122（96 👍）、cc#24189（74）、cc#26572

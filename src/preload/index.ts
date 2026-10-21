@@ -5,6 +5,7 @@ import { PR_IPC } from '@shared/pull-requests'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
+import { isSecondaryKey } from '@shared/window-layout'
 import type { SessionId } from '@shared/types'
 import { browserApi } from './browser'
 
@@ -77,9 +78,21 @@ const api: TrApi = {
     onNotificationClick: (listener) => listen(IPC.uiNotificationClick, listener),
     openSettings: () => ipcRenderer.send(IPC.uiOpenSettings),
     onShowSettings: (listener) => listen(IPC.uiShowSettings, listener),
-    onMenuCommand: (listener) => listen(IPC.uiMenuCommand, (command: unknown) => {
-      if (isMenuCommand(command)) listener(command)
+    onMenuCommand: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, command: unknown, windowKey: unknown) => {
+        if (isMenuCommand(command)) listener(command, isSecondaryKey(windowKey) ? windowKey : undefined)
+      }
+      ipcRenderer.on(IPC.uiMenuCommand, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC.uiMenuCommand, handler)
+      }
+    },
+    focusWindow: (key) => ipcRenderer.send(IPC.uiWindowFocus, key),
+    closeWindow: (key) => ipcRenderer.send(IPC.uiWindowClose, key),
+    onWindowCloseRequest: (listener) => listen(IPC.uiWindowCloseRequest, (key: unknown) => {
+      if (isSecondaryKey(key)) listener(key)
     }),
+    onWindowState: (listener) => listen(IPC.uiWindowState, listener),
     confirm: (options) => ipcRenderer.invoke(IPC.uiConfirm, options),
     revealInFinder: (path) => ipcRenderer.send(IPC.uiRevealInFinder, path)
   },

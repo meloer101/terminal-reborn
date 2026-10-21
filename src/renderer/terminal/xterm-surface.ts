@@ -218,6 +218,11 @@ export class XtermSurface implements TerminalSurface {
     return height > 0 && this.term.rows > 0 ? height / this.term.rows : undefined
   }
 
+  /** The document the terminal is in: the main window's, or a secondary window's (F20 · 多窗口). */
+  ownerDocument(): Document {
+    return this.term.element?.ownerDocument ?? document
+  }
+
   /** Resolves once the terminal is attached to the DOM and measured with its real font. */
   whenOpen(): Promise<void> {
     return this.openPromise ?? Promise.resolve()
@@ -227,7 +232,19 @@ export class XtermSurface implements TerminalSurface {
     if (this.disposed) return
     if (this.openPromise) {
       // Re-parenting (e.g. the React tree remounted): move the existing DOM, keep all state.
-      if (this.term.element && this.term.element.parentElement !== container) container.appendChild(this.term.element)
+      const element = this.term.element
+      if (element && element.parentElement !== container) {
+        // Into another window (F20 · 多窗口): the WebGL context belongs to the old window's canvas, so the terminal draws
+        // with the DOM until it is set up again; open() again tells xterm about its new window (pixel ratio, events).
+        const otherWindow = element.ownerDocument !== container.ownerDocument
+        if (otherWindow) this.unloadWebgl()
+        container.appendChild(element)
+        if (otherWindow) {
+          this.term.open(container)
+          this.syncRenderer()
+          this.fit()
+        }
+      }
       this.container = container
       return
     }
@@ -276,10 +293,12 @@ export class XtermSurface implements TerminalSurface {
     element.addEventListener('keyup', (event) => held.delete(event.code), true)
     textarea.addEventListener('blur', () => held.clear())
     const dropAutoPeriod = (event: Event): void => {
-      if (event.target !== textarea || !(event instanceof InputEvent)) return
+      // Not `instanceof InputEvent`: in a secondary window the event comes from that window's InputEvent.
+      if (event.target !== textarea || !('inputType' in event)) return
+      const input = event as InputEvent
       const insertion = {
-        inputType: event.inputType,
-        data: event.data,
+        inputType: input.inputType,
+        data: input.data,
         keyHeld: held.size > 0,
         lastInput: this.lastInput.data,
         msSinceLastInput: performance.now() - this.lastInput.at

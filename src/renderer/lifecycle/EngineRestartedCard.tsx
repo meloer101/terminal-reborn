@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { lostSessionIds, recoverLostSessions, startHostRestartTracking, useHostRestart } from './host-restart'
+import { usePaneView } from '../state/window-scope'
 import styles from './EngineRestartedCard.module.css'
 
 /**
@@ -12,7 +12,9 @@ import styles from './EngineRestartedCard.module.css'
 export function EngineRestartedCard() {
   useEffect(() => startHostRestartTracking(), [])
   const [busy, setBusy] = useState(false)
-  const { activeId, sessions } = useWorkspace(useShallow((s) => ({ activeId: s.activeSessionId, sessions: s.sessions })))
+  const sessions = useWorkspace((s) => s.sessions)
+  // This window's active session (F20 · 多窗口).
+  const activeId = usePaneView().activeSessionId
   const lost = useHostRestart((s) => s.lost)
   const lostIds = lostSessionIds(lost, sessions)
   if (!activeId || !lostIds.includes(activeId)) return null

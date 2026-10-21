@@ -6,6 +6,7 @@ import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
 import type { AgentKind, Project, TitleSource, Worktree } from './types'
+import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
 
 export const WORKSPACE_FILE_VERSION = 2
 
@@ -101,6 +102,11 @@ export interface WorkspaceFile {
   reviewComments?: Record<string, ReviewComment[]>
   /** The main area's split (PRD F20): two to four sessions, `activeSessionId` among them. Absent = one session. */
   split?: SplitNode
+  /**
+   * Secondary windows (F20 · 多窗口), each with its own panes; the fields above are the main window's. Absent = the
+   * main window only (every file written before windows existed).
+   */
+  windows?: PersistedWindow[]
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -216,9 +222,20 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
   const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
   const listed = new Set(sessions.filter((s) => !archived.has(s.worktreeId)).map((s) => s.id))
   const split = sanitizeSplit(value.split, (id) => listed.has(id))
-  const activeSessionId = active ? (value.activeSessionId as string) : (sessions[0]?.id ?? null)
   // The keyboard is always in one of the split's panes.
   const shown = sessionsIn(split)
+  // The main window's own panes win over a secondary window's; a session is shown in one window at most.
+  const mainActive = split ? null : active ? (value.activeSessionId as string) : null
+  const windows = sanitizeWindows(value.windows, {
+    listed: (id) => listed.has(id),
+    projectExists: (id) => projectIds.has(id),
+    taken: new Set(split ? shown : mainActive && listed.has(mainActive) ? [mainActive] : [])
+  })
+  const elsewhere = new Set(windows.flatMap((w) => shownIn({ split: w.split ?? null, activeSessionId: w.activeSessionId ?? null })))
+  // An unknown active session falls back to the first one that no other window shows. A main window emptied by moving
+  // its last pane to another window stays empty.
+  const emptied = value.activeSessionId === null && windows.length > 0
+  const activeSessionId = active ? (value.activeSessionId as string) : emptied ? null : (sessions.find((s) => !elsewhere.has(s.id))?.id ?? null)
   return {
     version: WORKSPACE_FILE_VERSION,
     projects,
@@ -242,7 +259,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(recentProjects.length > 0 ? { recentProjects } : {}),
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
-    ...(split ? { split } : {})
+    ...(split ? { split } : {}),
+    ...(windows.length > 0 ? { windows } : {})
   }
 }
 

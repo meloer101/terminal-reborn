@@ -12,6 +12,7 @@ import { homedir } from 'node:os'
 import { delimiter } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { hostWindowFor } from './app-windows'
 import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
 import {
   cleanFailedLog,
@@ -601,7 +602,7 @@ export function registerPullRequestHandlers(): void {
   })
   ipcMain.on(PR_IPC.refresh, (_event, worktree: unknown) => refreshWorktree(worktree))
   ipcMain.handle(PR_IPC.statuses, (event) => statusesFor(event.sender))
-  ipcMain.handle(PR_IPC.create, (event, raw: unknown) => createPullRequest(raw, BrowserWindow.fromWebContents(event.sender)))
+  ipcMain.handle(PR_IPC.create, (event, raw: unknown) => createPullRequest(raw, hostWindowFor(event.sender)))
   ipcMain.handle(PR_IPC.failure, (_event, worktree: unknown) => ciFailure(worktree))
   app.on('browser-window-focus', onFocus)
   app.on('before-quit', () => {

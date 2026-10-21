@@ -12,6 +12,7 @@ import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
+import type { WindowKey, WindowStateEvent } from './window-layout'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
@@ -131,8 +132,19 @@ export interface UiApi {
   openSettings(): void
   /** ⌘, from the app menu: show the settings dialog. */
   onShowSettings(listener: () => void): Unsubscribe
-  /** A command picked in the app menu (or its shortcut, when the menu took the key). */
-  onMenuCommand(listener: (command: MenuCommand) => void): Unsubscribe
+  /**
+   * A command picked in the app menu (or its shortcut, when the menu took the key). `windowKey` is the secondary window
+   * it was picked in (F20 · 多窗口); absent for the main window.
+   */
+  onMenuCommand(listener: (command: MenuCommand, windowKey?: WindowKey) => void): Unsubscribe
+  /** Brings a window forward and gives it the keyboard; `main` also shows a main window that was closed (hidden). */
+  focusWindow(key: WindowKey): void
+  /** Closes a secondary window for good, once its terminals have gone back (after onWindowCloseRequest). */
+  closeWindow(key: WindowKey): void
+  /** The user closed a secondary window (red button): move its terminals back, then call closeWindow. */
+  onWindowCloseRequest(listener: (key: WindowKey) => void): Unsubscribe
+  /** A secondary window moved, resized or entered / left full screen. */
+  onWindowState(listener: (state: WindowStateEvent) => void): Unsubscribe
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
   /** Native confirmation sheet; resolves to true when the user picked the confirm button. */
@@ -430,8 +442,16 @@ export const IPC = {
   uiOpenSettings: 'ui:open-settings',
   /** main → renderer: show the settings dialog */
   uiShowSettings: 'ui:show-settings',
-  /** main → renderer, payload MenuCommand */
+  /** main → renderer, payload MenuCommand and the secondary window's key (absent for the main window) */
   uiMenuCommand: 'ui:menu-command',
+  /** renderer → main (send), payload WindowKey: bring that window forward (F20 · 多窗口) */
+  uiWindowFocus: 'ui:window-focus',
+  /** renderer → main (send), payload WindowKey: close that secondary window now */
+  uiWindowClose: 'ui:window-close',
+  /** main → renderer, payload WindowKey: the user closed that secondary window */
+  uiWindowCloseRequest: 'ui:window-close-request',
+  /** main → renderer, payload WindowStateEvent */
+  uiWindowState: 'ui:window-state',
   uiRevealInFinder: 'ui:reveal-in-finder',
   uiConfirm: 'ui:confirm',
   settingsGet: 'settings:get',

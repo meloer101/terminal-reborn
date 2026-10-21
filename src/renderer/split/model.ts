@@ -1,6 +1,6 @@
 // What the split's panes show besides terminals (PRD F20 · Figma 21): the new pane's session list after ⌘D / ⇧⌘D,
 // and the words on a drop target. Pure.
-import { hasPane, sessionsIn, type SplitDrop, type SplitNode } from '@shared/split-layout'
+import { hasPane, type SplitDrop, type SplitNode } from '@shared/split-layout'
 import type { Project, Session, SessionId, Worktree } from '@shared/types'
 import { buildOverview, type OverviewRow } from '../overview/model'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
@@ -9,15 +9,16 @@ export interface PickerInput {
   projects: Project[]
   worktrees: Worktree[]
   sessions: Session[]
-  split: SplitNode | null
+  /** Sessions shown in some pane of some window (F20 · 多窗口): not offered. */
+  shown: readonly SessionId[]
   now: number
   /** Free text plus `p:项目` / `s:状态`, as in the overview's filter. */
   filter: string
 }
 
 /** Sessions the new pane can show: every listed one not shown already, in sidebar order (folded projects too). */
-export function pickerRows({ projects, worktrees, sessions, split, now, filter }: PickerInput): OverviewRow[] {
-  const shown = new Set(sessionsIn(split))
+export function pickerRows({ projects, worktrees, sessions, shown: shownIds, now, filter }: PickerInput): OverviewRow[] {
+  const shown = new Set(shownIds)
   const order = new Map(visibleSessionIds(buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds: [] })).map((id, i) => [id, i]))
   return buildOverview({ projects, worktrees, sessions, now, filter })
     .flatMap((group) => group.rows)

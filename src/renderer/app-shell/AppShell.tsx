@@ -5,6 +5,8 @@ import { startPullRequestBridge } from '../pull-requests/store'
 import { startSessionMetaBridge } from '../session-meta/store'
 import { startLimitResumeBridge } from '../limit-resume/bridge'
 import { useWorkspace } from '../state/workspace'
+import { useIsKeyWindow, usePaneView } from '../state/window-scope'
+import { startSecondaryWindows } from './secondary-windows'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
 import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
@@ -48,7 +50,10 @@ const windowWidth = () => window.innerWidth
 export function AppShell() {
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
   const overview = useWorkspace((s) => s.mainView === 'overview')
-  const hasSession = useWorkspace((s) => s.sessions.some((x) => x.id === s.activeSessionId))
+  // The main window's own panes (F20 · 多窗口: the keyboard may be in another window).
+  const mainActive = usePaneView().activeSessionId
+  const hasSession = useWorkspace((s) => s.sessions.some((x) => x.id === mainActive))
+  const isKey = useIsKeyWindow()
   // The panel follows the active session's worktree, so it shows beside a session (not the overview or welcome page).
   const savedPanel = useWorkspace((s) => s.rightPanel)
   const rightPanel = hasSession && !overview ? savedPanel : null
@@ -59,6 +64,7 @@ export function AppShell() {
   // Every session id, so a new or removed session resubscribes. The string compares by value.
   const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
   useEffect(() => startActivityReporting(), [])
+  useEffect(() => startSecondaryWindows(), [])
   useEffect(() => listenForBackgroundReview(), [])
   useEffect(() => startSessionMetaBridge(), [])
   useEffect(() => startLimitResumeBridge(), [])
@@ -108,11 +114,12 @@ export function AppShell() {
           </aside>
         )}
       </div>
-      <CommandPalette />
+      {/* The palette and the new-session sheet open in the window with the keyboard (F20 · 多窗口). */}
+      {isKey && <CommandPalette />}
       <StatusBridge />
       <AppearanceBridge />
       <SettingsDialog />
-      <NewSessionSheet />
+      {isKey && <NewSessionSheet />}
       <MergeSheet />
       <ArchiveSheet />
       <MenuHost />

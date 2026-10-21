@@ -1,6 +1,8 @@
 // Find in the active terminal (B18): whether the find bar is open, and ⌘F to open it.
 import { create } from 'zustand'
 import { useWorkspace } from '../state/workspace'
+import { everyWindow, keyDocument } from '../app-shell/windows-runtime'
+import { showsPanes } from '../split/store'
 import { noteKeyCommand } from '../state/key-commands'
 import { isFindShortcut } from './find'
 
@@ -18,9 +20,9 @@ export const useTerminalSearch = create<TerminalSearchState>()(() => ({ open: fa
  * whose 在终端中查找… lands here too, and must not open the bar behind the dialog.
  */
 export function openTerminalSearch(): boolean {
-  const { activeSessionId, mainView } = useWorkspace.getState()
-  if (!activeSessionId || mainView !== 'session') return false
-  if (document.querySelector('[role="dialog"][aria-modal="true"]')) return false
+  const { activeSessionId, keyWindow } = useWorkspace.getState()
+  if (!activeSessionId || !showsPanes(keyWindow)) return false
+  if (keyDocument().querySelector('[role="dialog"][aria-modal="true"]')) return false
   useTerminalSearch.setState((s) => ({ open: true, focusToken: s.focusToken + 1 }))
   return true
 }
@@ -36,5 +38,9 @@ const onKeyDown = (e: KeyboardEvent): void => {
   e.stopPropagation()
   noteKeyCommand('find')
 }
-window.addEventListener('keydown', onKeyDown, true)
-if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener('keydown', onKeyDown, true))
+// In every window (F20 · 多窗口).
+const uninstall = everyWindow((win) => {
+  win.addEventListener('keydown', onKeyDown, true)
+  return () => win.removeEventListener('keydown', onKeyDown, true)
+})
+if (import.meta.hot) import.meta.hot.dispose(uninstall)

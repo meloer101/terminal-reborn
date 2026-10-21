@@ -5,14 +5,15 @@ import { IPC } from '@shared/ipc'
 import { viewMenuItems } from '@shared/lifecycle'
 import { SHORTCUTS, stepFontSize, type FontSizeStep, type MenuCommand } from '@shared/shortcuts'
 import { clearActivity } from './activity'
-import { appWindows, isAppWindow } from './app-windows'
+import { appWindows, isAppWindow, isSecondaryWindow, rendererOf } from './app-windows'
 import { releaseSessionsOf } from './pty'
 import { isQuitting, quitEndingSessions } from './quit'
+import { adoptSecondaryWindow, closeSecondaryWindowsOf, secondaryKeyOf, secondaryWindowOptions } from './secondary-windows'
 import { getSettings, updateSettings } from './settings'
 import { isDeveloperBuild } from './source-checkout'
+import { restoreBounds, saveBounds } from './window-state'
 
 let mainWindow: BrowserWindow | null = null
-import { restoreBounds, saveBounds } from './window-state'
 
 function baseOptions(): BrowserWindowConstructorOptions {
   return {
@@ -32,9 +33,17 @@ function baseOptions(): BrowserWindowConstructorOptions {
 function load(win: BrowserWindow): void {
   win.once('ready-to-show', () => win.show())
   // Links open in the default browser; app windows never navigate away.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) void shell.openExternal(url)
+  // …except the page's own secondary windows (F20 · 多窗口), which it draws itself.
+  win.webContents.setWindowOpenHandler((details) => {
+    const secondary = secondaryWindowOptions(details, baseOptions())
+    if (secondary) return { action: 'allow', overrideBrowserWindowOptions: secondary }
+    if (/^https?:/.test(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+  win.webContents.on('did-create-window', (child, details) => adoptSecondaryWindow(child, win.webContents, details.frameName))
+  // A reload (or a crash) takes the page that draws the secondary windows: they close, and the new page reopens them.
+  win.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) closeSecondaryWindowsOf(win.webContents)
   })
   win.webContents.on('will-navigate', (event) => event.preventDefault())
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -71,6 +80,7 @@ export function createMainWindow(): BrowserWindow {
     console.error('[main] renderer process gone:', details.reason, details.exitCode)
     clearActivity(win.webContents)
     releaseSessionsOf(win.webContents)
+    closeSecondaryWindowsOf(win.webContents)
     if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.webContents.reload()
   })
   load(win)
@@ -82,7 +92,8 @@ export function showSettings(win: BrowserWindow | null | undefined): void {
   const target = win && !win.isDestroyed() ? win : (appWindows().find((w) => w.isFocused()) ?? appWindows()[0])
   if (!target) return
   target.show()
-  target.webContents.send(IPC.uiShowSettings)
+  // A secondary window is drawn by the main window's page, which shows the dialog in the window the user is in.
+  rendererOf(target).send(IPC.uiShowSettings)
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -111,7 +122,10 @@ function command(name: MenuCommand): Pick<MenuItemConstructorOptions, 'click'> {
         return
       }
       const target = window instanceof BrowserWindow ? window : getMainWindow()
-      if (target && !target.isDestroyed()) target.webContents.send(IPC.uiMenuCommand, name)
+      if (!target || target.isDestroyed()) return
+      // A secondary window's commands go to the page that draws it, with the window they were picked in.
+      if (isSecondaryWindow(target)) rendererOf(target).send(IPC.uiMenuCommand, name, secondaryKeyOf(target))
+      else target.webContents.send(IPC.uiMenuCommand, name)
     }
   }
 }
@@ -153,6 +167,7 @@ export function installAppMenu(): void {
       submenu: [
         { label: '新建会话', accelerator: SHORTCUTS['new-session'], ...command('new-session') },
         { label: '打开项目…', accelerator: SHORTCUTS['open-project'], ...command('open-project') },
+        { label: '在新窗口中打开项目…', accelerator: SHORTCUTS['open-project-in-window'], ...command('open-project-in-window') },
         { type: 'separator' },
         // Not the window's Close: ⌘W closes the active session (with its confirmation).
         { label: '关闭会话', accelerator: SHORTCUTS['close-session'], ...command('close-session') }
@@ -197,6 +212,7 @@ export function installAppMenu(): void {
         { label: '移到右边的格', accelerator: SHORTCUTS['focus-pane-right'], ...command('focus-pane-right') },
         { label: '移到上面的格', accelerator: SHORTCUTS['focus-pane-up'], ...command('focus-pane-up') },
         { label: '移到下面的格', accelerator: SHORTCUTS['focus-pane-down'], ...command('focus-pane-down') },
+        { label: '把这一格移到新窗口', ...command('pane-to-window') },
         { type: 'separator' },
         { label: '放大', accelerator: SHORTCUTS['font-bigger'], click: () => stepFont('bigger') },
         // ⌘= is the unshifted key under ⌘+; it does the same, without a second visible item.
@@ -212,7 +228,15 @@ export function installAppMenu(): void {
       role: 'window',
       label: '窗口',
       // Not `windowMenu`: its Close item owns ⌘W, which closes the active session instead (renderer).
-      submenu: [{ role: 'minimize', label: '最小化' }, { role: 'zoom', label: '缩放' }, { type: 'separator' }, { role: 'front', label: '前置全部窗口' }]
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        { role: 'zoom', label: '缩放' },
+        { type: 'separator' },
+        // The red button only hides the main window; with secondary windows open the Dock icon no longer brings it back.
+        { label: '主窗口', click: () => showMainWindow() },
+        { type: 'separator' },
+        { role: 'front', label: '前置全部窗口' }
+      ]
     }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

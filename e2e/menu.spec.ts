@@ -53,6 +53,7 @@ test('the menus are in Chinese and show their shortcuts', async () => {
   expect(items('文件')).toEqual([
     ['新建会话', 'CmdOrCtrl+N'],
     ['打开项目…', 'CmdOrCtrl+O'],
+    ['在新窗口中打开项目…', 'Shift+CmdOrCtrl+O'],
     ['关闭会话', 'CmdOrCtrl+W']
   ])
   expect(items('编辑').map(([l]) => l)).toEqual(['撤销', '重做', '剪切', '拷贝', '粘贴', '全选', '在终端中查找…'])
@@ -61,6 +62,9 @@ test('the menus are in Chinese and show their shortcuts', async () => {
   expect(items('显示')).toContainEqual(['向右拆分', 'CmdOrCtrl+D'])
   expect(items('显示')).toContainEqual(['向下拆分', 'Shift+CmdOrCtrl+D'])
   expect(items('显示')).toContainEqual(['关掉这一格', 'Alt+CmdOrCtrl+W'])
+  // Several windows (PRD F20 · 多窗口).
+  expect(items('显示').map(([l]) => l)).toContain('把这一格移到新窗口')
+  expect(items('窗口').map(([l]) => l)).toContain('主窗口')
   // Nothing English is left at the top level or in the items we own.
   for (const menu of menus.slice(1)) for (const [label] of menu.items) expect(label).toMatch(/[一-鿿]/)
 })

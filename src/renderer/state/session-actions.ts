@@ -11,8 +11,10 @@ import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from
 import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive/store'
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
+import { everyWindow, windowOf } from '../app-shell/windows-runtime'
+import { moveSessionToNewWindow } from '../split/commands'
 import { noteKeyCommand } from './key-commands'
-import { useWorkspace } from './workspace'
+import { useWorkspace, windowEffects } from './workspace'
 import { projectOfSession } from './workspace-model'
 
 const NEW_SESSION_LABEL: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
@@ -41,6 +43,34 @@ export async function openProjectInteractive(kind: AgentKind = 'claude'): Promis
   return path ? openProjectPath(path, kind) : null
 }
 
+/**
+ * 在新窗口中打开 (F20 · 多窗口): the project's own window — brought forward when it has one, else a new window beside the
+ * current one, showing the first of its sessions no window shows (a new Claude Code session when it has none at all).
+ */
+export function openProjectInNewWindow(projectId: ProjectId): void {
+  const state = useWorkspace.getState()
+  if (!state.projects.some((p) => p.id === projectId)) return
+  const existing = state.windows.find((w) => w.projectId === projectId)
+  if (existing) {
+    state.focusWindow(existing.key)
+    windowEffects.reveal(existing.key)
+    return
+  }
+  const source = windowOf(state.keyWindow) ?? window
+  const key = state.openWindow({ projectId, bounds: { x: source.screenX + 48, y: source.screenY + 48, width: 1100, height: 760 } })
+  if (!key) return
+  const worktreeIds = new Set(state.worktrees.filter((w) => w.projectId === projectId).map((w) => w.id))
+  if (!state.sessions.some((s) => worktreeIds.has(s.worktreeId))) useWorkspace.getState().addSession(projectId, 'claude')
+}
+
+/** 文件 › 在新窗口中打开项目… (⇧⌘O): pick a folder, then openProjectInNewWindow. */
+export async function openProjectInNewWindowInteractive(): Promise<void> {
+  if (isNewSessionSheetOpen()) return
+  const path = await window.tr.ui.pickFolder()
+  if (!path) return
+  openProjectInNewWindow(useWorkspace.getState().addProject(path))
+}
+
 /** The project header's ＋, the empty project's 新建会话 row and the Worktree view's ＋: the sheet, with that project chosen (PRD F4). */
 export function newSessionInProject(projectId: ProjectId): void {
   openNewSessionSheet(projectId)
@@ -55,6 +85,7 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   const sessionCount = state.sessions.filter((s) => worktreeIds.has(s.worktreeId)).length
   const entries: MenuEntry[] = [
     { type: 'item', id: 'new', label: '新建会话…', accelerator: 'CmdOrCtrl+N' },
+    { type: 'item', id: 'window', label: '在新窗口中打开' },
     { type: 'separator' },
     { type: 'item', id: 'reveal', label: '在 Finder 中显示' },
     { type: 'item', id: 'copy-path', label: '复制路径' },
@@ -66,6 +97,7 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   else if (choice === 'copy-path') void navigator.clipboard.writeText(project.rootPath).catch(() => {})
   else if (choice === 'remove') await removeProjectInteractive(projectId)
   else if (choice === 'new') openNewSessionSheet(projectId)
+  else if (choice === 'window') openProjectInNewWindow(projectId)
 }
 
 /** Closes a session; asks first while its agent is running or waiting for the user. Resolves to whether it closed. */
@@ -108,7 +140,11 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === sessionId)
   const worktree = state.worktrees.find((w) => w.id === session?.worktreeId)
-  const entries: MenuEntry[] = [{ type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }]
+  const entries: MenuEntry[] = [
+    { type: 'item', id: 'window', label: '移到新窗口' },
+    { type: 'separator' },
+    { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
+  ]
   if (worktree) {
     entries.push(
       { type: 'separator' },
@@ -118,6 +154,7 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   }
   const choice = await popupMenu(entries, anchor)
   if (choice === 'close') await closeSessionInteractive(sessionId)
+  if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'archive' && worktree) openArchiveSheet(worktree.id)
   const kind = choice?.startsWith('here:') ? (choice.slice('here:'.length) as AgentKind) : null
   if (!kind || !worktree || !KINDS.includes(kind)) return
@@ -145,10 +182,12 @@ export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAn
     { type: 'item', id: 'reveal', label: '在 Finder 中显示', enabled: path !== undefined },
     { type: 'item', id: 'copy-path', label: '复制路径', enabled: path !== undefined },
     { type: 'separator' },
+    { type: 'item', id: 'window', label: '移到新窗口' },
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]
   const choice = await popupMenu(entries, anchor)
   if (choice === 'rename') return 'rename'
+  if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'reveal' && path) window.tr.ui.revealInFinder(path)
   else if (choice === 'copy-path' && path) void navigator.clipboard.writeText(path).catch(() => {})
   else if (choice === 'close') await closeSessionInteractive(sessionId)
@@ -196,5 +235,9 @@ const onKeyDown = (e: KeyboardEvent) => {
   noteKeyCommand(command)
   void (command === 'new-session' ? quickNewSession() : command === 'open-project' ? openProjectInteractive() : closeActiveSession())
 }
-window.addEventListener('keydown', onKeyDown, true)
-if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener('keydown', onKeyDown, true))
+// In every window (F20 · 多窗口).
+const uninstall = everyWindow((win) => {
+  win.addEventListener('keydown', onKeyDown, true)
+  return () => win.removeEventListener('keydown', onKeyDown, true)
+})
+if (import.meta.hot) import.meta.hot.dispose(uninstall)

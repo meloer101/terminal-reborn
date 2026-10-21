@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { ChevronRight } from 'lucide-react'
 import { formatAccelerator, isActionable, placeMenu, stepIndex, type MenuEntry, type Placement } from './menu-model'
 import { closeMenu, useMenu } from './menu'
+import { useWindowScope } from '../state/window-scope'
 import styles from './MenuHost.module.css'
 
 /**
@@ -12,11 +13,15 @@ import styles from './MenuHost.module.css'
  */
 export function MenuHost() {
   const menu = useMenu((s) => s.menu)
-  return menu ? <MenuLayer key={menu.serial} entries={menu.entries} placement={menu.placement} /> : null
+  const { win } = useWindowScope()
+  // Only the window the menu opens in draws it (F20 · 多窗口).
+  return menu && menu.doc === win.document ? <MenuLayer key={menu.serial} entries={menu.entries} placement={menu.placement} win={win} /> : null
 }
 
-function MenuLayer({ entries, placement }: { entries: MenuEntry[]; placement: Placement }) {
+function MenuLayer({ entries, placement, win }: { entries: MenuEntry[]; placement: Placement; win: Window }) {
   useEffect(() => {
+    const document = win.document
+    const window = win
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null
       if (!target?.closest?.('[data-menu-panel]')) closeMenu(null, target ?? undefined)
@@ -35,7 +40,7 @@ function MenuLayer({ entries, placement }: { entries: MenuEntry[]; placement: Pl
       window.removeEventListener('blur', dismiss)
       window.removeEventListener('resize', dismiss)
     }
-  }, [])
+  }, [win])
   return <MenuPanel entries={entries} placement={placement} label="菜单" takeFocus />
 }
 
@@ -67,7 +72,8 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     const el = panel.current
     if (!el) return
     const size = { width: el.offsetWidth, height: el.offsetHeight }
-    setPosition(placeMenu(size, placement, { width: window.innerWidth, height: window.innerHeight }))
+    const view = el.ownerDocument.defaultView ?? window
+    setPosition(placeMenu(size, placement, { width: view.innerWidth, height: view.innerHeight }))
   }, [placement])
 
   // Only once placed: a visibility:hidden panel cannot take focus.
@@ -118,7 +124,7 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
   }
 
   const onRowPointerMove = (index: number) => {
-    if (document.activeElement !== panel.current) panel.current?.focus({ preventScroll: true })
+    if (panel.current?.ownerDocument.activeElement !== panel.current) panel.current?.focus({ preventScroll: true })
     const entry = entries[index]!
     if (!isActionable(entry)) return
     setActive(index)

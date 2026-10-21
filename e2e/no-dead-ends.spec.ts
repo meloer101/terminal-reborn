@@ -150,7 +150,7 @@ test.describe('first run and the session header', () => {
   test('B11: the header … menu renames and closes the session', async () => {
     await page.getByRole('button', { name: '会话菜单' }).click()
     const menu = page.getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText(['重命名…', '在 Finder 中显示', '复制路径', '关闭会话⌘W'])
+    await expect(menu.getByRole('menuitem')).toHaveText(['重命名…', '在 Finder 中显示', '复制路径', '移到新窗口', '关闭会话⌘W'])
     await menu.getByRole('menuitem', { name: '重命名…' }).click()
     await expect(menu).toHaveCount(0)
     const field = page.getByRole('textbox', { name: '会话名称' })
