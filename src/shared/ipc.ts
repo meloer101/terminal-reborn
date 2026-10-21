@@ -6,6 +6,7 @@ import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
+import type { PullRequestApi } from './pull-requests'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
 import type { AppSettings, SettingsPatch } from './settings'
@@ -373,6 +374,8 @@ export interface TrApi {
   review: BackgroundReviewApi
   /** Archiving a worktree (PRD F15); channels in ARCHIVE_IPC. */
   archive: ArchiveApi
+  /** PR / CI status and 创建 PR through the user's gh login (PRD F16); channels in PR_IPC. */
+  pr: PullRequestApi
 }
 
 export const IPC = {

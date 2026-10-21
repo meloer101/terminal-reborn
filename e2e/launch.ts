@@ -24,6 +24,8 @@ export function launchApp(
     TR_KILL_SESSIONS_ON_QUIT: '1',
     // Never ask the real Claude / Codex account for its plan usage from a test run.
     TR_ACCOUNT_USAGE: 'off',
+    // Nor the real gh for PRs (PRD F16); e2e/pull-requests.spec.ts puts a fake one on the PATH instead.
+    TR_GH: 'off',
     ...envOverrides
   }
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key]

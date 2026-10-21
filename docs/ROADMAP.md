@@ -186,13 +186,13 @@
 - [x] F6 / F17 Git · 图谱（2026-10-17，Figma 13B / 13H）：lane 算法 `src/shared/git-graph/lanes.ts`（增量分页、默认分支固定在第 0 列、每行向左收拢）、GraphRef 胶囊（本地 / 远程 / worktree + StatusGlyph / tag）、✓ 当前 HEAD、点 worktree 胶囊切会话、全部分支 / 仅 worktree / 隐藏远程分支、只渲染可见行、拉取（fetch，沿用用户的 ssh 配置）、ref 变化自动刷新并保持滚动位置；右键菜单有切换到会话 · 复制 SHA · 复制提交说明；e2e `git-panel.spec.ts`。5000 个提交首屏实测 75–111 ms（`git-panel-perf.spec.ts`）
 - [ ] F6 右键：合并到基线 · 基于基线 rebase · 新建 worktree · 删除 worktree（F4 合并面板已有，待接到图谱右键）
 - [ ] F6 / F17 Git 后续：每个 worktree 的未提交行 / 脏标记、点提交看详情、聚焦分支高亮、同一仓库的多个 worktree 共用图谱状态、`--no-textconv` 等仓库配置隔离、旧版 git 的 `-z` 兼容、分支 + 未提交合并 diff
-- [ ] F16 PR / CI 只读状态
-- [ ] 创建 PR：Git · 变更底部的按钮目前禁用（PRD F16 把创建和合并 PR 列为之后的工作）
+- [x] F16 PR / CI 状态（2026-10-20，PRD v1.51，提前于外部验证到期做掉）：只用用户自己的 `gh` 登录，主进程低频查有 upstream 的分支（checks 进行中 1 分钟、打开 3 分钟、其余 10 分钟，失败退避、限流全部暂停 15 分钟）；侧栏会话行和总览 PR 列显示 `#123 ✓` / `#13 草稿 ◌` / `#9 已合并`，会话头没放（Figma 17 没有位置）；没有 gh 时只在“创建 PR”上方给一行提示。CI 失败时“让 agent 修复”把失败的检查名和 `--log-failed` 末尾按 §6.9 引用、放进输入行不按回车。外部来源：竞品（Orca、Superset、Conductor、Claude Code 桌面版、Codex app、Copilot app）都有 PR / CI 闭环，Claude Code 桌面版有 CI 栏，o#9512（应用内看 PR，15 👍）；用户更愿意复用 gh 登录而不是给 GitHub OAuth 大权限。测试：`src/main/pull-requests.test.ts`（假 gh + 临时仓库，真推送到本地 bare 仓库）、`src/shared/pull-requests.test.ts`、e2e `pull-requests.spec.ts`（截图在 `test-results/pull-requests/`）。还没在真实 GitHub 仓库上走一遍创建和修复
+- [x] 创建 PR（2026-10-20）：Git · 变更底部的按钮启用——从没推送过的分支先确认再 `git push -u`，然后 `gh pr create`（标题 = 会话名，正文 = 提交说明），在内置浏览器打开；已有打开的 PR 时变成“打开 PR #N”
 
 ### M6 · 深化（持续）→ v1.0
 完成标准：PRD §1.3 的指标全部达标，没有 P0 / P1 缺陷。
 - [x] 会话在应用重启后保留（PTY 守护进程，已在 2b 期间完成）
-- [ ] GitHub PR 创建 / 合并（`gh`）
+- [ ] GitHub PR 合并（`gh`；创建已在 M5 做完，2026-10-20）、应用内看 PR 评论（o#9512）
 - [ ] 导入 Ghostty / iTerm 主题
 - [ ] 孤儿 worktree 自动回收
 - [ ] 总览批量操作（多选后停止、关闭、发送同一条消息）
@@ -279,7 +279,7 @@
 | 09 侧栏 · 项目与会话入口 | 2b | 已还原 |
 | 10 会话生命周期 | 2a | 已还原（卡片在 v1.2 去掉） |
 | 11 v2 总览 | 2b | 已实现，待验收 |
-| 12 会话头：ctx % · todo · 端口 · PR | M4 并行 / M5 | 已被 17 取代（PR 等 F16） |
+| 12 会话头：ctx % · todo · 端口 · PR | M4 并行 / M5 | 已被 17 取代；PR 标签按 F16 做在侧栏和总览（17 的会话头没有位置），Figma 待补 |
 | 17 会话指标（context · todo · 额度）+ F5 并排 diff | M4 | 已实现，待验收（2026-10-19） |
 | 18 context 与额度可视化 | M4 | 已实现，待验收（2026-10-19） |
 | 13 右侧栏：浏览器 · Git · Worktree · 文件 | M4 | 已设计，待作者确认 |

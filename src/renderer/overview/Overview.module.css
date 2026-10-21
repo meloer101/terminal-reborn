@@ -266,6 +266,17 @@
   color: var(--text-tertiary);
 }
 
+/* PR (F16): `#123 ✓`, or `#123 已合并`. */
+.prCell {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: 88px;
+  padding: 0 var(--space-6);
+  overflow: hidden;
+  line-height: 20px;
+}
+
 .contextCell[data-level='high'] {
   font: var(--text-mono-s-medium);
   line-height: 20px;
@@ -379,7 +390,8 @@
 /* Narrow list (small window) — drop the place and diff columns first. */
 @container (max-width: 860px) {
   .row .where,
-  .row .stat {
+  .row .stat,
+  .row .prCell {
     display: none;
   }
 }
