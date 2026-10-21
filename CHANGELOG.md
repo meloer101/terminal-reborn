@@ -4,6 +4,37 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
+Digest the work of many agents: what they checked, where they collide, one task to several agents, and a window per project.
+消化多个 agent 的产出：跑过哪些检查、哪里会冲突、一个任务交给几个 agent，以及每个项目一个窗口。
+
+### Review and merge / 审阅与合并
+- The overview's 待审阅 rows and the merge sheet show which tests, lint and type checks the agent ran this turn and whether they passed (`测试 ✓ · lint ✗ · 类型 未跑`). Read locally from the agent's hooks, no tokens spent.
+  总览的“待审阅”行和合并面板显示 agent 这一轮跑过哪些测试、lint、类型检查，以及是否通过（`测试 ✓ · lint ✗ · 类型 未跑`）。在本地从 hook 读出，不花 token。
+- Conflict radar: in the background Wavi checks a repo's active worktrees against each other and against the base (`git merge-tree`, your worktrees are never touched) and marks 和 xxx 会冲突 / main 已前进 · 落后 N in the overview and the Worktree view; 让 agent rebase puts the steps into the agent's input line for you to send. Needs git 2.38 or later.
+  冲突雷达：Wavi 在后台把同一仓库里活跃的 worktree 两两比对、并和基线比对（`git merge-tree`，不碰你的 worktree），在总览和 Worktree 视图标出“和 xxx 会冲突”“main 已前进 · 落后 N”；“让 agent rebase”把步骤放进 agent 的输入行，由你发送。需要 git 2.38 或更新。
+- 一题多解: choose 多个 in the new-session sheet (⌘N), pick 2–4 Claude Code / Codex copies and write one task. Each copy gets its own worktree from the same base and the same task; compare them side by side in the overview, merge one, and archive the rest after you confirm.
+  一题多解：在新建会话面板（⌘N）里选“多个”，定 2–4 份 Claude Code / Codex，写一段任务。每份在同一个基线上有自己的 worktree、收到同一段任务；在总览里并排比较，合并其中一份，确认后归档其余的。
+- Batch actions in the overview: ⌘- or ⇧-click to select sessions, then send them the same message, stop or close them. Each asks first and lists what goes to whom.
+  总览批量操作：按住 ⌘ 或 ⇧ 点击多选会话，然后发送同一条消息、停止或关闭。每样都先确认，并列出发什么、发给谁。
+
+### Windows / 多窗口
+- Drag a pane, or a session in the sidebar, out of the window to give it a window of its own; open a project in its own window from the project menu or with ⇧⌘O. Windows and their layouts come back after a restart, and closing a secondary window never stops an agent.
+  把一格、或侧栏里的会话拖到窗口外，它就有了自己的窗口；在项目菜单或用 ⇧⌘O 把项目开在新窗口里。重启后窗口和布局都会恢复，关掉副窗口不会停掉 agent。
+
+### Files / 文件
+- The file preview wraps long lines and renders Markdown (a button shows the source); links open in the built-in browser or in the preview.
+  文件预览的长行自动换行，Markdown 直接渲染（有按钮切回源码）；链接在内置浏览器或预览里打开。
+
+### Fixed / 修复
+- Status: two dialogs waiting at once no longer clear each other, subagents and background agents no longer start or end the main turn, and a wrong status corrects itself within seconds.
+  状态：同时等着的两个对话框不再互相清掉；子 agent 和后台 agent 不再开始或结束主会话的这一轮；状态错了几秒内自己纠正。
+- Typing no longer stalls with many sessions printing in the background: hidden terminals stopped redrawing every frame.
+  很多会话在后台输出时打字不再卡顿：看不见的终端不再每帧整屏重画。
+- When a tool stopped a process tree that Wavi was part of (for example a dev task stopped by another app), the background daemon ended every running agent. Now only a real logout or shutdown ends them.
+  某个工具停掉包含 Wavi 的进程树时（例如另一个应用停掉了开发任务），后台守护进程会结束所有正在运行的 agent。现在只有真正的注销或关机才会结束它们。
+
 ## [0.4.0] - 2026-10-20
 
 Keep several agents in view, and take their work all the way to a PR.
