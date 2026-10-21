@@ -94,7 +94,10 @@ describe('CodexUsageWatcher', () => {
       dirs,
       scheduler,
       now: () => 7,
-      read: async (path) => (reads.push(path), content)
+      read: async (path) => (reads.push(path), content),
+      // Without this the real readHead hits the disk, and the first check can still be waiting on it when
+      // runAll returns.
+      readHead: async () => ''
     })
     watcher.observe('s1', 'codex', 'PreToolUse', { transcript_path: ROLLOUT })
     expect(queue).toHaveLength(0)
@@ -118,7 +121,7 @@ describe('CodexUsageWatcher', () => {
   it('ignores Claude, foreign paths and forgotten sessions', async () => {
     const { scheduler, runAll } = fakeScheduler()
     const readings: unknown[] = []
-    const watcher = new CodexUsageWatcher((id, r) => readings.push([id, r]), { dirs, scheduler, read: async () => tokenCount(10) })
+    const watcher = new CodexUsageWatcher((id, r) => readings.push([id, r]), { dirs, scheduler, read: async () => tokenCount(10), readHead: async () => '' })
     watcher.observe('s1', 'claude', 'Stop', { transcript_path: ROLLOUT })
     watcher.observe('s2', 'codex', 'Stop', { transcript_path: '/tmp/x.jsonl' })
     watcher.observe('s3', 'codex', 'Stop', { transcript_path: ROLLOUT })
