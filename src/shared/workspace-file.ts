@@ -2,6 +2,7 @@
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
 import { archiveRefName, type WorktreeArchive } from './archive'
+import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
@@ -107,6 +108,8 @@ export interface WorkspaceFile {
    * main window only (every file written before windows existed).
    */
   windows?: PersistedWindow[]
+  /** 一题多解 groups (PRD v1.59): sessions launched together with one prompt. Absent when there are none. */
+  attemptGroups?: AttemptGroup[]
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -215,6 +218,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
   }
 
   const reviewComments = sanitizeReviewComments(value.reviewComments, new Set(worktrees.map((w) => w.path)))
+  const attemptGroups = sanitizeAttemptGroups(value.attemptGroups, sessionIds)
 
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
   const lastRightPanel = sanitizeRightPanel(value.lastRightPanel)
@@ -260,7 +264,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
     ...(split ? { split } : {}),
-    ...(windows.length > 0 ? { windows } : {})
+    ...(windows.length > 0 ? { windows } : {}),
+    ...(attemptGroups.length > 0 ? { attemptGroups } : {})
   }
 }
 

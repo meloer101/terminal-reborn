@@ -1,8 +1,11 @@
 // Status overview (PRD F9 · Figma 11 v2: list 106:3640 / 106:4038, board 108:4091 / 108:4366). Replaces the
 // terminal in the main area; the terminals stay mounted behind it. A row opens the session's own terminal in place
 // (list) or in an overlay (board). Keyboard: ↑↓ move · Space opens / closes · ↵ enter · Esc closes, then leaves.
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, ChevronUp, PanelLeft, Search } from 'lucide-react'
+// ⌘ / ⇧ click picks sessions for a batch action (BatchBar); 一题多解 groups sit above the status groups and open the
+// overlay with their members side by side (in either view).
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { Check, ChevronDown, ChevronRight, ChevronUp, PanelLeft, Search } from 'lucide-react'
+import { rangeBetween, togglePicked } from '@shared/batch-actions'
 import { useShallow } from 'zustand/react/shallow'
 import { needsAttention } from '@shared/session-status'
 import { contextHigh, orderVendors } from '@shared/session-meta'
@@ -38,6 +41,8 @@ import {
 } from './model'
 import { layoutIds } from './pane-layout'
 import { SessionOverlay } from './SessionOverlay'
+import { BatchBar } from './BatchBar'
+import { AttemptGroups } from '../attempts/AttemptGroups'
 import { enterSession, useOverviewStore, type OverviewView } from './store'
 import styles from './Overview.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -53,6 +58,9 @@ const TICK_MS = 15_000
  * shells have neither; a branch without a PR has no PR). The conflict radar's mark comes first, by the same rule.
  */
 const MetaColumns = createContext<{ radar: boolean; todo: boolean; context: boolean; pr: boolean }>({ radar: false, todo: false, context: false, pr: false })
+
+/** The sessions picked for a batch action; rows draw a check while any is picked. */
+const Picked = createContext<ReadonlySet<SessionId>>(new Set())
 
 /** "Now" on the shared 15 s clock, so "已等 3m" keeps counting without re-rendering on every frame. */
 function useClockNow(): number {
@@ -71,7 +79,8 @@ export function Overview() {
     }))
   )
   const now = useClockNow()
-  const { view, collapsed, selectedId, openId, layout, filter, setView, toggleGroup, select, setOpen, openOverlay, closePane, setFilter } = useOverviewStore()
+  const { view, collapsed, selectedId, openId, layout, filter, picked, pickAnchor, setView, toggleGroup, select, setOpen, openOverlay, closePane, setFilter, setPicked } =
+    useOverviewStore()
   const bodyRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
 
@@ -115,7 +124,16 @@ export function Overview() {
   useEffect(() => {
     for (const id of paneIds) if (!rows.some((r) => r.session.id === id)) closePane(id)
   }, [paneIds, rows, closePane])
-  useEffect(() => bodyRef.current?.focus(), [])
+  // A picked session that was closed or filtered out leaves the batch.
+  useEffect(() => {
+    const kept = picked.filter((id) => ids.includes(id))
+    if (kept.length !== picked.length) setPicked(kept)
+  }, [ids, picked, setPicked])
+  const pickedSet = useMemo(() => new Set(picked), [picked])
+  // Opened on a comparison (一题多解), the overlay keeps the keyboard it took.
+  useEffect(() => {
+    if (!useOverviewStore.getState().layout) bodyRef.current?.focus()
+  }, [])
   useEffect(() => {
     if (selectedId) bodyRef.current?.querySelector(`[data-session-id="${CSS.escape(selectedId)}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [selectedId])
@@ -139,6 +157,8 @@ export function Overview() {
     if (e.key === 'Escape') {
       e.preventDefault()
       if (openId) setOpen(null)
+      else if (layout) openOverlay(null)
+      else if (picked.length > 0 && !inText) setPicked([])
       else if (inText && filter) setFilter('')
       else setMainView('session')
       bodyRef.current?.focus()
@@ -164,7 +184,15 @@ export function Overview() {
     }
   }
 
-  const onRowClick = (id: SessionId) => {
+  const onRowClick = (id: SessionId, e: MouseEvent) => {
+    // ⌘ toggles one session in the batch, ⇧ picks the range from the last one clicked (F9 批量操作).
+    if (e.metaKey || e.shiftKey) {
+      setPicked(e.shiftKey ? [...new Set([...picked, ...rangeBetween(ids, pickAnchor ?? selectedId, id)])] : togglePicked(picked, id), id)
+      select(id)
+      bodyRef.current?.focus()
+      return
+    }
+    useOverviewStore.setState({ pickAnchor: id })
     // A click opens the session's terminal (in place, or in the overlay); 进入会话 / ↵ / a double-click go there.
     if (view === 'board') openOverlay(id)
     else setOpen(openId === id ? null : id)
@@ -173,6 +201,7 @@ export function Overview() {
 
   return (
     <MetaColumns.Provider value={metaColumns}>
+      <Picked.Provider value={pickedSet}>
       <div className={styles.overview} data-region="overview" onKeyDown={onKeyDown}>
         <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
           {sidebarCollapsed && (
@@ -206,6 +235,7 @@ export function Overview() {
           aria-label="会话"
           aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
         >
+          {sessions.length > 0 && !filter && <AttemptGroups />}
           {sessions.length === 0 ? (
             <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
           ) : view === 'list' ? (
@@ -231,10 +261,22 @@ export function Overview() {
           )}
           {sessions.length > 0 && ids.length === 0 && filter && <p className={styles.empty}>没有匹配“{filter}”的会话。</p>}
         </div>
-        {view === 'board' && layout && (
+        {picked.length > 0 && (
+          <BatchBar
+            ids={picked}
+            onClear={() => {
+              setPicked([])
+              bodyRef.current?.focus()
+            }}
+            onSettled={() => bodyRef.current?.focus()}
+          />
+        )}
+        {/* The board's overlay; also 一题多解's comparison, which opens from either view. */}
+        {layout && (
           <SessionOverlay layout={layout} rows={rows} candidates={rows.filter((r) => !paneIds.includes(r.session.id))} onClose={closeOverlay} />
         )}
       </div>
+      </Picked.Provider>
     </MetaColumns.Provider>
   )
 }
@@ -315,7 +357,7 @@ function ListGroup({
   selectedId: SessionId | null
   openId: SessionId | null
   onToggle(): void
-  onClick(id: SessionId): void
+  onClick(id: SessionId, e: MouseEvent): void
   onCollapse(): void
 }) {
   return (
@@ -341,12 +383,13 @@ function ListGroup({
 interface RowProps {
   row: OverviewRow
   selected: boolean
-  onClick(id: SessionId): void
+  onClick(id: SessionId, e: MouseEvent): void
 }
 
 /** OverviewRow v2 (104:191): 40 high, every cell 20 high and centered. */
 function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProps & { expanded?: boolean; trailing?: ReactNode }) {
   const id = row.session.id
+  const picked = useContext(Picked)
   return (
     <div
       id={`overview-row-${id}`}
@@ -358,9 +401,11 @@ function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProp
       data-expanded={expanded}
       data-session-id={id}
       data-tone={row.tone}
-      onClick={() => onClick(id)}
-      onDoubleClick={() => enterSession(id)}
+      data-picked={picked.has(id)}
+      onClick={(e) => onClick(id, e)}
+      onDoubleClick={(e) => !e.metaKey && !e.shiftKey && enterSession(id)}
     >
+      {picked.size > 0 && <PickMark picked={picked.has(id)} />}
       <span className={styles.statusCell}>
         <StatusGlyph status={row.status} />
         <span className={styles.statusLabel}>{row.statusLabel}</span>
@@ -463,7 +508,7 @@ function ExpandedRow({ row, selected, onClick, onCollapse }: RowProps & { onColl
   )
 }
 
-function BoardColumn({ group, selectedId, onClick }: { group: OverviewGroup; selectedId: SessionId | null; onClick(id: SessionId): void }) {
+function BoardColumn({ group, selectedId, onClick }: { group: OverviewGroup; selectedId: SessionId | null; onClick(id: SessionId, e: MouseEvent): void }) {
   return (
     <section className={styles.column} aria-label={group.label}>
       <div className={styles.columnHeader}>
@@ -480,6 +525,7 @@ function BoardColumn({ group, selectedId, onClick }: { group: OverviewGroup; sel
 /** StatusCard (104:286): a borderless status-colored block; status is also the glyph's shape and the column. */
 function StatusCard({ row, selected, onClick }: RowProps) {
   const id = row.session.id
+  const picked = useContext(Picked)
   return (
     <div
       id={`overview-row-${id}`}
@@ -489,10 +535,12 @@ function StatusCard({ row, selected, onClick }: RowProps) {
       data-selected={selected}
       data-session-id={id}
       data-card={row.card}
-      onClick={() => onClick(id)}
-      onDoubleClick={() => enterSession(id)}
+      data-picked={picked.has(id)}
+      onClick={(e) => onClick(id, e)}
+      onDoubleClick={(e) => !e.metaKey && !e.shiftKey && enterSession(id)}
     >
       <span className={styles.cardHead}>
+        {picked.size > 0 && <PickMark picked={picked.has(id)} />}
         <StatusGlyph status={row.status} />
         <span className={styles.cardTitle}>{row.title}</span>
         <span className={styles.cardMeta} data-emphasis={row.timeEmphasis}>
@@ -505,5 +553,14 @@ function StatusCard({ row, selected, onClick }: RowProps) {
       <PortTags sessionId={id} />
       {row.stat && <span className={styles.cardStat}>{row.stat}</span>}
     </div>
+  )
+}
+
+/** Picked for a batch action: a check (shape, not color), and its place kept empty for the rows not picked. */
+function PickMark({ picked }: { picked: boolean }) {
+  return (
+    <span className={styles.pick} data-testid="pick-mark" title={picked ? '已选' : undefined} aria-label={picked ? '已选' : undefined}>
+      {picked && <Check size={14} strokeWidth={2} aria-hidden />}
+    </span>
   )
 }

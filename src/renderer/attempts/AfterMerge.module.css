@@ -1,0 +1,48 @@
+/* A line of the merge sheet's result (like its checklist lines), with a ghost button at the end. */
+.offer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-6) 0;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-tertiary);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.button {
+  flex: none;
+  height: 24px;
+  margin-top: -3px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-caption-strong);
+  color: var(--text-primary);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--border-default);
+}
+
+.button:disabled {
+  opacity: 0.4;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

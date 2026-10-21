@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId, Worktree } from '@shared/types'
-import { useWorktreeCreations } from '../new-session/creation'
+import { useEagerStarts, useWorktreeCreations } from '../new-session/creation'
 import { runSessionWaits, useRunScripts } from '../scripts/run-script'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
@@ -213,6 +213,8 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
   const live = useLiveSessions((s) => s.live)
   // A session whose new worktree is still being created (or failed) has no folder to start in yet (PRD F4).
   const waitingForWorktree = useWorktreeCreations((s) => s.held)
+  // 一题多解: every member starts at once, shown or not, so its prompt can be sent.
+  const eager = useEagerStarts((s) => s.ids)
   // The Run button's terminal starts its script only when the button is pressed (PRD F4).
   const runStarts = useRunScripts((s) => s.started)
   useSessionStartup()
@@ -244,7 +246,7 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
             waitingForWorktree[session.id] !== undefined ||
             runSessionWaits(session, runStarts, live[session.id] !== undefined)
           }
-          live={live[session.id] !== undefined}
+          live={live[session.id] !== undefined || eager[session.id] === true}
           resumeAgentSessionId={requests[session.id]?.resumeAgentSessionId}
           generation={requests[session.id]?.generation ?? 0}
         />

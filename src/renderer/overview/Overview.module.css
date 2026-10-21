@@ -544,3 +544,22 @@
   color: var(--card-meta);
   white-space: nowrap;
 }
+
+/* Picked for a batch action (⌘ / ⇧ click): a check in front of the status, and the selected fill. */
+.pick {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--text-primary);
+}
+
+.row[data-picked='true'],
+.row[data-picked='true']:hover {
+  background: var(--bg-selected);
+}
+
+.card[data-picked='true'] {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
