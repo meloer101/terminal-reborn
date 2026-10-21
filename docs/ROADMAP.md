@@ -77,7 +77,7 @@
   - [ ] 真机走一遍：两块显示器（不同缩放）、副窗口全屏成为单独桌面、合盖 / 拔显示器后恢复位置；e2e 只在一块屏上跑
 
 PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外部来源：Conductor、Orca、Superset 在应用里看 PR 评论、发回 agent、合并 PR，Claude Code 桌面版的 Auto-fix 和 Merge when ready，Cursor Bugbot 自动修复限 3 次，o#9512 15 👍，GitHub community#189767）：
-- [ ] Figma：创建 PR 面板、变更视图的 PR 评论、合并面板的“合并到 GitHub PR”、PR 那一行的两个自动化开关（先画再做界面）
+- [x] Figma：创建 PR 面板、变更视图的 PR 评论、合并面板的“合并到 GitHub PR”、PR 那一行的两个自动化开关（2026-10-21，Section 22 `364:13861`，待作者确认）：22A 创建 PR、22B / 22B2 变更视图（GitHub thread 落在 diff 行上、审阅行“发到 PR”、自动修复 / 通过后合并开关、PR 评论）、22C 合并到 GitHub PR、22D 检查还在跑、22E 自动化状态；新组件 PrThread、PrNote
 - [x] F13 审阅结果按 worktree 存盘（每个留最近 10 次），复审不再报已忽略的发现（2026-10-21）：主进程 `review-results.json`（`ReviewResultsFile`），重启后同一份 diff 直接给存下的结果（`cached`），变更视图和合并面板打开时读回；删掉或取消勾选一条审阅评论算忽略（再勾上恢复），复审按“文件 + 标题”滤掉并写“另有 N 条你之前忽略过”。测试：`src/main/background-review.test.ts`（重启后不重审、忽略的不再落、再勾上回来）、`src/shared/background-review.test.ts`、`src/renderer/review/background.test.ts`
 - [x] F13 另一家来审（Claude 写的由 Codex 审，反之亦然），设置 · 自动化 · 代码审阅（2026-10-21）：「谁来审」分段、Claude / Codex 两个审阅模型（旧的单个模型名是 OpenAI 的就挪到 Codex）；另一家没装时改用会话自己的并写明；状态行写“Codex 审阅找到 N 条”。测试：`background-review.test.ts`（假 codex 审 Claude 会话、`pickReviewer`）、`settings.test.ts`，e2e `settings.spec.ts`
 - [ ] L2 创建 PR 面板：标题、正文（PR 模板 / 提交说明）+ 证据块、草稿；“推送前审阅”打开时创建 PR 也先审
