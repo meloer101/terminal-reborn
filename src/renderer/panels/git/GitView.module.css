@@ -821,3 +821,192 @@ button.pill:hover {
 .layoutHint[data-shown='true'] {
   visibility: visible;
 }
+
+/* PR threads, switches and comments (PRD F16 v1.63, Figma 22B). A thread is a comment row from GitHub: the same inset
+ * band, a hairline above and below, author in body-strong, bot / 可能已改 as quiet tags. */
+.prThread {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  height: 124px;
+  padding: var(--space-12) var(--space-12) var(--space-12) calc(var(--space-12) + var(--space-2));
+  background: var(--bg-inset);
+  box-shadow: inset 0 1px 0 var(--border-subtle), inset 0 -1px 0 var(--border-subtle);
+}
+
+.prThread[data-split] {
+  left: calc(50% + 0.5px);
+}
+
+.prThread .commentHead {
+  gap: var(--space-8);
+  height: 20px;
+}
+
+.prThread .commentText {
+  line-height: 20px;
+}
+
+.prSource,
+.prMeta {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.prMeta {
+  font: var(--text-mono-s);
+}
+
+.prAuthor {
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prTag {
+  flex: none;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.prActions {
+  display: flex;
+  gap: var(--space-8);
+  margin-top: auto;
+}
+
+.prAction {
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.prAction:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.prAction:focus-visible,
+.prNotesHead:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.prRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 28px;
+  padding: var(--space-4) var(--space-16) 0 calc(var(--space-12) + var(--space-2));
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.prRowLabel {
+  flex: none;
+}
+
+.prGap {
+  flex: none;
+  width: var(--space-8);
+}
+
+.prRowState {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prRowState[data-tone='attention'] {
+  color: var(--status-attention);
+}
+
+.prNotes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  max-height: 200px;
+  padding-top: var(--space-4);
+}
+
+.prNotesHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 28px;
+  padding: 0 var(--space-16) 0 calc(var(--space-12) + var(--space-2));
+  border: 0;
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.prNotesHead svg {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.prNoteList {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.prNote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-16) var(--space-8) calc(var(--space-12) + var(--space-2));
+}
+
+.prNote .commentHead {
+  gap: var(--space-8);
+  height: 20px;
+}
+
+.prNote .commentIcon {
+  opacity: 1;
+}
+
+.prNoteBody {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* The PR block: hairline above, between the files and the footer (Figma 22B). */
+.prBlock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}

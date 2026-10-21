@@ -323,3 +323,10 @@
 .cancel:disabled {
   opacity: 0.4;
 }
+
+/* 合并到 [GitHub PR #12 | 本地] (PRD F16 v1.63, Figma 22C): the title and the target on one line. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}

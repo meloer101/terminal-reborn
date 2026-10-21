@@ -21,6 +21,8 @@ import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
+import { CreatePrSheet } from '../pull-requests/CreatePrSheet'
+import { startPrAutomation } from '../pull-requests/auto-fix'
 import { ArchiveSheet } from '../archive/ArchiveSheet'
 import { RightPanel } from '../panels/RightPanel'
 import { Overview } from '../overview/Overview'
@@ -70,6 +72,7 @@ export function AppShell() {
   useEffect(() => startSessionMetaBridge(), [])
   useEffect(() => startLimitResumeBridge(), [])
   useEffect(() => startPullRequestBridge(), [])
+  useEffect(() => startPrAutomation(), [])
   useEffect(() => startConflictRadarBridge(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
@@ -123,6 +126,7 @@ export function AppShell() {
       <SettingsDialog />
       {isKey && <NewSessionSheet />}
       <MergeSheet />
+      <CreatePrSheet />
       <ArchiveSheet />
       <MenuHost />
       <SessionDragGhost />

@@ -20,9 +20,13 @@ import { useActiveSession, useWorkspace } from '../../state/workspace'
 import { openMergeSheet, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, itemHeight, placedThreadIds, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { PrButton, PrStatusLine } from './PullRequest'
+import { PrAutomationRow, PrNotes, PrThreadRow } from './PrRows'
+import { setPrNotice, usePrStatus, usePullRequests } from '../../pull-requests/store'
+import type { SessionId } from '@shared/types'
+import type { PrReviewComment } from '@shared/pull-requests'
 import { commentTarget, discardComments, sendComments } from './comments'
 import { toggleFile, type RootGit } from './store'
 import { offsetsOf, useViewport, visibleRange } from './virtual'
@@ -45,10 +49,16 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     () => (draft ? { id: draft.id, group: draft.group, path: draft.path, side: draft.side, endLine: draft.endLine } : null),
     [draft?.id, draft?.group, draft?.path, draft?.side, draft?.endLine] // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const prStatus = usePrStatus(worktree.path)
+  const prLive = prStatus?.pr && (prStatus.pr.state === 'open' || prStatus.pr.state === 'draft') ? prStatus.pr : null
+  const prThreads = prLive?.details?.threads
   const items = useMemo(
-    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, opened, layout) : []),
-    [changes, git.expanded, git.diffs, comments, place, opened, layout]
+    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, opened, layout, prThreads ?? []) : []),
+    [changes, git.expanded, git.diffs, comments, place, opened, layout, prThreads]
   )
+  const placed = useMemo(() => placedThreadIds(items), [items])
+  const unpicked = usePullRequests((s) => s.unpicked)
+  const pickedThreads = (prThreads ?? []).filter((t) => placed.has(t.id) && !unpicked[t.id])
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
   const activeId = useWorkspace((s) => s.activeSessionId)
@@ -62,12 +72,14 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
   if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
 
-  const count = comments?.length ?? 0
-  const picked = comments?.filter(commentPicked).length ?? 0
+  const own = comments?.length ?? 0
+  const count = own + pickedThreads.length
+  const picked = (comments?.filter(commentPicked).length ?? 0) + pickedThreads.length
+  const sessionId = active?.session.id ?? null
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
-    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} />)
+    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} sessionId={sessionId} />)
   }
   return (
     <>
@@ -76,8 +88,14 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
           {rendered}
         </div>
       </div>
-      <ReviewStatus root={root} agent={target?.kind === 'claude' || target?.kind === 'codex' ? target.kind : undefined} />
-      <PrStatusLine worktree={worktree} target={target} />
+      <div className={styles.prBlock}>
+        <ReviewStatus root={root} agent={target?.kind === 'claude' || target?.kind === 'codex' ? target.kind : undefined} prNumber={prLive?.number ?? null} />
+        <PrStatusLine worktree={worktree} target={target} />
+        {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
+        {prLive?.details && (
+          <PrNotes worktreePath={worktree.path} notes={prLive.details.notes} threads={prLive.details.threads.filter((t) => !placed.has(t.id))} sessionId={sessionId} />
+        )}
+      </div>
       <div className={styles.footer}>
         {count > 0 ? (
           <>
@@ -95,15 +113,19 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
               onClick={() => {
                 if (!target) return
                 setSendError(null)
-                sendComments(root, target).catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error)))
+                sendComments(root, target, prLive ? { number: prLive.number, threads: pickedThreads } : null).catch((error: unknown) =>
+                  setSendError(error instanceof Error ? error.message : String(error))
+                )
               }}
             >
               <MessageSquare size={16} strokeWidth={1.75} aria-hidden />
               {sendError ? '没能发送' : `发给 ${target ? agentLabel(target.kind) : 'agent'} · ${picked}`}
             </button>
-            <button type="button" className={styles.ghostButton} onClick={() => void discardComments(root)}>
-              放弃
-            </button>
+            {own > 0 && (
+              <button type="button" className={styles.ghostButton} onClick={() => void discardComments(root)}>
+                放弃
+              </button>
+            )}
           </>
         ) : (
           reviewer && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
@@ -115,6 +137,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
             projectRoot={projectRoot}
             title={(active?.session.worktreeId === worktree.id ? active.session.title : target?.title) ?? ''}
             sessionId={active?.session.id ?? null}
+            agent={target}
           />
         )}
         <button
@@ -124,7 +147,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
           title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
           onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
         >
-          合并到 {changes.base ?? 'main'}…
+          {prLive ? `合并 PR #${prLive.number}…` : `合并到 ${changes.base ?? 'main'}…`}
           <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
         </button>
       </div>
@@ -133,11 +156,31 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
 }
 
 /** The worktree's latest background review (PRD F13): progress with 取消, the result, or why it failed. */
-function ReviewStatus({ root, agent }: { root: string; agent: 'claude' | 'codex' | undefined }) {
+function ReviewStatus({ root, agent, prNumber }: { root: string; agent: 'claude' | 'codex' | undefined; prNumber: number | null }) {
   const status = useBackgroundReview((s) => s.byRoot[root])
   const comments = useReviewComments((s) => s.byRoot[root])
+  const [posting, setPosting] = useState(false)
   useEffect(() => loadSavedReview(root), [root])
   if (!status) return null
+  const findings = (comments ?? []).filter((c) => c.origin === 'review' && commentPicked(c))
+  // 发到 PR (PRD F16 v1.63): the ticked findings as one COMMENT review on the PR, as the user (main asks first).
+  const post = async (): Promise<void> => {
+    const state = useWorkspace.getState()
+    const record = state.worktrees.find((w) => w.path === root)
+    const projectRoot = state.projects.find((p) => p.id === record?.projectId)?.rootPath
+    if (!projectRoot || findings.length === 0) return
+    setPosting(true)
+    const list: PrReviewComment[] = findings.map((c) => ({
+      path: c.path,
+      side: c.side,
+      line: c.line,
+      endLine: c.endLine,
+      body: `${c.severity ? `${c.severity} · ` : ''}${c.text}`
+    }))
+    const result = await window.tr.pr.postReview({ root: projectRoot, worktree: root, reviewer: status.agent === 'claude' ? 'Claude' : 'Codex', comments: list })
+    setPosting(false)
+    setPrNotice(root, { tone: result.ok || result.reason === 'declined' ? 'muted' : 'error', text: result.message })
+  }
   const line = reviewLine(status, severityCounts((comments ?? []).filter((c) => c.origin === 'review')), agent)
   return (
     <p className={styles.reviewStatus} data-tone={line.tone} role="status" data-testid="review-status">
@@ -151,6 +194,17 @@ function ReviewStatus({ root, agent }: { root: string; agent: 'claude' | 'codex'
           取消
         </button>
       )}
+      {status.phase === 'done' && prNumber !== null && findings.length > 0 && (
+        <button
+          type="button"
+          className={styles.noteAction}
+          disabled={posting}
+          title={`把勾选的 ${findings.length} 条发成 PR #${prNumber} 上的一次评论审阅（以你的 GitHub 账号，不批准也不要求修改）`}
+          onClick={() => void post()}
+        >
+          {posting ? '正在发到 PR…' : '发到 PR'}
+        </button>
+      )}
     </p>
   )
 }
@@ -162,10 +216,11 @@ function itemKey(item: ChangeItem, index: number): string {
   if (item.kind === 'editor') return 'editor'
   if (item.kind === 'split') return `split:${item.key}:${index}`
   if (item.kind === 'comment') return `comment:${item.comment.id}`
+  if (item.kind === 'thread') return `thread:${item.thread.id}`
   return `${item.kind}:${item.key}:${index}`
 }
 
-function Item({ root, git, item, top, draft }: { root: string; git: RootGit; item: ChangeItem; top: number; draft: CommentDraft | null }) {
+function Item({ root, git, item, top, draft, sessionId }: { root: string; git: RootGit; item: ChangeItem; top: number; draft: CommentDraft | null; sessionId: SessionId | null }) {
   const style = { top }
   switch (item.kind) {
     case 'group':
@@ -238,6 +293,8 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
       return <CommentRow root={root} comment={item.comment} top={top} folded={item.folded} split={item.split === true} />
     case 'editor':
       return <CommentEditor top={top} split={item.split === true} />
+    case 'thread':
+      return <PrThreadRow worktreePath={root} thread={item.thread} changed={item.changed} top={top} split={item.split === true} sessionId={sessionId} />
     case 'note':
       return (
         <p className={styles.diffNote} style={style} data-owner={item.key}>

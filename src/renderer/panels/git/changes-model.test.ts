@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, rowAnchor, splitAnchors, splitRows } from './changes-model'
+import type { PrThread } from '@shared/pull-requests'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, placedThreadIds, rowAnchor, splitAnchors, splitRows } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -201,5 +202,32 @@ describe('splitRows (F5 并排)', () => {
     expect(items[at]).toMatchObject({ kind: 'comment', split: true })
     expect(items[at - 1]).toMatchObject({ kind: 'split', row: { kind: 'pair', new: { new: 28 } } })
     expect(itemHeight(items[at - 1]!)).toBe(ITEM_HEIGHT.split)
+  })
+})
+
+describe('PR threads in the list (PRD F16 v1.63, Figma 22B)', () => {
+  const rows = [
+    { kind: 'hunk' as const, old: null, new: null, text: '@@ -1,3 +1,3 @@' },
+    { kind: 'context' as const, old: 1, new: 1, text: 'a' },
+    { kind: 'del' as const, old: 2, new: null, text: 'b' },
+    { kind: 'add' as const, old: null, new: 2, text: 'B' }
+  ]
+  const data = changes({ committed: [file('a.ts')], uncommitted: [file('a.ts')] })
+  const key = changeKey('committed', 'a.ts')
+  const open = new Set([key])
+  const diffs = { [key]: { kind: 'ready' as const, rows, binary: false, truncated: 0 } }
+  const thread = (id: string, patch: Partial<PrThread> = {}): PrThread => ({ id, path: 'a.ts', line: 2, startLine: null, side: 'new', outdated: false, comments: [], ...patch })
+
+  it('puts a thread under its line in 已提交, counts it on the file, and leaves the rest for the PR line', () => {
+    const threads = [thread('T1'), thread('T2', { side: 'old' }), thread('T3', { line: 9 }), thread('T4', { outdated: true }), thread('T5', { path: 'b.ts' })]
+    const items = changeItems(data, open, diffs, [], null, {}, 'unified', threads)
+    const order = items.filter((i) => i.kind === 'diff' || i.kind === 'thread').map((i) => (i.kind === 'thread' ? i.thread.id : `${i.row.kind}${i.row.new ?? i.row.old ?? ''}`))
+    expect(order).toEqual(['hunk', 'context1', 'del2', 'T2', 'add2', 'T1'])
+    expect([...placedThreadIds(items)].sort()).toEqual(['T1', 'T2'])
+    const fileItem = items.find((i) => i.kind === 'file' && i.group === 'committed')
+    expect(fileItem).toMatchObject({ comments: 2 })
+    // a.ts also has uncommitted edits: the thread may be about code that changed since.
+    expect(items.find((i) => i.kind === 'thread')).toMatchObject({ changed: true })
+    expect(itemHeight(items.find((i) => i.kind === 'thread')!)).toBe(ITEM_HEIGHT.thread)
   })
 })

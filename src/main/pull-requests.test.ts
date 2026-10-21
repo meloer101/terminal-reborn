@@ -66,7 +66,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { cancelMerge, checkWorktree, ciFailure, createPullRequest, detectGh, mergePullRequest, postReview, resolveThreads, statusesFor, unwatch, watchTargets } =
+const { cancelMerge, checkWorktree, ciFailure, createPullRequest, detectGh, mergePullRequest, postReview, prDraft, resolveThreads, statusesFor, unwatch, watchTargets } =
   await import('./pull-requests')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -468,6 +468,46 @@ describe('回到 GitHub (PRD F16 v1.63)', () => {
     const fallback = inputs().at(-1)
     expect(fallback?.variables.threads).toEqual([])
     expect(String(fallback?.variables.body)).toContain('`b.txt:1-2`')
+    unwatch(w)
+  })
+})
+
+describe('创建 PR 面板 (PRD F16 v1.63)', () => {
+  it('starts from the commit subjects, or the repository PR template when there is one', async () => {
+    const { root, wt } = setup()
+    expect(await prDraft({ root, worktree: wt })).toEqual({ ok: true, branch: 'feat', base: 'main', remote: 'origin', pushed: false, body: '- Make nav sticky\n- Test nav', fromTemplate: false })
+    mkdirSync(join(wt, '.github'))
+    writeFileSync(join(wt, '.github', 'PULL_REQUEST_TEMPLATE.md'), '## 改了什么\n\n## 怎么测\n')
+    git(wt, 'add', '.')
+    git(wt, 'commit', '-q', '-m', 'template')
+    expect(await prDraft({ root, worktree: wt })).toMatchObject({ ok: true, body: '## 改了什么\n\n## 怎么测\n', fromTemplate: true })
+    expect(await prDraft({ root, worktree: root })).toEqual({ ok: false, message: '这是基线分支本身，没有可以提 PR 的改动' })
+    expect(await prDraft({ root: join(base, 'nope'), worktree: wt })).toEqual({ ok: false, message: '请求无效' })
+  })
+
+  it('creates with the sheet body and draft flag, without asking again before the first push', async () => {
+    const { root, wt, bare } = setup()
+    writeFileSync(join(ghDir, 'after-create.json'), prJson({ statusCheckRollup: [] }))
+    const result = await createPullRequest({ root, worktree: wt, title: '导航', body: '正文\n\n<!-- wavi -->\n检查\n<!-- /wavi -->', draft: true, pushApproved: true })
+    expect(result).toMatchObject({ ok: true, number: 7 })
+    expect(confirmAnswer).not.toHaveBeenCalled()
+    expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
+    const create = ghCalls('pr create')[0]!
+    expect(create).toContain('--draft')
+    expect(create.join('\n')).toContain('--body=正文\n\n<!-- wavi -->')
+  })
+})
+
+describe('status · local head and Wavi waiting (PRD F16 v1.63)', () => {
+  it('says whether the PR is the local branch, and which merge Wavi waits to do', async () => {
+    const { root, wt, head, w } = pushedWithPr({ requiredState: 'IN_PROGRESS' })
+    expect((await checkWorktree(wt))?.local).toEqual({ head, remoteAhead: false })
+    await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'when-ready', deleteRemoteBranch: false })
+    expect(w.sent.at(-1)).toMatchObject({ worktree: wt, waiting: 'squash' })
+    await cancelMerge({ root, worktree: wt })
+    expect((w.sent.at(-1) as { waiting?: string }).waiting).toBeUndefined()
+    writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: 'f'.repeat(40) }))
+    expect((await checkWorktree(wt))?.local).toEqual({ head, remoteAhead: true })
     unwatch(w)
   })
 })

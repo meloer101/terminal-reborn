@@ -34,7 +34,7 @@
 - [ ] 在中文开发者社区（V2EX、即刻、Linux.do 等）找同时跑多个 agent 的人，目标 10 个
 - [ ] 5 次观察式试用（PRD §1.5），每次的卡点记进下面的“外部需求”
 - [x] 竞品 issue 调研（2026-10-20）：三家共约 1.5 万个 issue（Orca 8,490、cmux 4,980、Superset 1,514）。结论：中文开发者有真实需求，但 Orca 已经在做（中文 README、微信群、中文界面），输入法正确只是入场条件；能拉开差距的是原生中文文案、多账号 / 第三方端点、多会话下的渲染稳定性。结果排进下面的“外部需求”
-- [ ] 作者自己的三种来源（PRD §1.5）：离开日志、并行数翻倍跑一周、拿 Orca 当主力用 3 天再切回来
+- [ ] 作者自己的三种来源（PRD §1.5）：离开日志、并行数翻倍跑一周、拿 Orca 和 T3 Code 各当主力用 3 天再切回来
 
 这期间修好的（2026-10-20，都来自竞品 issue 或自动化检查）：
 - [x] 中文输入和链接：网址和文件路径碰到中文、全角标点就截断（o#30213）；全角标点被打成半角（o#6147）；双空格自动句号；输入法组合中按 Enter / Esc 误触发终端查找、设置里的字体搜索、新建会话面板等（o#17820 一类）。e2e `cjk-input.spec.ts`，单元测试 `links` / `file-links` / `ime` / `keymap`。取舍：路径里直接带中文的网址（如 `/wiki/中文`）会在 `/wiki/` 处截断
@@ -80,12 +80,12 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Figma：创建 PR 面板、变更视图的 PR 评论、合并面板的“合并到 GitHub PR”、PR 那一行的两个自动化开关（2026-10-21，Section 22 `364:13861`，待作者确认）：22A 创建 PR、22B / 22B2 变更视图（GitHub thread 落在 diff 行上、审阅行“发到 PR”、自动修复 / 通过后合并开关、PR 评论）、22C 合并到 GitHub PR、22D 检查还在跑、22E 自动化状态；新组件 PrThread、PrNote
 - [x] F13 审阅结果按 worktree 存盘（每个留最近 10 次），复审不再报已忽略的发现（2026-10-21）：主进程 `review-results.json`（`ReviewResultsFile`），重启后同一份 diff 直接给存下的结果（`cached`），变更视图和合并面板打开时读回；删掉或取消勾选一条审阅评论算忽略（再勾上恢复），复审按“文件 + 标题”滤掉并写“另有 N 条你之前忽略过”。测试：`src/main/background-review.test.ts`（重启后不重审、忽略的不再落、再勾上回来）、`src/shared/background-review.test.ts`、`src/renderer/review/background.test.ts`
 - [x] F13 另一家来审（Claude 写的由 Codex 审，反之亦然），设置 · 自动化 · 代码审阅（2026-10-21）：「谁来审」分段、Claude / Codex 两个审阅模型（旧的单个模型名是 OpenAI 的就挪到 Codex）；另一家没装时改用会话自己的并写明；状态行写“Codex 审阅找到 N 条”。测试：`background-review.test.ts`（假 codex 审 Claude 会话、`pickReviewer`）、`settings.test.ts`，e2e `settings.spec.ts`
-- [ ] L2 创建 PR 面板：标题、正文（PR 模板 / 提交说明）+ 证据块、草稿；“推送前审阅”打开时创建 PR 也先审
-- [ ] L2 PR 评论回到 Wavi：一次 `gh api graphql` 取 checks、审批、合并状态和没解决的 thread；行内落成 F5 评论、PR 级评论列在 PR 行下；勾选“发给 agent”（不按回车）。主进程已接上（2026-10-21）：打开 / 草稿 PR 每次查询多一次 GraphQL（`PR_DETAILS_QUERY`），结果在 `PullRequestInfo.details`（thread、PR 评论和 review 正文、审批、`mergeStateStatus`、必需检查、仓库允许的合并方式、gh 用户），失败时沿用上次的；界面待做
-- [ ] L2 回到 GitHub：标记已解决（可附回复）、把 Wavi 审阅发到 PR（只发 COMMENT）。主进程已接上（2026-10-21）：`pr.resolveThreads`（只认 PR 上还没解决的 id，多条先确认）、`pr.postReview`（确认写明 @账号；行不在 PR 的改动里时改成一条总评论），GraphQL 变量走 stdin；界面待做
-- [ ] L2 合并 GitHub PR：合并面板“合并到”分段，预检（必需检查、本地和 PR 是否同一份、`--match-head-commit`）、仓库允许的方式、删除远程分支、检查通过后合并（GitHub auto-merge / Wavi 等待 / 合并队列）、合并后拉基线和归档。主进程已接上（2026-10-21）：`pr.merge` / `pr.cancelMerge`，本地有没推送的提交时先推送再等检查；合并后删远程分支（不碰本地）、拉取基线并在干净时快进。测试：`src/main/pull-requests.test.ts`（假 gh 认 `api graphql` 和 `pr merge`，真推送到本地 bare 仓库）、`src/shared/pull-requests.test.ts`。合并队列只按 gh 帮助实现，没在真实仓库上试过；界面（合并面板的“合并到”分段）待做
-- [ ] L3 自动修复：按 PR 打开，必需检查失败或允许名单里的新评论 → agent 空闲时发出；每个 PR 最多 3 次、同一失败只发一次、agent 没推送就停，停下时提醒
-- [ ] L3 通过后合并：检查通过、没有没解决的允许名单评论、审阅没有 P0 / P1、不是草稿 → 合并
+- [x] L2 创建 PR 面板：标题、正文（PR 模板 / 提交说明）+ 证据块、草稿；“推送前审阅”打开时创建 PR 也先审。界面已接上（2026-10-21）：`src/renderer/pull-requests/CreatePrSheet.tsx`，正文用 PR 模板（`.github/pull_request_template.md` 等，不分大小写）或提交说明，证据块由 `evidenceBlock` / `withEvidence` 生成，从正文里删掉就不再加；面板说过会推送，第一次推送不再弹原生确认。e2e `pull-requests.spec.ts`（截图 `create-pr-sheet`）
+- [x] L2 PR 评论回到 Wavi：一次 `gh api graphql` 取 checks、审批、合并状态和没解决的 thread；行内落成 F5 评论、PR 级评论列在 PR 行下；勾选“发给 agent”（不按回车）。主进程已接上（2026-10-21）：打开 / 草稿 PR 每次查询多一次 GraphQL（`PR_DETAILS_QUERY`），结果在 `PullRequestInfo.details`（thread、PR 评论和 review 正文、审批、`mergeStateStatus`、必需检查、仓库允许的合并方式、gh 用户），失败时沿用上次的；界面待做。界面已接上（2026-10-21）：thread 是变更列表里的一种定高行（`changes-model.ts` 的 `thread`），只放在“已提交”组、GitHub 还能定位的行上，默认勾选；其余和 PR 级评论在“PR 评论 · N”；文件有没提交的改动时标“可能已改”。“发给 … · N”一起发，发过的 thread 取消勾选。e2e 截图 `changes-pr`
+- [x] L2 回到 GitHub：标记已解决（可附回复）、把 Wavi 审阅发到 PR（只发 COMMENT）。主进程已接上（2026-10-21）：`pr.resolveThreads`（只认 PR 上还没解决的 id，多条先确认）、`pr.postReview`（确认写明 @账号；行不在 PR 的改动里时改成一条总评论），GraphQL 变量走 stdin；界面待做。界面已接上（2026-10-21）：thread 行上“标记已解决”、审阅行上“发到 PR”（只发勾选的发现）
+- [x] L2 合并 GitHub PR：合并面板“合并到”分段，预检（必需检查、本地和 PR 是否同一份、`--match-head-commit`）、仓库允许的方式、删除远程分支、检查通过后合并（GitHub auto-merge / Wavi 等待 / 合并队列）、合并后拉基线和归档。主进程已接上（2026-10-21）：`pr.merge` / `pr.cancelMerge`，本地有没推送的提交时先推送再等检查；合并后删远程分支（不碰本地）、拉取基线并在干净时快进。测试：`src/main/pull-requests.test.ts`（假 gh 认 `api graphql` 和 `pr merge`，真推送到本地 bare 仓库）、`src/shared/pull-requests.test.ts`。合并队列只按 gh 帮助实现，没在真实仓库上试过；界面（合并面板的“合并到”分段）待做。界面已接上（2026-10-21）：有打开的 PR 时合并面板默认“GitHub PR #N”，可切回“本地”（`PrMergeSheet.tsx`、`pr-model.ts`）；本地有没推送的提交或检查还在跑时按钮是“检查通过后合并”；合并后可归档。e2e 截图 `merge-pr`
+- [x] L3 自动修复：按 PR 打开，必需检查失败或允许名单里的新评论 → agent 空闲时发出；每个 PR 最多 3 次、同一失败只发一次、agent 没推送就停，停下时提醒（2026-10-21）：`src/renderer/pull-requests/auto-fix.ts` + `auto-fix-model.ts`；发出的消息以“（Wavi 自动修复 第 N 次）”开头，用户自己发消息就清零；开关只存在窗口里，重启后按 设置 · 自动化 · PR 的默认值
+- [x] L3 通过后合并：检查通过、没有没解决的允许名单评论、审阅没有 P0 / P1、不是草稿 → 合并（2026-10-21）：开关 = GitHub auto-merge（仓库没开时 Wavi 等），检查失败时也可以打开（等修好）；出现允许名单里的评论或审阅有 P0 / P1 时自动关掉。设置 · 自动化 · PR：证据块开关、两个开关对新 PR 的默认值、次数上限 1–5、机器人允许名单
 - [ ] 真实 GitHub 仓库上走一遍：创建 → 机器人评论 → 发给 agent → 修复推送 → 标记已解决 → auto-merge / 合并队列（同时补 M5 里“还没在真实仓库上走一遍”）
 
 第三批（先实测或先访谈）：

@@ -99,3 +99,16 @@ describe('alert settings (F11 · 额度提醒)', () => {
     expect(sanitizeSettings({}).alerts).toEqual({ usage: true })
   })
 })
+
+describe('设置 · 自动化 · PR (PRD F16 v1.63)', () => {
+  it('starts with the evidence block on and both automations off', () => {
+    expect(DEFAULT_SETTINGS.pr).toEqual({ evidence: true, autoFix: false, mergeWhenGreen: false, maxAutoFixes: 3, bots: [] })
+  })
+
+  it('keeps the cap within 1–5 and only valid bot logins', () => {
+    const pr = applySettingsPatch(DEFAULT_SETTINGS, { pr: { maxAutoFixes: 9, bots: ['coderabbitai[bot]', 'coderabbitai[bot]', 'not a login', 'copilot'] } }).pr
+    expect(pr.maxAutoFixes).toBe(5)
+    expect(pr.bots).toEqual(['coderabbitai[bot]', 'copilot'])
+    expect(sanitizeSettings({ pr: { autoFix: true } }).pr).toMatchObject({ autoFix: true, evidence: true })
+  })
+})

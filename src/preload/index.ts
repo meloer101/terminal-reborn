@@ -195,6 +195,7 @@ const api: TrApi = {
     statuses: () => ipcRenderer.invoke(PR_IPC.statuses),
     onStatus: (listener) => listen(PR_IPC.status, listener),
     create: (request) => ipcRenderer.invoke(PR_IPC.create, request),
+    draft: (target) => ipcRenderer.invoke(PR_IPC.draft, target),
     failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree),
     merge: (request) => ipcRenderer.invoke(PR_IPC.merge, request),
     cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target),

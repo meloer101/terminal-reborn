@@ -2,6 +2,7 @@
 // (group headers, files, diff lines, notes, review comments and the comment editor) the view renders through a window.
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
+import type { PrThread } from '@shared/pull-requests'
 import { reviewCommentFolded, type CommentSide, type ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
 
@@ -13,9 +14,10 @@ export const MAX_DIFF_LINES = 20_000
 /**
  * Figma 13B2 heights: group header 12 + 16 + 4, file row 8 + 16 + 8, DiffLine 20, a note line 4 + 16 + 8. Figma 03:
  * a saved comment 8 + 16 (location) + 2 × 18 (text, clamped) + 8; the editor 8 + 72 (text) + 8 + 28 (buttons) + 8.
- * A folded review comment (P2 / P3, PRD F13) is its head line only: 8 + 16 + 8.
+ * A folded review comment (P2 / P3, PRD F13) is its head line only: 8 + 16 + 8. A PR thread (Figma 22B PrThread
+ * 366:14568, PRD F16 v1.63): 12 + 20 (head) + 8 + 2 × 20 (body, clamped) + 8 + 24 (actions) + 12.
  */
-export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, split: 20, note: 28, comment: 68, commentFolded: 32, editor: 124 } as const
+export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, split: 20, note: 28, comment: 68, commentFolded: 32, editor: 124, thread: 124 } as const
 
 export const changeKey = (group: ChangeGroup, path: string): string => `${group}:${path}`
 
@@ -101,6 +103,8 @@ export type ChangeItem =
   /** `split`: drawn on the new (right) half of a 并排 diff. */
   | { kind: 'comment'; key: string; comment: ReviewComment; folded: boolean; split?: true }
   | { kind: 'editor'; key: string; split?: true }
+  /** An unresolved GitHub review thread on this line of the 已提交 diff. `changed`: the file has uncommitted edits since. */
+  | { kind: 'thread'; key: string; thread: PrThread; changed: boolean; split?: true }
   /** `open`: offer to open the file in the default editor. */
   | { kind: 'note'; key: string; text: string; open?: string }
 
@@ -134,8 +138,10 @@ export function changeItems(
   comments: readonly ReviewComment[] = [],
   draft: DraftPlace | null = null,
   opened: Readonly<Record<string, true>> = {},
-  layout: DiffLayout = 'unified'
+  layout: DiffLayout = 'unified',
+  threads: readonly PrThread[] = []
 ): ChangeItem[] {
+  const dirty = new Set(changes.uncommitted.map((c) => c.path))
   const split = layout === 'split' ? ({ split: true } as const) : {}
   const items: ChangeItem[] = []
   const files = (group: ChangeGroup, list: GitFileChange[]) => {
@@ -143,8 +149,11 @@ export function changeItems(
       const key = changeKey(group, change.path)
       const open = expanded.has(key)
       const own = comments.filter((c) => c.group === group && c.path === change.path)
+      // PR threads sit on the PR's diff: the 已提交 group, on the line GitHub still places them.
+      const prHere = group === 'committed' ? threads.filter((t) => t.path === change.path && t.line !== null && !t.outdated) : []
       const draftHere = draft && draft.group === group && draft.path === change.path ? draft : null
-      items.push({ kind: 'file', group, change, key, open, comments: own.length })
+      const fileItem: Extract<ChangeItem, { kind: 'file' }> = { kind: 'file', group, change, key, open, comments: own.length + prHere.length }
+      items.push(fileItem)
       if (!open) continue
       const reason = noDiffReason(change)
       if (reason) {
@@ -159,6 +168,7 @@ export function changeItems(
       else {
         const placed = new Set<string>()
         let draftPlaced = false
+        let placedHere = 0
         const commentItem = (comment: ReviewComment) => {
           placed.add(comment.id)
           if (draftHere?.id === comment.id) {
@@ -167,6 +177,11 @@ export function changeItems(
           } else items.push({ kind: 'comment', key, comment, folded: reviewCommentFolded(comment, opened), ...split })
         }
         const commentsAt = (anchor: { side: CommentSide; line: number }) => {
+          for (const thread of prHere) {
+            if (thread.side !== anchor.side || thread.line !== anchor.line) continue
+            items.push({ kind: 'thread', key, thread, changed: dirty.has(change.path), ...split })
+            placedHere++
+          }
           for (const comment of own) if (comment.side === anchor.side && comment.endLine === anchor.line) commentItem(comment)
           if (draftHere && draftHere.id === null && draftHere.side === anchor.side && draftHere.endLine === anchor.line) {
             draftPlaced = true
@@ -185,6 +200,8 @@ export function changeItems(
             if (anchor) commentsAt(anchor)
           }
         }
+        // Threads GitHub places on lines this diff does not show are listed under the PR line, not counted here.
+        fileItem.comments = own.length + placedHere
         // Comments whose line is no longer in the diff (the file changed since) still count; they go last.
         for (const comment of own) if (!placed.has(comment.id)) commentItem(comment)
         if (draftHere && !draftPlaced) items.push({ kind: 'editor', key, ...split })
@@ -209,3 +226,8 @@ export function changeItems(
 
 export const itemHeight = (item: ChangeItem): number =>
   item.kind === 'comment' && item.folded ? ITEM_HEIGHT.commentFolded : ITEM_HEIGHT[item.kind]
+
+/** PR threads the list placed on a diff line; the rest are listed under the PR line (PRD F16 v1.63). */
+export function placedThreadIds(items: readonly ChangeItem[]): Set<string> {
+  return new Set(items.flatMap((item) => (item.kind === 'thread' ? [item.thread.id] : [])))
+}

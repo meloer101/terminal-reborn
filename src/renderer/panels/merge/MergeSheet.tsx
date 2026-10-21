@@ -2,8 +2,8 @@
 // work, an upstream the base has not pulled), then the method (Squash · Merge · Rebase) and two options (remove the
 // worktree, push to origin). With conflicts the only way forward is the worktree's agent: the instructions go into its
 // input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { ArrowRight, Check, CircleAlert, CircleX, GitBranch } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import { archiveTargetFor, archiveWorktree } from '../../archive/actions'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
@@ -15,9 +15,10 @@ import { useReviewComments } from '../../state/review-comments'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../../ui/Segmented'
-import { StatusGlyph } from '../../ui/StatusGlyph'
-import { CheckMark, useTurnCheckView } from '../../turn-checks/TurnChecksTag'
-import { runNote, type TurnCheckView } from '@shared/turn-checks'
+import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
+import { Checkbox, Line, TestResult, TurnChecks } from './parts'
+import { PrMergeSheet } from './PrMergeSheet'
+import { usePrStatus } from '../../pull-requests/store'
 import { removeFailureText, removeWorktreeWithSessions } from '../worktree/actions'
 import { AfterMerge } from '../../attempts/AfterMerge'
 import { attemptForWorktrees } from '../../attempts/actions'
@@ -35,7 +36,6 @@ import {
   resultLines,
   testBlocksMerge,
   testLine,
-  turnChecksLine,
   type CheckLine,
   type MergeTestState
 } from './model'
@@ -49,7 +49,30 @@ const MAX_LISTED_CONFLICTS = 8
 export function MergeSheet() {
   const target = useMergeSheet((s) => s.target)
   const generation = useMergeSheet((s) => s.generation)
-  return target ? <Sheet key={generation} target={target} /> : null
+  return target ? <Target key={generation} target={target} /> : null
+}
+
+/**
+ * A branch with an open PR merges on GitHub by default (PRD F16 v1.63, Figma 22C); 本地 is the local merge as before.
+ * Without a PR (or without gh) the sheet is the local one, with no switch.
+ */
+function Target({ target }: { target: MergeTarget }) {
+  const status = usePrStatus(target.worktreePath)
+  const pr = status?.pr
+  const live = pr && (pr.state === 'open' || pr.state === 'draft') && pr.details ? pr : null
+  const [to, setTo] = useState<'pr' | 'local'>(live ? 'pr' : 'local')
+  const choice = live ? (
+    <Segmented
+      label="合并到"
+      value={to}
+      options={[
+        { value: 'pr', label: `GitHub PR #${live.number}` },
+        { value: 'local', label: '本地' }
+      ]}
+      onChange={setTo}
+    />
+  ) : null
+  return to === 'pr' && live && status ? <PrMergeSheet target={target} status={status} targetSwitch={choice} /> : <Sheet target={target} targetSwitch={choice} />
 }
 
 type Phase =
@@ -59,7 +82,7 @@ type Phase =
   | { kind: 'merging'; check: MergePrecheck }
   | { kind: 'done'; check: MergePrecheck; lines: CheckLine[] }
 
-function Sheet({ target }: { target: MergeTarget }) {
+function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: ReactNode }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
   const [method, setMethod] = useState<MergeMethod>('squash')
   const [removeAfter, setRemoveAfter] = useState(true)
@@ -304,9 +327,18 @@ function Sheet({ target }: { target: MergeTarget }) {
         data-testid="merge-sheet"
       >
         <header className={styles.context}>
-          <h2 id={titleId} className={styles.title}>
-            合并到 {shown?.base || '…'}
-          </h2>
+          {targetSwitch ? (
+            <div className={styles.titleRow}>
+              <h2 id={titleId} className={styles.title}>
+                合并到
+              </h2>
+              {targetSwitch}
+            </div>
+          ) : (
+            <h2 id={titleId} className={styles.title}>
+              合并到 {shown?.base || '…'}
+            </h2>
+          )}
           {shown?.branch && (
             <p className={styles.branches}>
               <GitBranch {...ICON} />
@@ -436,104 +468,6 @@ function Sheet({ target }: { target: MergeTarget }) {
           )}
         </footer>
       </div>
-    </div>
-  )
-}
-
-function Line({ line }: { line: CheckLine }) {
-  const icon =
-    line.tone === 'ok' ? (
-      <Check {...ICON} />
-    ) : line.tone === 'warn' ? (
-      <CircleAlert {...ICON} />
-    ) : line.tone === 'working' ? (
-      <StatusGlyph status="running" />
-    ) : (
-      <CircleX {...ICON} />
-    )
-  return (
-    <p className={styles.line} data-tone={line.tone}>
-      <span className={styles.lineIcon} aria-hidden={line.tone === 'working'}>
-        {icon}
-      </span>
-      <span className={styles.lineText}>{line.text}</span>
-      {line.meta && <span className={styles.lineMeta}>{line.meta}</span>}
-    </p>
-  )
-}
-
-/** Most runs a turn has are listed; the rest are counted. */
-const MAX_LISTED_RUNS = 6
-
-/** The agent's own checks this turn: the line, then each command with its mark (the failing ones first). */
-function TurnChecks({ view, kind }: { view: TurnCheckView; kind: Parameters<typeof turnChecksLine>[1] }) {
-  const order = { fail: 0, unknown: 1, pass: 2 } as const
-  const runs = [...view.runs].sort((a, b) => order[a.outcome] - order[b.outcome] || a.at - b.at)
-  return (
-    <>
-      <Line line={turnChecksLine(view, kind)} />
-      {runs.length > 0 && (
-        <ul className={styles.runs} aria-label="跑过的检查" data-testid="merge-turn-checks">
-          {runs.slice(0, MAX_LISTED_RUNS).map((run) => {
-            const note = runNote(run)
-            return (
-              <li key={`${run.kind} ${run.command}`} className={styles.run}>
-                <CheckMark outcome={run.outcome} />
-                <span className={styles.runCommand}>{run.command}</span>
-                {note && <span className={styles.runNote}>{note}</span>}
-              </li>
-            )
-          })}
-          {runs.length > MAX_LISTED_RUNS && <li className={styles.conflictMore}>还有 {runs.length - MAX_LISTED_RUNS} 条</li>}
-        </ul>
-      )}
-    </>
-  )
-}
-
-function TestResult({ line, onRerun }: { line: ReturnType<typeof testLine>; onRerun(): void }) {
-  return (
-    <>
-      <Line line={line} />
-      {line.output && <pre className={styles.output}>{line.output}</pre>}
-      {line.rerun && (
-        <button type="button" className={styles.rerun} onClick={onRerun}>
-          重新运行
-        </button>
-      )}
-    </>
-  )
-}
-
-function Checkbox({
-  checked,
-  disabled,
-  onChange,
-  label,
-  note
-}: {
-  checked: boolean
-  disabled: boolean
-  onChange: (checked: boolean) => void
-  label: string
-  note: string | null
-}) {
-  return (
-    <div className={styles.checkboxRow}>
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={checked}
-        disabled={disabled}
-        className={styles.checkbox}
-        onClick={() => onChange(!checked)}
-      >
-        <span className={styles.box} aria-hidden>
-          {checked && <Check size={12} strokeWidth={2.5} />}
-        </span>
-        {label}
-      </button>
-      {note && <p className={styles.note}>{note}</p>}
     </div>
   )
 }

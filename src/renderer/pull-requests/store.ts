@@ -2,6 +2,7 @@
 // gh is usable. gh runs in main; this only mirrors it. Nothing shows while gh is missing or signed out.
 import { create } from 'zustand'
 import type { GhState, PrStatus, PrTarget, PullRequestInfo } from '@shared/pull-requests'
+import type { PrAutomation } from './auto-fix-model'
 import type { Project, Session, Worktree } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 
@@ -12,9 +13,15 @@ interface PrStore {
   busy: Record<string, 'creating' | 'fixing'>
   /** The last 创建 PR / 让 agent 修复 outcome to show under Git · 变更 (UI copy), per worktree path. */
   notice: Record<string, { tone: 'error' | 'muted'; text: string }>
+  /** 自动修复 per worktree path (PRD F16 v1.63 · L3). */
+  automation: Record<string, PrAutomation>
+  /** PR threads unticked in Git · 变更 (ticked is the default), by thread id. */
+  unpicked: Record<string, true>
+  /** PR 评论 · N collapsed, per worktree path. */
+  notesClosed: Record<string, true>
 }
 
-export const usePullRequests = create<PrStore>()(() => ({ gh: 'checking', byWorktree: {}, busy: {}, notice: {} }))
+export const usePullRequests = create<PrStore>()(() => ({ gh: 'checking', byWorktree: {}, busy: {}, notice: {}, automation: {}, unpicked: {}, notesClosed: {} }))
 
 export function acceptPrStatus(status: PrStatus): void {
   usePullRequests.setState((s) => ({ byWorktree: { ...s.byWorktree, [status.worktree]: status } }))
@@ -84,5 +91,37 @@ export function setPrNotice(worktree: string, notice: PrStore['notice'][string] 
     if (notice) next[worktree] = notice
     else delete next[worktree]
     return { notice: next }
+  })
+}
+
+/** The worktree's whole status (PR, local head, waiting) while gh is ready. */
+export function usePrStatus(worktreePath: string | null | undefined): PrStatus | null {
+  return usePullRequests((s) => (s.gh === 'ready' && worktreePath ? (s.byWorktree[worktreePath] ?? null) : null))
+}
+
+export function setAutomation(worktree: string, next: PrAutomation | null): void {
+  usePullRequests.setState((s) => {
+    const automation = { ...s.automation }
+    if (next) automation[worktree] = next
+    else delete automation[worktree]
+    return { automation }
+  })
+}
+
+export function setThreadPicked(id: string, picked: boolean): void {
+  usePullRequests.setState((s) => {
+    const unpicked = { ...s.unpicked }
+    if (picked) delete unpicked[id]
+    else unpicked[id] = true
+    return { unpicked }
+  })
+}
+
+export function toggleNotes(worktree: string): void {
+  usePullRequests.setState((s) => {
+    const notesClosed = { ...s.notesClosed }
+    if (notesClosed[worktree]) delete notesClosed[worktree]
+    else notesClosed[worktree] = true
+    return { notesClosed }
   })
 }

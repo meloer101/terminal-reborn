@@ -63,6 +63,23 @@ export interface AlertSettings {
   usage: boolean
 }
 
+/**
+ * 设置 · 自动化 · PR (PRD F16 v1.63). The two switches here are what a new PR starts with; each PR has its own in
+ * Git · 变更. Both start off: they spend the user's quota and act on GitHub as the user.
+ */
+export interface PrSettings {
+  /** 创建 PR 面板 ends the body with this turn's checks and Wavi's review. On by default; the user can delete it there. */
+  evidence: boolean
+  /** New PRs start with 自动修复 on. */
+  autoFix: boolean
+  /** New PRs start with 通过后合并 on. */
+  mergeWhenGreen: boolean
+  /** 自动修复 sends at most this many times per PR (1–5). */
+  maxAutoFixes: number
+  /** Bot logins whose review comments 自动修复 may send (besides the user's own). None by default. */
+  bots: string[]
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
@@ -70,6 +87,7 @@ export interface AppSettings {
   review: ReviewSettings
   archive: ArchiveSettings
   alerts: AlertSettings
+  pr: PrSettings
 }
 
 export interface SettingsPatch {
@@ -78,6 +96,7 @@ export interface SettingsPatch {
   review?: Partial<ReviewSettings>
   archive?: Partial<ArchiveSettings>
   alerts?: Partial<AlertSettings>
+  pr?: Partial<PrSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -108,7 +127,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     codexModel: ''
   },
   archive: { afterMerge: false },
-  alerts: { usage: true }
+  alerts: { usage: true },
+  pr: { evidence: true, autoFix: false, mergeWhenGreen: false, maxAutoFixes: 3, bots: [] }
 }
 
 const MAX_REVIEW_RULES = 8000
@@ -188,7 +208,23 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     ports: ports(v.ports),
     review: review(v.review),
     archive: { afterMerge: typeof a.afterMerge === 'boolean' ? a.afterMerge : DEFAULT_SETTINGS.archive.afterMerge },
-    alerts: { usage: typeof al.usage === 'boolean' ? al.usage : DEFAULT_SETTINGS.alerts.usage }
+    alerts: { usage: typeof al.usage === 'boolean' ? al.usage : DEFAULT_SETTINGS.alerts.usage },
+    pr: prSettings(v.pr)
+  }
+}
+
+const BOT_LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$/
+
+function prSettings(value: unknown): PrSettings {
+  const d = DEFAULT_SETTINGS.pr
+  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const bots = Array.isArray(v.bots) ? [...new Set(v.bots.filter((b): b is string => typeof b === 'string' && BOT_LOGIN.test(b)))].slice(0, 20) : d.bots
+  return {
+    evidence: typeof v.evidence === 'boolean' ? v.evidence : d.evidence,
+    autoFix: typeof v.autoFix === 'boolean' ? v.autoFix : d.autoFix,
+    mergeWhenGreen: typeof v.mergeWhenGreen === 'boolean' ? v.mergeWhenGreen : d.mergeWhenGreen,
+    maxAutoFixes: Math.round(num(v.maxAutoFixes, d.maxAutoFixes, { min: 1, max: 5 })),
+    bots
   }
 }
 
@@ -201,5 +237,6 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const nextReview = typeof p.review === 'object' && p.review !== null ? { ...current.review, ...(p.review as object) } : current.review
   const nextArchive = typeof p.archive === 'object' && p.archive !== null ? { ...current.archive, ...(p.archive as object) } : current.archive
   const nextAlerts = typeof p.alerts === 'object' && p.alerts !== null ? { ...current.alerts, ...(p.alerts as object) } : current.alerts
-  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview, archive: nextArchive, alerts: nextAlerts })
+  const nextPr = typeof p.pr === 'object' && p.pr !== null ? { ...current.pr, ...(p.pr as object) } : current.pr
+  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview, archive: nextArchive, alerts: nextAlerts, pr: nextPr })
 }

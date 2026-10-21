@@ -1,6 +1,8 @@
 // A fake `gh` for e2e (PRD F16): a shell script put next to the fake claude on the login shell's PATH. It answers
 // `auth status`, `pr list --head=<branch>` (from pr-<branch>.json, `/` written as `_`), `pr create` (prints the URL
 // and turns after-create-<branch>.json into that branch's list) and `run view` (log-failed.txt), and logs each call.
+// PRD F16 v1.63: `api graphql` answers the PR details query from graphql-<number>.json and takes mutations on stdin
+// (saved as input-<n>.json); `pr merge` is logged and succeeds.
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -16,6 +18,17 @@ case "$1 $2" in
     [ -f "$d/after-create-$head.json" ] && cp "$d/after-create-$head.json" "$d/pr-$head.json"
     cat "$d/create-url"; exit 0 ;;
   "run view") cat "$d/log-failed.txt"; exit 0 ;;
+  "pr merge") exit 0 ;;
+  "api graphql")
+    case "$*" in
+      *"--input -"*)
+        n=$(ls "$d" | grep -c '^input-')
+        cat > "$d/input-$n.json"
+        echo '{"data":{}}'; exit 0 ;;
+    esac
+    number=""
+    for a in "$@"; do case "$a" in number=*) number="\${a#number=}";; esac; done
+    cat "$d/graphql-$number.json" 2>/dev/null || echo '{"data":null}'; exit 0 ;;
 esac
 echo "unknown command $*" >&2
 exit 1
@@ -65,6 +78,14 @@ export function fakeGh(bin: string, dir: string) {
       writeFileSync(join(dir, 'create-url'), `${url}\n`)
     },
     setFailedLog: (text: string) => writeFileSync(join(dir, 'log-failed.txt'), text),
+    /** What PR_DETAILS_QUERY returns for PR `number` (the `data` object). */
+    setDetails: (number: number, data: unknown) => writeFileSync(join(dir, `graphql-${number}.json`), JSON.stringify({ data })),
+    /** The GraphQL mutations sent on stdin so far. */
+    mutations: (): { query: string; variables: Record<string, unknown> }[] => {
+      const out: { query: string; variables: Record<string, unknown> }[] = []
+      for (let n = 0; existsSync(join(dir, `input-${n}.json`)); n++) out.push(JSON.parse(readFileSync(join(dir, `input-${n}.json`), 'utf8')))
+      return out
+    },
     /** Every call so far, as argument lists. */
     calls: (): string[][] =>
       existsSync(join(dir, 'calls'))

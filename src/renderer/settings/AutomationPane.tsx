@@ -1,8 +1,8 @@
-// 设置 · 自动化 · 代码审阅 (PRD F13) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
+// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
 // own Claude / Codex quota. No Figma frame yet; it follows the Worktree pane (16A): sections of label · control rows.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
-import type { AlertSettings, ReviewSettings } from '@shared/settings'
+import type { AlertSettings, PrSettings, ReviewSettings } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { Row, Section, Toggle } from './controls'
 import styles from './AutomationPane.module.css'
@@ -13,12 +13,16 @@ export function AutomationPane({
   review,
   update,
   alerts,
-  updateAlerts
+  updateAlerts,
+  pr,
+  updatePr
 }: {
   review: ReviewSettings
   update: (patch: Partial<ReviewSettings>) => void
   alerts: AlertSettings
   updateAlerts: (patch: Partial<AlertSettings>) => void
+  pr: PrSettings
+  updatePr: (patch: Partial<PrSettings>) => void
 }) {
   const builtin = review.mode === 'builtin'
   return (
@@ -91,6 +95,30 @@ export function AutomationPane({
             </>
           )}
         </Section>
+        <Section title="PR">
+          <p className={styles.lead}>自动修复和通过后合并在变更视图里按 PR 打开，这里定新 PR 一开始是什么样。它们会用你的额度，并以你的 GitHub 账号操作，默认都不开。</p>
+          <Row label="PR 正文附上检查和审阅结果">
+            <Toggle label="PR 正文附上检查和审阅结果" checked={pr.evidence} onChange={(evidence) => updatePr({ evidence })} />
+          </Row>
+          <Row label="新 PR 打开自动修复">
+            <Toggle label="新 PR 打开自动修复" checked={pr.autoFix} onChange={(autoFix) => updatePr({ autoFix })} />
+          </Row>
+          <Row label="新 PR 打开通过后合并">
+            <Toggle label="新 PR 打开通过后合并" checked={pr.mergeWhenGreen} onChange={(mergeWhenGreen) => updatePr({ mergeWhenGreen })} />
+          </Row>
+          <Row label="自动修复最多">
+            <Segmented
+              label="自动修复最多"
+              value={String(pr.maxAutoFixes)}
+              options={['1', '2', '3', '4', '5'].map((n) => ({ value: n, label: `${n} 次` }))}
+              onChange={(n) => updatePr({ maxAutoFixes: Number(n) })}
+            />
+          </Row>
+          <Row label="也认这些机器人">
+            <BotsField value={pr.bots} onCommit={(bots) => updatePr({ bots })} />
+          </Row>
+          <p className={styles.hint}>自动修复只把你自己和这里列出的机器人（如 coderabbitai[bot]）的评论发给 agent；其他人的评论只显示。有没解决的评论（来自上面这些人）或审阅里有 P0 / P1 时，通过后合并会自己关掉。</p>
+        </Section>
         <Section title="额度提醒">
           <Row label="额度提醒">
             <Toggle label="额度提醒" checked={alerts.usage} onChange={(usage) => updateAlerts({ usage })} />
@@ -141,6 +169,35 @@ function ModelField({ label, value, onCommit }: { label: string; value: string; 
       }}
       onKeyDown={(event) => {
         // Enter / Esc while an input method composes confirm / cancel the composition.
+        if (event.nativeEvent.isComposing) return
+        if (event.key === 'Enter') event.currentTarget.blur()
+        else if (event.key === 'Escape') {
+          setDraft(null)
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
+/** Bot logins, separated by commas or spaces; committed on blur or Enter. */
+function BotsField({ value, onCommit }: { value: string[]; onCommit: (bots: string[]) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? value.join(', ')
+  return (
+    <input
+      className={styles.model}
+      aria-label="也认这些机器人"
+      autoComplete="off"
+      spellCheck={false}
+      placeholder="没有"
+      value={shown}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onBlur={() => {
+        onCommit(shown.split(/[\s,，]+/).filter(Boolean))
+        setDraft(null)
+      }}
+      onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return
         if (event.key === 'Enter') event.currentTarget.blur()
         else if (event.key === 'Escape') {

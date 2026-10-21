@@ -1,9 +1,10 @@
 // Git · 变更's PR parts (PRD F16): the footer's 创建 PR / 打开 PR #N button, and one line above the footer with the
 // PR and its checks (让 agent 修复 when they fail), what went wrong last, or — without a usable gh — how to get one.
-import { checksLabel, prStateLabel } from '@shared/pull-requests'
+import { checksLabel, prReviewSummary, prStateLabel } from '@shared/pull-requests'
 import type { Session, SessionId, Worktree } from '@shared/types'
 import { ChecksMark } from '../../pull-requests/PrTag'
-import { createPullRequest, fixWithAgent, openPullRequest } from '../../pull-requests/actions'
+import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
+import { openCreatePr } from '../../pull-requests/create-sheet'
 import { usePr, usePullRequests } from '../../pull-requests/store'
 import { agentLabel } from '../merge/model'
 import styles from './GitView.module.css'
@@ -17,12 +18,15 @@ export function PrButton({
   worktree,
   projectRoot,
   title,
-  sessionId
+  sessionId,
+  agent
 }: {
   worktree: Worktree
   projectRoot: string | null
   title: string
   sessionId: SessionId | null
+  /** The worktree's agent session (its turn checks and review go into the PR body). */
+  agent: Session | null
 }) {
   const gh = usePullRequests((s) => s.gh)
   const busy = usePullRequests((s) => s.busy[worktree.path])
@@ -48,8 +52,18 @@ export function PrButton({
       type="button"
       className={styles.ghostButton}
       disabled={reason !== null || busy === 'creating'}
-      title={reason ?? '推送分支，用 gh 创建 PR（标题是会话名，正文是提交说明），然后在内置浏览器打开'}
-      onClick={() => projectRoot && void createPullRequest(projectRoot, worktree, title, sessionId)}
+      title={reason ?? '写好标题和正文后推送分支，用 gh 创建 PR，然后在内置浏览器打开'}
+      onClick={() =>
+        projectRoot &&
+        openCreatePr({
+          root: projectRoot,
+          worktree: worktree.path,
+          title,
+          sessionId,
+          agentSessionId: agent?.id ?? null,
+          agent: agent?.kind === 'claude' || agent?.kind === 'codex' ? agent.kind : null
+        })
+      }
     >
       {busy === 'creating' ? '正在创建 PR…' : '创建 PR'}
     </button>
@@ -89,7 +103,8 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
   }
   const live = pr.state === 'open' || pr.state === 'draft'
   const failing = live && pr.checks.state === 'failing'
-  const text = [`PR #${pr.number}`, prStateLabel(pr.state), ...(live ? [checksLabel(pr.checks)] : [])].join(' · ')
+  const pending = live && pr.details ? prReviewSummary(pr.details) : ''
+  const text = [`PR #${pr.number}`, prStateLabel(pr.state), ...(live ? [checksLabel(pr.checks)] : []), ...(pending ? [pending] : [])].join(' · ')
   return (
     <p className={styles.reviewStatus} role="status" data-testid="pr-status">
       {live && <ChecksMark state={pr.checks.state} />}

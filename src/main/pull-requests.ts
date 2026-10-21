@@ -9,9 +9,9 @@
 // v1.63 adds the writes (PRD F16 · L2): merging the PR (pinned to the head Wavi checked, GitHub auto-merge or Wavi's own
 // wait), resolving threads and posting Wavi's review. Each runs only on a button the user clicked; several at once ask.
 import { spawn } from 'node:child_process'
-import { realpath } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { delimiter } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { hostWindowFor } from './app-windows'
@@ -29,6 +29,7 @@ import {
   parsePrPostReviewRequest,
   parsePrResolveRequest,
   parsePrTarget,
+  PR_TEMPLATE_PATHS,
   mergeArgs,
   mergeBlockers,
   readyToMerge,
@@ -54,6 +55,7 @@ import {
   type GitHubRepo,
   type PrCreateResult,
   type PrDetails,
+  type PrDraft,
   type PrMergeRequest,
   type PrWriteResult,
   type PrStatus,
@@ -380,12 +382,28 @@ function schedule(entry: Entry, delay?: number): void {
   entry.timer.unref?.()
 }
 
-function setStatus(entry: Entry, branch: string | null, pr: PullRequestInfo | null): PrStatus {
+function setStatus(entry: Entry, branch: string | null, pr: PullRequestInfo | null, local?: PrStatus['local']): PrStatus {
   const previous = entry.status
-  const status: PrStatus = { worktree: entry.target.worktree, branch, pr, checkedAt: Date.now() }
+  const status: PrStatus = {
+    worktree: entry.target.worktree,
+    branch,
+    pr,
+    checkedAt: Date.now(),
+    ...(local ? { local } : {}),
+    ...(entry.waiting ? { waiting: entry.waiting.method } : {})
+  }
   entry.status = status
-  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr)) broadcast(status)
+  const sameExtras = JSON.stringify([previous?.local, previous?.waiting]) === JSON.stringify([status.local, status.waiting])
+  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameExtras) broadcast(status)
   return status
+}
+
+/** The status again after `waiting` changed (nothing else did). */
+function rebroadcast(entry: Entry): void {
+  if (!entry.status) return
+  const { waiting: _old, ...rest } = entry.status
+  entry.status = { ...rest, checkedAt: Date.now(), ...(entry.waiting ? { waiting: entry.waiting.method } : {}) }
+  broadcast(entry.status)
 }
 
 async function checkOnce(entry: Entry): Promise<PrStatus | null> {
@@ -422,7 +440,12 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
       if ('error' in more && isRateLimited(more.error)) pausedUntil = Date.now() + PR_POLL.rateLimitMs
     }
   }
-  const status = setStatus(entry, info.branch, pr)
+  let local: PrStatus['local']
+  if (pr?.details) {
+    const head = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
+    if (head) local = { head, remoteAhead: pr.details.headOid !== head && !(await localHas(info.cwd, pr.details.headOid, info.branch)) }
+  }
+  const status = setStatus(entry, info.branch, pr, local)
   if (entry.waiting) void mergeWhenReady(entry)
   return status
 }
@@ -576,7 +599,7 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
 
     const env = await pushEnv(cwd)
     if (!info.remoteRef) {
-      const yes = await confirm(
+      const yes = request.pushApproved === true || await confirm(
         {
           message: `把分支 ${branch} 推送到 ${remote}？`,
           detail: `这个分支还没有推送过，创建 PR 前要先推送（git push -u ${remote} ${branch}）。`,
@@ -594,8 +617,18 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
 
     const subjects = (await gitOut(cwd, ['log', '--reverse', '--max-count=101', '--format=%s', `${baseRef}..refs/heads/${branch}`, '--'])).split('\n').filter(Boolean)
     const head = where.headOwner ? `${where.headOwner}:${headBranch}` : headBranch
+    const body = request.body !== undefined ? request.body : prBody(subjects)
     const created = await gh(
-      ['pr', 'create', `--repo=${repoArg(where.repo)}`, `--head=${head}`, `--base=${base}`, `--title=${prTitle(request.title, branch)}`, `--body=${prBody(subjects)}`],
+      [
+        'pr',
+        'create',
+        `--repo=${repoArg(where.repo)}`,
+        `--head=${head}`,
+        `--base=${base}`,
+        `--title=${prTitle(request.title, branch)}`,
+        `--body=${body}`,
+        ...(request.draft ? ['--draft'] : [])
+      ],
       { cwd, timeout: 60_000 }
     )
     const url = created.code === 0 ? parseCreatedUrl(created.stdout) : null
@@ -605,6 +638,36 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
   } finally {
     creating.delete(request.worktree)
   }
+}
+
+/** The repository's PR template from the worktree (GitHub's locations, any case), or null. */
+async function prTemplate(cwd: string): Promise<string | null> {
+  const listed = (await gitOut(cwd, ['ls-files', '--', '.github', 'docs', '*.md'])).split('\n').filter(Boolean)
+  for (const wanted of PR_TEMPLATE_PATHS) {
+    const path = listed.find((p) => p.toLowerCase() === wanted)
+    if (!path) continue
+    const text = await readFile(join(cwd, path), 'utf8').catch(() => null)
+    if (text !== null && text.trim() !== '') return text.slice(0, 20_000)
+  }
+  return null
+}
+
+/** 创建 PR 面板 (PRD F16 v1.63): the branch, its base, whether it was pushed, and the body to start from. */
+export async function prDraft(raw: unknown): Promise<PrDraft> {
+  const target = parsePrTarget(raw)
+  if (!target || !isProjectRoot(target.root)) return { ok: false, message: '请求无效' }
+  const info = await branchInfo(target)
+  if (!info) return { ok: false, message: '不是这个项目的 worktree' }
+  const { cwd, branch, base } = info
+  if (!branch) return { ok: false, message: '处于分离 HEAD，没有分支可以提 PR' }
+  if (!base || base === branch) return { ok: false, message: '这是基线分支本身，没有可以提 PR 的改动' }
+  const remotes = (await gitOut(cwd, ['remote'])).split('\n').map((r) => r.trim()).filter(Boolean)
+  const remote = info.remote ?? (remotes.includes('origin') ? 'origin' : remotes.length === 1 ? remotes[0]! : null)
+  if (!remote) return { ok: false, message: '没有远程仓库，没法推送分支' }
+  const baseRef = (await refExists(cwd, `refs/remotes/${remote}/${base}`)) ? `refs/remotes/${remote}/${base}` : `refs/heads/${base}`
+  const subjects = (await gitOut(cwd, ['log', '--reverse', '--max-count=101', '--format=%s', `${baseRef}..refs/heads/${branch}`, '--'])).split('\n').filter(Boolean)
+  const template = await prTemplate(cwd)
+  return { ok: true, branch, base, remote, pushed: info.remoteRef !== null, body: template ?? prBody(subjects), fromTemplate: template !== null }
 }
 
 async function refreshAfterCreate(worktree: string): Promise<void> {
@@ -711,7 +774,7 @@ async function mergeWhenReady(entry: Entry): Promise<void> {
   if (pr.state !== 'open' || !pr.details || pr.details.headOid !== waiting.headOid) {
     // Merged elsewhere, closed, or new commits: the wait is over (the user merges again after looking).
     entry.waiting = null
-    if (entry.status) broadcast({ ...entry.status, checkedAt: Date.now() })
+    rebroadcast(entry)
     return
   }
   if (!readyToMerge(pr)) return
@@ -751,7 +814,7 @@ export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
     const details = pr.details
     const localHead = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
     const remoteAhead = details ? details.headOid !== localHead && !(await localHas(info.cwd, details.headOid, info.branch)) : false
-    const blockers = mergeBlockers({ pr, method: request.method, remoteAhead })
+    const blockers = mergeBlockers({ pr, method: request.method, remoteAhead, when: request.when })
     if (blockers.length > 0 || !details) return writeBlocked(blockers.join('；'))
 
     let headOid = details.headOid
@@ -773,7 +836,7 @@ export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
         return { ok: true, outcome: queued ? 'queued' : 'auto-merge', message: queued ? `PR #${pr.number} 已进入合并队列` : `检查通过后 GitHub 会合并 PR #${pr.number}` }
       }
       entry.waiting = { method: request.method, headOid }
-      if (entry.status) broadcast({ ...entry.status, checkedAt: Date.now() })
+      rebroadcast(entry)
       schedule(entry, 5_000)
       return { ok: true, outcome: 'waiting', message: `检查通过后由 Wavi 合并 PR #${pr.number}（Wavi 要开着）` }
     }
@@ -796,7 +859,7 @@ export async function cancelMerge(raw: unknown): Promise<PrWriteResult> {
   if (!entry || entry.target.root !== where.root) return writeBlocked('这个 worktree 没有在 Wavi 里显示')
   if (entry.waiting) {
     entry.waiting = null
-    if (entry.status) broadcast({ ...entry.status, checkedAt: Date.now() })
+    rebroadcast(entry)
     return { ok: true, outcome: 'cancelled', message: '不再等检查通过后合并' }
   }
   const pr = entry.status?.pr
@@ -900,6 +963,7 @@ export function registerPullRequestHandlers(): void {
   ipcMain.handle(PR_IPC.statuses, (event) => statusesFor(event.sender))
   ipcMain.handle(PR_IPC.create, (event, raw: unknown) => createPullRequest(raw, hostWindowFor(event.sender)))
   ipcMain.handle(PR_IPC.failure, (_event, worktree: unknown) => ciFailure(worktree))
+  ipcMain.handle(PR_IPC.draft, (_event, raw: unknown) => prDraft(raw))
   ipcMain.handle(PR_IPC.merge, (_event, raw: unknown) => mergePullRequest(raw))
   ipcMain.handle(PR_IPC.cancelMerge, (_event, raw: unknown) => cancelMerge(raw))
   ipcMain.handle(PR_IPC.resolveThreads, (event, raw: unknown) => resolveThreads(raw, hostWindowFor(event.sender)))

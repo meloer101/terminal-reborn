@@ -17,17 +17,34 @@ export function openPullRequest(sessionId: SessionId | null, url: string): void 
   else window.open(url, '_blank')
 }
 
-export async function createPullRequest(projectRoot: string, worktree: Pick<Worktree, 'path'>, title: string, sessionId: SessionId | null): Promise<void> {
+/**
+ * Pushes and creates the PR; on success opens it. From 创建 PR 面板 (PRD F16 v1.63) with its body, draft and the push
+ * the sheet already announced. Returns the error to show in the sheet, or null.
+ */
+export async function createPullRequest(
+  projectRoot: string,
+  worktree: Pick<Worktree, 'path'>,
+  title: string,
+  sessionId: SessionId | null,
+  sheet?: { body: string; draft: boolean }
+): Promise<string | null> {
   const path = worktree.path
-  if (usePullRequests.getState().busy[path]) return
+  if (usePullRequests.getState().busy[path]) return '正在创建 PR'
   setPrBusy(path, 'creating')
   setPrNotice(path, null)
   try {
-    const result = await window.tr.pr.create({ root: projectRoot, worktree: path, title })
-    if (result.ok) openPullRequest(sessionId, result.url)
-    else setPrNotice(path, { tone: result.reason === 'declined' ? 'muted' : 'error', text: result.reason === 'declined' ? result.message : `没能创建 PR：${result.message}` })
+    const result = await window.tr.pr.create({ root: projectRoot, worktree: path, title, ...(sheet ? { body: sheet.body, draft: sheet.draft, pushApproved: true } : {}) })
+    if (result.ok) {
+      openPullRequest(sessionId, result.url)
+      return null
+    }
+    const text = result.reason === 'declined' ? result.message : `没能创建 PR：${result.message}`
+    setPrNotice(path, { tone: result.reason === 'declined' ? 'muted' : 'error', text })
+    return text
   } catch (error) {
-    setPrNotice(path, { tone: 'error', text: `没能创建 PR：${message(error)}` })
+    const text = `没能创建 PR：${message(error)}`
+    setPrNotice(path, { tone: 'error', text })
+    return text
   } finally {
     setPrBusy(path, null)
   }
