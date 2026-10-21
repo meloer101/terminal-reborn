@@ -9,18 +9,18 @@
 ## 当前位置
 
 - 已发布 **v0.4.0**（2026-10-20：F20 主区分屏、F16 PR / CI 和创建 PR、F19 把文件和图片放进会话、额度恢复后继续、总览浮层 4 格并排、Developer ID 签名和公证；之前是 v0.3.0，2026-10-19）。
-- 下一步：**外部验证 4 周**（2026-10-19 → 2026-11-16，PRD §1.5）。先清掉分发的路障（签名公证、brew、官网、README），再找人试用；这段时间新功能只接有外部来源的需求。作者照常在真实使用中验收 Figma 11 / 15 / 16 / 17 / 18，并过一遍“待作者手动确认”。M5 等到期决定之后再排。
-- 2026-10-20：定下多 agent 的方向——一个人消化多个 agent 的产出（PRD §1.2 v1.48），排期见下面“进行中：多 agent”；第一批三项已开工。
+- 下一步（2026-10-21 改）：**外部验证延后到 M5 / M6 之后**（PRD §1.5 v1.55），作者判断产品还不够成熟。现在继续做多 agent 第二批和 M5；分发里剩下的 brew、仓库改名、Discussions 和用户群，以及找人试用，都等那时再开始。
+- 2026-10-20：定下多 agent 的方向——一个人消化多个 agent 的产出（PRD §1.2 v1.48），排期见下面“进行中：多 agent”；第一批三项已全部合进 main（2026-10-21：额度恢复和 F16 在 v0.4.0 里，状态准确性、规模基线和守护进程 SIGTERM 修复在 main 上，等下一个版本）。
 - 2026-10-20：P0 里能交给 agent 的几项已合进 main（中文输入和链接、WebGL 中文乱码、手动确认项自动化、README 和 issue 表单、官网）。剩下的都要作者动手：Apple Developer 账号、推送 main 并开启 Pages、仓库改名、Discussions 和用户群，以及两份人工清单（清单在作者的「Wavi 待办清单与优先级」文档里）。
 
-## 进行中：外部验证（2026-10-19 → 2026-11-16）
+## 暂停：外部验证（原定 2026-10-19 → 2026-11-16，延后到 M5 / M6 之后，PRD §1.5 v1.55）
 
 目标、指标和需求来源见 PRD §1.5。分发排在新功能前面；这 4 周新开的功能需求都要写明外部来源。
 
 分发（先做）：
-- [ ] Apple Developer 账号（作者准备）→ Developer ID 签名和公证，下载后不再需要 `xattr -cr`（原 D5；自动更新仍留在 D5）
+- [x] Apple Developer 账号 → Developer ID 签名和公证，下载后不再需要 `xattr -cr`（2026-10-20 流水线接通，v0.3.1-rc.1 试跑、v0.4.0 正式发布；自动更新仍留在 D5）
 - [ ] Homebrew：自己的 tap，`brew install --cask` 一行装好。放在公证之后做，因为未公证的 app 经 brew 装上同样会被 Gatekeeper 拦
-- [ ] 官网 `site/` 部署到 GitHub Pages：内容和部署流程已提交（2026-10-20，`f551935`：四个信任点、外观切换、`.github/workflows/pages.yml`，仓库名只写在 `site/index.html` 一处）；等作者推送 main，并在 Settings → Pages 里把 Source 设为 GitHub Actions（英文版不在这 4 周里）
+- [x] 官网 `site/` 部署到 GitHub Pages（2026-10-21 推送 main 后自动部署，https://meloer101.github.io/terminal-reborn/ ；英文版不在这一轮里）
 - [x] README 按 v0.3.0 重写，中文在前，加“Wavi 不会做的事”四条（2026-10-20）
 - [ ] GitHub 仓库改名为 `wavi`（原在“待作者手动确认”）：链接改动已备好，在分支 `claude/repo-storefront-01d834` 的 `e2acf43`（`package.json` 的 `repository` / `homepage`、README、CHANGELOG、打包和发布配置），作者在 GitHub 改名之后再合并；官网改 `site/index.html` 里那一处。已装 v0.3.0 的用户要靠 GitHub 的改名重定向收到新版本提示，所以 meloer101 下以后不能再建 `terminal-reborn`
 - [x] issue 表单：bug 报告和功能建议，功能建议必填“现在怎么绕过去”（2026-10-20，`.github/ISSUE_TEMPLATE/`）
@@ -55,14 +55,14 @@
 待验证想法（作者自己想到、还没有外部来源，到期再看）：
 - 暂无
 
-到期决定（2026-11-16）：
+到期决定（原定 2026-11-16，随外部验证顺延）：
 - [ ] 按 PRD §1.5 的三种结果做出决定，结论写在这里
 
 ## 进行中：多 agent——一个人消化多个 agent 的产出（2026-10-20 定）
 
 方向见 PRD §1.2（v1.48）。来源是 2026-10-20 的调研：GitHub issue（cc = anthropics/claude-code，cx = openai/codex，加上 o / c / s）、HN / Reddit / Product Hunt、竞品文档，以及 Anthropic、OpenAI 和一线实践者公开的工作流。结论：开会话、看状态正被各家原生产品吸收；审阅、验证、合并和 agent 之间互相踩还没人做好。下面每一条都有外部来源，符合 §1.5 的要求。
 
-第一批（2026-10-20 已开工，各自在自己的分支上更新对应条目）：额度恢复后继续（F11 扩展；cc#13354 215 👍、cc#35744 106、cx#21073 85、cx#28931 60）· 状态准确性和 20 会话基线（见上面“外部需求”和 D1）· F16 PR / CI（见 M5）。
+第一批（2026-10-21 已全部合进 main）：额度恢复后继续（F11 扩展；cc#13354 215 👍、cc#35744 106、cx#21073 85、cx#28931 60）· 状态准确性和 20 会话基线（见上面“外部需求”和 D1）· F16 PR / CI（见 M5）。
 
 第二批（Wavi 的差异化：审得完、合得进）：
 - [x] F20 主区分屏（2026-10-20，Figma 21 Section `301:15658`，PRD v1.49）：从侧栏把会话拖进终端区域（中间替换、边上多一格，已在显示的是挪动 / 互换），拖会话名挪格，细线拖动调大小、双击等分；⌘D / ⇧⌘D 新格先选会话（可过滤），⌥⌘ 方向键换格，⌥⌘W 关格，菜单「显示」里都有；右侧栏、⌘F、回形针、⌘V 跟着键盘所在的格，分屏时 ⌘+ / ⌘- 只调这一格；侧栏标出所有在显示的会话；“看得见”= 任何一格里显示；排法存进 workspace.json，重启恢复，会话关闭 / 归档后其余格补位；总览浮层不变。拆分树在 `src/shared/split-layout.ts`（总览浮层的落点判断也改用它），界面在 `src/renderer/split/`。测试：`split-layout.test.ts`、`workspace-model.test.ts`、`workspace-file.test.ts`、`controller.test.ts`、`split/model.test.ts`，e2e `split.spec.ts`（21A–21H 两种主题截图）、`split-restore.spec.ts`、`menu-keys.spec.ts`。4 格同时输出时的打字延迟见 D1。以后：一格拖出成独立窗口（下面“多窗口第二步”）。cc#30154（264 👍）、o#8377（合并了 o#6197 等）、cc#27725（70）、c#3297（25）
@@ -246,7 +246,6 @@
 
 - 没有 hook 时（Codex 的 hook 信任没拿到、Claude 的 hooks 不工作）API 报错看起来和一轮正常结束一样（都是空闲）。
 - 20 个会话都填满 1 万行回滚时 footprint 在 1.2–1.5 GB，贴着 PRD §1.3 的 1.5 GB，大头记在 GPU 进程上（D1）。要省可以从回滚长度和隐藏终端的 GPU 资源入手。
-- 守护进程收到 SIGTERM 就结束全部会话（它把 SIGTERM 当作注销）。作者真实的 Wavi / Wavi Dev 守护进程日志里 10-17、10-18 有 3 次这样结束，那几刻系统没有睡眠，原因没查；长跑测试里合盖睡眠时也出现过。要么查清是谁发的，要么只在真注销时才结束会话。
 - 隐藏终端不重画的补丁（`paused-selection.ts`）读 xterm RenderService 的三个内部字段，升级 xterm 时要复测（`TR_SCALE=1 TR_SCALE_PROFILE=1 … e2e/scale.spec.ts`）。
 - 状态规则依赖 Claude Code 2.1.304 的标题：有对话框时 `✳`、在跑时 `◐` / `◑`（PRD §6.6）。CLI 改了要用 `scripts/spikes/` 和模拟器复测。
 - 用户自己在 alias 里追加 `--settings` 会让我们的 hooks 失效（只认最后一个）。
@@ -269,9 +268,9 @@
 | Claude / Codex 新版本改变 hook 或 TUI 行为 | 按 CLI 版本区分策略；保留实测脚本 `scripts/spikes/` 和 fixtures 以便复测 | 持续 |
 | hook 丢事件导致状态卡死 | 进程存活检查、超时降级、标题和屏幕兜底、`idle_prompt`、守护进程补放；会话模拟器回放（丢 5% hook 时显示错误最长 7 s） | 已处理，模拟压测 + 自用验证 |
 | Codex hook 信任机制 | 用 `-c hooks.state` 按次固定我们自己的 hash | 已决定（PRD §6.7） |
-| Apple Developer 账号 | 外部验证阶段的第一道路障（公证和 brew 都要等它）；拿到之前继续发布未签名版本 | 待作者准备 |
+| Apple Developer 账号 | 已到位，v0.4.0 起发布版签名并公证 | 已解决（2026-10-20） |
 | xterm 7.0 正式版 | 发布后升级 xterm 和全部 addon（含守护进程用的 headless），删掉 `atlas-guard.ts`（PRD §6.3） | 等上游 |
-| 楔子假设不成立（中文开发者没有信号） | 2026-11-16 按 PRD §1.5 换楔子，或回到个人工具 | 外部验证中 |
+| 楔子假设不成立（中文开发者没有信号） | 外部验证开始后第 4 周按 PRD §1.5 换楔子，或回到个人工具 | 外部验证延后到 M5 / M6 之后 |
 | `claude -p` 被单独计费（“programmatic usage”） | 两份调研的说法不一致：一说从 2026-06-15 起按 programmatic 计费，一说宣布后又暂停了。F13 后台审阅用的是 `claude -p`；额度轮询不发模型请求，应该不受影响。先查清官方现状，再决定审阅要不要在设置里写明 | 待查 |
 | 原生产品吸收“开会话、看状态” | 不在这一段上竞争：做跨 Claude / Codex 的审阅、验证、合并（PRD §1.2 v1.48） | 已决定 |
 | 许可证合规 | 借用的代码逐文件登记在 `THIRD_PARTY_NOTICES.md` | 持续 |
