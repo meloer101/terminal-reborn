@@ -25,6 +25,17 @@ describe('errorNextSteps', () => {
     })
   })
 
+  it('a plan limit says when it resets and offers no fix (the agent cannot raise it)', () => {
+    const session = { ...claude, status: 'error' as const, phase: 'ready' as const, currentAction: "You've hit your session limit · resets 5:22pm" }
+    expect(errorNextSteps(session, undefined, 'Claude 额度用完 · 17:22 恢复')).toEqual({
+      summary: 'Claude 额度用完 · 17:22 恢复',
+      canFix: false,
+      retry: 'continue'
+    })
+    // An agent that crashed meanwhile still offers resuming it.
+    expect(errorNextSteps({ ...session, phase: 'exited' }, undefined, 'Claude 额度用完 · 17:22 恢复')?.retry).toBe('resume')
+  })
+
   it('launch problems explain themselves; the agent cannot fix them', () => {
     expect(errorNextSteps({ ...claude, status: 'exited', phase: 'exited' }, { kind: 'missing-cli' })).toEqual({
       summary: '没有找到 Claude Code 命令，安装后重试',

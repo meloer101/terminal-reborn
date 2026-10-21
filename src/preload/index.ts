@@ -107,6 +107,7 @@ const api: TrApi = {
     version: String(ipcRenderer.sendSync(IPC.appVersion)),
     checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
     reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary),
+    keepTimers: (on) => ipcRenderer.send(IPC.appKeepTimers, on),
     detectAgents: () => ipcRenderer.invoke(IPC.appDetectAgents),
     userName: () => ipcRenderer.invoke(IPC.appUserName)
   },

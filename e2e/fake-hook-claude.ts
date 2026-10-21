@@ -1,8 +1,10 @@
 // A fake `claude` that runs the hook commands of the per-launch `--settings` file Wavi gives it, on steps a test
 // appends to a file — so status travels the real path (hook command → socket → pty daemon relay → main → renderer)
 // with no model and no real CLI. Each launch works in its own folder: it writes its pid to `.fake-pid`, reads its
-// steps from `.fake-steps` and logs every byte typed to `.fake-typed` (Enter as <ENTER>). A step is
-// `{ hook, payload }` or `{ exit: code }`.
+// steps from `.fake-steps` and logs every byte typed to `.fake-typed` (Enter as <ENTER>). Typed text is echoed to the
+// screen, as a TUI's input line would show it (the send protocol waits for that before pressing Enter). A step is
+// `{ hook, payload }`, `{ statusLine: payload }` (runs the settings' statusLine command), `{ print: text }` or
+// `{ exit: code }`.
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,17 +17,14 @@ const at = process.argv.indexOf('--settings')
 const settings = at > 0 ? JSON.parse(fs.readFileSync(process.argv[at + 1], 'utf8')) : {}
 const dir = process.cwd()
 fs.writeFileSync(dir + '/.fake-pid', String(process.pid))
+const run = (command, payload) => {
+  try {
+    execSync(command, { input: JSON.stringify(payload), timeout: 10000, shell: '/bin/sh', stdio: ['pipe', 'ignore', 'ignore'] })
+  } catch {}
+}
 const hook = (event, payload) => {
   const entry = settings.hooks && settings.hooks[event] && settings.hooks[event][0].hooks[0]
-  if (!entry) return
-  try {
-    execSync(entry.command, {
-      input: JSON.stringify({ hook_event_name: event, session_id: 'fake-' + process.pid, cwd: dir, ...payload }),
-      timeout: 10000,
-      shell: '/bin/sh',
-      stdio: ['pipe', 'ignore', 'ignore']
-    })
-  } catch {}
+  if (entry) run(entry.command, { hook_event_name: event, session_id: 'fake-' + process.pid, cwd: dir, ...payload })
 }
 process.stdout.write('Claude Code v9.9.9\\r\\n\\r\\n❯ \\r\\n')
 hook('SessionStart', { source: 'startup' })
@@ -40,17 +39,23 @@ setInterval(() => {
   for (; seen < steps.length; seen++) {
     const step = JSON.parse(steps[seen])
     if (step.exit !== undefined) process.exit(step.exit)
+    if (step.statusLine && settings.statusLine) run(settings.statusLine.command, { session_id: 'fake-' + process.pid, cwd: dir, ...step.statusLine })
+    if (step.print !== undefined) process.stdout.write(step.print)
     if (step.hook) hook(step.hook, step.payload || {})
   }
 }, 150)
 if (process.stdin.isTTY) process.stdin.setRawMode(true)
-process.stdin.on('data', (d) => fs.appendFileSync(dir + '/.fake-typed', d.toString().replace(/\\r/g, '<ENTER>\\n')))
+process.stdin.on('data', (d) => {
+  const text = d.toString()
+  fs.appendFileSync(dir + '/.fake-typed', text.replace(/\\r/g, '<ENTER>\\n'))
+  process.stdout.write(text.replace(/\\x1b\\[20[01]~/g, '').replace(/\\r/g, '\\r\\n❯ '))
+})
 `
 
 export interface FakeAgentFolder {
   path: string
   /** Appends a step for the fake running in this folder. */
-  step(value: { hook: string; payload?: Record<string, unknown> } | { exit: number }): void
+  step(value: { hook: string; payload?: Record<string, unknown> } | { statusLine: Record<string, unknown> } | { print: string } | { exit: number }): void
   /** The pid of the fake running here (null before it started). */
   pid(): number | null
   typed(): string

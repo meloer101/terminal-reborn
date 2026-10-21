@@ -7,6 +7,7 @@ import { IconButton } from '../../ui/IconButton'
 import { formatAccelerator } from '../../ui/menu-model'
 import { ClosePanelButton } from '../PaneHeader'
 import { openFileMenu, runFileAction, type FileTarget } from './actions'
+import { FilesNotice } from './FilesNotice'
 import { FILE_SHORTCUTS, fileActionForKey } from './keys'
 import { reveal, showPreview, useFiles } from './store'
 import { parentOf } from './tree-model'
@@ -129,6 +130,7 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
           <ClosePanelButton />
         </span>
       </div>
+      <FilesNotice root={root} />
       <div ref={body} className={styles.code} tabIndex={0} role="document" aria-label={`${path} 预览`} data-testid="file-preview" onKeyDown={onKeyDown}>
         {message ? (
           <p className={styles.empty}>{message}</p>

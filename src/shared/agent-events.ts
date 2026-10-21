@@ -21,7 +21,12 @@ export type AgentEvent =
   | { type: 'notification'; kind: 'permission' | 'question' | 'idle' | 'other'; message: string }
   /** `message` is the agent's last reply of the turn (Claude / Codex `last_assistant_message`), possibly truncated. */
   | { type: 'stop'; message?: string }
-  | { type: 'stop-failure'; message?: string }
+  /**
+   * The turn ended on an API error (Claude StopFailure). `reason` is Claude's error kind (`rate_limit`, `overloaded`,
+   * `authentication_failed`, …); `rate_limit` also covers transient 429s, so a plan-limit stop needs the plan usage
+   * too (PRD §6.6, F11).
+   */
+  | { type: 'stop-failure'; message?: string; reason?: string }
   | { type: 'session-end'; reason?: string }
   /** The agent's own name for the conversation (Claude `ai-title` / `custom-title`, Codex `thread_name`), read by main. Not a hook. */
   | { type: 'agent-title'; title: string }

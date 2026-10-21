@@ -19,7 +19,11 @@ export interface ErrorNextSteps {
 
 type ErrorView = Pick<Session, 'kind' | 'status' | 'phase' | 'currentAction'>
 
-export function errorNextSteps(session: ErrorView, issue?: LaunchIssue): ErrorNextSteps | null {
+/**
+ * `limitNote`: the turn failed because the plan's limit is used up (shared/limit-resume.ts), e.g. `Claude 额度用完 ·
+ * 17:22 恢复`. The agent cannot fix that, so there is no 让 agent 修复; the header's 恢复后发送“继续” waits for the reset.
+ */
+export function errorNextSteps(session: ErrorView, issue?: LaunchIssue, limitNote?: string): ErrorNextSteps | null {
   if (issue?.kind === 'worktree-failed') return { summary: `没能创建 worktree：${issue.message}`, canFix: false, retry: null }
   if (session.kind === 'shell') return null
   if (issue?.kind === 'missing-cli') return { summary: `没有找到 ${AGENT_NAME[session.kind]} 命令，安装后重试`, canFix: false, retry: 'start' }
@@ -27,6 +31,7 @@ export function errorNextSteps(session: ErrorView, issue?: LaunchIssue): ErrorNe
   if (issue?.kind === 'spawn-failed') return { summary: `终端无法启动：${issue.message}`, canFix: false, retry: 'start' }
   if (session.status !== 'error') return null
   if (session.phase === 'exited') return { summary: session.currentAction ?? '进程异常退出', canFix: true, retry: 'resume' }
+  if (limitNote) return { summary: limitNote, canFix: false, retry: 'continue' }
   return { summary: session.currentAction ?? '这一轮出错了', canFix: true, retry: 'continue' }
 }
 

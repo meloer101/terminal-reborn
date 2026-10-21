@@ -5,7 +5,7 @@ import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../../ui/menu'
 import { FILE_SHORTCUTS, isFileAction, type FileAction } from './keys'
-import { showPreview } from './store'
+import { setNotice, showPreview } from './store'
 
 export interface FileTarget {
   root: string
@@ -20,10 +20,14 @@ export function openInEditor(target: FileTarget): void {
   })
 }
 
-/** `@path ` in the session's input line, as if typed (PRD §6.9), then the terminal gets the keyboard. */
+/**
+ * `@path ` in the session's input line, as if typed (PRD §6.9), then the terminal gets the keyboard. When nothing was
+ * typed — a menu is open in the agent's TUI — the view says so, and the terminal still gets the keyboard for the menu.
+ */
 export function insertPath(target: FileTarget): void {
+  setNotice(target.root, null)
   void insertIntoTerminal(target.sessionId, `@${target.path}${target.dir ? '/' : ''} `)
-    .catch((error: unknown) => console.warn('[files] insert failed:', error))
+    .catch((error: unknown) => setNotice(target.root, `没有插入路径：${error instanceof Error ? error.message : '没有放进终端'}`))
     .finally(() => useWorkspace.getState().requestTerminalFocus())
 }
 

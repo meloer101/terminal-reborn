@@ -41,10 +41,11 @@
 - [x] 和 CC Switch 共存：Claude 被指到第三方端点（settings.json 的 `ANTHROPIC_BASE_URL`、Bedrock / Vertex）或 Codex 用非 `openai` 的 provider 时，会话头不再显示官方账号的额度，token 不计入份额，也不让账号算“在用”（PRD v1.46）。之前同时有官方登录的用户会在 Kimi 会话上看到“Claude 5h 12%”。单元测试 `bridge` / `server`（真实中继脚本）/ `codex-usage` / `transcript-meter`，e2e `session-meta` 新增一条（去掉渲染端的判断它会失败）
 - [x] ⌘Q 后重开，守护进程保住的 agent 状态不再卡在“空闲”；弹窗里用真键盘按 ⌘F 不再在弹窗背后打开查找栏。新 e2e：`tui-apps`、`menu-keys`、`quit-keeps-agents`、`notifications`，另加随机事件序列下状态不卡死的性质测试
 
-外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset）：
+外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
 - [ ] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”。c#1027（44 👍）、c#2322（22 👍）、o#13600
 - [x] 把文件和图片拖进或粘贴进运行中的会话（2026-10-20，PRD F19）：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴截图、会话头的回形针（文件和文件夹），都把转义后的路径放进输入行，agent 自己把图片变成附件。c#3435（22 👍）、o#15377。e2e `attachments.spec.ts`；从 Finder 真实拖入还没在真机上走一遍（拖入用的 `pathForFile` 和欢迎页拖文件夹是同一个）
+- [x] 套餐额度用完后，恢复时继续（2026-10-20，PRD F11 v1.50）：会话因额度用完停下时，会话头（用完的 UsageChip 之后）和总览行写何时恢复，并给「恢复后发送“继续”」；点了才预约，按钮改写发送时间，再点取消。到点先复查账号额度（还在 100% 就顺延到新的重置时间），再看屏幕：有选择框（Claude 的 `/rate-limit-options`、Codex 的换模型弹窗）或 Claude 自己在倒计时继续时不发，发通知说明；在终端里打字、会话自己继续了就取消。额度用完的错误条不再给“让 agent 修复”。先实测了两家怎么报告限额（PRD §6.6 / §6.7，`scripts/spikes/60-rate-limit-lab.mjs`，本地模拟 429，不花额度）：Claude 是 `rate_limit` 的 StopFailure，Codex 不发任何 hook、之后弹换模型菜单（往里打“继续”回车会换掉模型）；Claude 2.1.304 自己有 `autoContinueAtUsageLimit`。cc#13354（215 👍）、cc#35744（106 👍）、cx#21073（85 👍）、cx#28931（60 👍）。单元测试 `limit-resume.test.ts` / `normalize.test.ts` / `error-next-steps.test.ts`，e2e `limit-resume.spec.ts`。预约不跨 ⌘Q（只在窗口页面里，见已知问题）；Figma 待补（按钮和预约状态，现在照 `/compact` 的样式）；“每次限额自动预约”没做，有人提出再放进设置 · 自动化、默认关。随后其他点击发给 agent 的操作（错误条的“重试这一轮”“让 agent 修复”、审阅、评论和浏览器错误的“发给 …”、插入路径、冲突交给 agent、/compact 按钮）也在这些菜单开着时不打字，提示“终端里有选择框，请先在终端中处理”（`sendRefusal()`，单元测试 `send-protocol.test.ts` / `session-io.test.ts`，e2e 同上；合并面板的 `merge-sheet.spec.ts`）。拒绝的提示写在被点的地方：合并面板留在原处并在失败行说明，文件视图标题下一行，/compact 下的小浮层
 - [ ] Option 当 Meta 的设置项（现在只映射了 ⌥← / ⌥→）。s#1359、c#2120
 - [ ] 中文文案通读，统一术语。o#29320、o#8553（Orca 的机翻）
 - [ ] 排查中文分支名在旧版 Apple Git 上被截断（Wavi 也用了 `%(refname:short)`，本机没复现）。o#19515
@@ -231,6 +232,7 @@
 - [ ] 下载后 Gatekeeper 提示与 `xattr -cr` 流程（清单 A）。结果决定 README 里“仍要打开”那句备选说法对不对
 - [ ] Codex 在真实模型下的表现（`TR_E2E_AGENTS=codex TR_E2E_CODEX_REAL=1`）。用例已有，会花额度，跑之前要作者同意
 - [ ] F19 真机：从 Finder 把一张图和一个文件拖进 Claude 会话、再拖进 Codex 会话；⌃⇧⌘4 截到剪贴板后 ⌘V；⌘⇧4 截图后直接拖角落的缩略图（应放进 `wavi/attachments/drop-*` 下的副本）。应各出 `[Image #N]`，文件保留成路径
+- [ ] 额度真的用完时走一遍“恢复后发送‘继续’”（要真实账号用完，跑之前要作者同意）：Claude 订阅账号上 2.1.304 的 `autoContinueAtUsageLimit` 倒计时和 `/rate-limit-options` 菜单是否如二进制所读（PRD §6.6）、Wavi 遇到时是否不发；Codex 用 ChatGPT 账号时 `usage_limit_reached` 的 rollout 和换模型弹窗（本机是 API key，只用模拟模型测过）
 - [ ] 连续自用一周，状态没有卡死（2026-10-20 修了一个必现的卡死：⌘Q 后重开）
 
 ## 已知问题
@@ -244,6 +246,7 @@
 - ⌘B / ⇧⌘B / ⇧⌘M 按物理键位（`e.code`）判断，其余快捷键按字符（`e.key`），Dvorak、AZERTY 等布局下会错位。
 - 输入法候选窗开着时，只由菜单处理的快捷键（⌘N、⌘O、⌘W、⌘F、⌘,、⌘+ / ⌘- / ⌘0）可能不起作用。这是从 Chromium 源码推断的，等中文输入真机清单第 7 步确认。
 - 重开应用后，接回的 agent 在下一个 hook 到来前显示“空闲”（状态不跨重启保存）。
+- “恢复后发送‘继续’”的预约只在窗口页面里：⌘Q、重启应用或重新载入后就没了，额度恢复时不会发送（关窗口只是隐藏，不影响）。
 - WebGL 图集保护每次重建会卡一帧（80–110 ms），而且读的是 addon 的内部字段；窗口重新获得焦点时原有的“原地清空图集”修不好已经合并的图集（有保护之后不会再合并）。
 - `PRODUCT.md` 还写着已取消的输入栏和一键作答；CHANGELOG 0.3.0 里“额度要等第一次回复后才出现”在 PRD v1.38 之后已经不准确。
 

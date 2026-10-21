@@ -1,0 +1,47 @@
+/* 恢复后发送“继续” (PRD F11). Figma 待补: the same quiet companion button as the header's /compact (SessionMeta.module.css
+   · .compact), in the UI face because the label is Chinese. Neutral, no status color: the armed state is a selected
+   fill and primary text, and the label itself says when it will type. */
+.toggle {
+  flex: none;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.toggle:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.toggle[data-armed='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+  font: var(--text-caption-strong);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Overview row: the reset time, then the toggle, on the row's one 20-high line. */
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

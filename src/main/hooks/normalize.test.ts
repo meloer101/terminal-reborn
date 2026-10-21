@@ -50,10 +50,16 @@ describe('normalizeHook · lifecycle events (real payloads)', () => {
     })
   })
 
-  it('StopFailure uses the API error text (per the hooks reference; not capturable cheaply)', () => {
-    const payload = { hook_event_name: 'StopFailure', error: 'rate_limit', last_assistant_message: 'API Error: Rate limit reached' }
-    expect(claude('StopFailure', payload).events).toEqual([{ type: 'stop-failure', message: 'API Error: Rate limit reached' }])
-    expect(claude('StopFailure', { error: 'unknown' }).events).toEqual([{ type: 'stop-failure', message: 'unknown' }])
+  it('StopFailure keeps the error text and its kind (2.1.304 plan-limit capture, PRD §6.6)', () => {
+    expect(claude('StopFailure', fx.StopFailure_rate_limit)).toEqual({
+      events: [{ type: 'stop-failure', message: "You've hit your session limit · resets 5:22pm (America/Bogota)", reason: 'rate_limit' }],
+      clears: 'all'
+    })
+    const endpoint = { hook_event_name: 'StopFailure', error: 'rate_limit', last_assistant_message: 'API Error: Request rejected (429) · Rate limit exceeded' }
+    expect(claude('StopFailure', endpoint).events).toEqual([
+      { type: 'stop-failure', message: 'API Error: Request rejected (429) · Rate limit exceeded', reason: 'rate_limit' }
+    ])
+    expect(claude('StopFailure', { error: 'unknown' }).events).toEqual([{ type: 'stop-failure', message: 'unknown', reason: 'unknown' }])
     expect(claude('StopFailure', {}).events).toEqual([{ type: 'stop-failure' }])
   })
 })

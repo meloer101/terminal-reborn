@@ -26,6 +26,8 @@ export interface RootFiles {
   previewRequest: number
   /** Bumped when the previewed file may have changed on disk, so the preview reloads. */
   previewRevision: number
+  /** One line about the last action that did not happen (插入路径到终端 refused while a menu is open), or null. */
+  notice: string | null
 }
 
 const EMPTY: RootFiles = {
@@ -41,7 +43,8 @@ const EMPTY: RootFiles = {
   preview: null,
   previewLine: null,
   previewRequest: 0,
-  previewRevision: 0
+  previewRevision: 0,
+  notice: null
 }
 
 export const useFiles = create<{ roots: Record<string, RootFiles> }>()(() => ({ roots: {} }))
@@ -140,6 +143,17 @@ export function setFilter(root: string, filter: string): void {
 export function setChangedOnly(root: string, changedOnly: boolean): void {
   patchRoot(root, { changedOnly, collapsed: new Set() })
   if (changedOnly) void refreshStatus(root)
+}
+
+const NOTICE_MS = 6_000
+const noticeTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+/** Shows `message` under the view's header for a few seconds; null clears it. */
+export function setNotice(root: string, message: string | null): void {
+  clearTimeout(noticeTimers.get(root))
+  noticeTimers.delete(root)
+  patchRoot(root, { notice: message })
+  if (message !== null) noticeTimers.set(root, setTimeout(() => setNotice(root, null), NOTICE_MS))
 }
 
 export const select = (root: string, path: string | null): void => patchRoot(root, { selected: path })
