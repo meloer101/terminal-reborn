@@ -1,16 +1,19 @@
-// Session metrics in the renderer (PRD F11 / F12): each session's context window and todo list, and the account's
+// Session metrics in the renderer (PRD F11 / F12): each session's context window, todo list and turn checks, and the account's
 // plan usage per vendor. Main sends only changes (and replays them to a reloaded window); usage comes from every
 // session of a vendor and is kept by main across runs, so a fresh window asks for it once.
 import { create } from 'zustand'
 import type { AgentEvent, HookAgent } from '@shared/agent-events'
 import { usageAlertText, type ContextUsage, type UsageVendor, type VendorUsage } from '@shared/session-meta'
 import type { TodoItem } from '@shared/todo-progress'
+import type { TurnChecks } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 
 export interface SessionMetrics {
   context?: ContextUsage
   todos?: TodoItem[]
+  /** What the agent ran this turn (PRD F9 / F4 “这一轮跑过哪些检查”). */
+  checks?: TurnChecks
   /** The agent reporting for the session; for a plain terminal, the one started in it by hand (until it exits). */
   agent?: UsageVendor
   /** False while the agent is off its vendor's plan (a third-party endpoint): the account's usage is not shown for it. */
@@ -26,6 +29,7 @@ interface SessionMetaState {
   consumeUsageOpen(): void
   setContext(sessionId: SessionId, context: ContextUsage | null): void
   setTodos(sessionId: SessionId, items: TodoItem[]): void
+  setChecks(sessionId: SessionId, checks: TurnChecks): void
   setUsage(usage: VendorUsage): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
   setPlan(sessionId: SessionId, plan: boolean): void
@@ -63,6 +67,7 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
         return next
       })
     ),
+  setChecks: (sessionId, checks) => set((s) => patchSession(s, sessionId, (current) => ({ ...current, checks }))),
   setAgent: (sessionId, agent) =>
     set((s) => (s.bySession[sessionId]?.agent === agent ? {} : patchSession(s, sessionId, (current) => ({ ...current, agent })))),
   setPlan: (sessionId, plan) =>
@@ -105,6 +110,7 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
   if (agent === 'claude' || agent === 'codex') state.setAgent(sessionId, agent)
   if (event.type === 'context') state.setContext(sessionId, event.context)
   else if (event.type === 'todos') state.setTodos(sessionId, event.items)
+  else if (event.type === 'checks') state.setChecks(sessionId, event.checks)
   else if (event.type === 'billing') state.setPlan(sessionId, event.plan)
 }
 

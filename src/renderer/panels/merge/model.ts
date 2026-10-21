@@ -1,6 +1,7 @@
 // What the merge sheet (PRD F4, Figma 05) says about a precheck, its options and a result. Pure.
 import type { GitOperation, MergeBlocker, MergeConflict, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
+import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 
 export type CheckTone = 'ok' | 'warn' | 'error' | 'working'
 
@@ -178,6 +179,15 @@ export function conflictPrompt(check: Pick<MergePrecheck, 'base' | 'branch' | 'c
 
 export function agentLabel(kind: AgentKind): string {
   return kind === 'codex' ? 'Codex' : 'Claude'
+}
+
+/**
+ * What the worktree's agent ran this turn (PRD F4 · “这一轮跑过哪些检查”): one line, worst outcome first, with the
+ * compact summary on the right. Information only: unlike `[scripts] test`, it never blocks 合并.
+ */
+export function turnChecksLine(view: TurnCheckView, kind: AgentKind): CheckLine {
+  const { tone, text } = checksVerdict(view, agentLabel(kind))
+  return { tone, text, ...(view.kinds.length > 0 ? { meta: checksText(view) } : {}) }
 }
 
 /** Lines after a merge: the commit, the push, the worktree removal. */

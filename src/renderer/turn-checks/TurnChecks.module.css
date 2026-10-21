@@ -1,0 +1,47 @@
+/* Turn checks (PRD F9 / F4): quiet row metadata; only the marks are colored, their shapes say the same. */
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.sep {
+  margin-right: var(--space-2);
+  color: var(--text-tertiary);
+}
+
+.when,
+.notRun {
+  color: var(--text-tertiary);
+}
+
+.item[data-status='fail'] .label {
+  color: var(--text-primary);
+}
+
+.mark {
+  display: inline-flex;
+}
+
+.mark[data-outcome='pass'] {
+  color: var(--status-done);
+}
+
+.mark[data-outcome='fail'] {
+  color: var(--status-error);
+}
+
+.mark[data-outcome='unknown'] {
+  color: var(--text-tertiary);
+}

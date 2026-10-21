@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto'
 import type { AgentEvent, AgentEventEnvelope, HookAgent, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
 import { describeAllowAlways, type AllowAlwaysScope } from '@shared/permission-scope'
 import { sameContext, type ContextUsage, type MetaReading, type VendorUsage } from '@shared/session-meta'
+import { checkRunsOf, type ScriptsLookup } from '@shared/check-commands'
 import { applyTodoTool, sameTodos, type TodoItem } from '@shared/todo-progress'
+import { beginTurn, emptyTurnChecks, recordEdit, recordRuns, sameTurnChecks, type TurnChecks } from '@shared/turn-checks'
 import type { AgentTitleWatcher } from './agent-title'
 import { normalizeHook } from './normalize'
 import { PermissionRegistry, type Scheduler } from './permission-registry'
@@ -27,7 +29,14 @@ interface SessionMeta {
   todos: TodoItem[]
   /** False once the agent said it is off the vendor's plan (AgentEvent `billing`); its plan usage is then not ours. */
   plan: boolean
+  /** The checks of the current turn (PRD F9 / F4 “这一轮跑过哪些检查”). */
+  checks: TurnChecks
 }
+
+/** Tools whose success means the agent changed files (Codex apply_patch arrives as Edit / Write). */
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+
+const hasChecks = (checks: TurnChecks): boolean => checks.edited || checks.runs.length > 0 || checks.previous !== undefined || checks.known.length > 0
 
 type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
 
@@ -67,6 +76,8 @@ export class HookBridge {
       rollouts?: HookObserver
       /** Follows every agent's transcript for context history and token spend (./transcript-meter.ts). */
       transcripts?: HookObserver
+      /** A folder's package.json scripts, so `npm run check` counts as what it runs (./package-scripts.ts). */
+      scripts?: ScriptsLookup
     } = {}
   ) {
     this.registry = new PermissionRegistry((resolution) => emitter.resolved(resolution), options.scheduler, options.permissionTimeoutMs)
@@ -90,6 +101,7 @@ export class HookBridge {
     if (meta.context) this.emitMeta(sessionId, agent, at, { type: 'context', context: meta.context })
     if (meta.todos.length > 0) this.emitMeta(sessionId, agent, at, { type: 'todos', items: meta.todos })
     if (!meta.plan) this.emitMeta(sessionId, agent, at, { type: 'billing', plan: false })
+    if (hasChecks(meta.checks)) this.emitMeta(sessionId, agent, at, { type: 'checks', checks: meta.checks })
   }
 
   /** False while the session's agent is off its vendor's plan (a third-party endpoint): its spend is not the account's. */
@@ -121,7 +133,7 @@ export class HookBridge {
   private metaOf(sessionId: string): SessionMeta {
     let meta = this.meta.get(sessionId)
     if (!meta) {
-      meta = { context: null, todos: [], plan: true }
+      meta = { context: null, todos: [], plan: true, checks: emptyTurnChecks() }
       this.meta.set(sessionId, meta)
     }
     return meta
@@ -151,6 +163,26 @@ export class HookBridge {
     if (sameTodos(meta.todos, todos)) return
     meta.todos = todos
     this.emitMeta(sessionId, agent, at, { type: 'todos', items: todos })
+  }
+
+  private setChecks(sessionId: string, agent: HookAgent, at: number, checks: TurnChecks): void {
+    const meta = this.metaOf(sessionId)
+    const silent = sameTurnChecks(meta.checks, checks) || (!hasChecks(meta.checks) && !hasChecks(checks))
+    meta.checks = checks
+    // A new turn of a session that never edited or checked anything changes nothing on screen.
+    if (silent) return
+    this.emitMeta(sessionId, agent, at, { type: 'checks', checks })
+  }
+
+  /** What this hook says about the turn's checks: a new turn, an edit, a finished Bash call. */
+  private followChecks(sessionId: string, agent: HookAgent, at: number, normalized: ReturnType<typeof normalizeHook>): void {
+    let checks = this.metaOf(sessionId).checks
+    if (normalized.cleared) checks = { ...emptyTurnChecks(), known: checks.known }
+    if (normalized.newTurn) checks = beginTurn(checks, at)
+    for (const e of normalized.events) if (e.type === 'tool-end' && e.ok && EDIT_TOOLS.has(e.tool)) checks = recordEdit(checks)
+    const call = normalized.bashCall
+    if (call) checks = recordRuns(checks, checkRunsOf(call.command, call.result, at, call.dir, this.options.scripts))
+    this.setChecks(sessionId, agent, at, checks)
   }
 
   /** Answers a permission prompt in the UI. Returns false for unknown / already-resolved ids. */
@@ -187,6 +219,7 @@ export class HookBridge {
     if (event === AGENT_EXIT_EVENT) {
       this.setTodos(sessionId, agent, at, [])
       this.setContext(sessionId, agent, at, null)
+      this.setChecks(sessionId, agent, at, emptyTurnChecks())
       this.metaOf(sessionId).plan = true
       this.emitter.event({ sessionId, agent, at, event: { type: 'agent-exit' } })
       return ''
@@ -211,6 +244,9 @@ export class HookBridge {
       if (next) this.setTodos(sessionId, agent, at, next)
     }
     if (normalized.usage && this.usesPlan(sessionId)) this.emitter.usage?.(normalized.usage)
+    if (normalized.cleared || normalized.newTurn || normalized.bashCall || normalized.events.some((e) => e.type === 'tool-end')) {
+      this.followChecks(sessionId, agent, at, normalized)
+    }
 
     // The user answered in the TUI (or the turn moved on): withdraw what we were still showing.
     if (normalized.clears === 'all') {

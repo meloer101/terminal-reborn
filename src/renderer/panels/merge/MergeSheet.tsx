@@ -16,6 +16,8 @@ import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
 import { Segmented } from '../../ui/Segmented'
 import { StatusGlyph } from '../../ui/StatusGlyph'
+import { CheckMark, useTurnCheckView } from '../../turn-checks/TurnChecksTag'
+import { runNote, type TurnCheckView } from '@shared/turn-checks'
 import { removeFailureText, removeWorktreeWithSessions } from '../worktree/actions'
 import {
   agentLabel,
@@ -30,6 +32,7 @@ import {
   resultLines,
   testBlocksMerge,
   testLine,
+  turnChecksLine,
   type CheckLine,
   type MergeTestState
 } from './model'
@@ -172,6 +175,7 @@ function Sheet({ target }: { target: MergeTarget }) {
   }, [autoTrigger, reviewAgent, reviewBase, target.worktreePath])
   const reviewCheck = review ? reviewLine(review, severityCounts((reviewComments ?? []).filter((c) => c.origin === 'review'))) : null
   const reviewRunning = review?.phase === 'running'
+  const checksView = useTurnCheckView(agent?.id)
 
   const merge = async (): Promise<void> => {
     if (!ready || !mergeable) return
@@ -320,6 +324,7 @@ function Sheet({ target }: { target: MergeTarget }) {
               }}
             />
           )}
+          {shown && phase.kind !== 'done' && agent && checksView && <TurnChecks view={checksView} kind={agent.kind} />}
           {shown && phase.kind !== 'done' && testState && (
             <TestResult line={testLine(testState)} onRerun={() => setTestAttempt((n) => n + 1)} />
           )}
@@ -446,6 +451,35 @@ function Line({ line }: { line: CheckLine }) {
       <span className={styles.lineText}>{line.text}</span>
       {line.meta && <span className={styles.lineMeta}>{line.meta}</span>}
     </p>
+  )
+}
+
+/** Most runs a turn has are listed; the rest are counted. */
+const MAX_LISTED_RUNS = 6
+
+/** The agent's own checks this turn: the line, then each command with its mark (the failing ones first). */
+function TurnChecks({ view, kind }: { view: TurnCheckView; kind: Parameters<typeof turnChecksLine>[1] }) {
+  const order = { fail: 0, unknown: 1, pass: 2 } as const
+  const runs = [...view.runs].sort((a, b) => order[a.outcome] - order[b.outcome] || a.at - b.at)
+  return (
+    <>
+      <Line line={turnChecksLine(view, kind)} />
+      {runs.length > 0 && (
+        <ul className={styles.runs} aria-label="跑过的检查" data-testid="merge-turn-checks">
+          {runs.slice(0, MAX_LISTED_RUNS).map((run) => {
+            const note = runNote(run)
+            return (
+              <li key={`${run.kind} ${run.command}`} className={styles.run}>
+                <CheckMark outcome={run.outcome} />
+                <span className={styles.runCommand}>{run.command}</span>
+                {note && <span className={styles.runNote}>{note}</span>}
+              </li>
+            )
+          })}
+          {runs.length > MAX_LISTED_RUNS && <li className={styles.conflictMore}>还有 {runs.length - MAX_LISTED_RUNS} 条</li>}
+        </ul>
+      )}
+    </>
   )
 }
 

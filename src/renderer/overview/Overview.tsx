@@ -20,6 +20,7 @@ import { ReviewButton } from '../review/ReviewButton'
 import { LimitResumeSummary } from '../limit-resume/LimitResumeButton'
 import { SessionPrTag } from '../pull-requests/PrTag'
 import { usePullRequests } from '../pull-requests/store'
+import { TurnChecksTag } from '../turn-checks/TurnChecksTag'
 import { UsageChip, useMetaNow, useUsageList } from '../session-meta/MetaChips'
 import { useSessionMeta } from '../session-meta/store'
 import metaStyles from '../session-meta/SessionMeta.module.css'
@@ -358,6 +359,8 @@ function ListRow({ row, selected, onClick, expanded = false, trailing }: RowProp
       <span className={styles.summaryCell}>
         <LimitResumeSummary sessionId={id} fallback={row.summary} />
       </span>
+      {/* 待审阅: what the agent ran this turn, next to what it said (PRD F9). */}
+      {row.session.status === 'done_unread' && <TurnChecksTag sessionId={id} />}
       <PortTags sessionId={id} />
       <MetaCells sessionId={id} />
       {trailing ?? (
@@ -487,6 +490,7 @@ function StatusCard({ row, selected, onClick }: RowProps) {
       </span>
       {row.where && <span className={styles.cardWhere}>{row.where}</span>}
       {row.summary && <span className={styles.cardSummary}>{row.summary}</span>}
+      {row.session.status === 'done_unread' && <TurnChecksTag sessionId={id} />}
       <PortTags sessionId={id} />
       {row.stat && <span className={styles.cardStat}>{row.stat}</span>}
     </div>

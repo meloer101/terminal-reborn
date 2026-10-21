@@ -28,7 +28,8 @@ describe('normalizeHook · lifecycle events (real payloads)', () => {
   it('UserPromptSubmit carries the prompt and clears pending prompts', () => {
     expect(claude('UserPromptSubmit', fx.UserPromptSubmit)).toEqual({
       events: [{ type: 'prompt-submit', prompt: 'Reply with only the word OK.' }],
-      clears: 'all'
+      clears: 'all',
+      newTurn: true
     })
   })
 
@@ -285,5 +286,44 @@ describe('normalizeHook · metrics (PRD F11 / F12)', () => {
     expect(normalizeHook('claude', 'PostToolUse', { tool_name: 'Bash', tool_input: {} }).todoCall).toBeUndefined()
     expect(normalizeHook('claude', 'SessionStart', { session_id: 'abc', source: 'clear' }).cleared).toBe(true)
     expect(normalizeHook('claude', 'SessionStart', { session_id: 'abc', source: 'resume' }).cleared).toBeUndefined()
+  })
+})
+
+describe('normalizeHook · Bash results for the turn checks (PRD F9 / F4)', () => {
+  it('reads exit 0 and the output from PostToolUse, and the exit code from PostToolUseFailure', () => {
+    expect(claude('PostToolUse', fx.PostToolUse_Bash).bashCall).toEqual({
+      command: 'echo hooks-lab-ran > /work/project/ran.txt',
+      dir: '/work/project',
+      result: { exitCode: 0, output: '' }
+    })
+    expect(claude('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: { stdout: 'Tests  3 passed', stderr: 'warn', interrupted: true } }).bashCall?.result).toEqual({
+      exitCode: 0,
+      output: 'Tests  3 passed\nwarn',
+      interrupted: true
+    })
+    expect(claude('PostToolUseFailure', fx.PostToolUseFailure_Bash).bashCall).toEqual({
+      command: 'ls /work/project/does-not-exist',
+      dir: '/work/project',
+      result: { exitCode: 1, output: 'Exit code 1\nls: /work/project/does-not-exist: No such file or directory' }
+    })
+    expect(claude('PostToolUseFailure', { ...fx.PostToolUseFailure_Bash, error: 'Command timed out after 2m', is_interrupt: true }).bashCall?.result).toEqual({
+      exitCode: null,
+      output: 'Command timed out after 2m',
+      interrupted: true
+    })
+  })
+
+  it('skips background runs and other tools, and keeps only the tail of a long output', () => {
+    expect(claude('PostToolUse', { ...fx.PostToolUse_Bash, tool_input: { command: 'npm test', run_in_background: true } }).bashCall).toBeUndefined()
+    expect(claude('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: { stdout: '', backgroundTaskId: 'b1' } }).bashCall).toBeUndefined()
+    expect(claude('PostToolUse', { tool_name: 'Read', tool_input: { file_path: '/a' } }).bashCall).toBeUndefined()
+    const long = claude('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: { stdout: `${'x'.repeat(50_000)}END` } })
+    expect(long.bashCall?.result.output).toHaveLength(16_000)
+    expect(long.bashCall?.result.output.endsWith('END')).toBe(true)
+  })
+
+  it('does not start a new turn when Claude wakes itself after a background task', () => {
+    expect(claude('UserPromptSubmit', { ...fx.UserPromptSubmit, source: 'system' }).newTurn).toBeUndefined()
+    expect(claude('UserPromptSubmit', { ...fx.UserPromptSubmit, source: 'user' }).newTurn).toBe(true)
   })
 })
