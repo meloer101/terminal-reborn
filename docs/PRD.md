@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.48 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.49 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.49 | 2026-10-20 | 新增 §6.11 **规模基线**（ROADMAP D1）：冷启动、10 / 20 个会话空闲和输出时的内存、CPU、输入延迟，长跑；修掉隐藏终端每帧整屏重画（§6.3），20 个会话里 19 个输出时按键最长卡 1.8 s 的问题。对照 §1.3：冷启动 0.45–0.72 s 达标；内存 10 个会话达标，20 个会话都填满回滚时 footprint 贴着 1.5 GB；输入延迟 p50 10–12 ms 达标，p95 18–20 ms 比 16 ms 多出不到一帧 |
 | v1.48 | 2026-10-20 | **状态在多个确认、子 agent、后台 agent 下也准确**（§3.1，外部来源 c#1027 44 👍、c#2322 22 👍、o#13600）：每个权限对话框 / 提问 / 计划确认是一个**待确认项**（agent + 工具调用），全部回答完才离开“等你处理”，第二行写最早的一项和总数（`等你确认：抓取 a.example（共 2 项）`），修掉“两个同时确认的调用互相顶替”；带 `agent_id` 的子 agent / 后台 agent 的调用不开始也不结束一轮，只有它们的对话框算等你处理，一轮结束后后台 agent 请求权限、回答后回到“已完成”；新增自愈信号：`idle_prompt`、对话框标题之后标题重新转动（批准后工具还在跑）、屏幕上出现没有 hook 报告的对话框；Codex 等你处理时也按 1 s 检查。实测 Claude Code 2.1.304 的 hook 字段见 §6.6 |
 | v1.47 | 2026-10-20 | 新增 **F19 把文件和图片放进会话**：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴（剪贴板里的图片先存成临时文件）、会话头的回形针选文件或文件夹，都把转义后的路径放进输入行、不按回车；agent 自己把图片路径变成 `[Image #N]`。外部来源 c#3435（22 👍）、o#15377 |
 | v1.46 | 2026-10-20 | F11 **走第三方端点的会话不显示账号额度**：用 CC Switch 等把 Claude 指到 Kimi / GLM（settings.json 的 `ANTHROPIC_BASE_URL`）、用 Bedrock / Vertex，或 Codex 用非 `openai` 的 model provider 时，会话头不显示该厂商的额度标签，它的 token 不计入份额，它的 hook 也不让账号算作“在用”（不会因此更常去问官方账号）；context 照常显示。不做多账号 / 按会话的启动配置（见 ROADMAP：换服务商有 CC Switch，换账号 /logout 再 /login，只剩“两个账号并行”，等有用户提出） |
@@ -399,6 +400,7 @@ Renderer（React 19 + zustand）：侧栏 · 总览 · TerminalSurface(xterm.js)
 - 定义 `TerminalSurface` 接口（write / onData / buffer 读取 / OSC 订阅 / resize），xterm.js 是它的第一个实现，以后可以替换为 libghostty。
 - xterm 配置：使用 WebGL 渲染，失败时**按终端**回退到 DOM 渲染；开启 unicode11；字形图集不让它合并（见下一条）；kitty 键盘协议保持关闭；切换标签或面板后强制执行 fit + resize。
 - 实测结论 · WebGL 字形图集（addon-webgl 0.19.0，2026-10-20）：图集长到 16 页开始合并页时，GPU 会取错纹理，中文出现叠字、错字和缺字，缓冲区内容本身是对的；原地清空图集修不好。做法（`atlas-guard.ts`）：图集长到 12 页时，等这一帧画完就重建 WebGL 渲染器、换一个新图集，所以永远不会合并；重建后紧接着那一帧又把图集填满的终端改用 DOM，下次显示时再试 WebGL（沿用 WebGL 丢失的处理）。代价是每次重建卡一帧（80–110 ms），并且依赖 addon 的一个内部字段（图集页数）。上游修复 xterm.js#5883 在 7.0.0，正式版发布后升级并删掉这层保护。压测：`TR_STRESS=1 npx playwright test e2e/webgl-cjk-stress.spec.ts`。
+- 实测结论 · 隐藏终端的重绘（xterm 6.0，2026-10-20）：隐藏的终端交还 WebGL、改用 DOM 渲染器，xterm 也会因为不可见而暂停渲染；但它每次滚动都刷新选区，而 `RenderService.handleSelectionChanged` 不看暂停，DOM 渲染器对每次选区变化都重画全部行、逐字测量宽度。所以每个在后台输出的会话每帧都整屏重画：20 个会话里 19 个在输出时，渲染进程的帧长到 100–500 ms，按键最长等了 1.7 s。`paused-selection.ts` 让暂停时只记下选区、恢复时再画（依赖 RenderService 的三个内部字段，缺了就不打补丁）；之后同样负载下 p95 17–18 ms、没有长任务、渲染进程 CPU 从 6.6–11% 降到 1.3–1.7%。上游修复前保留。
 - 行高默认 1；终端底色取主题色（F7）。
 
 ### 6.4 目录结构
@@ -492,6 +494,14 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - **Codex `--output-schema`**（0.142.5）。`codex exec --ephemeral --json --output-schema <file> -o <file>` 的 Responses 请求带 `stream: true`，以及 `text.format = { type: "json_schema", strict: true, name: "codex_output_schema", schema }`。本地模拟模型按 schema 回 `{"findings":[…]}` 时退出码 0，`-o` 和 JSONL 里 `agent_message.text` 都是这段 JSON。0.142.5 不检查返回是否符合 schema：回 `{"title":…}` 或一段纯文本也是退出码 0，原样写入 `-o`，所以 Wavi 自己解析，失败就标这次审阅失败。`--sandbox read-only` 仍会在请求里带上 `exec_command`、`write_stdin`、`update_plan`、`request_user_input`、`view_image`、`multi_agent_v1`、`web_search`。`codex exec review` 同样有 `--output-schema`、`--uncommitted`、`--base`。
 - **Codex 的大提示**。用户提示 1,048,576 字符会开回合；1,048,577 字符本地退出码 1，`input_too_large`（`max_chars` 1,048,576，JSON-RPC -32602），请求没发出去。1,000,000 字符的提示，头和尾都在请求体里（请求体约 1,060,124 字节，另有约 60 KB 的 instructions）。分段后的每一段都要留在这个上限以内。
 - **本机 Codex 服务商**。沿用配置里的模型 `gpt-6-sol`，`codex exec --sandbox read-only --output-schema` 打到 `/v1/responses`，返回 `503`：当前分组 default 下该模型无可用渠道。Codex 会重连（探针 22 秒时停在 2/5），没有写出 `-o`。真实服务商上的结构化输出仍没跑通，请求形状以本地模拟为准。测本地模拟时，系统代理（HTTP/HTTPS/SOCKS `127.0.0.1:7897`）会把回环地址也送进代理，监听端看不到连接、客户端报 502；`NO_PROXY=127.0.0.1,localhost` 后请求到达。正式审阅走用户自己的 https 服务商，不改代理。
+
+### 6.11 实测结论 · 规模基线（2026-10-20）
+脚本 `e2e/scale.spec.ts`（`TR_SCALE=1`；`TR_SCALE_SOAK_MIN=480` 跑长跑，`TR_SCALE_PROFILE=1` 存渲染进程的 CPU profile 和长任务，`TR_SCALE_APP` 指向一份冻结的构建）和假 agent `e2e/scale-agent.mjs`（真实的按次 hooks、statusLine、transcript）；Apple M4、16 GB、macOS 26.3。数字在 ROADMAP D1。
+- 冷启动（启动到侧栏出现全部会话）0.45–0.72 s，不随会话数变：恢复的会话看到时才启动，守护进程里的会话只是接回。
+- 内存两种口径：Electron `getAppMetrics` 的工作集之和加守护进程 RSS，以及同一组进程的 phys_footprint（活动监视器的“内存”）。两者能差一半，输出多时 footprint 更高（压缩内存和 GPU 内存记在进程上），§1.3 的 1.5 GB 按 footprint 判断。回滚填满之前内存会涨：每个终端 1 万行，守护进程的镜像另有 5000 行，20 个会话持续输出时大约一小时填满。之后（长跑 3.96 小时）JS 堆和各进程工作集都不涨，footprint 在 1.2–1.5 GB 之间来回、大头记在 GPU 进程上（工作集约 0.1 GB 的 GPU 进程 footprint 有 0.4 GB 以上）——20 个会话都填满回滚时已经贴着 1.5 GB，回滚长度是主要变量。
+- 长跑两次被外部结束，都在 macOS 会话活动的同一刻、没有崩溃报告；守护进程被 SIGTERM 时应用 0.1 s 内拉起新的、继续运行（20 个会话工作时复测）。
+- 输入延迟的下限是一帧：按键 → 主进程 → 守护进程 → PTY → agent 回显 → 渲染进程 → 下一帧。一个会话空闲时 p95 就是 18 ms，20 个会话、19 个在输出时也只到 20 ms；p50 10–12 ms。
+- 让会话数不影响前台的前提是隐藏的终端不花渲染时间，见 §6.3。
 
 ## 7. 开源与工程规范
 
