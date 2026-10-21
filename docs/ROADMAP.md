@@ -198,6 +198,7 @@
 完成标准：PRD §1.3 的指标全部达标，没有 P0 / P1 缺陷。
 - [x] 会话在应用重启后保留（PTY 守护进程，已在 2b 期间完成）
 - [ ] GitHub PR 合并（`gh`；创建已在 M5 做完，2026-10-20）、应用内看 PR 评论（o#9512）
+- [x] 文件预览：长行自动换行、Markdown 渲染（2026-10-21，PRD F17 v1.59）：react-markdown + remark-gfm，HTML 经 rehype-raw + rehype-sanitize（GitHub 白名单）；链接打开内置浏览器 / 文件预览 / 标题锚点，标题行切换源码。顺带修了切换文件时短暂显示上一个文件内容的问题。纯逻辑 `markdown-model.ts`（链接解析、不越出 worktree、标题锚点），e2e `right-panel.spec.ts`（截图 `13f-markdown`、`13f-wrap`，两种主题）。Figma 13F 待补渲染态；`npm run dev` 下 worktree 图片因页面不是 file:// 加载不出、显示替代文字，安装版正常（未在真机看过）
 - [ ] 导入 Ghostty / iTerm 主题
 - [ ] 孤儿 worktree 自动回收
 - [ ] 总览批量操作（多选后停止、关闭、发送同一条消息）

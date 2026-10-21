@@ -226,7 +226,8 @@
   margin-left: var(--space-6);
 }
 
-/* Code (151:7399): 4 top; per line 2px change mark · number 34 right-aligned · 16 gap · Mono/Code 12/20. */
+/* Code (151:7399): 4 top; per line 2px change mark · number 34 right-aligned · 16 gap · Mono/Code 12/20.
+   Long lines wrap to the panel's width; the number and change mark span the whole wrapped line. */
 .code {
   flex: 1;
   min-height: 0;
@@ -236,13 +237,12 @@
 }
 
 .lines {
-  min-width: max-content;
   padding-bottom: var(--space-8);
 }
 
 .line {
   display: flex;
-  height: 20px;
+  min-height: 20px;
   font: var(--text-mono-code);
 }
 
@@ -275,8 +275,10 @@
 .lineText {
   flex: 1;
   padding: 0 var(--space-12) 0 var(--space-16);
+  min-width: 0;
   color: var(--text-primary);
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .truncated {

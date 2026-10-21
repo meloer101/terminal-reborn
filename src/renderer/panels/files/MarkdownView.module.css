@@ -1,0 +1,149 @@
+/* Rendered Markdown in the read-only preview: reading type, hierarchy from size and hairlines only. */
+
+.markdown {
+  padding: var(--space-8) var(--space-16) var(--space-24);
+  font: var(--text-body);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown :is(p, ul, ol, blockquote, pre, table, details, hr) {
+  margin: 0 0 var(--space-12);
+}
+
+.markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: var(--space-24) 0 var(--space-8);
+  scroll-margin-top: var(--space-8);
+}
+
+.markdown h1 {
+  font: var(--text-title-l);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.markdown h2 {
+  font: var(--text-title-m);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.markdown :is(h3, h4) {
+  font: var(--text-body-heading);
+}
+
+.markdown :is(h5, h6) {
+  font: var(--text-caption-strong);
+  color: var(--text-secondary);
+}
+
+.markdown a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.markdown a:hover {
+  text-decoration-color: currentColor;
+}
+
+.markdown :is(ul, ol) {
+  padding-left: var(--space-20);
+}
+
+.markdown li + li,
+.markdown li > :is(ul, ol) {
+  margin-top: var(--space-2);
+}
+
+.markdown li > :is(ul, ol) {
+  margin-bottom: 0;
+}
+
+/* GFM task lists. */
+.markdown li:has(> input[type='checkbox']) {
+  list-style: none;
+}
+
+.markdown li > input[type='checkbox'] {
+  margin: 0 var(--space-6) 0 calc(-1 * var(--space-20));
+  vertical-align: -2px;
+}
+
+.markdown blockquote {
+  padding: 0 0 0 var(--space-12);
+  border-left: 2px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.markdown code {
+  padding: 1px var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  font: var(--text-mono-s);
+}
+
+.markdown pre {
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  overflow-x: auto;
+}
+
+/* Diagrams drawn in box characters keep their shape; they scroll instead of wrapping. */
+.markdown pre code {
+  padding: 0;
+  background: none;
+  font: var(--text-mono-code);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown :is(th, td) {
+  padding: var(--space-4) var(--space-12) var(--space-4) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+.markdown th {
+  font: var(--text-body-strong);
+  border-bottom-color: var(--border-default);
+}
+
+.markdown img {
+  max-width: 100%;
+}
+
+.markdown summary {
+  cursor: pointer;
+}
+
+.imageAlt {
+  color: var(--text-tertiary);
+}

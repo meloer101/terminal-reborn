@@ -1,5 +1,6 @@
-// Read-only file preview (PRD F17, Figma 13F): line numbers and change marks; Esc / ← goes back to the tree.
-import { ArrowLeft, Code, Ellipsis } from 'lucide-react'
+// Read-only file preview (PRD F17, Figma 13F): line numbers and change marks, long lines wrap; Markdown renders,
+// with its source one click away. Esc / ← goes back to the tree.
+import { ArrowLeft, BookOpen, Code, Ellipsis, FileCode } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { SessionId } from '@shared/types'
 import type { FilePreview as Preview, GitLetter, LineMark, LineMarkRange } from '@shared/worktree-files'
@@ -9,12 +10,16 @@ import { ClosePanelButton } from '../PaneHeader'
 import { openFileMenu, runFileAction, type FileTarget } from './actions'
 import { FilesNotice } from './FilesNotice'
 import { FILE_SHORTCUTS, fileActionForKey } from './keys'
+import { isMarkdownPath } from './markdown-model'
+import { MarkdownView } from './MarkdownView'
 import { reveal, showPreview, useFiles } from './store'
 import { parentOf } from './tree-model'
 import { previewLines, MAX_PREVIEW_LINES } from './preview-model'
 import styles from './FilesView.module.css'
 
 interface Loaded {
+  /** The file this was read from; another one's content is never shown under this path. */
+  path: string
   preview: Preview
   marks: LineMarkRange[]
 }
@@ -32,7 +37,8 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
   const revision = useFiles((s) => s.roots[root]?.previewRevision ?? 0)
   const targetLine = useFiles((s) => s.roots[root]?.previewLine ?? null)
   const request = useFiles((s) => s.roots[root]?.previewRequest ?? 0)
-  const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [read, setLoaded] = useState<Loaded | null>(null)
+  const loaded = read?.path === path ? read : null
   const [error, setError] = useState<string | null>(null)
   const body = useRef<HTMLDivElement>(null)
   const target: FileTarget = { root, path, dir: false, sessionId }
@@ -43,7 +49,7 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
     void Promise.all([window.tr.worktree.readFile(root, path), wantsMarks ? window.tr.worktree.lineMarks(root, path) : Promise.resolve([])])
       .then(([preview, marks]) => {
         if (cancelled) return
-        setLoaded({ preview, marks })
+        setLoaded({ path, preview, marks })
         setError(null)
       })
       .catch((e: unknown) => {
@@ -55,6 +61,13 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
   }, [root, path, letter, revision])
 
   useEffect(() => body.current?.focus({ preventScroll: true }), [path])
+
+  // Markdown opens rendered, except from a `path:line` link (the line is in the source). Per file and request.
+  const markdown = isMarkdownPath(path)
+  const viewKey = `${path}\n${request}`
+  const [view, setView] = useState({ key: viewKey, source: targetLine !== null })
+  const source = !markdown || (view.key === viewKey ? view.source : targetLine !== null)
+  const rendered = !source && loaded?.preview.kind === 'text' ? loaded.preview.text : null
 
   const lines = useMemo(
     () => (loaded?.preview.kind === 'text' ? previewLines(loaded.preview.text, letter === 'U' ? 'all-added' : loaded.marks) : null),
@@ -121,6 +134,16 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
           </span>
         )}
         <span className={styles.previewTools}>
+          {markdown && (
+            <IconButton
+              label={source ? '显示渲染结果' : '显示源码'}
+              aria-pressed={source}
+              active={source}
+              onClick={() => setView({ key: viewKey, source: !source })}
+            >
+              {source ? <BookOpen size={16} strokeWidth={1.75} /> : <FileCode size={16} strokeWidth={1.75} />}
+            </IconButton>
+          )}
           <IconButton label="用默认编辑器打开" title={`用默认编辑器打开 · ${formatAccelerator(FILE_SHORTCUTS.open)}`} onClick={() => runFileAction('open', target)}>
             <Code size={16} strokeWidth={1.75} />
           </IconButton>
@@ -134,6 +157,8 @@ export function FilePreview({ root, path, sessionId, letter, onBack }: Props) {
       <div ref={body} className={styles.code} tabIndex={0} role="document" aria-label={`${path} 预览`} data-testid="file-preview" onKeyDown={onKeyDown}>
         {message ? (
           <p className={styles.empty}>{message}</p>
+        ) : rendered !== null ? (
+          <MarkdownView root={root} path={path} sessionId={sessionId} text={rendered} />
         ) : (
           lines && (
             <div className={styles.lines}>

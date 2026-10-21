@@ -1,6 +1,7 @@
 // F17 right panel: the floating card, the session header's view icons, ⇧⌘B, resizing, and the 文件 view on a real
 // git worktree — lazy tree, git letters, ignored entries, filter, 有改动, preview with change marks, the context menu,
 // and file paths printed in the terminal opening the preview at their line (⌘-click / the link menu: the editor).
+// Long lines wrap; Markdown renders (its links open files, its source is one click away).
 // Screenshots in both themes go to test-results/right-panel/ (compare with Figma 13D / 13F / 13G).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -16,6 +17,28 @@ interface Hook {
   readScreen(sessionId: string, scrollbackLines?: number): string
 }
 
+const README = `# demo
+
+A **small** project with \`inline code\` and a [link to util](src/util.ts#L2), [an anchor](#usage) and [the web](https://example.com).
+
+## Usage
+
+| 命令 | 作用 |
+| --- | --- |
+| \`npm run dev\` | 开发模式，热重载 |
+
+\`\`\`
+┌──────┐
+│ core │ ── drive ──▶ frontends
+└──────┘
+\`\`\`
+
+- [x] done
+- [ ] not yet
+
+> 中文段落会随宽度换行，${'这是一段很长的说明文字。'.repeat(12)}
+`
+
 /** A small repo: one modified file, one untracked file, one ignored folder. */
 function makeRepo(): string {
   const project = mkdtempSync(join(tmpdir(), 'tr-e2e-files-'))
@@ -25,9 +48,9 @@ function makeRepo(): string {
   mkdirSync(join(project, 'build'))
   const lines = Array.from({ length: 12 }, (_, i) => `export const line${i + 1} = ${i + 1}`)
   writeFileSync(join(project, 'src', 'app.ts'), `${lines.join('\n')}\n`)
-  writeFileSync(join(project, 'src', 'util.ts'), 'export const util = 1\n')
+  writeFileSync(join(project, 'src', 'util.ts'), `export const util = 1\nexport const long = '${'很长的一行 long line '.repeat(30)}'\n`)
   writeFileSync(join(project, 'src', 'components', 'Nav.tsx'), 'export function Nav() {}\n')
-  writeFileSync(join(project, 'README.md'), '# demo\n')
+  writeFileSync(join(project, 'README.md'), README)
   writeFileSync(join(project, '.gitignore'), 'build/\n')
   git('init', '-q', '-b', 'main')
   git('add', '.')
@@ -186,6 +209,34 @@ test.describe('F17 right panel · 文件', () => {
     await expect(preview).toBeVisible()
     await page.keyboard.press('ArrowLeft')
     await expect(tree()).toBeVisible()
+  })
+
+  test('Markdown renders, its source is a click away; its links open files; long lines wrap', async () => {
+    await row('README.md').dblclick()
+    const preview = panel().getByTestId('file-preview')
+    await expect(preview.getByRole('heading', { name: 'demo', level: 1 })).toBeVisible()
+    await expect(preview.getByRole('table')).toContainText('开发模式，热重载')
+    await expect(preview.locator('[data-line]')).toHaveCount(0)
+    await expect(preview.locator('input[type="checkbox"]')).toHaveCount(2)
+    // Nothing scrolls sideways but the diagram's code block.
+    expect(await preview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await shoot('13f-markdown')
+
+    await panel().getByRole('button', { name: '显示源码' }).click()
+    await expect(preview.locator('[data-line="1"]')).toHaveText('1# demo')
+    await panel().getByRole('button', { name: '显示渲染结果' }).click()
+    await expect(preview.getByRole('heading', { name: 'demo', level: 1 })).toBeVisible()
+
+    await preview.getByRole('link', { name: 'link to util' }).click()
+    await expect(panel().getByTitle('src/util.ts')).toHaveText('src/util.ts')
+    const long = preview.locator('[data-line="2"]')
+    await expect(long).toHaveAttribute('data-target', 'true')
+    // The long line wraps to the panel's width instead of scrolling sideways.
+    expect((await long.boundingBox())!.height).toBeGreaterThan(40)
+    expect(await preview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await shoot('13f-wrap')
+    await page.keyboard.press('Escape')
+    await expect(tree()).toBeFocused()
   })
 
   test('the filter finds files in folders that were never opened; 有改动 shows only changes', async () => {
