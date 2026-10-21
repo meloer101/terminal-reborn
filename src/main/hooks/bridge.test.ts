@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentEventEnvelope, PendingPrompt, PromptResolution } from '@shared/agent-events'
+import type { ScriptsLookup } from '@shared/check-commands'
 import type { VendorUsage } from '@shared/session-meta'
+import { checksText, turnCheckView, type TurnChecks } from '@shared/turn-checks'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { claudeFixtures as fx } from './fixtures'
 import { type HookRequest, UnknownSessionError } from './server'
 
-function setup(canDeliver = true, holdPermissions?: boolean) {
+function setup(canDeliver = true, holdPermissions?: boolean, scripts?: ScriptsLookup) {
   const events: AgentEventEnvelope[] = []
   const prompts: PendingPrompt[] = []
   const resolutions: PromptResolution[] = []
@@ -17,7 +19,7 @@ function setup(canDeliver = true, holdPermissions?: boolean) {
     canDeliver: () => canDeliver,
     usage: (u) => usage.push(u)
   }
-  const bridge = new HookBridge(emitter, { now: () => 1000, ...(holdPermissions === undefined ? {} : { holdPermissions }) })
+  const bridge = new HookBridge(emitter, { now: () => 1000, ...(holdPermissions === undefined ? {} : { holdPermissions }), ...(scripts ? { scripts } : {}) })
   bridge.attach('s1')
   const req = (event: string, payload: unknown, sessionId = 's1', signal = new AbortController().signal): HookRequest => ({
     event,
@@ -296,5 +298,61 @@ describe('HookBridge · reattach', () => {
     bridge.attach('s1')
     bridge.attach('s1', { adopt: true })
     expect(events).toEqual([])
+  })
+})
+
+describe('HookBridge · turn checks (PRD F9 / F4)', () => {
+  const bash = (command: string, extra: Record<string, unknown> = {}) => ({ tool_name: 'Bash', tool_input: { command }, cwd: '/repo', ...extra })
+  const latest = (events: AgentEventEnvelope[]): TurnChecks | undefined => {
+    const all = events.map((e) => e.event).filter((e) => e.type === 'checks')
+    const last = all[all.length - 1]
+    return last?.type === 'checks' ? last.checks : undefined
+  }
+  const shown = (events: AgentEventEnvelope[]) => {
+    const view = turnCheckView(latest(events))
+    return view && `${view.turn} ${checksText(view)}`
+  }
+
+  it('follows a turn: edits, a passing test, a failing lint through a package.json script', async () => {
+    const scripts: ScriptsLookup = (dir) => (dir === '/repo' ? { check: 'tsc --noEmit && eslint .' } : undefined)
+    const { bridge, events, req } = setup(true, false, scripts)
+    await bridge.handle(req('UserPromptSubmit', { prompt: 'fix login' }))
+    // Nothing edited or checked yet: no event.
+    expect(latest(events)).toBeUndefined()
+    await bridge.handle(req('PostToolUse', { tool_name: 'Edit', tool_input: { file_path: '/repo/a.ts' } }))
+    expect(shown(events)).toBe('current 没跑检查')
+    await bridge.handle(req('PostToolUse', bash('npm test', { tool_response: { stdout: 'Tests  3 passed (3)' } })))
+    await bridge.handle(req('PostToolUseFailure', bash('npm run check', { error: 'Exit code 2\nsrc/a.ts(1,1): error TS2304' })))
+    expect(shown(events)).toBe('current 测试 ✓ · lint ✗ · 类型 ✗')
+    // The same check again replaces its result; a non-check command changes nothing.
+    const before = events.length
+    await bridge.handle(req('PostToolUse', bash('git status')))
+    expect(events.length).toBe(before + 1)
+    await bridge.handle(req('PostToolUse', bash('npm run check')))
+    expect(shown(events)).toBe('current 测试 ✓ · lint ✓ · 类型 ✓')
+  })
+
+  it('carries the last turn while the next only talks, and starts over on /clear', async () => {
+    const { bridge, events, req } = setup()
+    await bridge.handle(req('UserPromptSubmit', { prompt: 'a' }))
+    await bridge.handle(req('PostToolUseFailure', bash('npx vitest run', { error: 'Exit code 1' })))
+    await bridge.handle(req('UserPromptSubmit', { prompt: 'commit it' }))
+    expect(shown(events)).toBe('previous 测试 ✗')
+    // A background task waking Claude is not the user's turn.
+    await bridge.handle(req('PostToolUse', { tool_name: 'Edit', tool_input: {} }))
+    await bridge.handle(req('UserPromptSubmit', { prompt: '', source: 'system' }))
+    expect(shown(events)).toBe('current 测试 未跑')
+    await bridge.handle(req('SessionStart', { source: 'clear', session_id: 'x' }))
+    expect(turnCheckView(latest(events))).toBeNull()
+    expect(latest(events)?.known).toEqual(['test'])
+  })
+
+  it('counts a subagent\'s checks in the turn and replays them to a reattached window', async () => {
+    const { bridge, events, req } = setup()
+    await bridge.handle(req('UserPromptSubmit', { prompt: 'a' }))
+    await bridge.handle(req('PostToolUse', bash('cargo test', { agent_id: 'sub-1' })))
+    events.length = 0
+    bridge.attach('s1', { adopt: true })
+    expect(shown(events)).toBe('current 测试 ✓')
   })
 })

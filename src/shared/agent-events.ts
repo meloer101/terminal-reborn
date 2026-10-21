@@ -3,6 +3,7 @@
 import type { AllowAlwaysScope } from './permission-scope'
 import type { ContextUsage } from './session-meta'
 import type { TodoItem } from './todo-progress'
+import type { TurnChecks } from './turn-checks'
 import type { SessionId } from './types'
 
 export type { AllowAlwaysScope } from './permission-scope'
@@ -41,6 +42,11 @@ export type AgentEvent =
   | { type: 'context'; context: ContextUsage | null }
   /** The agent's todo list after a todo-tool call; [] after /clear (PRD F12). Not activity. */
   | { type: 'todos'; items: TodoItem[] }
+  /**
+   * The tests / lint / typecheck / builds the agent ran this turn and how they came out, read by main from its Bash
+   * calls (PRD F9 / F4 “这一轮跑过哪些检查”); sent when it changes. Not activity.
+   */
+  | { type: 'checks'; checks: TurnChecks }
   /** An agent started by hand in a plain terminal ended (resources/hooks/agent-shim.sh): its metrics are gone. */
   | { type: 'agent-exit' }
   /**

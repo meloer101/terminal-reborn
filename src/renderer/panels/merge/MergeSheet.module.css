@@ -155,7 +155,8 @@
   color: var(--text-tertiary);
 }
 
-.conflicts {
+.conflicts,
+.runs {
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -168,6 +169,30 @@
   align-items: baseline;
   gap: var(--space-12);
   padding: var(--space-4) 0;
+}
+
+/* The agent's own checks this turn: mark, command, how the result is known. */
+.run {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-2) 0;
+}
+
+.runCommand {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runNote {
+  flex-shrink: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
 }
 
 .conflictPath {

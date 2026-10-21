@@ -23,6 +23,7 @@ import { shellIntegrationEnv, writeCodexOverrides, writeShims, type ShimDirs } f
 import { StartWatchdog } from './start-watchdog'
 import { TranscriptMeter } from './transcript-meter'
 import { HookSupervisor } from './supervisor'
+import { packageScriptsReader } from './package-scripts'
 import { claudeInterval, codexInterval, PlanUsagePoller } from './plan-usage-poller'
 import { UsageStore } from './usage-store'
 import { userStatusLineFor } from './user-statusline'
@@ -192,6 +193,9 @@ const titles = new AgentTitleWatcher((sessionId, agent, title) =>
 /** Context history and token spend per session, read from the agents' transcripts (Figma 18). */
 const transcripts = new TranscriptMeter()
 
+/** package.json scripts, so a turn's `npm run check` counts as the checks it runs (PRD F9 / F4). */
+const scripts = packageScriptsReader()
+
 /** Codex's context and plan usage, read from its rollout after its hooks (PRD F11, §6.7). */
 const rollouts = new CodexUsageWatcher((sessionId, reading) => void runtime?.then((rt) => rt?.bridge.applyReading(sessionId, 'codex', reading)))
 
@@ -221,7 +225,7 @@ async function start(): Promise<Runtime | null> {
   ])
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts })
+      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, scripts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -245,7 +249,7 @@ async function start(): Promise<Runtime | null> {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
     // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
-    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts })
+    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, scripts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => bridge.handle(request),

@@ -6,6 +6,7 @@
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
 import { autoCompactRuleFromEnv, parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
+import type { BashResult } from '@shared/check-commands'
 import { isTodoTool } from '@shared/todo-progress'
 
 export interface PermissionDraft {
@@ -34,6 +35,10 @@ export interface NormalizedHook {
   todoCall?: { tool: string; input: unknown; response: unknown }
   /** The conversation was cleared (/clear): its todo list and context reading are gone. */
   cleared?: true
+  /** A finished Bash call, for the turn's checks (PRD F9 / F4): the bridge classifies it. Output is only its tail. */
+  bashCall?: { command: string; dir?: string; result: BashResult }
+  /** The user (not a background task waking the agent) started a turn: the turn's checks start over. */
+  newTurn?: true
 }
 
 const MAX_SUMMARY = 160
@@ -174,6 +179,39 @@ function agentIdOf(payload: Rec): { agentId?: string } {
 
 const NONE: NormalizedHook = { events: [], clears: 'none' }
 
+/** A Bash call's output can be megabytes; only the end carries a test runner's summary. */
+const OUTPUT_TAIL_CHARS = 16_000
+const tail = (text: string): string => (text.length > OUTPUT_TAIL_CHARS ? text.slice(-OUTPUT_TAIL_CHARS) : text)
+const EXIT_CODE = /^Exit code:? (\d+)/
+
+/**
+ * Claude's Bash result (PRD §6.6): PostToolUse means exit 0 (`tool_response.stdout / stderr / interrupted`),
+ * PostToolUseFailure carries `error: "Exit code 1\n…"` (a timeout has no code). A background run
+ * (`run_in_background`) has no result yet, so it is not a check run.
+ */
+function claudeBashCall(event: string, payload: Rec, input: Rec): NormalizedHook['bashCall'] {
+  const command = str(input.command)
+  if (!command || input.run_in_background === true) return undefined
+  const dir = str(payload.cwd)
+  const at = dir ? { dir } : {}
+  if (event === 'PostToolUse') {
+    const response = isRec(payload.tool_response) ? payload.tool_response : {}
+    if (str(response.backgroundTaskId)) return undefined
+    const output = tail([str(response.stdout), str(response.stderr)].filter(Boolean).join('\n'))
+    return { command, ...at, result: { exitCode: 0, output, ...(response.interrupted === true ? { interrupted: true } : {}) } }
+  }
+  const error = str(payload.error) ?? ''
+  const code = EXIT_CODE.exec(error)
+  return {
+    command,
+    ...at,
+    result: { exitCode: code ? Number(code[1]) : null, output: tail(error), ...(payload.is_interrupt === true ? { interrupted: true } : {}) }
+  }
+}
+
+/** Claude's own wake-up of the main thread after a background task (UserPromptSubmit source `system`) continues the turn. */
+const isUserTurn = (payload: Rec): boolean => payload.source !== 'system'
+
 /** Only the end of a long reply is ever shown (its last line), so the tail is all that crosses IPC. */
 const REPLY_TAIL_CHARS = 2_000
 
@@ -209,7 +247,7 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
       }
     }
     case 'UserPromptSubmit':
-      return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
+      return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all', ...(isUserTurn(payload) ? { newTurn: true as const } : {}) }
     case 'PreToolUse': {
       const result: NormalizedHook = { events: [{ type: 'tool-start', tool, input, ...agent }], clears: 'none' }
       if (tool === 'AskUserQuestion') {
@@ -219,13 +257,16 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
       return result
     }
     case 'PostToolUse':
+    case 'PostToolUseFailure': {
+      const ok = event === 'PostToolUse'
+      const bashCall = tool === 'Bash' ? claudeBashCall(event, payload, input) : undefined
       return {
-        events: [{ type: 'tool-end', tool, input, ok: true, ...agent }],
+        events: [{ type: 'tool-end', tool, input, ok, ...agent }],
         clears: 'tool',
-        ...(isTodoTool(tool) ? { todoCall: { tool, input, response: payload.tool_response } } : {})
+        ...(ok && isTodoTool(tool) ? { todoCall: { tool, input, response: payload.tool_response } } : {}),
+        ...(bashCall ? { bashCall } : {})
       }
-    case 'PostToolUseFailure':
-      return { events: [{ type: 'tool-end', tool, input, ok: false, ...agent }], clears: 'tool' }
+    }
     case 'PermissionRequest': {
       // AskUserQuestion already waits from its PreToolUse (which carries the questions).
       if (tool === 'AskUserQuestion') return NONE
@@ -311,6 +352,42 @@ export function mapCodexTool(tool: string, rawInput: unknown): { tool: string; i
   }
 }
 
+/**
+ * The command line of a Codex shell call: a string, `{ command: string }`, or an argv (`["bash", "-lc", "npm test"]`).
+ * Kept apart from mapCodexTool, whose `{ command }` must stay identical across a call's hooks.
+ */
+function codexCommand(raw: unknown): string | undefined {
+  const value = isRec(raw) ? raw.command : raw
+  if (typeof value === 'string') return str(value)
+  if (!Array.isArray(value) || !value.every((v) => typeof v === 'string')) return undefined
+  const argv = value as string[]
+  if (argv.length === 3 && /(^|\/)(ba|z)?sh$/.test(argv[0] as string) && /^-l?c$/.test(argv[1] as string)) return str(argv[2])
+  return str(argv.join(' '))
+}
+
+/**
+ * Codex's Bash result (PRD §6.7): 0.142.5 gives only the output as a string, with no exit code; a leading
+ * `Exit code: N` (as apply_patch writes) or an object with `exit_code` is used when a version gives one.
+ */
+function codexBashCall(payload: Rec): NormalizedHook['bashCall'] {
+  const command = codexCommand(payload.tool_input)
+  if (!command) return undefined
+  const response = payload.tool_response
+  let exitCode: number | null = null
+  let output = ''
+  if (typeof response === 'string') {
+    output = response
+    const code = EXIT_CODE.exec(response)
+    if (code) exitCode = Number(code[1])
+  } else if (isRec(response)) {
+    output = [str(response.output), str(response.stdout), str(response.stderr)].filter(Boolean).join('\n')
+    const code = response.exit_code ?? response.exitCode
+    if (typeof code === 'number' && Number.isInteger(code)) exitCode = code
+  }
+  const dir = str(payload.cwd)
+  return { command, ...(dir ? { dir } : {}), result: { exitCode, output: tail(output) } }
+}
+
 function normalizeCodex(event: string, payload: Rec): NormalizedHook {
   const mapped = mapCodexTool(str(payload.tool_name) ?? 'unknown', payload.tool_input)
 
@@ -318,7 +395,7 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
     case 'SessionStart':
       return { events: [sessionStart(payload)], clears: 'none' }
     case 'UserPromptSubmit':
-      return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
+      return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all', newTurn: true }
     case 'PreToolUse': {
       const result: NormalizedHook = { events: [{ type: 'tool-start', tool: mapped.tool, input: mapped.input }], clears: 'none' }
       if (mapped.tool === 'AskUserQuestion') {
@@ -328,8 +405,10 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
       return result
     }
     // The payload has no success flag (tool_response is the tool's text output), so every PostToolUse is `ok`.
-    case 'PostToolUse':
-      return { events: [{ type: 'tool-end', tool: mapped.tool, input: mapped.input, ok: true }], clears: 'tool' }
+    case 'PostToolUse': {
+      const bashCall = mapped.tool === 'Bash' ? codexBashCall(payload) : undefined
+      return { events: [{ type: 'tool-end', tool: mapped.tool, input: mapped.input, ok: true }], clears: 'tool', ...(bashCall ? { bashCall } : {}) }
+    }
     case 'PermissionRequest':
       // No `permission_suggestions`: Codex's "don't ask again" would persist a rule in ~/.codex, so there is no allow-always.
       return {

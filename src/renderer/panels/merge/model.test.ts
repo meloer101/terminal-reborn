@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, removeBlocker, resultLines, testBlocksMerge, testLine } from './model'
+import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
+import { turnCheckView } from '@shared/turn-checks'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
   branch: 'jacob/nav',
@@ -121,5 +122,18 @@ describe('texts', () => {
 
   it('failure text says when a rebase already happened', () => {
     expect(failureText({ ok: false, reason: 'git', message: 'boom', rebased: true }, check())).toBe('没能合并（jacob/nav 已经变基到最新的 main 上）：boom')
+  })
+})
+
+describe('turnChecksLine', () => {
+  const run = (kind: 'test' | 'lint', outcome: 'pass' | 'fail', at: number) => ({ kind, command: kind === 'test' ? 'npm test' : 'npm run lint', outcome, basis: 'exit' as const, full: true, at })
+  it('says the worst outcome, with the compact summary as meta', () => {
+    const view = turnCheckView({ since: 1, edited: true, runs: [run('test', 'pass', 2), run('lint', 'fail', 3)], known: [] })
+    expect(view && turnChecksLine(view, 'codex')).toEqual({ tone: 'error', text: 'Codex 这一轮的 lint 没过', meta: '测试 ✓ · lint ✗' })
+  })
+
+  it('has no meta when nothing ran', () => {
+    const view = turnCheckView({ since: 1, edited: true, runs: [], known: [] })
+    expect(view && turnChecksLine(view, 'claude')).toEqual({ tone: 'warn', text: 'Claude 这一轮改了文件，没跑检查' })
   })
 })

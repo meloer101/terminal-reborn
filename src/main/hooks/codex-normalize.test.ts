@@ -15,7 +15,8 @@ describe('normalizeHook · codex lifecycle (real payloads)', () => {
   it('UserPromptSubmit carries the prompt and clears pending prompts', () => {
     expect(codex('UserPromptSubmit', fx.UserPromptSubmit)).toEqual({
       events: [{ type: 'prompt-submit', prompt: 'Reply with only the word OK.' }],
-      clears: 'all'
+      clears: 'all',
+      newTurn: true
     })
   })
 
@@ -136,5 +137,24 @@ describe('mapCodexTool', () => {
   it('wraps a bare string input as a command and drops non-object inputs', () => {
     expect(mapCodexTool('Bash', 'ls')).toEqual({ tool: 'Bash', input: { command: 'ls' } })
     expect(mapCodexTool('whatever', 42)).toEqual({ tool: 'whatever', input: {} })
+  })
+})
+
+describe('normalizeHook · codex Bash results for the turn checks (PRD F9 / F4, §6.7)', () => {
+  it('has the output but no exit code', () => {
+    expect(codex('PostToolUse', fx.PostToolUse_Bash_failed).bashCall).toEqual({
+      command: 'ls /work/project/does-not-exist',
+      dir: '/work/project',
+      result: { exitCode: null, output: 'ls: /work/project/does-not-exist: No such file or directory\n' }
+    })
+  })
+
+  it('uses an exit code when a version gives one, and reads an argv command', () => {
+    const call = codex('PostToolUse', { ...fx.PostToolUse_Bash, tool_input: { command: ['bash', '-lc', 'npm test'] }, tool_response: 'Exit code: 1\nWall time: 2 seconds\nOutput:\n' })
+    expect(call.bashCall?.command).toBe('npm test')
+    expect(call.bashCall?.result.exitCode).toBe(1)
+    expect(codex('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: { output: 'ok', exit_code: 0 } }).bashCall?.result).toEqual({ exitCode: 0, output: 'ok' })
+    // The status code keeps seeing the same `{ command }` as before.
+    expect(call.events).toEqual([{ type: 'tool-end', tool: 'Bash', input: {}, ok: true }])
   })
 })
