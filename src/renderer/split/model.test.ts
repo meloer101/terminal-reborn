@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pane, splitPane } from '@shared/split-layout'
+import { pane, sessionsIn, splitPane } from '@shared/split-layout'
 import { mockProjects, mockSessions, mockWorktrees } from '../state/mock-data'
 import { dropLabel, pickerRows } from './model'
 
@@ -8,13 +8,17 @@ const input = { projects: mockProjects, worktrees: mockWorktrees, sessions: mock
 describe('pickerRows', () => {
   it('lists the sessions not shown yet, in sidebar order', () => {
     const split = splitPane(pane('s-cookie'), 's-cookie', 'right', 's-sidebar')
-    expect(pickerRows({ ...input, split }).map((r) => r.session.id)).toEqual(['s-perf', 's-nav', 's-acme-main', 's-graph'])
+    expect(pickerRows({ ...input, shown: sessionsIn(split) }).map((r) => r.session.id)).toEqual(['s-perf', 's-nav', 's-acme-main', 's-graph'])
+  })
+
+  it('leaves out sessions another window shows (F20 · 多窗口)', () => {
+    expect(pickerRows({ ...input, shown: ['s-cookie', 's-sidebar', 's-nav'] }).map((r) => r.session.id)).toEqual(['s-perf', 's-acme-main', 's-graph'])
   })
 
   it('filters like the overview, and leaves archived worktrees out', () => {
-    expect(pickerRows({ ...input, split: null, filter: 'p:terminal' }).map((r) => r.session.id)).toEqual(['s-sidebar', 's-graph'])
+    expect(pickerRows({ ...input, shown: [], filter: 'p:terminal' }).map((r) => r.session.id)).toEqual(['s-sidebar', 's-graph'])
     const worktrees = mockWorktrees.map((w) => (w.id === 'w-graph' ? { ...w, archived: { id: 'abcd1234', at: 1, commit: 'a'.repeat(40), dirty: false } } : w))
-    expect(pickerRows({ ...input, worktrees, split: null }).map((r) => r.session.id)).not.toContain('s-graph')
+    expect(pickerRows({ ...input, worktrees, shown: [] }).map((r) => r.session.id)).not.toContain('s-graph')
   })
 })
 

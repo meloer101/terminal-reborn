@@ -183,6 +183,24 @@ describe('sanitizeWorkspaceFile', () => {
     expect(sanitizeWorkspaceFile({ ...structuredClone(valid), split: 'row' }, 0)).not.toHaveProperty('split')
   })
 
+  it('keeps secondary windows (F20 · 多窗口), each session shown in one window only', () => {
+    const windows = [{ key: 'w-a1', projectId: 'p1', activeSessionId: 's1', sidebarCollapsed: true, bounds: { x: -1200, y: 40, width: 900, height: 700 } }]
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), windows }, 0)?.windows).toEqual(windows)
+    // Main shows s2, so a window cannot show it too.
+    const clash = sanitizeWorkspaceFile({ ...structuredClone(valid), windows: [{ key: 'w-a1', activeSessionId: 's2' }] }, 0)
+    expect(clash?.windows).toEqual([{ key: 'w-a1' }])
+    // A main window with an unknown active session falls back to one the windows do not show.
+    const fallback = sanitizeWorkspaceFile({ ...structuredClone(valid), activeSessionId: 'nope', windows }, 0)
+    expect(fallback?.activeSessionId).toBe('s2')
+    // A main window emptied by moving its last pane out stays empty.
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), activeSessionId: null, windows }, 0)?.activeSessionId).toBeNull()
+    // Without windows, null still falls back to the first session (files from before windows).
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), activeSessionId: null }, 0)?.activeSessionId).toBe('s1')
+    // A window for a removed project is dropped; garbage is ignored.
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), windows: [{ key: 'w-a1', projectId: 'p9' }] }, 0)).not.toHaveProperty('windows')
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), windows: 'yes' }, 0)).not.toHaveProperty('windows')
+  })
+
   it('keeps recent project folders: absolute, unique, at most 8', () => {
     const recent = ['/a', 'relative', '/a', 7, '/b', ...Array.from({ length: 10 }, (_, i) => `/r${i}`)]
     const file = sanitizeWorkspaceFile({ ...valid, recentProjects: recent }, 0) as WorkspaceFile

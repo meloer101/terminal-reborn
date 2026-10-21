@@ -59,7 +59,7 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   const menu = page.getByRole('menu')
   const cookie = sidebar.locator('[data-session-id="s-cookie"]')
   await cookie.click({ button: 'right' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['关闭会话⌘W', '在此新建会话', '归档 worktree…'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['移到新窗口', '关闭会话⌘W', '在此新建会话', '归档 worktree…'])
   const submenu = page.getByRole('menu', { name: '在此新建会话' })
   await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此新建会话' }), submenu)
   await expect(submenu.getByRole('menuitem')).toHaveText(['Claude Code', 'Codex', '终端'])

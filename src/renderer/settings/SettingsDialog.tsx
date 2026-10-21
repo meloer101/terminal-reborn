@@ -7,6 +7,9 @@ import styles from './SettingsDialog.module.css'
 
 const useDialog = create<{ open: boolean }>()(() => ({ open: false }))
 
+/** Whether the dialog is up (read by app-shell/secondary-windows.tsx: it opens over the main window). */
+export const useSettingsDialog = useDialog
+
 let restoreFocus: HTMLElement | null = null
 
 export function openSettings(): void {

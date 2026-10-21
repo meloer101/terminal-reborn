@@ -6,6 +6,7 @@ import type { ReviewComment } from '@shared/review-comments'
 import { hasPane, paneIds, persistedSplit, PICKER_PANE, removePane, replacePane, sessionsIn, type SplitNode } from '@shared/split-layout'
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
 import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
+import type { PersistedWindow } from '@shared/window-layout'
 
 export interface WorkspaceData {
   projects: Project[]
@@ -246,6 +247,8 @@ export interface WorkspaceUi {
   recentProjects: readonly string[]
   /** 工作目录 last used in the new-session sheet, by project. */
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
+  /** Secondary windows (F20 · 多窗口); `data` holds the main window's panes. */
+  secondaryWindows?: readonly PersistedWindow[]
 }
 
 /** Only what defines the workspace; live status is rebuilt at runtime. */
@@ -298,7 +301,8 @@ export function serializeWorkspace(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
     ),
     ...(comments.length > 0 ? { reviewComments: Object.fromEntries(comments.map(([path, list]) => [path, [...list]])) } : {}),
-    ...(split ? { split } : {})
+    ...(split ? { split } : {}),
+    ...(ui.secondaryWindows && ui.secondaryWindows.length > 0 ? { windows: [...ui.secondaryWindows] } : {})
   }
 }
 

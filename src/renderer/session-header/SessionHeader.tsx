@@ -6,7 +6,9 @@ import { useWorktreeCreations } from '../new-session/creation'
 import { PANEL_VIEW_LABEL } from '../panels/RightPanel'
 import { pressRun, runAction, runSessionOf, useRepoScripts, useRunRunning, type RunAction } from '../scripts/run-script'
 import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
-import { useSessionView, useWorkspace, type PanelView } from '../state/workspace'
+import { MAIN_WINDOW } from '@shared/window-layout'
+import { useSessionView, useWorkspace, windowEffects, type PanelView } from '../state/workspace'
+import { useSidebarCollapsed, useWindowKey } from '../state/window-scope'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
 import { SessionMetaChips } from '../session-meta/MetaChips'
@@ -47,11 +49,19 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
   const active = useSessionView(sessionId)
   const focused = pane?.focused ?? true
   const lead = pane?.lead ?? true
-  const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed) && lead
+  const windowKey = useWindowKey()
+  const sidebarCollapsed = useSidebarCollapsed() && lead
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar)
   const waiting = useWorkspace((s) => s.sessions.filter((x) => needsAttention(x.status)).length)
   const mostUrgent = useWorkspace((s) => s.sessions.filter((x) => needsAttention(x.status)).sort(compareByUrgency)[0]?.status)
-  const setMainView = useWorkspace((s) => s.setMainView)
+  // The overview is the main window's: from another window (F20 · 多窗口) that one comes forward.
+  const openOverview = (): void => {
+    if (windowKey !== MAIN_WINDOW) {
+      useWorkspace.getState().focusWindow(MAIN_WINDOW)
+      windowEffects.reveal(MAIN_WINDOW)
+    }
+    useWorkspace.getState().setMainView('overview')
+  }
   const rightPanel = useWorkspace((s) => s.rightPanel)
   const togglePanelView = useWorkspace((s) => s.togglePanelView)
   const hooks = useHooksHealth(active?.session.id ?? null)
@@ -86,7 +96,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
       )}
       {/* With the sidebar hidden nothing else says another session is waiting (B9). */}
       {sidebarCollapsed && waiting > 0 && mostUrgent && (
-        <button type="button" className={styles.waiting} title="打开总览 · ⇧⌘A" onClick={() => setMainView('overview')}>
+        <button type="button" className={styles.waiting} title="打开总览 · ⇧⌘A" onClick={openOverview}>
           <span aria-hidden className={styles.waitingGlyph}>
             <StatusGlyph status={mostUrgent} />
           </span>
@@ -164,7 +174,8 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
             <Paperclip size={16} strokeWidth={1.75} />
           </IconButton>
         )}
-        {focused && active && (
+        {/* The right panel is the main window's (F20 · 多窗口: not in other windows yet). */}
+        {focused && active && windowKey === MAIN_WINDOW && (
           <span className={styles.panes} role="group" aria-label="右侧栏">
             {PANE_ICONS.map(({ view, icon: Icon }) => (
               <IconButton

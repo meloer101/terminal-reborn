@@ -11,7 +11,7 @@ import type { SessionId } from '@shared/types'
 import { loadLiveSessions, useLiveSessions } from '../terminal/live-sessions'
 import { disposeTerminal, isTerminalAlive } from '../terminal/registry'
 import { agentSessionIdPatch, planStart, shouldAutoStart, type StartOptions } from './session-start-plan'
-import { shownSessionIds, useWorkspace } from './workspace'
+import { shownEverywhere, useWorkspace } from './workspace'
 
 export { AUTO_START_ON_VIEW, hasStartChoice, type StartOptions } from './session-start-plan'
 
@@ -83,10 +83,10 @@ export function useSessionStartup(): void {
     void loadLiveSessions().then(adoptLiveSessions)
   }, [])
 
-  // Every session shown in the main area is viewed: the active one, and the others in a split (PRD F20).
+  // Every session shown is viewed: the active one, the others in a split (PRD F20), and those in other windows.
   const due = useWorkspace((s) => {
     const live = useLiveSessions.getState().live
-    return shownSessionIds(s)
+    return shownEverywhere(s)
       .filter((id) => shouldAutoStart(s.sessions.find((x) => x.id === id)) && !live[id])
       .join('\n')
   })

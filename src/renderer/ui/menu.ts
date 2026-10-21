@@ -1,6 +1,8 @@
-// In-app context / dropdown menus. Drawn by the renderer (ui/MenuHost.tsx, mounted once by AppShell) so they share
-// the product's type, tokens and both themes instead of the system's vibrant popover.
+// In-app context / dropdown menus. Drawn by the renderer (ui/MenuHost.tsx, mounted once in every window) so they share
+// the product's type, tokens and both themes instead of the system's vibrant popover. A menu opens in the window of the
+// control or pointer that opened it (F20 · 多窗口).
 import { create } from 'zustand'
+import { keyDocument } from '../app-shell/windows-runtime'
 import type { MenuEntry, Placement } from './menu-model'
 
 export type { MenuEntry } from './menu-model'
@@ -18,6 +20,8 @@ export interface OpenMenu {
   placement: Placement
   /** Focus goes back here when the menu closes (the terminal, a sidebar row, …). */
   restoreTo: HTMLElement | null
+  /** The document of the window it opens in. */
+  doc: Document
   resolve(id: string | null): void
 }
 
@@ -29,28 +33,32 @@ let owner: Element | null = null
 /** A press outside closed the menu opened by this control; its click must not reopen it (toggle). */
 let dismissedBy: { element: Element; at: number } | null = null
 
+/** Not `instanceof Element`: a secondary window's elements come from that window's constructors. */
+const isElement = (anchor: MenuAnchor): anchor is Element => 'getBoundingClientRect' in anchor
+
 function placementOf(anchor: MenuAnchor): Placement {
-  if (!(anchor instanceof Element)) return { kind: 'point', x: anchor.x, y: anchor.y }
+  if (!isElement(anchor)) return { kind: 'point', x: anchor.x, y: anchor.y }
   const { left, top, right, bottom } = anchor.getBoundingClientRect()
   return { kind: 'below', box: { left, top, right, bottom } }
 }
 
 /** Shows a menu; resolves to the chosen item id, or null when it is dismissed. */
 export function popupMenu(entries: MenuEntry[], anchor: MenuAnchor): Promise<string | null> {
-  const anchorElement = anchor instanceof Element ? anchor : null
+  const anchorElement = isElement(anchor) ? anchor : null
   if (anchorElement && dismissedBy?.element === anchorElement && performance.now() - dismissedBy.at < 500) {
     dismissedBy = null
     return Promise.resolve(null)
   }
   closeMenu(null)
-  const active = document.activeElement
-  const restoreTo = active instanceof HTMLElement && active !== document.body ? active : null
+  owner = anchorElement ?? (isElement(anchor) ? null : (anchor.owner ?? null))
+  const doc = owner?.ownerDocument ?? keyDocument()
+  const active = doc.activeElement
+  const restoreTo = active && active !== doc.body && 'focus' in active ? (active as HTMLElement) : null
   openedBy = anchorElement
-  owner = anchorElement ?? (anchor instanceof Element ? null : (anchor.owner ?? null))
   owner?.setAttribute('data-menu-open', '')
   anchorElement?.setAttribute('aria-expanded', 'true')
   return new Promise((resolve) => {
-    useMenu.setState({ menu: { serial: ++serial, entries, placement: placementOf(anchor), restoreTo, resolve } })
+    useMenu.setState({ menu: { serial: ++serial, entries, placement: placementOf(anchor), restoreTo, doc, resolve } })
   })
 }
 

@@ -3,6 +3,8 @@
 // left to the app menu, which changes the setting itself (F8).
 import type { FontSizeStep } from '@shared/shortcuts'
 import { useWorkspace } from '../state/workspace'
+import { everyWindow, keyDocument } from '../app-shell/windows-runtime'
+import { showsPanes } from './store'
 import { clearTerminalZoom, stepTerminalZoom } from '../terminal/registry'
 
 function stepOf(e: KeyboardEvent): FontSizeStep | null {
@@ -16,22 +18,26 @@ function stepOf(e: KeyboardEvent): FontSizeStep | null {
 const onKeyDown = (e: KeyboardEvent): void => {
   const step = stepOf(e)
   if (!step) return
-  const { split, activeSessionId, mainView } = useWorkspace.getState()
-  if (!split || !activeSessionId || mainView !== 'session') return
+  const { split, activeSessionId, keyWindow } = useWorkspace.getState()
+  if (!split || !activeSessionId || !showsPanes(keyWindow)) return
   // A sheet or dialog in front keeps its own keys.
-  if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
+  if (keyDocument().querySelector('[role="dialog"][aria-modal="true"]')) return
   e.preventDefault()
   e.stopPropagation()
   stepTerminalZoom(activeSessionId, step)
 }
 
-window.addEventListener('keydown', onKeyDown, true)
+const uninstall = everyWindow((win) => {
+  win.addEventListener('keydown', onKeyDown, true)
+  return () => win.removeEventListener('keydown', onKeyDown, true)
+})
+// The split ended (not: the keyboard moved to a window without one).
 const unsubscribe = useWorkspace.subscribe((state, prev) => {
-  if (prev.split && !state.split) clearTerminalZoom()
+  if (prev.split && !state.split && state.keyWindow === prev.keyWindow) clearTerminalZoom()
 })
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    window.removeEventListener('keydown', onKeyDown, true)
+    uninstall()
     unsubscribe()
   })
 }

@@ -39,7 +39,13 @@ export function launchApp(
  * the width sticks even when it is wider than the screen. So this waits for the window to be visible first.
  */
 export async function setWindowSize(app: ElectronApplication, page: Page, width: number, height: number): Promise<void> {
-  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible() ?? false)).toBe(true)
-  await app.evaluate(({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows()[0]?.setSize(w!, h!), [width, height])
+  // The main window: secondary windows (PRD F20 · 多窗口) have no page of their own (about:blank, or nothing yet).
+  await expect
+    .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => /^(file|https?):/.test(w.webContents.getURL()))?.isVisible() ?? false))
+    .toBe(true)
+  await app.evaluate(
+    ({ BrowserWindow }, [w, h]) => BrowserWindow.getAllWindows().find((win) => /^(file|https?):/.test(win.webContents.getURL()))?.setSize(w!, h!),
+    [width, height]
+  )
   await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBe(width)
 }

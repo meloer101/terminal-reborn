@@ -1,5 +1,6 @@
 // Native confirmation sheets (quit, close session, remove project).
 import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { hostWindowFor } from './app-windows'
 import { IPC } from '@shared/ipc'
 import type { ConfirmOptions } from '@shared/lifecycle'
 import { getActivity } from './activity'
@@ -42,5 +43,5 @@ export async function confirm(options: ConfirmOptions, parent?: BrowserWindow | 
 }
 
 export function registerConfirmHandlers(): void {
-  ipcMain.handle(IPC.uiConfirm, (event, raw: unknown) => confirm(parseConfirmOptions(raw), BrowserWindow.fromWebContents(event.sender)))
+  ipcMain.handle(IPC.uiConfirm, (event, raw: unknown) => confirm(parseConfirmOptions(raw), hostWindowFor(event.sender)))
 }

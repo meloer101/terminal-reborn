@@ -2,24 +2,27 @@
 // Each pane is today's session view — its own header and the session's full, interactive terminal — and the panes
 // exactly fill the area, a 1 px hairline between neighbours that drags to resize (double-click evens the two out).
 // A session dragged from the sidebar, or a pane by its title, drops on a pane's middle (replace / swap) or an edge
-// (a new pane on that side). The terminals stay where TerminalArea mounted them; this only places them.
+// (a new pane on that side). The terminals stay where TerminalArea mounted them; this only places them. Every window has
+// its own (F20 · 多窗口): a secondary window's panes borrow their terminals into its document (PaneHosts).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { X } from 'lucide-react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import { dropRect, evenSplit, measureSplit, pane, PICKER_PANE, resizeSplit, type PaneBox, type Rect, type Size, type SplitHandle, type SplitNode } from '@shared/split-layout'
+import { dropRect, evenSplit, measureSplit, PICKER_PANE, resizeSplit, type PaneBox, type Rect, type Size, type SplitHandle, type SplitNode } from '@shared/split-layout'
 import type { SessionId } from '@shared/types'
+import { MAIN_WINDOW, viewRoot } from '@shared/window-layout'
 import { glyphStatus } from '../lifecycle/present'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { subscribeClock } from '../sidebar/clock'
-import { useWorkspace } from '../state/workspace'
-import { TerminalArea } from '../terminal/TerminalArea'
+import { shownEverywhere, useWorkspace } from '../state/workspace'
+import { usePaneView, useSidebarCollapsed, useWindowKey, useWindowScope } from '../state/window-scope'
+import { PaneHosts, TerminalArea } from '../terminal/TerminalArea'
 import { IconButton } from '../ui/IconButton'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { pressSession } from './drag'
 import './font-zoom'
 import { dropLabel, pickerRows } from './model'
-import { useSessionDrag, useSplitGeometry, type SessionDrag } from './store'
+import { setSplitGeometry, useSessionDrag, type SessionDrag } from './store'
 import styles from './SplitArea.module.css'
 
 /** A pane's header (= --titlebar-height); its terminal fills the rest of the pane. */
@@ -33,9 +36,11 @@ const NO_PANES: { panes: PaneBox[]; handles: SplitHandle[] } = { panes: [], hand
 export function SplitArea() {
   const ref = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 0, height: 0 })
-  const split = useWorkspace((s) => s.split)
-  const activeId = useWorkspace((s) => (s.sessions.some((x) => x.id === s.activeSessionId) ? s.activeSessionId : null))
-  const drag = useSessionDrag((s) => s.drag)
+  const windowKey = useWindowKey()
+  const view = usePaneView()
+  const split = view.split
+  const activeId = useWorkspace((s) => (s.sessions.some((x) => x.id === view.activeSessionId) ? view.activeSessionId : null))
+  const drag = useSessionDrag((s) => (s.drag?.window === windowKey ? s.drag : null))
   // While the new pane's picker has the keyboard, no session pane is the focused one (Figma 21G).
   const picking = usePickerFocus((s) => s.focused)
 
@@ -45,18 +50,20 @@ export function SplitArea() {
     const measure = (): void => {
       const area = { width: el.clientWidth, height: el.clientHeight }
       setSize(area)
-      useSplitGeometry.setState({ element: el, area })
+      setSplitGeometry(windowKey, { element: el, area })
     }
     measure()
-    const observer = new ResizeObserver(measure)
+    // The window's own ResizeObserver: one from the main window does not see a secondary window's layout.
+    const Observer = (el.ownerDocument.defaultView as (Window & typeof globalThis) | null)?.ResizeObserver ?? ResizeObserver
+    const observer = new Observer(measure)
     observer.observe(el)
     return () => {
       observer.disconnect()
-      useSplitGeometry.setState({ element: null })
+      setSplitGeometry(windowKey, null)
     }
-  }, [])
+  }, [windowKey])
 
-  const root: SplitNode | null = split ?? (activeId ? pane(activeId) : null)
+  const root: SplitNode | null = split ?? (activeId ? viewRoot({ split: null, activeSessionId: activeId }) : null)
   const { panes, handles } = useMemo(() => (root ? measureSplit(root, size.width, size.height) : NO_PANES), [root, size.width, size.height])
   const placements = useMemo(
     () =>
@@ -69,7 +76,7 @@ export function SplitArea() {
 
   return (
     <div ref={ref} className={styles.area} data-panes={panes.length}>
-      <TerminalArea placements={placements} />
+      {windowKey === MAIN_WINDOW ? <TerminalArea placements={placements} /> : <PaneHosts placements={placements} />}
       {panes.map((p) =>
         p.id === PICKER_PANE ? (
           <PanePicker key={PICKER_PANE} rect={p} top={p.y === 0} lead={p.x === 0 && p.y === 0} />
@@ -191,10 +198,12 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
   const [filter, setFilter] = useState('')
   const [at, setAt] = useState(0)
   const now = useClockNow()
-  const { projects, worktrees, sessions, split, sidebarCollapsed } = useWorkspace(
-    useShallow((s) => ({ projects: s.projects, worktrees: s.worktrees, sessions: s.sessions, split: s.split, sidebarCollapsed: s.sidebarCollapsed }))
+  const { projects, worktrees, sessions, shown } = useWorkspace(
+    useShallow((s) => ({ projects: s.projects, worktrees: s.worktrees, sessions: s.sessions, shown: shownEverywhere(s).join('\n') }))
   )
-  const rows = useMemo(() => pickerRows({ projects, worktrees, sessions, split, now, filter }), [projects, worktrees, sessions, split, now, filter])
+  const sidebarCollapsed = useSidebarCollapsed()
+  // Sessions another pane or window shows are not offered (one place at a time).
+  const rows = useMemo(() => pickerRows({ projects, worktrees, sessions, shown: shown.split('\n'), now, filter }), [projects, worktrees, sessions, shown, now, filter])
   const highlighted = Math.min(at, Math.max(0, rows.length - 1))
   const pick = (id: SessionId) => useWorkspace.getState().pickForPane(id)
   const cancel = () => useWorkspace.getState().closePane(PICKER_PANE)
@@ -283,11 +292,25 @@ function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: bo
   )
 }
 
-/** Follows the pointer while a session is dragged (Figma 21D DragGhost); mounted once for the whole window. */
+/** Follows the pointer while a session is dragged (Figma 21D DragGhost); mounted once per window. */
 export function SessionDragGhost() {
-  const drag = useSessionDrag((s) => s.drag)
+  const { key: windowKey, win } = useWindowScope()
+  const drag = useSessionDrag((s) => (s.drag?.window === windowKey ? s.drag : null))
   const session = useWorkspace((s) => (drag ? s.sessions.find((x) => x.id === drag.id) : undefined))
   if (!drag || !session) return null
+  if (drag.outside) {
+    // Past the window's edge the ghost cannot follow: it waits at the edge and says what releasing does (F20 · 多窗口).
+    return (
+      <span
+        className={styles.hint}
+        data-outside
+        style={{ left: clamp(drag.x + 14, 8, win.innerWidth - 220), top: clamp(drag.y + 18, 8, win.innerHeight - 40) }}
+        aria-hidden
+      >
+        松开在新窗口中打开
+      </span>
+    )
+  }
   return (
     <div className={styles.ghost} style={{ left: drag.x + 14, top: drag.y + 18 }} aria-hidden>
       <StatusGlyph status={glyphStatus(session)} />
@@ -295,3 +318,5 @@ export function SessionDragGhost() {
     </div>
   )
 }
+
+const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value))

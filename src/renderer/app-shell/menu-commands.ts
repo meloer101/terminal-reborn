@@ -1,15 +1,30 @@
 // Runs the app menu's commands (B8) and the shortcuts that only the menu table defines (⌘B, ⇧⌘B, ⇧⌘M, and the
-// split's ⌘D, ⇧⌘D, ⌥⌘W, ⌥⌘ arrows — PRD F20).
+// split's ⌘D, ⇧⌘D, ⌥⌘W, ⌥⌘ arrows — PRD F20). They act in the window with the keyboard (F20 · 多窗口); the ones that
+// only the main window has (overview, right panel, merge sheet) bring the main window forward first.
 import type { MenuCommand } from '@shared/shortcuts'
+import { MAIN_WINDOW, type WindowKey } from '@shared/window-layout'
 import { toggleCommandPalette } from '../command-palette/palette-store'
 import { toggleOverview } from '../overview/store'
 import { jumpToNextAttention } from '../sidebar/shortcuts-runtime'
 import { isKeyEcho, noteKeyCommand } from '../state/key-commands'
-import { closeActiveSession, openProjectInteractive, quickNewSession } from '../state/session-actions'
-import { useWorkspace } from '../state/workspace'
+import { closeActiveSession, openProjectInNewWindowInteractive, openProjectInteractive, quickNewSession } from '../state/session-actions'
+import { useWorkspace, windowEffects } from '../state/workspace'
 import { openTerminalSearch } from '../terminal/search-store'
 import { openMergeForActiveSession } from '../panels/merge/store'
-import { closeFocusedPane, focusPaneToward, splitFocusedPane } from '../split/commands'
+import { closeFocusedPane, focusPaneToward, moveFocusedPaneToNewWindow, splitFocusedPane } from '../split/commands'
+import { everyWindow } from './windows-runtime'
+
+/** Runs `run` in the main window: from a secondary window that window comes forward and takes the keyboard first. */
+function inMainWindow(run: () => void): () => void {
+  return () => {
+    const state = useWorkspace.getState()
+    if (state.keyWindow !== MAIN_WINDOW) {
+      state.focusWindow(MAIN_WINDOW)
+      windowEffects.reveal(MAIN_WINDOW)
+    }
+    run()
+  }
+}
 
 const RUN: Record<MenuCommand, () => void> = {
   'new-session': () => void quickNewSession(),
@@ -17,11 +32,12 @@ const RUN: Record<MenuCommand, () => void> = {
   'close-session': () => void closeActiveSession(),
   find: () => void openTerminalSearch(),
   'command-palette': toggleCommandPalette,
-  'toggle-overview': toggleOverview,
+  'toggle-overview': inMainWindow(toggleOverview),
   'next-attention': () => void jumpToNextAttention(),
   'rename-session': () => useWorkspace.getState().requestRename(),
   'toggle-sidebar': () => useWorkspace.getState().toggleSidebar(),
-  'toggle-right-panel': () => useWorkspace.getState().toggleRightPanel(),
+  'toggle-right-panel': inMainWindow(() => useWorkspace.getState().toggleRightPanel()),
+  // The sheet is for the session the keyboard is in; it shows in the main window (secondary-windows.tsx).
   'merge-worktree': openMergeForActiveSession,
   'split-right': () => splitFocusedPane('right'),
   'split-down': () => splitFocusedPane('bottom'),
@@ -29,11 +45,16 @@ const RUN: Record<MenuCommand, () => void> = {
   'focus-pane-left': () => focusPaneToward('left'),
   'focus-pane-right': () => focusPaneToward('right'),
   'focus-pane-up': () => focusPaneToward('up'),
-  'focus-pane-down': () => focusPaneToward('down')
+  'focus-pane-down': () => focusPaneToward('down'),
+  'open-project-in-window': () => void openProjectInNewWindowInteractive(),
+  'pane-to-window': moveFocusedPaneToNewWindow
 }
 
-export function runMenuCommand(command: MenuCommand): void {
-  if (!isKeyEcho(command)) RUN[command]()
+/** `windowKey`: the secondary window the command was picked in (it has the keyboard); absent for the main window. */
+export function runMenuCommand(command: MenuCommand, windowKey?: WindowKey): void {
+  if (isKeyEcho(command)) return
+  useWorkspace.getState().focusWindow(windowKey ?? MAIN_WINDOW)
+  RUN[command]()
 }
 
 const PANE_ARROWS: Record<string, MenuCommand> = {
@@ -65,11 +86,14 @@ const onKeyDown = (e: KeyboardEvent): void => {
   noteKeyCommand(command)
   RUN[command]()
 }
-window.addEventListener('keydown', onKeyDown, true)
+const uninstall = everyWindow((win) => {
+  win.addEventListener('keydown', onKeyDown, true)
+  return () => win.removeEventListener('keydown', onKeyDown, true)
+})
 const unsubscribe = window.tr.ui.onMenuCommand(runMenuCommand)
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    window.removeEventListener('keydown', onKeyDown, true)
+    uninstall()
     unsubscribe()
   })
 }

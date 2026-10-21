@@ -2,6 +2,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
 import { isAbsolute } from 'node:path'
 import { IPC } from '@shared/ipc'
+import { hostWindowFor } from './app-windows'
+import { secondaryWindowsOf } from './secondary-windows'
 
 const text = (value: unknown, max: number): string => (typeof value === 'string' ? value.slice(0, max) : '')
 
@@ -27,9 +29,12 @@ export function registerUiHandlers(): void {
     const release = () => liveNotifications.delete(notification)
     notification.on('click', () => {
       release()
-      const win = BrowserWindow.fromWebContents(sender)
-      win?.show()
-      win?.focus()
+      // With secondary windows the page brings forward the window that shows the session (F20 · 多窗口).
+      if (secondaryWindowsOf(sender).length === 0) {
+        const win = BrowserWindow.fromWebContents(sender)
+        win?.show()
+        win?.focus()
+      }
       if (!sender.isDestroyed()) sender.send(IPC.uiNotificationClick, text(tag, 200))
     })
     notification.on('close', release)
@@ -38,7 +43,7 @@ export function registerUiHandlers(): void {
   })
 
   ipcMain.handle(IPC.uiPickFolder, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = hostWindowFor(event.sender)
     const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>, buttonLabel: '打开项目' }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : (result.filePaths[0] ?? null)
@@ -46,7 +51,7 @@ export function registerUiHandlers(): void {
 
   // The session header's paperclip: files whose paths go into the terminal (renderer/terminal/attachments.ts).
   ipcMain.handle(IPC.uiPickFiles, async (event, defaultPath: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = hostWindowFor(event.sender)
     const start = typeof defaultPath === 'string' && defaultPath.length <= 4096 && isAbsolute(defaultPath) && !defaultPath.includes('\0') ? defaultPath : undefined
     const options = {
       // Files and folders alike (macOS lets one panel pick both).

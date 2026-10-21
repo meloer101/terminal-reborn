@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { Folder, LayoutList, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { shownSessionIds, useWorkspace } from '../state/workspace'
+import { MAIN_WINDOW } from '@shared/window-layout'
+import { shownEverywhere, useWorkspace, windowEffects } from '../state/workspace'
+import { usePaneView, useSecondaryWindow, useWindowKey } from '../state/window-scope'
 import { pressSession } from '../split/drag'
 import { newSessionInProject, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
@@ -22,24 +24,39 @@ import { SHORTCUTS } from '@shared/shortcuts'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
-/** Status sidebar — Figma screens 01 / 02 / 08. Pure view over the workspace store. */
+/**
+ * Status sidebar — Figma screens 01 / 02 / 08. Pure view over the workspace store. In a project's own window
+ * (F20 · 多窗口) it lists only that project; the row of the session the keyboard is in, in this window, is selected.
+ */
 export function Sidebar() {
-  const { projects, worktrees, sessions, collapsedProjectIds, activeSessionId, setActiveSession, toggleSidebar, toggleProjectCollapsed, overview } =
+  const windowKey = useWindowKey()
+  const scope = useSecondaryWindow()?.projectId ?? null
+  const { projects: allProjects, worktrees, sessions, collapsedProjectIds, setActiveSession, toggleSidebar, toggleProjectCollapsed, mainOverview } =
     useWorkspace(
       useShallow((s) => ({
         projects: s.projects,
         worktrees: s.worktrees,
         sessions: s.sessions,
         collapsedProjectIds: s.collapsedProjectIds,
-        activeSessionId: s.activeSessionId,
         setActiveSession: s.setActiveSession,
         toggleSidebar: s.toggleSidebar,
         toggleProjectCollapsed: s.toggleProjectCollapsed,
-        overview: s.mainView === 'overview'
+        mainOverview: s.mainView === 'overview'
       }))
     )
-  // Sessions shown in the main area's other panes (PRD F20); the active one is `selected`.
-  const shown = useWorkspace((s) => shownSessionIds(s).join('\n'))
+  const overview = windowKey === MAIN_WINDOW && mainOverview
+  const activeSessionId = usePaneView().activeSessionId
+  const projects = useMemo(() => (scope === null ? allProjects : allProjects.filter((p) => p.id === scope)), [allProjects, scope])
+  // Sessions shown in this window's other panes (PRD F20) or in another window; the active one is `selected`.
+  const shown = useWorkspace((s) => shownEverywhere(s).join('\n'))
+  // The overview belongs to the main window: from another window, that one comes forward.
+  const onOverview = useCallback(() => {
+    if (windowKey !== MAIN_WINDOW) {
+      useWorkspace.getState().focusWindow(MAIN_WINDOW)
+      windowEffects.reveal(MAIN_WINDOW)
+    }
+    toggleOverview()
+  }, [windowKey])
   const listRef = useRef<HTMLDivElement>(null)
   const onRowContextMenu = useCallback((id: string, anchor: MenuAnchor) => void openSessionContextMenu(id, anchor), [])
   const onRowPress = useCallback((e: PointerEvent<HTMLElement>, id: string) => pressSession(e, id, 'sidebar'), [])
@@ -93,7 +110,7 @@ export function Sidebar() {
               </>
             )
           }
-          onClick={toggleOverview}
+          onClick={onOverview}
         />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>

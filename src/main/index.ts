@@ -29,6 +29,7 @@ import { registerBackgroundReviewHandlers } from './background-review'
 import { registerArchiveHandlers } from './archive'
 import { registerPullRequestHandlers } from './pull-requests'
 import { registerConflictRadarHandlers } from './conflict-radar'
+import { registerSecondaryWindowHandlers } from './secondary-windows'
 
 // Before anything reads userData (the single-instance lock included): dev runs, e2e runs (TR_USER_DATA_DIR) and the
 // installed app each get their own profile; the pre-rename "Terminal Reborn" profile moves to Wavi.
@@ -92,13 +93,17 @@ function boot(): void {
   registerHookHandlers()
   registerPtyHandlers()
   registerUiHandlers()
+  registerSecondaryWindowHandlers(showMainWindow, () => getMainWindow()?.webContents ?? null)
   registerUpdateHandlers()
   installAppMenu()
   installQuitGuard(getMainWindow)
   createMainWindow()
   registerLiveRebuilds()
-  // Dock icon click: the close button only hid the window.
-  app.on('activate', () => showMainWindow())
+  // Dock icon click: the close button only hid the window. With a secondary window in front, macOS brings that one.
+  app.on('activate', () => {
+    const main = getMainWindow()
+    if (!main || !main.isVisible() || main.isMinimized()) showMainWindow()
+  })
 }
 
 app.on('window-all-closed', () => {

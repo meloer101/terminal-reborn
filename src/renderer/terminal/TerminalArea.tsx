@@ -1,7 +1,8 @@
 // One xterm-backed terminal per session. Terminals are created the first time a session is
 // viewed and then stay mounted (display:none) so scrollback and running programs survive
 // switching sessions. The main area places the shown ones (PRD F20: one per pane of a split); moving between
-// panes only moves the element, never the terminal.
+// panes only moves the element, never the terminal. A secondary window's panes (F20 · 多窗口) borrow the terminal into
+// that window's document (PaneHosts): the same xterm, the same PTY stream, only its DOM moves.
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
@@ -10,7 +11,9 @@ import { useWorktreeCreations } from '../new-session/creation'
 import { runSessionWaits, useRunScripts } from '../scripts/run-script'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
-import { useBorrowedTerminal } from './borrow'
+import { windowOf } from '../app-shell/windows-runtime'
+import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
+import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
 import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
 import { attachFileInput } from './file-input'
@@ -69,23 +72,27 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
       surface?.setVisible(false)
       return
     }
-    const frame = requestAnimationFrame(() => getXtermSurface(sessionId)?.setVisible(true))
-    return () => cancelAnimationFrame(frame)
+    // The frame of the window it is shown in: a hidden main window draws no frames.
+    const win = hostWindow(borrowedHost)
+    const frame = win.requestAnimationFrame(() => getXtermSurface(sessionId)?.setVisible(true))
+    return () => win.cancelAnimationFrame(frame)
   }, [shown, everActive, sessionId, borrowedHost])
 
   useEffect(() => {
     const host = borrowedHost ?? hostRef.current
     if (!everActive || !host) return
     let frame = 0
-    const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
+    // An observer of the host's own window: one from another window never sees its layout change.
+    const win = hostWindow(host)
+    const observer = new win.ResizeObserver(() => {
+      win.cancelAnimationFrame(frame)
+      frame = win.requestAnimationFrame(() => {
         if (host.offsetParent !== null) getSurface(sessionId)?.fit()
       })
     })
     observer.observe(host)
     return () => {
-      cancelAnimationFrame(frame)
+      win.cancelAnimationFrame(frame)
       observer.disconnect()
     }
   }, [everActive, sessionId, borrowedHost])
@@ -106,12 +113,17 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
   )
 }
 
-/** Whether moving the keyboard focus now would take it from something the user is typing in. */
-function canStealFocus(): boolean {
-  if (document.querySelector('[role="dialog"][aria-modal="true"]')) return false
-  const active = document.activeElement
-  if (!active || active === document.body) return true
-  const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active as HTMLElement).isContentEditable
+/** The window an element is in (the main window for none). */
+const hostWindow = (node: Node | null | undefined): Window & typeof globalThis =>
+  (node?.ownerDocument?.defaultView as (Window & typeof globalThis) | null | undefined) ?? window
+
+/** Whether moving the keyboard focus now (in `doc`, the terminal's window) would take it from something the user is typing in. */
+function canStealFocus(doc: Document): boolean {
+  if (doc.querySelector('[role="dialog"][aria-modal="true"]')) return false
+  const active = doc.activeElement
+  if (!active || active === doc.body) return true
+  // By tag, not instanceof: a secondary window's elements come from that window's constructors.
+  const typing = active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable
   return !typing || active.matches('.xterm-helper-textarea')
 }
 
@@ -128,22 +140,24 @@ function useFocusActiveTerminal(sessionId: SessionId | null, request: number): v
     let frame = 0
     let tries = 0
     let cancelled = false
+    // Frames of the window with the keyboard (F20 · 多窗口): a hidden main window draws none.
+    const win = windowOf(useWorkspace.getState().keyWindow) ?? window
     const attempt = (): void => {
       const surface = getXtermSurface(sessionId)
       if (!surface) {
-        if (tries++ < FOCUS_WAIT_FRAMES) frame = requestAnimationFrame(attempt)
+        if (tries++ < FOCUS_WAIT_FRAMES) frame = win.requestAnimationFrame(attempt)
         return
       }
       // xterm ignores focus() until it is open (fonts loaded, attached to the DOM).
       void surface.whenOpen().then(() => {
-        if (!cancelled && canStealFocus()) surface.focus()
+        if (!cancelled && canStealFocus(surface.ownerDocument())) surface.focus()
       })
     }
     // Never within the event that asked: the keypress / keyup of an ↵ that picked the session must not reach xterm.
-    frame = requestAnimationFrame(attempt)
+    frame = win.requestAnimationFrame(attempt)
     return () => {
       cancelled = true
-      cancelAnimationFrame(frame)
+      win.cancelAnimationFrame(frame)
     }
   }, [sessionId, request])
 }
@@ -153,23 +167,24 @@ function useFocusActiveTerminal(sessionId: SessionId | null, request: number): v
  * visible terminals with stale glyphs or a grid the PTY does not know about: redraw them and resend their size.
  * `shown` is the shown sessions' ids, one per line (every pane of a split).
  */
-function useResyncOnWake(shown: string): void {
+function useResyncOnWake(shown: string, win: Window = window): void {
   useEffect(() => {
     if (!shown) return
+    const doc = win.document
     let frame = 0
     const resync = (): void => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
+      win.cancelAnimationFrame(frame)
+      frame = win.requestAnimationFrame(() => {
         for (const sessionId of shown.split('\n')) resyncTerminal(sessionId)
       })
     }
     const onVisibility = (): void => {
-      if (document.visibilityState === 'visible') resync()
+      if (doc.visibilityState === 'visible') resync()
     }
     let ratio: MediaQueryList | null = null
     const watchRatio = (): void => {
       ratio?.removeEventListener('change', onRatio)
-      ratio = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+      ratio = win.matchMedia(`(resolution: ${win.devicePixelRatio}dppx)`)
       ratio.addEventListener('change', onRatio)
     }
     function onRatio(): void {
@@ -177,15 +192,15 @@ function useResyncOnWake(shown: string): void {
       resync()
     }
     watchRatio()
-    window.addEventListener('focus', resync)
-    document.addEventListener('visibilitychange', onVisibility)
+    win.addEventListener('focus', resync)
+    doc.addEventListener('visibilitychange', onVisibility)
     return () => {
-      cancelAnimationFrame(frame)
+      win.cancelAnimationFrame(frame)
       ratio?.removeEventListener('change', onRatio)
-      window.removeEventListener('focus', resync)
-      document.removeEventListener('visibilitychange', onVisibility)
+      win.removeEventListener('focus', resync)
+      doc.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [shown])
+  }, [shown, win])
 }
 
 /** `placements`: where each shown session's terminal goes (below its pane's header). */
@@ -239,6 +254,51 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
           <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * A secondary window's panes (F20 · 多窗口): each borrows its session's terminal from the main window's TerminalArea,
+ * which keeps owning it (spawn, attach, restart). Clicking or focusing a pane gives it the keyboard as in the main window.
+ */
+export function PaneHosts({ placements }: { placements: Readonly<Record<SessionId, Rect>> }) {
+  const { win } = useWindowScope()
+  const isKey = useIsKeyWindow()
+  const activeSessionId = useWorkspace((s) => s.activeSessionId)
+  useResyncOnWake(Object.keys(placements).join('\n'), win)
+  return (
+    <div className={styles.area} data-region="terminal">
+      {Object.entries(placements).map(([sessionId, rect]) => (
+        <PaneHost key={sessionId} sessionId={sessionId} rect={rect} active={isKey && sessionId === activeSessionId} />
+      ))}
+      {isKey && activeSessionId && placements[activeSessionId] && (
+        <div className={styles.searchSlot} style={place(placements[activeSessionId])}>
+          <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PaneHost({ sessionId, rect, active }: { sessionId: SessionId; rect: Rect; active: boolean }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    return borrowTerminal(sessionId, host)
+  }, [sessionId])
+  return (
+    <div
+      className={styles.pane}
+      data-active={active}
+      data-shown
+      data-session-id={sessionId}
+      style={place(rect)}
+      onClick={() => getSurface(sessionId)?.focus()}
+      onFocus={() => useWorkspace.getState().focusPane(sessionId)}
+    >
+      <div ref={hostRef} className={styles.host} />
     </div>
   )
 }

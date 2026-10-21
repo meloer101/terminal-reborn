@@ -3,7 +3,7 @@
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
 import type { AppSettings } from '@shared/settings'
-import { appWindows, isAppWindow } from './app-windows'
+import { allAppWindows, isAppWindow } from './app-windows'
 import { getSettings, onSettingsChange } from './settings'
 
 function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
@@ -17,7 +17,7 @@ function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
 function applyToAll(settings: AppSettings): void {
   // Forces the native appearance (and prefers-color-scheme in renderers) to the user's choice.
   nativeTheme.themeSource = settings.appearance.theme
-  for (const win of appWindows()) applyToWindow(win, settings)
+  for (const win of allAppWindows()) applyToWindow(win, settings)
 }
 
 export function registerAppearanceEffects(): void {

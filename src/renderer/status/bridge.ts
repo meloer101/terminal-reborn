@@ -6,6 +6,7 @@ import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/l
 import { getSurface, onTerminalRestarted, readViewport } from '../terminal/registry'
 import type { TerminalSurface } from '../terminal/surface'
 import { launchKind, shownSessionIds, useWorkspace } from '../state/workspace'
+import { anyWindowFocused, everyWindow } from '../app-shell/windows-runtime'
 import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
@@ -17,8 +18,9 @@ const SCREEN_CHECK_MS = 200
 
 const e2e = (globalThis as { __TR_E2E__?: boolean }).__TR_E2E__ === true
 
+/** Whether one of the app's windows is in front (F20 · 多窗口: the key window's panes are the ones being looked at). */
 function windowFocused(): boolean {
-  return document.visibilityState === 'visible' && document.hasFocus()
+  return anyWindowFocused()
 }
 
 /** Starts listening; returns a function that stops everything. */
@@ -195,9 +197,16 @@ export function startStatusBridge(): () => void {
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
   const onViewChange = (): void => controller.refreshViewing()
-  window.addEventListener('focus', onViewChange)
-  window.addEventListener('blur', onViewChange)
-  document.addEventListener('visibilitychange', onViewChange)
+  const stopViewWatch = everyWindow((win) => {
+    win.addEventListener('focus', onViewChange)
+    win.addEventListener('blur', onViewChange)
+    win.document.addEventListener('visibilitychange', onViewChange)
+    return () => {
+      win.removeEventListener('focus', onViewChange)
+      win.removeEventListener('blur', onViewChange)
+      win.document.removeEventListener('visibilitychange', onViewChange)
+    }
+  })
 
   hook?.attach({
     emit: (sessionId, event) => controller.handleEvent(sessionId, event),
@@ -218,9 +227,7 @@ export function startStatusBridge(): () => void {
     unsubscribeEvents()
     unsubscribeClick()
     unsubscribeRestart()
-    window.removeEventListener('focus', onViewChange)
-    window.removeEventListener('blur', onViewChange)
-    document.removeEventListener('visibilitychange', onViewChange)
+    stopViewWatch()
     for (const unsubscribe of exitSubscriptions.values()) unsubscribe()
     for (const subscription of titleSubscriptions.values()) subscription.dispose()
     for (const entry of outputSubscriptions.values()) {

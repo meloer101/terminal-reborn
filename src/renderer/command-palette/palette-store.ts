@@ -2,6 +2,8 @@
 // React so the sidebar's "跳转到…" row can call openCommandPalette() without prop plumbing.
 import { create } from 'zustand'
 import { noteKeyCommand } from '../state/key-commands'
+import { useWorkspace } from '../state/workspace'
+import { everyWindow, keyDocument, windowOf } from '../app-shell/windows-runtime'
 import { isPaletteShortcut } from './keys'
 
 export const usePaletteOpen = create<{ open: boolean }>()(() => ({ open: false }))
@@ -15,8 +17,10 @@ export function isCommandPaletteOpen(): boolean {
 
 export function openCommandPalette(): void {
   if (isCommandPaletteOpen()) return
-  const active = document.activeElement
-  restoreTo = active instanceof HTMLElement && active !== document.body ? active : null
+  // The palette opens in the window with the keyboard (F20 · 多窗口).
+  const doc = keyDocument()
+  const active = doc.activeElement
+  restoreTo = active && active !== doc.body && 'focus' in active ? (active as HTMLElement) : null
   usePaletteOpen.setState({ open: true })
 }
 
@@ -31,7 +35,7 @@ export function closeCommandPalette({ restoreFocus = true }: { restoreFocus?: bo
   const target = restoreFocus ? restoreTo : null
   restoreTo = null
   usePaletteOpen.setState({ open: false })
-  requestAnimationFrame(() => {
+  ;(windowOf(useWorkspace.getState().keyWindow) ?? window).requestAnimationFrame(() => {
     if (!isCommandPaletteOpen() && target?.isConnected) target.focus()
   })
 }
@@ -49,5 +53,9 @@ const onKeyDown = (e: KeyboardEvent) => {
   noteKeyCommand('command-palette')
   toggleCommandPalette()
 }
-window.addEventListener('keydown', onKeyDown, true)
-if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener('keydown', onKeyDown, true))
+// In every window (F20 · 多窗口).
+const uninstall = everyWindow((win) => {
+  win.addEventListener('keydown', onKeyDown, true)
+  return () => win.removeEventListener('keydown', onKeyDown, true)
+})
+if (import.meta.hot) import.meta.hot.dispose(uninstall)
