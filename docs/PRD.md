@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.51 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.52 · 2026-10-21 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.52 | 2026-10-21 | §6.8 PTY 守护进程**收到 SIGTERM 不再结束全部会话**：作者日志里的 3 次都不是注销（查证见 §6.8 实测），而是停掉一棵进程树时连带发来的。守护进程改由一个立即退出的启动器拉起，从一开始就被 launchd 收养，不再是应用的子孙进程；SIGTERM 只写盘、照常运行，只有 main 先报告了注销 / 重启 / 关机（powerMonitor `shutdown`）才结束会话并退出 |
 | v1.51 | 2026-10-20 | **F16 PR / CI** 落地，并把“创建 PR”提前做掉：只用用户自己的 `gh` 登录（不做 OAuth、不存 token），没装或没登录时什么都不显示、只在“创建 PR”上方给一行提示；侧栏会话行和总览的 PR 列显示 `#123 ✓`（草稿 / 已合并 / 已关闭写在编号后），会话头不放（Figma 17 没有位置）；只查有 upstream 的分支，低频轮询、出错退避、限流时全部暂停；创建 PR = 先推送（从没推送过时先确认）再 `gh pr create`（标题 = 会话名，正文 = 提交说明），然后在内置浏览器打开；CI 失败时“让 agent 修复”把失败的检查名和 `--log-failed` 末尾按 §6.9 引用成数据、放进输入行不按回车。实测结论写进 §6.11。外部来源：竞品都有 PR / CI 闭环，Claude Code 桌面版有 CI 栏，o#9512（应用内看 PR，15 👍） |
 | v1.50 | 2026-10-20 | F11 新增**额度恢复后继续**：会话因套餐额度用完停下时（Claude `rate_limit` 的 StopFailure，Codex 一轮没等到 Stop 就回到空闲，并且该厂商有窗口在 100%），会话头和总览行写何时恢复并给「恢复后发送“继续”」；点了才预约，到点复查额度和屏幕（有选择框或 Claude 自己在倒计时继续就不发、发通知说明），用户在终端里打字、会话自己继续了就取消；预约不跨 ⌘Q。额度用完的错误条不再给“让 agent 修复”。§6.6 / §6.7 补实测：两家的限额停止信号、Claude 2.1.304 自带的 `autoContinueAtUsageLimit` 和 `/rate-limit-options`、Codex 限额后的换模型弹窗（往里打“继续”回车会换掉模型）。外部来源 cc#13354（215 👍）、cc#35744（106）、cx#21073（85）、cx#28931（60） |
 | v1.49 | 2026-10-20 | **F20 主区分屏**按 Figma 21（Section `301:15658`）实现，实现时定下的细节：格之间是 1px 细线加常显的短把手，双击两边等分；键盘不在的格会话头只留 … 和 ×，回形针、run 和右侧栏图标只在键盘所在那格；格子窄于 640 去掉额度标签、窄于 480 再去掉 context；侧栏里其他格的会话是细描边，拖动时原行变淡；落点文字分“显示 / 挪到这里 / 换掉 / 交换”，4 格时边上提示“最多 4 格”，放不下时提示“这里放不下新的一格”；⌘D 的新格可打字过滤（同总览的过滤），选的时候侧栏和右侧栏仍跟着原来那格，点侧栏或 ⌘K、⌘N 都填进这一格；分屏时 ⌘+ / ⌘- / ⌘0 只调键盘所在那格（叠加在设置的字号上，不改设置），分屏结束回到设置的字号；只有最上一排的会话头能拖动窗口 |
@@ -484,15 +485,17 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 
 ### 6.8 PTY 守护进程（2026-10-16 实现）
 参考 Orca（MIT）的 `src/main/daemon/*`，只取核心形态，不要 launchd。e2e：`e2e/pty-daemon.spec.ts`；其余 e2e 用 `TR_KILL_SESSIONS_ON_QUIT=1` 退出，不留守护进程。
-- **进程**：应用自己的二进制以 `ELECTRON_RUN_AS_NODE=1` 运行 `out/main/pty-daemon.js`，detached、独立会话，cwd 为 userData（不能是可能被删的 worktree）。依赖 Electron 的 `runAsNode` fuse 保持开启。应用退出、main 崩溃、开发时 ⌘R 都不影响它。
+- **进程**：应用自己的二进制以 `ELECTRON_RUN_AS_NODE=1` 运行 `out/main/pty-daemon.js`，独立会话和进程组，cwd 为 userData（不能是可能被删的 worktree）。由一个立即退出的启动器（同一个二进制 `-e`，约 30 ms）拉起，所以父进程从一开始就是 launchd，不是应用的子孙进程：按父 pid 停掉一棵进程树的工具（Claude Code 的后台任务、Claude 退出、IDE 的运行配置）碰不到它，也碰不到终端里的 agent。依赖 Electron 的 `runAsNode` fuse 保持开启。应用退出、main 崩溃、开发时 ⌘R 都不影响它。日志开头 Electron 的 `task_name_for_pid` 报错是它查不到已退出的父进程，无害（会话的环境由应用传入）。
 - **端点**：`<userData>/daemon/` 下有 `daemon-v<PROTOCOL>.sock`（路径超过 103 字节时改用 `/tmp/tr-<uid>-ptyd-<hash>/`）、`token`（32 字节）、`daemon.json`（pid、协议、版本）、`daemon.log`（5 MB 轮转）。目录 0700、文件 0600，拒绝符号链接。每个连接的第一帧是 `hello {token, protocol}`，用 `timingSafeEqual` 比较。
 - **启动**：能连上就接管；`ENOENT` / `ECONNREFUSED` 就删掉旧 socket、拉起新的，3 s 内轮询连接；其他错误（超时、`EPERM`）不当作“已死”，本次退回 utilityProcess（`TR_PTY_DAEMON=0` 可强制）。运行中连接断开，按终端进程崩溃处理（恢复卡片 + `--resume`）。
 - **协议**：NDJSON；在原有 HostRequest / HostEvent 之外加 `hello` / `list` / `attach` / `detach` / `shutdown`，`data` 事件带 `seq`。spawn 使用**应用**当前的环境变量，避免几天前启动的守护进程给新 shell 一个过期的 PATH。`hello` / `list` / `shutdown` 跨版本冻结：协议版本不同时，旧守护进程的会话存盘、结束，再用 `--resume` 冷恢复。
 - **HeadlessMirror**：每个会话一个 `@xterm/headless`（scrollback ≤ 5000、unicode11）。快照 = 序列化的屏幕（含备用屏）+ 重放模式序列（备用屏、bracketed paste、应用光标、隐藏光标、焦点上报、鼠标跟踪和 SGR 编码）+ 最后的标题。用一次空写入的回调取得和 `seq` 一致的切点。没有客户端时不暂停 PTY，agent 不会因为应用关着而卡住。
 - **重连**：每次页面加载只调用一次 `pty.live()`（第二次会把本页会话悄悄 detach），然后 attach 所有活着的会话（状态、通知需要它们的输出）。渲染端清屏 → 按快照尺寸 → 写快照、模式、标题 → 丢掉 `seq` 不超过快照的数据块 → 进入实时。没命中就走冷路径：先画磁盘快照，再 `--resume`。窗口卸载和渲染进程崩溃只 detach，不 kill。
 - **退出**：⌘Q 不确认，会话继续；⌥⌘Q 结束所有会话。没有活会话、也没有客户端 10 s 后守护进程退出；拉起后 2 分钟没被接管也退出。已退出的会话保留退出码和最后一屏。
+- **SIGTERM**：不结束会话。守护进程把没连着应用的会话的屏幕写盘（以防随后是 SIGKILL），记一行日志，照常运行。只有 main 报告了注销 / 重启 / 关机（Electron powerMonitor `shutdown` → `system-shutdown` 消息，5 分钟内有效，因为注销可能被取消）之后的 SIGTERM 才写盘、结束所有会话并退出。收到这个报告时、以及之后应用断开时，立即写盘，不等 30 s 安静期。脚本要结束守护进程，用 `shutdown` 消息（⌥⌘Q 走这条）或 SIGKILL（PTY 关闭，shell 收到 SIGHUP）。
 - **hooks**：守护进程持有 hook socket（`<userData>/daemon/hooks/`），收到的事件转给 main 的 HookBridge。应用没连着时立即空回复，并记入该会话最近 64 条日志（超过 64 KB 的 payload 置空）；重连时按原时间戳补放，所以关着应用时结束的回合，打开后显示正确的状态。
 - **磁盘快照**：没有客户端时，会话安静 30 s 后由守护进程写 `terminal-snapshots/<id>.json`（与渲染端同格式、同 2 MB 上限），这样重启电脑后冷路径也能看到最新一屏。同一时间只有一个写者。
+- **实测 · SIGTERM 从哪来**（2026-10-21）：作者的守护进程日志里有 3 次“SIGTERM 结束全部会话”（Wavi 10-17 13:43Z，Wavi Dev 10-18 12:56Z、19:48Z），`pmset -g log` 和 loginwindow 都显示那几刻没有睡眠、注销或重启。19:48Z 那次：`npm run dev` 是一个 Claude Code 会话 18:03Z 开的后台任务，守护进程 1.5 s 后启动；Claude 桌面版 19:48:33Z 退出重启（launchd 报告退出，1.2 s 后新进程），守护进程和一批 node 进程同一秒收到 SIGTERM。12:56Z 那次：开发应用和一批 node 分两波结束，间隔约 1 s，是一个会话收尾的样子，没留下 transcript。10-17 那次：没有应用连着，守护进程终端里的 `claude` 先退出，1.7 s 后守护进程收到 SIGTERM，保留的日志里查不到是谁发的。复现：从 Claude Code 后台任务启动应用、停掉任务，守护进程（detached，但父进程是应用 main）和终端里的 agent 都直接收到 SIGTERM，日志一字不差；已被 launchd 收养的进程收不到。唯一一次真实重启（10-18 21:07，loginwindow Restart）守护进程没有留下 SIGTERM 记录。
 - **实测**（打包版 arm64，Claude 2.1.302）：守护进程启动约 145 ms；⌘Q 后应用 0.2–0.3 s 退出，shell、claude、守护进程都还在；重开后是同一组 pid，第一帧 68–140 ms（目标 < 150 ms）；真实 agent 下守护进程 CPU < 1%。纯吞吐（`seq 1 3000000`）时瓶颈在 PTY 读取，和 utilityProcess 相当。
 
 ### 6.9 实测结论 · 向 TUI 写入文字和按键（Claude 2.1.296–2.1.299 / Codex 0.142.5）

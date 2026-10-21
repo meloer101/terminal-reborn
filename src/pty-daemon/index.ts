@@ -13,6 +13,7 @@ import { ensureSpawnHelperExecutable, SessionHost } from '../pty-host/session-ho
 import { DiskSnapshots } from './disk-snapshots'
 import { DaemonHooks, type RelayReply } from './hooks'
 import { IdleTimer } from './idle'
+import { SystemShutdown } from './sigterm'
 import {
   frame,
   HOOK_TOKEN_FILE,
@@ -72,6 +73,8 @@ const hooksReady = new Promise<void>((resolve) => {
 })
 let server: Server | null = null
 let shuttingDown = false
+/** main reported a logout / restart / shutdown: only then does a SIGTERM end the sessions. */
+const systemShutdown = new SystemShutdown()
 
 function send(client: Client, message: DaemonMessage): void {
   if (!client.socket.destroyed) client.socket.write(frame(message))
@@ -194,8 +197,10 @@ function onConnection(socket: Socket): void {
       active = null
       for (const rid of [...relays.keys()]) settleRelay(rid, { status: 200, body: '' })
       host.detachAll()
-      // The renderer saved on unload, unless the app crashed: write every screen once more from here.
+      // The renderer saved on unload, unless the app crashed: write every screen once more from here (at once when
+      // the system is going down: the quiet period would outlast us).
       for (const session of host.list()) if (!session.exit) snapshots.touch(session.id)
+      if (systemShutdown.inProgress(performance.now())) void snapshots.flush()
       log('app disconnected; sessions keep running:', host.liveCount)
       idle.update()
     }
@@ -220,6 +225,12 @@ function handle(client: Client, message: ClientMessage & Record<string, unknown>
     return
   }
   if (!client.compatible || active !== client) return
+  if (message.type === 'system-shutdown') {
+    systemShutdown.report(performance.now())
+    log('the system is logging out, restarting or shutting down')
+    void snapshots.flush()
+    return
+  }
   if (message.type === 'hook-reply') {
     if (typeof message.rid === 'number' && typeof message.body === 'string' && typeof message.status === 'number') {
       settleRelay(message.rid, { status: message.status, body: message.body })
@@ -314,7 +325,15 @@ process.on('uncaughtException', (error) => log('uncaughtException', error))
 process.on('unhandledRejection', (reason) => log('unhandledRejection', reason))
 // Detached from the app's terminal session: a hang-up or the app's process group being signalled is not for us.
 process.on('SIGHUP', () => undefined)
-process.on('SIGTERM', () => shutdown('SIGTERM', true))
+// Most SIGTERMs are not a logout (./sigterm.ts): keep the sessions, but get the screens to disk in case a SIGKILL follows.
+process.on('SIGTERM', () => {
+  if (systemShutdown.inProgress(performance.now())) {
+    shutdown('SIGTERM during logout or shutdown', true)
+    return
+  }
+  log(`SIGTERM outside a logout or shutdown: keeping ${host.liveCount} running sessions`)
+  void snapshots.flush()
+})
 
 start().catch((error: unknown) => {
   log('could not start:', error)

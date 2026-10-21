@@ -51,6 +51,8 @@ export function hookDirFor(dir: string, uid: number): string {
 export type ClientMessage =
   | { type: 'hello'; token: string; protocol: number; appVersion: string }
   | { type: 'shutdown'; killSessions: boolean }
+  /** Electron's powerMonitor `shutdown`: a logout, restart or shutdown is under way (ignored by older daemons). */
+  | { type: 'system-shutdown' }
   /** The app's answer to a relayed hook: the hook's stdout, or 404 for a session it does not know. */
   | { type: 'hook-reply'; rid: number; status: number; body: string }
   | HostRequest
