@@ -12,3 +12,5 @@ playwright-report/
 .claude/settings.local.json
 .claude/worktrees/
 *.tsbuildinfo
+.vercel/
+.astro/

@@ -1,0 +1,28 @@
+---
+import { copy, type Lang } from '../../i18n'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].merge
+---
+
+<!-- Merge: every branch, one agent, on a timeline (graph.ts draws the graph). -->
+<section class="wt" id="merge" data-wt>
+  <div class="wt-sticky">
+    <div class="graph" data-graph role="img" aria-label={t.label}></div>
+    <ol class="wt-steps" data-wt-steps>
+      {
+        t.steps.map(([title, key, body], i) => (
+          <li>
+            <span class="n">{i + 1}</span>
+            <h3>
+              {title} {key && <kbd>{key}</kbd>}
+            </h3>
+            <p>{body}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>

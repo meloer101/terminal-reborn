@@ -20,7 +20,7 @@
 分发（先做）：
 - [x] Apple Developer 账号 → Developer ID 签名和公证，下载后不再需要 `xattr -cr`（2026-10-20 流水线接通，v0.3.1-rc.1 试跑、v0.4.0 正式发布；自动更新仍留在 D5）
 - [ ] Homebrew：自己的 tap，`brew install --cask` 一行装好。放在公证之后做，因为未公证的 app 经 brew 装上同样会被 Gatekeeper 拦
-- [x] 官网 `site/` 部署到 GitHub Pages（2026-10-21 推送 main 后自动部署，https://meloer101.github.io/terminal-reborn/ ；英文版不在这一轮里）
+- [x] 官网 `site/` 部署到 GitHub Pages（2026-10-21 推送 main 后自动部署，https://meloer101.github.io/terminal-reborn/ ；英文版不在这一轮里）；2026-10-21 起 `site/` 是 Astro 项目，Pages 工作流先构建再发布，同一份站点也部署到 Vercel（项目根目录 `site/`，见 `site/vercel.json`）
 - [x] README 按 v0.3.0 重写，中文在前，加“Wavi 不会做的事”四条（2026-10-20）
 - [ ] GitHub 仓库改名为 `wavi`（原在“待作者手动确认”）：链接改动已备好，在分支 `claude/repo-storefront-01d834` 的 `e2acf43`（`package.json` 的 `repository` / `homepage`、README、CHANGELOG、打包和发布配置），作者在 GitHub 改名之后再合并；官网改 `site/index.html` 里那一处。已装 v0.3.0 的用户要靠 GitHub 的改名重定向收到新版本提示，所以 meloer101 下以后不能再建 `terminal-reborn`
 - [x] issue 表单：bug 报告和功能建议，功能建议必填“现在怎么绕过去”（2026-10-20，`.github/ISSUE_TEMPLATE/`）
@@ -205,7 +205,7 @@
 - [ ] PRD §4 “P2 储备”中的各项
 
 ### D · 发布质量（穿插在各批次里）
-- [ ] 官网 `site/`（纯静态页面，GSAP 走 CDN）：版式、动效、深浅色和手机宽度已按 Figma「官网 · Website」做完（2026-10-18）；部署移到“外部验证”，英文版排在那之后
+- [ ] 官网 `site/`：2026-10-21 按 Figma W11（PRD v1.61）改版，并改为 Astro 项目——开机引导、WebGL 老电视问号、全屏产品窗口首屏（会话轮换、git 栏新提交、滚动时显像管关机）、总览三步 + 通知和 Dock、一题多解三格比较（可合并、看 diff）、8 条分支的图谱播放头、叠印 + 六栏、线网轨道海报、ASCII 粒子页尾，以及光标拖尾、信号故障转场、输入 wavi 的彩蛋。2026-10-21 加了英文版（默认 `/`，中文在 `/zh/`，PRD v1.62），去掉了自定义光标和拖尾；加了整屏吸附（宽于 900 时），并按 1280 / 1024 / 900 / 768 / 375 五种宽度、中英两版过了一遍版式。还没做：继续按作者意见删减动效、og:image、文档页（Starlight）
 - [x] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动，8 小时长跑（2026-10-20，PRD §6.12）。外部背景：三家竞品都有内存 / CPU 随时间涨的 issue——o#10928（正常使用中越用越重）、o#19768（主进程每秒漏 26 MB 直到被系统杀掉）、s#3049（渲染进程 60 分钟涨到 3.2 GB 后 GC 卡死）、c#5209（2 GB 涨到 12 GB），Electron 和 xterm.js 被点名；在多 agent 这个定位上，稳定跑 10–20 个会话是前提
   - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms
   - [x] F20 4 格同时在屏（2026-10-20，`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL，三次）：只有键盘所在那格安静时 p50 / p95 为 11 / 18–50 ms；其他三格输出时 10–13 / 19–49 ms；四格都在输出时 12–13 / 55–83 ms。p50 达到 PRD F20 的 < 16 ms，p95 有长尾（四个 WebGL 终端同帧重绘），待查

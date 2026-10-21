@@ -3,8 +3,13 @@
   "configurations": [
     {
       "name": "site",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4321", "--bind", "127.0.0.1", "--directory", "site"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "site"
+      ],
       "port": 4321
     }
   ]

@@ -1,0 +1,21 @@
+---
+import { copy, otherPath, type Lang } from '../i18n'
+import { gh, withBase } from '../site'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].nav
+---
+
+<header class="nav" data-nav>
+  <a class="brand" href="#top" aria-label={t.home} data-scramble>Wavi</a>
+  <nav class="nav-links" aria-label={t.navLabel}>
+    <a href="#status" data-scramble data-nav-link="status">{t.status}</a>
+    <a href="#compare" data-scramble data-nav-link="compare">{t.compare}</a>
+    <a href="#merge" data-scramble data-nav-link="merge">{t.merge}</a>
+    <a href={gh()} rel="noopener" data-scramble>{t.github}</a>
+  </nav>
+  <a class="nav-lang" href={withBase(otherPath(Astro.props.lang))} aria-label={t.otherLabel} data-scramble>{t.other}</a>
+  <a class="nav-download" href="#download" data-scramble>{t.download} <span class="arrow">↓</span></a>
+</header>

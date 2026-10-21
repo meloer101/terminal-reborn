@@ -1,0 +1,63 @@
+---
+import { copy, type Lang } from '../../i18n'
+import { gh } from '../../site'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].hero
+---
+
+<!-- The app window is the stage; the headline sits in its middle column (Figma W11). -->
+<section class="hero" id="top" data-hero>
+  <div class="hero-stage">
+    <div class="app-px" data-px="-12,-8">
+      <div class="app" data-app aria-hidden="true">
+        <aside class="app-side">
+          <div class="app-titlebar"><span class="lights"><i></i><i></i><i></i></span></div>
+          <div class="app-nav">
+            <div class="app-nav-item"><span>{t.app.open}</span><kbd>⌘O</kbd></div>
+            <div class="app-nav-item"><span>{t.app.jump}</span><kbd>⌘K</kbd></div>
+            <div class="app-nav-item">
+              <span>{t.app.overview}</span>
+              <span class="app-count" data-app-count><svg viewBox="0 0 14 14"><use href="#g-needs_you"></use></svg><b>1</b></span>
+            </div>
+          </div>
+          <div class="app-tree" data-app-tree></div>
+          <div class="app-nav app-foot"><div class="app-nav-item"><span>{t.app.settings}</span><kbd>⌘,</kbd></div></div>
+        </aside>
+        <div class="app-main"></div>
+        <div class="app-pane-slot">
+          <div class="app-pane">
+            <div class="pane-head"><b>Git</b><span>acme-web</span><i class="pane-icons"><u></u><u></u><u></u></i></div>
+            <div class="pane-view"><span class="on">{t.app.graph}</span><span>{t.app.changes}</span><span class="pane-filter">{t.app.branches}</span></div>
+            <div class="pane-graph" data-pane-graph></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-fade" aria-hidden="true"></div>
+
+    <div class="hero-content" data-hero-content>
+      <div class="px" data-px="22,12">
+        <div class="sky" data-sky aria-hidden="true">
+          <span class="sky-fringe">WAVI</span>
+          <span class="sky-fill">WAVI</span>
+        </div>
+      </div>
+      <div class="px px-crt" data-px="7,4">
+        <div class="crt-zone" data-crt-zone>
+          <canvas class="crt" data-crt role="img" aria-label={t.crt}></canvas>
+        </div>
+      </div>
+      <div class="px" data-px="-16,-9"><h1 class="hero-title" data-hero-title>{t.title}</h1></div>
+      <div class="px" data-px="-7,-4"><p class="hero-sub" data-hero-sub>{t.sub}</p></div>
+      <div class="px" data-px="-5,-3">
+        <div class="cta-row" data-hero-cta>
+          <a class="btn btn-solid" href={gh('/releases/latest')} rel="noopener" data-magnetic data-spark>{t.download}</a>
+          <a class="btn btn-line" href={gh()} rel="noopener" data-magnetic>{t.github}</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

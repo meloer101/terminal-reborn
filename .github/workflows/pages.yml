@@ -1,7 +1,8 @@
 name: Pages
 
-# Publishes the static website in site/ to GitHub Pages as-is (no build step). Runs when a push to
-# main touches site/ or this file, or by hand. Needs Settings → Pages → Source set to "GitHub Actions";
+# Builds the Astro website in site/ and publishes it to GitHub Pages under the repository's sub-path
+# (the same site is also deployed to Vercel at the root, see site/vercel.json). Runs when a push to main
+# touches site/ or this file, or by hand. Needs Settings → Pages → Source set to "GitHub Actions";
 # no secrets beyond the workflow's own GITHUB_TOKEN.
 on:
   push:
@@ -29,11 +30,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/configure-pages@v6
+      - id: pages
+        uses: actions/configure-pages@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Build
+        working-directory: site
+        env:
+          SITE_BASE: ${{ steps.pages.outputs.base_path }}/
+          SITE_URL: ${{ steps.pages.outputs.origin }}
+        run: |
+          npm ci
+          npm run build
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: site
+          path: site/dist
 
       - id: deployment
         uses: actions/deploy-pages@v5

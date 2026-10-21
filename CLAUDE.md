@@ -39,7 +39,7 @@ In a fresh worktree run `npm install` first.
 | `src/renderer/settings/` | Settings dialog UI (M3; a sheet over the main window) | `settings-ui` |
 | `src/renderer/appearance/`, `src/main/appearance.ts`, `src/renderer/theme.ts` | Applying appearance settings (M3) | `appearance-runtime` |
 | `src/main/hooks/` (Codex parts) | Codex hooks/approvals (M3) | `codex-adapter` |
-| `site/` | Static website (HTML/CSS/JS, GSAP from a CDN); design is the Figma page 「官网 · Website」 | integrator |
+| `site/` | Website: Astro project with its own `package.json` (`cd site && npm install && npm run dev`, `npm run check`); GSAP and Lenis from npm, fonts are self-hosted subsets; deployed to Vercel (project root `site/`) and GitHub Pages (`.github/workflows/pages.yml`); English at `/`, Chinese at `/zh/` (page copy in `site/src/i18n.ts`, replica text in `site/src/scripts/data.ts`); design is the Figma page 「官网 · W5 重塑（噪音门面）」, frame W11 | integrator |
 | `build/`, `electron-builder.yml`, `.github/workflows/release.yml`, `src/main/updates.ts` | Packaging, icon, update check (M3) | `release` |
 
 Stay inside the directories your task owns. If you truly need a change elsewhere, keep it minimal and say so in the commit message — don't refactor shared files.

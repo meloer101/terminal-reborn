@@ -1,0 +1,43 @@
+---
+import { copy, type Lang } from '../../i18n'
+import { withBase } from '../../site'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].status
+---
+
+<!-- Status: the overview regroups as you scroll (status.ts). -->
+<section class="status" id="status" data-status-sec>
+  <div class="status-sticky">
+    <div class="overview" role="img" aria-label={t.label}>
+      <div class="ov-head" aria-hidden="true">
+        <span class="ov-title">{t.title}</span>
+        <span class="ov-sub" data-ov-sub>{t.sub}</span>
+        <span class="ov-seg"><span class="on">{t.list}</span><span>{t.board}</span></span>
+      </div>
+      <div class="ov-list" data-ov aria-hidden="true"></div>
+    </div>
+    <div class="status-copy">
+      <ol class="steps-index" data-steps-index aria-hidden="true">
+        {t.steps.map((s, i) => <li><b>{i + 1}/3</b><span>{s}</span><i></i></li>)}
+      </ol>
+      <h2 class="h2" data-split set:html={t.h2} />
+      <p class="body" set:html={t.body} />
+    </div>
+    <div class="notif" data-notif aria-hidden="true">
+      <img src={withBase('icon-64.png')} alt="" width="32" height="32" />
+      <div class="notif-text">
+        <b>{t.notifTitle}</b>
+        <span>{t.notifBody}</span>
+      </div>
+      <time>{t.notifTime}</time>
+    </div>
+    <div class="dock" data-dock aria-hidden="true">
+      <i class="dock-app"></i><i class="dock-app"></i>
+      <span class="dock-wavi"><img src={withBase('icon-64.png')} alt="" width="48" height="48" /><b data-dock-badge>1</b></span>
+      <i class="dock-app"></i>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,33 @@
+---
+import { copy, type Lang } from '../../i18n'
+import { gh } from '../../site'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].poster
+---
+
+<!-- Download: the poster (poster.ts). -->
+<section class="poster" id="download" data-poster>
+  <h2 class="sr-only">{t.heading}</h2>
+  <canvas class="orbit" data-orbit aria-hidden="true"></canvas>
+  <div class="poster-type" aria-hidden="true">
+    <p class="p-wavi" data-p-wavi><span>W</span><span>A</span><span>V</span><span>I</span></p>
+    <p class="p-term" data-p-term>TERMINAL</p>
+    <div class="barcode">
+      <svg data-barcode viewBox="0 0 272 52" preserveAspectRatio="none"></svg>
+      <span data-barcode-label>PARALLELAGENTS</span>
+    </div>
+  </div>
+  <div class="poster-foot">
+    <p class="mirror" data-mirror aria-hidden="true" set:html={t.mirror.join('<br />')} />
+    <div class="cta-row">
+      <a class="btn btn-solid" href={gh('/releases/latest')} rel="noopener" data-magnetic data-spark>{t.download}</a>
+      <a class="btn btn-line" href={gh()} rel="noopener" data-magnetic>{t.github}</a>
+    </div>
+  </div>
+  <div class="advisory advisory-red" data-stamp aria-label={t.advisory}>
+    <span class="a1">AGENT</span><span class="a2">ADVISORY</span><span class="a3">UNATTENDED</span>
+  </div>
+</section>

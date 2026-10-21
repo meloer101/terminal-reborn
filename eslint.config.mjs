@@ -4,11 +4,11 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
 export default tseslint.config(
-  { ignores: ['.claude/', 'out/', 'dist/', 'release/', 'node_modules/', 'coverage/', 'test-results/'] },
+  { ignores: ['.claude/', 'out/', 'dist/', 'release/', 'node_modules/', 'coverage/', 'test-results/', 'site/dist/', 'site/.astro/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/main/**', 'src/preload/**', 'src/pty-host/**', 'e2e/**', 'e2e-packaged/**', 'scripts/*.mjs', '*.config.*'],
+    files: ['src/main/**', 'src/preload/**', 'src/pty-host/**', 'e2e/**', 'e2e-packaged/**', 'scripts/*.mjs', '*.config.*', 'site/*.config.*'],
     languageOptions: { globals: globals.node }
   },
   {
@@ -18,7 +18,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-require-imports': 'off' }
   },
   {
-    // Static website (plain browser JS, GSAP from a CDN).
+    // Website (Astro; browser scripts in site/src/scripts).
     files: ['site/**'],
     languageOptions: { globals: globals.browser }
   },

@@ -1,0 +1,38 @@
+---
+/* The landing page, in either language. */
+import type { Lang } from '../../i18n'
+import Footer from '../Footer.astro'
+import Glyphs from '../Glyphs.astro'
+import Nav from '../Nav.astro'
+import Boot from './Boot.astro'
+import Compare from './Compare.astro'
+import Flow from './Flow.astro'
+import Hero from './Hero.astro'
+import Poster from './Poster.astro'
+import Status from './Status.astro'
+import Worktree from './Worktree.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+---
+
+<Glyphs />
+<Boot />
+<div class="grain" aria-hidden="true"></div>
+<div class="progress" data-progress aria-hidden="true"></div>
+<Nav lang={lang} />
+<main id="main">
+  <Hero lang={lang} />
+  <Status lang={lang} />
+  <Compare lang={lang} />
+  <Worktree lang={lang} />
+  <Flow lang={lang} />
+  <Poster lang={lang} />
+</main>
+<Footer lang={lang} />
+
+<script>
+  import '../../scripts/main'
+</script>

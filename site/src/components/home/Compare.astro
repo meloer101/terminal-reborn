@@ -1,0 +1,26 @@
+---
+import { copy, type Lang } from '../../i18n'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].compare
+---
+
+<!-- Compare: one task, several answers (compare.ts builds the panes). -->
+<section class="compare" id="compare" data-compare>
+  <div class="sec-head">
+    <h2 class="h2" data-split set:html={t.h2} />
+    <p class="lead" data-fade-up>{t.lead}</p>
+  </div>
+  <div class="cmp-stage">
+    <div class="cmp" data-cmp role="img" aria-label={t.label}>
+      <div class="cmp-head" aria-hidden="true">
+        <b>{t.head}</b>
+        <span class="cmp-task">{t.task}</span>
+        <span class="cmp-base" data-cmp-base>{t.base}</span>
+      </div>
+      <div class="cmp-panes" data-cmp-panes></div>
+    </div>
+  </div>
+</section>

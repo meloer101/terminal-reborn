@@ -12,3 +12,5 @@ Only MIT / Apache-2.0 / BSD sources may be adapted (see docs/PRD.md §6.5). Idea
 Bundled assets:
 
 - JetBrains Mono — SIL Open Font License 1.1, via `@fontsource-variable/jetbrains-mono`.
+- Website fonts (`site/src/assets/fonts/`, subsets downloaded from Google Fonts): Archivo, Noto Sans SC, Noto Serif SC — SIL Open Font License 1.1.
+- Website scripts (bundled by Astro from npm): GSAP 3.15 — GSAP Standard “No Charge” License; Lenis 1.3 — MIT.

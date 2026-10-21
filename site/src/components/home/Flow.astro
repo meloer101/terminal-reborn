@@ -1,0 +1,38 @@
+---
+import { copy, type Lang } from '../../i18n'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].flow
+---
+
+<!-- Branch out, merge in: overprint + six things (flow.ts). -->
+<section class="flow" id="flow" data-flow>
+  <div class="ovp-wrap">
+    <h2 class="ovp" aria-label={t.label}>
+      {
+        t.lines.map((line) => (
+          <span class="ovp-line" aria-hidden="true">
+            <span class="s a"><span class="in">{line}</span></span>
+            <span class="s b"><span class="in">{line}</span></span>
+            <span class="k"><span class="in">{line}</span></span>
+          </span>
+        ))
+      }
+    </h2>
+    <div class="advisory" data-stamp aria-label={t.advisory}>
+      <span class="a1">AGENT</span><span class="a2">ADVISORY</span><span class="a3">NO TELEMETRY</span>
+    </div>
+  </div>
+  <ul class="six" data-six>
+    {
+      t.six.map(([title, body]) => (
+        <li>
+          <b data-text={title}>{title}</b>
+          <span>{body}</span>
+        </li>
+      ))
+    }
+  </ul>
+</section>

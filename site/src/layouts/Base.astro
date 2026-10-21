@@ -1,0 +1,53 @@
+---
+import '../styles/site.css'
+import archivo from '../assets/fonts/archivo-wdth-wght-subset.woff2?url'
+import bodoni from '../assets/fonts/bodoni-moda-400-subset.woff2?url'
+import hei from '../assets/fonts/noto-sans-sc-900-subset.woff2?url'
+import mono from '../assets/fonts/jetbrains-mono-latin-wght-normal.woff2?url'
+import { copy, otherPath, type Lang } from '../i18n'
+import { withBase } from '../site'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = copy[lang]
+const self = withBase(lang === 'en' ? '' : 'zh/')
+const other = withBase(otherPath(lang))
+---
+
+<!doctype html>
+<html lang={t.htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{t.meta.title}</title>
+    <meta name="description" content={t.meta.description} />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:title" content={t.meta.title} />
+    <meta property="og:description" content={t.meta.description} />
+    <meta property="og:type" content="website" />
+    <link rel="alternate" hreflang={lang === 'en' ? 'en' : 'zh-CN'} href={self} />
+    <link rel="alternate" hreflang={lang === 'en' ? 'zh-CN' : 'en'} href={other} />
+    <link rel="icon" type="image/png" sizes="64x64" href={withBase('icon-64.png')} />
+    <link rel="apple-touch-icon" href={withBase('icon-180.png')} />
+    <link rel="preload" href={archivo} as="font" type="font/woff2" crossorigin />
+    {lang === 'zh' ? <link rel="preload" href={hei} as="font" type="font/woff2" crossorigin /> : <link rel="preload" href={bodoni} as="font" type="font/woff2" crossorigin />}
+    <link rel="preload" href={mono} as="font" type="font/woff2" crossorigin />
+    <script is:inline>
+      ;(function () {
+        var root = document.documentElement
+        root.classList.add('js')
+        // If the page script never starts (blocked, old browser), show everything as authored.
+        setTimeout(function () {
+          if (!root.classList.contains('ready')) root.classList.remove('js')
+        }, 4000)
+      })()
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">{t.skip}</a>
+    <slot />
+  </body>
+</html>

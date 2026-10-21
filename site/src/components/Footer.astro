@@ -1,0 +1,22 @@
+---
+import { copy, type Lang } from '../i18n'
+import { gh } from '../site'
+
+interface Props {
+  lang: Lang
+}
+const t = copy[Astro.props.lang].footer
+---
+
+<footer class="foot">
+  <div class="outro" data-outro aria-hidden="true"></div>
+  <div class="foot-bar">
+    <a class="brand" href="#top" data-scramble>Wavi</a>
+    <nav aria-label={t.label}>
+      <a href={gh()} rel="noopener" data-scramble>{t.github}</a>
+      <a href={gh('/releases')} rel="noopener" data-scramble>{t.releases}</a>
+      <a href={gh('/blob/main/docs/ROADMAP.md')} rel="noopener" data-scramble>{t.roadmap}</a>
+      <a href={gh('/blob/main/LICENSE')} rel="noopener" data-scramble>{t.license}</a>
+    </nav>
+  </div>
+</footer>
