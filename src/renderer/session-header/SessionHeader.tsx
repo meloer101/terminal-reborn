@@ -1,12 +1,12 @@
-import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, type LucideIcon } from 'lucide-react'
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, X, type LucideIcon } from 'lucide-react'
+import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
 import { useWorktreeCreations } from '../new-session/creation'
 import { PANEL_VIEW_LABEL } from '../panels/RightPanel'
 import { pressRun, runAction, runSessionOf, useRepoScripts, useRunRunning, type RunAction } from '../scripts/run-script'
 import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
-import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
+import { useSessionView, useWorkspace, type PanelView } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
 import { SessionMetaChips } from '../session-meta/MetaChips'
@@ -24,10 +24,29 @@ const PANE_ICONS: { view: PanelView; icon: LucideIcon }[] = [
   { view: 'files', icon: Folder }
 ]
 
-/** Figma component `SessionHeader` (11:86). Doubles as the window drag region. */
-export function SessionHeader() {
-  const active = useActiveSession()
-  const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
+/** A pane of the main area's split (PRD F20 · Figma 21 PaneHeader): one header per pane. */
+export interface PaneChrome {
+  /** The keyboard is in this pane: primary title, the paperclip and the right panel's icons. */
+  focused: boolean
+  /** The top-left pane: room for the traffic lights and the sidebar button when the sidebar is hidden. */
+  lead: boolean
+  /** Touches the window's top edge, so it is part of the window drag region. */
+  top: boolean
+  /** The × that closes only this pane (absent with a single pane). */
+  onClose?: () => void
+  /** A press on the session name, which drags the pane elsewhere. */
+  onTitlePointerDown?: (e: PointerEvent<HTMLElement>) => void
+}
+
+/**
+ * Figma component `SessionHeader` (11:86). Doubles as the window drag region. Without a `sessionId` it shows the
+ * active session; in a split each pane has its own (`pane`).
+ */
+export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: PaneChrome } = {}) {
+  const active = useSessionView(sessionId)
+  const focused = pane?.focused ?? true
+  const lead = pane?.lead ?? true
+  const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed) && lead
   const toggleSidebar = useWorkspace((s) => s.toggleSidebar)
   const waiting = useWorkspace((s) => s.sessions.filter((x) => needsAttention(x.status)).length)
   const mostUrgent = useWorkspace((s) => s.sessions.filter((x) => needsAttention(x.status)).sort(compareByUrgency)[0]?.status)
@@ -57,7 +76,7 @@ export function SessionHeader() {
   // The status is in the sidebar row already (F17 dropped the copy here); only a hooks problem is worth repeating.
 
   return (
-    <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed}>
+    <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed} data-focused={focused} data-drag-region={pane?.top ?? true}>
       {sidebarCollapsed && (
         <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft size={16} strokeWidth={1.75} />
@@ -84,7 +103,13 @@ export function SessionHeader() {
               }}
             />
           ) : (
-            <h1 className={styles.title} onDoubleClick={() => setRenaming(active.session.id)}>
+            <h1
+              className={styles.title}
+              data-movable={pane?.onTitlePointerDown !== undefined}
+              title={pane?.onTitlePointerDown ? '拖动到别的格或边上 · 双击重命名' : undefined}
+              onPointerDown={pane?.onTitlePointerDown}
+              onDoubleClick={() => setRenaming(active.session.id)}
+            >
               {active.session.title}
             </h1>
           )}
@@ -109,7 +134,8 @@ export function SessionHeader() {
       {/* Without a session there is no status to push the tools right. */}
       {!active && <span className={styles.spacer} />}
       <span className={styles.tools}>
-        {active?.worktree && scripts?.scripts.run && (
+        {/* The run script, paperclip and right panel act on the focused pane's session (PRD F20). */}
+        {focused && active?.worktree && scripts?.scripts.run && (
           <RunButton
             action={runAction(running, runSession?.id === active.session.id)}
             command={scripts.scripts.run}
@@ -120,7 +146,7 @@ export function SessionHeader() {
           />
         )}
         {/* PRD F19: the files' paths go into the input line; the agent makes images attachments. */}
-        {active && (
+        {focused && active && (
           <IconButton
             label="添加文件或文件夹"
             title="添加文件或文件夹 · 也可以拖进终端，或 ⌘V 粘贴截图"
@@ -133,7 +159,7 @@ export function SessionHeader() {
             <Paperclip size={16} strokeWidth={1.75} />
           </IconButton>
         )}
-        {active && (
+        {focused && active && (
           <span className={styles.panes} role="group" aria-label="右侧栏">
             {PANE_ICONS.map(({ view, icon: Icon }) => (
               <IconButton
@@ -160,6 +186,11 @@ export function SessionHeader() {
             }}
           >
             <Ellipsis size={16} strokeWidth={1.75} />
+          </IconButton>
+        )}
+        {pane?.onClose && (
+          <IconButton label="关掉这一格" title={`关掉这一格，会话继续运行 · ${formatAccelerator(SHORTCUTS['close-pane'])}`} onClick={pane.onClose}>
+            <X size={16} strokeWidth={1.75} />
           </IconButton>
         )}
       </span>

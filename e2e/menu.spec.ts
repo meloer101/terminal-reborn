@@ -58,6 +58,9 @@ test('the menus are in Chinese and show their shortcuts', async () => {
   expect(items('编辑').map(([l]) => l)).toEqual(['撤销', '重做', '剪切', '拷贝', '粘贴', '全选', '在终端中查找…'])
   expect(items('显示')).toContainEqual(['显示 / 隐藏侧栏', 'CmdOrCtrl+B'])
   expect(items('显示')).toContainEqual(['显示 / 隐藏右侧栏', 'Shift+CmdOrCtrl+B'])
+  expect(items('显示')).toContainEqual(['向右拆分', 'CmdOrCtrl+D'])
+  expect(items('显示')).toContainEqual(['向下拆分', 'Shift+CmdOrCtrl+D'])
+  expect(items('显示')).toContainEqual(['关掉这一格', 'Alt+CmdOrCtrl+W'])
   // Nothing English is left at the top level or in the items we own.
   for (const menu of menus.slice(1)) for (const [label] of menu.items) expect(label).toMatch(/[一-鿿]/)
 })

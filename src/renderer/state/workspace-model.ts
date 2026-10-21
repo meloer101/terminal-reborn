@@ -3,6 +3,7 @@
 import type { WorktreeArchive } from '@shared/archive'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
+import { hasPane, paneIds, persistedSplit, PICKER_PANE, removePane, replacePane, sessionsIn, type SplitNode } from '@shared/split-layout'
 import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
 import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 
@@ -11,6 +12,8 @@ export interface WorkspaceData {
   worktrees: Worktree[]
   sessions: Session[]
   activeSessionId: SessionId | null
+  /** The main area's split (PRD F20); absent / null = the active session alone. Kept in step by reconcileSplit. */
+  split?: SplitNode | null
 }
 
 export const EMPTY_WORKSPACE: WorkspaceData = { projects: [], worktrees: [], sessions: [], activeSessionId: null }
@@ -192,6 +195,41 @@ export function projectOfSession(data: WorkspaceData, sessionId: SessionId | nul
   return data.worktrees.find((w) => w.id === session?.worktreeId)?.projectId ?? null
 }
 
+/**
+ * Keeps the main area's split (PRD F20) in step with a change from `prev` to `next`: the panes of closed or archived
+ * sessions close and the rest close up, and the keyboard goes to the pane that took over when its own pane closed. A
+ * newly selected session that is not shown takes the picker's pane (⌘D), else the focused pane. Fewer than two panes
+ * left means no split.
+ */
+export function reconcileSplit(next: WorkspaceData, prev: WorkspaceData): WorkspaceData {
+  const start = next.split ?? null
+  if (!start) return next
+  const archived = new Set(next.worktrees.filter((w) => w.archived).map((w) => w.id))
+  const listed = new Set(next.sessions.filter((s) => !archived.has(s.worktreeId)).map((s) => s.id))
+  let split: SplitNode | null = start
+  let successor: SessionId | null = null
+  for (const id of sessionsIn(start)) {
+    if (listed.has(id) || !split) continue
+    const removed = removePane(split, id)
+    if (id === prev.activeSessionId || id === successor) successor = removed.successor
+    split = removed.node
+  }
+  let active = next.activeSessionId
+  const shown = (id: SessionId | null): id is SessionId => id !== null && id !== PICKER_PANE && hasPane(split, id)
+  if (split && prev.activeSessionId !== null && hasPane(start, prev.activeSessionId) && !listed.has(prev.activeSessionId)) {
+    active = shown(successor) ? successor : (sessionsIn(split)[0] ?? active)
+  } else if (split && active !== null && !hasPane(split, active)) {
+    const target = hasPane(split, PICKER_PANE) ? PICKER_PANE : shown(prev.activeSessionId) ? prev.activeSessionId : null
+    split = target ? replacePane(split, target, active) : null
+  }
+  if (split && paneIds(split).length < 2) {
+    active = sessionsIn(split)[0] ?? active
+    split = null
+  }
+  if (active === null) split = null
+  return { ...next, split, activeSessionId: active }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Persistence (the file format and its sanitizer live in @shared/workspace-file)
 // ---------------------------------------------------------------------------------------------
@@ -218,6 +256,7 @@ export function serializeWorkspace(
   reviewComments: Readonly<Record<string, readonly ReviewComment[]>> = {}
 ): WorkspaceFile {
   const comments = Object.entries(reviewComments).filter(([path, list]) => list.length > 0 && data.worktrees.some((w) => w.path === path))
+  const split = persistedSplit(data.split)
   return {
     version: WORKSPACE_FILE_VERSION,
     projects: data.projects.map(({ id, name, rootPath }) => ({ id, name, rootPath })),
@@ -258,7 +297,8 @@ export function serializeWorkspace(
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
     ),
-    ...(comments.length > 0 ? { reviewComments: Object.fromEntries(comments.map(([path, list]) => [path, [...list]])) } : {})
+    ...(comments.length > 0 ? { reviewComments: Object.fromEntries(comments.map(([path, list]) => [path, [...list]])) } : {}),
+    ...(split ? { split } : {})
   }
 }
 
@@ -287,7 +327,8 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       ...(s.script ? { script: s.script } : {}),
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
-    activeSessionId: file.activeSessionId
+    activeSessionId: file.activeSessionId,
+    split: file.split ?? null
   }
 }
 
@@ -299,6 +340,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.projects !== prev.projects ||
     next.worktrees !== prev.worktrees ||
     next.activeSessionId !== prev.activeSessionId ||
+    (next.split ?? null) !== (prev.split ?? null) ||
     next.sidebarCollapsed !== prev.sidebarCollapsed ||
     next.sidebarWidth !== prev.sidebarWidth ||
     next.rightPanel !== prev.rightPanel ||

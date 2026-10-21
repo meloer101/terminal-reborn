@@ -12,8 +12,19 @@
   cursor: text;
 }
 
-.pane[data-active='false'] {
+/* Placed by the main area (inline left / top / width / height): one session, or one per pane of a split (PRD F20). */
+.pane[data-shown='false'] {
   display: none;
+}
+
+/* The find bar (⌘F) floats over the focused pane's terminal; only the bar itself takes clicks. */
+.searchSlot {
+  position: absolute;
+  pointer-events: none;
+}
+
+.searchSlot > * {
+  pointer-events: auto;
 }
 
 /* No padding here: xterm's fit addon measures this element's content box. */

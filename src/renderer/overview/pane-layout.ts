@@ -1,13 +1,14 @@
 // The board overlay's tiles (PRD F9): up to four sessions in columns, each column a stack of tiles. Tiles can be
 // dragged onto another tile — its middle swaps the two, an edge puts the dragged tile beside it on that side — and
 // the gaps between columns and between tiles in a column drag to resize. Pure: the overlay measures and draws it.
+// The drop zones and limits are the main area's split's too (@shared/split-layout, PRD F20).
+import { MAX_PANES, MIN_SHARE, type DropZone, type Rect } from '@shared/split-layout'
 import type { SessionId } from '@shared/types'
 
-export const MAX_PANES = 4
+export { dropRect, dropZone, MAX_PANES, MIN_SHARE, type DropZone, type Rect } from '@shared/split-layout'
+
 /** The picker's slot while the overlay offers one more session; never a session id (those are UUIDs). */
 export const PICKER_SLOT: SessionId = 'overlay:picker'
-/** No column or tile gets narrower / shorter than this share of its parent when resizing. */
-export const MIN_SHARE = 0.15
 
 export interface PaneColumn {
   ids: SessionId[]
@@ -19,15 +20,6 @@ export interface PaneLayout {
   columns: PaneColumn[]
   /** Width shares of `columns`, summing to 1. */
   sizes: number[]
-}
-
-export type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center'
-
-export interface Rect {
-  x: number
-  y: number
-  width: number
-  height: number
 }
 
 export interface TileBox extends Rect {
@@ -168,35 +160,6 @@ export function measureLayout(layout: PaneLayout, width: number, height: number,
     x += w + gap
   })
   return { tiles, handles }
-}
-
-/** The zone of a tile under the pointer (`px`, `py` as 0…1 across the tile): the middle, or the nearest edge. */
-export function dropZone(px: number, py: number): DropZone {
-  if (px > 0.3 && px < 0.7 && py > 0.3 && py < 0.7) return 'center'
-  const edges: [DropZone, number][] = [
-    ['left', px],
-    ['right', 1 - px],
-    ['top', py],
-    ['bottom', 1 - py]
-  ]
-  return edges.reduce((best, e) => (e[1] < best[1] ? e : best))[0]
-}
-
-/** The part of a tile a drop in `zone` will take: the whole tile to swap, or the half on that side. */
-export function dropRect(tile: Rect, zone: DropZone): Rect {
-  const { x, y, width, height } = tile
-  switch (zone) {
-    case 'left':
-      return { x, y, width: width / 2, height }
-    case 'right':
-      return { x: x + width / 2, y, width: width / 2, height }
-    case 'top':
-      return { x, y, width, height: height / 2 }
-    case 'bottom':
-      return { x, y: y + height / 2, width, height: height / 2 }
-    default:
-      return tile
-  }
 }
 
 /** The tile in the top-right corner, which carries the "add a session" button. */

@@ -32,6 +32,13 @@ const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+Shift+KeyM', accelerator: 'Shift+CmdOrCtrl+M', item: ['会话', '合并到基线…'] },
   { key: 'Meta+KeyB', accelerator: 'CmdOrCtrl+B', item: ['显示', '显示 / 隐藏侧栏'] },
   { key: 'Meta+Shift+KeyB', accelerator: 'Shift+CmdOrCtrl+B', item: ['显示', '显示 / 隐藏右侧栏'] },
+  { key: 'Meta+KeyD', accelerator: 'CmdOrCtrl+D', item: ['显示', '向右拆分'] },
+  { key: 'Meta+Shift+KeyD', accelerator: 'Shift+CmdOrCtrl+D', item: ['显示', '向下拆分'] },
+  { key: 'Alt+Meta+KeyW', accelerator: 'Alt+CmdOrCtrl+W', item: ['显示', '关掉这一格'] },
+  { key: 'Alt+Meta+ArrowLeft', accelerator: 'Alt+CmdOrCtrl+Left', item: ['显示', '移到左边的格'] },
+  { key: 'Alt+Meta+ArrowRight', accelerator: 'Alt+CmdOrCtrl+Right', item: ['显示', '移到右边的格'] },
+  { key: 'Alt+Meta+ArrowUp', accelerator: 'Alt+CmdOrCtrl+Up', item: ['显示', '移到上面的格'] },
+  { key: 'Alt+Meta+ArrowDown', accelerator: 'Alt+CmdOrCtrl+Down', item: ['显示', '移到下面的格'] },
   { key: 'Meta+Shift+Equal', accelerator: 'CmdOrCtrl+Plus', item: ['显示', '放大'] },
   { key: 'Meta+Equal', accelerator: 'CmdOrCtrl+=', item: ['显示', '放大'] },
   { key: 'Meta+Minus', accelerator: 'CmdOrCtrl+-', item: ['显示', '缩小'] },
@@ -212,6 +219,33 @@ test.describe('with the keyboard in the terminal', () => {
     await page.waitForTimeout(400)
     expect(await activeId()).toBe(expected)
     await activate('s-cookie')
+  })
+
+  test('⌘D and ⇧⌘D open one picker pane, ⌥⌘ arrows move once, ⌥⌘W closes one pane (PRD F20)', async () => {
+    const picker = page.locator('[data-pane-id="split:picker"]')
+    expect(await press('Meta+KeyD')).toBe('page')
+    await expect(picker).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(picker).toHaveCount(0)
+    await terminal().click()
+    expect(await press('Meta+Shift+KeyD')).toBe('page')
+    await expect(picker).toHaveCount(1)
+    await picker.locator('[data-pick-id="s-perf"]').click()
+    await expect.poll(activeId).toBe('s-perf')
+    expect(await press('Alt+Meta+ArrowUp')).toBe('page')
+    await expect.poll(activeId).not.toBe('s-perf')
+    const top = await activeId()
+    expect(await press('Alt+Meta+ArrowDown')).toBe('page')
+    await expect.poll(activeId).toBe('s-perf')
+    // Nothing further down: the keyboard stays.
+    expect(await press('Alt+Meta+ArrowDown')).toBe('page')
+    expect(await activeId()).toBe('s-perf')
+    for (const key of ['Alt+Meta+ArrowLeft', 'Alt+Meta+ArrowRight']) expect(await press(key)).toBe('page')
+    expect(await press('Alt+Meta+KeyW')).toBe('page')
+    await expect(page.locator('[data-region="split"] [data-pane-id]')).toHaveCount(1)
+    await page.waitForTimeout(400)
+    expect(await activeId()).toBe(top)
+    await expect(page.locator('[data-region="split"] [data-pane-id]')).toHaveCount(1)
   })
 
   test('⇧⌘M opens the merge sheet once', async () => {

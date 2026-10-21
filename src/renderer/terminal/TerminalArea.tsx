@@ -1,7 +1,9 @@
 // One xterm-backed terminal per session. Terminals are created the first time a session is
 // viewed and then stay mounted (display:none) so scrollback and running programs survive
-// switching sessions.
-import { useEffect, useRef, useState } from 'react'
+// switching sessions. The main area places the shown ones (PRD F20: one per pane of a split); moving between
+// panes only moves the element, never the terminal.
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId, Worktree } from '@shared/types'
 import { useWorktreeCreations } from '../new-session/creation'
@@ -20,7 +22,10 @@ interface PaneProps {
   sessionId: SessionId
   cwd: string
   agent: AgentKind
+  /** The keyboard's pane. */
   active: boolean
+  /** Where it is shown in the terminal area; undefined = not shown. */
+  rect: Rect | undefined
   /** Restored from disk and not started yet: no terminal until startSession() (state/session-start.ts). */
   held: boolean
   /** Its process kept running in the pty daemon: attach now, viewed or not (status and notifications need it). */
@@ -30,13 +35,17 @@ interface PaneProps {
   generation: number
 }
 
-function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSessionId, generation }: PaneProps) {
+const place = (rect: Rect | undefined): CSSProperties | undefined =>
+  rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
+
+function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   // The overview may show this terminal in its own host for a while (borrow.ts).
   const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
-  const shown = active || borrowedHost !== null
+  const placed = rect !== undefined
+  const shown = placed || borrowedHost !== null
   // Spawn lazily: nothing is created until the session has been shown once (a live process is attached at once).
-  const [everActive, setEverActive] = useState(active || live)
+  const [everActive, setEverActive] = useState(placed || live)
   if ((shown || live) && !everActive) setEverActive(true)
 
   useEffect(() => {
@@ -85,8 +94,12 @@ function TerminalPane({ sessionId, cwd, agent, active, held, live, resumeAgentSe
     <div
       className={styles.pane}
       data-active={active}
+      data-shown={placed}
       data-session-id={sessionId}
+      style={place(rect)}
       onClick={() => getSurface(sessionId)?.focus()}
+      // The keyboard went into this pane's terminal (a click): its session becomes the active one (PRD F20).
+      onFocus={() => useWorkspace.getState().focusPane(sessionId)}
     >
       <div ref={hostRef} className={styles.host} />
     </div>
@@ -137,15 +150,18 @@ function useFocusActiveTerminal(sessionId: SessionId | null, request: number): v
 
 /**
  * Waking from sleep, refocusing the window or moving it to a screen with another pixel ratio can leave the
- * visible terminal with stale glyphs or a grid the PTY does not know about: redraw it and resend its size.
+ * visible terminals with stale glyphs or a grid the PTY does not know about: redraw them and resend their size.
+ * `shown` is the shown sessions' ids, one per line (every pane of a split).
  */
-function useResyncOnWake(sessionId: SessionId | null): void {
+function useResyncOnWake(shown: string): void {
   useEffect(() => {
-    if (!sessionId) return
+    if (!shown) return
     let frame = 0
     const resync = (): void => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => resyncTerminal(sessionId))
+      frame = requestAnimationFrame(() => {
+        for (const sessionId of shown.split('\n')) resyncTerminal(sessionId)
+      })
     }
     const onVisibility = (): void => {
       if (document.visibilityState === 'visible') resync()
@@ -169,10 +185,11 @@ function useResyncOnWake(sessionId: SessionId | null): void {
       window.removeEventListener('focus', resync)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [sessionId])
+  }, [shown])
 }
 
-export function TerminalArea() {
+/** `placements`: where each shown session's terminal goes (below its pane's header). */
+export function TerminalArea({ placements }: { placements: Readonly<Record<SessionId, Rect>> }) {
   const { sessions, worktrees, activeSessionId } = useWorkspace(
     useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees, activeSessionId: s.activeSessionId }))
   )
@@ -186,7 +203,7 @@ export function TerminalArea() {
   useSessionStartup()
   const focusRequest = useWorkspace((s) => s.focusRequest)
   useFocusActiveTerminal(activeSessionId, focusRequest)
-  useResyncOnWake(activeSessionId)
+  useResyncOnWake(Object.keys(placements).join('\n'))
 
   useEffect(() => {
     // Every record, archived ones included: their saved screens stay for the restore.
@@ -197,7 +214,7 @@ export function TerminalArea() {
   useEffect(() => closeTerminalSearch(), [activeSessionId])
 
   return (
-    <div className={styles.area}>
+    <div className={styles.area} data-region="terminal">
       {/* An archived worktree's panes unmount (PRD F15); restoring mounts them again, which starts them afresh. */}
       {sessions.filter((session) => !archivedWorktree(worktrees, session.worktreeId)).map((session) => (
         <TerminalPane
@@ -206,6 +223,7 @@ export function TerminalArea() {
           cwd={worktrees.find((w) => w.id === session.worktreeId)?.path ?? window.tr.homeDir}
           agent={launchKind(session)}
           active={session.id === activeSessionId}
+          rect={placements[session.id]}
           held={
             (session.phase === 'not-started' && !live[session.id]) ||
             waitingForWorktree[session.id] !== undefined ||
@@ -216,7 +234,11 @@ export function TerminalArea() {
           generation={requests[session.id]?.generation ?? 0}
         />
       ))}
-      {activeSessionId && <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />}
+      {activeSessionId && placements[activeSessionId] && (
+        <div className={styles.searchSlot} style={place(placements[activeSessionId])}>
+          <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
+        </div>
+      )}
     </div>
   )
 }

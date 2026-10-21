@@ -14,7 +14,15 @@ export const MENU_COMMANDS = [
   'rename-session',
   'toggle-sidebar',
   'toggle-right-panel',
-  'merge-worktree'
+  'merge-worktree',
+  // The main area's split (PRD F20).
+  'split-right',
+  'split-down',
+  'close-pane',
+  'focus-pane-left',
+  'focus-pane-right',
+  'focus-pane-up',
+  'focus-pane-down'
 ] as const
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number]
@@ -39,6 +47,14 @@ export const SHORTCUTS = {
   'toggle-right-panel': 'Shift+CmdOrCtrl+B',
   // ⌘M stays the system's Minimize; the merge sheet takes ⇧⌘M (PRD F4).
   'merge-worktree': 'Shift+CmdOrCtrl+M',
+  // As in iTerm2 / Ghostty: ⌘D splits right, ⇧⌘D down, ⌥⌘ arrows move between panes (PRD F20). ⌘W stays 关闭会话.
+  'split-right': 'CmdOrCtrl+D',
+  'split-down': 'Shift+CmdOrCtrl+D',
+  'close-pane': 'Alt+CmdOrCtrl+W',
+  'focus-pane-left': 'Alt+CmdOrCtrl+Left',
+  'focus-pane-right': 'Alt+CmdOrCtrl+Right',
+  'focus-pane-up': 'Alt+CmdOrCtrl+Up',
+  'focus-pane-down': 'Alt+CmdOrCtrl+Down',
   settings: 'CmdOrCtrl+,',
   'font-bigger': 'CmdOrCtrl+Plus',
   'font-smaller': 'CmdOrCtrl+-',

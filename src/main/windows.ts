@@ -189,6 +189,15 @@ export function installAppMenu(): void {
         { label: '显示 / 隐藏侧栏', accelerator: SHORTCUTS['toggle-sidebar'], ...command('toggle-sidebar') },
         { label: '显示 / 隐藏右侧栏', accelerator: SHORTCUTS['toggle-right-panel'], ...command('toggle-right-panel') },
         { type: 'separator' },
+        // The main area's split (PRD F20).
+        { label: '向右拆分', accelerator: SHORTCUTS['split-right'], ...command('split-right') },
+        { label: '向下拆分', accelerator: SHORTCUTS['split-down'], ...command('split-down') },
+        { label: '关掉这一格', accelerator: SHORTCUTS['close-pane'], ...command('close-pane') },
+        { label: '移到左边的格', accelerator: SHORTCUTS['focus-pane-left'], ...command('focus-pane-left') },
+        { label: '移到右边的格', accelerator: SHORTCUTS['focus-pane-right'], ...command('focus-pane-right') },
+        { label: '移到上面的格', accelerator: SHORTCUTS['focus-pane-up'], ...command('focus-pane-up') },
+        { label: '移到下面的格', accelerator: SHORTCUTS['focus-pane-down'], ...command('focus-pane-down') },
+        { type: 'separator' },
         { label: '放大', accelerator: SHORTCUTS['font-bigger'], click: () => stepFont('bigger') },
         // ⌘= is the unshifted key under ⌘+; it does the same, without a second visible item.
         { label: '放大', accelerator: 'CmdOrCtrl+=', visible: false, acceleratorWorksWhenHidden: true, click: () => stepFont('bigger') },

@@ -1,5 +1,7 @@
 // Module-level registry of live terminals, keyed by session id. Terminals outlive React re-renders.
 import type { SendIo } from '@shared/send-protocol'
+import { LIMITS } from '@shared/settings'
+import type { FontSizeStep } from '@shared/shortcuts'
 import type { AgentKind, SessionId } from '@shared/types'
 import { SessionTerminal } from './session-terminal'
 import type { TerminalAppearance, TerminalSurface } from './surface'
@@ -8,11 +10,41 @@ import type { SurfaceDebugInfo, XtermSurface } from './xterm-surface'
 const terminals = new Map<SessionId, SessionTerminal>()
 /** Latest appearance from settings; new terminals start with it, existing ones are updated in place. */
 let appearance: TerminalAppearance | null = null
+/** Font size steps of single panes of a split (PRD F20), on top of the setting; gone when the split ends. */
+const zoom = new Map<SessionId, number>()
+
+/** The appearance of one session's terminal: the setting's, with its pane's font size step. */
+function appearanceFor(sessionId: SessionId, base: TerminalAppearance): TerminalAppearance {
+  const step = zoom.get(sessionId) ?? 0
+  if (step === 0) return base
+  return { ...base, fontSize: Math.min(LIMITS.fontSize.max, Math.max(LIMITS.fontSize.min, base.fontSize + step)) }
+}
 
 /** Applies the appearance to every live terminal and remembers it for terminals created later. */
 export function setTerminalAppearance(next: TerminalAppearance): void {
   appearance = next
-  for (const terminal of terminals.values()) terminal.surface.setAppearance(next)
+  for (const [id, terminal] of terminals) terminal.surface.setAppearance(appearanceFor(id, next))
+}
+
+/** ⌘+ / ⌘- / ⌘0 in a split: only the focused pane's terminal gets bigger, smaller or back to the setting. */
+export function stepTerminalZoom(sessionId: SessionId, step: FontSizeStep): void {
+  if (!appearance) return
+  const base = appearance.fontSize
+  const wanted = step === 'reset' ? base : base + (zoom.get(sessionId) ?? 0) + (step === 'bigger' ? 1 : -1)
+  // Within the setting's limits.
+  const next = Math.min(LIMITS.fontSize.max, Math.max(LIMITS.fontSize.min, wanted)) - base
+  if (next === 0) zoom.delete(sessionId)
+  else zoom.set(sessionId, next)
+  terminals.get(sessionId)?.surface.setAppearance(appearanceFor(sessionId, appearance))
+}
+
+/** The split ended: every terminal goes back to the setting's font size. */
+export function clearTerminalZoom(): void {
+  if (zoom.size === 0) return
+  const ids = [...zoom.keys()]
+  zoom.clear()
+  if (!appearance) return
+  for (const id of ids) terminals.get(id)?.surface.setAppearance(appearance)
 }
 
 /** Creates the terminal for a session on first call; later calls return the same one. */
@@ -25,7 +57,7 @@ export function ensureTerminal(
   let terminal = terminals.get(sessionId)
   if (!terminal) {
     terminal = new SessionTerminal(sessionId, cwd, agent, resumeAgentSessionId)
-    if (appearance) terminal.surface.setAppearance(appearance)
+    if (appearance) terminal.surface.setAppearance(appearanceFor(sessionId, appearance))
     terminals.set(sessionId, terminal)
   }
   return terminal
