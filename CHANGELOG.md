@@ -4,6 +4,47 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
+Keep several agents in view, and take their work all the way to a PR.
+同时看住几个 agent，并把它们的改动一路送到 PR。
+
+### Several sessions at once / 同时看几个会话
+- Drag a session from the sidebar into the terminal area to show two to four sessions side by side. ⌘D / ⇧⌘D split, ⌥⌘ arrows move between panes, ⌥⌘W closes a pane; the layout comes back after a restart.
+  从侧栏把会话拖进终端区域，最多 4 个并排。⌘D / ⇧⌘D 拆分，⌥⌘方向键在格之间移动，⌥⌘W 关掉一格；重启后布局还在。
+- The overview board's overlay tiles up to four sessions: drag a window to swap or move it, drag the gaps and edges to resize.
+  总览看板的浮层最多并排 4 个会话：拖窗口换位置，拖空隙和边缘调大小。
+
+### Pull requests / PR
+- With your own `gh` login, the sidebar and the overview show each session's PR and checks (`#123 ✓`). No OAuth, no stored token.
+  用你自己的 `gh` 登录，侧栏和总览显示每个会话的 PR 和 checks（`#123 ✓`）。不做 OAuth，不存 token。
+- 创建 PR pushes the branch and opens the PR; when checks fail, 让 agent 修复 puts the failure and the log tail into the agent's input line for you to send.
+  “创建 PR”推送分支并开 PR；checks 失败时，“让 agent 修复”把失败项和日志末尾放进 agent 的输入行，由你发送。
+
+### Files, images and plan limits / 文件、图片与额度
+- Drag files or folders onto a session, paste a screenshot with ⌘V, or pick files with the paperclip: their paths go into the agent's input line.
+  把文件或文件夹拖到会话上、⌘V 粘贴截图，或用回形针选文件：路径放进 agent 的输入行。
+- When a session stops because the plan limit ran out, it shows when the limit resets and can send “继续” then, only if you ask it to.
+  会话因套餐额度用完停下时，显示何时恢复；你点了才会在恢复后发送“继续”。
+- Plan usage is asked from your Claude and Codex accounts directly, including per-model weekly limits; context is measured against the agent's own auto-compaction point.
+  额度改为直接问你的 Claude 和 Codex 账号，含按模型的周额度；context 按 agent 自己的自动压缩点计算。
+- Sessions on a third-party endpoint (CC Switch, Bedrock, Vertex, a non-OpenAI Codex provider) no longer show the official account's usage.
+  走第三方端点的会话（CC Switch、Bedrock、Vertex、Codex 的非 OpenAI 服务商）不再显示官方账号的额度。
+
+### Layout / 界面
+- A rounded main surface, a sidebar you can drag wider (200–480, double-click to reset), and the right panel floating on the main surface. New orbit logo.
+  主界面圆角，侧栏可拖宽（200–480，双击恢复），右侧栏浮在主界面上。新的轨道 logo。
+
+### Fixed / 修复
+- Chinese input: full-width punctuation stays full-width, no double-space period, Enter / Esc while composing no longer trigger app shortcuts; links and file paths end at Chinese text.
+  中文输入：全角标点不再变半角、不再双空格变句号，组合输入中按 Enter / Esc 不再触发应用快捷键；链接和文件路径在中文处结束。
+- Overlapping or wrong Chinese characters with many sessions on the WebGL renderer.
+  多个会话下 WebGL 渲染中文叠字、错字。
+- Agents kept running across ⌘Q no longer show as idle after a relaunch; a real ⌘F never opens find behind a dialog.
+  ⌘Q 后重开，后台继续运行的 agent 不再显示为空闲；弹窗里按 ⌘F 不再在背后打开查找。
+- Wavi never types into a menu that is open in the agent's TUI, and tells you when it held back.
+  agent 界面里有菜单开着时，Wavi 不往里打字，并告诉你为什么没放进去。
+
 ### Changed / 变更
 - Release builds are signed with a Developer ID and notarized by Apple: a downloaded Wavi opens without `xattr -cr`.
   发布版改用 Developer ID 签名并经 Apple 公证，下载后直接打开，不再需要 `xattr -cr`。
@@ -151,7 +192,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/meloer101/terminal-reborn/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/meloer101/terminal-reborn/compare/v0.1.1...v0.3.0
 [0.1.1]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.1
 [0.1.0]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.0
