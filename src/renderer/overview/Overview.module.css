@@ -266,6 +266,16 @@
   color: var(--text-tertiary);
 }
 
+/* Conflict radar: "和 jacob/otter 会冲突"; the full list is in the tag's tooltip. */
+.radarCell {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: 168px;
+  padding: 0 var(--space-6);
+  overflow: hidden;
+}
+
 /* PR (F16): `#123 ✓`, or `#123 已合并`. */
 .prCell {
   flex: none;
@@ -397,7 +407,8 @@
 }
 
 @container (max-width: 560px) {
-  .row .summaryCell {
+  .row .summaryCell,
+  .row .radarCell {
     display: none;
   }
 

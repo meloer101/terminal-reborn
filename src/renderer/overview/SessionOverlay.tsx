@@ -12,6 +12,7 @@ import { StatusGlyph } from '../ui/StatusGlyph'
 import { getXtermSurface } from '../terminal/registry'
 import { BorrowedTerminal, TERMINAL_HOST_SELECTOR } from './BorrowedTerminal'
 import { ReviewButton } from '../review/ReviewButton'
+import { SessionRadarTag } from '../conflict-radar/RadarTag'
 import { EnterButton } from './EnterButton'
 import enterStyles from './EnterButton.module.css'
 import type { OverviewRow } from './model'
@@ -307,6 +308,9 @@ function Pane({
         <StatusGlyph status={row.status} />
         <span className={styles.title}>{row.title}</span>
         {row.where && <span className={styles.where}>{row.where}</span>}
+        <span className={styles.radar}>
+          <SessionRadarTag sessionId={id} />
+        </span>
         <span className={styles.spacer} />
         <span className={styles.status}>{[row.statusLabel, row.time].filter(Boolean).join(' · ')}</span>
         <span className={styles.divider} aria-hidden />

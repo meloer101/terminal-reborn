@@ -14,6 +14,12 @@ import { IconButton } from '../../ui/IconButton'
 import { formatAccelerator } from '../../ui/menu-model'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { openMergeSheet } from '../merge/store'
+import { agentLabel, agentSessionFor } from '../merge/model'
+import { wantsRebase } from '@shared/conflict-radar'
+import { rebaseWithAgent } from '../../conflict-radar/actions'
+import { radarDetailLines } from '../../conflict-radar/model'
+import { RadarTag } from '../../conflict-radar/RadarTag'
+import { useWorktreeRadarMark } from '../../conflict-radar/store'
 import { useRepoScripts } from '../../scripts/run-script'
 import { PaneHeader } from '../PaneHeader'
 import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
@@ -186,6 +192,9 @@ interface RowProps {
 function Row({ row, selected, projectId, root, refresh }: RowProps) {
   const { info } = row
   const scripts = useRepoScripts(selected ? info.path : undefined)
+  const radar = useWorktreeRadarMark(root, row.worktreeIds)
+  const activeSessionId = useWorkspace((s) => s.activeSessionId)
+  const rebaseTarget = radar && wantsRebase(radar.self) ? agentSessionFor(row.sessions, activeSessionId) : null
   return (
     <li className={styles.item} data-selected={selected} data-path={info.path}>
       <button type="button" className={styles.row} aria-expanded={selected} onClick={() => selectRow(root, row)}>
@@ -205,6 +214,7 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
         </span>
         <span className={styles.meta}>
           <span className={styles.session}>{row.sessionLine}</span>
+          {radar && <RadarTag mark={radar} />}
           <span className={styles.path}>{tildePath(row.openPath, window.tr.homeDir)}</span>
         </span>
       </button>
@@ -219,6 +229,15 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
                 </dd>
               </div>
             ))}
+            {radar &&
+              radarDetailLines(radar).map((line, i) => (
+                <div key={`radar-${i}`} className={styles.kvRow} data-testid="radar-detail">
+                  <dt className={styles.kvLabel}>{line.label}</dt>
+                  <dd className={styles.kvValue} title={line.title}>
+                    {line.value}
+                  </dd>
+                </div>
+              ))}
           </dl>
           <div className={styles.actions}>
             <button
@@ -239,6 +258,20 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
                 }
               >
                 合并到 {info.base}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+              </button>
+            )}
+            {radar && rebaseTarget && (
+              <button
+                type="button"
+                className={styles.ghost}
+                title={`把 rebase 说明放进 ${agentLabel(rebaseTarget.kind)} 的输入行，看过后按回车发送`}
+                onClick={() =>
+                  void rebaseWithAgent(radar.self, rebaseTarget).then((error) => {
+                    if (error) patchRoot(root, { notice: `没能交给 ${agentLabel(rebaseTarget.kind)}：${error}` })
+                  })
+                }
+              >
+                让 agent rebase
               </button>
             )}
             <span className={styles.spacer} />

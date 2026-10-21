@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
 import { PR_IPC } from '@shared/pull-requests'
+import { RADAR_IPC } from '@shared/conflict-radar'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -180,6 +181,11 @@ const api: TrApi = {
     onStatus: (listener) => listen(PR_IPC.status, listener),
     create: (request) => ipcRenderer.invoke(PR_IPC.create, request),
     failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree)
+  },
+  radar: {
+    watch: (targets) => ipcRenderer.send(RADAR_IPC.watch, targets),
+    reports: () => ipcRenderer.invoke(RADAR_IPC.reports),
+    onReport: (listener) => listen(RADAR_IPC.report, listener)
   }
 }
 

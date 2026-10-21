@@ -1,0 +1,30 @@
+/* Conflict radar mark: caption text in the secondary color, the icon carries the status color. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  font: var(--text-caption);
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+  display: inline-flex;
+}
+
+.tag[data-tone='conflict'] .icon {
+  color: var(--status-error);
+}
+
+.tag[data-tone='behind'] .icon {
+  color: var(--text-tertiary);
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
