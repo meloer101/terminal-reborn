@@ -24,6 +24,8 @@ interface Harness {
   timers: (() => void)[]
   flush(): void
   overviewOpened: number
+  /** How often the controller asked for the fast tick. */
+  fastTicks: number
 }
 
 function harness(initial: Session[], activeId: string | null = null): Harness {
@@ -41,6 +43,7 @@ function harness(initial: Session[], activeId: string | null = null): Harness {
       due.forEach((fn) => fn())
     },
     overviewOpened: 0,
+    fastTicks: 0,
     controller: undefined as unknown as StatusController
   }
   const deps: StatusDeps = {
@@ -62,6 +65,9 @@ function harness(initial: Session[], activeId: string | null = null): Harness {
     },
     later: (fn) => {
       h.timers.push(fn)
+    },
+    needsFastTicks: () => {
+      h.fastTicks += 1
     }
   }
   h.controller = new StatusController(deps)
@@ -279,6 +285,16 @@ describe('StatusController', () => {
   })
 
   describe('self-heal', () => {
+    it('asks for the fast tick the moment a session runs or waits on a dialog, not after a slow one', () => {
+      const g = harness([session('c', 'done_unread', 'codex')], null)
+      g.controller.handleTitle('c', 'tr-proj')
+      const before = g.fastTicks
+      g.controller.handleEvent('c', { type: 'permission-request', tool: 'Bash', input: { command: 'ls' } })
+      expect(status(g, 'c')).toBe('needs_you')
+      expect(g.fastTicks).toBeGreaterThan(before)
+      expect(g.controller.hasRunning()).toBe(true)
+    })
+
     it('heals a turn that ended without a Stop (interrupt) once the title is idle and hooks are quiet', () => {
       h.controller.handleEvent('b', { type: 'prompt-submit', prompt: 'x' })
       h.controller.handleTitle('b', '✳ Claude Code')

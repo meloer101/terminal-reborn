@@ -13,10 +13,17 @@ export type AgentEvent =
   /** `agentSessionId` is the agent's conversation id (Claude/Codex `session_id`), for `--resume`. */
   | { type: 'session-start'; agentSessionId?: string }
   | { type: 'prompt-submit'; prompt: string }
-  /** PreToolUse. `input` is the tool's raw input object (file_path, command, pattern, …). */
-  | { type: 'tool-start'; tool: string; input: Record<string, unknown> }
+  /**
+   * PreToolUse. `input` is the tool's raw input object (file_path, command, pattern, …). `agentId` is set when a
+   * subagent made the call (Claude's `agent_id`: a Task-tool worker, an in-process teammate); absent on the main thread.
+   */
+  | { type: 'tool-start'; tool: string; input: Record<string, unknown>; agentId?: string }
   /** PostToolUse / PostToolUseFailure. */
-  | { type: 'tool-end'; tool: string; input: Record<string, unknown>; ok: boolean }
+  | { type: 'tool-end'; tool: string; input: Record<string, unknown>; ok: boolean; agentId?: string }
+  /** PermissionRequest: the agent's own dialog for this call is up (answered in the TUI; PRD §6.6 / §6.7). */
+  | { type: 'permission-request'; tool: string; input: Record<string, unknown>; agentId?: string }
+  /** SubagentStop: that subagent is done, so nothing of it can still be waiting on the user. */
+  | { type: 'subagent-stop'; agentId: string }
   /** Notification hook, classified. 'permission' / 'question' mean the TUI is waiting on the user. */
   | { type: 'notification'; kind: 'permission' | 'question' | 'idle' | 'other'; message: string }
   /** `message` is the agent's last reply of the turn (Claude / Codex `last_assistant_message`), possibly truncated. */

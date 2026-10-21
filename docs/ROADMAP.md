@@ -43,7 +43,7 @@
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
-- [ ] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”。c#1027（44 👍）、c#2322（22 👍）、o#13600
+- [x] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”（2026-10-20，PRD v1.52）。c#1027（44 👍：Running / Needs Input 时对时错）、c#2322（22 👍：通知时快时慢）、o#13600（Codex 自动批准后仍提示需要处理）。先核对了 Claude Code 2.1.304 二进制（`agent_id`、`background_tasks`、拒绝不发 PostToolUse、标题 `✳` = 有对话框，PRD §6.6），再按它写了会话模拟器 `src/shared/agent-sim.ts`，回放进状态机对照真实状态（`src/main/hooks/status-sim.test.ts`）。改动前：Claude 48 小时模拟里显示错误最长 266 s、超过 1 s 的错误占 5.5% 的时间，丢 5% hook 时最长 230 s，Codex 最长 39.5 s——主要是两个对话框互相顶替、子 agent 的调用把“等你处理 / 已完成”改回运行中、批准后工具在跑却还显示等你处理、空闲时 15 s 才检查一次。改后：每个对话框一个待确认项、子 agent 只算它的对话框、`idle_prompt` / 对话框后标题转动 / 屏幕上的对话框参与自愈、需要时立刻改用 1 s 检查（PRD §3.1）；最长 7 s、0.6%，丢 5% hook 时最长 7 s，Codex 最长 4.5 s。Claude 的 PermissionRequest 只在真要问人时触发（Auto mode 放行的不触发），所以 o#13600 那种误报在 Claude 上不会出现；Codex 的“Approve for me”没在真 CLI 上验证。测试：`status-sim.test.ts`（含丢 hook、完全没有 hook）、`session-state-machine.test.ts`（600 段随机序列：等你处理 ⇔ 有待确认项）、`normalize.test.ts`，e2e `asks.spec.ts`（真实 hook 链路），可选的 `TR_STATUS_STRESS=1 … e2e/status-stress.spec.ts`（假 agent 在应用里回放、对照侧栏）。真 CLI 下的并行对话框、后台 agent 请求权限和 agent teams 没跑（花额度，列在“待作者手动确认”）
 - [x] 把文件和图片拖进或粘贴进运行中的会话（2026-10-20，PRD F19）：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴截图、会话头的回形针（文件和文件夹），都把转义后的路径放进输入行，agent 自己把图片变成附件。c#3435（22 👍）、o#15377。e2e `attachments.spec.ts`；从 Finder 真实拖入还没在真机上走一遍（拖入用的 `pathForFile` 和欢迎页拖文件夹是同一个）
 - [x] 套餐额度用完后，恢复时继续（2026-10-20，PRD F11 v1.50）：会话因额度用完停下时，会话头（用完的 UsageChip 之后）和总览行写何时恢复，并给「恢复后发送“继续”」；点了才预约，按钮改写发送时间，再点取消。到点先复查账号额度（还在 100% 就顺延到新的重置时间），再看屏幕：有选择框（Claude 的 `/rate-limit-options`、Codex 的换模型弹窗）或 Claude 自己在倒计时继续时不发，发通知说明；在终端里打字、会话自己继续了就取消。额度用完的错误条不再给“让 agent 修复”。先实测了两家怎么报告限额（PRD §6.6 / §6.7，`scripts/spikes/60-rate-limit-lab.mjs`，本地模拟 429，不花额度）：Claude 是 `rate_limit` 的 StopFailure，Codex 不发任何 hook、之后弹换模型菜单（往里打“继续”回车会换掉模型）；Claude 2.1.304 自己有 `autoContinueAtUsageLimit`。cc#13354（215 👍）、cc#35744（106 👍）、cx#21073（85 👍）、cx#28931（60 👍）。单元测试 `limit-resume.test.ts` / `normalize.test.ts` / `error-next-steps.test.ts`，e2e `limit-resume.spec.ts`。预约不跨 ⌘Q（只在窗口页面里，见已知问题）；Figma 待补（按钮和预约状态，现在照 `/compact` 的样式）；“每次限额自动预约”没做，有人提出再放进设置 · 自动化、默认关。随后其他点击发给 agent 的操作（错误条的“重试这一轮”“让 agent 修复”、审阅、评论和浏览器错误的“发给 …”、插入路径、冲突交给 agent、/compact 按钮）也在这些菜单开着时不打字，提示“终端里有选择框，请先在终端中处理”（`sendRefusal()`，单元测试 `send-protocol.test.ts` / `session-io.test.ts`，e2e 同上；合并面板的 `merge-sheet.spec.ts`）。拒绝的提示写在被点的地方：合并面板留在原处并在失败行说明，文件视图标题下一行，/compact 下的小浮层
 - [ ] Option 当 Meta 的设置项（现在只映射了 ⌥← / ⌥→）。s#1359、c#2120
@@ -200,9 +200,13 @@
 
 ### D · 发布质量（穿插在各批次里）
 - [ ] 官网 `site/`（纯静态页面，GSAP 走 CDN）：版式、动效、深浅色和手机宽度已按 Figma「官网 · Website」做完（2026-10-18）；部署移到“外部验证”，英文版排在那之后
-- [ ] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动；渲染包拆分
-  - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms。冷启动和 10 / 20 个会话还没测
+- [x] D1 性能基线：10 / 20 个会话的内存、输入延迟、冷启动，8 小时长跑（2026-10-20，PRD §6.12）。外部背景：三家竞品都有内存 / CPU 随时间涨的 issue——o#10928（正常使用中越用越重）、o#19768（主进程每秒漏 26 MB 直到被系统杀掉）、s#3049（渲染进程 60 分钟涨到 3.2 GB 后 GC 卡死）、c#5209（2 GB 涨到 12 GB），Electron 和 xterm.js 被点名；在多 agent 这个定位上，稳定跑 10–20 个会话是前提
+  - [x] 8 个会话的第一份数据（2026-10-20，假 agent，M4 Retina，修复图集之后的构建）：每个会话约 4900 行中文回滚、空闲时 Wavi 加守护进程约 1080 MB，输入延迟 p50 / p95 为 13 / 20 ms；7 个会话在后台各输出 40 行/秒时，内存峰值 1123 MB，渲染进程 CPU 6–10%；在正在输出的会话里打字为 29 / 40 ms
   - [x] F20 4 格同时在屏（2026-10-20，`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL，三次）：只有键盘所在那格安静时 p50 / p95 为 11 / 18–50 ms；其他三格输出时 10–13 / 19–49 ms；四格都在输出时 12–13 / 55–83 ms。p50 达到 PRD F20 的 < 16 ms，p95 有长尾（四个 WebGL 终端同帧重绘），待查
+  - [x] 10 / 20 个会话和冷启动（2026-10-20，M4 16 GB，`TR_SCALE=1 npx playwright test e2e/scale.spec.ts`）：假 agent `e2e/scale-agent.mjs` 跑真实的按次 hooks、statusLine 和 transcript，像 agent 一样画标题、工具调用、彩色中文和权限框；项目是带 worktree 的 git 仓库。冷启动（启动到侧栏出现全部会话）0.45–0.72 s，目标 ≤ 2 s。内存（各进程工作集 + 守护进程；括号里是活动监视器口径的 phys_footprint）：10 个会话空闲 668（460）MB、9 个各输出 20 行/秒 570（502）MB、全部输出 617（610）MB；20 个会话 703（409）、609（535）、669（763）MB，目标 < 1.5 GB。输入延迟（按键到显示回显的那一帧）p50 / p95：10 个会话 10 / 18（空闲）、12 / 20（9 个输出）、11 / 19 ms（全部输出）；20 个会话 11 / 18、11 / 20、11 / 20 ms。p50 达到 < 16 ms；p95 多出的 2–4 ms 是“下一帧才显示”，一个会话空闲时也是 18 ms，不随会话数变。19 个会话输出时渲染进程 CPU 1.5%、主进程 0.4%、守护进程 2.8%
+  - [x] 修掉的规模问题：隐藏的终端每帧整屏重画（PRD §6.3，`paused-selection.ts`）。修之前 20 个会话里 19 个输出时 p95 65–1632 ms、最长卡 1.8 s，渲染进程 CPU 6.6–11%（8 个会话那份数据里的 6–10% 也是它）；修之后见上
+  - [ ] 8 小时长跑（`TR_SCALE_SOAK_MIN=480 … -g soak`，20 个会话按真人节奏循环：20–120 s 一轮、30–300 s 空闲，偶尔权限框和并行子 agent，每 20 s 切换会话、每 10 分钟开一次总览）：三次都在合盖时被结束（55 分钟、3.96 小时、21 分钟）：机器用电池，合盖就睡眠（`caffeinate -s` 只在接电源时有效），系统日志里每次都是睡眠事件之后 50–400 ms，测试启动的应用或守护进程收到 SIGTERM / 退出，没有崩溃报告。复测：20 个会话工作时 SIGTERM 守护进程，应用 0.1 s 内拉起新的、继续运行（但那些会话结束了）。要跑满 8 小时得接电源、开着盖子。最长的 3.96 小时：热身约 1 小时（回滚填满）之后，渲染进程 JS 堆平均 65 MB（+1 MB/h）、主进程 11 MB，不涨；各进程工作集之和平均 1.18 GB，不涨（−98 MB/h，部分被压缩）；守护进程约 160 MB；footprint 在 1.2–1.5 GB 之间来回（拟合 +29 MB/h，噪声大），最高 1.51 GB，大头记在 GPU 进程上。平均 CPU：渲染 0.7%、GPU 0.3%、主进程 0.2%、守护进程 1.3%。没看到泄漏；完整 8 小时还没跑成。长跑现在按进程类型拆 footprint（一次 10 个会话的试跑里 0.71 GB 中 GPU 进程占 0.44 GB），被中断时也写出汇总
+- [ ] D1b 渲染包拆分（原在 D1）
 - [ ] D2 可访问性：弹窗焦点锁定、状态变化朗读、更明显的焦点框
 - [ ] D3 测试：真实 agent 和打包测试做成每晚任务；故障注入测试；去掉固定等待
   - [x] CI 上只在 runner 失败的 3 个 e2e（2026-10-17）：字形采样不再包含提示符行（单行提示符时命令会打在那一行）；持久化测试改用假 `claude`（runner 上没有真 CLI，启动行一闪而过）、窗口尺寸取在 1024×768 屏幕之内
@@ -233,11 +237,16 @@
 - [ ] Codex 在真实模型下的表现（`TR_E2E_AGENTS=codex TR_E2E_CODEX_REAL=1`）。用例已有，会花额度，跑之前要作者同意
 - [ ] F19 真机：从 Finder 把一张图和一个文件拖进 Claude 会话、再拖进 Codex 会话；⌃⇧⌘4 截到剪贴板后 ⌘V；⌘⇧4 截图后直接拖角落的缩略图（应放进 `wavi/attachments/drop-*` 下的副本）。应各出 `[Image #N]`，文件保留成路径
 - [ ] 额度真的用完时走一遍“恢复后发送‘继续’”（要真实账号用完，跑之前要作者同意）：Claude 订阅账号上 2.1.304 的 `autoContinueAtUsageLimit` 倒计时和 `/rate-limit-options` 菜单是否如二进制所读（PRD §6.6）、Wavi 遇到时是否不发；Codex 用 ChatGPT 账号时 `usage_limit_reached` 的 rollout 和换模型弹窗（本机是 API key，只用模拟模型测过）
-- [ ] 连续自用一周，状态没有卡死（2026-10-20 修了一个必现的卡死：⌘Q 后重开）
+- [ ] 连续自用一周，状态没有卡死（2026-10-20 修了一个必现的卡死：⌘Q 后重开；同日按模拟压测修了多个对话框、子 agent、后台 agent 下的错状态，PRD §3.1）
+- [ ] 真实 Claude Code 下核对模拟器的几条假设（会花额度，跑之前要作者同意）：一批里两个新域名的 WebFetch 同时请求权限、依次回答；前台 Task 的子 agent 请求权限时标题是否停在 `✳`；后台 agent 在一轮结束后请求权限；agent teams 成员的 `worker_permission_prompt`，以及 tmux / iTerm 分屏模式的成员进程的 hook 会不会记到 lead 的会话上
 
 ## 已知问题
 
-- 两个同时需要确认的工具调用会互相顶替，较早的那个回到 TUI 里确认。
+- 没有 hook 时（Codex 的 hook 信任没拿到、Claude 的 hooks 不工作）API 报错看起来和一轮正常结束一样（都是空闲）。
+- 20 个会话都填满 1 万行回滚时 footprint 在 1.2–1.5 GB，贴着 PRD §1.3 的 1.5 GB，大头记在 GPU 进程上（D1）。要省可以从回滚长度和隐藏终端的 GPU 资源入手。
+- 守护进程收到 SIGTERM 就结束全部会话（它把 SIGTERM 当作注销）。作者真实的 Wavi / Wavi Dev 守护进程日志里 10-17、10-18 有 3 次这样结束，那几刻系统没有睡眠，原因没查；长跑测试里合盖睡眠时也出现过。要么查清是谁发的，要么只在真注销时才结束会话。
+- 隐藏终端不重画的补丁（`paused-selection.ts`）读 xterm RenderService 的三个内部字段，升级 xterm 时要复测（`TR_SCALE=1 TR_SCALE_PROFILE=1 … e2e/scale.spec.ts`）。
+- 状态规则依赖 Claude Code 2.1.304 的标题：有对话框时 `✳`、在跑时 `◐` / `◑`（PRD §6.6）。CLI 改了要用 `scripts/spikes/` 和模拟器复测。
 - 用户自己在 alias 里追加 `--settings` 会让我们的 hooks 失效（只认最后一个）。
 - Codex 只在第一条 prompt 时才发 SessionStart，也没有 SessionEnd / Interrupt 事件；它的启动和中断靠屏幕与标题判断。
 - 启动标记（OSC 7771）没有鉴权，恶意输出最多伪造一张“已退出”卡片。
@@ -255,7 +264,7 @@
 | 风险 / 待定项 | 应对 | 状态 |
 |---|---|---|
 | Claude / Codex 新版本改变 hook 或 TUI 行为 | 按 CLI 版本区分策略；保留实测脚本 `scripts/spikes/` 和 fixtures 以便复测 | 持续 |
-| hook 丢事件导致状态卡死 | 进程存活检查、超时降级、标题兜底、守护进程补放 | 已处理，靠自用验证 |
+| hook 丢事件导致状态卡死 | 进程存活检查、超时降级、标题和屏幕兜底、`idle_prompt`、守护进程补放；会话模拟器回放（丢 5% hook 时显示错误最长 7 s） | 已处理，模拟压测 + 自用验证 |
 | Codex hook 信任机制 | 用 `-c hooks.state` 按次固定我们自己的 hash | 已决定（PRD §6.7） |
 | Apple Developer 账号 | 外部验证阶段的第一道路障（公证和 brew 都要等它）；拿到之前继续发布未签名版本 | 待作者准备 |
 | xterm 7.0 正式版 | 发布后升级 xterm 和全部 addon（含守护进程用的 headless），删掉 `atlas-guard.ts`（PRD §6.3） | 等上游 |

@@ -12,6 +12,7 @@ import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } 
 import { defersToTextInput, macKeyToBytes } from './keymap'
 import { isAutoPeriod } from './ime'
 import { findLigatureRanges } from './ligatures'
+import { deferSelectionRedrawWhilePaused } from './paused-selection'
 import { cellText, findPathCandidates, resolvedCandidates, type Cell } from './file-links'
 import { linkHint, URL_PATTERN, type LinkRef, type PathResolver, type TerminalLink } from './links'
 import { readBufferText } from './screen-text'
@@ -234,6 +235,8 @@ export class XtermSurface implements TerminalSurface {
     this.openPromise = whenAppearanceKnown().then(() => this.loadFonts()).then(() => {
       if (this.disposed || !this.container) return
       this.term.open(this.container)
+      // Hidden terminals that print would otherwise redraw their whole screen every frame (paused-selection.ts).
+      deferSelectionRedrawWhilePaused(this.term)
       this.term.element?.addEventListener('contextmenu', (event) => this.onContextMenu(event))
       this.watchTextInput()
       this.syncLigatures()

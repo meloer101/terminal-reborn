@@ -8,6 +8,7 @@
 // An empty body is always safe: spike §4 showed Claude keeps its own dialog open while a hook is
 // pending and falls back to it when the hook says nothing.
 import type { HookAgent, PendingPrompt, PermissionDecision, PromptResolution } from '@shared/agent-events'
+import { toolCallKey } from '@shared/tool-call'
 
 export const PERMISSION_TIMEOUT_MS = 120_000
 
@@ -62,18 +63,7 @@ interface Entry extends PermissionHold {
 }
 
 /** Same tool + same input = same call (PostToolUse repeats the PreToolUse / PermissionRequest input). */
-export function toolKey(tool: string, input: Record<string, unknown>): string {
-  return `${tool}\u0000${stableStringify(input)}`
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
-}
+export const toolKey = toolCallKey
 
 export class PermissionRegistry {
   private readonly entries = new Map<string, Entry>()

@@ -57,7 +57,7 @@ export function startStatusBridge(): () => void {
       else ui.notify(notification)
     }
   }
-  const controller = new StatusController(deps)
+  const controller = new StatusController({ ...deps, needsFastTicks: () => hurry() })
 
   const exitSubscriptions = new Map<SessionId, () => void>()
   const titleSubscriptions = new Map<SessionId, { surface: TerminalSurface; dispose(): void }>()
@@ -127,12 +127,20 @@ export function startStatusBridge(): () => void {
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined
-  function schedule(): void {
+  let due = 0
+  function schedule(ms = tickInterval()): void {
+    due = Date.now() + ms
     timer = setTimeout(() => {
       reconcileSources()
       controller.tick()
       schedule()
-    }, tickInterval())
+    }, ms)
+  }
+  /** A session started running or waiting on a dialog: self-heal is on the 1 s tick from now, not after a 15 s one. */
+  function hurry(): void {
+    if (due - Date.now() <= FAST_TICK_MS) return
+    clearTimeout(timer)
+    schedule(FAST_TICK_MS)
   }
 
   const sync = (): void => {
@@ -166,16 +174,8 @@ export function startStatusBridge(): () => void {
     }
     controller.handleEvent(sessionId, event)
   })
-  // A PermissionRequest / AskUserQuestion prompt is the authoritative "needs you" signal: Claude's own
-  // Notification(permission_prompt) lags ~6 s behind it (PRD §6.6).
-  const unsubscribePrompts = window.tr.agent.onPrompt((prompt) =>
-    !isShell(prompt.sessionId) &&
-    controller.handleEvent(prompt.sessionId, {
-      type: 'notification',
-      kind: prompt.kind,
-      message: prompt.kind === 'permission' ? prompt.summary : ''
-    })
-  )
+  // "Needs you" comes with the events: PermissionRequest is a `permission-request` (it names the call, so two dialogs
+  // up at once are two asks) and AskUserQuestion its `tool-start`; Notification(permission_prompt) lags ~6 s (PRD §6.6).
   const unsubscribeRestart = onTerminalRestarted((sessionId) => controller.handleRestart(sessionId))
   // Main's per-session hook signals: launched without hooks (chip), or silent after launch (maybe a dialog).
   const unsubscribeSessionHooks = window.tr.agent.onSessionHooks((signal) => {
@@ -209,7 +209,6 @@ export function startStatusBridge(): () => void {
   })
 
   return () => {
-    unsubscribePrompts()
     unsubscribeSessionHooks()
     stopHooksHealth()
     unsubscribeIssues()

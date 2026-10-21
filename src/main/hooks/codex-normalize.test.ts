@@ -52,7 +52,7 @@ describe('normalizeHook · codex shell tool', () => {
 
   it('PermissionRequest becomes a prompt draft without any allow-always suggestion', () => {
     const result = codex('PermissionRequest', fx.PermissionRequest_Bash)
-    expect(result.events).toEqual([])
+    expect(result.events).toEqual([{ type: 'permission-request', tool: 'Bash', input: { command: 'echo codex-lab-ran > /work/project/ran.txt' } }])
     expect(result.permission).toEqual({
       tool: 'Bash',
       input: { command: 'echo codex-lab-ran > /work/project/ran.txt' },

@@ -30,6 +30,15 @@ describe('readScreen', () => {
     const reading = readScreen('claude', CLAUDE_PERMISSION)
     expect(reading.idleFooter).toBe(false)
     expect(reading.dialog).toBeNull()
+    expect(reading.askDialog).toBe(true)
+  })
+
+  it('a dialog needs its numbered choice and its Esc footer; prose that only asks is not one', () => {
+    expect(readScreen('claude', CLAUDE_IDLE).askDialog).toBe(false)
+    expect(readScreen('claude', '⏺ Do you want to proceed with the migration?\n──\n❯ \n──\n  ? for shortcuts').askDialog).toBe(false)
+    const many = ` Do you want to proceed?\n ❯ 1. Yes\n${Array.from({ length: 7 }, (_, i) => `   ${i + 2}. Option`).join('\n')}\n\n Esc to cancel`
+    expect(readScreen('claude', many).askDialog).toBe(true)
+    expect(readScreen('codex', CLAUDE_PERMISSION).askDialog).toBe(false)
   })
 
   it('finds the first-run dialogs', () => {

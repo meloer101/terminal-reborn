@@ -10,10 +10,11 @@ import { join } from 'node:path'
  * Confirmation dialogs are recorded in main (`globalThis.__trDialogs`) and auto-answered instead of shown.
  * Quitting ends every session (and the pty daemon) so no test leaves processes behind; pass
  * `TR_KILL_SESSIONS_ON_QUIT: undefined` to keep them running across a relaunch (e2e/pty-daemon.spec.ts).
+ * `options.appDir` launches another build than this checkout's `out/` (a long soak keeps a frozen copy).
  */
 export function launchApp(
   envOverrides: Record<string, string | undefined> = {},
-  options: { userDataDir?: string; args?: string[] } = {}
+  options: { userDataDir?: string; args?: string[]; appDir?: string } = {}
 ): Promise<ElectronApplication> {
   // A fixed `userDataDir` lets a test relaunch with the same profile (persistence).
   const userData = options.userDataDir ?? mkdtempSync(join(tmpdir(), 'tr-e2e-'))
@@ -29,7 +30,7 @@ export function launchApp(
     ...envOverrides
   }
   for (const key of Object.keys(env)) if (env[key] === undefined) delete env[key]
-  return electron.launch({ args: ['.', ...(options.args ?? [])], env: env as Record<string, string> })
+  return electron.launch({ args: [options.appDir ?? '.', ...(options.args ?? [])], env: env as Record<string, string> })
 }
 
 /**

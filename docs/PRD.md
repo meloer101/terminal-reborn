@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.51 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.53 · 2026-10-20 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,8 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.53 | 2026-10-20 | 新增 §6.12 **规模基线**（ROADMAP D1）：冷启动、10 / 20 个会话空闲和输出时的内存、CPU、输入延迟，长跑；修掉隐藏终端每帧整屏重画（§6.3），20 个会话里 19 个输出时按键最长卡 1.8 s 的问题。对照 §1.3：冷启动 0.45–0.72 s 达标；内存 10 个会话达标，20 个会话都填满回滚时 footprint 贴着 1.5 GB；输入延迟 p50 10–12 ms 达标，p95 18–20 ms 比 16 ms 多出不到一帧 |
+| v1.52 | 2026-10-20 | **状态在多个确认、子 agent、后台 agent 下也准确**（§3.1，外部来源 c#1027 44 👍、c#2322 22 👍、o#13600）：每个权限对话框 / 提问 / 计划确认是一个**待确认项**（agent + 工具调用），全部回答完才离开“等你处理”，第二行写最早的一项和总数（`等你确认：抓取 a.example（共 2 项）`），修掉“两个同时确认的调用互相顶替”；带 `agent_id` 的子 agent / 后台 agent 的调用不开始也不结束一轮，只有它们的对话框算等你处理，一轮结束后后台 agent 请求权限、回答后回到“已完成”；新增自愈信号：`idle_prompt`、对话框标题之后标题重新转动（批准后工具还在跑）、屏幕上出现没有 hook 报告的对话框；Codex 等你处理时也按 1 s 检查。实测 Claude Code 2.1.304 的 hook 字段见 §6.6 |
 | v1.51 | 2026-10-20 | **F16 PR / CI** 落地，并把“创建 PR”提前做掉：只用用户自己的 `gh` 登录（不做 OAuth、不存 token），没装或没登录时什么都不显示、只在“创建 PR”上方给一行提示；侧栏会话行和总览的 PR 列显示 `#123 ✓`（草稿 / 已合并 / 已关闭写在编号后），会话头不放（Figma 17 没有位置）；只查有 upstream 的分支，低频轮询、出错退避、限流时全部暂停；创建 PR = 先推送（从没推送过时先确认）再 `gh pr create`（标题 = 会话名，正文 = 提交说明），然后在内置浏览器打开；CI 失败时“让 agent 修复”把失败的检查名和 `--log-failed` 末尾按 §6.9 引用成数据、放进输入行不按回车。实测结论写进 §6.11。外部来源：竞品都有 PR / CI 闭环，Claude Code 桌面版有 CI 栏，o#9512（应用内看 PR，15 👍） |
 | v1.50 | 2026-10-20 | F11 新增**额度恢复后继续**：会话因套餐额度用完停下时（Claude `rate_limit` 的 StopFailure，Codex 一轮没等到 Stop 就回到空闲，并且该厂商有窗口在 100%），会话头和总览行写何时恢复并给「恢复后发送“继续”」；点了才预约，到点复查额度和屏幕（有选择框或 Claude 自己在倒计时继续就不发、发通知说明），用户在终端里打字、会话自己继续了就取消；预约不跨 ⌘Q。额度用完的错误条不再给“让 agent 修复”。§6.6 / §6.7 补实测：两家的限额停止信号、Claude 2.1.304 自带的 `autoContinueAtUsageLimit` 和 `/rate-limit-options`、Codex 限额后的换模型弹窗（往里打“继续”回车会换掉模型）。外部来源 cc#13354（215 👍）、cc#35744（106）、cx#21073（85）、cx#28931（60） |
 | v1.49 | 2026-10-20 | **F20 主区分屏**按 Figma 21（Section `301:15658`）实现，实现时定下的细节：格之间是 1px 细线加常显的短把手，双击两边等分；键盘不在的格会话头只留 … 和 ×，回形针、run 和右侧栏图标只在键盘所在那格；格子窄于 640 去掉额度标签、窄于 480 再去掉 context；侧栏里其他格的会话是细描边，拖动时原行变淡；落点文字分“显示 / 挪到这里 / 换掉 / 交换”，4 格时边上提示“最多 4 格”，放不下时提示“这里放不下新的一格”；⌘D 的新格可打字过滤（同总览的过滤），选的时候侧栏和右侧栏仍跟着原来那格，点侧栏或 ⌘K、⌘N 都填进这一格；分屏时 ⌘+ / ⌘- / ⌘0 只调键盘所在那格（叠加在设置的字号上，不改设置），分屏结束回到设置的字号；只有最上一排的会话头能拖动窗口 |
@@ -160,7 +162,7 @@ Project（git 仓库根目录）
 | 状态 | 含义 | 进入信号（优先级从高到低） |
 |---|---|---|
 | `running` 运行中 | agent 正在工作 | hook `UserPromptSubmit` / `PreToolUse` / `PostToolUse`；标题出现 spinner 字符 |
-| `needs_you` 等你处理 | 等待权限确认或回答提问 | hook `PermissionRequest`、`Notification(permission_prompt / elicitation_dialog)`、AskUserQuestion 对应的 `PreToolUse`；Codex 标题 `Action Required` |
+| `needs_you` 等你处理 | 等待权限确认或回答提问（可能同时有几项） | hook `PermissionRequest`（每个对话框一项）、`Notification(permission_prompt / elicitation_dialog / worker_permission_prompt)`、AskUserQuestion 对应的 `PreToolUse`；运行中 Claude 标题停在 `✳` 且屏幕上是对话框；Codex 标题 `Action Required` |
 | `done_unread` 已完成·未读 | 一轮对话结束，用户还没看 | hook `Stop`，且该会话当前不可见 |
 | `idle` 空闲 | 已完成且已看过，或刚启动 | 用户看过 `done_unread` 的会话；`SessionStart` |
 | `error` 出错 | 本轮失败 | hook `StopFailure`；进程非零退出 |
@@ -168,7 +170,10 @@ Project（git 仓库根目录）
 
 - `needsAttention = needs_you || error || done_unread`，总览计数、⌘J 和 Dock 角标按这个条件筛选。
 - 生命周期阶段与状态并列：正在启动 / 未启动 · 点击恢复 / 被首次弹窗挡住（“等你确认：信任此文件夹”）/ 已退出 / 找不到命令。只有 PTY 退出才算终止；`SessionEnd`（如 `/clear`）之后等待下一个 `SessionStart`。
-- **自愈**：hook 可能丢事件，所以定期检查进程是否存活。`running` 超过 3 分钟没有收到任何 hook 且标题显示空闲字符（Claude 为 `✳`）时降级为 `idle`；Codex 空闲标题持续 4 s 且没有 hook 时降级（§6.7）。`needs_you` 被用户在 TUI 中直接回答后（随后收到 `PostToolUse` 或 `UserPromptSubmit`），立即恢复为 `running`。
+- **同时等你处理的几件事**：每个权限对话框、提问、计划确认是一个待确认项，按“agent + 工具名 + 输入”区分（PermissionRequest 没有 tool_use_id）。还有没回答的就保持 `needs_you`，第二行写最早的一项（TUI 先显示它）和总数。一项在这些时候算回答了：同一调用的 `PostToolUse` / `PostToolUseFailure`（输入被改写时取同一工具最早的一项）；同一 agent 在它 1.5 s 之后开始了另一个调用（TUI 里拒绝不发 PostToolUse，主线程带反馈的拒绝和子 agent 被拒后都会接着做；同一批调用的 PreToolUse 只差几十毫秒）；该子 agent 的 `SubagentStop`；一轮的边界——主线程的项随 `UserPromptSubmit` / `Stop` / `StopFailure` 结束，子 agent 的项留着。没有点名调用的 Notification 只在没有别的项时算一项，由主线程的下一个调用回答。
+- **子 agent 与后台 agent**（Claude 2.1.304 的 `agent_id`，§6.6）：它们的调用不开始、不结束、不延长一轮，只有它们的对话框算 `needs_you`。主线程 `Stop` 之后后台 agent 请求权限 → `needs_you`，回答后回到 `done_unread`（期间看过则 `idle`）；后台任务完成后 Claude 自己用 `UserPromptSubmit`（source `system`）唤醒主线程，按新的一轮处理。后台的 Bash（dev server 等）不影响状态。
+- **自愈**：hook 可能丢，TUI 里的操作（回答、Esc）本身没有 hook。`running` 而 Claude 标题是 `✳`、6 s 没有 hook → `idle`（Esc 中断；先读屏幕，屏幕上是对话框时改为下一条）；`running` 而 Claude 标题是 `✳`、屏幕上是带编号选项和 `Esc to cancel` 的对话框 → `needs_you`（PermissionRequest 和 6 s 后的 Notification 都丢了，或 hooks 不工作；hooks 不工作时两轮之间也看屏幕，接住后台 agent 的对话框）；Codex 空闲标题 4 s 且没有 hook → `idle`（§6.7）；`needs_you` 时 Claude 的空闲输入框底栏回到屏幕 2 s → 对话框被取消，`idle`（或一轮已结束时的 `done_unread` / `error`）；看到对话框标题（Claude `✳`、Codex `Action Required`）之后标题又转起来 → 对话框都回答了、agent 在干活，`running`（批准后工具在跑，PostToolUse 要等它跑完）；`idle_prompt` 到达 → 不在运行也不在等待（Claude 只在没有对话框、没有后台 agent 时发）。会运行、会等待或要看屏幕的会话按 1 s 检查，一进入这种状态就把 15 s 的检查提前。
+- **压测**（2026-10-20）：`src/shared/agent-sim.ts` 按实测行为模拟整段会话（真实状态 + agent 发出的 hook、标题、屏幕：并行对话框、前台 / 后台子 agent、agent teams、提问、计划确认、Esc、拒绝、API 报错、/clear、压缩），`src/main/hooks/status-sim.test.ts` 按真实时间回放进状态机、每 250 ms 对照：Claude 300 段 / 48 小时，显示错误的最长一段 7 s，超过 1 s 的错误占 0.6% 的时间（改动前最长 266 s、5.5%）；Codex 最长 4.5 s（之前 39.5 s）；丢 5% hook 时 Claude 最长 7 s（之前 230 s），完全没有 hook 时 Claude 最长 2.75 s、Codex 0（模拟里屏幕和标题与真实一致时）。`TR_STATUS_STRESS=1 npx playwright test e2e/status-stress.spec.ts` 把同样的会话交给假 agent 在应用里跑一遍、对照侧栏。
 - 状态从不只靠颜色表达：每种状态都有独立的 StatusGlyph 形状和文字。
 
 ### 3.2 当前动作
@@ -425,6 +430,7 @@ Renderer（React 19 + zustand）：侧栏 · 总览 · TerminalSurface(xterm.js)
 - 定义 `TerminalSurface` 接口（write / onData / buffer 读取 / OSC 订阅 / resize），xterm.js 是它的第一个实现，以后可以替换为 libghostty。
 - xterm 配置：使用 WebGL 渲染，失败时**按终端**回退到 DOM 渲染；开启 unicode11；字形图集不让它合并（见下一条）；kitty 键盘协议保持关闭；切换标签或面板后强制执行 fit + resize。
 - 实测结论 · WebGL 字形图集（addon-webgl 0.19.0，2026-10-20）：图集长到 16 页开始合并页时，GPU 会取错纹理，中文出现叠字、错字和缺字，缓冲区内容本身是对的；原地清空图集修不好。做法（`atlas-guard.ts`）：图集长到 12 页时，等这一帧画完就重建 WebGL 渲染器、换一个新图集，所以永远不会合并；重建后紧接着那一帧又把图集填满的终端改用 DOM，下次显示时再试 WebGL（沿用 WebGL 丢失的处理）。代价是每次重建卡一帧（80–110 ms），并且依赖 addon 的一个内部字段（图集页数）。上游修复 xterm.js#5883 在 7.0.0，正式版发布后升级并删掉这层保护。压测：`TR_STRESS=1 npx playwright test e2e/webgl-cjk-stress.spec.ts`。
+- 实测结论 · 隐藏终端的重绘（xterm 6.0，2026-10-20）：隐藏的终端交还 WebGL、改用 DOM 渲染器，xterm 也会因为不可见而暂停渲染；但它每次滚动都刷新选区，而 `RenderService.handleSelectionChanged` 不看暂停，DOM 渲染器对每次选区变化都重画全部行、逐字测量宽度。所以每个在后台输出的会话每帧都整屏重画：20 个会话里 19 个在输出时，渲染进程的帧长到 100–500 ms，按键最长等了 1.7 s。`paused-selection.ts` 让暂停时只记下选区、恢复时再画（依赖 RenderService 的三个内部字段，缺了就不打补丁）；之后同样负载下 p95 17–18 ms、没有长任务、渲染进程 CPU 从 6.6–11% 降到 1.3–1.7%。上游修复前保留。
 - 行高默认 1；终端底色取主题色（F7）。
 
 ### 6.4 目录结构
@@ -465,6 +471,9 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - **transcript 里的用量**（2.1.299 本机 transcript，2026-10-19）：每条 assistant 消息的 `message.usage`（`input_tokens`、`cache_creation_input_tokens`、`cache_read_input_tokens`、`output_tokens`）；同一条消息按内容块写成多行、`message.id` 相同，按 id 只算一次（后一行 output 更大时补差）；`isSidechain: true` 是子 agent，算花费不算 context；用户输入是 `type: user` 且 `message.content` 为字符串或含 text 块（`tool_result`、`isMeta`、`isCompactSummary` 不算一轮）；压缩是 `type: system, subtype: compact_boundary`（带 `compactMetadata.preTokens`）。每行有 ISO `timestamp`。
 - **套餐额度用完**（2.1.304，2026-10-20，`scripts/spikes/60-rate-limit-lab.mjs`：本地模拟 API 按真实的形状回 429——`anthropic-ratelimit-unified-status: rejected`、`-representative-claim: five_hour`、`-reset`、`x-should-retry: false`，`CLAUDE_CODE_USE_GATEWAY` 让它像订阅用户那样拼提示；独立的 `CLAUDE_CONFIG_DIR`，不花额度）：429 后约 30 ms 发 **StopFailure**（不是 Stop），`{ error: "rate_limit", last_assistant_message: "You've hit your session limit · resets 5:22pm (America/Bogota)" }`，没有 `error_details`；屏幕上是那条 prompt 下面一行 `⎿  You've hit your session limit · resets …`，然后回到空闲的输入行。同一时刻 statusLine 的 `rate_limits.five_hour` 是 `used_percentage: 100` 加 `resets_at`（取自 429 的响应头）。限额名：session limit（5 小时）/ weekly limit / Opus · Sonnet · Fable limit，额外用量另有 `You've hit your limit`、`You're out of usage credits`。第三方端点上同样是 `error: "rate_limit"`，文字是 `API Error: Request rejected (429) · Rate limit exceeded`，没有 rate_limits；临时的 429 也是 `rate_limit`。所以“额度用完”要同时看账号额度，不解析这句英文（时区和格式随本机）。重置后输入“继续”回车就是普通的一轮（UserPromptSubmit → Stop）。**2.1.304 自己也会等**（只读二进制，要真实订阅账号到限额才看得到）：设置 `autoContinueAtUsageLimit`（`/config` 的 Model & output；没写时算开，另受服务端开关控制）开着时，订阅账号由 Claude 自己等到重置再继续，屏幕写 `Usage limit reached · continuing automatically at 5:22pm · esc to cancel`；关着时 Pro / Max 账号会弹 `/rate-limit-options`（“What do you want to do?”：Wait here, then continue automatically at … / Stop and wait for limit to reset / 升级 / 额外用量）。往这个菜单里打“继续”回车会选中其中一项。
 - **会话标题**（2.1.302，2026-10-18，`30-hooks-lab.mjs title`）：hook payload 里**没有**标题字段，只有 `transcript_path`。Claude 在第一条 prompt 后约 4 s、和回复并行，用小模型生成标题，写进 transcript：`{"type":"ai-title","aiTitle":"…"}`；/rename 写 `{"type":"custom-title","customTitle":"…"}`，显示规则是 `customTitle ?? aiTitle`。两种条目每一轮都会在文件尾部重新追加一遍，所以只读文件尾部（4 MB）就够。标题之后不会随对话变化。本机 80 个会话里 74 个在第一条回复之前就有了 ai-title。Wavi 在 SessionStart（含 --resume）、Stop 时读，第一条 prompt 后 3 / 8 / 20 s 再读；只接受 `~/.claude/projects`（或 `$CLAUDE_CONFIG_DIR/projects`）下的 `.jsonl`。
+- **子 agent、后台任务、agent teams 与对话框**（2.1.304 二进制核对，2026-10-20，不花额度）：在子 agent 里触发的 hook 都带 `agent_id`、`agent_type`（主线程没有）。`Stop` / `SubagentStop` 带 `background_tasks`（仍在跑的后台任务：`local_bash` / `local_agent` / … 的 id、类型、状态）和 `session_crons`；`UserPromptSubmit` 带 `source`（`user` / `sdk` / `system` / `loop_wakeup` / `schedule_wakeup` / `poll_event`，后台任务完成的通知以 `system` 唤醒主线程）；`PostToolUseFailure` 带 `is_interrupt`。新事件 `PostToolBatch`（一批调用全部结束后、下一次请求前一次）、`PermissionDenied`（Auto mode 分类器拒绝，带 reason）、agent teams 的 `TeammateIdle` / `TaskCreated` / `TaskCompleted`；Notification 新类型 `worker_permission_prompt`（成员向 lead 请求权限，在 lead 的 TUI 里确认，lead 这边没有 PermissionRequest）。`--settings` 里不认识的事件名只忽略那一条。Wavi 只多注册了 `SubagentStop`。
+- PermissionRequest 只在真要问人时运行（Auto mode 由分类器先判，放行的调用不触发）。在 TUI 里拒绝：调用不执行，**没有** PostToolUse / PostToolUseFailure；主线程不带反馈的拒绝中断整轮（没有 Stop），带反馈的拒绝和子 agent 里的拒绝都接着做。`Notification(permission_prompt)` 在对话框显示 6 s 后发（`Dtn = 6000`），回答了就取消；`idle_prompt` 在一轮结束 60 s 后发，前提是没有对话框、没有后台 agent、其间用户没操作。
+- **终端标题**：`✳ <标题>` 表示空闲或在等（任何对话框：权限、提问、成员请求、沙箱、elicitation 都算等），只有在跑且没有对话框时才以 960 ms 交替 `◐` / `◑`（更早的版本是盲文）。所以“出现过 `✳` 之后又转起来”= 对话框都被回答了。另有 `showStatusInTerminalTab`（把忙 / 等 / 空闲报给终端标签），在功能开关和用户设置后面，Wavi 不依赖。
 
 ### 6.7 实测结论 · Codex（0.142.5，2026-10-14）
 脚本 `scripts/spikes/40-codex-hooks-list.mjs`、`41-codex-hooks-lab.mjs`、`codex-mock-provider.mjs`（本地模拟模型）；payload 在 `src/main/hooks/codex-fixtures.ts`。当时第三方模型服务一直返回 503，所以依赖真实模型的行为没有验证。
@@ -525,6 +534,14 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 通过管道运行时没有颜色、不分页；仍设 `GH_PROMPT_DISABLED`、`GH_NO_UPDATE_NOTIFIER`、`NO_COLOR`、`GH_PAGER=cat`。参数一律写成 `--flag=value`，值不会被读成选项；`--repo` 接受 `HOST/OWNER/REPO`。
 - `gh auth status --active` 已登录时退出 0；不认识的参数退出 1（`unknown flag`）。退出码不是 0 时，只有输出里是 “not logged in / gh auth login” 且不像网络错误才算没登录，其余按已登录处理，由真正的调用出错再退避（旧版 gh 不认 `--active` 也走这条）。
 - e2e 默认 `TR_GH=off`（同 `TR_ACCOUNT_USAGE=off`，测试不碰用户真实的 gh），`pull-requests.spec.ts` 在登录 shell 的 PATH 上放一个假 gh。
+
+### 6.12 实测结论 · 规模基线（2026-10-20）
+脚本 `e2e/scale.spec.ts`（`TR_SCALE=1`；`TR_SCALE_SOAK_MIN=480` 跑长跑，`TR_SCALE_PROFILE=1` 存渲染进程的 CPU profile 和长任务，`TR_SCALE_APP` 指向一份冻结的构建）和假 agent `e2e/scale-agent.mjs`（真实的按次 hooks、statusLine、transcript）；Apple M4、16 GB、macOS 26.3。数字在 ROADMAP D1。
+- 冷启动（启动到侧栏出现全部会话）0.45–0.72 s，不随会话数变：恢复的会话看到时才启动，守护进程里的会话只是接回。
+- 内存两种口径：Electron `getAppMetrics` 的工作集之和加守护进程 RSS，以及同一组进程的 phys_footprint（活动监视器的“内存”）。两者能差一半，输出多时 footprint 更高（压缩内存和 GPU 内存记在进程上），§1.3 的 1.5 GB 按 footprint 判断。回滚填满之前内存会涨：每个终端 1 万行，守护进程的镜像另有 5000 行，20 个会话持续输出时大约一小时填满。之后（长跑 3.96 小时）JS 堆和各进程工作集都不涨，footprint 在 1.2–1.5 GB 之间来回、大头记在 GPU 进程上（工作集约 0.1 GB 的 GPU 进程 footprint 有 0.4 GB 以上）——20 个会话都填满回滚时已经贴着 1.5 GB，回滚长度是主要变量。
+- 长跑三次都在合盖睡眠时被结束（电池供电时 `caffeinate -s` 不阻止合盖睡眠），睡眠事件之后 50–400 ms 测试启动的应用或守护进程收到 SIGTERM / 退出，没有崩溃报告。守护进程被 SIGTERM 时会结束全部会话（按注销处理），应用 0.1 s 内拉起新的守护进程、继续运行（20 个会话工作时复测）。长跑要接电源、开着盖子。
+- 输入延迟的下限是一帧：按键 → 主进程 → 守护进程 → PTY → agent 回显 → 渲染进程 → 下一帧。一个会话空闲时 p95 就是 18 ms，20 个会话、19 个在输出时也只到 20 ms；p50 10–12 ms。
+- 让会话数不影响前台的前提是隐藏的终端不花渲染时间，见 §6.3。
 
 ## 7. 开源与工程规范
 

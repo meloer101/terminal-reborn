@@ -88,6 +88,8 @@ export function summarizeToolUse(tool: string, input: Rec): string {
       const description = str(input.description)
       return description ? `子任务 ${truncate(description)}` : '启动子任务'
     }
+    case 'ExitPlanMode':
+      return '确认计划'
     default: {
       const mcp = /^mcp__(.+?)__(.+)$/.exec(tool)
       return mcp ? `调用 ${mcp[1]} · ${mcp[2]}` : `使用 ${tool}`
@@ -136,6 +138,9 @@ export function classifyNotification(type: string | undefined, message: string):
       return 'question'
     case 'idle_prompt':
       return 'idle'
+    // A teammate (agent teams) asks the lead's TUI for permission (Claude 2.1.304).
+    case 'worker_permission_prompt':
+      return 'permission'
   }
   if (type === undefined || type === '') {
     if (/permission|approval|approve/i.test(message)) return 'permission'
@@ -157,6 +162,15 @@ export function safeSuggestions(raw: unknown): unknown[] {
 
 /** Tools whose PermissionRequest dialog has no allow/deny meaning here: leave it to the TUI. */
 const TUI_ONLY_PERMISSION_TOOLS: ReadonlySet<string> = new Set(['AskUserQuestion', 'ExitPlanMode'])
+
+/**
+ * The subagent a hook fired in (`agent_id`, Claude 2.1.304: a Task-tool worker or an in-process teammate); absent on
+ * the main thread. Only used as a key, so anything odd is dropped rather than carried along.
+ */
+function agentIdOf(payload: Rec): { agentId?: string } {
+  const id = str(payload.agent_id)
+  return id && id.length <= 128 ? { agentId: id } : {}
+}
 
 const NONE: NormalizedHook = { events: [], clears: 'none' }
 
@@ -180,6 +194,7 @@ const CLAUDE_COMPACT_RULE = autoCompactRuleFromEnv(process.env)
 function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHook {
   const tool = str(payload.tool_name) ?? 'unknown'
   const input = isRec(payload.tool_input) ? payload.tool_input : {}
+  const agent = agentIdOf(payload)
 
   switch (event) {
     case 'SessionStart':
@@ -196,7 +211,7 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
     case 'UserPromptSubmit':
       return { events: [{ type: 'prompt-submit', prompt: str(payload.prompt) ?? '' }], clears: 'all' }
     case 'PreToolUse': {
-      const result: NormalizedHook = { events: [{ type: 'tool-start', tool, input }], clears: 'none' }
+      const result: NormalizedHook = { events: [{ type: 'tool-start', tool, input, ...agent }], clears: 'none' }
       if (tool === 'AskUserQuestion') {
         const questions = parseQuestions(input)
         if (questions.length > 0) result.questions = questions
@@ -205,20 +220,28 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
     }
     case 'PostToolUse':
       return {
-        events: [{ type: 'tool-end', tool, input, ok: true }],
+        events: [{ type: 'tool-end', tool, input, ok: true, ...agent }],
         clears: 'tool',
         ...(isTodoTool(tool) ? { todoCall: { tool, input, response: payload.tool_response } } : {})
       }
     case 'PostToolUseFailure':
-      return { events: [{ type: 'tool-end', tool, input, ok: false }], clears: 'tool' }
+      return { events: [{ type: 'tool-end', tool, input, ok: false, ...agent }], clears: 'tool' }
     case 'PermissionRequest': {
-      if (TUI_ONLY_PERMISSION_TOOLS.has(tool)) return NONE
+      // AskUserQuestion already waits from its PreToolUse (which carries the questions).
+      if (tool === 'AskUserQuestion') return NONE
+      const request: AgentEvent = { type: 'permission-request', tool, input, ...agent }
+      // Plan approval waits on the user too, but is no allow / deny for a prompt bar.
+      if (TUI_ONLY_PERMISSION_TOOLS.has(tool)) return { events: [request], clears: 'none' }
       const suggestions = safeSuggestions(payload.permission_suggestions)
       return {
-        events: [],
+        events: [request],
         permission: { tool, input, summary: summarizeToolUse(tool, input), suggestions },
         clears: 'none'
       }
+    }
+    case 'SubagentStop': {
+      const { agentId } = agent
+      return agentId ? { events: [{ type: 'subagent-stop', agentId }], clears: 'none' } : NONE
     }
     case 'Notification': {
       const message = str(payload.message) ?? ''
@@ -310,7 +333,7 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
     case 'PermissionRequest':
       // No `permission_suggestions`: Codex's "don't ask again" would persist a rule in ~/.codex, so there is no allow-always.
       return {
-        events: [],
+        events: [{ type: 'permission-request', tool: mapped.tool, input: mapped.input }],
         permission: { tool: mapped.tool, input: mapped.input, summary: summarizeToolUse(mapped.tool, mapped.input), suggestions: [] },
         clears: 'none'
       }
