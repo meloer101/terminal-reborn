@@ -70,14 +70,32 @@ test.describe('F17 right panel · 浏览器', () => {
       const page = webContents.getAllWebContents().find((w) => w.getURL().startsWith(o))
       return { app: BrowserWindow.getAllWindows()[0]?.webContents.isFocused() ?? false, page: page?.isFocused() ?? false }
     }, origin())
-  /** Puts the keyboard in the page (once it is visible again: a hidden view does not take focus). */
-  const givePageFocus = () =>
+  /**
+   * Makes the app window the key window. macOS reports no view as focused in a window that is not key, and since
+   * macOS 14 an app's activation is only a request, which the system turns down while someone is busy in another app.
+   */
+  const bringToFront = () =>
     expect
+      .poll(
+        () =>
+          app.evaluate(({ BrowserWindow }) => {
+            const win = BrowserWindow.getAllWindows()[0]
+            if (win && !win.isFocused()) win.focus()
+            return win?.isFocused() ?? false
+          }),
+        { message: 'the app window never became the key window: macOS kept another app in front (is the Mac in use?)', timeout: 15_000 }
+      )
+      .toBe(true)
+  /** Puts the keyboard in the page (once it is visible again: a hidden view does not take focus). */
+  const givePageFocus = async () => {
+    await bringToFront()
+    await expect
       .poll(async () => {
         await app.evaluate(({ webContents }, o) => webContents.getAllWebContents().find((w) => w.getURL().startsWith(o))?.focus(), origin())
         return (await focus()).page
       })
       .toBe(true)
+  }
   const address = () => panel().getByRole('textbox', { name: '地址' })
   const consoleRow = () => panel().getByTestId('browser-console')
   /** Runs `code` in the page loaded from `origin` (in main, which can reach every WebContents). */
