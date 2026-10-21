@@ -52,6 +52,8 @@ interface HostLink {
   close(): void
   /** Daemon only: ask it to exit, ending every session. */
   shutdown?(): Promise<void>
+  /** Daemon only: a logout / restart / shutdown is under way, so its SIGTERM may end the sessions. */
+  systemShutdown?(): void
 }
 
 let link: HostLink | null = null
@@ -117,7 +119,8 @@ async function connectDaemon(): Promise<HostLink> {
     kind: 'daemon',
     post: (message) => connection.post(message),
     close: () => connection.close(),
-    shutdown: () => connection.shutdown(true)
+    shutdown: () => connection.shutdown(true),
+    systemShutdown: () => connection.systemShutdown()
   }
   return self
 }
@@ -464,6 +467,11 @@ export function releaseSessionsOf(owner: WebContents): void {
 /** Whether quitting now leaves the sessions running (the pty daemon is in use and no "end sessions" quit was asked for). */
 export function quitKeepsSessions(): boolean {
   return link?.kind === 'daemon' && !endSessionsOnQuit
+}
+
+/** powerMonitor `shutdown` (logout, restart, shutdown): tell the daemon, which otherwise keeps sessions on SIGTERM. */
+export function notifySystemShutdown(): void {
+  link?.systemShutdown?.()
 }
 
 /** The next quit ends every session (and the daemon) instead of leaving them running. */

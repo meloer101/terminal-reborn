@@ -6,7 +6,7 @@ import { app, powerMonitor, type BrowserWindow } from 'electron'
 import { decideQuit, endSessionsQuitConfirmation, quitConfirmation } from '@shared/lifecycle'
 import { getActivity } from './activity'
 import { confirm } from './confirm'
-import { endSessionsOnNextQuit, quitKeepsSessions } from './pty'
+import { endSessionsOnNextQuit, notifySystemShutdown, quitKeepsSessions } from './pty'
 
 let quitting = false
 let osForcedQuit = false
@@ -18,9 +18,11 @@ export function isQuitting(): boolean {
 }
 
 export function installQuitGuard(getParent: () => BrowserWindow | null): void {
-  // Logout / shutdown: a dialog here would block the system, so let the quit through.
+  // Logout / shutdown: a dialog here would block the system, so let the quit through. The pty daemon learns it too:
+  // only now does its SIGTERM mean the sessions are ending (PRD §6.8).
   powerMonitor.on('shutdown', () => {
     osForcedQuit = true
+    notifySystemShutdown()
   })
 
   app.on('before-quit', (event) => {

@@ -1,6 +1,8 @@
 // The pty daemon keeps terminals running across quit: the relaunched app reattaches to the same process (same pid),
 // shows its live screen (here a full-screen program on the alternate screen) at once, and input reaches it.
+// A SIGTERM ends the sessions only during a logout, restart or shutdown (PRD §6.8).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,6 +22,10 @@ function alive(pid: number): boolean {
   }
 }
 
+function parentPid(pid: number): number {
+  return Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8' }).trim())
+}
+
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(60_000)
 
@@ -28,6 +34,8 @@ test.describe('pty daemon', () => {
   const project = mkdtempSync(join(tmpdir(), 'tr-e2e-daemon-proj-'))
   let app: ElectronApplication
   let page: Page
+  /** The session's shell, kept across the tests. */
+  let shellPid = 0
 
   const screen = () =>
     page.evaluate(
@@ -52,6 +60,7 @@ test.describe('pty daemon', () => {
   }
 
   const daemonPid = (): number => (JSON.parse(readFileSync(join(profile, 'daemon', 'daemon.json'), 'utf8')) as { pid: number }).pid
+  const daemonLog = (): string => readFileSync(join(profile, 'daemon', 'daemon.log'), 'utf8')
 
   test.beforeAll(() => {
     mkdirSync(profile, { recursive: true })
@@ -72,9 +81,10 @@ test.describe('pty daemon', () => {
 
   test.afterAll(async () => {
     await app?.close().catch(() => {})
-    // Never leave the daemon (and its shell) behind: SIGTERM ends its sessions and it.
+    // Never leave the daemon (and its shell) behind. A SIGTERM would keep them; SIGKILL closes the PTYs, which hangs up
+    // the shell.
     try {
-      process.kill(daemonPid(), 'SIGTERM')
+      process.kill(daemonPid(), 'SIGKILL')
     } catch {
       // Already gone.
     }
@@ -87,6 +97,7 @@ test.describe('pty daemon', () => {
     await expect.poll(screen).toMatch(/PID-\d+-END/)
     const pid = Number(/PID-(\d+)-END/.exec(await screen())?.[1])
     expect(pid).toBeGreaterThan(0)
+    shellPid = pid
 
     // A full-screen program on the alternate screen, waiting for input.
     await type(`printf '\\033[?1049h\\033[2J\\033[HALT-%s-SCREEN\\r\\n' $((6*7)); cat`)
@@ -110,5 +121,35 @@ test.describe('pty daemon', () => {
     await page.keyboard.press('Control+C')
     await type(`printf '\\033[?1049l'; echo AGAIN-$$-END`)
     await expect.poll(screen).toContain(`AGAIN-${pid}-END`)
+  })
+
+  test('a SIGTERM keeps the daemon and its shell; during a logout it ends them', async () => {
+    const daemon = daemonPid()
+    // Orphaned from the start: stopping the app's process tree (a tool walking parent pids) never reaches it.
+    expect(parentPid(daemon)).toBe(1)
+
+    await app.close()
+    process.kill(daemon, 'SIGTERM')
+    await expect.poll(daemonLog).toContain('SIGTERM outside a logout or shutdown: keeping 1 running sessions')
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    expect(alive(daemon)).toBe(true)
+    expect(alive(shellPid)).toBe(true)
+
+    // The relaunch reattaches the same shell.
+    await launch()
+    expect(daemonPid()).toBe(daemon)
+    await page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"]`).click()
+    await type('echo STILL-$$-END')
+    await expect.poll(screen).toContain(`STILL-${shellPid}-END`)
+
+    // Logout, restart or shutdown (powerMonitor `shutdown`): main tells the daemon, and now a SIGTERM ends the sessions.
+    await app.evaluate(({ powerMonitor }) => {
+      powerMonitor.emit('shutdown')
+    })
+    await expect.poll(daemonLog).toContain('the system is logging out, restarting or shutting down')
+    process.kill(daemon, 'SIGTERM')
+    await expect.poll(() => alive(daemon)).toBe(false)
+    await expect.poll(() => alive(shellPid)).toBe(false)
+    expect(daemonLog()).toContain('shutting down: SIGTERM during logout or shutdown (ending sessions)')
   })
 })

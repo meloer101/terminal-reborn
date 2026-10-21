@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-20
+> 最后更新：2026-10-21
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -39,6 +39,7 @@
 - [x] 中文输入和链接：网址和文件路径碰到中文、全角标点就截断（o#30213）；全角标点被打成半角（o#6147）；双空格自动句号；输入法组合中按 Enter / Esc 误触发终端查找、设置里的字体搜索、新建会话面板等（o#17820 一类）。e2e `cjk-input.spec.ts`，单元测试 `links` / `file-links` / `ime` / `keymap`。取舍：路径里直接带中文的网址（如 `/wiki/中文`）会在 `/wiki/` 处截断
 - [x] 8 个中文会话下的 WebGL 乱码（s#3572，上游修复 xterm.js#5883 在 7.0.0）：v0.3.0 确实会在字形图集合并后叠字、错字；`atlas-guard.ts` 让图集永远不合并（见 PRD §6.3）。压测 `TR_STRESS=1 npx playwright test e2e/webgl-cjk-stress.spec.ts`，修复前 56 次检查 34 次画错，修复后 0 次
 - [x] 和 CC Switch 共存：Claude 被指到第三方端点（settings.json 的 `ANTHROPIC_BASE_URL`、Bedrock / Vertex）或 Codex 用非 `openai` 的 provider 时，会话头不再显示官方账号的额度，token 不计入份额，也不让账号算“在用”（PRD v1.46）。之前同时有官方登录的用户会在 Kimi 会话上看到“Claude 5h 12%”。单元测试 `bridge` / `server`（真实中继脚本）/ `codex-usage` / `transcript-meter`，e2e `session-meta` 新增一条（去掉渲染端的判断它会失败）
+- [x] 守护进程收到 SIGTERM 不再结束全部会话（2026-10-21，PRD §6.8 v1.54；来自作者日志里的 3 次和长跑测试）：查证是停掉一棵进程树时连带发来的（Claude 桌面版退出时停掉开着 `npm run dev` 的后台任务，守护进程当时是应用的子进程），不是注销。守护进程改为启动即被 launchd 收养，SIGTERM 只写盘、照常运行；main 报告注销 / 重启 / 关机后才结束会话。单元测试 `sigterm.test.ts`、`daemon-client.test.ts`，e2e `pty-daemon.spec.ts`（父进程是 launchd；SIGTERM 后同一个 shell 还在，重开接回；报告关机后 SIGTERM 结束它们）
 - [x] ⌘Q 后重开，守护进程保住的 agent 状态不再卡在“空闲”；弹窗里用真键盘按 ⌘F 不再在弹窗背后打开查找栏。新 e2e：`tui-apps`、`menu-keys`、`quit-keeps-agents`、`notifications`，另加随机事件序列下状态不卡死的性质测试
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
@@ -251,6 +252,7 @@
 - Codex 只在第一条 prompt 时才发 SessionStart，也没有 SessionEnd / Interrupt 事件；它的启动和中断靠屏幕与标题判断。
 - 启动标记（OSC 7771）没有鉴权，恶意输出最多伪造一张“已退出”卡片。
 - PTY 守护进程不处理截在 attach 点上的半个转义序列（会显示成一次文本）。
+- 应用没开着时注销或重启，守护进程得不到通知：没连着应用的会话，最后 30 s 内变了的屏幕不写盘（唯一一次实测的真实重启里，守护进程没收到能记下来的 SIGTERM）。
 - 机器负载很高时，几个依赖时序的 e2e 会偶发失败（D3）。跑 e2e 时有人在这台机器上打字，键盘输入会进到测试窗口里，这种情况测试兜不住。
 - ⌘B / ⇧⌘B / ⇧⌘M 按物理键位（`e.code`）判断，其余快捷键按字符（`e.key`），Dvorak、AZERTY 等布局下会错位。
 - 输入法候选窗开着时，只由菜单处理的快捷键（⌘N、⌘O、⌘W、⌘F、⌘,、⌘+ / ⌘- / ⌘0）可能不起作用。这是从 Chromium 源码推断的，等中文输入真机清单第 7 步确认。

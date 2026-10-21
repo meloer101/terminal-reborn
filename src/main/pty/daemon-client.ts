@@ -180,6 +180,11 @@ export class DaemonConnection {
     if (!this.closed && !this.socket.destroyed) this.socket.write(frame(message))
   }
 
+  /** The user is logging out, restarting or shutting down: the daemon's next SIGTERM ends the sessions (PRD §6.8). */
+  systemShutdown(): void {
+    this.write({ type: 'system-shutdown' })
+  }
+
   /** Disconnects; the daemon keeps every session running (detached). */
   close(): void {
     if (this.closed) return
@@ -221,20 +226,39 @@ function rotateLog(path: string): void {
   }
 }
 
-/** Starts a detached daemon: its own session and process group, so nothing that happens to the app reaches it. */
+/** Run by the launcher (`<binary> -e`): starts `argv[1..]` in a session of its own and exits at once. */
+const ORPHAN_LAUNCHER =
+  "require('node:child_process').spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit' }).unref()"
+
+/**
+ * Runs `execPath args…` (Node mode comes from `env`) in its own session and process group, as an orphan: a launcher
+ * starts it and exits, so its parent is launchd from the start. Tools that stop a process tree by walking parent pids
+ * (Claude Code's background tasks, Claude quitting, IDE run configurations) SIGTERM every descendant of the app, a
+ * `detached` child and the agents in its terminals included (PRD §6.8); an orphan is no one's descendant.
+ */
+export function spawnOrphan(execPath: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv; out: number }): void {
+  const launcher = spawn(execPath, ['-e', ORPHAN_LAUNCHER, ...args], {
+    detached: true,
+    stdio: ['ignore', options.out, options.out],
+    cwd: options.cwd,
+    env: options.env
+  })
+  launcher.on('error', () => undefined)
+  launcher.unref()
+}
+
+/** Starts the daemon detached and orphaned (`spawnOrphan`), so nothing that happens to the app reaches it. */
 function launch(location: DaemonLocation, script: string): void {
   const logPath = join(location.dir, LOG_FILE)
   rotateLog(logPath)
   const out = openSync(logPath, 'a', 0o600)
   try {
-    const child = spawn(process.execPath, [script, '--dir', location.dir, '--socket', location.socketPath], {
-      detached: true,
-      stdio: ['ignore', out, out],
+    spawnOrphan(process.execPath, [script, '--dir', location.dir, '--socket', location.socketPath], {
       // A deleted worktree must never be the daemon's cwd.
       cwd: location.dir,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      out
     })
-    child.unref()
   } finally {
     closeSync(out)
   }

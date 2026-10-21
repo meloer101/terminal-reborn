@@ -73,7 +73,8 @@ test.describe('quit keeps agents running', () => {
         return null
       }
     })()]) {
-      if (alive(pid)) process.kill(pid as number, 'SIGTERM')
+      // SIGKILL: a SIGTERM leaves the daemon running (PRD §6.8).
+      if (alive(pid)) process.kill(pid as number, 'SIGKILL')
     }
   })
 
