@@ -21,7 +21,7 @@ import { IconButton } from '../ui/IconButton'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { pressSession } from './drag'
 import './font-zoom'
-import { dropLabel, pickerRows } from './model'
+import { dropLabel, pickerRows, stackHandles } from './model'
 import { setSplitGeometry, useSessionDrag, type SessionDrag } from './store'
 import styles from './SplitArea.module.css'
 
@@ -84,7 +84,7 @@ export function SplitArea() {
           <PaneHeader key={p.id} rect={p} focused={p.id === activeId && !picking} many={many} />
         )
       )}
-      {handles.map((h) => (
+      {stackHandles(handles).map((h) => (
         <Hairline key={`${h.path.join('.')}:${h.index}`} handle={h} />
       ))}
       {drag?.drop && <DropMark drag={drag} panes={panes} root={root} />}

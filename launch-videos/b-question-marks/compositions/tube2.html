@@ -1,0 +1,77 @@
+<template>
+  <style>
+    
+  @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+  @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-400-subset.woff2') format('woff2'); font-weight: 400; }
+
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+
+    #b4-bg, #b4-stage { position: absolute; inset: 0; }
+    #b4-grain { position: absolute; inset: -40px; opacity: 0.05;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); }
+    #b4-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    
+    #b4-tube { position: absolute; left: 160px; top: 150px; width: 1600px; height: 460px; border-radius: 48px; background: #000; overflow: hidden; box-shadow: inset 0 0 0 2px #ffffff14, inset 0 0 120px #ffffff08; }
+    #b4-tube .screen { position: absolute; inset: 0; transform-origin: 50% 50%; }
+    #b4-tube .qrow { position: absolute; left: 50px; top: 110px; width: 1500px; height: 240px; }
+    #b4-tube .q { position: absolute; top: 0; width: 150px; height: 240px; }
+    #b4-tube .hook { position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; font: 900 230px/240px 'Wavi Archivo', sans-serif; font-stretch: 112%; color: var(--color-accent); text-shadow: -5px 0 0 #2141ffb0, 5px 0 0 #ff2a12b0; }
+    #b4-tube .cover { position: absolute; left: 40px; top: 143px; width: 76px; height: 62px; background: #000; }
+    #b4-tube .dot { position: absolute; left: 52px; top: 147.5px; width: 52px; height: 52px; border-radius: 50%; background: var(--color-accent); box-shadow: -5px 0 0 #2141ffb0, 5px 0 0 #ff2a12b0; }
+    #b4-tube .q.ok .hook { opacity: 0; }
+    #b4-tube .q.ok .dot { background: #ededed; }
+    #b4-tube .scan { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0, 0, 0, 0.42) 3px 4px); }
+    #b4-tube .band { position: absolute; left: 0; right: 0; top: -90px; height: 80px; background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.06), transparent); }
+    #b4-tube .all { position: absolute; left: 0; right: 0; top: 0; height: 460px; display: flex; align-items: center; justify-content: center; font: 900 140px/1 'Wavi Archivo', sans-serif; font-stretch: 125%; letter-spacing: -0.01em; white-space: nowrap; color: #ededed; text-shadow: -5px 0 0 #2141ffb0, 5px 0 0 #ff2a12b0; }
+  </style>
+  <div id="root" data-composition-id="tube2" data-width="1920" data-height="1080">
+    <div id="b4-bg" class="clip" data-start="0" data-duration="4"><div id="b4-grain"></div></div>
+    <div id="b4-stage" class="clip" data-start="0" data-duration="4" data-layout-allow-overflow>
+      <div id="b4-cam">
+        <div id="b4-tube">
+          <div class="screen" id="b4-screen">
+          <div class="qrow" id="b4-row">
+            <div class="q ok" id="b4-q0" style="left:0px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q1" style="left:150px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q2" style="left:300px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q3" style="left:450px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q4" style="left:600px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q5" style="left:750px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q6" style="left:900px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q7" style="left:1050px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q8" style="left:1200px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+            <div class="q" id="b4-q9" style="left:1350px"><span class="hook">?</span><span class="cover" data-layout-allow-occlusion></span><span class="dot"></span></div>
+          </div>
+            <div class="all" id="b4-all">ALL RUNNING</div>
+          </div>
+          <div class="band" id="b4-band"></div>
+          <div class="scan"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo('#b4-grain', { x: 0, y: 0 }, { x: 41, y: -37, duration: 4, ease: 'steps(120)' }, 0);
+      tl.fromTo('#b4-band', { y: 0 }, { y: 640, duration: 3.4, ease: 'none' }, 0);
+      tl.fromTo('#b4-cam', { x: -590.77, y: -1794.23, scale: 5.3846, filter: 'blur(14px)' }, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, ease: 'expo.out' }, 0);
+      tl.set('#b4-all', { opacity: 0 }, 0);
+      // Nine answers on 16ths: each question loses its hook; the dot that stays is the answer.
+      for (let i = 1; i < 10; i++) {
+        const t = 0.9 + (i - 1) * 0.125;
+        tl.to('#b4-q' + i + ' .hook', { opacity: 0, duration: 0.01 }, t);
+        tl.to('#b4-q' + i + ' .dot', { backgroundColor: '#ededed', duration: 0.01 }, t);
+      }
+      tl.to('#b4-row', { keyframes: [{ x: -6, duration: 0.033 }, { x: 0, duration: 0.033 }] }, 1.5);
+      tl.to('#b4-row', { opacity: 0, filter: 'blur(6px)', duration: 0.1, ease: 'power3.in' }, 2.05);
+      tl.fromTo('#b4-all', { opacity: 0, scaleX: 1.3, filter: 'blur(10px)' }, { opacity: 1, scaleX: 1, filter: 'blur(0px)', duration: 0.2, ease: 'expo.out' }, 2.1);
+      tl.to('#b4-all', { keyframes: [{ x: 6, duration: 0.033 }, { x: 0, duration: 0.033 }] }, 2.9);
+      // Switch-off: the picture folds to a line, then to nothing.
+      tl.to('#b4-screen', { scaleY: 0.012, filter: 'brightness(2.5)', duration: 0.2, ease: 'power3.in' }, 3.5);
+      tl.to('#b4-screen', { scaleX: 0, duration: 0.15, ease: 'power3.in' }, 3.72);
+      window.__timelines['tube2'] = tl;
+    })();
+  </script>
+</template>

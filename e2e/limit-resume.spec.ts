@@ -9,7 +9,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { alive, fakeHookClaude } from './fake-hook-claude'
-import { launchApp } from './launch'
+import { launchApp, setWindowSize } from './launch'
 
 const WITHIN = { timeout: 20_000 }
 const SHOTS = join(process.cwd(), 'test-results', 'limit-resume')
@@ -104,6 +104,9 @@ test.describe('continue after the plan limit resets', () => {
       ;(globalThis as unknown as { __TR_TERMINAL_PROBE__: boolean }).__TR_TERMINAL_PROBE__ = true
     })
     await page.reload()
+    // Wide enough for the right panel to sit beside the session (PRD F17): on the CI runner's 1024 × 768 screen the
+    // window starts narrow, the 文件 panel floats over the header, and it covers the /compact button this spec clicks.
+    await setWindowSize(app, page, 1440, 900)
     await expect(row()).toBeVisible(WITHIN)
     await row().click()
     await expect.poll(agent.pid, WITHIN).not.toBeNull()

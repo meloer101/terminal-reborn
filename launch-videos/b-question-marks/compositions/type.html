@@ -1,0 +1,33 @@
+<template>
+  <style>
+    
+  @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+  @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-400-subset.woff2') format('woff2'); font-weight: 400; }
+
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+
+    #b5-bg { position: absolute; inset: 0; }
+    #b5-grain { position: absolute; inset: -40px; opacity: 0.05;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); }
+    .bl { position: absolute; left: 0; right: 0; text-align: center; font: 400 190px/1 'Wavi Bodoni', serif; letter-spacing: 0.02em; color: var(--color-ink); white-space: nowrap; }
+    #b5-l1 { top: 440px; }
+    #b5-l2 { top: 410px; font-size: 250px; }
+    .bl .ch { display: inline-block; }
+  </style>
+  <div id="root" data-composition-id="type" data-width="1920" data-height="1080">
+    <div id="b5-bg" class="clip" data-start="0" data-duration="3"><div id="b5-grain"></div></div>
+    <div id="b5-l1" class="bl clip" data-start="0" data-duration="1.5"><span class="ch">B</span><span class="ch">R</span><span class="ch">A</span><span class="ch">N</span><span class="ch">C</span><span class="ch">H</span><span class="ch">&nbsp;</span><span class="ch">O</span><span class="ch">U</span><span class="ch">T</span><span class="ch">.</span></div>
+    <div id="b5-l2" class="bl clip" data-start="1.5" data-duration="1.5"><span class="ch">M</span><span class="ch">E</span><span class="ch">R</span><span class="ch">G</span><span class="ch">E</span><span class="ch">&nbsp;</span><span class="ch">I</span><span class="ch">N</span><span class="ch">.</span></div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo('#b5-grain', { x: 0, y: 0 }, { x: 29, y: -43, duration: 3, ease: 'steps(90)' }, 0);
+      // Printed, letter by letter, one frame apart; no fades.
+      tl.fromTo('#b5-l1 .ch', { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.033 }, 0);
+      tl.fromTo('#b5-l2 .ch', { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.033 }, 1.5);
+      window.__timelines['type'] = tl;
+    })();
+  </script>
+</template>

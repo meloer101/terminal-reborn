@@ -1,0 +1,326 @@
+<template>
+  <style>
+    
+  @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+  @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-400-subset.woff2') format('woff2'); font-weight: 400; }
+
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #app-stage, #app-notif-clip { position: absolute; inset: 0; }
+    #app-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    
+  .sb { position: absolute; left: 0; top: 0; width: 760px; height: 1080px; background: #050505; }
+  .sb-rule { position: absolute; left: 760px; top: 0; width: 2px; height: 1080px; background: #ffffff12; }
+  .sb-head { position: absolute; left: 16px; width: 728px; height: 72px; display: flex; align-items: center; gap: 12px; padding: 0 24px 0 16px; font: 600 28px/36px Inter, sans-serif; color: #ededed; }
+  .sb-head .chev { width: 32px; height: 32px; flex: none; background:
+      linear-gradient(45deg, transparent 46%, #6b6b6b 46% 54%, transparent 54%) 4px 2px / 14px 14px no-repeat,
+      linear-gradient(-45deg, transparent 46%, #6b6b6b 46% 54%, transparent 54%) 14px 2px / 14px 14px no-repeat; transform: translateY(6px); }
+  .sb-head b { font-weight: 600; flex: 1; }
+  .sb-head .count { font: 400 26px/36px 'JetBrains Mono', monospace; color: #6b6b6b; }
+  .row { position: absolute; left: 16px; width: 728px; height: 104px; display: flex; align-items: flex-start; gap: 16px; padding: 16px 24px 16px 56px; border-radius: 10px; }
+  .row.sel { background: #ffffff12; }
+  .row .g { position: relative; flex: none; width: 28px; height: 28px; margin-top: 4px; }
+  .row .g .glyph { position: absolute; left: 0; top: 0; display: block; }
+  .row .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .row .t { font: 400 26px/36px Inter, sans-serif; color: #ededed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .a-wrap, .row .m-wrap { position: relative; display: block; height: 32px; }
+  .row .a { position: absolute; left: 0; top: 0; right: 0; font: 400 24px/32px Inter, sans-serif; color: #a1a1a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .a.att { color: var(--color-accent); }
+  .row .meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font: 400 24px/32px 'JetBrains Mono', monospace; color: #6b6b6b; white-space: nowrap; }
+  .row .m-wrap { width: 170px; }
+  .row .m-wrap .m { position: absolute; right: 0; top: 0; }
+  .row .m.strong { font-weight: 500; }
+  .alt { opacity: 0; }
+
+    
+  .ln { white-space: pre; }
+  .ln .g { color: #3dd68c; } .ln .o { color: #e08a5e; } .ln .w { color: #ededed; } .ln .d { color: #808080; }
+  .ln .r { color: #ff5c5c; } .ln .b { color: #5ea1ff; } .ln .acc { color: #e08a5e; } .ln .v { color: #c79bff; }
+  .ln .sel { color: #c79bff; } .ln .ins { color: #3dd68c; } .ln .del { color: #ff5c5c; }
+
+    
+  .hud { position: absolute; display: flex; align-items: center; gap: 24px; }
+  .hud .keys { display: flex; gap: 10px; }
+  .hud .key { position: relative; min-width: 88px; height: 88px; padding: 0 22px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #161616; box-shadow: inset 0 0 0 2px #ffffff2e, 0 6px 0 #000; font: 500 44px/1 Inter, sans-serif; color: #ededed; }
+  .hud .key .fill { position: absolute; inset: 0; border-radius: 14px; background: #ededed; opacity: 0; }
+  .hud .key span { position: relative; }
+  .hud .verb { font: 500 36px/1 Inter, sans-serif; color: #ededed; }
+
+    #app-title { position: absolute; left: 834px; right: 48px; top: 490px; font: 900 76px/1.05 'Wavi Archivo', sans-serif; font-stretch: 100%; letter-spacing: -0.02em; color: var(--color-ink); }
+    #app-title .line { position: absolute; left: 0; top: 0; white-space: nowrap; }
+    #app-title .w { display: inline-block; }
+    #app-notif { position: absolute; right: 48px; top: 48px; width: 760px; display: flex; gap: 24px; align-items: flex-start; padding: 26px 30px; border-radius: 30px; background: #262626; box-shadow: inset 0 0 0 2px #ffffff14, 0 20px 48px #00000080; }
+    #app-notif img { width: 76px; height: 76px; flex: none; }
+    #app-notif .nt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    #app-notif .nt-top { display: flex; justify-content: space-between; font: 600 28px/36px Inter, sans-serif; color: #ededed; }
+    #app-notif .nt-top span { font-weight: 400; color: #a1a1a1; font-size: 24px; }
+    #app-notif .nt-body { font: 400 28px/36px Inter, sans-serif; color: #c4c4c4; white-space: nowrap; }
+    #app-main { position: absolute; left: 762px; top: 0; width: 1158px; height: 1080px; transform-origin: 0 0; background: #0a0a0a; border-radius: 32px 0 0 32px; overflow: hidden; }
+    #app-main .mh { height: 88px; padding: 0 48px; display: flex; align-items: center; gap: 20px; border-bottom: 2px solid #ffffff0a; }
+    #app-main .mh b { font: 600 30px/1 Inter, sans-serif; color: #ededed; }
+    #app-main .mh span { font: 400 26px/1 'JetBrains Mono', monospace; color: #6b6b6b; }
+    #app-main .mh i { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 2.5px #6b6b6b; }
+    #app-term { position: absolute; left: 48px; top: 128px; right: 48px; font: 400 26px/40px 'JetBrains Mono', monospace; color: #c4c4c4; }
+    #app-term .blk { position: relative; }
+    #app-prompt, #app-after { position: absolute; left: 0; right: 0; top: 320px; }
+    #app-hud1 { left: 762px; right: 0; top: 920px; justify-content: center; }
+    #app-hud2 { left: 762px; right: 0; top: 900px; justify-content: center; }
+    #app-hud3 { left: 762px; right: 0; top: 920px; justify-content: center; }
+    #app-hud4 { left: 0; right: 0; top: 920px; justify-content: center; }
+    .hud-box { display: flex; align-items: center; gap: 24px; padding: 18px 28px; border-radius: 20px; background: #050505; box-shadow: inset 0 0 0 2px #ffffff1c; }
+    #app-panel { position: absolute; left: 1100px; top: 16px; width: 804px; height: 1048px; border-radius: 24px; background: #121212; box-shadow: inset 0 0 0 2px #ffffff12, 0 16px 48px #00000080; overflow: hidden; }
+    #app-panel .ph { height: 80px; padding: 0 32px; display: flex; align-items: center; gap: 16px; font: 600 28px/1 Inter, sans-serif; color: #ededed; }
+    #app-panel .ph span { font-weight: 400; color: #6b6b6b; font-size: 26px; }
+    #app-panel .tabs { display: flex; gap: 32px; padding: 0 32px; height: 64px; align-items: center; border-bottom: 2px solid #ffffff0a; font: 500 26px/1 Inter, sans-serif; color: #6b6b6b; }
+    #app-panel .tabs .on { color: #ededed; }
+    #app-panel .files { padding: 16px 16px 8px; }
+    #app-panel .file { display: flex; justify-content: space-between; padding: 14px 16px; border-radius: 10px; font: 400 26px/36px 'JetBrains Mono', monospace; color: #ededed; }
+    #app-panel .file.sel { background: #ffffff12; }
+    #app-panel .file .st b { color: #3dd68c; font-weight: 400; } #app-panel .file .st i { color: #ff5c5c; font-style: normal; margin-left: 12px; }
+    #app-panel .diff { margin: 8px 16px; padding: 20px 0; border-top: 2px solid #ffffff0a; font: 400 24px/38px 'JetBrains Mono', monospace; color: #c4c4c4; }
+    #app-panel .diff .ln { padding: 0 16px; }
+    #app-panel .diff .ln:has(.ins) { background: #3dd68c1f; } #app-panel .diff .ln:has(.del) { background: #ff5c5c1f; }
+    #app-scrim { position: absolute; inset: 0; background: #00000099; }
+    #app-sheet { position: absolute; left: 520px; top: 200px; width: 880px; padding: 44px 48px 40px; border-radius: 32px; background: #1a1a1a; box-shadow: inset 0 0 0 2px #ffffff14, 0 32px 80px #000000a0; }
+    #app-sheet h2 { font: 600 40px/48px Inter, sans-serif; color: #ededed; }
+    #app-sheet .sub { margin-top: 8px; font: 400 28px/36px 'JetBrains Mono', monospace; color: #a1a1a1; }
+    #app-sheet .checks { margin-top: 36px; display: flex; flex-direction: column; gap: 18px; }
+    #app-sheet .ck { display: flex; align-items: center; gap: 18px; font: 400 30px/40px Inter, sans-serif; color: #ededed; }
+    #app-sheet .ck .dot { position: relative; width: 36px; height: 36px; border-radius: 50%; background: #3dd68c; }
+    #app-sheet .ck .dot::after { content: ''; position: absolute; left: 12px; top: 6px; width: 9px; height: 17px; border: solid #0a0a0a; border-width: 0 4px 4px 0; transform: rotate(45deg); }
+    #app-sheet .seg { margin-top: 36px; display: flex; padding: 6px; gap: 6px; border-radius: 14px; background: #0a0a0a; }
+    #app-sheet .seg span { flex: 1; text-align: center; padding: 14px 0; border-radius: 10px; font: 500 28px/1 Inter, sans-serif; color: #a1a1a1; }
+    #app-sheet .seg .on { background: #ffffff24; color: #ededed; }
+    #app-sheet .opt { margin-top: 28px; display: flex; align-items: center; gap: 16px; font: 400 28px/36px Inter, sans-serif; color: #c4c4c4; }
+    #app-sheet .opt .box { width: 32px; height: 32px; border-radius: 8px; background: #ededed; position: relative; }
+    #app-sheet .opt .box::after { content: ''; position: absolute; left: 10px; top: 4px; width: 8px; height: 15px; border: solid #0a0a0a; border-width: 0 4px 4px 0; transform: rotate(45deg); }
+    #app-sheet .btns { margin-top: 44px; display: flex; justify-content: flex-end; gap: 20px; }
+    #app-sheet .btn { position: relative; padding: 18px 36px; border-radius: 14px; font: 500 30px/1 Inter, sans-serif; color: #ededed; background: #ffffff14; overflow: hidden; }
+    #app-sheet .btn.primary { background: #ededed; color: #0a0a0a; min-width: 200px; text-align: center; }
+    #app-sheet .btn .flash { position: absolute; inset: 0; background: #ffffff; opacity: 0; }
+    #app-sheet .btn .lab { position: relative; display: inline-block; }
+    #app-sheet .btn .lab2 { position: absolute; left: 0; right: 0; top: 18px; text-align: center; opacity: 0; }
+    #app-sheet .done { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; opacity: 0; }
+    #app-sheet .done .big { position: relative; width: 120px; height: 120px; border-radius: 50%; background: #3dd68c; }
+    #app-sheet .done .big::after { content: ''; position: absolute; left: 41px; top: 20px; width: 28px; height: 54px; border: solid #0a0a0a; border-width: 0 10px 10px 0; transform: rotate(45deg); }
+    #app-sheet .done b { font: 600 44px/1.1 Inter, sans-serif; color: #ededed; }
+    #app-sheet .done span { font: 400 30px/1.2 Inter, sans-serif; color: #a1a1a1; }
+    #app-sheet .form { position: relative; }
+  </style>
+  <div data-hf-id="hf-nuym" id="root" data-composition-id="app" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-8kag" id="app-stage" class="clip" data-start="0" data-duration="16" data-layout-allow-overflow>
+    <div data-hf-id="hf-8euk" id="app-cam">
+      <div data-hf-id="hf-hgly" class="sb-rule"></div>
+      <div data-hf-id="hf-st60" id="app-sb" class="sb">
+        <div data-hf-id="hf-edds" id="app-head-acme" class="sb-head" style="top:40px"><span data-hf-id="hf-9h45" class="chev"></span><b data-hf-id="hf-cl0w">acme-web</b><span data-hf-id="hf-lcmd" class="count">5</span></div>
+        <div data-hf-id="hf-39fo" id="app-row-cookie" class="row" style="top:112px">
+          <span data-hf-id="hf-uo94" class="g"><svg data-hf-id="hf-5xjb" class="glyph" id="app-g-need" width="28" height="28" viewBox="0 0 14 14"><circle data-hf-id="hf-339c" cx="7" cy="7" r="7" fill="#ff5fb01f"/><circle data-hf-id="hf-mzlq" cx="7" cy="7" r="4" fill="var(--color-accent)"/></svg><svg data-hf-id="hf-uuht" class="glyph alt" id="app-g-run" width="28" height="28" viewBox="0 0 14 14"><g data-hf-id="hf-reh6" class="spin"><circle data-hf-id="hf-210m" cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path data-hf-id="hf-rco0" d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><svg data-hf-id="hf-kbmk" class="glyph alt" id="app-g-done" width="28" height="28" viewBox="0 0 14 14"><circle data-hf-id="hf-ozvl" cx="7" cy="7" r="4" fill="#3dd68c"/></svg></span>
+          <span data-hf-id="hf-ksf6" class="main"><span data-hf-id="hf-6c31" class="t">Session cookie migration</span><span data-hf-id="hf-xxxz" class="a-wrap"><span data-hf-id="hf-8ya2" id="app-a-need" class="a att">Confirm: pnpm prisma migrate dev</span><span data-hf-id="hf-qpn2" id="app-a-run" class="a alt">Running pnpm test auth</span><span data-hf-id="hf-pse9" id="app-a-done" class="a alt">Done, ready for review</span></span></span>
+          <span data-hf-id="hf-2eim" class="meta"><span data-hf-id="hf-tfur" class="m-wrap"><span data-hf-id="hf-rym1" id="app-m-need" class="m">waiting 23m</span><span data-hf-id="hf-pi9a" id="app-m-run" class="m alt">23m</span><span data-hf-id="hf-zdcr" id="app-m-done" class="m alt">just now</span></span><span data-hf-id="hf-c47i" class="m">+42 −18</span></span>
+        </div>
+        <div data-hf-id="hf-uo0d" id="app-row-checkout" class="row sel" style="top:216px">
+          <span data-hf-id="hf-5c5c" class="g"><svg data-hf-id="hf-jp9z" class="glyph" width="28" height="28" viewBox="0 0 14 14"><g data-hf-id="hf-vnbi" class="spin"><circle data-hf-id="hf-nnze" cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path data-hf-id="hf-b36g" d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></span>
+          <span data-hf-id="hf-d3gm" class="main"><span data-hf-id="hf-6hal" class="t">Checkout performance</span><span data-hf-id="hf-dvkn" class="a-wrap"><span data-hf-id="hf-b4la" class="a">Running pnpm test checkout</span></span></span>
+          <span data-hf-id="hf-ixnm" class="meta"><span data-hf-id="hf-fqj0" class="m">12m</span><span data-hf-id="hf-sl36" class="m">+128 −35</span></span>
+        </div>
+        <div data-hf-id="hf-kse1" id="app-row-mobile" class="row" style="top:320px">
+          <span data-hf-id="hf-4589" class="g"><svg data-hf-id="hf-g2if" class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle data-hf-id="hf-5lth" cx="7" cy="7" r="4" fill="#3dd68c"/></svg></span>
+          <span data-hf-id="hf-dhrn" class="main"><span data-hf-id="hf-8rch" class="t">Fix mobile nav jitter</span><span data-hf-id="hf-dh9m" class="a-wrap"><span data-hf-id="hf-sv5u" class="a">Done, ready for review</span></span></span>
+          <span data-hf-id="hf-jbyn" class="meta"><span data-hf-id="hf-41wf" class="m">2m</span><span data-hf-id="hf-rfwd" class="m">+23 −9</span></span>
+        </div>
+        <div data-hf-id="hf-kw29" id="app-row-webhook" class="row" style="top:424px">
+          <span data-hf-id="hf-4jja" class="g"><svg data-hf-id="hf-fo7e" class="glyph" width="28" height="28" viewBox="0 0 14 14"><g data-hf-id="hf-w1mj" class="spin"><circle data-hf-id="hf-o2af" cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path data-hf-id="hf-9w9d" d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></span>
+          <span data-hf-id="hf-dw2o" class="main"><span data-hf-id="hf-ts3o" class="t">Payment webhook retries</span><span data-hf-id="hf-d2yl" class="a-wrap"><span data-hf-id="hf-21q6" class="a">Running pnpm vitest webhook</span></span></span>
+          <span data-hf-id="hf-jq9o" class="meta"><span data-hf-id="hf-m2ss" class="m">9m</span><span data-hf-id="hf-zdqv" class="m">+19 −2</span></span>
+        </div>
+        <div data-hf-id="hf-sipr" id="app-row-vite" class="row" style="top:528px">
+          <span data-hf-id="hf-3cm7" class="g"><svg data-hf-id="hf-f9wd" class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle data-hf-id="hf-l62o" cx="7" cy="7" r="3.25" fill="none" stroke="#6b6b6b" stroke-width="1.5"/></svg></span>
+          <span data-hf-id="hf-b3xh" class="main"><span data-hf-id="hf-jqra" class="t">Move to Vite 7</span><span data-hf-id="hf-fv3s" class="a-wrap"><span data-hf-id="hf-qh3x" class="a">Upgraded, all tests pass</span></span></span>
+          <span data-hf-id="hf-k4kp" class="meta"><span data-hf-id="hf-4blu" class="m">20m ago</span><span data-hf-id="hf-zfi9" class="m">+40 −31</span></span>
+        </div>
+        <div data-hf-id="hf-hk83" id="app-head-tr" class="sb-head" style="top:656px"><span data-hf-id="hf-9yd5" class="chev"></span><b data-hf-id="hf-3dxq">terminal-reborn</b><span data-hf-id="hf-nqgj" class="count">3</span></div>
+        <div data-hf-id="hf-02ai" id="app-row-agg" class="row" style="top:728px">
+          <span data-hf-id="hf-3qx8" class="g"><svg data-hf-id="hf-i21k" class="glyph" width="28" height="28" viewBox="0 0 14 14"><g data-hf-id="hf-wfxk" class="spin"><circle data-hf-id="hf-oglg" cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path data-hf-id="hf-aake" d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></span>
+          <span data-hf-id="hf-bi8i" class="main"><span data-hf-id="hf-pgn5" class="t">Sidebar status rollup</span><span data-hf-id="hf-fgsr" class="a-wrap"><span data-hf-id="hf-ldkk" class="a">Reading src/state/agents.ts</span></span></span>
+          <span data-hf-id="hf-kivq" class="meta"><span data-hf-id="hf-3y3f" class="m">6m</span><span data-hf-id="hf-f79s" class="m">+61 −4</span></span>
+        </div>
+        <div data-hf-id="hf-1aoe" id="app-row-lanes" class="row" style="top:832px">
+          <span data-hf-id="hf-2k05" class="g"><svg data-hf-id="hf-hnqj" class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle data-hf-id="hf-2so1" cx="7" cy="7" r="4" fill="#ff5c5c"/></svg></span>
+          <span data-hf-id="hf-bwjj" class="main"><span data-hf-id="hf-wcp5" class="t">Git graph layout</span><span data-hf-id="hf-f2hq" class="a-wrap"><span data-hf-id="hf-qkso" class="a">pnpm build failed · 2 type errors</span></span></span>
+          <span data-hf-id="hf-kx6r" class="meta"><span data-hf-id="hf-mk3m" class="m">18m</span><span data-hf-id="hf-bfrz" class="m">+210 −12</span></span>
+        </div>
+        <div data-hf-id="hf-u6r0" id="app-row-search" class="row" style="top:936px">
+          <span data-hf-id="hf-2yb6" class="g"><svg data-hf-id="hf-h9fi" class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle data-hf-id="hf-6sqk" cx="7" cy="7" r="4" fill="#3dd68c"/></svg></span>
+          <span data-hf-id="hf-cauk" class="main"><span data-hf-id="hf-fx60" class="t">Docs search</span><span data-hf-id="hf-eo6p" class="a-wrap"><span data-hf-id="hf-pvps" class="a">Search index builds incrementally</span></span></span>
+          <span data-hf-id="hf-lbhs" class="meta"><span data-hf-id="hf-l8w9" class="m">5m ago</span><span data-hf-id="hf-58kk" class="m">+88 −14</span></span>
+        </div>
+      </div>
+      
+      <div data-hf-id="hf-mjig" id="app-main">
+        <div data-hf-id="hf-ownb" class="mh"><b data-hf-id="hf-qqub">Session cookie migration</b><i data-hf-id="hf-wt6k"></i><span data-hf-id="hf-53rw">jacob/session-cookie</span></div>
+        <div data-hf-id="hf-ggj9" id="app-term">
+          <div data-hf-id="hf-5hkc" class="blk" id="app-before">
+          <div data-hf-id="hf-e5jj" class="ln b4" data-i="0"><span data-hf-id="hf-1e9j" class="d">&gt; </span><span data-hf-id="hf-oxx6" class="w">Move the session token into an httpOnly cookie</span></div>
+          <div data-hf-id="hf-a7fi" class="ln b4" data-i="1">&nbsp;</div>
+          <div data-hf-id="hf-is5u" class="ln b4" data-i="2"><span data-hf-id="hf-1646" class="g">⏺ </span><span data-hf-id="hf-ej09" class="w">Update</span>(prisma/schema.prisma)</div>
+          <div data-hf-id="hf-5hno" class="ln b4" data-i="3"><span data-hf-id="hf-jh44" class="d">  ⎿  </span><span data-hf-id="hf-l8s2" class="d">Added model Session</span></div>
+          <div data-hf-id="hf-vokk" class="ln b4" data-i="4"><span data-hf-id="hf-vfdm" class="g">⏺ </span><span data-hf-id="hf-j5ot" class="w">Update</span>(src/middleware.ts)</div>
+          <div data-hf-id="hf-p116" class="ln b4" data-i="5"><span data-hf-id="hf-kra4" class="d">  ⎿  </span><span data-hf-id="hf-u8aw" class="d">Moved the token to an httpOnly cookie</span></div>
+          <div data-hf-id="hf-l2x5" class="ln b4" data-i="6"><span data-hf-id="hf-vton" class="g">⏺ </span><span data-hf-id="hf-5h0f" class="w">The Session table needs a migration first.</span></div>
+          <div data-hf-id="hf-i3nk" class="ln b4" data-i="7">&nbsp;</div>
+          </div>
+          <div data-hf-id="hf-m21n" class="blk" id="app-prompt">
+          <div data-hf-id="hf-41bb" class="ln pr" data-i="0"><span data-hf-id="hf-j5b2" class="v"> Bash command</span></div>
+          <div data-hf-id="hf-037a" class="ln pr" data-i="1">&nbsp;</div>
+          <div data-hf-id="hf-w539" class="ln pr" data-i="2"><span data-hf-id="hf-4dzt" class="w">   pnpm prisma migrate dev</span></div>
+          <div data-hf-id="hf-vdfg" class="ln pr" data-i="3"><span data-hf-id="hf-pc4c" class="d">   Apply the Session migration to the dev database</span></div>
+          <div data-hf-id="hf-iuwz" class="ln pr" data-i="4">&nbsp;</div>
+          <div data-hf-id="hf-ewsy" class="ln pr" data-i="5"><span data-hf-id="hf-y6w0" class="w"> Do you want to proceed?</span></div>
+          <div data-hf-id="hf-ayox" class="ln pr" data-i="6"><span data-hf-id="hf-7h1q" class="v"> ❯ 1. Yes</span></div>
+          <div data-hf-id="hf-e1bs" class="ln pr" data-i="7">   2. Yes, and don’t ask again for pnpm prisma migrate</div>
+          <div data-hf-id="hf-yg6m" class="ln pr" data-i="8">      commands in ~/code/acme-web</div>
+          <div data-hf-id="hf-4yeu" class="ln pr" data-i="9">   3. No, and tell Claude what to do differently (esc)</div>
+          </div>
+          <div data-hf-id="hf-qw4h" class="blk" id="app-after">
+          <div data-hf-id="hf-410m" class="ln af" data-i="0"><span data-hf-id="hf-w7zo" class="g">⏺ </span><span data-hf-id="hf-vzly" class="w">Bash</span>(pnpm prisma migrate dev)</div>
+          <div data-hf-id="hf-ibnf" class="ln af" data-i="1"><span data-hf-id="hf-jkd1" class="d">  ⎿  </span><span data-hf-id="hf-njzw" class="d">Applied migration 20261022_add_session</span></div>
+          <div data-hf-id="hf-794y" class="ln af" data-i="2"><span data-hf-id="hf-wmap" class="g">⏺ </span><span data-hf-id="hf-vb4a" class="w">Bash</span>(pnpm test auth)</div>
+          <div data-hf-id="hf-87tl" class="ln af" data-i="3"><span data-hf-id="hf-jyo2" class="d">  ⎿  </span><span data-hf-id="hf-qckf" class="g">24 passed (1.8s)</span></div>
+          <div data-hf-id="hf-zjxq" class="ln af" data-i="4">&nbsp;</div>
+          <div data-hf-id="hf-3i1r" class="ln af" data-i="5"><span data-hf-id="hf-x0lq" class="g">⏺ </span><span data-hf-id="hf-1zm5" class="w">Done. The session token now lives in an httpOnly</span></div>
+          <div data-hf-id="hf-sw0t" class="ln af" data-i="6">  cookie, and the refresh flow reads it from there.</div>
+          </div>
+        </div>
+      </div>
+      <div data-hf-id="hf-mi1t" id="app-panel" data-layout-allow-occlusion data-layout-allow-overlap>
+        <div data-hf-id="hf-v73c" class="ph">Git<span data-hf-id="hf-8yr8">acme-web</span></div>
+        <div data-hf-id="hf-5rmk" class="tabs"><span data-hf-id="hf-7l2b">Graph</span><span data-hf-id="hf-gypy" class="on">Changes 3</span></div>
+        <div data-hf-id="hf-j0qd" class="files">
+          <div data-hf-id="hf-z9d2" class="file sel"><span data-hf-id="hf-9nal">src/middleware.ts</span><span data-hf-id="hf-7km0" class="st"><b data-hf-id="hf-5o0r">+18</b><i data-hf-id="hf-1xyh">−9</i></span></div>
+          <div data-hf-id="hf-s7w2" class="file"><span data-hf-id="hf-0g9t">prisma/schema.prisma</span><span data-hf-id="hf-vwj4" class="st"><b data-hf-id="hf-798v">+14</b></span></div>
+          <div data-hf-id="hf-ypiu" class="file"><span data-hf-id="hf-unnq">src/auth/session.ts</span><span data-hf-id="hf-upm1" class="st"><b data-hf-id="hf-8ugz">+10</b><i data-hf-id="hf-rk7x">−9</i></span></div>
+        </div>
+        <div data-hf-id="hf-bnol" class="diff">
+          <div data-hf-id="hf-gmyq" class="ln"><span data-hf-id="hf-82q8" class="b">@@ -8,9 +8,12 @@ export async function middleware(req)</span></div>
+          <div data-hf-id="hf-ru7a" class="ln"><span data-hf-id="hf-4ms9" class="d">   const token = await issueSession(user)</span></div>
+          <div data-hf-id="hf-s8ib" class="ln"><span data-hf-id="hf-bpg6" class="del">-  res.headers.set('x-session-token', token)</span></div>
+          <div data-hf-id="hf-smtc" class="ln"><span data-hf-id="hf-nb3b" class="ins">+  res.cookies.set('session', token, {</span></div>
+          <div data-hf-id="hf-puo5" class="ln"><span data-hf-id="hf-vz88" class="ins">+    httpOnly: true,</span></div>
+          <div data-hf-id="hf-q8z6" class="ln"><span data-hf-id="hf-u2at" class="ins">+    secure: true,</span></div>
+          <div data-hf-id="hf-qna7" class="ln"><span data-hf-id="hf-6al6" class="ins">+    sameSite: 'lax',</span></div>
+          <div data-hf-id="hf-r1l8" class="ln"><span data-hf-id="hf-1yzq" class="ins">+  })</span></div>
+          <div data-hf-id="hf-o9g1" class="ln"><span data-hf-id="hf-ajsj" class="d">   return res</span></div>
+        </div>
+      </div>
+      <div data-hf-id="hf-6cn1" id="app-scrim" data-layout-allow-occlusion></div>
+      <div data-hf-id="hf-iqca" id="app-sheet" data-layout-allow-occlusion data-layout-allow-overlap>
+        <div data-hf-id="hf-9p44" class="form" id="app-form">
+          <h2 data-hf-id="hf-cngq">Merge session-cookie</h2>
+          <div data-hf-id="hf-1dwq" class="sub">into main · 3 commits · +42 −18</div>
+          <div data-hf-id="hf-jdor" class="checks">
+            <div data-hf-id="hf-tzq9" class="ck" id="app-ck1"><span data-hf-id="hf-9gry" class="dot"></span>No conflicts</div>
+            <div data-hf-id="hf-5qlx" class="ck" id="app-ck2"><span data-hf-id="hf-zcc2" class="dot"></span>Tests passed</div>
+          </div>
+          <div data-hf-id="hf-ta0z" class="seg"><span data-hf-id="hf-1mri" class="on">Merge</span><span data-hf-id="hf-30w8">Squash</span><span data-hf-id="hf-53w1">Rebase</span></div>
+          <div data-hf-id="hf-i929" class="opt"><span data-hf-id="hf-2l5s" class="box"></span>Remove the worktree, keep the branch</div>
+          <div data-hf-id="hf-5u2b" class="btns"><span data-hf-id="hf-ylcp" class="btn">Cancel</span><span data-hf-id="hf-vcs4" class="btn primary" id="app-merge-btn"><span data-hf-id="hf-2ibm" class="flash" id="app-merge-flash"></span><span data-hf-id="hf-52e0" class="lab" id="app-merge-lab">Merge</span><span data-hf-id="hf-dqoz" class="lab2" id="app-merge-lab2">Merging…</span></span></div>
+        </div>
+        <div data-hf-id="hf-fiqk" class="done" id="app-done"><span data-hf-id="hf-yaxz" class="big" id="app-done-dot"></span><b data-hf-id="hf-3o9u">Merged into main</b><span data-hf-id="hf-a20c">Worktree removed, branch kept</span></div>
+      </div>
+    </div>
+    </div>
+
+    <div data-hf-id="hf-f64o" id="app-notif-clip" class="clip" data-start="0.5" data-duration="3.5">
+    <div data-hf-id="hf-yt1j" id="app-notif">
+      <img data-hf-id="hf-e79p" src="assets/brand/icon.svg" alt="" />
+      <div data-hf-id="hf-8iim" class="nt"><div data-hf-id="hf-3mde" class="nt-top">acme-web · Session cookie migration<span data-hf-id="hf-9yvn">now</span></div><div data-hf-id="hf-s82g" class="nt-body">Confirm: pnpm prisma migrate dev</div></div>
+    </div>
+    </div>
+    <div data-hf-id="hf-qvpj" id="app-title" class="clip" data-start="0.8" data-duration="2.9">
+      <div data-hf-id="hf-xcnb" class="line" id="app-t1"><span data-hf-id="hf-rgua" class="w">Who's</span> <span data-hf-id="hf-wvh4" class="w">waiting?</span></div>
+      <div data-hf-id="hf-mh5o" class="line" id="app-t2"><span data-hf-id="hf-crys" class="w">You'll</span> <span data-hf-id="hf-rr9n" class="w">know</span> <span data-hf-id="hf-xtml" class="w">at</span> <span data-hf-id="hf-b7a3" class="w">a</span> <span data-hf-id="hf-tdyu" class="w">glance.</span></div>
+    </div>
+    <div data-hf-id="hf-xms0" id="app-hud1" class="hud clip" data-start="3.6" data-duration="1.1"><div data-hf-id="hf-2w4y" class="hud-box" id="app-hb1"><div data-hf-id="hf-rgbw" class="keys"><div data-hf-id="hf-pxt6" class="key" id="app-k1a"><div data-hf-id="hf-4qej" class="fill"></div><span data-hf-id="hf-a5kr">⌘</span></div><div data-hf-id="hf-lzp5" class="key" id="app-k1b"><div data-hf-id="hf-lwnf" class="fill"></div><span data-hf-id="hf-iesx">J</span></div></div><div data-hf-id="hf-fnhh" class="verb">Jump to it</div></div></div>
+    <div data-hf-id="hf-rlb6" id="app-hud2" class="hud clip" data-start="6.8" data-duration="1.3"><div data-hf-id="hf-yy0x" class="hud-box" id="app-hb2"><div data-hf-id="hf-7imc" class="keys"><div data-hf-id="hf-6swi" class="key" id="app-k2"><div data-hf-id="hf-lice" class="fill"></div><span data-hf-id="hf-ikog">1</span></div></div><div data-hf-id="hf-bvny" class="verb">Answer it</div></div></div>
+    <div data-hf-id="hf-upfb" id="app-hud3" class="hud clip" data-start="10.4" data-duration="1.8"><div data-hf-id="hf-y6d4" class="hud-box" id="app-hb3"><div data-hf-id="hf-h55j" class="verb">Read the diff</div></div></div>
+    <div data-hf-id="hf-chyc" id="app-hud4" class="hud clip" data-start="12.3" data-duration="1.1"><div data-hf-id="hf-u893" class="hud-box" id="app-hb4"><div data-hf-id="hf-6bp9" class="keys"><div data-hf-id="hf-1305" class="key" id="app-k4a"><div data-hf-id="hf-l41d" class="fill"></div><span data-hf-id="hf-hn76">⇧</span></div><div data-hf-id="hf-5146" class="key" id="app-k4b"><div data-hf-id="hf-kpqc" class="fill"></div><span data-hf-id="hf-a8aj">⌘</span></div><div data-hf-id="hf-8z87" class="key" id="app-k4c"><div data-hf-id="hf-kbfb" class="fill"></div><span data-hf-id="hf-i0hw">M</span></div></div><div data-hf-id="hf-62vx" class="verb">Merge</div></div></div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      const COOKIE_Y = 112, CHECKOUT_Y = 216;
+      tl.fromTo('#app-cam .spin', { rotation: 0 }, { rotation: 360 * 15, duration: 16, ease: 'none', svgOrigin: '7 7' }, 0);
+
+      // Initial: sidebar only, as the wall left it.
+      tl.set('#app-main', { opacity: 0 }, 0);
+      tl.set(['#app-prompt', '#app-after'], { opacity: 0 }, 0);
+      tl.set('#app-after .ln', { opacity: 0 }, 0);
+      tl.set('#app-panel', { x: 860 }, 0);
+      tl.set(['#app-scrim', '#app-sheet'], { opacity: 0 }, 0);
+
+      // Beat 5: notification, the one row is already magenta; the line.
+      tl.fromTo('#app-notif', { x: 820 }, { x: 0, duration: 0.5, ease: 'expo.out' }, 0.5);
+      tl.fromTo('#app-t1 .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 0.8);
+      tl.to('#app-t1 .w', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.03, ease: 'power3.in' }, 1.95);
+      tl.fromTo('#app-t2 .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 2.15);
+      tl.to('#app-t2 .w', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.03, ease: 'power3.in' }, 3.5);
+      tl.to('#app-notif', { x: 820, duration: 0.3, ease: 'power3.in' }, 3.65);
+
+      // Beat 6: ⌘J, the selection jumps, the row widens into its terminal.
+      const press = (sel, t) => {
+        tl.fromTo(sel + ' .fill', { opacity: 0.9 }, { opacity: 0, duration: 0.2, ease: 'power2.out' }, t);
+        tl.fromTo(sel, { y: 4 }, { y: 0, duration: 0.2, ease: 'power2.out' }, t);
+      };
+      const hud = (box, t0, t1) => {
+        tl.fromTo(box, { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, ease: 'expo.out' }, t0);
+        tl.to(box, { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, t1);
+      };
+      hud('#app-hb1', 3.6, 4.5);
+      press('#app-k1a', 3.85); press('#app-k1b', 3.85);
+      tl.to('#app-row-checkout', { backgroundColor: 'rgba(255,255,255,0)', duration: 0.05 }, 3.85);
+      tl.fromTo('#app-row-cookie', { backgroundColor: 'rgba(255,255,255,0)' }, { backgroundColor: 'rgba(255,255,255,0.07)', duration: 0.05 }, 3.85);
+      // Morph: from the row's rect to the main area.
+      tl.fromTo('#app-main',
+        { opacity: 1, x: -746, y: COOKIE_Y, scaleX: 0.6286701208981001, scaleY: 0.0962962962962963, filter: 'blur(0px)' },
+        { x: 0, y: 0, scaleX: 1, scaleY: 1, duration: 0.5, ease: 'power3.out' }, 4.05);
+      tl.to('#app-main', { keyframes: [{ filter: 'blur(6px)', duration: 0.2 }, { filter: 'blur(0px)', duration: 0.3 }] }, 4.05);
+      tl.fromTo(['#app-main .mh', '#app-before'], { opacity: 0 }, { opacity: 1, duration: 0.15 }, 4.4);
+      tl.fromTo('#app-prompt', { opacity: 0 }, { opacity: 1, duration: 0.15 }, 4.5);
+
+      // Beat 7: answer "1"; the prompt goes, the agent carries on; the row turns running.
+      hud('#app-hb2', 6.8, 8.0);
+      press('#app-k2', 7.15);
+      tl.to('#app-prompt', { opacity: 0, duration: 0.01 }, 7.2);
+      tl.set('#app-after', { opacity: 1 }, 7.2);
+      const AT = [7.3, 7.45, 7.9, 8.6, 8.9, 9.6, 9.62];
+      AT.forEach((t, i) => tl.to('#app-after .ln[data-i="' + i + '"]', { opacity: 1, duration: 0.01 }, t));
+      tl.to(['#app-g-need', '#app-a-need', '#app-m-need'], { opacity: 0, duration: 0.01 }, 7.25);
+      tl.to(['#app-g-run', '#app-a-run', '#app-m-run'], { opacity: 1, duration: 0.01 }, 7.25);
+
+      // Beat 8: done; the Changes panel slides in.
+      tl.to(['#app-g-run', '#app-a-run', '#app-m-run'], { opacity: 0, duration: 0.01 }, 9.65);
+      tl.to(['#app-g-done', '#app-a-done', '#app-m-done'], { opacity: 1, duration: 0.01 }, 9.65);
+      tl.to('#app-panel', { x: 0, duration: 0.55, ease: 'expo.out' }, 10.0);
+      tl.to('#app-panel', { keyframes: [{ filter: 'blur(8px)', duration: 0.15 }, { filter: 'blur(0px)', duration: 0.3 }] }, 10.0);
+      hud('#app-hb3', 10.4, 12.0);
+
+      // Beat 9: ⇧⌘M, the merge sheet, checks, Merged.
+      hud('#app-hb4', 12.3, 13.2);
+      ['#app-k4a', '#app-k4b', '#app-k4c'].forEach((k) => press(k, 12.55));
+      tl.to('#app-scrim', { opacity: 1, duration: 0.2, ease: 'power2.out' }, 12.65);
+      tl.fromTo('#app-sheet', { opacity: 0, scale: 0.96, filter: 'blur(8px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.3, ease: 'expo.out' }, 12.65);
+      tl.fromTo('#app-ck1 .dot', { scale: 0 }, { scale: 1, duration: 0.25, ease: 'back.out(1.6)' }, 13.25);
+      tl.fromTo('#app-ck2 .dot', { scale: 0 }, { scale: 1, duration: 0.25, ease: 'back.out(1.6)' }, 13.6);
+      tl.fromTo('#app-merge-flash', { opacity: 0.6 }, { opacity: 0, duration: 0.2 }, 14.1);
+      tl.to('#app-merge-lab', { opacity: 0, duration: 0.01 }, 14.15);
+      tl.to('#app-merge-lab2', { opacity: 1, duration: 0.01 }, 14.15);
+      tl.to('#app-form', { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, 14.6);
+      tl.fromTo('#app-done', { opacity: 0 }, { opacity: 1, duration: 0.15 }, 14.75);
+      tl.fromTo('#app-done-dot', { scale: 0.4 }, { scale: 1, duration: 0.35, ease: 'expo.out' }, 14.75);
+
+      // Zoom through the merge dot into the graph.
+      tl.to('#app-cam', { scale: 5, x: -4 * 960, y: -4 * 440, filter: 'blur(14px)', duration: 0.6, ease: 'power3.in' }, 15.4);
+      tl.to('#app-cam', { opacity: 0, duration: 0.2, ease: 'power2.in' }, 15.8);
+      window.__timelines['app'] = tl;
+    })();
+  </script>
+</template>

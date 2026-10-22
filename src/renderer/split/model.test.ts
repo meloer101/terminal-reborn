@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { pane, sessionsIn, splitPane } from '@shared/split-layout'
+import { measureSplit, pane, sessionsIn, splitPane } from '@shared/split-layout'
 import { mockProjects, mockSessions, mockWorktrees } from '../state/mock-data'
-import { dropLabel, pickerRows } from './model'
+import { dropLabel, pickerRows, stackHandles } from './model'
 
 const input = { projects: mockProjects, worktrees: mockWorktrees, sessions: mockSessions, now: Date.now(), filter: '' }
 
@@ -30,5 +30,16 @@ describe('dropLabel', () => {
     expect(dropLabel({ id: 'b', zone: 'center' }, 'a', split)).toBe('松开交换这两格')
     expect(dropLabel({ id: 'b', zone: 'top' }, 'a', split)).toBe('松开把这一格挪到这里')
     expect(dropLabel({ id: 'b', zone: 'left', refused: 'max' }, 'z', split)).toBe('最多 4 格 · 放到格子中间来替换')
+  })
+})
+
+describe('stackHandles', () => {
+  it('paints the outer split’s hairline last, so it wins where it crosses an inner one', () => {
+    let split = splitPane(pane('a'), 'a', 'right', 'b')
+    split = splitPane(split, 'a', 'bottom', 'c')
+    split = splitPane(split, 'b', 'bottom', 'd')
+    const order = stackHandles(measureSplit(split, 1200, 900).handles)
+    expect(order.map((h) => h.dir)).toEqual(['column', 'column', 'row'])
+    expect(order.at(-1)?.path).toEqual([])
   })
 })

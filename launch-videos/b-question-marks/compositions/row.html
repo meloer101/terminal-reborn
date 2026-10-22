@@ -1,0 +1,102 @@
+<template>
+  <style>
+    
+  @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+  @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-400-subset.woff2') format('woff2'); font-weight: 400; }
+
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+
+    #b2-bg, #b2-stage { position: absolute; inset: 0; }
+    #b2-bg { background: #050505; }
+    #b2-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    #b2-sec { position: absolute; left: 504px; top: 250px; width: 760px; height: 384px; transform: scale(1.2); transform-origin: 0 0; }
+    
+  .sb { position: absolute; left: 0; top: 0; width: 760px; height: 1080px; background: #050505; }
+  .sb-rule { position: absolute; left: 760px; top: 0; width: 2px; height: 1080px; background: #ffffff12; }
+  .sb-head { position: absolute; left: 16px; width: 728px; height: 72px; display: flex; align-items: center; gap: 12px; padding: 0 24px 0 16px; font: 600 28px/36px Inter, sans-serif; color: #ededed; }
+  .sb-head .chev { width: 32px; height: 32px; flex: none; background:
+      linear-gradient(45deg, transparent 46%, #6b6b6b 46% 54%, transparent 54%) 4px 2px / 14px 14px no-repeat,
+      linear-gradient(-45deg, transparent 46%, #6b6b6b 46% 54%, transparent 54%) 14px 2px / 14px 14px no-repeat; transform: translateY(6px); }
+  .sb-head b { font-weight: 600; flex: 1; }
+  .sb-head .count { font: 400 26px/36px 'JetBrains Mono', monospace; color: #6b6b6b; }
+  .row { position: absolute; left: 16px; width: 728px; height: 104px; display: flex; align-items: flex-start; gap: 16px; padding: 16px 24px 16px 56px; border-radius: 10px; }
+  .row.sel { background: #ffffff12; }
+  .row .g { position: relative; flex: none; width: 28px; height: 28px; margin-top: 4px; }
+  .row .g .glyph { position: absolute; left: 0; top: 0; display: block; }
+  .row .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .row .t { font: 400 26px/36px Inter, sans-serif; color: #ededed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .a-wrap, .row .m-wrap { position: relative; display: block; height: 32px; }
+  .row .a { position: absolute; left: 0; top: 0; right: 0; font: 400 24px/32px Inter, sans-serif; color: #a1a1a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .a.att { color: var(--color-accent); }
+  .row .meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font: 400 24px/32px 'JetBrains Mono', monospace; color: #6b6b6b; white-space: nowrap; }
+  .row .m-wrap { width: 170px; }
+  .row .m-wrap .m { position: absolute; right: 0; top: 0; }
+  .row .m.strong { font-weight: 500; }
+  .alt { opacity: 0; }
+
+    #b2-sec .row .a { font-size: 25px; }
+    
+  .hud { position: absolute; display: flex; align-items: center; gap: 24px; }
+  .hud .keys { display: flex; gap: 10px; }
+  .hud .key { position: relative; min-width: 88px; height: 88px; padding: 0 22px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #161616; box-shadow: inset 0 0 0 2px #ffffff2e, 0 6px 0 #000; font: 500 44px/1 Inter, sans-serif; color: #ededed; }
+  .hud .key .fill { position: absolute; inset: 0; border-radius: 14px; background: #ededed; opacity: 0; }
+  .hud .key span { position: relative; }
+  .hud .verb { font: 500 36px/1 Inter, sans-serif; color: #ededed; }
+
+    .hud-box { display: flex; align-items: center; gap: 24px; padding: 18px 28px; border-radius: 20px; background: #050505; box-shadow: inset 0 0 0 2px #ffffff1c; }
+  </style>
+  <div id="root" data-composition-id="row" data-width="1920" data-height="1080">
+    <div id="b2-bg" class="clip" data-start="0" data-duration="4"></div>
+    <div id="b2-stage" class="clip" data-start="0" data-duration="4" data-layout-allow-overflow>
+      <div id="b2-cam">
+        <div id="b2-sec">
+          <div class="sb-head" style="top:0"><span class="chev"></span><b>acme-web</b><span class="count">3</span></div>
+          <div class="row sel" id="b2-row-cookie" style="top:72px">
+            <span class="g"><svg class="glyph" id="b2-g-need" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="#ff5fb01f"/><circle cx="7" cy="7" r="4" fill="var(--color-accent)"/></svg><svg class="glyph alt" id="b2-g-run" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><svg class="glyph alt" id="b2-g-done" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg></span>
+            <span class="main"><span class="t">Session cookie migration</span><span class="a-wrap"><span id="b2-a-need" class="a att">Confirm: pnpm prisma migrate dev</span><span id="b2-a-run" class="a alt">Running pnpm test auth</span><span id="b2-a-done" class="a alt">Done, ready for review</span></span></span>
+            <span class="meta"><span class="m-wrap"><span id="b2-m-need" class="m strong">waiting 1m</span><span id="b2-m-run" class="m alt">2m</span><span id="b2-m-done" class="m alt">just now</span></span><span class="m">+42 −18</span></span>
+          </div>
+          <div class="row" id="b2-row-checkout" style="top:176px">
+            <span class="g"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></span>
+            <span class="main"><span class="t">Checkout performance</span><span class="a-wrap"><span class="a">Running pnpm test checkout</span></span></span>
+            <span class="meta"><span class="m">12m</span><span class="m">+128 −35</span></span>
+          </div>
+          <div class="row" id="b2-row-mobile" style="top:280px">
+            <span class="g"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg></span>
+            <span class="main"><span class="t">Fix mobile nav jitter</span><span class="a-wrap"><span class="a">Done, ready for review</span></span></span>
+            <span class="meta"><span class="m">2m</span><span class="m">+23 −9</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="b2-hud" class="hud clip" data-start="1" data-duration="1.3" style="left:0;right:0;top:830px;justify-content:center"><div class="hud-box" id="b2-hud-box"><div class="keys"><div class="key" id="b2-hud-k0"><div class="fill"></div><span>1</span></div></div><div class="verb">Answer it</div></div></div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+
+      const press = (sel, t) => {
+        tl.fromTo(sel + ' .fill', { opacity: 0.9 }, { opacity: 0, duration: 0.2, ease: 'power2.out', immediateRender: false }, t);
+        tl.fromTo(sel, { y: 4 }, { y: 0, duration: 0.2, ease: 'power2.out', immediateRender: false }, t);
+      };
+      const hud = (box, t0, t1) => {
+        tl.fromTo(box, { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, ease: 'expo.out' }, t0);
+        tl.to(box, { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, t1);
+      };
+      tl.fromTo('#b2-stage .spin', { rotation: 0 }, { rotation: 360 * 4, duration: 4, ease: 'none', svgOrigin: '7 7' }, 0);
+      // Arrive: the tube's dot is this glyph; pull back to the row.
+      tl.fromTo('#b2-cam', { x: -7895, y: -4960.83, scale: 14.5833, filter: 'blur(14px)' }, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, ease: 'expo.out' }, 0);
+      tl.fromTo('#b2-g-need circle:first-child', { opacity: 0 }, { opacity: 1, duration: 0.4 }, 0.2);
+      hud('#b2-hud-box', 1.0, 2.15);
+      press('#b2-hud-k0', 1.6);
+      tl.to(['#b2-g-need', '#b2-a-need', '#b2-m-need'], { opacity: 0, duration: 0.01 }, 1.63);
+      tl.to(['#b2-g-run', '#b2-a-run', '#b2-m-run'], { opacity: 1, duration: 0.01 }, 1.63);
+      tl.to(['#b2-g-run', '#b2-a-run', '#b2-m-run'], { opacity: 0, duration: 0.01 }, 2.8);
+      tl.to(['#b2-g-done', '#b2-a-done', '#b2-m-done'], { opacity: 1, duration: 0.01 }, 2.8);
+      // Zoom into the green glyph.
+      tl.to('#b2-cam', { x: -7895, y: -4960.83, scale: 14.5833, duration: 0.5, ease: 'power3.in' }, 3.5);
+      tl.to('#b2-cam', { filter: 'blur(14px)', duration: 0.25, ease: 'power2.in' }, 3.75);
+      window.__timelines['row'] = tl;
+    })();
+  </script>
+</template>

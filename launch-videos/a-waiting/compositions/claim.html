@@ -1,0 +1,24 @@
+<template>
+  <style>
+    @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #claim-grain { position: absolute; inset: -40px; opacity: 0.05;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); }
+    #claim-line { position: absolute; left: 0; right: 0; top: 476px; text-align: center; font: 900 112px/1 'Wavi Archivo', sans-serif; font-stretch: 100%; letter-spacing: -0.02em; color: var(--color-ink); white-space: nowrap; }
+    #claim-line .w { display: inline-block; }
+  </style>
+  <div data-hf-id="hf-dc55" id="root" data-composition-id="claim" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-jju3" id="claim-bg" class="clip" data-start="0" data-duration="2.5"><div data-hf-id="hf-7gwd" id="claim-grain"></div></div>
+    <h1 data-hf-id="hf-uezy" id="claim-line" class="clip" data-start="0" data-duration="2.5"><span data-hf-id="hf-iogc" class="w">One</span> <span data-hf-id="hf-vbqb" class="w">person,</span> <span data-hf-id="hf-a0dr" class="w">many</span> <span data-hf-id="hf-mu8d" class="w">threads.</span></h1>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      // Grain steps like film, never drifts smoothly.
+      tl.fromTo('#claim-grain', { x: 0, y: 0 }, { x: 37, y: -23, duration: 2.5, ease: 'steps(30)' }, 0);
+      tl.fromTo('#claim-line .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.1, ease: 'power2.out' }, 0.15);
+      tl.to('#claim-line .w', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.03, ease: 'power3.in' }, 2.2);
+      window.__timelines['claim'] = tl;
+    })();
+  </script>
+</template>
