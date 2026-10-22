@@ -39,9 +39,9 @@ describe('normalizeHook · lifecycle events (real payloads)', () => {
 
   it('Stop without a reply, and only the tail of a long one', () => {
     expect(claude('Stop', { hook_event_name: 'Stop' })).toEqual({ events: [{ type: 'stop' }], clears: 'all' })
-    const long = `${'a'.repeat(5_000)}END`
+    const long = `${'a'.repeat(60_000)}END`
     const [event] = claude('Stop', { hook_event_name: 'Stop', last_assistant_message: long }).events
-    expect(event).toEqual({ type: 'stop', message: long.slice(-2_000) })
+    expect(event).toEqual({ type: 'stop', message: long.slice(-48_000) })
   })
 
   it('SessionEnd keeps the reason', () => {

@@ -9,6 +9,7 @@ import { forgetSetup, handleScriptMarker, takeSetup } from '../scripts/setup-run
 import { loadLiveSessions, takeReattach } from './live-sessions'
 import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
+import { takeDispatchLaunch } from '../dispatch/store'
 
 const ACK_BATCH_UNITS = 32 * 1024
 const ACK_FLUSH_MS = 50
@@ -176,6 +177,8 @@ export class SessionTerminal {
     const { cols, rows } = this.surface.fit()
     // A new worktree's first launch runs the repository's setup script first; the Run button's terminal runs `run`.
     const script = takeSetup(id) ? 'setup' : takeRunStart(id) ? 'run' : undefined
+    // A dispatched session's first launch carries its task on the command line (PRD F21); a resume never does.
+    const dispatched = resumeAgentSessionId ? undefined : takeDispatchLaunch(id)
     try {
       await pty.spawn({
         sessionId: id,
@@ -184,7 +187,8 @@ export class SessionTerminal {
         cols,
         rows,
         ...(resumeAgentSessionId ? { resumeAgentSessionId } : {}),
-        ...(script ? { script } : {})
+        ...(script ? { script } : {}),
+        ...(dispatched ? { initialPrompt: dispatched.initialPrompt, ...(dispatched.model ? { model: dispatched.model } : {}) } : {})
       })
     } catch (error) {
       if (script === 'setup') forgetSetup(id)

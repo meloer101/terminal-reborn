@@ -70,6 +70,15 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(id)) throw new Error('invalid resume id')
     result.resumeAgentSessionId = id
   }
+  if (o.initialPrompt !== undefined) {
+    if (result.agent === undefined || result.agent === 'shell') throw new Error('a first message needs an agent')
+    result.initialPrompt = parseString(o.initialPrompt, 'first message')
+  }
+  if (o.model !== undefined) {
+    const model = parseString(o.model, 'model')
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/.test(model)) throw new Error('invalid model')
+    result.model = model
+  }
   if (o.script !== undefined) {
     if (o.script !== 'setup' && o.script !== 'run') throw new Error('invalid script')
     if (result.command !== undefined) throw new Error('a script cannot be combined with a command')

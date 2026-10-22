@@ -3,6 +3,7 @@ import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
 import { PR_IPC } from '@shared/pull-requests'
 import { RADAR_IPC } from '@shared/conflict-radar'
+import { DISPATCH_IPC } from '@shared/dispatch'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -206,6 +207,11 @@ const api: TrApi = {
     watch: (targets) => ipcRenderer.send(RADAR_IPC.watch, targets),
     reports: () => ipcRenderer.invoke(RADAR_IPC.reports),
     onReport: (listener) => listen(RADAR_IPC.report, listener)
+  },
+  dispatch: {
+    onRequest: (listener) => listen(DISPATCH_IPC.request, listener),
+    reply: (callId, result) => ipcRenderer.send(DISPATCH_IPC.reply, callId, result),
+    deliver: (request) => ipcRenderer.invoke(DISPATCH_IPC.deliver, request)
   }
 }
 

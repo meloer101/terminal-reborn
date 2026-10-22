@@ -151,3 +151,20 @@ describe('keyboard targets', () => {
     expect(adjacentSessionId([], 'x', 1)).toBeNull()
   })
 })
+
+describe('dispatched sessions (PRD F21)', () => {
+  it('follow the session that started them, one step in; others keep store order', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [
+        session('child-b', 'wa2', 'running', 0, { dispatchedBy: 'parent' }),
+        session('parent', 'wam', 'idle'),
+        session('other', 'wa1', 'idle'),
+        session('child-a', 'wa1', 'idle', 0, { dispatchedBy: 'parent' }),
+        session('orphan', 'wa1', 'idle', 0, { dispatchedBy: 'gone' })
+      ]
+    })
+    expect(groups[0]?.rows.map((r) => `${r.session.id}:${r.depth}`)).toEqual(['parent:0', 'child-b:1', 'child-a:1', 'other:0', 'orphan:0'])
+  })
+})

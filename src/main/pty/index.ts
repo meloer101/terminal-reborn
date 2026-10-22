@@ -21,6 +21,7 @@ import {
   setHookTarget,
   type AgentLaunchHooks
 } from '../hooks'
+import { dispatchLaunchFor } from '../dispatch'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { shouldKillLateSpawn } from './late-spawn'
@@ -309,25 +310,33 @@ function realCwdOf(cwd: string): string | null {
 }
 
 /**
- * A spawn that runs one of the repository's approved scripts (PtySpawnOptions.script): main builds the login shell's
- * arguments itself — `run` alone, or `setup` followed by the agent / shell — so the pty host needs nothing new.
+ * Main builds the login shell's arguments itself for every agent launch and for the repository's approved scripts
+ * (PtySpawnOptions.script: `run` alone, or `setup` before the agent / shell), so a pty daemon started by an older
+ * version needs nothing new: the agent's hooks, Wavi's dispatch tools, its model and first message (PRD F21).
+ * A plain shell without a script is left to the host.
  */
-async function scriptLaunch(
+async function hostLaunch(
   options: PtySpawnOptions,
   realCwd: string | null,
   env: Record<string, string>,
   hooks: AgentLaunchHooks | null
 ): Promise<{ command: string; args: string[] } | null> {
-  if (!options.script) return null
+  const agent = options.agent !== undefined && options.agent !== 'shell' ? options.agent : undefined
+  if (options.command !== undefined || (!options.script && !agent)) return null
   if (!realCwd) throw new Error(`the folder ${options.cwd} does not exist`)
-  const script = await approvedScript(realCwd, options.script)
+  const script = options.script ? await approvedScript(realCwd, options.script) : null
   const shell = resolveShell(buildPtyEnv(appEnv(), env)).command
-  if (options.script === 'run') return { command: shell, args: runShellArgs(script) }
+  if (options.script === 'run' && script) return { command: shell, args: runShellArgs(script) }
+  const dispatch = agent ? dispatchLaunchFor(agent) : {}
+  const codexConfig = [...(hooks?.codexConfig ?? []), ...(dispatch.codexOverrides ?? [])]
   const args = agentShellArgs(options.agent ?? 'shell', realCwd, shell, {
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
-    ...(hooks?.codexConfig ? { codexConfig: hooks.codexConfig } : {}),
+    ...(codexConfig.length > 0 ? { codexConfig } : {}),
+    ...(dispatch.mcpConfigPath ? { mcpConfigPath: dispatch.mcpConfigPath } : {}),
     ...(options.resumeAgentSessionId ? { resumeAgentSessionId: options.resumeAgentSessionId } : {}),
-    before: setupCommand(script)
+    ...(options.model ? { model: options.model } : {}),
+    ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
+    ...(script ? { before: setupCommand(script) } : {})
   })
   return { command: shell, args }
 }
@@ -361,7 +370,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
   const env = { ...options.env, ...hooks?.env, ...shellEnv, ...(port !== null ? { TR_PORT: String(port) } : {}) }
   let launch: { command: string; args: string[] } | null
   try {
-    launch = await scriptLaunch(options, realCwd, env, hooks)
+    launch = await hostLaunch(options, realCwd, env, hooks)
   } catch (error) {
     sessions.delete(id)
     if (attached) endAgentSession(id)
@@ -390,7 +399,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       reject(new Error('timed out starting the terminal process'))
     }, SPAWN_TIMEOUT_MS)
     pendingSpawns.set(id, { resolve, reject, timer })
-    const { sessionId: _sessionId, env: _env, script: _script, ...rest } = options
+    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, ...rest } = options
     send({
       type: 'spawn',
       id,
@@ -398,7 +407,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       ...(launch ?? {}),
       baseEnv: appEnv(),
       env,
-      // A script launch has the hook flags in its arguments already.
+      // A launch main built has the hook flags in its arguments already.
       ...(hooks && !launch
         ? {
             ...(hooks.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),

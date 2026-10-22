@@ -1,8 +1,8 @@
-// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
+// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63), 派活 (PRD F21) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
 // own Claude / Codex quota. No Figma frame yet; it follows the Worktree pane (16A): sections of label · control rows.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
-import type { AlertSettings, PrSettings, ReviewSettings } from '@shared/settings'
+import type { AlertSettings, DispatchSettings, PrSettings, ReviewSettings } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { Row, Section, Toggle } from './controls'
 import styles from './AutomationPane.module.css'
@@ -15,7 +15,9 @@ export function AutomationPane({
   alerts,
   updateAlerts,
   pr,
-  updatePr
+  updatePr,
+  dispatch,
+  updateDispatch
 }: {
   review: ReviewSettings
   update: (patch: Partial<ReviewSettings>) => void
@@ -23,6 +25,8 @@ export function AutomationPane({
   updateAlerts: (patch: Partial<AlertSettings>) => void
   pr: PrSettings
   updatePr: (patch: Partial<PrSettings>) => void
+  dispatch: DispatchSettings
+  updateDispatch: (patch: Partial<DispatchSettings>) => void
 }) {
   const builtin = review.mode === 'builtin'
   return (
@@ -118,6 +122,23 @@ export function AutomationPane({
             <BotsField value={pr.bots} onCommit={(bots) => updatePr({ bots })} />
           </Row>
           <p className={styles.hint}>自动修复只把你自己和这里列出的机器人（如 coderabbitai[bot]）的评论发给 agent；其他人的评论只显示。有没解决的评论（来自上面这些人）或审阅里有 P0 / P1 时，通过后合并会自己关掉。</p>
+        </Section>
+        <Section title="派活">
+          <p className={styles.lead}>会话里的 agent 可以用 Wavi 的工具开新的 Claude Code / Codex 会话、把任务分出去；它们各在新的 worktree 里干活，做完把结果报告给派活的会话。合并、推送和归档仍由你来做。</p>
+          <Row label="让 agent 能开会话">
+            <Toggle label="让 agent 能开会话" checked={dispatch.tools} onChange={(tools) => updateDispatch({ tools })} />
+          </Row>
+          <Row label="agent 开会话不再确认">
+            <Toggle
+              label="agent 开会话不再确认"
+              checked={dispatch.autoApprove}
+              disabled={!dispatch.tools}
+              onChange={(autoApprove) => updateDispatch({ autoApprove })}
+            />
+          </Row>
+          <p className={styles.hint}>
+            关掉第一项后，之后启动的 agent 不再有这些工具。默认每次开会话都先弹出确认，写明开几个、什么 agent、发什么任务；打开第二项后直接开始，仍然最多同时 4 个，被派出的会话不能再往下派。每个会话都用你自己的额度。
+          </p>
         </Section>
         <Section title="额度提醒">
           <Row label="额度提醒">

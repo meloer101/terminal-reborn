@@ -131,6 +131,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
               {active.worktree.branch}
             </span>
           )}
+          {active.session.dispatchedBy && <DispatchedBy parentId={active.session.dispatchedBy} />}
           <span className={styles.spacer} />
           {/* Figma 17A: todo · context · usage, after the branch and before the pane icons (PRD F11 / F12). */}
           {/* A plain terminal shows the agent started in it by hand, while it runs. */}
@@ -262,5 +263,22 @@ function TitleEditor({ initial, onDone }: { initial: string; onDone(value: strin
       onKeyDown={onKeyDown}
       onBlur={() => finish(value)}
     />
+  )
+}
+
+/** 由「…」派出 (PRD F21): the session whose agent started this one; a click goes there. */
+function DispatchedBy({ parentId }: { parentId: string }) {
+  const title = useWorkspace((s) => s.sessions.find((x) => x.id === parentId)?.title)
+  if (title === undefined) return null
+  return (
+    <button
+      type="button"
+      className={styles.dispatchedBy}
+      title={`这个会话是「${title}」里的 agent 开的，它做完的结果会报告给那边 · 点击前往`}
+      onClick={() => useWorkspace.getState().setActiveSession(parentId)}
+      data-testid="dispatched-by"
+    >
+      由「<span className={styles.dispatchedByName}>{title}</span>」派出
+    </button>
   )
 }

@@ -212,8 +212,11 @@ function claudeBashCall(event: string, payload: Rec, input: Rec): NormalizedHook
 /** Claude's own wake-up of the main thread after a background task (UserPromptSubmit source `system`) continues the turn. */
 const isUserTurn = (payload: Rec): boolean => payload.source !== 'system'
 
-/** Only the end of a long reply is ever shown (its last line), so the tail is all that crosses IPC. */
-const REPLY_TAIL_CHARS = 2_000
+/**
+ * The sidebar shows only a long reply's last line, but a dispatched session's whole last message is its report to the
+ * agent that started it (PRD F21: read_result, the report excerpt), so a generous tail crosses IPC.
+ */
+const REPLY_TAIL_CHARS = 48_000
 
 function stopEvent(payload: Rec): AgentEvent {
   const message = str(payload.last_assistant_message)

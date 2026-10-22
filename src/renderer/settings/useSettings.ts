@@ -6,6 +6,7 @@ import {
   type AppSettings,
   type AppearanceSettings,
   type ArchiveSettings,
+  type DispatchSettings,
   type PortSettings,
   type PrSettings,
   type ReviewSettings
@@ -21,6 +22,7 @@ export interface SettingsHandle {
   updateArchive(patch: Partial<ArchiveSettings>): void
   updateAlerts(patch: Partial<AlertSettings>): void
   updatePr(patch: Partial<PrSettings>): void
+  updateDispatch(patch: Partial<DispatchSettings>): void
 }
 
 /**
@@ -79,5 +81,10 @@ export function useSettings(): SettingsHandle {
     void window.tr.settings.update({ pr: patch })
   }, [])
 
-  return { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr }
+  const updateDispatch = useCallback((patch: Partial<DispatchSettings>) => {
+    setSettings((current) => applySettingsPatch(current, { dispatch: patch }))
+    void window.tr.settings.update({ dispatch: patch })
+  }, [])
+
+  return { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch }
 }

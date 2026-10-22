@@ -23,6 +23,9 @@ import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
 import { CreatePrSheet } from '../pull-requests/CreatePrSheet'
 import { startPrAutomation } from '../pull-requests/auto-fix'
+import { startDispatchBridge } from '../dispatch/bridge'
+import { DispatchSheet } from '../dispatch/DispatchSheet'
+import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
 import { ArchiveSheet } from '../archive/ArchiveSheet'
 import { RightPanel } from '../panels/RightPanel'
 import { Overview } from '../overview/Overview'
@@ -73,6 +76,7 @@ export function AppShell() {
   useEffect(() => startLimitResumeBridge(), [])
   useEffect(() => startPullRequestBridge(), [])
   useEffect(() => startPrAutomation(), [])
+  useEffect(() => startDispatchBridge(), [])
   useEffect(() => startConflictRadarBridge(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
@@ -106,6 +110,7 @@ export function AppShell() {
             <EngineRestartedCard />
             <SessionErrorBar />
             <SetupStrip />
+            <HeldReportsStrip />
           </div>
         </main>
         {rightPanel && (
@@ -128,6 +133,7 @@ export function AppShell() {
       <MergeSheet />
       <CreatePrSheet />
       <ArchiveSheet />
+      <DispatchSheet />
       <MenuHost />
       <SessionDragGhost />
     </div>

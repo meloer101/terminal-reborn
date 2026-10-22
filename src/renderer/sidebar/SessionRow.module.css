@@ -21,6 +21,11 @@
   background: var(--bg-hover);
 }
 
+/* Started by the session above it (PRD F21): one step in, so the dispatcher reads as its parent. */
+.row[data-depth='1'] {
+  padding-left: calc(var(--indent-tree) + var(--space-16));
+}
+
 .row[data-selected='true'] {
   background: var(--bg-selected);
 }

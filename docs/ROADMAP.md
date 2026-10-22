@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-21
+> 最后更新：2026-10-22
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -9,7 +9,7 @@
 ## 当前位置
 
 - 已发布 **v0.5.0**（2026-10-21：多 agent 第二批——这一轮跑过哪些检查、冲突雷达、一题多解 + 总览批量操作、多窗口；文件预览换行和 Markdown；状态准确性、隐藏终端不再重画、守护进程 SIGTERM 修复；之前是 v0.4.0，2026-10-20）。
-- 下一步（2026-10-21 改）：**外部验证延后到 M5 / M6 之后**（PRD §1.5 v1.55），作者判断产品还不够成熟。多 agent 第二批已全部完成（2026-10-21，v0.5.0）；现在继续做第三批和 M5；分发里剩下的 brew、仓库改名、Discussions 和用户群，以及找人试用，都等那时再开始。
+- 下一步（2026-10-21 改）：**外部验证延后到 M5 / M6 之后**（PRD §1.5 v1.55），作者判断产品还不够成熟。多 agent 第二批已全部完成（2026-10-21，v0.5.0）；现在继续做第三批（F21 派活与回报已完成，PRD v1.67）和 M5；分发里剩下的 brew、仓库改名、Discussions 和用户群，以及找人试用，都等那时再开始。
 - 2026-10-21：定下 **PR 闭环做到 L3**（PRD F16 v1.63），排在第三批之前，见下面“进行中：多 agent”的“PR 闭环”。
 - 2026-10-20：定下多 agent 的方向——一个人消化多个 agent 的产出（PRD §1.2 v1.48），排期见下面“进行中：多 agent”；第一批三项已全部合进 main（2026-10-21：额度恢复和 F16 在 v0.4.0 里，状态准确性、规模基线和守护进程 SIGTERM 修复在 main 上，等下一个版本）。
 - 2026-10-20：P0 里能交给 agent 的几项已合进 main（中文输入和链接、WebGL 中文乱码、手动确认项自动化、README 和 issue 表单、官网）。剩下的都要作者动手：Apple Developer 账号、推送 main 并开启 Pages、仓库改名、Discussions 和用户群，以及两份人工清单（清单在作者的「Wavi 待办清单与优先级」文档里）。
@@ -89,7 +89,15 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 真实 GitHub 仓库上走一遍：创建 → 机器人评论 → 发给 agent → 修复推送 → 标记已解决 → auto-merge / 合并队列（同时补 M5 里“还没在真实仓库上走一遍”）（2026-10-21，公开测试仓库 meloer101/wavi-pr-loop-test 的 PR #1 / #2，结论见 PRD §6.11）：除合并队列外全部走通（免费账号的仓库开不了合并队列，没测）；评论用作者自己的账号代替机器人发；自动修复没在真实仓库上跑（要真的 agent）。走的时候修了三处：CI 日志里字面的 `^[[…m` 和 BOM、过时的 thread 在“PR 评论”里也能标记已解决、GitHub 自己合并后拉取基线。第三次（PR #3）用模拟的 agent（假 Claude 给出审阅结果；收到自动修复的消息后由测试脚本提交并推送）走了“创建 PR 时自动审阅 → 证据块进 PR 正文 → CI 失败自动修复（自己按回车）→ 通过后合并 → 基线跟上”，并修了三处：upstream 指向 origin/main 的分支会被直接推到 main（v0.4 起就有）、合并后变更视图底部仍显示“创建 PR / 合并到 main”、自动修复在 PR 列表和详情两次查询结果不一致时发出了没有日志的消息（现在重新查询，并等日志出来，最多 3 分钟）
 
 第三批（先实测或先访谈）：
-- [ ] agent teams 的队友显示成侧栏里的会话：学 cmux 用 shim 接住 tmux 分屏请求，先实测 Claude Code 当前版本能不能接。cc#24122（96 👍）、cc#24189（74）、cc#26572
+- [x] F21 派活与回报（2026-10-22，PRD F21 / §6.14 v1.66–v1.67，跨厂商 L4：任何一家 agent 都能派给任何一家，结果自动回到派活方；合并、推送、归档、批准权限仍只由人做）。外部来源：Orca orchestration（stablyai/orca#12988 空闲时往派活方终端里打提示，#21745 / #22651 因此替用户答了问题、混进草稿）、T3 Code `delegate_task`（pingdotgg/t3code#4499 做完叫醒父会话）、Nimbalyst meta-agent、Superset / cmux / Conductor / Vibe Kanban 只到派活方自己轮询；stablyai/orca#13079、#4376。实现前读了上面几家的源码（工具描述、子会话简报、合批和 ack、防环、深度限制）
+  - [x] 实测（Claude 用 Haiku 两轮、Codex 用假模型）：Claude 收件箱的行格式、空闲时开新一轮、MCP server 拿得到收件箱和 `TR_*`；`codex queue` 送进 Wavi PTY 里的 Codex TUI（空闲、忙时都行），两个 Codex 的 hook 环境不串；Codex 的 MCP server 要 `env_vars` 才拿到 `TR_*`；`claude/codex -- "<文字>"` 起交互界面并提交首条消息。结论在 PRD §6.14
+  - [x] 每次启动注入 stdio MCP server（`src/main/dispatch/`，Claude `--mcp-config`、Codex `-c mcp_servers.wavi.*`），经 hook socket 转给窗口（`broker.ts`，7 秒内答不了就让 server 轮询），守护进程不记这类请求；5 个工具、确认面板（`DispatchSheet`）、上限 4 个、判重、子会话没有工具；设置 · 自动化 · 派活两项开关；agent 启动参数全部改由 main 拼（`hostLaunch`），首条消息和模型放在命令行上
+  - [x] 回报：一轮结束 / 出错 / 退出 → 报告（分支、diff 统计、检查、冲突、最后一条消息摘录），3 秒合批、每个子会话只留最新一份、`read_result` 读过的不再送、每小时最多 20 次；Claude 走收件箱、Codex 走 `codex queue`，送不进去时留在派活会话下方的「送进去」条（`HeldReportsStrip`）
+  - [x] 界面：侧栏子会话紧跟派活会话、缩进一级；会话头“由「…」派出”；总览“派出的会话”一节和「比较」；workspace.json 存 `dispatchedBy` / `dispatchTask`
+  - [x] 测试：e2e `dispatch.spec.ts`（6 个，真实链路，两种主题截图在 `test-results/dispatch/`）；`src/shared/dispatch.test.ts`、`src/main/dispatch/*.test.ts`、侧栏和存盘的单元测试
+  - [ ] 真实 Claude / Codex 互相派一次活（会花额度，跑之前要作者同意）：Claude 派给 Codex、Codex 派给 Claude，看 agent 会不会照工具描述在派完后结束这一轮、会不会多派
+  - [ ] Figma 补 F21 的画面（确认面板、侧栏缩进、会话头、总览一节、待送报告条）
+- [ ] agent teams 的队友和子 agent 只显示、不接管（PRD F21 v1.66 改）：在派活会话下列出 Claude 自己开的队友 / 子 agent 的名字和状态（来自 hook 的 `agent_id`、`TeammateIdle`），不变成 Wavi 会话。~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
 - [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
 - [ ] 读 `claude agents --json`，把 Claude 自己在后台开的会话（会自己建 worktree、开 draft PR）也显示到总览
 
@@ -316,3 +324,4 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 | 21 主区分屏（F20；Figma 的 20 节是 F19） | 多 agent 第二批 | 已实现，待验收（2026-10-20） |
 | 冲突雷达：总览冲突列、浮层标题栏、Worktree 行和详情、“让 agent rebase”（还没有 Figma 节） | 多 agent 第二批 | 未设计，照现有样式实现（2026-10-21），待补 Figma |
 | 一题多解 + 广播：新建会话面板「多个」、总览的一题多解组行、浮层对比条、合并后「归档其余 N 份」、批量条（还没有 Figma 节） | 多 agent 第二批 | 未设计，照 15 / 11 v2 现有样式实现（2026-10-21），待补 Figma |
+| 派活与回报（F21）：开会话确认面板、侧栏子会话、会话头“由 … 派出”、总览“派出的会话”、待送报告条（还没有 Figma 节） | 第三批 | 未设计，照 15 / 11 v2 现有样式实现（2026-10-22），待补 Figma |

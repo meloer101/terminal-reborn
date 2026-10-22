@@ -72,6 +72,38 @@
   white-space: nowrap;
 }
 
+/* 由「…」派出 (PRD F21): quiet like the branch; the name ellipsizes before anything else in the header. */
+.dispatchedBy {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.dispatchedBy:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.dispatchedBy:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.dispatchedByName {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .spacer {
   flex: 1;
 }

@@ -39,15 +39,31 @@ export interface AgentLaunchOptions {
    * script (script-launch.ts `setupCommand`). The agent starts when it returns, whatever its exit code.
    */
   before?: string
+  /** Claude's `--mcp-config <file>` with Wavi's dispatch server (PRD F21); added to the user's own servers, never strict. */
+  mcpConfigPath?: string
+  /** A model for this launch (`claude --model` / `codex -m`), e.g. what a dispatching agent asked for (PRD F21). */
+  model?: string
+  /**
+   * The first message, passed after `--` so the CLI submits it itself (PRD F21: nothing is typed into a starting TUI).
+   * Ignored when resuming.
+   */
+  initialPrompt?: string
 }
+
+const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 
 export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, options: AgentLaunchOptions = {}): string[] {
   const resumeId = isSafeAgentSessionId(options.resumeAgentSessionId) ? options.resumeAgentSessionId : undefined
+  const model = options.model !== undefined && MODEL.test(options.model) ? options.model : undefined
+  const prompt = !resumeId && options.initialPrompt?.trim() ? ['--', options.initialPrompt] : []
   if (kind === 'claude') {
     return [
       'claude',
       ...(resumeId ? ['--resume', resumeId] : []),
-      ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : [])
+      ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : []),
+      ...(options.mcpConfigPath ? ['--mcp-config', options.mcpConfigPath] : []),
+      ...(model ? ['--model', model] : []),
+      ...prompt
     ]
   }
   return [
@@ -57,7 +73,9 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
     'check_for_update_on_startup=false',
     '-c',
     `projects={${tomlString(realCwd)}={trust_level="trusted"}}`,
-    ...(options.codexConfig ?? []).flatMap((override) => ['-c', override])
+    ...(options.codexConfig ?? []).flatMap((override) => ['-c', override]),
+    ...(model ? ['-m', model] : []),
+    ...prompt
   ]
 }
 

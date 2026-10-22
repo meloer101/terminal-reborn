@@ -53,6 +53,10 @@
   transition: background var(--duration-fast) var(--ease-out);
 }
 
+.toggle:disabled {
+  opacity: 0.4;
+}
+
 .toggle[aria-checked='true'] {
   border-color: transparent;
   background: var(--fill-primary);

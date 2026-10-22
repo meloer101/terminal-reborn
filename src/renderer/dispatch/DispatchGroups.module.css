@@ -1,0 +1,21 @@
+/* The section reuses the 一题多解 rows (attempts/AttemptGroups.module.css); names here are buttons that go to the session. */
+.link {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: default;
+}
+
+.link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}

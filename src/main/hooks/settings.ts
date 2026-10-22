@@ -30,6 +30,14 @@ export interface ClaudeHookSettings {
    * (it is one object, not a merged array), which is why the relay chains it.
    */
   statusLine: { type: 'command'; command: string }
+  /**
+   * Reports from dispatched sessions reach a dispatcher through its cross-session inbox (PRD F21, §6.14). Wavi is the
+   * agent's parent, not a session it started, so without this a dispatcher in bypass mode would hold every report
+   * for approval. Such messages still cannot approve prompts or run slash commands.
+   */
+  crossSessionInbound: 'accept'
+  /** Wavi's own dispatch tools need no extra prompt: starting sessions waits for the user in Wavi already. */
+  permissions: { allow: string[] }
 }
 
 /** The statusLine relay sits next to the hook relay (in the checkout and in Contents/Resources/hooks). */
@@ -64,5 +72,10 @@ export function buildClaudeHookSettings(scriptPath: string): ClaudeHookSettings 
       }
     ]
   }
-  return { hooks, statusLine: { type: 'command', command: `/bin/sh ${shellQuote(statusLineScriptPath(scriptPath))}` } }
+  return {
+    hooks,
+    statusLine: { type: 'command', command: `/bin/sh ${shellQuote(statusLineScriptPath(scriptPath))}` },
+    crossSessionInbound: 'accept',
+    permissions: { allow: ['mcp__wavi'] }
+  }
 }

@@ -43,6 +43,7 @@ import { layoutIds } from './pane-layout'
 import { SessionOverlay } from './SessionOverlay'
 import { BatchBar } from './BatchBar'
 import { AttemptGroups } from '../attempts/AttemptGroups'
+import { DispatchGroups } from '../dispatch/DispatchGroups'
 import { enterSession, useOverviewStore, type OverviewView } from './store'
 import styles from './Overview.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -236,6 +237,7 @@ export function Overview() {
           aria-activedescendant={selectedId ? `overview-row-${selectedId}` : undefined}
         >
           {sessions.length > 0 && !filter && <AttemptGroups />}
+          {sessions.length > 0 && !filter && <DispatchGroups />}
           {sessions.length === 0 ? (
             <p className={styles.empty}>还没有会话。打开一个项目，在侧栏的项目上点 ＋ 新建会话。</p>
           ) : view === 'list' ? (

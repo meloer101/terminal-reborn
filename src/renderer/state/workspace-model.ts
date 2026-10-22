@@ -130,7 +130,14 @@ function startSessionIn(
 export function closeSession(data: WorkspaceData, sessionId: SessionId): WorkspaceData {
   const at = data.sessions.findIndex((s) => s.id === sessionId)
   if (at === -1) return data
-  const sessions = data.sessions.filter((s) => s.id !== sessionId)
+  // Sessions it dispatched become ordinary ones (PRD F21): nobody is left to report to.
+  const sessions = data.sessions
+    .filter((s) => s.id !== sessionId)
+    .map((s) => {
+      if (s.dispatchedBy !== sessionId) return s
+      const { dispatchedBy: _by, dispatchTask: _task, ...rest } = s
+      return rest
+    })
   const activeSessionId =
     data.activeSessionId === sessionId ? (sessions[at]?.id ?? sessions[at - 1]?.id ?? null) : data.activeSessionId
   return { ...data, sessions, activeSessionId }
@@ -276,7 +283,7 @@ export function serializeWorkspace(
       ...(baseBranch ? { baseBranch } : {}),
       ...(archived ? { archived } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask }) => ({
       id,
       worktreeId,
       kind,
@@ -287,7 +294,8 @@ export function serializeWorkspace(
       lastActivityAt,
       ...(lastReply ? { lastReply } : {}),
       ...(finishedAt !== undefined ? { finishedAt } : {}),
-      ...(script ? { script } : {})
+      ...(script ? { script } : {}),
+      ...(dispatchedBy ? { dispatchedBy, ...(dispatchTask ? { dispatchTask } : {}) } : {})
     })),
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
@@ -334,6 +342,7 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       ...(s.lastReply ? { lastReply: s.lastReply } : {}),
       ...(s.finishedAt !== undefined ? { finishedAt: s.finishedAt } : {}),
       ...(s.script ? { script: s.script } : {}),
+      ...(s.dispatchedBy ? { dispatchedBy: s.dispatchedBy, ...(s.dispatchTask ? { dispatchTask: s.dispatchTask } : {}) } : {}),
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
     activeSessionId: file.activeSessionId,
@@ -373,7 +382,8 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
       s.agentSessionId !== before.agentSessionId ||
       s.worktreeId !== before.worktreeId ||
       s.lastReply !== before.lastReply ||
-      s.finishedAt !== before.finishedAt
+      s.finishedAt !== before.finishedAt ||
+      s.dispatchedBy !== before.dispatchedBy
     )
   })
 }

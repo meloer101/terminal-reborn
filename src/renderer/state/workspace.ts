@@ -181,6 +181,8 @@ export type SessionPatch = Partial<
     | 'finishedAt'
     | 'statusSince'
     | 'turnStartedAt'
+    | 'dispatchedBy'
+    | 'dispatchTask'
   >
 >
 

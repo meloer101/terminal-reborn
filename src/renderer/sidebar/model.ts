@@ -18,6 +18,8 @@ export interface SessionRowModel {
   /** Only `needs_you` recolors the secondary line (Figma SessionRow `attention`). */
   attention: boolean
   stat: DiffStat | null
+  /** 1: started by the session right above it through Wavi's dispatch tools (PRD F21), drawn one step in. */
+  depth: 0 | 1
 }
 
 export interface SidebarGroup {
@@ -46,7 +48,7 @@ function afterTurn(session: Session): string | undefined {
   return undefined
 }
 
-function toRow(session: Session, worktree: Worktree | undefined): SessionRowModel {
+function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 0): SessionRowModel {
   const location = worktree ? (worktree.isMain ? worktree.path : worktree.branch) : ''
   const added = worktree?.added ?? 0
   const removed = worktree?.removed ?? 0
@@ -54,8 +56,25 @@ function toRow(session: Session, worktree: Worktree | undefined): SessionRowMode
     session,
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? location,
     attention: session.status === 'needs_you',
-    stat: added + removed > 0 ? { added, removed } : null
+    stat: added + removed > 0 ? { added, removed } : null,
+    depth
   }
+}
+
+/**
+ * Store order, except that a dispatched session follows the session that started it (PRD F21), after that session's
+ * earlier children. A child whose dispatcher is not listed here stays where it is, at the top level.
+ */
+export function withChildrenNested(sessions: readonly Session[]): Array<{ session: Session; depth: 0 | 1 }> {
+  const listed = new Set(sessions.map((s) => s.id))
+  const nested = (s: Session): boolean => s.dispatchedBy !== undefined && listed.has(s.dispatchedBy)
+  const out: Array<{ session: Session; depth: 0 | 1 }> = []
+  for (const session of sessions) {
+    if (nested(session)) continue
+    out.push({ session, depth: 0 })
+    for (const child of sessions) if (child.dispatchedBy === session.id && nested(child)) out.push({ session: child, depth: 1 })
+  }
+  return out
 }
 
 /**
@@ -79,7 +98,7 @@ export function buildSidebarGroups({ projects, worktrees, sessions, collapsedPro
     return {
       id: project.id,
       title: project.name,
-      rows: isCollapsed ? [] : own.map((s) => toRow(s, worktreeById.get(s.worktreeId))),
+      rows: isCollapsed ? [] : withChildrenNested(own).map(({ session, depth }) => toRow(session, worktreeById.get(session.worktreeId), depth)),
       sessionCount: own.length,
       collapsed: isCollapsed,
       attention: urgent?.status ?? null

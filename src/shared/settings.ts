@@ -80,6 +80,17 @@ export interface PrSettings {
   bots: string[]
 }
 
+/**
+ * 设置 · 自动化 · 派活 (PRD F21 v1.66). An agent may start new sessions through Wavi's tools; each batch waits for the
+ * user's 开始 unless `autoApprove` is on (off by default: it spends the user's quota).
+ */
+export interface DispatchSettings {
+  /** Agents get Wavi's dispatch tools (takes effect for agents started from now on). */
+  tools: boolean
+  /** Start the sessions an agent asks for without the confirmation panel (the limits still apply). */
+  autoApprove: boolean
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
@@ -88,6 +99,7 @@ export interface AppSettings {
   archive: ArchiveSettings
   alerts: AlertSettings
   pr: PrSettings
+  dispatch: DispatchSettings
 }
 
 export interface SettingsPatch {
@@ -97,6 +109,7 @@ export interface SettingsPatch {
   archive?: Partial<ArchiveSettings>
   alerts?: Partial<AlertSettings>
   pr?: Partial<PrSettings>
+  dispatch?: Partial<DispatchSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -128,7 +141,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   archive: { afterMerge: false },
   alerts: { usage: true },
-  pr: { evidence: true, autoFix: false, mergeWhenGreen: false, maxAutoFixes: 3, bots: [] }
+  pr: { evidence: true, autoFix: false, mergeWhenGreen: false, maxAutoFixes: 3, bots: [] },
+  dispatch: { tools: true, autoApprove: false }
 }
 
 const MAX_REVIEW_RULES = 8000
@@ -202,6 +216,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
   const v = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
   const a = typeof v.archive === 'object' && v.archive !== null ? (v.archive as Record<string, unknown>) : {}
   const al = typeof v.alerts === 'object' && v.alerts !== null ? (v.alerts as Record<string, unknown>) : {}
+  const dp = typeof v.dispatch === 'object' && v.dispatch !== null ? (v.dispatch as Record<string, unknown>) : {}
   return {
     version: 1,
     appearance: appearance(v.appearance),
@@ -209,7 +224,11 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     review: review(v.review),
     archive: { afterMerge: typeof a.afterMerge === 'boolean' ? a.afterMerge : DEFAULT_SETTINGS.archive.afterMerge },
     alerts: { usage: typeof al.usage === 'boolean' ? al.usage : DEFAULT_SETTINGS.alerts.usage },
-    pr: prSettings(v.pr)
+    pr: prSettings(v.pr),
+    dispatch: {
+      tools: typeof dp.tools === 'boolean' ? dp.tools : DEFAULT_SETTINGS.dispatch.tools,
+      autoApprove: typeof dp.autoApprove === 'boolean' ? dp.autoApprove : DEFAULT_SETTINGS.dispatch.autoApprove
+    }
   }
 }
 
@@ -238,5 +257,15 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const nextArchive = typeof p.archive === 'object' && p.archive !== null ? { ...current.archive, ...(p.archive as object) } : current.archive
   const nextAlerts = typeof p.alerts === 'object' && p.alerts !== null ? { ...current.alerts, ...(p.alerts as object) } : current.alerts
   const nextPr = typeof p.pr === 'object' && p.pr !== null ? { ...current.pr, ...(p.pr as object) } : current.pr
-  return sanitizeSettings({ ...current, appearance: nextAppearance, ports: nextPorts, review: nextReview, archive: nextArchive, alerts: nextAlerts, pr: nextPr })
+  const nextDispatch = typeof p.dispatch === 'object' && p.dispatch !== null ? { ...current.dispatch, ...(p.dispatch as object) } : current.dispatch
+  return sanitizeSettings({
+    ...current,
+    appearance: nextAppearance,
+    ports: nextPorts,
+    review: nextReview,
+    archive: nextArchive,
+    alerts: nextAlerts,
+    pr: nextPr,
+    dispatch: nextDispatch
+  })
 }

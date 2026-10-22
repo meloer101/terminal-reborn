@@ -17,7 +17,8 @@ import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
 import { CodexUsageWatcher } from './codex-usage'
 import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
 import { createHookDir, sweepStaleHookDirs } from './hook-dir'
-import { UnknownSessionError } from './server'
+import { UnknownSessionError, type HookRequest } from './server'
+import { isDispatchEvent } from '../dispatch/broker'
 import { buildClaudeHookSettings } from './settings'
 import { shellIntegrationEnv, writeCodexOverrides, writeShims, type ShimDirs } from './shell-agents'
 import { StartWatchdog } from './start-watchdog'
@@ -72,6 +73,22 @@ export function hookScriptPath(): string {
 function ownerOf(sessionId: string): WebContents | null {
   const owner = owners.get(sessionId)
   return owner && !owner.isDestroyed() ? owner : null
+}
+
+/** The window that receives this session's hook events (PRD F21 sends its tool calls there too). */
+export const sessionOwner = (sessionId: string): WebContents | null => ownerOf(sessionId)
+
+let dispatchHandler: ((request: HookRequest) => Promise<string>) | null = null
+
+/** src/main/dispatch answers the MCP server's requests on the hook socket (WaviHello / WaviCall / WaviPoll). */
+export function setDispatchHookHandler(handler: (request: HookRequest) => Promise<string>): void {
+  dispatchHandler = handler
+}
+
+/** Dispatch requests go to src/main/dispatch, everything else to the bridge. */
+function route(bridge: HookBridge, request: HookRequest): Promise<string> | string {
+  if (isDispatchEvent(request.event)) return dispatchHandler ? dispatchHandler(request) : ''
+  return bridge.handle(request)
 }
 
 function sendSessionSignal(owner: WebContents | null, signal: SessionHooksSignal): void {
@@ -252,7 +269,7 @@ async function start(): Promise<Runtime | null> {
     const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, scripts })
     const supervisor = new HookSupervisor({
       dir,
-      handler: (request) => bridge.handle(request),
+      handler: (request) => route(bridge, request),
       settings: () => buildClaudeHookSettings(hookScriptPath()),
       onHealth: broadcastHealth,
       ...checkIntervalOverride()
@@ -423,6 +440,8 @@ export function adoptAgentSession(sessionId: string, owner: WebContents, missed:
     // What happened while the app was closed (a finished turn, a permission prompt) brings the status up to date.
     const signal = new AbortController().signal
     for (const entry of missed) {
+      // A tool call nobody answered while the app was away is not replayed: its MCP server already gave up.
+      if (isDispatchEvent(entry.event)) continue
       await rt.bridge
         .handle({ event: entry.event, sessionId, agent: entry.agent, payload: entry.payload ?? undefined, signal, receivedAt: entry.at })
         .catch(() => undefined)
@@ -440,7 +459,7 @@ export async function handleRelayedHook(request: {
   const rt = await runtime
   if (!rt) return { status: 404, body: '' }
   try {
-    const body = await rt.bridge.handle({ ...request, payload: request.payload ?? undefined, signal: new AbortController().signal })
+    const body = await route(rt.bridge, { ...request, payload: request.payload ?? undefined, signal: new AbortController().signal })
     return { status: 200, body }
   } catch (error) {
     return { status: error instanceof UnknownSessionError ? 404 : 500, body: '' }

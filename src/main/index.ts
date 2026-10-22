@@ -9,6 +9,7 @@ import { registerAppearanceEffects } from './appearance'
 import { registerConfirmHandlers } from './confirm'
 import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
+import { registerDispatchHandlers } from './dispatch'
 import { selectProfile } from './profile'
 import { registerPtyHandlers } from './pty'
 import { installQuitGuard } from './quit'
@@ -91,6 +92,7 @@ function boot(): void {
   registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()
+  registerDispatchHandlers()
   registerPtyHandlers()
   registerUiHandlers()
   registerSecondaryWindowHandlers(showMainWindow, () => getMainWindow()?.webContents ?? null)

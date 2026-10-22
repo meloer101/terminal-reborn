@@ -133,6 +133,8 @@ export class DaemonHooks {
     if (!this.options.known(request.sessionId)) throw new UnknownSessionError(request.sessionId)
     const relayed = this.options.relay(request)
     if (!relayed) {
+      // Dispatch tool calls (PRD F21) need an app to answer now; journaling one would replay it much later.
+      if (request.event.startsWith('Wavi')) return ''
       this.journal.record(request.sessionId, { event: request.event, agent: request.agent, payload: request.payload ?? null, at: Date.now() })
       return ''
     }

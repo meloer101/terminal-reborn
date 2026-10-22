@@ -20,7 +20,7 @@ const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
 ]
 
 export function SettingsApp({ onClose }: { onClose(): void }) {
-  const { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr } = useSettings()
+  const { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch } = useSettings()
   const [pane, setPane] = useState<PaneId>('appearance')
   const items = useRef(new Map<PaneId, HTMLButtonElement>())
 
@@ -75,7 +75,18 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
             archiveAfterMerge={settings.archive.afterMerge}
             updateArchiveAfterMerge={(afterMerge) => updateArchive({ afterMerge })}
           />}
-        {pane === 'automation' && loaded && <AutomationPane review={settings.review} update={updateReview} alerts={settings.alerts} updateAlerts={updateAlerts} pr={settings.pr} updatePr={updatePr} />}
+        {pane === 'automation' && loaded && (
+          <AutomationPane
+            review={settings.review}
+            update={updateReview}
+            alerts={settings.alerts}
+            updateAlerts={updateAlerts}
+            pr={settings.pr}
+            updatePr={updatePr}
+            dispatch={settings.dispatch}
+            updateDispatch={updateDispatch}
+          />
+        )}
         {pane === 'about' && <AboutPane />}
       </main>
     </div>

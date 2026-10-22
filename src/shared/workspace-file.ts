@@ -56,6 +56,9 @@ export interface PersistedSession {
   finishedAt?: number
   /** The Run button's terminal for the worktree's `run` script (PRD F4). */
   script?: 'run'
+  /** The session that dispatched this one (PRD F21); dropped when that session is not in the file. */
+  dispatchedBy?: string
+  dispatchTask?: string
 }
 
 /** A saved archive marker (PRD F15), or null when it is not one. */
@@ -130,6 +133,7 @@ const AGENT_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 export const isSafeAgentSessionId = (value: unknown): value is string => typeof value === 'string' && AGENT_SESSION_ID.test(value)
 
 const isString = (v: unknown): v is string => typeof v === 'string'
+const MAX_DISPATCH_TASK = 20_000
 const isText = (v: unknown, max = MAX_TEXT): v is string => typeof v === 'string' && v.length <= max && !v.includes('\0')
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -195,11 +199,22 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           lastActivityAt: isTime(s.lastActivityAt) ? s.lastActivityAt : startedAt,
           ...(isText(s.lastReply, MAX_REPLY) && s.lastReply !== '' ? { lastReply: s.lastReply } : {}),
           ...(isTime(s.finishedAt) ? { finishedAt: s.finishedAt } : {}),
-          ...(s.kind === 'shell' && s.script === 'run' ? { script: 'run' as const } : {})
+          ...(s.kind === 'shell' && s.script === 'run' ? { script: 'run' as const } : {}),
+          ...(s.kind !== 'shell' && isText(s.dispatchedBy) && s.dispatchedBy !== s.id
+            ? { dispatchedBy: s.dispatchedBy, ...(isText(s.dispatchTask, MAX_DISPATCH_TASK) ? { dispatchTask: s.dispatchTask } : {}) }
+            : {})
         }
       })
   )
   const sessionIds = new Set(sessions.map((s) => s.id))
+  // A dispatcher that is gone leaves its children as ordinary sessions; one level only (PRD F21).
+  for (const s of sessions) {
+    const parent = s.dispatchedBy === undefined ? undefined : sessions.find((p) => p.id === s.dispatchedBy)
+    if (s.dispatchedBy !== undefined && (!parent || parent.dispatchedBy !== undefined)) {
+      delete s.dispatchedBy
+      delete s.dispatchTask
+    }
+  }
 
   const drafts: Record<string, string> = {}
   if (isRecord(value.drafts)) {

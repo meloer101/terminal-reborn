@@ -134,6 +134,30 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.sessions.map((s) => s.script)).toEqual(['run', undefined, undefined])
   })
 
+  it('keeps who dispatched a session (PRD F21): one level, and only while the dispatcher is in the file', () => {
+    const file = sanitizeWorkspaceFile(
+      {
+        ...valid,
+        sessions: [
+          { id: 'p', worktreeId: 'w1', kind: 'claude', title: 'plan' },
+          { id: 'c1', worktreeId: 'w1', kind: 'codex', title: 'impl', dispatchedBy: 'p', dispatchTask: 'Do X' },
+          { id: 'c2', worktreeId: 'w1', kind: 'claude', title: 'orphan', dispatchedBy: 'gone', dispatchTask: 'Do Y' },
+          { id: 'c3', worktreeId: 'w1', kind: 'claude', title: 'grandchild', dispatchedBy: 'c1' },
+          { id: 'c4', worktreeId: 'w1', kind: 'shell', title: 'shell', dispatchedBy: 'p' }
+        ],
+        drafts: {}
+      },
+      0
+    ) as WorkspaceFile
+    expect(file.sessions.map((s) => [s.id, s.dispatchedBy, s.dispatchTask])).toEqual([
+      ['p', undefined, undefined],
+      ['c1', 'p', 'Do X'],
+      ['c2', undefined, undefined],
+      ['c3', undefined, undefined],
+      ['c4', undefined, undefined]
+    ])
+  })
+
   it('defaults UI fields and drops empty drafts', () => {
     const file = sanitizeWorkspaceFile(
       { ...valid, sidebarCollapsed: 'yes', rightPanel: 'bogus', collapsedProjectIds: 'p1', drafts: { s1: '' } },

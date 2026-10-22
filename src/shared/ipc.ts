@@ -17,6 +17,7 @@ import type { WindowKey, WindowStateEvent } from './window-layout'
 import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeChange } from './worktree-files'
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
+import type { DispatchApi } from './dispatch'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
 import type { MergePrecheck, MergeRequest, MergeResult } from './git-merge'
 import type { CapturedScript, RepoScripts, RunnableScript } from './repo-scripts'
@@ -45,6 +46,10 @@ export interface PtySpawnOptions {
    * approved (RepoScriptsApi.approve).
    */
   script?: RunnableScript
+  /** The agent's first message, given on its command line (PRD F21). Ignored when resuming. */
+  initialPrompt?: string
+  /** The model for this launch (PRD F21). */
+  model?: string
   cols: number
   rows: number
 }
@@ -391,6 +396,8 @@ export interface TrApi {
   pr: PullRequestApi
   /** Background pairwise / base merge-tree checks of active worktrees (冲突雷达); channels in RADAR_IPC. */
   radar: ConflictRadarApi
+  /** Agents starting sessions and Wavi reporting back (PRD F21); channels in DISPATCH_IPC. */
+  dispatch: DispatchApi
 }
 
 export const IPC = {

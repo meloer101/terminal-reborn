@@ -48,9 +48,9 @@ export function Row({ label, children, id }: { label: string; children: ReactNod
 
 /* ---------- Toggle ---------- */
 
-export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
+export function Toggle({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (checked: boolean) => void; label: string; disabled?: boolean }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={styles.toggle} onClick={() => onChange(!checked)}>
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={styles.toggle} disabled={disabled} onClick={() => onChange(!checked)}>
       <span className={styles.toggleKnob} />
     </button>
   )

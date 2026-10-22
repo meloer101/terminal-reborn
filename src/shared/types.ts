@@ -75,6 +75,10 @@ export interface Session {
   turnStartedAt?: number
   /** A shell session made by the Run button for the worktree's `run` script (PRD F4). Persisted. */
   script?: 'run'
+  /** The session whose agent started this one through Wavi's dispatch tools (PRD F21). Persisted. */
+  dispatchedBy?: SessionId
+  /** The task that agent gave it (without Wavi's brief). Persisted with dispatchedBy. */
+  dispatchTask?: string
 }
 
 /**

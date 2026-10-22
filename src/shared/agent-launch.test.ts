@@ -35,6 +35,26 @@ describe('agentArgv', () => {
     ])
   })
 
+  it('adds the dispatch MCP config, a model and the first task after -- (PRD F21)', () => {
+    expect(agentArgv('claude', '/tmp/x', { claudeSettingsPath: '/s.json', mcpConfigPath: '/m.json', model: 'opus', initialPrompt: '-p mcp do it' })).toEqual([
+      'claude',
+      '--settings',
+      '/s.json',
+      '--mcp-config',
+      '/m.json',
+      '--model',
+      'opus',
+      '--',
+      '-p mcp do it'
+    ])
+    expect(agentArgv('codex', '/tmp/x', { model: 'gpt-5-codex', initialPrompt: 'do it' }).slice(-4)).toEqual(['-m', 'gpt-5-codex', '--', 'do it'])
+  })
+
+  it('never resends the first task when resuming, and drops a model that is not a name', () => {
+    const id = '3f2a9c1e-7b4d-4e08-9a55-0c1d2e3f4a5b'
+    expect(agentArgv('claude', '/tmp/x', { resumeAgentSessionId: id, initialPrompt: 'again', model: '--evil' })).toEqual(['claude', '--resume', id])
+  })
+
   it('escapes quotes and backslashes in the TOML key', () => {
     expect(agentArgv('codex', '/a "b"\\c')[4]).toBe('projects={"/a \\"b\\"\\\\c"={trust_level="trusted"}}')
   })

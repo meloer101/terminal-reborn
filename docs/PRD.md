@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.65 · 2026-10-21 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.67 · 2026-10-22 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,8 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.67 | 2026-10-22 | **F21 派活与回报落地**，实现前读了 Orca、T3 Code、Nimbalyst、Superset、coder/mux、codex-plugin-cc、cmux 的源码和 issue，并实测了 Claude 收件箱、`codex queue` 和命令行首条消息（§6.14 改成实测结论）。定下的细节：方向和厂商不限，每家的接入写在能力表里；接口是每个 agent 自己启动的 stdio MCP server，经 hook socket 转给窗口，不用 HTTP（agent 活得比 app 久）；工具名 `start_sessions` / `list_sessions` / `read_result` / `send_message` / `stop_session`，被派出的会话一个工具都不列；子会话的首条消息放在命令行上，不往刚启动的 TUI 里打字；只在一轮结束、出错、退出时报告（“等你处理”、合并、归档不报），3 秒合批、每个子会话只留最新一份、读过的不再送、每小时最多叫醒 20 次；报告从不往终端里打字，送不进去时留在派活会话下方由用户点「送进去」；确认面板不算“等你处理”，窗口不在前台时发系统通知；侧栏子会话缩进一级、不提供折叠；设置 · 自动化 · 派活两项开关。agent 的启动参数改为全部由 main 拼好再交给 PTY 宿主。 |
+| v1.66 | 2026-10-22 | **新增 F21 派活与回报**（§2 / L9 / §6.14，ROADMAP 第三批；外部来源：2026-10-21 调研——Orca 的 orchestration CLI 在派活方空闲时往它的终端里打一行“有 N 条消息”（stablyai/orca#12988），T3 Code v0.1.0 的 `delegate_task` 通过按会话注入的 MCP server 派活、做完自动叫醒父会话（pingdotgg/t3code#4499），Superset / cmux / Conductor / Vibe Kanban 都能让 agent 开会话，但做没做完要派活方自己轮询；Claude Code 2.1.224 起有跨会话收件箱，Codex 0.149 起有 `codex queue`）：会话里的 agent 可以通过 Wavi 按次注入的 MCP 工具开新的 Claude / Codex 会话（只开新 worktree）、给它们派任务、读结果、发消息；子会话做完、等你处理、出错时，Wavi 把一份带分支、diff 统计、这一轮跑过的检查和冲突雷达的报告送回派活方（Claude 走收件箱，Codex 走 `codex queue`，都不行时在空闲且没有确认框时写进终端）。深度定为**跨厂商的 L4**：派活和回报都打通，合并、推送、归档和批准权限仍只由人做。agent 每次开会话都先弹确认面板，写明开几个、什么 agent、任务和“做完会把结果报告给谁”；“不再确认”放进设置的“自动化”、默认关。一次最多 4 个，子会话不能再往下派。不做任务依赖图、远程 worker、往 agent 全局目录装 skill。ROADMAP 里“agent teams 队友用 tmux 假命令接管成侧栏会话”改为只显示、不接管（实验功能，spawn 协议没有文档，只有 Claude，队友没有自己的 worktree）。 |
 | v1.65 | 2026-10-21 | **PR 闭环界面按 Figma 22 落地**，实现时定下的细节（F16）：创建 PR 面板说过会推送，第一次推送不再弹原生确认；PR 模板按 GitHub 的位置找（不分大小写）；证据块在用户从正文里删掉后不再加回。GitHub thread 只放在“已提交”组里 GitHub 还能定位的行上、默认勾选，文件有没提交的改动时标“可能已改”，其余进“PR 评论 · N”；发过的 thread 取消勾选。“检查通过后合并”在必需检查失败时也能打开（等修好再合），立即合并仍被挡。自动修复和通过后合并的开关只存在窗口里，重启后回到设置里的默认值；自动修复的消息以“（Wavi 自动修复 第 N 次）”开头，用户自己在会话里发消息后次数清零。设置 · 自动化 新增“PR”一组。 |
 | v1.64 | 2026-10-21 | **竞品加上 T3 Code**（§1.2 / §1.5；外部来源：t3.codes、pingdotgg/t3code 的 README 和 v0.1.0 发布说明）：§1.2 加“保留终端”一段，写明它是自绘聊天 GUI、Wavi 保留原生 TUI，以及对外讲区别时用的四条（CLI 更新当天可用、审阅合并做深、不替用户花 token、终端排版和 CJK），手机端、远程、跨平台和 agent 数量不追；§1.5 的竞品 issue 来源加上 T3 Code，反向对比改成 Orca 和 T3 Code 各当主力用 3 天 |
 | v1.63 | 2026-10-21 | **PR 闭环做到 L3**（F16 / F13 / §2；作者决定“能多提供的服务就提供”；外部来源：Conductor、Orca、Superset 都能在应用里看 PR 评论、发回 agent 并合并 PR，Claude Code 桌面版有 Auto-fix 和“Merge when ready”，Cursor Bugbot 自动修复每个 PR 限 3 次，o#9512 应用内看 PR 15 👍，GitHub community#189767“每次推送都重新评论、修个没完”）：分四级——L0 看状态、L1 一键交给 agent（已有）、**L2 两边接通**（创建 PR 面板带证据块、创建 PR 也触发“推送前审阅”、PR 上没解决的评论拉回变更视图和本地审阅一起勾选发给 agent、标记已解决和把 Wavi 审阅发到 PR、在合并面板里合并 GitHub PR：只列仓库允许的方式，总带 `--match-head-commit`，支持 GitHub auto-merge、合并队列和“Wavi 等检查通过后合并”）、**L3 自动化**（按 PR 打开的“自动修复”和“通过后合并”，设置里默认关；只认允许名单里的评论作者；每个 PR 最多 3 次、agent 没推送就停）。Wavi 仍不做 GitHub App、不起云端 agent、不做 OAuth，读写 GitHub 只用用户自己的 gh，修复只在用户本机的会话里做。§2 加一条：以用户的账号往外写（推送、在 GitHub 上评论、标记已解决、合并）也只在用户点了写明做什么的按钮、或打开了对应的自动化开关时发生。F13：审阅结果按 worktree 存盘；可选“另一家来审”（Claude 写的由 Codex 审，反之亦然）；复审不再报已忽略的发现。 |
@@ -153,7 +155,7 @@
 
 **设计原则**：终端优先，界面其余部分退后；只在需要你时打扰，“等你处理”是唯一高亮的状态；所有高频操作都能用键盘完成；用排版层级、对齐和分隔线组织信息，不靠装饰。
 
-**Wavi 不替用户花 token**：只有用户点了按钮才向 agent 发消息，按钮写明会发什么（如“让 agent 审阅”发 `/code-review`）。可能花很多 token 的任务（如解决合并冲突）只放进输入行、不按回车，由用户看过后自己发送。不花 token 的本地检查（git 预检、端口扫描）不受此限。以后任何**自动**向 agent 发送的功能（完成后自动审阅、CI 失败自动修复等）都必须在设置里有开关、**默认关闭**、写明会做什么，统一放在设置的“自动化”分组。一题多解（F4）和总览广播（F9）是用户点了写明“发什么、发给谁”的按钮才发，广播还要再确认一次，不算自动发送（v1.60）。以用户的账号往外写（推送，在 GitHub 上发评论、标记已解决、合并 PR）同样只在用户点了写明做什么的按钮、或打开了“自动化”里对应的开关时发生，按钮和确认框写明会以哪个账号做什么（v1.63）。
+**Wavi 不替用户花 token**：只有用户点了按钮才向 agent 发消息，按钮写明会发什么（如“让 agent 审阅”发 `/code-review`）。可能花很多 token 的任务（如解决合并冲突）只放进输入行、不按回车，由用户看过后自己发送。不花 token 的本地检查（git 预检、端口扫描）不受此限。以后任何**自动**向 agent 发送的功能（完成后自动审阅、CI 失败自动修复等）都必须在设置里有开关、**默认关闭**、写明会做什么，统一放在设置的“自动化”分组。一题多解（F4）和总览广播（F9）是用户点了写明“发什么、发给谁”的按钮才发，广播还要再确认一次，不算自动发送（v1.60）。以用户的账号往外写（推送，在 GitHub 上发评论、标记已解决、合并 PR）同样只在用户点了写明做什么的按钮、或打开了“自动化”里对应的开关时发生，按钮和确认框写明会以哪个账号做什么（v1.63）。agent 通过 F21 开会话也要用户在确认面板里点「开始」，面板写明开几个、什么 agent、发什么任务、做完把结果报告给哪个会话；点了就算同意派活方之后给这些会话发消息、Wavi 把结果报告回去，不算自动发送。设置 · 自动化 里的“agent 开会话不再确认”默认关闭（v1.66）。
 
 **核心链路**（验收标准见 §4）：
 
@@ -165,6 +167,7 @@
 - **L6 Git 全景**：打开“图谱” → 看到 main 与所有 worktree 分支的走向、每个 worktree 的 agent 状态、领先 / 落后 → 点击节点跳到会话 → 右键合并或 rebase。
 - **L7 外观定制**：⌘, → 外观 → 选主题 / 英文字体 / 中文字体 / 字号行高 → 预览实时变化。
 - **L8 PR 闭环**（F16，v1.63）：会话完成 →（可选）本地审阅 → “创建 PR” 面板（标题、正文和证据块、草稿）→ ⌘↵ 推送并创建 → CI 和 PR 评论回到变更视图 → 勾选评论或失败的检查“发给 agent”（放进输入行，用户按回车；打开“自动修复”时由 Wavi 按回车，有次数上限）→ agent 修复并推送 → 状态刷新、标记已解决 → 合并面板选“GitHub PR”→ 预检 → 合并（或“检查通过后合并”、进合并队列）→ 拉取基线、归档 worktree、冲突雷达标出其余 worktree 落后多少。
+- **L9 派活与回报**（F21，v1.66）：用户在一个会话里让 agent 把活分出去（如“前端交给 Codex，测试交给另一个 Claude”）→ agent 调 Wavi 的工具 → 确认面板列出每一份（agent、基于、任务）→ 用户点「开始」→ 侧栏在派活会话下面出现几个子会话（正在启动），各自的新 worktree 里 agent 收到任务开始干活 → 子会话要权限或提问时照常“等你处理”，由用户在那个会话里回答 → 子会话一轮做完，Wavi 把报告送进派活会话（Claude 走收件箱、Codex 走 `codex queue`，都不往终端里打字；空闲时开始新一轮，忙时稍后读到）→ 派活方读结果、比较、要求修改或写审阅意见 → 用户在合并面板 / PR 里合并（顺序参考冲突雷达和 `list_sessions` 给的建议顺序）。
 
 ## 3. 对象模型与状态机
 
@@ -461,6 +464,35 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **实现**：拆分树和它的纯逻辑（拆、换、挪、关、量尺寸、最小尺寸、相邻格、落点、读写校验）在 `src/shared/split-layout.ts`，总览浮层的落点判断也用它；界面在 `src/renderer/split/`。终端照旧每个会话一个、一直挂载，分屏只是把它摆到格子的位置，不搬 DOM。
 - **验收**：从侧栏拖出 2 / 3 / 4 格、换位、调大小、关格都能只用鼠标完成，拆分、移动键盘、关格都能只用键盘完成；每格的输入只到达它自己的 PTY；切换键盘所在格后右侧栏 100 ms 内换成该格的 worktree；重启后排法恢复；深浅两套主题按 Figma 还原——e2e `split.spec.ts`（21A–21H 两种主题截图）、`split-restore.spec.ts`、`menu-keys.spec.ts`。4 格同时有输出时在其中一格打字（`split-latency.spec.ts`，TR_STRESS=1，假 agent 每格 40 行/秒，M4 Retina，WebGL）：p50 11–13 ms，达到 < 16 ms；p95 在只有其他三格输出时 19–49 ms、四格都输出时 55–83 ms，有长尾（单屏时在输出中的会话里打字为 29 / 40 ms，D1）。
 
+### F21 派活与回报 · P1 · Figma 未设计（v1.66 / v1.67；外部来源：Orca orchestration、T3 Code `delegate_task`、Claude Code 桌面版的“开新会话、做完回一条消息”，Superset / cmux / Conductor / Vibe Kanban 只做到派活方自己轮询；stablyai/orca#13079、#4376）
+一个会话里的 agent（派活方）把活分给几个新会话（子会话），子会话做完后结果自动回到派活方。和一题多解（F4）的区别：一题多解是用户把**同一个**任务发给几份，结果给用户看；这里是 agent 把**不同的**任务分出去，结果先回给派活的 agent。L9 是完整链路。**方向和厂商不限**：Claude 派给 Codex、Codex 派给 Claude、同一家互派都行；每家怎么接入写在 `src/shared/dispatch.ts` 的能力表里（`DISPATCH_AGENTS`：名字、回报通道、选模型的参数），以后加一家 CLI 就是加一行，没有回报通道的一家照样能派和被派，只是报告要用户点「送进去」。
+
+- **深度**（2026-10-21 调研时的分级）：L0 没有 · L1 人一次派给多个（广播、一题多解，Wavi 已有）· L2 agent 能开会话但不回报 · L3 agent 能开会话、读写别的会话，但要自己轮询 · L4 做完自动回到派活方 · L5 再加上跨厂商的审阅和合并闭环。Orca、T3 Code 是 L4（T3 不是原生终端），其余同类是 L3，没有一家做到 L5。**Wavi 做跨厂商的 L4**：L5 里的合并、推送、归档和批准权限留给人，在 Wavi 已有的审阅、合并面板、PR 闭环和冲突雷达里做，派活方只能拿到这些信息、给出意见。
+- **接口**（借鉴 T3 Code 的按会话注入，但不用 HTTP：Wavi 的 agent 跑在 PTY 守护进程里、会比 app 活得久，固定端口在 app 重启后就断了）：每次启动 agent 时注入 Wavi 自己的 stdio MCP server，不写用户的全局配置（§6.2）。Claude 用 `--mcp-config <userData>/dispatch/wavi-mcp.json`（不加 `--strict-mcp-config`，用户自己的 MCP 照常加载），Codex 用 `-c mcp_servers.wavi.*`（`env_vars` 转发 `TR_*`，`tool_timeout_sec` 放宽到 16 分钟）。server 是 Wavi 自己的可执行文件以 `ELECTRON_RUN_AS_NODE=1` 跑 `out/main/wavi-mcp.js`，没有状态：每个调用都经 agent 已有的 hook socket（`TR_HOOK_SOCK` / `TR_HOOK_TOKEN` / `TR_SESSION_ID`，鉴权同 §6.2）发给 main，守护进程转给拥有这个会话的窗口；一次请求最多停 7 秒（守护进程转发上限 10 秒），等用户确认时 server 轮询并发 MCP 进度通知。app 没开时调用返回“Wavi 现在没在应答”，不挂起；守护进程不把这类请求记进 hook 日志。工具（agent 看到的描述是英文，写在 `dispatchToolDefs`）：
+  - `start_sessions`：一次 1–4 个，每个 `{agent, task, title?, model?}`，可附一句 `reason` 给用户看。**只开新 worktree**，基于派活方 worktree 当前所在的分支（未提交的改动不带过去，确认面板和返回结果都写明）；分支名是 `<前缀>/<标题 slug>`，标题没有英文词（如中文）时用随机名，重名加 `-2`。用户点「开始」后才返回（每个会话的 id 和分支），拒绝时返回“不要重试，除非用户要求”。
+  - `list_sessions`：派活方自己派出的会话：状态、分支、`+N −M · N 个文件`、这一轮跑过的检查（F9）、冲突雷达（F4 v1.57）、最后一句回复，以及建议的合并顺序（没有冲突的先、改动小的先；合并仍由用户做）。
+  - `read_result`：一个子会话最后一条消息的全文（每页 16k 字，`offset` 翻页）、改了哪些文件、检查和冲突；读过的子会话，还没送出的报告就不再送（T3 的 ack）。
+  - `send_message`：给自己派出的一个子会话发一段话，走和报告一样的通道（不往终端里打字），开头写明来自派活方、不是用户。
+  - `stop_session`：让子会话停下这一轮（发 Esc），不关闭、不归档。
+  - 不给的：合并、推送、归档、关闭、回答子会话的权限框或提问，以及操作不是自己派出的会话。**子会话的 MCP server 一个工具都不列**（只派一层，Orca 的默认深度）。
+  - 工具描述里写明的用法（借鉴 Nimbalyst、Orca、Superset 的措辞，MCP 的 `instructions` 说同样的话，避免 T3 #19821 那种两处说法打架）：只为能独立成块的多步工作派活，一次读文件、一条命令自己做；能少派就少派，同一件事不派第二个，要追加就 `send_message`；任务要自成一体（目标、范围、怎么验、做到哪算完）；派完就结束这一轮，Wavi 会自动报告，不要轮询；子会话的 diff 才是记录，它的自述不是。
+- **确认面板**（§2）：样式同 15 新建会话的玻璃面板：标题 `「<派活会话名>」想开 3 个会话`，下一行 `Claude Code 派活 · 基于 main` 和 agent 给的理由；每个会话一行：agent、名字、分支、任务第一行（展开看全文）；底部写 `startNote`：“新建 N 个 worktree，各启动一个 agent 并把任务发给它；做完后把结果报告给「…」。每个会话各用一次你自己的额度。”，派活方有未提交改动时再加一行；「拒绝」「开始 N 个 ⌘↵」，Esc 等于拒绝。窗口不在前台时发系统通知（点了回到派活会话）。10 分钟没回答返回超时。设置 · 自动化 · 派活：“让 agent 能开会话”（默认开，关掉后之后启动的 agent 没有这些工具）、“agent 开会话不再确认”（默认关，打开后仍受上限约束）。
+- **上限**：一个派活方同时最多 4 个没归档的子会话，一次调用超出时整次拒绝并写明还能开几个；和还开着的子会话任务相同的整次拒绝（`duplicate`）；任务文字以报告抬头开头的拒绝（Nimbalyst 的防环）。
+- **子会话启动**：建 worktree（复制被忽略的文件、有 setup 就跑，同 F4），agent 的**第一条消息放在命令行上**（`claude … -- <简报>` / `codex … -- <简报>`，§6.14 实测），由 CLI 自己提交，不往刚启动的 TUI 里打字（Orca 的 argv 模式），恢复会话时不再带；`model` 同样只在这次启动时用。简报 = Wavi 写的一句来历（谁派的、哪个分支、基于什么）+ 任务原文 + 一段平静的说明：只做这件事，不要合并、推送或切分支；最后一条消息就是报告，先写结果，再写改了哪些文件、跑了哪些检查、还有什么没做；做不下去最后一行写 `BLOCKED: <原因>`（Superset / coder/mux 的约定）。子会话的权限请求和提问照常是“等你处理”，由用户回答。
+- **回报**：子会话**一轮结束**（running / needs_you → done_unread / idle）、**出错**、**agent 退出**时排一份报告；“等你处理”不叫醒派活方（它也替不了用户回答，只会白花 token），合并、归档、关闭也不报（`list_sessions` 能看到）。同一个子会话只留最新一份，同一轮同一事件只报一次；最后一份进来 3 秒后合成一条发出（T3 / Nimbalyst 的合批）。报告在发出时才取材料：会话名、agent、事件、分支、`+N −M · N 个文件`、检查、冲突、`id`，再加最后一条消息的摘录（每个最多 4k 字，整条共 12k 字，超出的指向 `read_result`）；抬头 `[Wavi 派活报告]`，写明来自子会话、不是用户的指示。送达**从不往派活方终端里打字**（Orca 往终端里打提示，会混进用户没发的草稿、替用户回答 AskUserQuestion：stablyai/orca#21745、#22651）：
+  - **Claude 派活方**：跨会话收件箱（§6.14）。子会话的 MCP server 启动时把自己所在 agent 的收件箱 socket 和 token 报给 Wavi（`WaviHello`）。空闲时开始新一轮，忙时在两次工具调用之间读到；生成的 `--settings` 里加 `crossSessionInbound: "accept"`。
+  - **Codex 派活方**：`codex queue --thread <agentSessionId> --message …`（用户登录 shell 的 PATH 里找 codex）。空闲时开始新一轮，忙时排在这一轮之后。
+  - **送不进去时**（没有通道、送达失败、派活方已退出，或这一小时已经叫醒了 20 次）：报告留在派活会话终端下方的一条（`N 份派活报告还没送进去：「…」` ·「送进去」），用户点了才作为一条消息打进终端（屏幕上有确认框时同 §6.9 拒绝）。
+  - 派活方关闭后，子会话变成普通会话（侧栏回到顶层），不再报告。
+- **界面**：
+  - 侧栏：子会话紧跟在派活会话后面、缩进一级（`data-depth=1`），只在同一项目里；派活方不在列表里（比如在别的项目）时子会话照常在顶层。不提供折叠。
+  - 会话头：子会话的分支后面写 `由「<派活会话名>」派出`，点它回到派活会话。
+  - 总览：在“一题多解”那一节下面加“派出的会话”，每个派活方一行：派活会话名、每个子会话的状态图形和名字（都能点进去）、2 个以上时「比较」（F9 浮层并排）。
+  - 存盘：会话多存 `dispatchedBy`（派活会话 id）和 `dispatchTask`（任务原文，用于判重）；派活方不在文件里或它自己也是子会话时这两项丢掉，旧文件照常读。
+- **不做**：任务依赖图和决策关口（Orca）、远程 / SSH worker、往 agent 的全局目录装 skill（Orca 这样做）、多层派活、agent 替用户批准权限、子会话之间互发消息、agent teams 的 tmux 接管（Claude 自己开的队友和子 agent 只在派活会话下显示名字和状态，ROADMAP 第三批）。
+- **实现**：纯逻辑在 `src/shared/dispatch.ts`（能力表、工具定义、参数校验、上限、判重、子会话分支规划、简报、报告文字、报告队列和每小时上限）；main 在 `src/main/dispatch/`（`mcp-server.ts` 是 server 入口、`broker.ts` 在 hook socket 和窗口之间转调用、`deliver.ts` 写收件箱和跑 `codex queue`、`mcp-config.ts` 按厂商注入）；agent 的启动参数改为全部由 main 拼好再交给 PTY 宿主（`hostLaunch`），所以较早版本启动的守护进程不用升级；窗口里在 `src/renderer/dispatch/`（处理工具调用、确认面板、报告协调、待送报告条、总览一节）。
+- **验收**：e2e `dispatch.spec.ts`（真实链路：假 Claude 按 `--mcp-config` 启动 Wavi 的 MCP server 并用 JSON-RPC 调工具；派活方拿到 5 个工具、命令行上没有 `--strict-mcp-config`、没写全局配置 → 确认面板写明一切、确认前不建 worktree → 开始后两个 worktree 从 main 开出、分支 `jacob/fix-login` / `jacob/login-tests`，Claude 子会话的命令行带简报和 `--mcp-config`、Codex 子会话带简报和 `mcp_servers.wavi.env_vars` → 侧栏缩进、子会话一个工具都没有 → 子会话一轮结束后派活方收件箱只收到一份报告、带分支和消息，`read_result` 拿到全文，`list_sessions` 列出两个和合并顺序 → 重复任务、别人的会话、拒绝的一批都被拒绝 → 会话头和总览；确认面板、侧栏、会话头、总览两种主题截图在 `test-results/dispatch/`）；纯逻辑 `src/shared/dispatch.test.ts`、`src/main/dispatch/*.test.ts`（转调用的时序和归属、收件箱的行格式、注入参数）。`codex queue` 送进 Codex TUI 只在 §6.14 实测过，e2e 里的 Codex 是假的。
+
 ### P2 储备（已验证，但排在后面）
 代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· ~~best-of-N 竞赛~~（v1.60 起做成 F4 的“一题多解”）· Claude Remote Control 菜单入口（发送 `/remote-control`，需要实测）· 仓库级预设 prompt（`.tr/settings.toml`）· `@` 文件引用 · GitHub PR 创建 / 合并。（“实时终端网格”已由 F20 取代。）
 
@@ -629,6 +661,15 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 - 有未提交改动时在复制出来的临时 index 上 `add -u` 再 `write-tree`：worktree 的真实 index 内容和修改时间都不变（主进程测试里比对）；`git status` 本身会刷新真实 index，所以雷达里的 git 都带 `GIT_OPTIONAL_LOCKS=0`。
 - squash 合并之后，被合并分支对基线的 merge-tree 结果就是基线的树，用这一点判断“工作已经在基线里了”，否则它会被标成落后、还和别人配对。
 - 规模：20 个 worktree 各一个提交、小仓库，第一次全算（20 次对基线 + 190 对）约 1.1 s（同时 2 个 git 进程）；之后一个 worktree 提交只重跑 20 次。
+
+### 6.14 实测结论 · 派活与回报的接口（Claude Code 2.1.306 / Codex 0.163.0，2026-10-22）
+F21 用。Claude 部分用 Haiku 跑了两轮（几十个 token），Codex 部分用 `scripts/spikes/codex-mock-provider.mjs` 的假模型，不花额度；脚本没有提交。
+- **Claude 跨会话收件箱**（2.1.224 起 macOS 默认开）：每个交互会话绑一个 Unix socket（`/tmp/cc-socks/<pid>.sock`），路径和每会话 token 以 `CLAUDE_CODE_MESSAGING_SOCKET` / `CLAUDE_CODE_MESSAGING_TOKEN` 给 hook、Bash **和 stdio MCP server**（server 的环境里有，所以 Wavi 不用改 hook 脚本就能拿到）。行格式实测可用：换行分隔的 JSON，先 `{"type":"auth","token":…}`，再 `{"type":"user","message":{"role":"user","content":…}}`，socket 不回任何东西。空闲的会话立刻开始一轮，TUI 里显示为 “Another Claude session sent a message: …” 加一段 Claude 自己的说明（来自另一个会话、不是用户、不能借它提权），`Stop` hook 照常触发。文档写明忙时在两次工具调用之间读到；消息不能批准权限、不执行其中的 slash 命令；纯文本，最多排 50 条。Wavi 是 Claude 的父进程而不是“自己开的子会话”，派活方在跳过权限模式下会把这类消息挂起等确认，所以 Wavi 的 `--settings` 里有 `"crossSessionInbound": "accept"`（只能放在那一个 `--settings` 文件里，§6.6）。`--bare` 不绑 socket。
+- **Claude 其他办法（没用）**：`asyncRewake: true` 的 hook 退出码 2 时立即叫醒 Claude，但受 hook 超时约束、每次要重新挂上；`Stop` hook 的 `decision: block` 只在一轮结束时生效，叫不醒空闲会话；Channels（MCP 推送）是研究预览，自定义 server 每次启动都有全屏警告；Claude 自己的 `SendMessage` + `notify_when_idle` 只在 Claude 之间。
+- **首条消息放在命令行**：`claude [选项] -- "<文字>"` 和 `codex [选项] -- "<文字>"` 都起交互界面并立即提交这条消息，显示和用户自己输入的一样；`--` 让以 `-` 开头或等于子命令名（如 `mcp`）的文字也不被当成参数。
+- **MCP 工具调用的限制**（Claude）：主对话里超过 2 分钟没返回的 MCP 调用转成后台任务、结束时作为任务通知回来；stdio server 30 分钟没有响应也没有进度通知就中止，进度通知会重置计时；输出上限约 25k token。Claude 给 stdio server 它的整个环境（`TR_*`、`CLAUDE_CODE_SESSION_ID` 都在）。
+- **Codex**：`codex mcp-server` 已删除，不能把 Codex 当 MCP 工具调用。stdio MCP server **只拿到 `PATH`、`HOME` 这类默认变量**，`TR_*` 要用 `mcp_servers.<名>.env_vars=[…]` 转发（实测）；默认工具超时 60 秒，用 `tool_timeout_sec` 放宽。`codex queue --thread <UUID> --message <文字>` 能送到 Wavi PTY 里跑着的 Codex TUI（实测：空闲时约 1 秒内开始新一轮、显示成一条用户消息，`UserPromptSubmit` / `Stop` hook 照常触发；忙时排到这一轮之后）。两个 Codex TUI 用不同的 `TR_SESSION_ID` 启动，各自的 hook 拿到的是各自的值，共享守护进程没有串环境变量。Codex 的 `Stop` hook 用 `decision: block` 会把 reason 变成下一条 prompt，但同样只在一轮结束时；后台 hook 不会开始新一轮。
+- **agent teams**（实验功能，`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）：每个会话只有一个隐式队伍，队友之间用 `SendMessage` 和 `~/.claude/teams/` 下的收件箱，队友做完会自动通知 lead；分屏模式靠 tmux / iTerm2，cmux 用假的 `tmux` 命令接管，但 Claude 发出的 tmux 命令没有文档；只有 Claude，队友没有自己的 worktree，`/resume` 不恢复进程内队友。所以 Wavi 不接管，只显示（F21）。
 
 ## 7. 开源与工程规范
 
