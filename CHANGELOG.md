@@ -4,6 +4,39 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-22
+
+Let agents hand work to each other, and take a PR from review to merge without leaving Wavi.
+让 agent 之间互相派活，并在 Wavi 里把 PR 从审阅一路做到合并。
+
+### Dispatch / 派活与回报
+- An agent can start new Claude Code or Codex sessions, each in its own worktree with its own task, in any direction (Claude to Codex, Codex to Claude, or the same kind), and gets their results back when they finish. Wavi gives every agent its tools at launch; nothing is written to your global agent config.
+  agent 可以开新的 Claude Code 或 Codex 会话，每个都在自己的 worktree 里、带着自己的任务，方向不限（Claude 派给 Codex、Codex 派给 Claude、同一家互派），做完后结果自动回到派活的会话。工具在启动时注入，不写你的全局 agent 配置。
+- Every batch waits for you: a panel says how many sessions, which agent, what task and who gets the results (设置 · 自动化 · 派活 can skip it). At most four open sessions per dispatcher, and dispatched sessions cannot dispatch further.
+  每一批都先等你确认：面板写明开几个、什么 agent、发什么任务、结果报告给谁（设置 · 自动化 · 派活里可以免确认）。一个派活方同时最多 4 个，被派出的会话不能再往下派。
+- Results reach the dispatcher through Claude's cross-session inbox or `codex queue`, never typed into its terminal; anything that cannot be delivered waits under it for 送进去. Dispatched sessions sit under their dispatcher in the sidebar, their header says 由「…」派出, and the overview lists them together.
+  结果经 Claude 的跨会话收件箱或 `codex queue` 送到派活方，从不往它的终端里打字；送不进去的留在它下方等你点“送进去”。侧栏里子会话排在派活会话下面，会话头写“由「…」派出”，总览里把它们列在一起。
+
+### Pull requests / PR
+- 创建 PR opens a sheet with the title, a body from the repository's PR template or the commits, and this turn's checks and review as evidence; it can review before pushing.
+  “创建 PR”打开面板：标题、按仓库 PR 模板或提交说明生成的正文，以及这一轮的检查和审阅作为证据；可以推送前先审阅。
+- Unresolved PR threads and comments come back into Git · 变更 next to the lines they are about; tick them to send to the agent, mark them resolved, or post Wavi's review to the PR as a comment.
+  PR 上没解决的讨论和评论回到 Git · 变更，挂在对应的行上；勾选后发给 agent、标记已解决，或把 Wavi 的审阅作为评论发到 PR。
+- Merge a GitHub PR from the merge sheet: only the methods the repository allows, always pinned to the head you reviewed, with GitHub auto-merge, the merge queue or Wavi waiting for checks. Afterwards Wavi pulls the base and offers to archive the worktree.
+  在合并面板里合并 GitHub PR：只列仓库允许的方式，总是锁定你审阅过的那个提交，可选 GitHub 自动合并、合并队列或由 Wavi 等检查通过。合并后拉取基线，并可归档 worktree。
+- Two switches per PR, off by default: 自动修复 sends failing checks and new comments to the agent (at most 3 times), 通过后合并 merges once everything is green.
+  每个 PR 两个开关，默认关：“自动修复”把失败的检查和新评论发给 agent（最多 3 次），“通过后合并”在全部通过后合并。
+
+### Review / 审阅
+- Review results are kept per worktree, so a restart does not review the same diff again, and findings you dismissed stay dismissed. Optionally the other vendor reviews (Codex reviews Claude's work and the other way round).
+  审阅结果按 worktree 保存，重启后同一份 diff 不再重审，你忽略过的发现不再出现。可选由另一家来审（Codex 审 Claude 写的，反之亦然）。
+
+### Fixed / 修复
+- A branch whose upstream was `origin/main` could be pushed straight to main when creating a PR; it now always gets its own branch.
+  上游指向 `origin/main` 的分支在创建 PR 时可能被直接推到 main；现在总是推到自己的分支。
+- CI logs sent to the agent no longer carry escape codes, outdated threads can be resolved too, and the base catches up after GitHub merges a PR.
+  发给 agent 的 CI 日志不再带转义字符，过时的讨论也能标记已解决，GitHub 合并 PR 后基线会跟上。
+
 ## [0.5.0] - 2026-10-21
 
 Digest the work of many agents: what they checked, where they collide, one task to several agents, and a window per project.
@@ -223,7 +256,9 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/meloer101/terminal-reborn/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/meloer101/terminal-reborn/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/meloer101/terminal-reborn/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/meloer101/terminal-reborn/compare/v0.1.1...v0.3.0
 [0.1.1]: https://github.com/meloer101/terminal-reborn/releases/tag/v0.1.1
