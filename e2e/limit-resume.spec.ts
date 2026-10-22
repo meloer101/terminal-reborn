@@ -226,6 +226,9 @@ test.describe('continue after the plan limit resets', () => {
         context_window: { context_window_size: 200000, used_percentage: 86, current_usage: { input_tokens: 2, cache_creation_input_tokens: 1998, cache_read_input_tokens: 170000 } }
       }
     })
+    // The previous test hid and showed the window, and macOS fits a shown window into the screen again (1024 wide on
+    // the CI runner): size it once more so the 文件 panel docks beside the header instead of floating over /compact.
+    await setWindowSize(app, page, 1440, 900)
     const compact = header().getByTestId('context-chip').getByRole('button', { name: '/compact' })
     await expect(compact).toBeVisible(WITHIN)
     await header().getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
