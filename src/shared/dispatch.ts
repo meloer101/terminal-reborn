@@ -400,7 +400,11 @@ export function reportText(reports: readonly ChildReport[], running: readonly { 
     const facts = [`「${r.title}」`, DISPATCH_AGENTS[r.agent].name, EVENT_TEXT[r.event], `分支 ${r.branch}`, r.changes, r.checks, r.conflicts, `id ${r.childId}`]
     lines.push('', `— ${facts.filter(Boolean).join(' · ')}`)
     const message = r.message?.trim()
-    if (!message) continue
+    if (!message) {
+      // An agent whose turn failed (a provider error, a crash) often leaves no reply: say so instead of nothing.
+      if (r.event !== 'exited') lines.push('  （这一轮结束时没有留下回复，可能出错了；它的终端里有原因，可以请用户去看看）')
+      continue
+    }
     const room = Math.min(DISPATCH_LIMITS.excerpt, budget)
     if (room < 200) {
       lines.push('  （最后一条消息较长，用 read_result 读）')

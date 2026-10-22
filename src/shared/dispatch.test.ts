@@ -99,6 +99,11 @@ describe('reportText', () => {
     expect(text).toContain('仍在进行：「Write tests」')
     expect(text).toContain('read_result')
   })
+  it('says when a turn ended without a reply (a provider error, say)', () => {
+    expect(reportText([report({})])).toContain('这一轮结束时没有留下回复，可能出错了')
+    expect(reportText([report({ event: 'exited' })])).not.toContain('没有留下回复')
+  })
+
   it('keeps excerpts within the shared budget', () => {
     const long = 'x'.repeat(DISPATCH_LIMITS.excerpt * 2)
     const text = reportText(Array.from({ length: 4 }, (_, i) => report({ childId: `s${i}`, message: long })))

@@ -293,7 +293,11 @@ async function read(caller: Place, args: unknown): Promise<DispatchToolResult> {
     ...(checksOf(child.session.id) ? [`Checks this turn: ${checksOf(child.session.id)}`] : []),
     ...(conflictsOf(child) ? [`Conflicts: ${conflictsOf(child)}`] : [])
   ]
-  const body = page.text ? `Last message${offset > 0 ? ` (from ${offset})` : ''}:\n${page.text}` : 'No final message yet.'
+  const body = page.text
+    ? `Last message${offset > 0 ? ` (from ${offset})` : ''}:\n${page.text}`
+    : child.session.status === 'running' || child.session.phase === 'starting'
+      ? 'No final message yet: it is still working.'
+      : 'No final message: its turn ended without a reply, which usually means it failed (for example a model provider error). The reason is on its screen; ask the user to look.'
   const more = page.nextOffset !== null ? `\n[more: call read_result with offset ${page.nextOffset}]` : ''
   return toolOk(`${head.join('\n')}\n\n${body}${more}`)
 }

@@ -10,13 +10,14 @@ describe('dispatch MCP injection', () => {
     })
   })
 
-  it('gives Codex the same server, forwards the hook environment and lifts the tool timeout', () => {
+  it('gives Codex the same server, forwards the hook environment, lifts the tool timeout and skips its per-call prompt', () => {
     expect(codexMcpOverrides(server)).toEqual([
       `mcp_servers.wavi.command="${server.command}"`,
       `mcp_servers.wavi.args=["${server.script}","--agent","codex"]`,
       'mcp_servers.wavi.env={ELECTRON_RUN_AS_NODE="1"}',
       'mcp_servers.wavi.env_vars=["TR_SESSION_ID","TR_HOOK_SOCK","TR_HOOK_TOKEN"]',
-      'mcp_servers.wavi.tool_timeout_sec=960'
+      'mcp_servers.wavi.tool_timeout_sec=960',
+      'mcp_servers.wavi.default_tools_approval_mode="approve"'
     ])
   })
 })

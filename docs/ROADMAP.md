@@ -95,7 +95,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] 回报：一轮结束 / 出错 / 退出 → 报告（分支、diff 统计、检查、冲突、最后一条消息摘录），3 秒合批、每个子会话只留最新一份、`read_result` 读过的不再送、每小时最多 20 次；Claude 走收件箱、Codex 走 `codex queue`，送不进去时留在派活会话下方的「送进去」条（`HeldReportsStrip`）
   - [x] 界面：侧栏子会话紧跟派活会话、缩进一级；会话头“由「…」派出”；总览“派出的会话”一节和「比较」；workspace.json 存 `dispatchedBy` / `dispatchTask`
   - [x] 测试：e2e `dispatch.spec.ts`（6 个，真实链路，两种主题截图在 `test-results/dispatch/`）；`src/shared/dispatch.test.ts`、`src/main/dispatch/*.test.ts`、侧栏和存盘的单元测试
-  - [ ] 真实 Claude / Codex 互相派一次活（会花额度，跑之前要作者同意）：Claude 派给 Codex、Codex 派给 Claude，看 agent 会不会照工具描述在派完后结束这一轮、会不会多派
+  - [x] 真实 Claude / Codex 互相派一次活（2026-10-22，作者同意后跑，PRD §6.14）：Claude（Haiku）派给 Codex、Codex 派给 Claude 都走通，Claude 派完会按工具说明结束这一轮，报告到了会读、会自己调 `read_result`。作者的 Codex 服务商当天对 `gpt-6-sol` 返回 503，所以 Codex 用的是真 CLI + 本地假模型；真 Codex 模型自己会不会照说明派活还没看到。顺带修了两处：Codex 默认对每次 MCP 工具调用都先问用户（现在注入 `default_tools_approval_mode="approve"`），以及一轮结束却没有回复时报告写明“可能出错了”
   - [ ] Figma 补 F21 的画面（确认面板、侧栏缩进、会话头、总览一节、待送报告条）
 - [ ] agent teams 的队友和子 agent 只显示、不接管（PRD F21 v1.66 改）：在派活会话下列出 Claude 自己开的队友 / 子 agent 的名字和状态（来自 hook 的 `agent_id`、`TeammateIdle`），不变成 Wavi 会话。~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
 - [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）

@@ -32,6 +32,10 @@ export function codexMcpOverrides(server: McpServerCommand): string[] {
     `mcp_servers.wavi.args=${array([server.script, '--agent', 'codex'])}`,
     `mcp_servers.wavi.env={ELECTRON_RUN_AS_NODE="1"}`,
     `mcp_servers.wavi.env_vars=${array(FORWARDED_ENV)}`,
-    `mcp_servers.wavi.tool_timeout_sec=${CODEX_TOOL_TIMEOUT_S}`
+    `mcp_servers.wavi.tool_timeout_sec=${CODEX_TOOL_TIMEOUT_S}`,
+    // Codex asks before every MCP tool call by default (measured on 0.163). Starting sessions waits for Wavi's own
+    // confirmation panel already, and the other tools only read or act on the caller's own sessions (like Claude's
+    // `permissions.allow: mcp__wavi`).
+    'mcp_servers.wavi.default_tools_approval_mode="approve"'
   ]
 }
