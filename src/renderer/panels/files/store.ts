@@ -104,13 +104,14 @@ export async function loadAllFiles(root: string): Promise<void> {
   patchRoot(root, { allFiles: files })
 }
 
-/** First look at a root: its top level and git status. Later calls only refresh the status. */
+/**
+ * The view (re)opens on a root: its top level, and every listing already loaded, since nothing watched them while
+ * it was closed. The entry can exist before the view ever showed (a terminal file link opens the preview first).
+ */
 export function openRoot(root: string): void {
-  const current = useFiles.getState().roots[root]
-  if (!current) {
-    patchRoot(root, {})
-    void loadDir(root, '')
-  }
+  const loaded = Object.keys(filesOf(root).children)
+  patchRoot(root, {})
+  for (const dir of loaded.includes('') ? loaded : ['', ...loaded]) void loadDir(root, dir)
   void refreshStatus(root)
 }
 
