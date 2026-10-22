@@ -3,8 +3,8 @@
 ```text
 GOAL:    in 24 s a stranger gets "ten agents are waiting on me; Wavi answers them one by one" and remembers the tube.
 OUTPUT:  HyperFrames, 1920 x 1080, 30 fps, English on screen, no voice.
-TIME:    24 s x 30 = 720 frames. Grid 120 BPM = 15 frames a beat, 60 a bar; every scene seam is on a bar
-         (4, 8, 12, 16 s), the type cuts on beats (16.0, 17.5), the nine fast answers on 16ths (0.125 s).
+TIME:    24.5 s x 30 = 735 frames. Grid 120 BPM = 15 frames a beat; scene seams on beats (4.5, 8.5, 12.5, 16.5,
+         19.5 s), the type cuts on beats (16.5, 18.0), the nine fast answers on 16ths (0.125 s).
 LOOK:    ground #050505 with stepped grain 5 % (fractal noise, 240 px tile, steps of 1 frame) on the type worlds
          (tube, type, end); product ground #0a0a0a under the UI worlds (row, graph).
          Ink #ededed, secondary #a1a1a1. One accent #ff5fb0: only the waiting "?" and the needs-you glyph.
@@ -26,29 +26,29 @@ MOTION:  carrier zooms: in power3.in 0.5 s (blur to 14 px), out expo.out 0.8 s f
          Titles: per word blur 6 → 0 in 0.13 s, 0.067 s apart; Bodoni lines per letter, 1 frame apart, hard cut out.
          UI state changes are instant swaps (the app does not animate status). Exits 0.15 s power3.in.
 SHOTS:
-  1 tube    f0-120    frame 0: the lit tube, ten magenta "?" with jitter; "Ten agents." (f9-42) then
-                      "Waiting on you." (f45-87) under it; keycap J (f90), press f96: the first "?" brightens,
-                      the rest dim to 45 %; f105-120 zoom into its dot.            sfx: glitch-3 hum, key, whoosh
-  2 row     f120-240  the dot is the needs-you glyph; pull back to the sidebar section; keycap 1 "Answer it",
-                      press f159: glyph → running, activity → "Running pnpm test auth"; f198 → done;
-                      f222-240 zoom into the green glyph.                          sfx: key, pop, whoosh
-  3 graph   f240-360  the green dot is session-cookie's head node; pull back to four lanes over main;
-                      keycap ⇧⌘M "Merge it", press f278: the merge curve draws and the node rides it to main,
-                      lands as the white merge dot f294; f342-360 zoom into it.     sfx: key, pop, whoosh
-  4 tube2   f360-480  the white dot is the first answered "·" in the tube; pull back; nine "?" answered on 16ths
-                      (f387-420); ALL RUNNING f423; f465-480 the tube switches off to a line.  sfx: typing, glitch
-  5 type    f480-570  hard cut on the bar: "BRANCH OUT." (f480-525), hard cut on the beat: "MERGE IN." (f525-570),
-                      Bodoni 250 px on grain.                                       sfx: two bass impacts
-  6 end     f570-720  the tube switches back on and shows the WAVI mark on its screen; "Download for macOS" and
-                      "Free · open source · no telemetry" below (f600); hold to the end.  sfx: glitch, pop
-BANNED:  a dark void with small things floating (the tube is >= 70 % of the frame width, the UI at 2.4x);
+  1 tube    f0-135    frame 0: the lit tube, ten magenta "?" with sync jumps and one-frame flicker; "Ten agents."
+                      (f9-45) then "Waiting on you." (f48-93) under it; keycap J (f93), press f102: the first "?"
+                      stays, the other nine dim to 45 %; f120-135 zoom into its dot.  sfx: glitch-3 hum, key, whoosh
+  2 row     f135-255  the dot is the needs-you glyph; pull back to the sidebar section; keycap 1 "Answer it",
+                      press f183: glyph -> running, "Running pnpm test auth"; f219 -> done;
+                      f240-255 zoom into the green glyph.                          sfx: click, pop, whoosh
+  3 graph   f255-375  the green dot is session-cookie's head node; pull back to four lanes over main;
+                      keycap ⇧⌘M "Merge it", press f293: the merge curve draws and the node rides it to main,
+                      lands as the white merge dot f309; f360-375 zoom into it.     sfx: key, pop, whoosh
+  4 tube2   f375-495  the white dot is the first answered "?" (hook gone, dot kept); pull back; nine more answered
+                      on 16ths (f402-438); ALL RUNNING f438; f480-495 the tube switches off to a line.  sfx: typing, glitch
+  5 type    f495-585  hard cut on the beat: "BRANCH OUT." printed letter by letter (f495-540), hard cut on the beat:
+                      "MERGE IN." 250 px (f540-585), Bodoni on grain.               sfx: two bass impacts
+  6 end     f585-735  the tube switches back on and shows the WAVI mark on its screen; "Download for macOS" and
+                      "Free · open source · no telemetry" below (f615); hold to the end.  sfx: glitch, pop
+BANNED:  an empty frame on a cut (found and fixed at 18.0 s); a dark void with small things floating (the tube is >= 70 % of the frame width, the UI at 2.4x);
          glow, bloom, particles, lens flares; purple/blue gradients; glass cards; tilted UI;
          everything fading and sliding up; a title over a dimmed screenshot; the logo docked in a corner;
          an end card that copies film A (A puts the mark above the tube; B's mark lives inside the tube);
          invented UI; any number presented as measured.
-QA:      f0 (lit tube, ten "?", never black) · f30 ("Ten agents." readable) · f100 (J pressed, one "?" lit) ·
-         f150 (row readable, magenta glyph) · f210 (done) · f300 (merge dot on main) · f430 (ALL RUNNING) ·
-         f500 (BRANCH OUT.) · f550 (MERGE IN.) · f700 (WAVI in the tube, Download for macOS).
+QA:      f0 (lit tube, ten "?", never black) · f30 ("Ten agents." readable) · f110 (J pressed, one "?" lit) ·
+         f150 (row readable, magenta glyph) · f230 (done) · f315 (merge dot on main) · f440 (ALL RUNNING) ·
+         f505 (BRANCH OUT.) · f560 (MERGE IN.) · f720 (WAVI in the tube, Download for macOS).
 ```
 
 ## Notes

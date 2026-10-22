@@ -9,7 +9,7 @@
     #b2-bg, #b2-stage { position: absolute; inset: 0; }
     #b2-bg { background: #050505; }
     #b2-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
-    #b2-sec { position: absolute; left: 504px; top: 250px; width: 760px; height: 384px; transform: scale(1.2); transform-origin: 0 0; }
+    #b2-sec { position: absolute; left: 276px; top: 130px; width: 760px; height: 384px; transform: scale(1.8); transform-origin: 0 0; }
     
   .sb { position: absolute; left: 0; top: 0; width: 760px; height: 1080px; background: #050505; }
   .sb-rule { position: absolute; left: 760px; top: 0; width: 2px; height: 1080px; background: #ffffff12; }
@@ -69,11 +69,14 @@
         </div>
       </div>
     </div>
-    <div id="b2-hud" class="hud clip" data-start="1" data-duration="1.3" style="left:0;right:0;top:830px;justify-content:center"><div class="hud-box" id="b2-hud-box"><div class="keys"><div class="key" id="b2-hud-k0"><div class="fill"></div><span>1</span></div></div><div class="verb">Answer it</div></div></div>
+    <div id="b2-hud" class="hud clip" data-start="1" data-duration="1.45" style="left:0;right:0;top:870px;justify-content:center"><div class="hud-box" id="b2-hud-box"><div class="keys"><div class="key" id="b2-hud-k0"><div class="fill"></div><span>1</span></div></div><div class="verb">Answer it</div></div></div>
   </div>
   <script>
     (() => {
-      const tl = gsap.timeline({ paused: true });
+      const tl = gsap.timeline();
+      // Authored at 1x; the film plays it at SPEED. F(t) places a tween at film time t (clip times above are film times).
+      const SPEED = 1.5;
+      const F = (t) => t * SPEED;
 
       const press = (sel, t) => {
         tl.fromTo(sel + ' .fill', { opacity: 0.9 }, { opacity: 0, duration: 0.2, ease: 'power2.out', immediateRender: false }, t);
@@ -83,20 +86,23 @@
         tl.fromTo(box, { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, ease: 'expo.out' }, t0);
         tl.to(box, { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, t1);
       };
-      tl.fromTo('#b2-stage .spin', { rotation: 0 }, { rotation: 360 * 4, duration: 4, ease: 'none', svgOrigin: '7 7' }, 0);
-      // Arrive: the tube's dot is this glyph; pull back to the row.
-      tl.fromTo('#b2-cam', { x: -7895, y: -4960.83, scale: 14.5833, filter: 'blur(14px)' }, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, ease: 'expo.out' }, 0);
+      tl.fromTo('#b2-stage .spin', { rotation: 0 }, { rotation: 360 * 6, duration: F(4), ease: 'none', svgOrigin: '7 7' }, 0);
+      // Arrive: the tube's dot is this glyph; pull back to the rows.
+      tl.fromTo('#b2-cam', { x: -3228.33, y: -2578.89, scale: 9.7222, filter: 'blur(14px)' }, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, ease: 'expo.out' }, 0);
       tl.fromTo('#b2-g-need circle:first-child', { opacity: 0 }, { opacity: 1, duration: 0.4 }, 0.2);
-      hud('#b2-hud-box', 1.0, 2.15);
-      press('#b2-hud-k0', 1.6);
-      tl.to(['#b2-g-need', '#b2-a-need', '#b2-m-need'], { opacity: 0, duration: 0.01 }, 1.63);
-      tl.to(['#b2-g-run', '#b2-a-run', '#b2-m-run'], { opacity: 1, duration: 0.01 }, 1.63);
-      tl.to(['#b2-g-run', '#b2-a-run', '#b2-m-run'], { opacity: 0, duration: 0.01 }, 2.8);
-      tl.to(['#b2-g-done', '#b2-a-done', '#b2-m-done'], { opacity: 1, duration: 0.01 }, 2.8);
-      // Zoom into the green glyph.
-      tl.to('#b2-cam', { x: -7895, y: -4960.83, scale: 14.5833, duration: 0.5, ease: 'power3.in' }, 3.5);
-      tl.to('#b2-cam', { filter: 'blur(14px)', duration: 0.25, ease: 'power2.in' }, 3.75);
-      window.__timelines['row'] = tl;
+      hud('#b2-hud-box', F(1.0), F(2.35));
+      // Answer on the beat (6.0 s), done on the beat (7.0 s).
+      press('#b2-hud-k0', F(1.5));
+      tl.to(['#b2-g-need', '#b2-a-need', '#b2-m-need'], { opacity: 0, duration: 0.01 }, F(1.5));
+      tl.to(['#b2-g-run', '#b2-a-run', '#b2-m-run'], { opacity: 1, duration: 0.01 }, F(1.5));
+      tl.to(['#b2-g-run', '#b2-a-run', '#b2-m-run'], { opacity: 0, duration: 0.01 }, F(2.5));
+      tl.to(['#b2-g-done', '#b2-a-done', '#b2-m-done'], { opacity: 1, duration: 0.01 }, F(2.5));
+      // Zoom into the green glyph, landing at the cut (8.5 s).
+      tl.to('#b2-cam', { x: -3228.33, y: -2578.89, scale: 9.7222, duration: 0.5, ease: 'power3.in' }, F(4) - 0.5);
+      tl.to('#b2-cam', { filter: 'blur(14px)', duration: 0.25, ease: 'power2.in' }, F(4) - 0.25);
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['row'] = film;
     })();
   </script>
 </template>

@@ -20,7 +20,7 @@
     </style>
   </head>
   <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="24.5" data-width="1920" data-height="1080">
+    <div id="root" data-composition-id="main" data-start="0" data-duration="22.5" data-width="1920" data-height="1080">
       <div id="ground"></div>
       <div
         id="tube"
@@ -49,7 +49,7 @@
         data-composition-id="graph"
         data-composition-src="compositions/graph.html"
         data-start="8.5"
-        data-duration="4"
+        data-duration="3"
         data-track-index="1"
         data-track-kind="graphics"
         data-width="1920"
@@ -59,7 +59,7 @@
         id="tube2"
         data-composition-id="tube2"
         data-composition-src="compositions/tube2.html"
-        data-start="12.5"
+        data-start="11.5"
         data-duration="4"
         data-track-index="1"
         data-track-kind="graphics"
@@ -70,7 +70,7 @@
         id="type"
         data-composition-id="type"
         data-composition-src="compositions/type.html"
-        data-start="16.5"
+        data-start="15.5"
         data-duration="3"
         data-track-index="1"
         data-track-kind="graphics"
@@ -81,31 +81,34 @@
         id="end"
         data-composition-id="end"
         data-composition-src="compositions/end.html"
-        data-start="19.5"
-        data-duration="5"
+        data-start="18.5"
+        data-duration="4"
         data-track-index="1"
         data-track-kind="graphics"
         data-width="1920"
         data-height="1080"
       ></div>
 
+      <!-- Music: "do robots have a god?" by smilingcynic (ccMixter, CC BY 3.0, 120 BPM), entered on a beat at 16.045 s of the
+           track; muffled and lower in the tube until J (3.5 s), open from there; limiter last. Credit in assets/sfx/CREDITS.md. -->
+      <audio id="music" class="clip" src="assets/music/do-robots-have-a-god.mp3" data-timeline-role="music" data-start="0" data-duration="22.5" data-media-start="16.045" data-track-index="9" data-volume="1" data-fade-out="1.2" data-fx-chain="{&quot;version&quot;:1,&quot;nodes&quot;:[{&quot;type&quot;:&quot;lowpass&quot;,&quot;id&quot;:&quot;lp&quot;,&quot;label&quot;:&quot;Muffled in the tube until J&quot;,&quot;params&quot;:{&quot;frequency&quot;:1200}},{&quot;type&quot;:&quot;limiter&quot;,&quot;id&quot;:&quot;lim&quot;,&quot;params&quot;:{&quot;limit&quot;:-1}}]}" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0.55},{&quot;t&quot;:3.4,&quot;v&quot;:0.55},{&quot;t&quot;:3.5,&quot;v&quot;:0.82},{&quot;t&quot;:21.3,&quot;v&quot;:0.82}]},{&quot;target&quot;:&quot;fx.lp.frequency&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:1200},{&quot;t&quot;:3.3,&quot;v&quot;:1600,&quot;curve&quot;:0.6},{&quot;t&quot;:3.5,&quot;v&quot;:18000}]}]}"></audio>
       <!-- Sound effects: each on a visible action, peak one frame after the picture (bundled Pixabay library, assets/sfx/CREDITS.md). -->
-      <audio id="sfx-hum" class="clip" src="assets/sfx/glitch-3.mp3" data-start="0.033" data-duration="3.096" data-track-index="10" data-volume="0.5"></audio>
-      <audio id="sfx-j" class="clip" src="assets/sfx/key-press.mp3" data-start="3.357" data-duration="0.4" data-track-index="11" data-volume="2"></audio>
-      <audio id="sfx-in1" class="clip" src="assets/sfx/whoosh-short.mp3" data-start="4.321" data-duration="0.575" data-track-index="12" data-volume="0.5"></audio>
-      <audio id="sfx-answer" class="clip" src="assets/sfx/click-soft.mp3" data-start="6.06" data-duration="0.366" data-track-index="13" data-volume="0.9"></audio>
-      <audio id="sfx-done" class="clip" src="assets/sfx/pop.mp3" data-start="7.213" data-duration="0.72" data-track-index="10" data-volume="0.6"></audio>
-      <audio id="sfx-in2" class="clip" src="assets/sfx/whoosh.mp3" data-start="8.321" data-duration="0.575" data-track-index="11" data-volume="0.45"></audio>
-      <audio id="sfx-merge-key" class="clip" src="assets/sfx/key-press.mp3" data-start="9.727" data-duration="0.4" data-track-index="12" data-volume="2"></audio>
-      <audio id="sfx-landed" class="clip" src="assets/sfx/pop.mp3" data-start="10.213" data-duration="0.72" data-track-index="13" data-volume="0.7"></audio>
-      <audio id="sfx-in3" class="clip" src="assets/sfx/whoosh-short.mp3" data-start="12.321" data-duration="0.575" data-track-index="10" data-volume="0.5"></audio>
-      <audio id="sfx-nine" class="clip" src="assets/sfx/typing.mp3" data-start="12.979" data-duration="1.5" data-track-index="11" data-volume="1.4"></audio>
-      <audio id="sfx-all" class="clip" src="assets/sfx/glitch-1.mp3" data-start="13.813" data-duration="2.638" data-track-index="12" data-volume="0.35"></audio>
-      <audio id="sfx-off" class="clip" src="assets/sfx/whoosh-short.mp3" data-start="15.971" data-duration="0.575" data-track-index="13" data-volume="0.35"></audio>
-      <audio id="sfx-branch" class="clip" src="assets/sfx/impact-bass-1.mp3" data-start="16.46" data-duration="2.116" data-track-index="10" data-volume="0.4"></audio>
-      <audio id="sfx-merge" class="clip" src="assets/sfx/impact-bass-2.mp3" data-start="16.047" data-duration="2.592" data-track-index="11" data-volume="0.3"></audio>
-      <audio id="sfx-on" class="clip" src="assets/sfx/glitch-1.mp3" data-start="18.713" data-duration="2.638" data-track-index="12" data-volume="0.3"></audio>
-      <audio id="sfx-cta" class="clip" src="assets/sfx/pop.mp3" data-start="20.413" data-duration="0.72" data-track-index="13" data-volume="0.5"></audio>
+      <audio id="sfx-hum" class="clip" src="assets/sfx/glitch-3.mp3" data-start="0.033" data-duration="3.096" data-track-index="10" data-volume="0.4"></audio>
+      <audio id="sfx-j" class="clip" src="assets/sfx/key-press.mp3" data-start="3.457" data-duration="0.4" data-track-index="11" data-volume="2"></audio>
+      <audio id="sfx-in1" class="clip" src="assets/sfx/whoosh-short.mp3" data-start="4.371" data-duration="0.575" data-track-index="12" data-volume="0.5"></audio>
+      <audio id="sfx-answer" class="clip" src="assets/sfx/click-soft.mp3" data-start="5.96" data-duration="0.366" data-track-index="10" data-volume="0.9"></audio>
+      <audio id="sfx-done" class="clip" src="assets/sfx/pop.mp3" data-start="6.913" data-duration="0.72" data-track-index="11" data-volume="0.6"></audio>
+      <audio id="sfx-in2" class="clip" src="assets/sfx/whoosh.mp3" data-start="8.371" data-duration="0.575" data-track-index="12" data-volume="0.45"></audio>
+      <audio id="sfx-merge-key" class="clip" src="assets/sfx/key-press.mp3" data-start="9.457" data-duration="0.4" data-track-index="10" data-volume="2"></audio>
+      <audio id="sfx-landed" class="clip" src="assets/sfx/pop.mp3" data-start="9.913" data-duration="0.72" data-track-index="11" data-volume="0.7"></audio>
+      <audio id="sfx-in3" class="clip" src="assets/sfx/whoosh-short.mp3" data-start="11.371" data-duration="0.575" data-track-index="12" data-volume="0.5"></audio>
+      <audio id="sfx-nine" class="clip" src="assets/sfx/typing.mp3" data-start="12.079" data-duration="1.5" data-track-index="10" data-volume="1.4"></audio>
+      <audio id="sfx-all" class="clip" src="assets/sfx/glitch-1.mp3" data-start="13.213" data-duration="2.638" data-track-index="11" data-volume="0.35"></audio>
+      <audio id="sfx-off" class="clip" src="assets/sfx/whoosh-short.mp3" data-start="15.121" data-duration="0.575" data-track-index="12" data-volume="0.35"></audio>
+      <audio id="sfx-branch" class="clip" src="assets/sfx/impact-bass-1.mp3" data-start="15.46" data-duration="2.116" data-track-index="10" data-volume="0.4"></audio>
+      <audio id="sfx-merge" class="clip" src="assets/sfx/impact-bass-2.mp3" data-start="15.047" data-duration="2.592" data-track-index="13" data-volume="0.3"></audio>
+      <audio id="sfx-on" class="clip" src="assets/sfx/glitch-1.mp3" data-start="17.713" data-duration="2.638" data-track-index="11" data-volume="0.3"></audio>
+      <audio id="sfx-cta" class="clip" src="assets/sfx/pop.mp3" data-start="19.413" data-duration="0.72" data-track-index="12" data-volume="0.5"></audio>
     </div>
     <script>
       window.__timelines = window.__timelines || {};

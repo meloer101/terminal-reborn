@@ -14,7 +14,7 @@
     .lab span { font: 400 28px/36px Inter, sans-serif; color: #a1a1a1; }
     .head { position: absolute; width: 34px; height: 34px; }
     .head .glyph { width: 34px; height: 34px; display: block; }
-    #b3-main { position: absolute; left: 100px; top: 826px; font: 500 30px/36px 'JetBrains Mono', monospace; color: #a1a1a1; }
+    #b3-main { position: absolute; left: 100px; top: 786px; font: 500 30px/36px 'JetBrains Mono', monospace; color: #a1a1a1; }
     
   .hud { position: absolute; display: flex; align-items: center; gap: 24px; }
   .hud .keys { display: flex; gap: 10px; }
@@ -26,58 +26,65 @@
     .hud-box { display: flex; align-items: center; gap: 24px; padding: 18px 28px; border-radius: 20px; background: #050505; box-shadow: inset 0 0 0 2px #ffffff1c; }
   </style>
   <div id="root" data-composition-id="graph" data-width="1920" data-height="1080">
-    <div id="b3-bg" class="clip" data-start="0" data-duration="4"></div>
-    <div id="b3-stage" class="clip" data-start="0" data-duration="4" data-layout-allow-overflow>
+    <div id="b3-bg" class="clip" data-start="0" data-duration="3"></div>
+    <div id="b3-stage" class="clip" data-start="0" data-duration="3" data-layout-allow-overflow>
       <div id="b3-cam">
         <svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;left:0;top:0">
-          <line x1="100" y1="800" x2="1820" y2="800" stroke="#a1a1a1" stroke-width="6" />
-          <path d="M 200 800 C 200 420, 212 380, 270 380 L 1500 380" fill="none" stroke="#ffb224" stroke-width="6" />
-          <circle cx="432" cy="380" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
-          <circle cx="615" cy="380" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
-          <circle cx="798" cy="380" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
-          <circle cx="982" cy="380" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
-          <circle cx="1165" cy="380" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
-          <circle cx="1348" cy="380" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
-          <path d="M 280 800 C 280 520, 292 480, 350 480 L 1580 480" fill="none" stroke="#6ccfd6" stroke-width="6" />
-          <circle cx="512" cy="480" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
-          <circle cx="695" cy="480" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
-          <circle cx="878" cy="480" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
-          <circle cx="1062" cy="480" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
-          <circle cx="1245" cy="480" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
-          <circle cx="1428" cy="480" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
-          <path d="M 360 800 C 360 620, 372 580, 430 580 L 1400 580" fill="none" stroke="#c79bff" stroke-width="6" />
-          <circle cx="584" cy="580" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
-          <circle cx="752" cy="580" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
-          <circle cx="920" cy="580" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
-          <circle cx="1088" cy="580" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
-          <circle cx="1256" cy="580" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
-          <path d="M 440 800 C 440 720, 452 680, 510 680 L 1160 680" fill="none" stroke="#5ea1ff" stroke-width="6" />
-          <circle cx="667" cy="680" r="10" fill="#5ea1ff" stroke="#050505" stroke-width="5" />
-          <circle cx="840" cy="680" r="10" fill="#5ea1ff" stroke="#050505" stroke-width="5" />
-          <circle cx="1013" cy="680" r="10" fill="#5ea1ff" stroke="#050505" stroke-width="5" />
-          <circle cx="180" cy="800" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
-          <circle cx="330" cy="800" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
-          <circle cx="480" cy="800" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
-          <circle cx="640" cy="800" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
-          <circle cx="900" cy="800" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
-          <path id="b3-merge" d="M 1160,680 C 1220,680, 1260,760, 1260,800" pathLength="1" fill="none" stroke="#5ea1ff" stroke-width="6" stroke-dasharray="1" stroke-dashoffset="1" />
-          <circle id="b3-node" cx="1160" cy="680" r="12" fill="#3dd68c" />
+          <line x1="100" y1="760" x2="1820" y2="760" stroke="#a1a1a1" stroke-width="6" />
+          <path d="M 120 760 C 120 260, 132 220, 190 220 L 1800 220" fill="none" stroke="#ffb224" stroke-width="6" />
+          <circle cx="353" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="538" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="723" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="908" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="1093" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="1278" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="1463" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <circle cx="1648" cy="220" r="10" fill="#ffb224" stroke="#050505" stroke-width="5" />
+          <path d="M 200 760 C 200 400, 212 360, 270 360 L 1720 360" fill="none" stroke="#6ccfd6" stroke-width="6" />
+          <circle cx="434" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <circle cx="623" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <circle cx="811" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <circle cx="1000" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <circle cx="1189" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <circle cx="1377" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <circle cx="1566" cy="360" r="10" fill="#6ccfd6" stroke="#050505" stroke-width="5" />
+          <path d="M 280 760 C 280 540, 292 500, 350 500 L 1600 500" fill="none" stroke="#c79bff" stroke-width="6" />
+          <circle cx="513" cy="500" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
+          <circle cx="700" cy="500" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
+          <circle cx="887" cy="500" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
+          <circle cx="1073" cy="500" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
+          <circle cx="1260" cy="500" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
+          <circle cx="1447" cy="500" r="10" fill="#c79bff" stroke="#050505" stroke-width="5" />
+          <path d="M 360 760 C 360 680, 372 640, 430 640 L 860 640" fill="none" stroke="#5ea1ff" stroke-width="6" />
+          <circle cx="575" cy="640" r="10" fill="#5ea1ff" stroke="#050505" stroke-width="5" />
+          <circle cx="725" cy="640" r="10" fill="#5ea1ff" stroke="#050505" stroke-width="5" />
+          <circle cx="160" cy="760" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
+          <circle cx="240" cy="760" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
+          <circle cx="320" cy="760" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
+          <circle cx="460" cy="760" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
+          <circle cx="600" cy="760" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
+          <circle cx="760" cy="760" r="11" fill="#a1a1a1" stroke="#050505" stroke-width="5" />
+          <path id="b3-merge" d="M 860,640 C 920,640, 960,720, 960,760" pathLength="1" fill="none" stroke="#5ea1ff" stroke-width="6" stroke-dasharray="1" stroke-dashoffset="1" />
+          <circle id="b3-node" cx="860" cy="640" r="12" fill="#3dd68c" />
         </svg>
-        <div class="lab" style="left:284px;top:330px"><b>graph-layout</b><span>Claude Code · build failed</span></div>
-        <div class="head" style="left:1483px;top:363px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#ff5c5c"/></svg></div>
-        <div class="lab" style="left:364px;top:430px"><b>i18n-copy</b><span>Codex</span></div>
-        <div class="head" style="left:1563px;top:463px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></div>
-        <div class="lab" style="left:444px;top:530px"><b>checkout-perf</b><span>Codex</span></div>
-        <div class="head" style="left:1383px;top:563px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></div>
-        <div class="lab" style="left:524px;top:630px"><b>session-cookie</b><span>Claude Code</span></div>
+        <div class="lab" style="left:204px;top:170px"><b>graph-layout</b><span>Claude Code · build failed</span></div>
+        <div class="head" style="left:1783px;top:203px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#ff5c5c"/></svg></div>
+        <div class="lab" style="left:284px;top:310px"><b>i18n-copy</b><span>Codex</span></div>
+        <div class="head" style="left:1703px;top:343px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></div>
+        <div class="lab" style="left:364px;top:450px"><b>checkout-perf</b><span>Codex</span></div>
+        <div class="head" style="left:1583px;top:483px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg></div>
+        <div class="lab" style="left:444px;top:590px"><b>session-cookie</b><span>Claude Code</span></div>
         <div id="b3-main">main</div>
       </div>
     </div>
-    <div id="b3-hud" class="hud clip" data-start="0.9" data-duration="1.1" style="left:0;right:0;top:900px;justify-content:center"><div class="hud-box" id="b3-hud-box"><div class="keys"><div class="key" id="b3-hud-k0"><div class="fill"></div><span>⇧</span></div><div class="key" id="b3-hud-k1"><div class="fill"></div><span>⌘</span></div><div class="key" id="b3-hud-k2"><div class="fill"></div><span>M</span></div></div><div class="verb">Merge it</div></div></div>
+    <div id="b3-hud" class="hud clip" data-start="0.5" data-duration="1" style="left:0;right:0;top:880px;justify-content:center"><div class="hud-box" id="b3-hud-box"><div class="keys"><div class="key" id="b3-hud-k0"><div class="fill"></div><span>⇧</span></div><div class="key" id="b3-hud-k1"><div class="fill"></div><span>⌘</span></div><div class="key" id="b3-hud-k2"><div class="fill"></div><span>M</span></div></div><div class="verb">Merge it</div></div></div>
   </div>
   <script>
     (() => {
-      const tl = gsap.timeline({ paused: true });
+      const tl = gsap.timeline();
+      // Authored at 1x; the film plays it at SPEED. F(t) places a tween at film time t (clip times above are film times).
+      const SPEED = 1.5;
+      const F = (t) => t * SPEED;
 
       const press = (sel, t) => {
         tl.fromTo(sel + ' .fill', { opacity: 0.9 }, { opacity: 0, duration: 0.2, ease: 'power2.out', immediateRender: false }, t);
@@ -88,18 +95,20 @@
         tl.to(box, { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, t1);
       };
       const PTS = [{"x":0,"y":0},{"x":14.6,"y":1.6},{"x":28.2,"y":6.1},{"x":40.9,"y":13.1},{"x":52.6,"y":22.2},{"x":63.1,"y":33},{"x":72.5,"y":45},{"x":80.6,"y":57.8},{"x":87.4,"y":71.1},{"x":92.8,"y":84.4},{"x":96.8,"y":97.2},{"x":99.2,"y":109.2},{"x":100,"y":120}];
-      tl.fromTo('#b3-stage .spin', { rotation: 0 }, { rotation: 360 * 4, duration: 4, ease: 'none', svgOrigin: '7 7' }, 0);
-      tl.fromTo('#b3-cam', { x: -12573.33, y: -7393.33, scale: 11.6667, filter: 'blur(14px)' }, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, ease: 'expo.out' }, 0);
-      hud('#b3-hud-box', 0.9, 1.85);
-      ['#b3-hud-k0', '#b3-hud-k1', '#b3-hud-k2'].forEach((k) => press(k, 1.27));
-      // The head node rides the merge curve into main and lands as the merge dot.
-      tl.fromTo('#b3-merge', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.5, ease: 'none' }, 1.3);
-      tl.to('#b3-node', { keyframes: PTS.slice(1).map((p) => ({ x: p.x, y: p.y, duration: 0.5 / 12, ease: 'none' })) }, 1.3);
-      tl.to('#b3-node', { attr: { r: 16 }, fill: '#ededed', duration: 0.2, ease: 'back.out(2)' }, 1.8);
-      // Zoom into the merge dot.
-      tl.to('#b3-cam', { x: -10065, y: -6460, scale: 8.75, duration: 0.5, ease: 'power3.in' }, 3.5);
-      tl.to('#b3-cam', { filter: 'blur(14px)', duration: 0.25, ease: 'power2.in' }, 3.75);
-      window.__timelines['graph'] = tl;
+      tl.fromTo('#b3-stage .spin', { rotation: 0 }, { rotation: 360 * 4, duration: F(3), ease: 'none', svgOrigin: '7 7' }, 0);
+      tl.fromTo('#b3-cam', { x: -9073.33, y: -6926.67, scale: 11.6667, filter: 'blur(14px)' }, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, ease: 'expo.out' }, 0);
+      hud('#b3-hud-box', F(0.5), F(1.4));
+      // ⇧⌘M on the beat (9.5 s); the head node rides the merge curve and lands on main on the next beat (10.0 s).
+      ['#b3-hud-k0', '#b3-hud-k1', '#b3-hud-k2'].forEach((k) => press(k, F(1.0)));
+      tl.fromTo('#b3-merge', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: F(0.5), ease: 'none' }, F(1.0));
+      tl.to('#b3-node', { keyframes: PTS.slice(1).map((p) => ({ x: p.x, y: p.y, duration: F(0.5) / 12, ease: 'none' })) }, F(1.0));
+      tl.to('#b3-node', { attr: { r: 16 }, fill: '#ededed', duration: 0.2, ease: 'back.out(2)' }, F(1.5));
+      // Zoom into the merge dot, landing at the cut (11.5 s).
+      tl.to('#b3-cam', { x: -7440, y: -6110, scale: 8.75, duration: 0.5, ease: 'power3.in' }, F(3) - 0.5);
+      tl.to('#b3-cam', { filter: 'blur(14px)', duration: 0.25, ease: 'power2.in' }, F(3) - 0.25);
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['graph'] = film;
     })();
   </script>
 </template>

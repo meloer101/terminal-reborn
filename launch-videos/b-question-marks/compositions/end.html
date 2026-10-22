@@ -29,8 +29,8 @@
     #b6-note { font: 400 30px/1 Inter, sans-serif; color: #a1a1a1; }
   </style>
   <div id="root" data-composition-id="end" data-width="1920" data-height="1080">
-    <div id="b6-bg" class="clip" data-start="0" data-duration="5"><div id="b6-grain"></div></div>
-    <div id="b6-stage" class="clip" data-start="0" data-duration="5">
+    <div id="b6-bg" class="clip" data-start="0" data-duration="4"><div id="b6-grain"></div></div>
+    <div id="b6-stage" class="clip" data-start="0" data-duration="4">
       <div id="b6-tube">
         <div class="screen" id="b6-screen">
           <svg id="b6-mark" viewBox="0 0 1600 460" aria-label="WAVI">
@@ -44,27 +44,33 @@
             <text x="800" y="335" text-anchor="middle" fill="url(#b6-chrome)">WAVI</text>
           </svg>
         </div>
-        <div class="band" id="b6-band"></div>
+        <div class="band" id="b6-band" data-layout-ignore></div>
         <div class="scan"></div>
       </div>
     </div>
-    <div id="b6-cta" class="clip" data-start="1" data-duration="4">
+    <div id="b6-cta" class="clip" data-start="1" data-duration="3">
       <div id="b6-btn">Download for macOS</div>
       <div id="b6-note">Free · open source · no telemetry</div>
     </div>
   </div>
   <script>
     (() => {
-      const tl = gsap.timeline({ paused: true });
+      const tl = gsap.timeline();
+      // Authored at 1x; the film plays it at SPEED. F(t) places a tween at film time t (clip times above are film times).
+      const SPEED = 1.5;
+      const F = (t) => t * SPEED;
 
-      tl.fromTo('#b6-grain', { x: 0, y: 0 }, { x: 53, y: -31, duration: 5, ease: 'steps(150)' }, 0);
-      // Switch-on: a bright line opens into the picture.
+      tl.fromTo('#b6-grain', { x: 0, y: 0 }, { x: 53, y: -31, duration: F(4), ease: 'steps(120)' }, 0);
+      // Switch-on on the beat (18.5 s): a bright line opens into the WAVI mark.
       tl.fromTo('#b6-screen', { scaleY: 0.012, scaleX: 0.6, filter: 'brightness(3)' }, { scaleY: 1, scaleX: 1, filter: 'brightness(1)', duration: 0.3, ease: 'expo.out' }, 0);
-      tl.fromTo('#b6-band', { y: 0 }, { y: 640, duration: 2.6, ease: 'none' }, 0.2);
-      tl.to('#b6-fringe', { keyframes: [{ x: -6, y: 2, duration: 0.033 }, { x: 0, y: 0, duration: 0.033 }, { x: 5, duration: 0.033, delay: 1.6 }, { x: 0, duration: 0.033 }] }, 0.9);
-      tl.fromTo('#b6-btn', { opacity: 0, scale: 0.94, filter: 'blur(6px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.3, ease: 'expo.out' }, 1.0);
-      tl.fromTo('#b6-note', { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'power2.out' }, 1.2);
-      window.__timelines['end'] = tl;
+      tl.fromTo('#b6-band', { y: 0 }, { y: 640, duration: F(2.6), ease: 'none' }, F(0.2));
+      tl.to('#b6-fringe', { keyframes: [{ x: -6, y: 2, duration: 0.05 }, { x: 0, y: 0, duration: 0.05 }, { x: 5, duration: 0.05, delay: 2.4 }, { x: 0, duration: 0.05 }] }, F(1.5));
+      // The call to action on the beat (19.5 s).
+      tl.fromTo('#b6-btn', { opacity: 0, scale: 0.94, filter: 'blur(6px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.3, ease: 'expo.out' }, F(1.0));
+      tl.fromTo('#b6-note', { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'power2.out' }, F(1.2));
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['end'] = film;
     })();
   </script>
 </template>

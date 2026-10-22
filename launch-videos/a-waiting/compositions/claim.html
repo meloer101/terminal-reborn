@@ -8,17 +8,21 @@
     #claim-line .w { display: inline-block; }
   </style>
   <div data-hf-id="hf-dc55" id="root" data-composition-id="claim" data-width="1920" data-height="1080">
-    <div data-hf-id="hf-jju3" id="claim-bg" class="clip" data-start="0" data-duration="2.5"><div data-hf-id="hf-7gwd" id="claim-grain"></div></div>
-    <h1 data-hf-id="hf-uezy" id="claim-line" class="clip" data-start="0" data-duration="2.5"><span data-hf-id="hf-iogc" class="w">One</span> <span data-hf-id="hf-vbqb" class="w">person,</span> <span data-hf-id="hf-a0dr" class="w">many</span> <span data-hf-id="hf-mu8d" class="w">threads.</span></h1>
+    <div data-hf-id="hf-jju3" id="claim-bg" class="clip" data-start="0" data-duration="1.5"><div data-hf-id="hf-7gwd" id="claim-grain"></div></div>
+    <h1 data-hf-id="hf-uezy" id="claim-line" class="clip" data-start="0" data-duration="1.5"><span data-hf-id="hf-iogc" class="w">One</span> <span data-hf-id="hf-vbqb" class="w">person,</span> <span data-hf-id="hf-a0dr" class="w">many</span> <span data-hf-id="hf-mu8d" class="w">threads.</span></h1>
   </div>
   <script>
     (() => {
-      const tl = gsap.timeline({ paused: true });
+      const tl = gsap.timeline();
       // Grain steps like film, never drifts smoothly.
-      tl.fromTo('#claim-grain', { x: 0, y: 0 }, { x: 37, y: -23, duration: 2.5, ease: 'steps(30)' }, 0);
+      tl.fromTo('#claim-grain', { x: 0, y: 0 }, { x: 37, y: -23, duration: 2.25, ease: 'steps(27)' }, 0);
       tl.fromTo('#claim-line .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.1, ease: 'power2.out' }, 0.15);
-      tl.to('#claim-line .w', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.03, ease: 'power3.in' }, 2.2);
-      window.__timelines['claim'] = tl;
+      tl.to('#claim-line .w', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.03, ease: 'power3.in' }, 2.05);
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['claim'] = film;
     })();
   </script>
 </template>

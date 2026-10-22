@@ -18,7 +18,7 @@
     .gt .ch { display: inline-block; }
   </style>
   <div data-hf-id="hf-7m1t" id="root" data-composition-id="graph" data-width="1920" data-height="1080">
-    <div data-hf-id="hf-3mgv" id="graph-stage" class="clip" data-start="0" data-duration="7" data-layout-allow-overflow>
+    <div data-hf-id="hf-3mgv" id="graph-stage" class="clip" data-start="0" data-duration="5" data-layout-allow-overflow>
     <div data-hf-id="hf-p3sd" id="graph-cam">
       <svg data-hf-id="hf-oumh" id="graph-svg" width="1920" height="1080" viewBox="0 0 1920 1080">
         <line data-hf-id="hf-q1dl" x1="80" y1="980" x2="1840" y2="980" stroke="#a1a1a1" stroke-width="4" />
@@ -97,14 +97,14 @@
       <div data-hf-id="hf-h13s" id="graph-main-lab">main</div>
     </div>
     </div>
-    <div data-hf-id="hf-cw9i" id="graph-t1" class="gt clip" data-start="1.0" data-duration="2.0"><span data-hf-id="hf-zbhu" class="ch">B</span><span data-hf-id="hf-syle" class="ch">R</span><span data-hf-id="hf-zpsv" class="ch">A</span><span data-hf-id="hf-xq9q" class="ch">N</span><span data-hf-id="hf-yx6t" class="ch">C</span><span data-hf-id="hf-wxno" class="ch">H</span><span data-hf-id="hf-5eis" class="ch">&nbsp;</span><span data-hf-id="hf-xbyp" class="ch">O</span><span data-hf-id="hf-uy4j" class="ch">U</span><span data-hf-id="hf-vcfk" class="ch">T</span><span data-hf-id="hf-rivy" class="ch">.</span></div>
-    <div data-hf-id="hf-ag8e" id="graph-t2" class="gt clip" data-start="3.1" data-duration="3.9"><span data-hf-id="hf-y4kr" class="ch">M</span><span data-hf-id="hf-1b0z" class="ch">E</span><span data-hf-id="hf-rshy" class="ch">R</span><span data-hf-id="hf-0iex" class="ch">G</span><span data-hf-id="hf-dg8j" class="ch">E</span><span data-hf-id="hf-6zuk" class="ch">&nbsp;</span><span data-hf-id="hf-wjcn" class="ch">I</span><span data-hf-id="hf-u336" class="ch">N</span><span data-hf-id="hf-6ude" class="ch">.</span></div>
+    <div data-hf-id="hf-cw9i" id="graph-t1" class="gt clip" data-start="0.5" data-duration="1.933"><span data-hf-id="hf-zbhu" class="ch">B</span><span data-hf-id="hf-syle" class="ch">R</span><span data-hf-id="hf-zpsv" class="ch">A</span><span data-hf-id="hf-xq9q" class="ch">N</span><span data-hf-id="hf-yx6t" class="ch">C</span><span data-hf-id="hf-wxno" class="ch">H</span><span data-hf-id="hf-5eis" class="ch">&nbsp;</span><span data-hf-id="hf-xbyp" class="ch">O</span><span data-hf-id="hf-uy4j" class="ch">U</span><span data-hf-id="hf-vcfk" class="ch">T</span><span data-hf-id="hf-rivy" class="ch">.</span></div>
+    <div data-hf-id="hf-ag8e" id="graph-t2" class="gt clip" data-start="2.5" data-duration="2.5"><span data-hf-id="hf-y4kr" class="ch">M</span><span data-hf-id="hf-1b0z" class="ch">E</span><span data-hf-id="hf-rshy" class="ch">R</span><span data-hf-id="hf-0iex" class="ch">G</span><span data-hf-id="hf-dg8j" class="ch">E</span><span data-hf-id="hf-6zuk" class="ch">&nbsp;</span><span data-hf-id="hf-wjcn" class="ch">I</span><span data-hf-id="hf-u336" class="ch">N</span><span data-hf-id="hf-6ude" class="ch">.</span></div>
   </div>
   <script>
     (() => {
-      const tl = gsap.timeline({ paused: true });
-      const LANES = [{"id":"checkout","at":3.1,"x":1380},{"id":"docs","at":2.6,"x":1240},{"id":"webhook","at":2.1,"x":1100},{"id":"mobile","at":1.6,"x":960},{"id":"cookie","at":0,"x":780}];
-      tl.fromTo('#graph-stage .spin', { rotation: 0 }, { rotation: 360 * 7, duration: 7, ease: 'none', svgOrigin: '7 7' }, 0);
+      const tl = gsap.timeline();
+      const LANES = [{"id":"checkout","at":3.75,"x":1380},{"id":"docs","at":3,"x":1240},{"id":"webhook","at":2.25,"x":1100},{"id":"mobile","at":1.5,"x":960},{"id":"cookie","at":0,"x":780}];
+      tl.fromTo('#graph-stage .spin', { rotation: 0 }, { rotation: 360 * 8, duration: 7.5, ease: 'none', svgOrigin: '7 7' }, 0);
       // Arrive from the merge we just made: start close on the session-cookie merge dot and pull back.
       tl.fromTo('#graph-cam', { scale: 3.2, x: 960 - 3.2 * 780, y: 600 - 3.2 * 980, filter: 'blur(14px)' },
         { scale: 1, x: 0, y: 0, filter: 'blur(0px)', duration: 0.9, ease: 'expo.out' }, 0);
@@ -116,9 +116,9 @@
         tl.fromTo('#graph-md-' + l.id, { scale: 0, transformOrigin: '50% 50%' }, { scale: 1, duration: 0.35, ease: 'back.out(2)' }, l.at);
         tl.to('#graph-h-' + l.id, { opacity: 0, duration: 0.2 }, l.at);
       }
-      tl.fromTo('#graph-t1 .ch', { opacity: 0.3, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, stagger: 0.05, ease: 'power2.out' }, 1.0);
-      tl.to('#graph-t1 .ch', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.02, ease: 'power3.in' }, 2.75);
-      tl.fromTo('#graph-t2 .ch', { opacity: 0.3, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, stagger: 0.05, ease: 'power2.out' }, 3.1);
+      tl.fromTo('#graph-t1 .ch', { opacity: 0.3, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, stagger: 0.05, ease: 'power2.out' }, 0.75);
+      tl.to('#graph-t1 .ch', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.02, ease: 'power3.in' }, 3.4);
+      tl.fromTo('#graph-t2 .ch', { opacity: 0.3, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, stagger: 0.05, ease: 'power2.out' }, 3.75);
       // The running lane keeps working.
       tl.fromTo('#graph-grow', { strokeDashoffset: 1 }, { strokeDashoffset: 0.5, duration: 0.4, ease: 'power2.out' }, 4.4);
       tl.fromTo('#graph-c1', { scale: 0, transformOrigin: '50% 50%' }, { scale: 1, duration: 0.3, ease: 'back.out(2)' }, 4.6);
@@ -126,7 +126,11 @@
       tl.to('#graph-grow', { strokeDashoffset: 0, duration: 0.4, ease: 'power2.out' }, 5.6);
       tl.fromTo('#graph-c2', { scale: 0, transformOrigin: '50% 50%' }, { scale: 1, duration: 0.3, ease: 'back.out(2)' }, 5.8);
       tl.to('#graph-h-i18n', { x: 180, duration: 0.4, ease: 'power2.out' }, 5.6);
-      window.__timelines['graph'] = tl;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['graph'] = film;
     })();
   </script>
 </template>

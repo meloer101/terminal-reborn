@@ -60,7 +60,7 @@
     .sb { background: transparent; }
   </style>
   <div data-hf-id="hf-7lsv" id="root" data-composition-id="wall" data-width="1920" data-height="1080">
-    <div data-hf-id="hf-nl6v" id="wall-side" class="clip" data-start="0" data-duration="10">
+    <div data-hf-id="hf-nl6v" id="wall-side" class="clip" data-start="0" data-duration="6.5">
       <div data-hf-id="hf-ldoj" class="sb-rule" id="wall-rule"></div>
       <div data-hf-id="hf-182p" id="wall-sb" class="sb">
         <div data-hf-id="hf-0hgn" id="wall-head-acme" class="sb-head" style="top:40px"><span data-hf-id="hf-9h45" class="chev"></span><b data-hf-id="hf-cl0w">acme-web</b><span data-hf-id="hf-lcmd" class="count">5</span></div>
@@ -108,7 +108,7 @@
       </div>
       
     </div>
-    <div data-hf-id="hf-tdaj" id="wall-stage" class="clip" data-start="0" data-duration="10" data-layout-allow-overflow>
+    <div data-hf-id="hf-tdaj" id="wall-stage" class="clip" data-start="0" data-duration="6.5" data-layout-allow-overflow>
     <div data-hf-id="hf-409v" id="wall-cam">
       <div data-hf-id="hf-lwnq" id="pane-checkout" class="pane" style="left:0px;top:0px">
         <div data-hf-id="hf-nqdm" class="pane-in" id="pane-in-checkout" data-layout-ignore>
@@ -641,17 +641,17 @@
       <div data-hf-id="hf-dzq2" id="wall-focus"></div>
     </div>
     </div>
-    <div data-hf-id="hf-8dgn" id="wall-hud" class="hud clip" data-start="1.8" data-duration="2.9">
+    <div data-hf-id="hf-8dgn" id="wall-hud" class="hud clip" data-start="0.867" data-duration="2.167">
       <div data-hf-id="hf-alb1" class="hud-box" id="wall-hud-box">
         <div data-hf-id="hf-rgbw" class="keys"><div data-hf-id="hf-v7l4" class="key" id="wall-k1"><div data-hf-id="hf-ic4s" class="fill" id="wall-k1-fill"></div><span data-hf-id="hf-a5kr">⌘</span></div><div data-hf-id="hf-3vgz" class="key" id="wall-k2"><div data-hf-id="hf-9pbx" class="fill" id="wall-k2-fill"></div><span data-hf-id="hf-b5ao" id="wall-k2-n">1</span></div></div>
         <div data-hf-id="hf-80ee" class="verb">Check each one</div>
       </div>
     </div>
-    <h1 data-hf-id="hf-7yqh" id="wall-title" class="clip" data-start="5.2" data-duration="2.5"><span data-hf-id="hf-ehbp" class="w">It</span> <span data-hf-id="hf-i4lc" class="w">waited</span> <span data-hf-id="hf-1hsw" class="w acc">23</span> <span data-hf-id="hf-nc7m" class="w acc">minutes.</span></h1>
+    <h1 data-hf-id="hf-7yqh" id="wall-title" class="clip" data-start="3.467" data-duration="1.6"><span data-hf-id="hf-ehbp" class="w">It</span> <span data-hf-id="hf-i4lc" class="w">waited</span> <span data-hf-id="hf-1hsw" class="w acc">23</span> <span data-hf-id="hf-nc7m" class="w acc">minutes.</span></h1>
   </div>
   <script>
     (() => {
-      const tl = gsap.timeline({ paused: true });
+      const tl = gsap.timeline();
       const ORDER = ["checkout","agg","webhook","lanes","mobile","cookie","search","vite"];
       const SCROLL = {"checkout":30,"agg":26,"webhook":22,"lanes":18,"mobile":28,"search":20,"vite":24};
       const RECTS = {"checkout":{"px":0,"py":0,"rx":16,"ry":216,"rw":728,"rh":104},"agg":{"px":480,"py":0,"rx":16,"ry":728,"rw":728,"rh":104},"webhook":{"px":960,"py":0,"rx":16,"ry":424,"rw":728,"rh":104},"lanes":{"px":1440,"py":0,"rx":16,"ry":832,"rw":728,"rh":104},"mobile":{"px":0,"py":540,"rx":16,"ry":320,"rw":728,"rh":104},"cookie":{"px":480,"py":540,"rx":16,"ry":112,"rw":728,"rh":104},"search":{"px":960,"py":540,"rx":16,"ry":936,"rw":728,"rh":104},"vite":{"px":1440,"py":540,"rx":16,"ry":528,"rw":728,"rh":104}};
@@ -666,23 +666,23 @@
       // Wavi's spinners (the product's own running glyph) turn throughout.
       tl.fromTo('#wall-side .spin', { rotation: 0 }, { rotation: 360 * 9, duration: 10, ease: 'none', svgOrigin: '7 7' }, 0);
 
-      // Hops: ⌘1..⌘5 on the beat, each one a busy pane; the stuck pane 6 is never visited.
-      tl.fromTo('#wall-hud-box', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2, ease: 'expo.out' }, 1.8);
-      for (let i = 0; i < 5; i++) {
-        const t = 2 + i * 0.5;
+      // Hops: ⌘1..⌘4 on the music's beat, each one a busy pane; the stuck pane 6 is never visited.
+      tl.fromTo('#wall-hud-box', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2, ease: 'expo.out' }, 1.3);
+      for (let i = 0; i < 4; i++) {
+        const t = 1.5 + i * 0.75;
         const x = (i % 4) * 480, y = Math.floor(i / 4) * 540;
         tl.set('#wall-focus', { x, y, opacity: 1 }, t);
         tl.set('#wall-k2-n', { textContent: String(i + 1) }, t);
-        tl.fromTo(['#wall-k1-fill', '#wall-k2-fill'], { opacity: 0.9 }, { opacity: 0, duration: 0.18, ease: 'power2.out' }, t);
+        tl.fromTo(['#wall-k1-fill', '#wall-k2-fill'], { opacity: 0.9 }, { opacity: 0, duration: 0.18, ease: 'power2.out', immediateRender: false }, t);
         tl.fromTo(['#wall-k1', '#wall-k2'], { y: 4 }, { y: 0, duration: 0.18, ease: 'power2.out' }, t);
       }
-      tl.to('#wall-focus', { opacity: 0, duration: 0.1 }, 4.5);
-      tl.to('#wall-hud-box', { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, 4.5);
+      tl.to('#wall-focus', { opacity: 0, duration: 0.1 }, 4.4);
+      tl.to('#wall-hud-box', { opacity: 0, filter: 'blur(6px)', duration: 0.15, ease: 'power3.in' }, 4.35);
 
       // Punch in on the stuck pane.
-      tl.fromTo('#wall-cam', { x: 0, y: 0, scale: 1, filter: 'blur(0px)' }, { x: -610.8000000000002, y: -1639.6000000000001, scale: 2.2, duration: 0.5, ease: 'power2.inOut' }, 4.6);
-      tl.to('#wall-cam', { keyframes: [{ filter: 'blur(10px)', duration: 0.25, ease: 'power2.in' }, { filter: 'blur(0px)', duration: 0.25, ease: 'power2.out' }] }, 4.6);
-      tl.fromTo('#wall-title .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 5.3);
+      tl.fromTo('#wall-cam', { x: 0, y: 0, scale: 1, filter: 'blur(0px)' }, { x: -610.8000000000002, y: -1639.6000000000001, scale: 2.2, duration: 0.5, ease: 'power2.inOut' }, 4.5);
+      tl.to('#wall-cam', { keyframes: [{ filter: 'blur(10px)', duration: 0.25, ease: 'power2.in' }, { filter: 'blur(0px)', duration: 0.25, ease: 'power2.out' }] }, 4.5);
+      tl.fromTo('#wall-title .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 5.25);
       tl.to('#wall-title .w', { opacity: 0, filter: 'blur(8px)', duration: 0.18, stagger: 0.03, ease: 'power3.in' }, 7.35);
 
       // Pull back.
@@ -706,7 +706,11 @@
       });
       tl.to('#wall-row-checkout', { backgroundColor: 'rgba(255,255,255,0.07)', duration: 0.1 }, 8.6);
       tl.fromTo('#wall-side .sb-head, #wall-rule', { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' }, 8.7);
-      window.__timelines['wall'] = tl;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['wall'] = film;
     })();
   </script>
 </template>

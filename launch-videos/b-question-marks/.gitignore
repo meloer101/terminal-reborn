@@ -1,6 +1,7 @@
-# Snapshots, proxies and renders are rebuilt by the CLI; .hyperframes/ itself keeps project history.
-.hyperframes/artifacts/
-.hyperframes/cache/
+# Studio and CLI caches, snapshots and renders are rebuilt locally; .hyperframes/ also keeps local edit history.
+.hyperframes/
+.thumbnails/
+.waveform-cache/
 renders/
 *.mp4
 *.mov

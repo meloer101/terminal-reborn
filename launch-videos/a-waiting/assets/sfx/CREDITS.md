@@ -33,3 +33,7 @@ All files are distributed under the [Pixabay Content License](https://pixabay.co
 - Redistribution as part of derivative works (such as videos rendered with HyperFrames)
 
 without any attribution requirement.
+
+# Music
+
+- `assets/music/do-robots-have-a-god.mp3` — "do robots have a god?" by smilingcynic, https://ccmixter.org/files/smilingcynic/44992, licensed under CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Credit it wherever the film is published, e.g. "Music: do robots have a god? by smilingcynic (ccMixter), CC BY 3.0".

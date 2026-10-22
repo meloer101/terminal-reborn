@@ -1,0 +1,86 @@
+<template>
+  <style>
+    
+  @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+  @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-400-subset.woff2') format('woff2'); font-weight: 400; }
+
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #rise-stage { position: absolute; inset: 0; }
+    #rise-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    #rise-svg { position: absolute; }
+    .head { position: absolute; width: 84px; height: 84px; }
+    .head .glyph { display: block; }
+    #rise-title { position: absolute; left: 860px; right: 40px; top: 752px; height: 100px; font: 900 76px/1 'Wavi Archivo', sans-serif; font-stretch: 100%; letter-spacing: -0.02em; color: var(--color-ink); }
+    #rise-title .line { position: absolute; left: 0; top: 0; white-space: nowrap; }
+    #rise-title .w { display: inline-block; }
+  </style>
+  <div id="root" data-composition-id="rise" data-width="1920" data-height="1080">
+    <div id="rise-stage" class="clip" data-start="0" data-duration="5" data-layout-allow-overflow>
+    <div id="rise-cam">
+      <svg id="rise-svg" width="8000" height="4200" viewBox="-1600 -1800 8000 4200" style="left:-1600px;top:-1800px">
+        <line x1="-1600" y1="1800" x2="6400" y2="1800" stroke="#a1a1a1" stroke-width="16" />
+        <circle cx="-1500" cy="1800" r="26" fill="#a1a1a1" stroke="#050505" stroke-width="12" />
+        <circle cx="-1100" cy="1800" r="26" fill="#a1a1a1" stroke="#050505" stroke-width="12" />
+        <circle cx="-700" cy="1800" r="26" fill="#a1a1a1" stroke="#050505" stroke-width="12" />
+        <circle cx="-300" cy="1800" r="26" fill="#a1a1a1" stroke="#050505" stroke-width="12" />
+        <g id="rise-lane1">
+          <path d="M 700 1800 C 700 1440, 740 1100, 1000 1100 L 2400 1100" fill="none" stroke="#c79bff" stroke-width="16" />
+          <circle cx="1050" cy="1100" r="26" fill="#c79bff" stroke="#050505" stroke-width="12" />
+          <circle cx="1500" cy="1100" r="26" fill="#c79bff" stroke="#050505" stroke-width="12" />
+          <circle cx="1950" cy="1100" r="26" fill="#c79bff" stroke="#050505" stroke-width="12" />
+        </g>
+        <g id="rise-lane2">
+          <path d="M 790 1800 C 790 640, 830 300, 1090 300 L 4000 300" fill="none" stroke="#6ccfd6" stroke-width="16" />
+          <circle cx="2650" cy="300" r="26" fill="#6ccfd6" stroke="#050505" stroke-width="12" />
+          <circle cx="3100" cy="300" r="26" fill="#6ccfd6" stroke="#050505" stroke-width="12" />
+          <circle cx="3550" cy="300" r="26" fill="#6ccfd6" stroke="#050505" stroke-width="12" />
+        </g>
+        <g id="rise-lane3">
+          <path d="M 880 1800 C 880 -160, 920 -500, 1180 -500 L 5600 -500" fill="none" stroke="#ffb224" stroke-width="16" />
+          <circle cx="4250" cy="-500" r="26" fill="#ffb224" stroke="#050505" stroke-width="12" />
+          <circle cx="4700" cy="-500" r="26" fill="#ffb224" stroke="#050505" stroke-width="12" />
+          <circle cx="5150" cy="-500" r="26" fill="#ffb224" stroke="#050505" stroke-width="12" />
+        </g>
+        <path id="rise-merge" d="M 2400 1100 C 2560 1100, 2650 1500, 2650 1800" pathLength="1" fill="none" stroke="#c79bff" stroke-width="16" stroke-dasharray="1" stroke-dashoffset="1" />
+        <circle cx="700" cy="1800" r="30" fill="#ededed" stroke="#050505" stroke-width="12" />
+        <circle cx="790" cy="1800" r="30" fill="#ededed" stroke="#050505" stroke-width="12" />
+        <circle cx="880" cy="1800" r="30" fill="#ededed" stroke="#050505" stroke-width="12" />
+        <circle id="rise-mdot" cx="2650" cy="1800" r="44" fill="#ededed" stroke="#050505" stroke-width="14" />
+      </svg>
+      
+      <div class="head" id="rise-h1" style="left:2358px;top:1058px"><svg class="glyph" width="84" height="84" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg></div>
+      <div class="head" id="rise-h2" style="left:3958px;top:258px"><svg class="glyph" width="84" height="84" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg></div>
+      <div class="head" id="rise-h3" style="left:5558px;top:-542px"><svg class="glyph" width="84" height="84" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg></div>
+    </div>
+    </div>
+    <div id="rise-title" class="clip" data-start="1" data-duration="3.8">
+      <div class="line" id="rise-l1"><span class="w">Merge</span> <span class="w">the</span> <span class="w">best</span> <span class="w">one.</span></div>
+      <div class="line" id="rise-l2"><span class="w">Archive</span> <span class="w">the</span> <span class="w">rest.</span></div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      // Authored at 1x on a 0.75 s grid: the merge lands on beat 2, the archive on beat 6.
+      const tl = gsap.timeline();
+      // Blur swap in, and the camera rises over the graph.
+      tl.fromTo('#rise-cam', { ...{"x":-363,"y":99,"scale":0.42} }, { ...{"x":-111,"y":302,"scale":0.34}, duration: 1.2, ease: 'power2.inOut' }, 0);
+      tl.fromTo('#rise-cam', { opacity: 0, filter: 'blur(10px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.3, ease: 'power2.out' }, 0);
+      // The best branch merges into main.
+      tl.fromTo('#rise-merge', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.5, ease: 'power2.in' }, 1.0);
+      tl.fromTo('#rise-mdot', { scale: 0, transformOrigin: '50% 50%' }, { scale: 1, duration: 0.4, ease: 'back.out(2)' }, 1.4);
+      tl.to('#rise-h1', { opacity: 0, duration: 0.2 }, 1.4);
+      // The rest are archived.
+      tl.to(['#rise-lane2', '#rise-lane3', '#rise-h2', '#rise-h3'], { opacity: 0.18, duration: 0.5, ease: 'power2.out' }, 4.5);
+      tl.fromTo('#rise-l1 .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 1.5);
+      tl.to('#rise-l1 .w', { opacity: 0, filter: 'blur(8px)', duration: 0.12, stagger: 0.02, ease: 'power3.in' }, 4.1);
+      tl.fromTo('#rise-l2 .w', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 4.5);
+      tl.to('#rise-l2 .w', { opacity: 0, filter: 'blur(8px)', duration: 0.15, stagger: 0.03, ease: 'power3.in' }, 7.0);
+      tl.to('#rise-cam', { opacity: 0, filter: 'blur(8px)', duration: 0.2, ease: 'power3.in' }, 7.3);
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const film = gsap.timeline({ paused: true });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['rise'] = film;
+    })();
+  </script>
+</template>

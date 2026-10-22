@@ -40,6 +40,7 @@ In a fresh worktree run `npm install` first.
 | `src/renderer/appearance/`, `src/main/appearance.ts`, `src/renderer/theme.ts` | Applying appearance settings (M3) | `appearance-runtime` |
 | `src/main/hooks/` (Codex parts) | Codex hooks/approvals (M3) | `codex-adapter` |
 | `site/` | Website: Astro project with its own `package.json` (`cd site && npm install && npm run dev`, `npm run check`); GSAP and Lenis from npm, fonts are self-hosted subsets; deployed to Vercel (project root `site/`) and GitHub Pages (`.github/workflows/pages.yml`); English at `/`, Chinese at `/zh/` (page copy in `site/src/i18n.ts`, replica text in `site/src/scripts/data.ts`); design is the Figma page 「官网 · W5 重塑（噪音门面）」, frame W11 | integrator |
+| `launch-videos/` | Launch films: one HyperFrames project per film (`a-waiting`, `b-question-marks`, `c-three-answers`; storylines in `launch-videos/STORYLINES.md`, each project's `SPEC.md` / `REVIEW.md`); work through the HyperFrames skills, `npx hyperframes preview` / `check` / `render` inside a project; scenes are authored at 1x and played at `SPEED` 1.5; renders, previews and caches are git-ignored | integrator |
 | `build/`, `electron-builder.yml`, `.github/workflows/release.yml`, `src/main/updates.ts` | Packaging, icon, update check (M3) | `release` |
 
 Stay inside the directories your task owns. If you truly need a change elsewhere, keep it minimal and say so in the commit message — don't refactor shared files.

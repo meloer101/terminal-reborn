@@ -1,3 +1,15 @@
+# Review
+
+## 1.5x cut with music (2026-10-22)
+
+- Plays at 1.5x: each scene keeps its 1x authoring and is wrapped in a parent timeline with `timeScale(SPEED)`; clip times in the HTML are already divided by 1.5. Film is 29 s.
+- Music: "do robots have a god?" by smilingcynic (ccMixter, CC BY 3.0, 120 BPM; credit in assets/sfx/CREDITS.md). It starts on a beat at t=0 from 12.045 s into the track, sits muffled (lowpass 900 Hz) and low through the old way, dips under the punch-in, and opens at 6.5 s when Wavi appears; 1.5 s fade-out.
+- Retimed to the music: ⌘1-⌘4 hops on beats 1.0-2.5 s, punch-in 3.0, notification 7.0, ⌘J 10.0, ⇧⌘M 16.0, Merge 17.0, branch merges 19.0 / 19.5 / 20.0 / 20.5, claim cut 23.0, tube 24.5, ALL RUNNING 25.5, WAVI 26.0. Two beats were added between "Who's waiting?" and "You'll know at a glance." so both can be read at 1.5x.
+- Fixed: terminal output after answering sat at the bottom of the frame (a CSS specificity bug, also in the 1x renders).
+- Mix measured, not heard: project render -17.9 LUFS; renders/wavi-a-1.5x.mp4 is loudness-normalised with ffmpeg to -14.9 LUFS, -2 dBTP.
+- Kept warnings: "You'll know at a glance." holds 1.56 s (floor 1.72 s); BRANCH OUT. is a per-letter false positive.
+- The music was picked by tags and spectrogram without listening; alternatives found on ccMixter (CC BY): "Saturdays Basement" by cdk (128 BPM, electro/funky), "tonight" by smilingcynic (120 BPM, dance/funky rock), "Zest" by basematic (funky guitar).
+
 # Review — first cut (2026-10-22)
 
 ## Creative calls
