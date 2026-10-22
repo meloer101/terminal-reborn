@@ -17,6 +17,11 @@ export const AUTO_FIX_MARK = '（Wavi 自动修复'
 
 let settings: PrSettings = DEFAULT_SETTINGS.pr
 const sending = new Set<string>()
+/** Worktree → when 自动修复 first wanted to send a failure whose log GitHub did not give yet. */
+const awaitingLog = new Map<string, number>()
+/** How long to wait for a failed run's log (GitHub publishes it some seconds after the run, and the PR list can lag). */
+const LOG_WAIT_MS = 180_000
+const LOG_RETRY_MS = 15_000
 /** Worktree → the PR number whose new-PR defaults were applied (once per PR). */
 const initialized = new Map<string, number>()
 
@@ -72,19 +77,32 @@ async function send(worktreePath: string, status: PrStatus, state: PrAutomation,
   const decision = autoFixDecision(state, { pr, agentIdle: true, max: settings.maxAutoFixes, bots: settings.bots })
   if (decision.kind !== 'send') return
   sending.add(worktreePath)
-  setAutomation(worktreePath, afterSend(state, decision))
+  let sent = false
   try {
     const parts = [`${AUTO_FIX_MARK} 第 ${state.attempts + 1} 次）`]
     if (decision.failing.length > 0) {
-      const failure = await window.tr.pr.failure(worktreePath)
-      if (failure) parts.push(ciFixPrompt(failure))
+      const failure = await window.tr.pr.failure(worktreePath).catch(() => null)
+      if (failure?.log) parts.push(ciFixPrompt(failure))
+      else {
+        // No log yet: try again shortly, and after LOG_WAIT_MS send the check names alone rather than nothing.
+        const since = awaitingLog.get(worktreePath) ?? Date.now()
+        awaitingLog.set(worktreePath, since)
+        if (Date.now() - since < LOG_WAIT_MS) {
+          setTimeout(step, LOG_RETRY_MS)
+          return
+        }
+        parts.push(ciFixPrompt(failure ?? { number: pr.number, checks: decision.failing, log: '' }))
+      }
     }
+    awaitingLog.delete(worktreePath)
     if (decision.threads.length > 0) parts.push(prThreadsPrompt(pr.number, decision.threads))
     parts.push('修好后提交并推送到这个分支。')
+    setAutomation(worktreePath, afterSend(state, decision))
+    sent = true
     await submitPrompt(session.id, parts.join('\n\n'))
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error)
-    setAutomation(worktreePath, { ...afterSend(state, decision), stopped: `自动修复已停：没能发送（${why}）` })
+    setAutomation(worktreePath, { ...(sent ? afterSend(state, decision) : state), stopped: `自动修复已停：没能发送（${why}）` })
     notify(session, `PR #${pr.number} 的自动修复没能发送：${why}`)
   } finally {
     sending.delete(worktreePath)

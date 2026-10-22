@@ -76,6 +76,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const count = own + pickedThreads.length
   const picked = (comments?.filter(commentPicked).length ?? 0) + pickedThreads.length
   const sessionId = active?.session.id ?? null
+  // Nothing to propose or merge (merged already, or no work yet): no 创建 PR, no 合并 — the PR line says what happened.
+  const nothingToShip = !worktree.isMain && !prLive && changes.ahead === 0 && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
@@ -128,10 +130,10 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
             )}
           </>
         ) : (
-          reviewer && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
+          reviewer && !nothingToShip && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
         )}
         <span className={styles.spacer} />
-        {count === 0 && (
+        {count === 0 && !nothingToShip && (
           <PrButton
             worktree={worktree}
             projectRoot={projectRoot}
@@ -140,16 +142,18 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
             agent={target}
           />
         )}
-        <button
-          type="button"
-          className={styles.primaryButton}
-          disabled={worktree.isMain || !projectRoot}
-          title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
-          onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
-        >
-          {prLive ? `合并 PR #${prLive.number}…` : `合并到 ${changes.base ?? 'main'}…`}
-          <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
-        </button>
+        {!nothingToShip && (
+          <button
+            type="button"
+            className={styles.primaryButton}
+            disabled={worktree.isMain || !projectRoot}
+            title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
+            onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
+          >
+            {prLive ? `合并 PR #${prLive.number}…` : `合并到 ${changes.base ?? 'main'}…`}
+            <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+          </button>
+        )}
       </div>
     </>
   )

@@ -336,6 +336,10 @@ test.describe('F16 without gh', () => {
     git('commit', '-q', '-m', 'init')
     const wt = join(fake.root, 'wt')
     git('worktree', 'add', '-q', '-b', 'jacob/x', wt)
+    // Something to propose: a branch with no work shows no 创建 PR at all.
+    writeFileSync(join(wt, 'x.ts'), 'export {}\n')
+    execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', 'add', '.'], { cwd: wt })
+    execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'x'], { cwd: wt })
     const profile = mkdtempSync(join(tmpdir(), 'tr-e2e-pr-nogh-profile-'))
     writeFileSync(
       join(profile, 'workspace.json'),

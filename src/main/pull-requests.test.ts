@@ -311,6 +311,21 @@ describe('创建 PR', () => {
     expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
   })
 
+  it('never pushes to main when the branch was started from origin/main and tracks it', async () => {
+    const { root, wt, bare } = setup()
+    // As `git switch -c feat origin/main` leaves it: upstream origin/main.
+    git(root, 'config', 'branch.feat.remote', 'origin')
+    git(root, 'config', 'branch.feat.merge', 'refs/heads/main')
+    const mainBefore = git(bare, 'rev-parse', 'refs/heads/main').trim()
+    writeFileSync(join(ghDir, 'after-create.json'), prJson({ statusCheckRollup: [] }))
+    expect(await prDraft({ root, worktree: wt })).toMatchObject({ ok: true, pushed: false })
+    expect(await createPullRequest({ root, worktree: wt, title: 't' })).toMatchObject({ ok: true })
+    expect(git(bare, 'rev-parse', 'refs/heads/main').trim()).toBe(mainBefore)
+    expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
+    expect(ghCalls('pr create')[0]).toContain('--head=feat')
+    expect(git(wt, 'rev-parse', '--abbrev-ref', '@{u}').trim()).toBe('origin/feat')
+  })
+
   it('refuses the base branch, a branch with nothing new, a missing gh and bad input', async () => {
     const { root, wt } = setup()
     expect(await createPullRequest({ root, worktree: root, title: 't' })).toMatchObject({ ok: false, reason: 'blocked', message: '这是基线分支本身，没有可以提 PR 的改动' })
@@ -534,6 +549,19 @@ describe('catching up the base after a merge (v1.65)', () => {
 })
 
 // Last: a rate limit pauses every gh call for a while.
+describe('让 agent 修复 when the two calls disagree (v1.65)', () => {
+  it('asks again when the details already see a required check fail that the list still has running', async () => {
+    const { wt, w } = pushedWithPr({ requiredState: 'FAILURE' })
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ statusCheckRollup: [{ __typename: 'CheckRun', name: 'test', status: 'IN_PROGRESS', conclusion: null }] }))
+    writeFileSync(join(ghDir, 'log-failed.txt'), 'test\tRun\t2026-10-21T00:00:00Z expected 1 to be 2\n')
+    await checkWorktree(wt)
+    // GitHub's list catches up a moment later; the throttle would otherwise keep the stale answer.
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    expect(await ciFailure(wt)).toEqual({ number: 7, checks: ['test'], log: 'expected 1 to be 2' })
+    unwatch(w)
+  })
+})
+
 describe('rate limits', () => {
   it('keeps the last answer, counts the error and stops asking gh for a while', async () => {
     const { root, wt } = setup()

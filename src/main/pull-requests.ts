@@ -286,7 +286,10 @@ async function branchInfo(target: PrTarget): Promise<BranchInfo | null> {
   const main = pickMainBranch(heads.split('\n').filter(Boolean), originHead.trim() || null, mainIndex === null ? null : entries[mainIndex]!.branch)
   const base = parseBaseConfig(baseConfig)[branch] ?? main
   const [remote, remoteRef] = upstream.trim().split('\0')
-  const tracked = remote && remoteRef?.startsWith('refs/heads/') ? { remote, remoteRef } : null
+  // A branch made with `git switch -c x origin/main` tracks main: that is where it started, not where it is pushed.
+  // Treating it as the branch's own would push the work straight to main (and look for PRs whose head is main).
+  const shared = new Set([base, main].filter((b): b is string => Boolean(b)).map((b) => `refs/heads/${b}`))
+  const tracked = remote && remoteRef?.startsWith('refs/heads/') && !shared.has(remoteRef) ? { remote, remoteRef } : null
   return { cwd, branch, base, remote: tracked?.remote ?? null, remoteRef: tracked?.remoteRef ?? null }
 }
 
@@ -688,6 +691,13 @@ export async function ciFailure(worktree: unknown): Promise<CiFailure | null> {
   const entry = entries.get(worktree)
   if (!entry) return null
   if (Date.now() - entry.lastCheck >= REFRESH_MIN_MS) await checkEntry(entry)
+  // The PR list and the details are two calls: the details may already see a required check fail that the list still
+  // has running. Ask again then, whatever the throttle says.
+  const known = entry.status?.pr
+  if (known && known.checks.state !== 'failing' && (known.details?.required.failing.length ?? 0) > 0) {
+    if (entry.inFlight) await entry.inFlight
+    await checkEntry(entry)
+  }
   const pr = entry.status?.pr
   const repo = entry.repo
   if (!pr || pr.checks.state !== 'failing' || !repo) return null
