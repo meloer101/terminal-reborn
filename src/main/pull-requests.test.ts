@@ -66,7 +66,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { cancelMerge, checkWorktree, ciFailure, createPullRequest, detectGh, mergePullRequest, postReview, prDraft, resolveThreads, statusesFor, unwatch, watchTargets } =
+const { cancelMerge, catchUpBase, checkWorktree, ciFailure, createPullRequest, detectGh, mergePullRequest, postReview, prDraft, resolveThreads, statusesFor, unwatch, watchTargets } =
   await import('./pull-requests')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -509,6 +509,27 @@ describe('status · local head and Wavi waiting (PRD F16 v1.63)', () => {
     writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: 'f'.repeat(40) }))
     expect((await checkWorktree(wt))?.local).toEqual({ head, remoteAhead: true })
     unwatch(w)
+  })
+})
+
+describe('catching up the base after a merge (v1.65)', () => {
+  it('fetches the base and fast-forwards a clean checkout, and leaves a dirty one alone', async () => {
+    const { root, bare } = setup()
+    git(root, 'remote', 'set-url', 'origin', bare)
+    const other = join(base, `clone-${Date.now()}`)
+    git(base, 'clone', '-q', bare, other)
+    commit(other, 'merged.txt', 'm\n', 'Merge pull request #7')
+    git(other, 'push', '-q', 'origin', 'main')
+    await catchUpBase(root, 'origin', 'main')
+    expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+
+    commit(other, 'more.txt', 'x\n', 'Another merge')
+    git(other, 'push', '-q', 'origin', 'main')
+    writeFileSync(join(root, 'a.txt'), 'local edit\n')
+    const before = git(root, 'rev-parse', 'main').trim()
+    await catchUpBase(root, 'origin', 'main')
+    expect(git(root, 'rev-parse', 'main').trim()).toBe(before)
+    expect(git(root, 'rev-parse', 'origin/main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
   })
 })
 

@@ -445,8 +445,11 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     const head = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
     if (head) local = { head, remoteAhead: pr.details.headOid !== head && !(await localHas(info.cwd, pr.details.headOid, info.branch)) }
   }
+  const wasOpen = entry.status?.pr?.number === pr?.number && (entry.status?.pr?.state === 'open' || entry.status?.pr?.state === 'draft')
   const status = setStatus(entry, info.branch, pr, local)
   if (entry.waiting) void mergeWhenReady(entry)
+  // Merged on GitHub (auto-merge, the queue, or someone else): bring the base here too, as after Wavi's own merge.
+  if (wasOpen && pr?.state === 'merged' && info.remote && info.base) await catchUpBase(info.cwd, info.remote, info.base)
   return status
 }
 
@@ -743,7 +746,7 @@ async function localHas(cwd: string, oid: string, branch: string): Promise<boole
 }
 
 /** After a merge: fetch the base, and fast-forward the local base branch when nothing is in the way. */
-async function catchUpBase(cwd: string, remote: string, base: string): Promise<void> {
+export async function catchUpBase(cwd: string, remote: string, base: string): Promise<void> {
   const env = await pushEnv(cwd)
   const fetched = await git(cwd, ['fetch', '--quiet', '--', remote, `refs/heads/${base}:refs/remotes/${remote}/${base}`], { timeout: PUSH_TIMEOUT_MS, env })
   if (fetched.code !== 0) return

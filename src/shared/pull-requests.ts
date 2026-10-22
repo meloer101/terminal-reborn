@@ -518,14 +518,18 @@ export function parseCreatedUrl(stdout: string): { url: string; number: number |
 /** Same budget as the browser's 发给 Claude: below Claude's paste placeholder, so the user reads it all (§6.9). */
 export const CI_PROMPT_MAX = 800
 
+/** Colors gh writes out as text when piped (`^[[36;1m`, measured with gh 2.92 on a real run, §6.11). */
+const CARET_ESCAPES = /\^\[\[[0-?]*[ -/]*[@-~]/g
+
 /**
- * `gh run view --log-failed` lines are `job<TAB>step<TAB>timestamp text`: keep the text, without colors or control
- * characters, and drop the empty and `##[group]` lines. The last `maxLines`.
+ * `gh run view --log-failed` lines are `job<TAB>step<TAB>timestamp text`: keep the text, without colors (real escape
+ * bytes or their `^[` spelling) or control characters, and drop the empty and `##[group]` lines. Each step's first line
+ * starts with a byte-order mark before the timestamp. The last `maxLines`.
  */
 export function cleanFailedLog(raw: string, maxLines = 40): string {
   const lines: string[] = []
   for (const line of raw.split('\n')) {
-    const text = stripControl(line.replace(/^[^\t\n]*\t[^\t\n]*\t/, ''))
+    const text = stripControl(line.replace(/^[^\t\n]*\t[^\t\n]*\t/, '').replace(/\uFEFF/g, '').replace(CARET_ESCAPES, ''))
       .replace(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z ?/, '')
       .trimEnd()
     if (!text.trim() || /^##\[(group|endgroup)\]/.test(text.trim())) continue

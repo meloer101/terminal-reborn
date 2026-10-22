@@ -148,6 +148,8 @@ export function PrNotes({ worktreePath, notes, threads, sessionId }: { worktreeP
               body={thread.comments[0]!.body}
               url={thread.comments[0]!.url}
               sessionId={sessionId}
+              onResolve={() => void resolve(worktreePath, thread)}
+              threadId={thread.id}
             />
           ))}
           {notes.map((note) => (
@@ -167,13 +169,37 @@ export function PrNotes({ worktreePath, notes, threads, sessionId }: { worktreeP
   )
 }
 
-function NoteItem({ login, bot, meta, body, url, sessionId }: { login: string; bot: boolean; meta: string; body: string; url: string; sessionId: SessionId | null }) {
+/** `onResolve`: a thread not placed on a line (outdated after a fix, or on a line this diff does not show) can still be resolved here. */
+function NoteItem({
+  login,
+  bot,
+  meta,
+  body,
+  url,
+  sessionId,
+  onResolve,
+  threadId
+}: {
+  login: string
+  bot: boolean
+  meta: string
+  body: string
+  url: string
+  sessionId: SessionId | null
+  onResolve?: () => void
+  threadId?: string
+}) {
   return (
-    <li className={styles.prNote}>
+    <li className={styles.prNote} data-thread-id={threadId}>
       <div className={styles.commentHead}>
         <Author login={login} bot={bot} />
         <span className={styles.spacer} />
         <span className={styles.prMeta}>{meta}</span>
+        {onResolve && (
+          <button type="button" className={styles.prAction} title="在 GitHub 上把这条评论标记为已解决（以你的账号）" onClick={onResolve}>
+            标记已解决
+          </button>
+        )}
         {url && (
           <button type="button" className={styles.commentIcon} aria-label="在 GitHub 打开" onClick={() => openPullRequest(sessionId, url)}>
             <ExternalLink {...ICON} />
