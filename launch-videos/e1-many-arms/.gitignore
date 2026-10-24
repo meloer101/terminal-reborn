@@ -1,0 +1,8 @@
+# Studio and CLI caches, snapshots and renders are rebuilt locally; .hyperframes/ also keeps local edit history.
+.hyperframes/
+.thumbnails/
+.waveform-cache/
+renders/
+*.mp4
+*.mov
+*.webm

@@ -1,0 +1,74 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #000; }
+    #tube-stage { position: absolute; inset: 0; }
+    #tube-tv { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-tb01" id="root" data-composition-id="tube" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-tb02" id="tube-stage" class="clip" data-start="0" data-duration="4.8">
+      <canvas data-hf-id="hf-tb03" id="tube-tv" aria-label="The surface line warms up into the site's old TV tube: WAVI in sky-filled letters, and a Download for macOS button under it."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const T = window.WaviTube;
+      // The scene is authored at 1x; the film plays it at SPEED.
+      const SPEED = 1.5;
+      const D = 4.8;
+      const FILM0 = 44.8;
+      const CTA = 1.2; // film seconds after the tube is on: the button prints in
+      const COPY = { cta: 'Download for macOS' };
+      const INK = '#ededed';
+      // The letters' box inside the Figma export (2880 x 1520).
+      const LETTERS = { cx: 1425, cy: 756, w: 2361 };
+      const tl = gsap.timeline();
+      const film = gsap.timeline({ paused: true });
+      let draw = null;
+      let lastU = 0;
+      T.drive(tl, D * SPEED, (u) => { lastU = u; if (draw) draw(u); });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['tube'] = film;
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      window.__hf.buildReady['tube'] = Promise.all([T.fonts(['700 54px "Wavi Archivo"']), T.image('assets/brand/sky-wavi.png')]).then(([, img]) => {
+        const tube = T.create(document.getElementById('tube-tv'));
+        const { ctx, W, H } = tube;
+        const base = (W * 0.7) / LETTERS.w;
+        function paint(t) {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, W, H);
+          const s = base * (1.04 - 0.04 * T.ramp(t, 0, D));
+          const cy = H * 0.42;
+          ctx.drawImage(img, W / 2 - LETTERS.cx * s, cy - LETTERS.cy * s, img.width * s, img.height * s);
+          if (t >= CTA) {
+            const bw = 640; const bh = 116; const by = H * 0.7;
+            ctx.fillStyle = INK;
+            ctx.beginPath(); ctx.roundRect(W / 2 - bw / 2, by, bw, bh, 18); ctx.fill();
+            T.text(ctx, COPY.cta, W / 2, by + bh / 2 + 2, { font: '700 54px ' + T.GROT, fill: '#050505' });
+          }
+        }
+        function settings(t) {
+          // Warms up from the surface's bright line, settles in a bar.
+          const on = T.ramp(t, 0, 0.55);
+          const settle = 1 - T.ramp(t, 0.3, 1.6);
+          return {
+            power: 0.22 + 0.78 * on,
+            snow: 0.05 + settle * 0.25,
+            glitch: settle * 0.5 + T.decay(t, CTA, 0.25) * 0.25,
+            ca0: 0.003 + settle * 0.012,
+            bandAmp: t >= CTA ? 0.2 : 0.8,
+            roll: 0,
+            invert: 0
+          };
+        }
+        draw = (u) => {
+          const t = u / SPEED;
+          paint(t);
+          tube.render(FILM0 + t, settings(t));
+        };
+        draw(lastU);
+      });
+    })();
+  </script>
+</template>

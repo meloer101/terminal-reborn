@@ -1,0 +1,72 @@
+<template>
+  <style>
+    @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-var-subset.woff2') format('woff2'); font-weight: 400 900; }
+    @font-face { font-family: 'Wavi Mono'; src: url('assets/fonts/jetbrains-mono-e1-subset.woff2') format('woff2'); font-weight: 100 800; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #020604; }
+    #abyss-stage { position: absolute; inset: 0; }
+    #abyss-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+    .inc { position: absolute; margin: 0; font: 500 120px/1.02 'Wavi Bodoni', 'Bodoni Moda', 'Noto Serif SC', serif; font-variation-settings: 'opsz' 20; letter-spacing: 0.04em; color: var(--color-bone); text-transform: uppercase; white-space: nowrap; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55); }
+    .inc .k { font-family: 'Wavi Mono', 'JetBrains Mono', monospace; font-weight: 500; letter-spacing: 0; }
+    .sub { position: absolute; margin: 0; font: 500 34px/1 'Wavi Mono', 'JetBrains Mono', monospace; letter-spacing: 0.08em; color: var(--color-bone); white-space: nowrap; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); }
+    #t-one { left: 150px; top: 806px; }
+    #t-many { right: 150px; top: 806px; text-align: right; }
+    #t-branch { left: 150px; top: 818px; font-size: 104px; }
+    #t-cmdj { left: 0; right: 0; top: 432px; text-align: center; font-size: 200px; }
+    #t-merge { left: 150px; top: 140px; }
+    #t-merge-key { left: 156px; top: 284px; }
+    #t-c1 { left: 150px; top: 440px; font-size: 72px; }
+    #t-c2 { left: 150px; top: 440px; font-size: 72px; }
+    #t-q { left: 150px; top: 452px; font-size: 84px; }
+    #t-poster { left: 156px; top: 572px; font-size: 30px; }
+    #counter { position: absolute; left: 0; right: 0; top: 880px; text-align: center; margin: 0; font: 500 72px/1 'Wavi Mono', 'JetBrains Mono', monospace; color: var(--color-blood); white-space: nowrap; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.7); }
+    #counter .lbl { font-size: 40px; letter-spacing: 0.04em; margin-right: 22px; }
+  </style>
+  <div data-hf-id="hf-ab01" id="root" data-composition-id="abyss" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-ab02" id="abyss-stage" class="clip" data-start="0" data-duration="44.8">
+      <canvas data-hf-id="hf-ab03" id="abyss-gl" aria-label="One continuous take in black water: a pale arm whose suckers are lit terminal lines, a spine with eight arms branching out, one arm freezes and opens a magenta eye that bleeds, the camera dives into it, the arms merge back into the spine and the head with the Wavi sigil rises to the surface."></canvas>
+    </div>
+    <!-- Incantations: each lands as a cut on a downbeat (3.2 s bars) and leaves as a cut. -->
+    <h1 data-hf-id="hf-ab10" id="t-one" class="inc clip" data-start="3.2" data-duration="3.0" data-var-text="t-one">One person,</h1>
+    <h1 data-hf-id="hf-ab11" id="t-many" class="inc clip" data-start="6.4" data-duration="3.0" data-var-text="t-many">Many threads.</h1>
+    <h1 data-hf-id="hf-ab12" id="t-branch" class="inc clip" data-start="9.6" data-duration="3.0" data-var-text="t-branch">Branch out.</h1>
+    <p data-hf-id="hf-ab13" id="counter" class="clip" data-start="16.4" data-duration="6.0"><span data-hf-id="hf-ab14" class="lbl">waiting</span><span data-hf-id="hf-ab15" id="counter-n">00:00</span></p>
+    <h1 data-hf-id="hf-ab16" id="t-cmdj" class="inc clip" data-start="22.4" data-duration="0.8"><span data-hf-id="hf-ab17" class="k">⌘J</span></h1>
+    <h1 data-hf-id="hf-ab18" id="t-merge" class="inc clip" data-start="28.8" data-duration="3.0" data-var-text="t-merge">Merge in.</h1>
+    <p data-hf-id="hf-ab19" id="t-merge-key" class="sub clip" data-start="29.2" data-duration="2.6">⇧⌘M</p>
+    <h1 data-hf-id="hf-ab20" id="t-c1" class="inc clip" data-start="35.2" data-duration="3.1">That is not dead<br data-hf-id="hf-ab21" />which can eternal lie,</h1>
+    <h1 data-hf-id="hf-ab22" id="t-c2" class="inc clip" data-start="38.4" data-duration="3.1">And with strange aeons<br data-hf-id="hf-ab23" />even death may die.</h1>
+    <h1 data-hf-id="hf-ab24" id="t-q" class="inc clip" data-start="41.6" data-duration="2.6">Agents run after <span data-hf-id="hf-ab25" class="k">⌘Q</span></h1>
+    <p data-hf-id="hf-ab26" id="t-poster" class="sub clip" data-start="42.0" data-duration="2.2">NO ACCOUNT · NO TELEMETRY · HANDS OFF YOUR CONFIG</p>
+  </div>
+  <script>
+    (() => {
+      const A = window.WaviAbyss;
+      // The scene is authored at 1x; the film plays it at SPEED. Film times are authored / SPEED.
+      const SPEED = 1.5;
+      const DUR = 44.8;
+      const tl = gsap.timeline();
+      const film = gsap.timeline({ paused: true });
+      const num = document.getElementById('counter-n');
+      let R = null;
+      let lastU = 0;
+      const frame = (u) => {
+        const t = u / SPEED;
+        R.render(t);
+        // The wait runs to 23 minutes in about five seconds, then holds (illustrative).
+        const k = A.ramp(t, 16.6, 21.8);
+        const secs = Math.round(23 * 60 * (k * k * (3 - 2 * k)));
+        num.textContent = String(Math.floor(secs / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0');
+      };
+      // Registered at once so the runtime nests it; it draws once the faces and the GL are ready.
+      A.drive(tl, DUR * SPEED, (u) => { if (u === lastU && R) return; lastU = u; if (R) frame(u); });
+      film.add(tl.timeScale(SPEED), 0);
+      window.__timelines['abyss'] = film;
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      window.__hf.buildReady['abyss'] = A.fonts(['500 40px "Wavi Mono"', '600 40px "Wavi Mono"']).then(() => {
+        R = A.create(document.getElementById('abyss-gl'));
+        frame(lastU);
+      });
+    })();
+  </script>
+</template>
