@@ -41,6 +41,10 @@ Running one coding agent is easy. Running five means five terminals, five branch
 
 Wavi keeps each agent in its own terminal user interface (TUI), exactly as the CLI ships it: you type and answer there as usual. Around the agents, Wavi adds the work of a lead: who needs you right now, what each worktree changed, whether the tests passed, and how to merge the best result back without breaking `main`.
 
+## How it works
+
+<img src="docs/assets/readme/workflow.jpg" alt="Six steps on a git graph: start an agent, work in parallel worktrees, spot conflicts early, review, merge, wrap up. The worktree goes, the branch stays.">
+
 ## Features
 
 ### Know who's waiting, at a glance
@@ -56,19 +60,7 @@ Every session shows its status as a shape and a word, never color alone, along w
 
 <kbd>⌘N</kbd> creates a worktree in the background, copies ignored files like `.env` per `.worktreeinclude`, and starts Claude Code, Codex or a plain shell in it. Choose *several* to hand one task to two to four agents at once, Claude Code and Codex mixed. Each attempt gets its own worktree from the same base. Then line them up side by side and merge the best one.
 
-<table>
-  <tr>
-    <td width="44%" valign="top">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/new-session-dark.png">
-        <img src="docs/assets/readme/new-session-light.png" alt="The new-session sheet with two Claude Code and one Codex attempt at the same task.">
-      </picture>
-    </td>
-    <td width="56%" valign="top">
-      <img src="docs/assets/readme/compare.jpg" alt="Three attempts at the same task compared: lines changed, test, type-check and lint results, and a merge button for each.">
-    </td>
-  </tr>
-</table>
+<img src="docs/assets/readme/compare.jpg" alt="Three attempts at the same task compared: lines changed, test, type-check and lint results, and a merge button for each.">
 
 ### Review the diff, talk back on the lines
 
@@ -87,24 +79,26 @@ The changes panel shows uncommitted and committed work against the base branch, 
   <tr>
     <td width="50%" valign="top">
       <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/new-session-dark.png">
+        <img src="docs/assets/readme/new-session-light.png" alt="The new-session sheet with two Claude Code and one Codex attempt at the same task.">
+      </picture>
+      <p align="center"><sub><kbd>⌘N</kbd> one task, three worktrees: two Claude Code, one Codex</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/merge-dark.png">
         <img src="docs/assets/readme/merge-light.png" alt="The merge sheet: two commits ahead of main, squash selected, the worktree is removed after the merge and the branch kept.">
       </picture>
-    </td>
-    <td width="50%" valign="top">
-      <b>Also in the loop</b>
-      <ul>
-        <li><b>Pull requests</b>: create a PR with this turn's checks and review as evidence, bring unresolved PR comments back onto the lines they're about, and merge through GitHub, pinned to the commit you reviewed.</li>
-        <li><b>Turn checks</b>: which tests, lint and type checks the agent ran this turn, and whether they passed. Read from hooks; no tokens spent.</li>
-        <li><b>Archive</b>: stop the session, keep uncommitted work in a private ref, fold the worktree away, and restore it later with the conversation intact.</li>
-      </ul>
+      <p align="center"><sub><kbd>⇧⌘M</kbd> merge after the pre-checks; the branch stays</sub></p>
     </td>
   </tr>
 </table>
 
-### How it works
+**Also in the loop**
 
-<img src="docs/assets/readme/workflow.jpg" alt="Six steps on a git graph: start an agent, work in parallel worktrees, spot conflicts early, review, merge, wrap up. The worktree goes, the branch stays.">
+- **Pull requests**: create a PR with this turn's checks and review as evidence, bring unresolved PR comments back onto the lines they're about, and merge through GitHub, pinned to the commit you reviewed.
+- **Turn checks**: which tests, lint and type checks the agent ran this turn, and whether they passed. Read from hooks; no tokens spent.
+- **Archive**: stop the session, keep uncommitted work in a private ref, fold the worktree away, and restore it later with the conversation intact.
 
 ### And the rest of a proper terminal
 

@@ -41,6 +41,10 @@
 
 Wavi 让每个 agent 留在它自己的终端界面里，和 CLI 原本的样子一样，你照常在里面输入和作答。Wavi 补上旁边那些带团队的活：现在谁需要你，每个 worktree 改了什么，测试过没过，以及怎样在不弄坏 `main` 的前提下把最好的结果合并回去。
 
+## 工作流程
+
+<img src="docs/assets/readme/workflow.jpg" alt="Git 图谱上的六步：启动 agent、在各自的 worktree 里并行、提前发现冲突、审阅、合并、收尾。worktree 删掉，分支保留。">
+
 ## 功能
 
 ### 谁在等你，一眼就知道
@@ -56,19 +60,7 @@ Wavi 让每个 agent 留在它自己的终端界面里，和 CLI 原本的样子
 
 <kbd>⌘N</kbd> 在后台新建 worktree，按 `.worktreeinclude` 复制被 git 忽略的文件（如 `.env`），在里面启动 Claude Code、Codex 或普通终端。选“多个”，就把同一个任务同时交给 2–4 个 agent，Claude Code 和 Codex 可以混着来；每份都在同一个基线上有自己的 worktree。做完后并排比较，合并最好的那一份。
 
-<table>
-  <tr>
-    <td width="44%" valign="top">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/new-session-dark.png">
-        <img src="docs/assets/readme/new-session-light.png" alt="新建会话面板：同一个任务交给两份 Claude Code 和一份 Codex。">
-      </picture>
-    </td>
-    <td width="56%" valign="top">
-      <img src="docs/assets/readme/compare.jpg" alt="同一个任务的三份结果并排比较：改动行数、测试、类型检查和 lint 结果，每份都能直接合并。">
-    </td>
-  </tr>
-</table>
+<img src="docs/assets/readme/compare.jpg" alt="同一个任务的三份结果并排比较：改动行数、测试、类型检查和 lint 结果，每份都能直接合并。">
 
 ### 审阅 diff，在行上回话
 
@@ -87,24 +79,26 @@ Wavi 让每个 agent 留在它自己的终端界面里，和 CLI 原本的样子
   <tr>
     <td width="50%" valign="top">
       <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/new-session-dark.png">
+        <img src="docs/assets/readme/new-session-light.png" alt="新建会话面板：同一个任务交给两份 Claude Code 和一份 Codex。">
+      </picture>
+      <p align="center"><sub><kbd>⌘N</kbd> 一个任务，三个 worktree：两份 Claude Code，一份 Codex</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/merge-dark.png">
         <img src="docs/assets/readme/merge-light.png" alt="合并面板：领先 main 2 个提交，选中 squash，合并后删除 worktree、保留分支。">
       </picture>
-    </td>
-    <td width="50%" valign="top">
-      <b>同一条链路上的还有</b>
-      <ul>
-        <li><b>PR</b>：创建 PR 时附上这一轮的检查和审阅作为证据；PR 上没解决的评论回到对应的行上；在 GitHub 合并时锁定你审阅过的那个提交。</li>
-        <li><b>这一轮的检查</b>：agent 这一轮跑过哪些测试、lint、类型检查，是否通过。从 hook 读出，不花 token。</li>
-        <li><b>归档</b>：停掉会话，未提交的改动存进私有 ref，把 worktree 收起；之后恢复，agent 接上原来的对话。</li>
-      </ul>
+      <p align="center"><sub><kbd>⇧⌘M</kbd> 先检查再合并，分支保留</sub></p>
     </td>
   </tr>
 </table>
 
-### 工作流程
+**同一条链路上的还有**
 
-<img src="docs/assets/readme/workflow.jpg" alt="Git 图谱上的六步：启动 agent、在各自的 worktree 里并行、提前发现冲突、审阅、合并、收尾。worktree 删掉，分支保留。">
+- **PR**：创建 PR 时附上这一轮的检查和审阅作为证据；PR 上没解决的评论回到对应的行上；在 GitHub 合并时锁定你审阅过的那个提交。
+- **这一轮的检查**：agent 这一轮跑过哪些测试、lint、类型检查，是否通过。从 hook 读出，不花 token。
+- **归档**：停掉会话，未提交的改动存进私有 ref，把 worktree 收起；之后恢复，agent 接上原来的对话。
 
 ### 一个像样的终端该有的
 
