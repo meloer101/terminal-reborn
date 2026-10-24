@@ -1,0 +1,195 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #wavi-stage { position: absolute; inset: 0; }
+    #wavi-cam, #wavi-osd { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-jnei" id="root" data-composition-id="wavi" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-gntf" id="wavi-stage" class="clip" data-start="0" data-duration="10.17">
+      <canvas data-hf-id="hf-adr1" id="wavi-cam" aria-label="PLAY, the same night with Wavi: the eight terminals fold into Wavi's sidebar. Only Session cookie migration is magenta, waiting 23m, and its line starts to bleed. Command J jumps to it: the permission prompt, its letters red and dripping. 1, Yes: the blood runs back up into the text, the letters turn white, the agent runs on. ALL RUNNING. One person, many threads."></canvas>
+      <canvas data-hf-id="hf-uxhh" id="wavi-osd" aria-hidden="true"></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const R = window.Rec;
+      const B = window.Blood;
+      const N = window.Night;
+      const W = window.WaviUI;
+      const SPEED = 1.5;
+      const D = 10.17 * SPEED;
+      const FILM0 = 26.443;
+      const bar = N.bar;
+      const COPY = { all: 'ALL RUNNING.', claim: 'One person, many threads.', jump: 'Jump to it', yes: 'Yes' };
+
+      // Beats (authored seconds; one bar = 3.0511).
+      const FOLD = 0.05;          // the wall folds into the sidebar
+      const MAIN_IN = 0.75;
+      const HUD1 = 1.35;
+      const JUMP = bar(1);        // ⌘J on the downbeat
+      const HUD2 = bar(1.5);
+      const ANSWER = bar(2);      // 1 = Yes
+      const BACK = 3.4;           // the blood runs back 3.4x faster than it came
+      const RESOLVE = bar(2.62);
+      const TITLE = bar(3);
+      const CLAIM = bar(4);
+      const NIGHT_AT = bar(1.55); // the wall as the rewind left it
+      const te = (u) => (u < ANSWER ? u : ANSWER - (u - ANSWER) * BACK);
+
+      const CHECKOUT = [
+        '{g}⏺ {w}Read{n}(components/CartSummary.tsx)', '{d}  ⎿  Read 96 lines', '{g}⏺ {w}Update{n}(components/CartSummary.tsx)', '{d}  ⎿  Memoized cart totals per render', '',
+        '{g}⏺ {w}Bash{n}(pnpm build)', '{d}  ⎿  Compiled in 8.4s', '{g}⏺ {w}Read{n}(app/checkout/layout.tsx)', '{d}  ⎿  Read 41 lines',
+        '{g}⏺ {w}Update{n}(app/checkout/layout.tsx)', '{d}  ⎿  Lazy-loaded CouponPanel', '', '{g}⏺ {w}Bash{n}(pnpm test checkout)', '{d}  ⎿  {g}38 passed (2.1s)'
+      ];
+      const PROMPT = [
+        '{g}⏺ {w}Update{n}(src/auth/session.ts)', '{d}  ⎿  Reads the cookie instead of the header', '{g}⏺ {w}The Session table needs a migration first.', '',
+        '{k}' + '─'.repeat(66), '{v} Bash command', '', '{w}   pnpm prisma migrate dev', '{d}   Apply the Session migration to the dev database', '',
+        '{w} Do you want to proceed?', '{v} ❯ 1. Yes', '{n}   2. Yes, and don’t ask again for pnpm prisma migrate commands in', '{n}      ~/code/acme-web',
+        '{n}   3. No, and tell Claude what to do differently {d}(esc)'
+      ];
+      // After the answer the prompt is gone and the agent carries on in its place (rows 4-7, the spinner on row 9).
+      const AFTER = [
+        '{g}⏺ {w}Bash{n}(pnpm prisma migrate dev)', '{d}  ⎿  Applied migration 20261024031706_session',
+        '{g}⏺ {w}Update{n}(tests/session.test.ts)', '{d}  ⎿  Cookie round-trip test'
+      ];
+      const Q = 10;
+      const CUR = 24;
+
+      // Blood on this night: the question bleeds (red before the jump, so it is dripping when we arrive) and the
+      // waiting row's line bleeds over the rows below it.
+      const RED = new Map();
+      const qs = ' Do you want to proceed?';
+      for (let c = 1; c < qs.length; c++) if (qs[c] !== ' ') RED.set(c, 0.6 + R.hash(c * 3.7) * 1.6);
+      const DR = [];
+      const mk = (x, y0, t0, s, r) => ({ x, y0, t0, r: r || 6 + 3 * R.hash(s * 1.7), v: 22 + 16 * R.hash(s * 2.9), f: 0.45 + 0.5 * R.hash(s * 4.3), amp: 0.55 + 0.35 * R.hash(s * 5.9), seed: R.hash(s * 7.7) });
+      RED.forEach((t, c) => { if (R.hash(c * 9.1) < 0.6) DR.push({ d: mk(W.mx(c) + W.MCW / 2, W.my(Q) + 3, t + 0.4 + R.hash(c) * 1.2, c), main: true }); });
+      DR.push({ d: mk(W.mx(CUR) + W.MCW / 2, W.my(Q) + 6, 0.3, 99, 9), main: true });
+      for (let k = 1; k < 4; k++) DR.push({ d: mk(W.mx(CUR) + W.MCW / 2 + (k - 2) * 2, W.my(Q) + 6, 0.3 + k * 1.52, 100 + k, 7.5), main: true });
+
+      const tl = gsap.timeline();
+      R.fonts(['400 26px "Wavi Mono"', '700 34px "Wavi Mono"', '400 26px "Wavi Archivo"', '600 30px "Wavi Archivo"', '900 150px "Wavi Archivo"', '500 44px Inter', '400 26px "JetBrains Mono"']).then(() => {
+        const rec = R.create(document.getElementById('wavi-cam'), document.getElementById('wavi-osd'));
+        const ui = rec.ui;
+        // The row's subtitle letters (proportional type), measured once.
+        ui.font = '400 24px ' + R.SANS;
+        const r0 = W.ROWS[0];
+        const ROWRED = [];
+        const sub = r0.sub;
+        for (let i = 9; i < sub.length; i++) {
+          if (sub[i] === ' ' || R.hash(i * 5.3) > 0.55) continue;
+          const x = W.subX + ui.measureText(sub.slice(0, i)).width;
+          const w = ui.measureText(sub[i]).width;
+          const t = 1.7 + R.hash(i * 2.2) * 1.0;
+          ROWRED.push({ ch: sub[i], x, t });
+          DR.push({ d: Object.assign(mk(x + w / 2, W.subY(r0) + 3, t + 0.3 + R.hash(i) * 0.7, 500 + i, 6.5 + 2.5 * R.hash(i)), { v: 34 + 20 * R.hash(i * 1.9) }), main: false });
+        }
+        // ALL RUNNING. fills the main area's width (1030 px) at most 150 px tall.
+        ui.save(); ui.font = '900 150px ' + R.SANS; ui.fontStretch = 'expanded'; ui.letterSpacing = '-3px';
+        const ALL_PX = Math.min(150, Math.floor(150 * 1030 / ui.measureText(COPY.all).width));
+        ui.restore();
+        const CAM = [
+          { t: 0, s: 1, x: 960, y: 540 },
+          { t: JUMP + 0.1, s: 1.6, x: 1362, y: 548, d: 0.86 },
+          { t: TITLE, s: 1, x: 960, y: 540, d: 0.86 }
+        ];
+        const ZE = [JUMP + 0.96, TITLE + 0.86];
+        const focus = (u) => ZE.reduce((m, z) => Math.max(m, 4.5 * R.bump(u, z - 0.15, 0.6)), 0);
+
+        R.drive(tl, D, (u) => {
+          rec.begin('#050505');
+          const cam = R.camera(CAM, u, 0.86);
+          R.apply(ui, cam, u);
+          R.apply(rec.blood, cam, u);
+          const t = u / SPEED;
+          const resolved = u >= RESOLVE;
+          const jumped = u >= JUMP;
+          const waiting = resolved ? 0 : 1;
+
+          // 1. The fold: each pane's rect morphs into its sidebar row.
+          const rowAlpha = W.ROWS.map((r, i) => R.ramp(u, FOLD + i * 0.06 + 0.62, FOLD + i * 0.06 + 0.86));
+          W.sidebar(ui, { t, waiting, sel: jumped ? 0 : 1, rowAlpha, alpha: R.ramp(u, 0.5, 0.9) });
+          W.ROWS.forEach((r, i) => {
+            const k = R.io3(R.ramp(u, FOLD + i * 0.06, FOLD + i * 0.06 + 0.9));
+            if (k >= 1) return;
+            const p = N.PANES[r.pane];
+            const tx = R.lerp(p.x, W.ROW.x, k); const ty = R.lerp(p.y, r.y, k);
+            const tw = R.lerp(N.PW, W.ROW.w, k); const th = R.lerp(N.PH, W.ROW.h, k);
+            const sx = tw / N.PW; const sy = th / N.PH;
+            ui.save();
+            ui.transform(sx, 0, 0, sy, tx - p.x * sx, ty - p.y * sy);
+            ui.globalAlpha = 1 - R.ramp(k, 0.7, 1);
+            N.paintPane(ui, p, NIGHT_AT, 1 - R.ramp(k, 0, 0.25));
+            ui.restore();
+          });
+
+          // 2. The main area: checkout until ⌘J, then it morphs from the waiting row into that session.
+          if (!jumped) {
+            const a = R.ramp(u, MAIN_IN, MAIN_IN + 0.35);
+            W.main(ui, { t, alpha: a, status: 'running', title: 'Checkout performance', path: 'acme-web/checkout-perf' });
+            CHECKOUT.forEach((s, i) => { if (s) W.mline(ui, s, i, a); });
+            W.mline(ui, '{o}' + '·✢✳✶✻✽✻✶✳✢'[Math.floor(u * 8) % 10] + ' Measuring first paint… {d}(1m ' + String(Math.floor(12 + t) % 60).padStart(2, '0') + 's · esc to interrupt)', CHECKOUT.length + 1, a);
+          } else {
+            const k = R.io3(R.ramp(u, JUMP, JUMP + 0.75));
+            const r = W.ROWS[0];
+            ui.save();
+            const sx = R.lerp(W.ROW.w / W.MAIN.w, 1, k); const sy = R.lerp(W.ROW.h / 1080, 1, k);
+            ui.transform(sx, 0, 0, sy, R.lerp(W.ROW.x, W.MAIN.x, k) - W.MAIN.x * sx, R.lerp(r.y, 0, k));
+            const ca = R.ramp(u, JUMP + 0.45, JUMP + 0.7);
+            W.main(ui, { t, alpha: 1, status: resolved ? 'running' : 'needs', title: 'Session cookie migration', path: 'acme-web/session-cookie' });
+            if (!resolved) {
+              const e = te(u);
+              PROMPT.forEach((s, i) => { if (s) W.mline(ui, s, i, ca, i === Q ? (c) => RED.has(c) && e >= RED.get(c) : null); });
+              if (Math.floor(u / N.BEAT + 1e-6) % 2 === 0 && e < 0.3) { ui.globalAlpha = ca; ui.fillStyle = '#ededed'; ui.fillRect(W.mx(CUR), W.my(Q) - 24, W.MCW, 30); ui.globalAlpha = 1; }
+            } else {
+              const fa = 1 - R.ramp(u, TITLE, TITLE + 0.3);
+              PROMPT.slice(0, 3).forEach((s, i) => W.mline(ui, s, i, fa));
+              AFTER.forEach((s, i) => { if (u >= RESOLVE + i * 0.12) W.mline(ui, s, 4 + i, fa); });
+              if (u >= RESOLVE + 0.6) W.mline(ui, '{o}' + '·✢✳✶✻✽✻✶✳✢'[Math.floor(u * 8) % 10] + ' Running the session tests… {d}(' + Math.floor((u - RESOLVE) / SPEED) + 's · esc to interrupt)', 9, fa);
+            }
+            ui.restore();
+          }
+
+          // 3. Blood, on a clock that runs backwards from the answer.
+          const e = te(u);
+          const bl = rec.blood;
+          bl.globalCompositeOperation = 'lighter';
+          ROWRED.forEach((g) => { if (e >= g.t) B.glyph(bl, g.ch, g.x, W.subY(r0), '600 24px ' + R.SANS, R.clamp01((e - g.t) / 2.4), 24); });
+          if (u >= JUMP + 0.72 && !resolved) {
+            RED.forEach((t0, c) => { if (e >= t0) B.glyph(bl, qs[c], W.mx(c), W.my(Q), '800 26px ' + R.MONO, R.clamp01((e - t0) / 2.6), 26); });
+            if (e >= 0.3) { bl.globalAlpha = 1; bl.fillStyle = '#fff'; bl.fillRect(W.mx(CUR), W.my(Q) - 24, W.MCW, 30 + 8 * R.clamp01((e - 0.3) / 2)); }
+          }
+          for (const o of DR) {
+            if (o.main && !(u >= JUMP + 0.72 && !resolved)) continue;
+            bl.save();
+            bl.beginPath();
+            if (o.main) bl.rect(W.MAIN.x, 90, W.MAIN.w, 990); else bl.rect(0, 0, 760, 1080);
+            bl.clip();
+            B.drip(bl, o.d, e, () => 1080);
+            bl.restore();
+          }
+          bl.globalCompositeOperation = 'source-over';
+
+          // 4. ALL RUNNING.
+          if (u >= TITLE + 0.2) {
+            const k = R.out3(R.ramp(u, TITLE + 0.2, TITLE + 0.55));
+            ui.save();
+            ui.beginPath(); ui.rect(W.MAIN.x, 380, W.MAIN.w, 260); ui.clip();
+            R.text(ui, COPY.all, 830, 610 + 120 * (1 - k), { font: '900 ' + ALL_PX + 'px ' + R.SANS, stretch: 'expanded', fill: '#ededed', tracking: '-3px' });
+            ui.restore();
+          }
+          if (u >= CLAIM) R.text(ui, COPY.claim, 836, 720, { font: '500 46px ' + R.SANS, fill: '#a1a1a1', alpha: R.ramp(u, CLAIM, CLAIM + 0.25) });
+
+          rec.render(FILM0 + t, { grade: 0.62, keepM: 1, keepB: 0.75, focus: focus(u) + 5 * R.bump(u, JUMP + 0.05, 0.6) });
+          R.osd(rec.osd, { mode: u < 1.4 ? 'play' : 'rec', t, clock: 3 * 3600 + 17 * 60 + 9 + t });
+          const h1 = R.ramp(u, HUD1, HUD1 + 0.2) * (1 - R.ramp(u, JUMP + 0.5, JUMP + 0.7));
+          W.hud(rec.osd, ['⌘', 'J'], COPY.jump, 1240, 860, h1, u >= JUMP ? 1 - R.ramp(u, JUMP + 0.15, JUMP + 0.3) + 0.0001 : 0);
+          const h2 = R.ramp(u, HUD2, HUD2 + 0.2) * (1 - R.ramp(u, ANSWER + 0.5, ANSWER + 0.7));
+          W.hud(rec.osd, ['1'], COPY.yes, 1240, 860, h2, u >= ANSWER ? 1 - R.ramp(u, ANSWER + 0.15, ANSWER + 0.3) + 0.0001 : 0);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['wavi'] = film;
+      });
+    })();
+  </script>
+</template>

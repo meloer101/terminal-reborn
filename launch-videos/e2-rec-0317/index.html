@@ -1,0 +1,90 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[
+    {"id":"color-ground","type":"color","label":"Ground","default":"#050505"},
+    {"id":"color-accent","type":"color","label":"Accent (waiting on you)","default":"#ff5fb0"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <!-- The camcorder (rec.js), the blood field (blood.js) and act 1's wall of eight terminals (night.js). -->
+    <script src="assets/lib/rec.js"></script>
+    <script src="assets/lib/blood.js"></script>
+    <script src="assets/lib/night.js"></script>
+    <script src="assets/lib/wavi.js"></script>
+    <style>
+      @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+      @font-face { font-family: 'Wavi Bodoni'; src: url('assets/fonts/bodoni-moda-var-subset.woff2') format('woff2'); font-weight: 400 900; }
+      @font-face { font-family: 'Wavi Mono'; src: url('assets/fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); font-weight: 100 800; }
+      :root { --color-ground: #050505; --color-accent: #ff5fb0; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--color-ground); }
+      #root { position: relative; width: 100%; height: 100%; }
+      #ground { position: absolute; inset: 0; background: var(--color-ground); }
+      /* Keeps the bundled faces the canvases fall back to (⏺ ⎿ ✻ ❯ ⌘) loaded. */
+      #faces { position: absolute; left: 0; top: 0; opacity: 0; font: 400 10px 'JetBrains Mono'; }
+      #faces b { font: 500 10px Inter; }
+    </style>
+  </head>
+  <body>
+    <!-- One clock: "Nightmares" at 117.99 BPM, bar 2.03407 s. Bar lines: 0 2.034 4.068 6.102 8.136 10.170 12.204 14.238
+         16.273 18.307 20.341 22.375 24.409 26.443 28.477 30.511 32.545 34.579 36.613 38.647 40.681 42.716 44.750 46.784
+         48.818 50.852. Every seam is on one (SPEC.md). -->
+    <div data-hf-id="hf-huna" id="root" data-composition-id="main" data-start="0" data-duration="50.852" data-width="1920" data-height="1080">
+      <div data-hf-id="hf-7hg0" id="ground"></div>
+      <div data-hf-id="hf-egol" id="faces">⏺⎿✻❯└•⌘⇧◀▶ <b data-hf-id="hf-uy5m">⌘⇧⏎</b></div>
+      <div data-hf-id="hf-840e" id="night" data-composition-id="night" data-composition-src="compositions/night.html" data-start="0" data-duration="22.375" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <div data-hf-id="hf-blcl" id="rewind" data-composition-id="rewind" data-composition-src="compositions/rewind.html" data-start="22.375" data-duration="4.068" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <div data-hf-id="hf-ps2m" id="wavi" data-composition-id="wavi" data-composition-src="compositions/wavi.html" data-start="26.443" data-duration="10.17" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <div data-hf-id="hf-is76" id="coda" data-composition-id="coda" data-composition-src="compositions/coda.html" data-start="36.613" data-duration="8.137" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <div data-hf-id="hf-mzk9" id="end" data-composition-id="end" data-composition-src="compositions/end.html" data-start="44.75" data-duration="6.102" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <!-- Act 1 bed: the Mac's fan and "Songs in Fallen Halls" (PorchCat, CC BY 3.0) as the low drone, both cut dead at the drown (20.341). -->
+      <audio data-hf-id="hf-9ubz" id="fan" class="clip" src="assets/sfx/fan-hum.mp3" data-start="0" data-duration="20.341" data-track-index="8" data-volume="0.45" data-fade-out="0.02"></audio>
+      <audio data-hf-id="hf-vrqu" id="drone" class="clip" src="assets/music/fallen-halls-excerpt.mp3" data-timeline-role="music" data-start="0" data-duration="20.341" data-track-index="9" data-volume="1" data-fade-out="0.02" data-automation="{&quot;version&quot;: 1, &quot;lanes&quot;: [{&quot;target&quot;: &quot;volume&quot;, &quot;points&quot;: [{&quot;t&quot;: 0, &quot;v&quot;: 0.32}, {&quot;t&quot;: 8.0, &quot;v&quot;: 0.32}, {&quot;t&quot;: 9.5, &quot;v&quot;: 0.5}, {&quot;t&quot;: 16.27, &quot;v&quot;: 0.62}, {&quot;t&quot;: 20.3, &quot;v&quot;: 0.8}]}]}"></audio>
+      <!-- The chant under the logs: a monk chant (CC0) pitched down 3 semitones. -->
+      <audio data-hf-id="hf-rrk3" id="chant" class="clip" src="assets/sfx/chant-low.mp3" data-start="8.136" data-duration="12.205" data-track-index="10" data-volume="1" data-fade-out="0.02" data-automation="{&quot;version&quot;: 1, &quot;lanes&quot;: [{&quot;target&quot;: &quot;volume&quot;, &quot;points&quot;: [{&quot;t&quot;: 0, &quot;v&quot;: 0.25}, {&quot;t&quot;: 4, &quot;v&quot;: 0.45}, {&quot;t&quot;: 8.1, &quot;v&quot;: 0.7}, {&quot;t&quot;: 12.2, &quot;v&quot;: 0.85}]}]}"></audio>
+      <!-- A drip on every cursor blink (2 beats = 1.01704 s), five takes in rotation, peak one frame after the blink. -->
+      <audio data-hf-id="hf-5pku" id="drip-00" class="clip" src="assets/sfx/drip-a.mp3" data-start="0.000" data-duration="0.4" data-track-index="11" data-volume="0.30"></audio>
+      <audio data-hf-id="hf-uwaa" id="drip-01" class="clip" src="assets/sfx/drip-d.mp3" data-start="1.017" data-duration="0.4" data-track-index="12" data-volume="0.32"></audio>
+      <audio data-hf-id="hf-7slg" id="drip-02" class="clip" src="assets/sfx/drip-b.mp3" data-start="2.034" data-duration="0.4" data-track-index="11" data-volume="0.34"></audio>
+      <audio data-hf-id="hf-d7i4" id="drip-03" class="clip" src="assets/sfx/drip-e.mp3" data-start="3.051" data-duration="0.4" data-track-index="12" data-volume="0.35"></audio>
+      <audio data-hf-id="hf-uyej" id="drip-04" class="clip" src="assets/sfx/drip-c.mp3" data-start="4.068" data-duration="0.4" data-track-index="11" data-volume="0.37"></audio>
+      <audio data-hf-id="hf-vcdf" id="drip-05" class="clip" src="assets/sfx/drip-a.mp3" data-start="5.085" data-duration="0.4" data-track-index="12" data-volume="0.39"></audio>
+      <audio data-hf-id="hf-h0c4" id="drip-06" class="clip" src="assets/sfx/drip-d.mp3" data-start="6.102" data-duration="0.4" data-track-index="11" data-volume="0.41"></audio>
+      <audio data-hf-id="hf-d4hk" id="drip-07" class="clip" src="assets/sfx/drip-b.mp3" data-start="7.119" data-duration="0.4" data-track-index="12" data-volume="0.42"></audio>
+      <audio data-hf-id="hf-j6pn" id="drip-08" class="clip" src="assets/sfx/drip-e.mp3" data-start="8.136" data-duration="0.4" data-track-index="11" data-volume="0.44"></audio>
+      <audio data-hf-id="hf-ly4v" id="drip-09" class="clip" src="assets/sfx/drip-c.mp3" data-start="9.153" data-duration="0.4" data-track-index="12" data-volume="0.46"></audio>
+      <audio data-hf-id="hf-srp7" id="drip-10" class="clip" src="assets/sfx/drip-a.mp3" data-start="10.170" data-duration="0.4" data-track-index="11" data-volume="0.48"></audio>
+      <audio data-hf-id="hf-xrc6" id="drip-11" class="clip" src="assets/sfx/drip-d.mp3" data-start="11.187" data-duration="0.4" data-track-index="12" data-volume="0.50"></audio>
+      <audio data-hf-id="hf-crhc" id="drip-12" class="clip" src="assets/sfx/drip-b.mp3" data-start="12.204" data-duration="0.4" data-track-index="11" data-volume="0.51"></audio>
+      <audio data-hf-id="hf-tlll" id="drip-13" class="clip" src="assets/sfx/drip-e.mp3" data-start="13.221" data-duration="0.4" data-track-index="12" data-volume="0.53"></audio>
+      <audio data-hf-id="hf-0gcw" id="drip-14" class="clip" src="assets/sfx/drip-c.mp3" data-start="14.238" data-duration="0.4" data-track-index="11" data-volume="0.55"></audio>
+      <audio data-hf-id="hf-wra1" id="drip-15" class="clip" src="assets/sfx/drip-a.mp3" data-start="15.256" data-duration="0.4" data-track-index="12" data-volume="0.55"></audio>
+      <audio data-hf-id="hf-msqc" id="drip-16" class="clip" src="assets/sfx/drip-d.mp3" data-start="16.273" data-duration="0.4" data-track-index="11" data-volume="0.55"></audio>
+      <audio data-hf-id="hf-0vx0" id="drip-17" class="clip" src="assets/sfx/drip-b.mp3" data-start="17.290" data-duration="0.4" data-track-index="12" data-volume="0.55"></audio>
+      <audio data-hf-id="hf-uizt" id="drip-18" class="clip" src="assets/sfx/drip-e.mp3" data-start="18.307" data-duration="0.4" data-track-index="11" data-volume="0.55"></audio>
+      <audio data-hf-id="hf-wswl" id="drip-19" class="clip" src="assets/sfx/drip-c.mp3" data-start="19.324" data-duration="0.4" data-track-index="12" data-volume="0.55"></audio>
+      <!-- Silence 20.341-22.375. Then the tape rewinds (a VHS deck + the night's drone backwards at 5x) and PLAY. -->
+      <audio data-hf-id="hf-8tuf" id="rewind-sfx" class="clip" src="assets/sfx/tape-rewind.mp3" data-start="22.39" data-duration="3.7" data-track-index="13" data-volume="0.8"></audio>
+      <audio data-hf-id="hf-bxul" id="play-clunk" class="clip" src="assets/sfx/click.mp3" data-start="25.855" data-duration="0.37" data-track-index="14" data-volume="1"></audio>
+      <!-- The bed: "Nightmares" (donniedrost, CC BY 3.0) from its file 8.1395 s (where the full band slams in), on film bar 13. -->
+      <audio data-hf-id="hf-66di" id="music" class="clip" src="assets/music/nightmares-excerpt.mp3" data-timeline-role="music" data-start="26.443" data-duration="24.409" data-track-index="9" data-volume="0.62" data-fade-out="1.5"></audio>
+      <!-- Actions: keys on ⌘J, 1 and ⌘Q; the blood running back; impacts on ALL RUNNING and AGENTS RUN AFTER ⌘Q; the camcorder stops. -->
+      <audio data-hf-id="hf-ud7q" id="key-jump" class="clip" src="assets/sfx/key-press.mp3" data-start="28.435" data-duration="0.4" data-track-index="13" data-volume="1.2"></audio>
+      <audio data-hf-id="hf-6cha" id="key-yes" class="clip" src="assets/sfx/key-press.mp3" data-start="30.469" data-duration="0.4" data-track-index="14" data-volume="1.2"></audio>
+      <audio data-hf-id="hf-1utf" id="drip-back-1" class="clip" src="assets/sfx/drip-back.mp3" data-start="30.42" data-duration="0.93" data-track-index="15" data-volume="0.55"></audio>
+      <audio data-hf-id="hf-cqvd" id="drip-back-2" class="clip" src="assets/sfx/drip-back.mp3" data-start="30.78" data-duration="0.93" data-track-index="13" data-volume="0.4"></audio>
+      <audio data-hf-id="hf-ja00" id="impact-all" class="clip" src="assets/sfx/impact-bass-1.mp3" data-start="32.66" data-duration="2.1" data-track-index="14" data-volume="0.5"></audio>
+      <audio data-hf-id="hf-qr2l" id="key-quit" class="clip" src="assets/sfx/key-press.mp3" data-start="37.08" data-duration="0.4" data-track-index="15" data-volume="1.2"></audio>
+      <audio data-hf-id="hf-tdu9" id="impact-claim" class="clip" src="assets/sfx/impact-bass-2.mp3" data-start="42.39" data-duration="2.59" data-track-index="13" data-volume="0.5"></audio>
+      <audio data-hf-id="hf-o7g5" id="stop" class="clip" src="assets/sfx/lens-close.mp3" data-start="44.27" data-duration="0.79" data-track-index="14" data-volume="0.8"></audio>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #night-stage { position: absolute; inset: 0; }
+    #night-cam, #night-osd { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-i4oj" id="root" data-composition-id="night" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-y07y" id="night-stage" class="clip" data-start="0" data-duration="22.375">
+      <canvas data-hf-id="hf-dmy5" id="night-cam" aria-label="A recovered screen recording, green camcorder grade, REC 03:17: eight terminals tiled 4 by 2 stream Claude Code and Codex logs. One, session-cookie, is frozen on Do you want to proceed? and its cursor bleeds drops of blood. The camera zooms in: no input since 02:54, 23:00. The logs turn into R'lyehian chant, the letters of the prompt melt into blood, pools rise pane after pane until the whole screen is red; then silence."></canvas>
+      <canvas data-hf-id="hf-7bqi" id="night-osd" aria-hidden="true"></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const R = window.Rec;
+      const N = window.Night;
+      // Authored at 1x (one bar = 3.0511 s); the film plays this scene at SPEED.
+      const SPEED = 1.5;
+      const D = 22.375 * SPEED;
+      const tl = gsap.timeline();
+      R.fonts(['400 15px "Wavi Mono"', '700 34px "Wavi Mono"', '500 13px "Wavi Archivo"', '400 15px "JetBrains Mono"']).then(() => {
+        const rec = R.create(document.getElementById('night-cam'), document.getElementById('night-osd'));
+        R.drive(tl, D, (u) => {
+          const st = N.paint(rec, u);
+          rec.render(u / SPEED, st.fx);
+          R.osd(rec.osd, { mode: 'rec', t: u / SPEED, clock: st.clock });
+          N.readout(rec.osd, st.readout);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['night'] = film;
+      });
+    })();
+  </script>
+</template>
