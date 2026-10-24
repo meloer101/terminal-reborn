@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-22
+> 最后更新：2026-10-24
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -23,10 +23,11 @@
 - [ ] Homebrew：自己的 tap，`brew install --cask` 一行装好。放在公证之后做，因为未公证的 app 经 brew 装上同样会被 Gatekeeper 拦
 - [x] 官网 `site/` 部署到 GitHub Pages（2026-10-21 推送 main 后自动部署，https://meloer101.github.io/terminal-reborn/ ；英文版不在这一轮里）；2026-10-21 起 `site/` 是 Astro 项目，Pages 工作流先构建再发布，同一份站点也部署到 Vercel（项目根目录 `site/`，见 `site/vercel.json`）
 - [x] README 按 v0.3.0 重写，中文在前，加“Wavi 不会做的事”四条（2026-10-20）
+- [x] README 改为英文在前（`README.md`），中文另成 `README.zh-CN.md`（2026-10-24，跟随 PRD v1.62 主要市场改为海外）：横幅、徽章、深浅两套真实应用截图（`<picture>`）、官网的比较图和流程图，`docs/assets/readme/`；截图用 `npm run readme:shots` 重拍（演示仓库 + e2e 夹具 + 一个真实 Claude Code 会话，`scripts/readme-shots/`）。同日在 GitHub 上补了 20 个 topic、改了简介、上传了 social preview 图
 - [x] 发布视频三部（2026-10-22，`launch-videos/`，HyperFrames 项目，三条故事线见 `launch-videos/STORYLINES.md`）：A「等你的那一个」主发布片 29 s、B「十个问号」X 预告 22.5 s、C「一个任务，三份答案」功能片 31.5 s；都是 1.5 倍速、英文、同一首 CC BY 配乐（smilingcynic「do robots have a god?」，发布时要署名），关键动作卡在 120 BPM 的拍点上，响度 −15 LUFS。还没做：作者试听确认配乐、中文版（换变量和真实中文界面文案）、发布
 - [ ] GitHub 仓库改名为 `wavi`（原在“待作者手动确认”）：链接改动已备好，在分支 `claude/repo-storefront-01d834` 的 `e2acf43`（`package.json` 的 `repository` / `homepage`、README、CHANGELOG、打包和发布配置），作者在 GitHub 改名之后再合并；官网改 `site/index.html` 里那一处。已装 v0.3.0 的用户要靠 GitHub 的改名重定向收到新版本提示，所以 meloer101 下以后不能再建 `terminal-reborn`
 - [x] issue 表单：bug 报告和功能建议，功能建议必填“现在怎么绕过去”（2026-10-20，`.github/ISSUE_TEMPLATE/`）
-- [ ] Discussions 和用户群：作者开启 Discussions、建好群后，把链接填进 `.github/ISSUE_TEMPLATE/config.yml` 和 README「反馈」里的 `TODO(author)`
+- [ ] Discussions 和用户群：作者开启 Discussions、建好群后，把链接填进 `.github/ISSUE_TEMPLATE/config.yml`，并加到两份 README 顶部的链接行和「Development / 开发」里的 issue 那句旁边
 
 楔子必须先过的一关：
 - [ ] 搜狗输入法、豆包输入法和系统拼音下的中文输入（原在“待作者手动确认”）。Orca 的 issue 里输入法吞字、重复上屏、选字被清掉这类问题反复出现，Wavi 在这里不能出错。自动化部分已完成（见下面“这期间修好的”）；还差真机清单 10 步，系统拼音、搜狗、豆包各走一遍

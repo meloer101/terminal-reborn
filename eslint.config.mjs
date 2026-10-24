@@ -8,7 +8,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/main/**', 'src/preload/**', 'src/pty-host/**', 'e2e/**', 'e2e-packaged/**', 'scripts/*.mjs', '*.config.*', 'site/*.config.*'],
+    files: ['src/main/**', 'src/preload/**', 'src/pty-host/**', 'e2e/**', 'e2e-packaged/**', 'scripts/*.mjs', 'scripts/readme-shots/*.mjs', '*.config.*', 'site/*.config.*'],
     languageOptions: { globals: globals.node }
   },
   {

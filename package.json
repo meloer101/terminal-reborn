@@ -28,7 +28,8 @@
     "app:install": "electron-vite build && node scripts/install-app.mjs",
     "dist": "electron-vite build && node scripts/dist.mjs",
     "dist:dir": "electron-vite build && node scripts/dist.mjs --dir",
-    "test:packaged": "playwright test -c playwright.packaged.config.ts"
+    "test:packaged": "playwright test -c playwright.packaged.config.ts",
+    "readme:shots": "scripts/readme-shots/run.sh"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
