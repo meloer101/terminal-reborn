@@ -1,0 +1,41 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #cover-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-cv01" id="root" data-composition-id="cover" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-cv02" id="cover-stage" class="clip" data-start="0" data-duration="8">
+      <canvas data-hf-id="hf-cv03" id="cover-gl" aria-label="A book bound in black flesh lies shut on a stone table, a sewn-shut eye in its cover. The stitches tear, the eye opens with a magenta iris and looks around, then the cover lifts itself and turns over to the left, opening the book."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film;
+      const FILM0 = 0; const D = 8;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"']).then(() => {
+        const flesh = M.boards();
+        const book = new F.Book(document.getElementById('cover-gl'), { leftBoard: false, leftTop: M.TOPS.s1.left, rightTop: M.TOPS.s1.right, flesh });
+        const cover = M.coverSheet();
+        const plate = M.treePage();
+        const rule = M.ruleBranchPage();
+        book.addCover(cover, plate, M.TOPS.s1.right);
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          cover.frame(t); plate.frame(t); rule.frame(t);
+          book.pages({ right: rule });
+          // it lifts slowly (4.0-4.8), then falls open and slams onto the table at 5.5
+          const th = t < 4.8 ? 0.55 * F.E.io2(F.ramp(t, 4.0, 4.8)) : 0.55 + (Math.PI - 0.55) * F.E.in3(F.ramp(t, 4.8, 5.5));
+          book.coverPose(th);
+          // the candle gutters in the draught of the opening board
+          book.render(t, null, { light: 1 - 0.25 * Math.sin(Math.PI * F.ramp(t, 4.3, 5.6)) });
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['cover'] = film;
+      });
+    })();
+  </script>
+</template>

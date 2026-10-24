@@ -1,0 +1,54 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #eyes-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-eye01" id="root" data-composition-id="eyes" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-eye02" id="eyes-stage" class="clip" data-start="0" data-duration="8">
+      <canvas data-hf-id="hf-eye03" id="eyes-gl" aria-label="Out of a pupil: a real eye with a magenta iris in the margin of the book, Do you want to proceed? written under it. The camera pulls back to ten such eyes down both margins, Do you want to proceed? in blackletter and a blood ⌘J over JUMPS TO THE AGENT WAITING ON YOU. Ten iron nails fall one by one into the eyes; each lid slams shut and bleeds. The leaf turns."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film;
+      const FILM0 = 24; const D = 8;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"']).then(() => {
+        const flesh = M.boards();
+        const top = M.TOPS.s4;
+        const book = new F.Book(document.getElementById('eyes-gl'), { leftTop: top.left, rightTop: top.right, flesh });
+        const left = M.eyesPage(-1);
+        const right = M.eyesPage(1);
+        const city = M.cityPage();
+        const next = M.ruleAeonsPage();
+        // Ten forged nails, one per waiting eye: left column top→bottom, then the right.
+        const nails = book.addNails(10).map((g, k) => {
+          const side = k < 5 ? -1 : 1;
+          const ex = side < 0 ? 175 : 1105;
+          const p = F.pagePoint(side, ex / F.TEX_W, 1 - (M.EYE_Y[k % 5] + 4) / F.TEX_H, side < 0 ? top.left : top.right);
+          return { g, k, ex, p, n: M.NAIL_T(k), tilt: (F.hash(k * 3.1) - 0.5) * 0.12, spin: F.hash(k * 7.7) * 3 };
+        });
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          left.frame(t); right.frame(t); city.frame(t); next.frame(t);
+          const th = M.turn(t, 31.2, 0.8);
+          book.pages({ left, right: th > 0 ? next : right, leaf: th > 0 ? { recto: right, verso: city, theta: th } : null });
+          let jolt = 0;
+          nails.forEach(({ g, k, ex, p, n, tilt, spin }) => {
+            // falls 0.10 s (power4.in) and stops dead; the right column then rides the turning leaf, driven through it
+            g.visible = t >= n - 0.1 && th <= 0.88 * Math.PI;
+            const leaf = k >= 5 && th > 0 ? { u: ex / F.TEX_W, vv: (M.EYE_Y[k - 5] + 4) / F.TEX_H } : null;
+            book.placeNail(g, { p, fall: F.ramp(t, n - 0.1, n), tilt, spin, leaf });
+            if (t >= n && t < n + 2 / 30) jolt = k % 2 ? -1 : 1;
+          });
+          book.render(t, null, { jolt });
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['eyes'] = film;
+      });
+    })();
+  </script>
+</template>

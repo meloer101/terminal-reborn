@@ -1,0 +1,22 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    #grain-film { position: absolute; inset: -60px; opacity: 0.04; mix-blend-mode: screen;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); }
+  </style>
+  <div data-hf-id="hf-grn01" id="root" data-composition-id="grain" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-grn02" id="grain-film" class="clip" data-start="0" data-duration="52"></div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      const el = document.getElementById('grain-film');
+      // Grain jumps to a new place every frame like film, never drifts smoothly.
+      window.Folio.drive(tl, 52, (t) => {
+        const f = Math.floor(t * 30 + 1e-4);
+        el.style.transform = 'translate(' + (-((f * 37) % 60)) + 'px,' + (-((f * 23) % 60)) + 'px)';
+      });
+      window.__timelines['grain'] = tl;
+    })();
+  </script>
+</template>

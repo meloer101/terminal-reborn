@@ -1,0 +1,35 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #branch-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-br01" id="root" data-composition-id="branch" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-br02" id="branch-stage" class="clip" data-start="0" data-duration="8">
+      <canvas data-hf-id="hf-br03" id="branch-gl" aria-label="The open book: on the left an engraved plate of one trunk splitting into six tendrils that rejoin above it; on the right the rule Branch out. Merge in., the line each agent runs on its own git worktree, and a drop of blood that spreads into a seal; the camera dives into the seal."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film;
+      const FILM0 = 8; const D = 8;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"']).then(() => {
+        const flesh = M.boards();
+        const book = new F.Book(document.getElementById('branch-gl'), { flatLeft: true, leftTop: M.TOPS.s1.left, rightTop: M.TOPS.s1.right, flesh });
+        const plate = M.treePage();
+        const rule = M.ruleBranchPage();
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          plate.frame(t); rule.frame(t);
+          book.pages({ left: plate, right: rule });
+          book.render(t);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['branch'] = film;
+      });
+    })();
+  </script>
+</template>
