@@ -195,6 +195,7 @@ export function installAppMenu(): void {
         { label: '下一个需要你的会话', accelerator: SHORTCUTS['next-attention'], ...command('next-attention') },
         { type: 'separator' },
         { label: '重命名会话', ...command('rename-session') },
+        { label: '同任务多解…', accelerator: SHORTCUTS['same-task'], ...command('same-task') },
         { label: '合并到基线…', accelerator: SHORTCUTS['merge-worktree'], ...command('merge-worktree') }
       ]
     },

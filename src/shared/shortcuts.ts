@@ -15,6 +15,8 @@ export const MENU_COMMANDS = [
   'toggle-sidebar',
   'toggle-right-panel',
   'merge-worktree',
+  // 同任务多解 from the session with the keyboard (PRD F4 v1.68).
+  'same-task',
   // The main area's split (PRD F20).
   'split-right',
   'split-down',
@@ -50,6 +52,8 @@ export const SHORTCUTS = {
   'toggle-right-panel': 'Shift+CmdOrCtrl+B',
   // ⌘M stays the system's Minimize; the merge sheet takes ⇧⌘M (PRD F4).
   'merge-worktree': 'Shift+CmdOrCtrl+M',
+  // ⌘D is the split's (F20); 同任务多解 opens from any of its entries with ⇧⌘N.
+  'same-task': 'Shift+CmdOrCtrl+N',
   // As in iTerm2 / Ghostty: ⌘D splits right, ⇧⌘D down, ⌥⌘ arrows move between panes (PRD F20). ⌘W stays 关闭会话.
   'split-right': 'CmdOrCtrl+D',
   'split-down': 'Shift+CmdOrCtrl+D',

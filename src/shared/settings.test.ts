@@ -102,7 +102,23 @@ describe('alert settings (F11 · 额度提醒)', () => {
 
 describe('设置 · 自动化 · PR (PRD F16 v1.63)', () => {
   it('starts with the evidence block on and both automations off', () => {
-    expect(DEFAULT_SETTINGS.pr).toEqual({ evidence: true, autoFix: false, mergeWhenGreen: false, maxAutoFixes: 3, bots: [] })
+    expect(DEFAULT_SETTINGS.pr).toEqual({
+      evidence: true,
+      autoFix: false,
+      mergeWhenGreen: false,
+      maxAutoFixes: 3,
+      bots: [],
+      writer: 'session',
+      writerClaudeModel: 'haiku',
+      writerCodexModel: '',
+      writeOnOpen: false
+    })
+  })
+
+  it('AI 写 (v1.68): the session\'s agent on Haiku by default, never writing on open unless asked, and only model names', () => {
+    const pr = applySettingsPatch(DEFAULT_SETTINGS, { pr: { writer: 'codex', writerCodexModel: 'gpt-5-mini', writerClaudeModel: 'rm -rf /', writeOnOpen: true } }).pr
+    expect(pr).toMatchObject({ writer: 'codex', writerCodexModel: 'gpt-5-mini', writerClaudeModel: 'haiku', writeOnOpen: true })
+    expect(sanitizeSettings({ pr: { writer: 'gemini' } }).pr.writer).toBe('session')
   })
 
   it('keeps the cap within 1–5 and only valid bot logins', () => {

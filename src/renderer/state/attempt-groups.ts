@@ -1,4 +1,4 @@
-// 一题多解 groups (PRD v1.59): the sessions launched together with one prompt, saved with the workspace
+// 同任务多解 groups (PRD v1.59 / v1.68): the sessions launched together with one prompt, saved with the workspace
 // (`workspace.json`, see ./persistence), plus how far each member's launch got (worktree → agent up → prompt sent),
 // which is not saved. Closed sessions leave their group (workspace.ts prunes); a group with no member left goes.
 import { create } from 'zustand'
@@ -49,4 +49,9 @@ export function pruneGroups(alive: ReadonlySet<SessionId>): void {
   const { groups } = useAttemptGroups.getState()
   const next = pruneAttemptGroups(groups, alive)
   if (next !== groups) useAttemptGroups.setState({ groups: next })
+}
+
+/** The members' settle that went to the session the task came from (or is held for its 送进去). */
+export function markGroupReported(groupId: string, key: string): void {
+  useAttemptGroups.setState((s) => ({ groups: s.groups.map((g) => (g.id === groupId ? { ...g, reported: key } : g)) }))
 }

@@ -1,4 +1,4 @@
-// 一题多解 after one member was merged (PRD F4 / F15 v1.59): the merge sheet's result lists the members still left
+// 同任务多解 after one member was merged (PRD F4 / F15 v1.59): the merge sheet's result lists the members still left
 // and offers to archive them. Nothing is archived before the confirmation that names every branch.
 import { useEffect, useRef, useState } from 'react'
 import { Archive } from 'lucide-react'
@@ -37,7 +37,7 @@ export function AfterMerge({ groupId }: { groupId: string }) {
     <div ref={ref} className={styles.offer} data-testid="attempt-after-merge">
       <Archive size={16} strokeWidth={1.75} aria-hidden className={styles.icon} />
       <span className={styles.text}>
-        {outcome ?? `一题多解还剩 ${left.length} 份：${left.map((m) => m.branch).join('、')}`}
+        {outcome ?? `同任务多解还剩 ${left.length} 份：${left.map((m) => m.branch).join('、')}`}
       </span>
       {left.length > 0 && (
         <button type="button" className={styles.button} disabled={busy} onClick={() => void archive()}>

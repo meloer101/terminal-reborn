@@ -1,5 +1,6 @@
 // User-facing workspace commands: opening projects and creating sessions in them (Figma 09).
 // Menus are the app's own (ui/MenuHost.tsx), anchored to the control or pointer that opened them.
+import { agentName } from '@shared/agents'
 import {
   closeSessionConfirmation,
   countActive,
@@ -7,6 +8,7 @@ import {
   removeProjectMenuLabel
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
+import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
 import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
 import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive/store'
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
@@ -17,7 +19,6 @@ import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
 import { projectOfSession } from './workspace-model'
 
-const NEW_SESSION_LABEL: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
 const KINDS: AgentKind[] = ['claude', 'codex', 'shell']
 
 /**
@@ -148,7 +149,7 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   if (worktree) {
     entries.push(
       { type: 'separator' },
-      { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: NEW_SESSION_LABEL[kind] })) }
+      { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: agentName(kind) })) }
     )
     if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: '归档 worktree…' })
   }
@@ -168,8 +169,8 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
 }
 
 /**
- * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 关闭会话. Renaming is inline in the header,
- * so that choice is handed back to it.
+ * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 同任务多解… · 移到新窗口 · 关闭会话 (Figma 26A).
+ * Renaming is inline in the header, so that choice is handed back to it.
  */
 export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<'rename' | null> {
   const state = useWorkspace.getState()
@@ -182,11 +183,14 @@ export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAn
     { type: 'item', id: 'reveal', label: '在 Finder 中显示', enabled: path !== undefined },
     { type: 'item', id: 'copy-path', label: '复制路径', enabled: path !== undefined },
     { type: 'separator' },
+    { type: 'item', id: 'same-task', label: '同任务多解…', accelerator: 'Shift+CmdOrCtrl+N', enabled: canRunSameTask(sessionId) },
+    { type: 'separator' },
     { type: 'item', id: 'window', label: '移到新窗口' },
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]
   const choice = await popupMenu(entries, anchor)
   if (choice === 'rename') return 'rename'
+  if (choice === 'same-task') openSameTask(sessionId)
   if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'reveal' && path) window.tr.ui.revealInFinder(path)
   else if (choice === 'copy-path' && path) void navigator.clipboard.writeText(path).catch(() => {})
@@ -216,6 +220,10 @@ export async function closeActiveSession(): Promise<void> {
   }
   if (isMergeSheetOpen()) {
     closeMergeSheet(true)
+    return
+  }
+  if (isSameTaskOpen()) {
+    closeSameTask(true)
     return
   }
   if (useArchiveSheet.getState().target) {

@@ -3,6 +3,7 @@ import type { Project, Session, SessionStatus, Worktree } from '@shared/types'
 import {
   adjacentSessionId,
   buildSidebarGroups,
+  nestedTitle,
   nextAttentionSessionId,
   sessionForShortcut,
   visibleSessionIds
@@ -166,5 +167,19 @@ describe('dispatched sessions (PRD F21)', () => {
       ]
     })
     expect(groups[0]?.rows.map((r) => `${r.session.id}:${r.depth}`)).toEqual(['parent:0', 'child-b:1', 'child-a:1', 'other:0', 'orphan:0'])
+  })
+
+  it('shows a nested 同任务多解 part by the name after its parent’s title', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [
+        session('parent', 'wam', 'idle', 0, { title: 'Cookie 会话迁移' }),
+        session('part', 'wa1', 'running', 0, { title: 'Cookie 会话迁移 · Codex', dispatchedBy: 'parent' })
+      ]
+    })
+    expect(groups[0]?.rows.map((r) => r.title)).toEqual(['Cookie 会话迁移', 'Codex'])
+    expect(nestedTitle('别的名字', 'Cookie 会话迁移')).toBe('别的名字')
+    expect(nestedTitle('Cookie 会话迁移 · ', 'Cookie 会话迁移')).toBe('Cookie 会话迁移 · ')
   })
 })

@@ -39,8 +39,8 @@ export interface AgentSendProfile {
   placeholderOverChars: number
   /** A paste with at least this many `\n` collapses into a placeholder (null = line count is irrelevant). */
   placeholderAtNewlines: number | null
-  /** Text of the placeholder, e.g. `[Pasted text #3 +4 lines]` starts with this. */
-  placeholderNeedle: string
+  /** Text of the placeholder, e.g. `[Pasted text #3 +4 lines]` starts with this (null: none known). */
+  placeholderNeedle: string | null
   /** Wait between "paste is visible" and the submitting `\r`. */
   preEnterDelayMs: number
 }
@@ -52,6 +52,16 @@ export const AGENT_PROFILES: Record<'claude' | 'codex', AgentSendProfile> = {
   // Codex 0.142.5: >1000 chars -> `[Pasted Content N chars]`; the model gets the text verbatim.
   // 0 ms already worked with bracketed paste; 150 ms is cheap insurance against its 120 ms paste-burst window.
   codex: { placeholderOverChars: 1000, placeholderAtNewlines: null, placeholderNeedle: '[Pasted Content', preEnterDelayMs: 150 }
+}
+
+/**
+ * The other CLIs are not measured: no placeholder is assumed (the echo of the first line proves the paste arrived)
+ * and Enter waits as long as Codex's, which covers the paste-burst windows the Ink / Bubble Tea composers have.
+ */
+export const GENERIC_SEND_PROFILE: AgentSendProfile = { placeholderOverChars: Number.POSITIVE_INFINITY, placeholderAtNewlines: null, placeholderNeedle: null, preEnterDelayMs: 150 }
+
+export function sendProfile(agent: Exclude<AgentKind, 'shell'>): AgentSendProfile {
+  return agent === 'claude' || agent === 'codex' ? AGENT_PROFILES[agent] : GENERIC_SEND_PROFILE
 }
 
 /** Gap between the `/` keystroke and the bracketed paste carrying the rest of a slash command. */
@@ -120,7 +130,7 @@ function countChar(text: string, ch: string): number {
 /** Will the agent collapse this text into a `[Pasted …]` placeholder when it is pasted? */
 export function becomesPlaceholder(text: string, agent: AgentKind): boolean {
   if (agent === 'shell') return false
-  const p = AGENT_PROFILES[agent]
+  const p = sendProfile(agent)
   if (text.length > p.placeholderOverChars) return true
   return p.placeholderAtNewlines !== null && countChar(text, '\n') >= p.placeholderAtNewlines
 }
@@ -145,7 +155,8 @@ export function echoNeedles(text: string, agent: AgentKind): string[] {
       const n = linePrefixNeedle(firstLine)
       if (n) needles.push(n)
     }
-    needles.push(AGENT_PROFILES[agent].placeholderNeedle)
+    const placeholder = sendProfile(agent).placeholderNeedle
+    if (placeholder) needles.push(placeholder)
   }
   return needles
 }
@@ -211,7 +222,7 @@ export const planSend: PlanSend = (rawText, agent) => {
   if (text.trim() === '') return []
   if (agent === 'shell') return planShell(text)
 
-  const profile = AGENT_PROFILES[agent]
+  const profile = sendProfile(agent)
   const slash = isSlashText(text)
 
   // A pasted `/cmd …` that becomes a placeholder is no longer parsed as a command by Claude (it is sent to

@@ -1,5 +1,6 @@
 // Messages exchanged between main (src/main/pty) and the process that owns the PTYs: the pty daemon
 // (src/pty-daemon, over a Unix socket) or, as a fallback, the pty-host utilityProcess (over parentPort).
+import type { HookAgent } from '@shared/agent-events'
 import type { AgentKind } from '@shared/types'
 
 export interface HostSpawnRequest {
@@ -40,7 +41,7 @@ export interface HostScreen {
 /** A hook event the pty daemon answered itself because no app was attached to the session (PRD §6.8). */
 export interface HookJournalEntry {
   event: string
-  agent: 'claude' | 'codex'
+  agent: HookAgent
   /** Parsed body; null when it was too large to keep. */
   payload: unknown
   at: number

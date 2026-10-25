@@ -78,6 +78,17 @@ export interface PrSettings {
   maxAutoFixes: number
   /** Bot logins whose review comments 自动修复 may send (besides the user's own). None by default. */
   bots: string[]
+  /**
+   * AI 写 in 创建 PR 面板 (v1.68): which CLI writes the commit message and the PR title / body — the session's own
+   * agent, or always Claude / Codex — on the user's own login, in a separate headless run.
+   */
+  writer: 'session' | 'claude' | 'codex'
+  /** Model for Claude's runs; empty uses the CLI's own. Haiku by default: a commit message needs no big model. */
+  writerClaudeModel: string
+  /** Model for Codex's runs; empty uses the CLI's own (at low reasoning effort). */
+  writerCodexModel: string
+  /** Opening the sheet runs AI 写 at once. Off by default: it spends the user's quota. */
+  writeOnOpen: boolean
 }
 
 /**
@@ -141,7 +152,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   archive: { afterMerge: false },
   alerts: { usage: true },
-  pr: { evidence: true, autoFix: false, mergeWhenGreen: false, maxAutoFixes: 3, bots: [] },
+  pr: {
+    evidence: true,
+    autoFix: false,
+    mergeWhenGreen: false,
+    maxAutoFixes: 3,
+    bots: [],
+    writer: 'session',
+    writerClaudeModel: 'haiku',
+    writerCodexModel: '',
+    writeOnOpen: false
+  },
   dispatch: { tools: true, autoApprove: false }
 }
 
@@ -243,7 +264,11 @@ function prSettings(value: unknown): PrSettings {
     autoFix: typeof v.autoFix === 'boolean' ? v.autoFix : d.autoFix,
     mergeWhenGreen: typeof v.mergeWhenGreen === 'boolean' ? v.mergeWhenGreen : d.mergeWhenGreen,
     maxAutoFixes: Math.round(num(v.maxAutoFixes, d.maxAutoFixes, { min: 1, max: 5 })),
-    bots
+    bots,
+    writer: v.writer === 'claude' || v.writer === 'codex' ? v.writer : d.writer,
+    writerClaudeModel: typeof v.writerClaudeModel === 'string' && (v.writerClaudeModel === '' || REVIEW_MODEL.test(v.writerClaudeModel)) ? v.writerClaudeModel : d.writerClaudeModel,
+    writerCodexModel: typeof v.writerCodexModel === 'string' && (v.writerCodexModel === '' || REVIEW_MODEL.test(v.writerCodexModel)) ? v.writerCodexModel : d.writerCodexModel,
+    writeOnOpen: typeof v.writeOnOpen === 'boolean' ? v.writeOnOpen : d.writeOnOpen
   }
 }
 

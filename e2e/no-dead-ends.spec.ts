@@ -150,7 +150,7 @@ test.describe('first run and the session header', () => {
   test('B11: the header … menu renames and closes the session', async () => {
     await page.getByRole('button', { name: '会话菜单' }).click()
     const menu = page.getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText(['重命名…', '在 Finder 中显示', '复制路径', '移到新窗口', '关闭会话⌘W'])
+    await expect(menu.getByRole('menuitem')).toHaveText(['重命名…', '在 Finder 中显示', '复制路径', '同任务多解…⇧⌘N', '移到新窗口', '关闭会话⌘W'])
     await menu.getByRole('menuitem', { name: '重命名…' }).click()
     await expect(menu).toHaveCount(0)
     const field = page.getByRole('textbox', { name: '会话名称' })
@@ -219,7 +219,7 @@ test('B11: settings lists only panes with content', async () => {
   await page.waitForSelector('[data-region="sidebar"]')
   await page.evaluate(() => (globalThis as unknown as { tr: { ui: { openSettings(): void } } }).tr.ui.openSettings())
   const dialog = page.getByRole('dialog', { name: '设置' })
-  await expect(dialog.getByRole('tab')).toHaveText(['外观', 'Worktree', '自动化', '关于'])
+  await expect(dialog.getByRole('tab')).toHaveText(['外观', '智能体', 'Worktree', '自动化', '关于'])
   await expect(dialog.getByText('即将推出')).toHaveCount(0)
   await shootAll(app, page, 'b11-settings')
   await app.close()

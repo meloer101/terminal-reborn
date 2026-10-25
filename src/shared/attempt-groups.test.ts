@@ -1,36 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import {
-  attemptBranchesText,
+  addAgentRow,
+  attemptBrief,
   attemptCountProblem,
   attemptKinds,
-  attemptSendNote,
+  attemptReportText,
+  defaultRows,
   diffSummary,
   diffSummaryText,
   groupShown,
   markMerged,
+  memberBranches,
   memberLabels,
+  memberTitle,
   planAttempts,
   promptPreview,
+  promptsTask,
   pruneAttemptGroups,
-  recipientsText,
   remainingMembers,
+  reportDue,
   sanitizeAttemptGroups,
-  stepCount,
+  settledKey,
+  sourceLabel,
+  stepRow,
   type AttemptGroup,
-  type AttemptPlanInput
+  type AttemptPlanInput,
+  type MemberState
 } from './attempt-groups'
+import { looksLikeReport } from './dispatch'
 import type { NewSessionBranch } from './new-session'
 
 const branch = (name: string): NewSessionBranch => ({ name, remote: false, worktreePath: null, inMainCheckout: false })
 
 const input = (patch: Partial<AttemptPlanInput> = {}): AttemptPlanInput => ({
   root: '/repo',
-  base: 'main',
-  stem: 'jacob/swift-otter',
-  counts: { claude: 2, codex: 1 },
+  base: 'jacob/session-cookie',
+  stem: 'jacob/session-cookie',
+  rows: [
+    { kind: 'claude', count: 2 },
+    { kind: 'gemini', count: 1 }
+  ],
   prompt: '把登录页改成两步',
   prepare: true,
-  branches: [branch('main')],
+  branches: [branch('main'), branch('jacob/session-cookie')],
   worktreesDir: '/home/.tr/worktrees/repo',
   takenFolders: [],
   ...patch
@@ -45,66 +57,132 @@ const group = (patch: Partial<AttemptGroup> = {}): AttemptGroup => ({
   ...patch
 })
 
-describe('counts', () => {
-  it('lists Claude first, then Codex', () => {
-    expect(attemptKinds({ claude: 2, codex: 1 })).toEqual(['claude', 'claude', 'codex'])
-    expect(attemptKinds({ claude: 0, codex: 2 })).toEqual(['codex', 'codex'])
+describe('份数', () => {
+  it('lists the agents row by row', () => {
+    expect(attemptKinds([{ kind: 'claude', count: 2 }, { kind: 'codex', count: 1 }])).toEqual(['claude', 'claude', 'codex'])
+    expect(attemptKinds([{ kind: 'claude', count: 0 }, { kind: 'qwen', count: 2 }])).toEqual(['qwen', 'qwen'])
   })
 
   it('needs two to four in all', () => {
-    expect(attemptCountProblem({ claude: 1, codex: 0 })).toBe('too-few')
-    expect(attemptCountProblem({ claude: 1, codex: 1 })).toBeNull()
-    expect(attemptCountProblem({ claude: 3, codex: 2 })).toBe('too-many')
+    expect(attemptCountProblem([{ kind: 'claude', count: 1 }])).toBe('too-few')
+    expect(attemptCountProblem([{ kind: 'claude', count: 1 }, { kind: 'pi', count: 1 }])).toBeNull()
+    expect(attemptCountProblem([{ kind: 'claude', count: 3 }, { kind: 'codex', count: 2 }])).toBe('too-many')
   })
 
-  it('steps never below zero nor past four in all', () => {
-    expect(stepCount({ claude: 0, codex: 2 }, 'claude', -1)).toEqual({ claude: 0, codex: 2 })
-    expect(stepCount({ claude: 3, codex: 1 }, 'codex', 1)).toEqual({ claude: 3, codex: 1 })
-    expect(stepCount({ claude: 2, codex: 1 }, 'codex', 1)).toEqual({ claude: 2, codex: 2 })
+  it('steps never past four in all, and drops a row stepped down to zero', () => {
+    const rows = [{ kind: 'claude' as const, count: 1 }, { kind: 'codex' as const, count: 2 }]
+    expect(stepRow(rows, 'claude', -1)).toEqual([{ kind: 'codex', count: 2 }])
+    expect(stepRow([{ kind: 'claude', count: 3 }, { kind: 'codex', count: 1 }], 'codex', 1)).toEqual([{ kind: 'claude', count: 3 }, { kind: 'codex', count: 1 }])
+    expect(stepRow(rows, 'codex', -1)).toEqual([{ kind: 'claude', count: 1 }, { kind: 'codex', count: 1 }])
+  })
+
+  it('adds an agent as a new row, or one more part of a listed one, up to four', () => {
+    expect(addAgentRow([{ kind: 'claude', count: 1 }], 'opencode')).toEqual([{ kind: 'claude', count: 1 }, { kind: 'opencode', count: 1 }])
+    expect(addAgentRow([{ kind: 'claude', count: 1 }], 'claude')).toEqual([{ kind: 'claude', count: 2 }])
+    expect(addAgentRow([{ kind: 'claude', count: 4 }], 'codex')).toEqual([{ kind: 'claude', count: 4 }])
+  })
+
+  it('starts with the session’s agent and the next installed ones, one part each', () => {
+    expect(defaultRows('codex', ['claude', 'codex', 'opencode', 'gemini'])).toEqual([
+      { kind: 'codex', count: 1 },
+      { kind: 'claude', count: 1 },
+      { kind: 'opencode', count: 1 }
+    ])
+    expect(defaultRows('claude', ['claude'])).toEqual([{ kind: 'claude', count: 2 }])
+    expect(defaultRows('grok', ['claude', 'codex'])).toEqual([{ kind: 'claude', count: 1 }, { kind: 'codex', count: 1 }])
   })
 
   it('numbers an agent only when it repeats', () => {
-    expect(memberLabels(['claude', 'claude', 'codex'])).toEqual(['Claude Code 1', 'Claude Code 2', 'Codex'])
-    expect(recipientsText(['claude', 'claude', 'codex'])).toBe('Claude Code ×2 · Codex ×1')
+    expect(memberLabels(['claude', 'claude', 'gemini'])).toEqual(['Claude Code 1', 'Claude Code 2', 'Gemini CLI'])
+    expect(memberTitle('Cookie 会话迁移', 'Codex')).toBe('Cookie 会话迁移 · Codex')
   })
 })
 
 describe('planAttempts', () => {
-  it('makes one worktree per member off the same base, with numbered branches and their own folders', () => {
+  it('makes one worktree per member off the session’s branch, numbered from 2, each with its own folder', () => {
     const plan = planAttempts(input())
     expect(plan.problem).toBeNull()
     expect(plan.members?.map((m) => [m.kind, m.label, m.request.branch, m.request.folder, m.request.base, m.path])).toEqual([
-      ['claude', 'Claude Code 1', 'jacob/swift-otter-1', 'swift-otter-1', 'main', '/home/.tr/worktrees/repo/swift-otter-1'],
-      ['claude', 'Claude Code 2', 'jacob/swift-otter-2', 'swift-otter-2', 'main', '/home/.tr/worktrees/repo/swift-otter-2'],
-      ['codex', 'Codex', 'jacob/swift-otter-3', 'swift-otter-3', 'main', '/home/.tr/worktrees/repo/swift-otter-3']
+      ['claude', 'Claude Code 1', 'jacob/session-cookie-2', 'session-cookie-2', 'jacob/session-cookie', '/home/.tr/worktrees/repo/session-cookie-2'],
+      ['claude', 'Claude Code 2', 'jacob/session-cookie-3', 'session-cookie-3', 'jacob/session-cookie', '/home/.tr/worktrees/repo/session-cookie-3'],
+      ['gemini', 'Gemini CLI', 'jacob/session-cookie-4', 'session-cookie-4', 'jacob/session-cookie', '/home/.tr/worktrees/repo/session-cookie-4']
     ])
     expect(plan.members?.every((m) => m.request.root === '/repo' && m.request.prepare)).toBe(true)
   })
 
-  it('steps around folders already taken', () => {
-    const plan = planAttempts(input({ takenFolders: ['swift-otter-1'] }))
-    expect(plan.members?.map((m) => m.request.folder)).toEqual(['swift-otter-1-2', 'swift-otter-2', 'swift-otter-3'])
+  it('steps around branches and folders already taken', () => {
+    expect(memberBranches('x', 2, new Set(['x-2', 'x-4']))).toEqual(['x-3', 'x-5'])
+    const plan = planAttempts(input({ takenFolders: ['session-cookie-2'] }))
+    expect(plan.members?.map((m) => m.request.folder)).toEqual(['session-cookie-2-2', 'session-cookie-3', 'session-cookie-4'])
   })
 
-  it('refuses a count out of range, a bad stem, an existing member branch and an empty prompt', () => {
-    expect(planAttempts(input({ counts: { claude: 1, codex: 0 } })).problem).toBe('too-few')
+  it('refuses a count out of range, a bad stem and an empty or long task', () => {
+    expect(planAttempts(input({ rows: [{ kind: 'claude', count: 1 }] })).problem).toBe('too-few')
     expect(planAttempts(input({ stem: 'bad name' })).problem).toBe('invalid')
-    expect(planAttempts(input({ stem: '' })).problem).toBe('empty')
-    expect(planAttempts(input({ branches: [branch('main'), branch('jacob/swift-otter-2')] })).problem).toBe('exists')
     expect(planAttempts(input({ prompt: '  \n ' })).problem).toBe('prompt-empty')
     expect(planAttempts(input({ prompt: 'x'.repeat(20_001) })).problem).toBe('prompt-too-long')
   })
 
-  it('says what will be sent to whom', () => {
-    expect(attemptSendNote(['claude', 'claude', 'codex'], 'main')).toBe(
-      '新建 3 个 worktree（基于 main），各启动一个 agent，把这段话发给每一个并按回车：Claude Code ×2 · Codex ×1。每份各用一次你自己的额度。'
-    )
-    expect(attemptBranchesText('jacob/swift-otter', 3)).toBe('jacob/swift-otter-1 … -3')
+  it('briefs each member with where it came from and works', () => {
+    const brief = attemptBrief({ task: '改登录', parentTitle: 'Cookie', count: 3, branch: 'b-2', base: 'b' })
+    expect(brief).toContain('会话「Cookie」把同一个任务交给了 3 份')
+    expect(brief).toContain('分支 b-2，基于 b')
+    expect(brief.split('\n\n')[1]).toBe('改登录')
   })
 
   it('previews the first non-empty line', () => {
     expect(promptPreview('\n  修好   登录 \n第二行')).toBe('修好 登录')
     expect(promptPreview('一'.repeat(70), 60)).toBe(`${'一'.repeat(60)}…`)
+  })
+
+  it('names where the task came from', () => {
+    expect(promptsTask([' 改登录 ', '', '别重试'])).toBe('改登录\n别重试')
+    expect(sourceLabel('prompts', '改登录\n别重试', 'Claude Code')).toBe('你在这个会话里说过的 2 句话')
+    expect(sourceLabel('selection', 'a\nb\nc', 'Claude Code')).toBe('终端里选中的 3 行')
+    expect(sourceLabel('plan', '1. x', 'Claude Code')).toBe('Claude Code 写好的计划')
+  })
+})
+
+describe('the report', () => {
+  const m = (id: string, patch: Partial<MemberState> = {}): MemberState => ({ id, status: 'done_unread', exited: false, finishedAt: 10, launchFailed: false, ...patch })
+  const g = group({ createdAt: 5, reportTo: 's0' })
+
+  it('settles once every member stopped after its task ran', () => {
+    expect(settledKey(g, [m('s1'), m('s2', { status: 'error' }), m('s3', { exited: true })])).toBe('s1:10:done|s2:10:error|s3:10:exited')
+    expect(settledKey(g, [m('s1'), m('s2', { status: 'running' })])).toBeNull()
+    expect(settledKey(g, [m('s1'), m('s2', { status: 'needs_you' })])).toBeNull()
+    // Idle before its first turn: the task has not run yet.
+    expect(settledKey(g, [m('s1'), m('s2', { status: 'idle', finishedAt: undefined })])).toBeNull()
+    expect(settledKey(g, [m('s1'), m('s2', { status: 'idle', finishedAt: undefined, launchFailed: true })])).toBe('s1:10:done|s2:0:failed')
+    expect(settledKey(g, [])).toBeNull()
+  })
+
+  it('is due for a new settle of a group that reports, until one was merged', () => {
+    expect(reportDue(g, 'k')).toBe(true)
+    expect(reportDue({ ...g, reported: 'k' }, 'k')).toBe(false)
+    expect(reportDue(group(), 'k')).toBe(false)
+    expect(reportDue(markMerged(g, 's1', 'b', 1), 'k')).toBe(false)
+    expect(reportDue(g, null)).toBe(false)
+  })
+
+  it('lists each member’s facts and result, then asks for a comparison and leaves merging to the user', () => {
+    const text = attemptReportText({
+      base: 'jacob/x',
+      members: [
+        { label: 'Claude Code', branch: 'jacob/x-2', event: 'done', changes: '+38 −12 · 3 个文件', checks: '测试 ✓', message: '改好了'.repeat(80) },
+        { label: 'Gemini CLI', branch: 'jacob/x-3', event: 'failed', failure: '没能创建 worktree' }
+      ]
+    })
+    expect(looksLikeReport(text)).toBe(true)
+    expect(text).toContain('交给了 2 份各做一遍')
+    expect(text).toContain('— Claude Code · 做完了 · 分支 jacob/x-2 · +38 −12 · 3 个文件 · 测试 ✓')
+    expect(text).toContain('— Gemini CLI · 任务没发出去 · 分支 jacob/x-3\n  没能创建 worktree')
+    expect(text).toContain('git diff jacob/x...<分支>')
+    expect(attemptReportText({ base: 'b', members: [{ label: 'Codex', branch: 'b-2', event: 'done', message: '改好了。' }] })).toContain('\n  改好了。\n')
+    // Past the shared budget, a long result points to the member's terminal instead.
+    const long = attemptReportText({ base: 'b', members: [1, 2, 3, 4].map((n) => ({ label: `A${n}`, branch: `b-${n}`, event: 'done' as const, message: 'x'.repeat(5_000) })) })
+    expect(long).toContain('— A4 · 做完了 · 分支 b-4\n  （回复较长，看它的终端）')
+    expect(text.endsWith('你接着做下一步。')).toBe(true)
   })
 })
 
@@ -143,6 +221,14 @@ describe('diff summary', () => {
 
 describe('sanitizeAttemptGroups', () => {
   const sessions = new Set(['s1', 's2', 's3'])
+
+  it('keeps the session it reports to when it is one of the file’s and not a member', () => {
+    expect(sanitizeAttemptGroups([{ id: 'g1', prompt: 'p', base: 'b', createdAt: 1, members: ['s1', 's2'], reportTo: 's3', reported: 'k' }], sessions)).toEqual([
+      { id: 'g1', prompt: 'p', base: 'b', createdAt: 1, members: ['s1', 's2'], reportTo: 's3', reported: 'k' }
+    ])
+    expect(sanitizeAttemptGroups([{ id: 'g1', prompt: 'p', base: 'b', createdAt: 1, members: ['s1', 's2'], reportTo: 's1' }], sessions)[0]?.reportTo).toBeUndefined()
+    expect(sanitizeAttemptGroups([{ id: 'g1', prompt: 'p', base: 'b', createdAt: 1, members: ['s1'], reportTo: 'gone' }], sessions)[0]?.reportTo).toBeUndefined()
+  })
 
   it('keeps valid groups and members that exist, each session in one group only', () => {
     expect(

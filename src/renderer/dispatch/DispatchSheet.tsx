@@ -3,7 +3,7 @@
 // task sent to each, results reported to the dispatcher, the user's own quota. 拒绝 tells the agent not to retry.
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { GitBranch } from 'lucide-react'
-import { DISPATCH_AGENTS, startNote } from '@shared/dispatch'
+import { DISPATCH_AGENTS, isDispatchAgent, startNote } from '@shared/dispatch'
 import { useWorkspace } from '../state/workspace'
 import { settleConfirm, useDispatch, type PendingStart } from './store'
 import styles from './DispatchSheet.module.css'
@@ -18,7 +18,7 @@ function Sheet({ pending }: { pending: PendingStart }) {
   const titleId = useId()
   const parent = useWorkspace((s) => s.sessions.find((x) => x.id === pending.parentId))
   const parentTitle = parent?.title ?? '未命名'
-  const agentName = parent && parent.kind !== 'shell' ? DISPATCH_AGENTS[parent.kind].name : 'agent'
+  const agentName = parent && isDispatchAgent(parent.kind) ? DISPATCH_AGENTS[parent.kind].name : 'agent'
   const count = pending.plans.length
 
   useEffect(() => sheetRef.current?.focus(), [])

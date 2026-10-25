@@ -26,6 +26,10 @@ import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startDispatchBridge } from '../dispatch/bridge'
 import { DispatchSheet } from '../dispatch/DispatchSheet'
 import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
+import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
+import { PlanStrip } from '../attempts/PlanStrip'
+import { SameTaskSheet } from '../attempts/SameTaskSheet'
+import { startTaskSources } from '../attempts/sources'
 import { ArchiveSheet } from '../archive/ArchiveSheet'
 import { RightPanel } from '../panels/RightPanel'
 import { Overview } from '../overview/Overview'
@@ -77,6 +81,7 @@ export function AppShell() {
   useEffect(() => startPullRequestBridge(), [])
   useEffect(() => startPrAutomation(), [])
   useEffect(() => startDispatchBridge(), [])
+  useEffect(() => startTaskSources(), [])
   useEffect(() => startConflictRadarBridge(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
@@ -111,6 +116,8 @@ export function AppShell() {
             <SessionErrorBar />
             <SetupStrip />
             <HeldReportsStrip />
+            <HeldAttemptReportStrip />
+            <PlanStrip />
           </div>
         </main>
         {rightPanel && (
@@ -130,6 +137,7 @@ export function AppShell() {
       <AppearanceBridge />
       <SettingsDialog />
       {isKey && <NewSessionSheet />}
+      {isKey && <SameTaskSheet />}
       <MergeSheet />
       <CreatePrSheet />
       <ArchiveSheet />

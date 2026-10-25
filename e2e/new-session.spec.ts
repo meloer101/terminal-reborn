@@ -57,6 +57,11 @@ test.describe('F4 新建会话', () => {
   const sheet = () => page.getByTestId('new-session-sheet')
   const sidebar = () => page.locator('[data-region="sidebar"]')
   const radio = (name: string) => sheet().getByRole('radio', { name, exact: true })
+  /** 智能体 is a pop-up menu (Figma 24A). */
+  const pickAgent = async (name: string) => {
+    await sheet().getByRole('button', { name: '智能体' }).click()
+    await page.getByRole('listbox', { name: '智能体' }).getByRole('option', { name, exact: true }).click()
+  }
   const createButton = () => sheet().getByRole('button', { name: /创建/ })
   const setTheme = async (theme: 'dark' | 'light') => {
     await page.evaluate(
@@ -124,7 +129,7 @@ test.describe('F4 新建会话', () => {
     await expect(sheet().getByRole('button', { name: '项目' })).toHaveText('demo')
     await expect(radio('新 worktree')).toHaveAttribute('aria-checked', 'true')
     await expect(sheet().getByRole('button', { name: '基于' })).toHaveText('main')
-    await expect(radio('Claude Code')).toHaveAttribute('aria-checked', 'true')
+    await expect(sheet().getByRole('button', { name: '智能体' })).toContainText('Claude Code')
     const advanced = sheet().getByRole('button', { name: /高级/ })
     await expect(advanced).toHaveAttribute('aria-expanded', 'false')
     await expect(advanced).toHaveText(/^高级jacob\/[a-z]+-[a-z]+$/)
@@ -178,7 +183,7 @@ test.describe('F4 新建会话', () => {
   })
 
   test('创建 closes at once and creates the worktree in the background', async () => {
-    await radio('终端').click()
+    await pickAgent('终端')
     await page.keyboard.press('Meta+Enter')
     await expect(sheet()).toHaveCount(0)
     await expect(sidebar().locator('section[aria-label="demo"] [data-session-id]')).toHaveCount(2)
@@ -198,7 +203,7 @@ test.describe('F4 新建会话', () => {
     await openSheet()
     await expect(radio('新 worktree')).toHaveAttribute('aria-checked', 'true')
     await radio('当前目录').click()
-    await radio('终端').click()
+    await pickAgent('终端')
     await createButton().click()
     await expect(sheet()).toHaveCount(0)
     await expect(sidebar().locator('section[aria-label="demo"] [data-session-id]')).toHaveCount(3)
@@ -212,7 +217,7 @@ test.describe('F4 新建会话', () => {
     await page.getByRole('listbox', { name: '基于' }).getByRole('option', { name: /jacob\/checkout-coupon/ }).click()
     await expect(sheet().getByRole('group', { name: '基于' })).toContainText('已在 worktree 里：会在')
     await expect(sheet().getByRole('button', { name: /高级/ })).toHaveCount(0)
-    await radio('终端').click()
+    await pickAgent('终端')
     await createButton().click()
     await expect(sheet()).toHaveCount(0)
     const pane = page.locator('[data-region="terminal"] [data-active="true"]')

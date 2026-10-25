@@ -4,6 +4,8 @@
 // while checks run, rarely otherwise, backing off after errors and pausing every call on a rate limit. Branches
 // without an upstream cost one local git call and never reach gh.
 // 创建 PR pushes the branch (asking in a native sheet first when it was never pushed) and runs `gh pr create`.
+// v1.68 puts 提交 before it (the ticked uncommitted files, the user's message, the repository's hooks) and 推送 for a
+// branch whose PR is open already.
 // 让 agent 修复 reads the failing jobs' `gh run view --log-failed`. Everything from the renderer is validated: project
 // roots must be the workspace's, worktrees theirs, and no value reaches git or gh where it could be read as an option.
 // v1.63 adds the writes (PRD F16 · L2): merging the PR (pinned to the head Wavi checked, GitHub auto-merge or Wavi's own
@@ -22,8 +24,13 @@ import {
   isRateLimited,
   isSignedOut,
   nextPollDelay,
+  commitSubject,
+  MAX_SHIP_FILES,
+  stripControl,
   parseCreatedUrl,
+  parsePrCommitRequest,
   parsePrCreateRequest,
+  parseStatusZ,
   parsePrDetails,
   parsePrMergeRequest,
   parsePrPostReviewRequest,
@@ -53,9 +60,11 @@ import {
   type CiFailure,
   type GhState,
   type GitHubRepo,
+  type PrCommitResult,
   type PrCreateResult,
   type PrDetails,
   type PrDraft,
+  type ShipFile,
   type PrMergeRequest,
   type PrWriteResult,
   type PrStatus,
@@ -71,6 +80,8 @@ import { isProjectRoot } from './workspace-store'
 const GIT_TIMEOUT_MS = 15_000
 const GH_TIMEOUT_MS = 30_000
 const PUSH_TIMEOUT_MS = 120_000
+/** A commit runs the repository's hooks (lint, tests): they get this long. */
+const COMMIT_TIMEOUT_MS = 5 * 60_000
 const MAX_STDOUT = 8 * 1024 * 1024
 const MAX_STDERR = 8 * 1024
 /** Of `gh run view --log-failed`, only the end is kept (the failure is at the bottom). */
@@ -152,17 +163,17 @@ function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   }
 }
 
-async function git(cwd: string, args: string[], options: { timeout?: number; env?: Record<string, string> } = {}): Promise<Ran> {
+export async function git(cwd: string, args: string[], options: { timeout?: number; env?: Record<string, string> } = {}): Promise<Ran> {
   return runProcess('git', args, { cwd, env: gitEnv(options.env), timeout: options.timeout ?? GIT_TIMEOUT_MS })
 }
 
 /** stdout of a git command, '' when it failed. */
-async function gitOut(cwd: string, args: string[]): Promise<string> {
+export async function gitOut(cwd: string, args: string[]): Promise<string> {
   const ran = await git(cwd, args)
   return ran.code === 0 ? ran.stdout : ''
 }
 
-async function searchPath(): Promise<string> {
+export async function searchPath(): Promise<string> {
   const login = await userLoginPath()
   return [...(login ?? process.env.PATH ?? '').split(delimiter), ...EXTRA_PATH].filter(Boolean).join(delimiter)
 }
@@ -262,7 +273,7 @@ async function realOrSelf(path: string): Promise<string> {
 }
 
 /** The worktree's branch facts, or null when `worktree` is not a worktree of the project at `root`. */
-async function branchInfo(target: PrTarget): Promise<BranchInfo | null> {
+export async function branchInfo(target: PrTarget): Promise<BranchInfo | null> {
   if (!isProjectRoot(target.root)) return null
   const root = await realOrSelf(target.root)
   const listing = await git(root, ['worktree', 'list', '--porcelain'])
@@ -562,7 +573,7 @@ async function countCommits(cwd: string, range: string): Promise<number | null> 
   return ran.code === 0 ? Number(ran.stdout.trim()) || 0 : null
 }
 
-async function refExists(cwd: string, ref: string): Promise<boolean> {
+export async function refExists(cwd: string, ref: string): Promise<boolean> {
   return (await git(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`])).code === 0
 }
 
@@ -647,7 +658,7 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
 }
 
 /** The repository's PR template from the worktree (GitHub's locations, any case), or null. */
-async function prTemplate(cwd: string): Promise<string | null> {
+export async function prTemplate(cwd: string): Promise<string | null> {
   const listed = (await gitOut(cwd, ['ls-files', '--', '.github', 'docs', '*.md'])).split('\n').filter(Boolean)
   for (const wanted of PR_TEMPLATE_PATHS) {
     const path = listed.find((p) => p.toLowerCase() === wanted)
@@ -671,9 +682,128 @@ export async function prDraft(raw: unknown): Promise<PrDraft> {
   const remote = info.remote ?? (remotes.includes('origin') ? 'origin' : remotes.length === 1 ? remotes[0]! : null)
   if (!remote) return { ok: false, message: '没有远程仓库，没法推送分支' }
   const baseRef = (await refExists(cwd, `refs/remotes/${remote}/${base}`)) ? `refs/remotes/${remote}/${base}` : `refs/heads/${base}`
-  const subjects = (await gitOut(cwd, ['log', '--reverse', '--max-count=101', '--format=%s', `${baseRef}..refs/heads/${branch}`, '--'])).split('\n').filter(Boolean)
-  const template = await prTemplate(cwd)
-  return { ok: true, branch, base, remote, pushed: info.remoteRef !== null, body: template ?? prBody(subjects), fromTemplate: template !== null }
+  const [log, template, files, pushState] = await Promise.all([
+    gitOut(cwd, ['log', '--reverse', '--max-count=101', '--format=%s', `${baseRef}..refs/heads/${branch}`, '--']),
+    prTemplate(cwd),
+    uncommittedFiles(cwd),
+    pushCounts(cwd, branch, info.remoteRef ? { remote, remoteRef: info.remoteRef } : null)
+  ])
+  const subjects = log.split('\n').filter(Boolean)
+  return {
+    ok: true,
+    branch,
+    base,
+    remote,
+    pushed: info.remoteRef !== null,
+    body: template ?? prBody(subjects),
+    fromTemplate: template !== null,
+    subjects,
+    files: files.slice(0, MAX_SHIP_FILES),
+    filesOmitted: Math.max(0, files.length - MAX_SHIP_FILES),
+    ...pushState
+  }
+}
+
+/** The worktree's uncommitted files, untracked ones included (one by one, not as folders). */
+export async function uncommittedFiles(cwd: string): Promise<ShipFile[]> {
+  const ran = await git(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=dirty'])
+  return ran.code === 0 ? parseStatusZ(ran.stdout) : []
+}
+
+/** Commits not pushed yet (null: never pushed) and commits on the remote branch the local one does not have. */
+async function pushCounts(cwd: string, branch: string, upstream: { remote: string; remoteRef: string } | null): Promise<{ unpushed: number | null; remoteAhead: number }> {
+  if (!upstream) return { unpushed: null, remoteAhead: 0 }
+  const tracking = `refs/remotes/${upstream.remote}/${upstream.remoteRef.slice('refs/heads/'.length)}`
+  if (!(await refExists(cwd, tracking))) return { unpushed: null, remoteAhead: 0 }
+  const ran = await git(cwd, ['rev-list', '--left-right', '--count', `${tracking}...refs/heads/${branch}`, '--'])
+  if (ran.code !== 0) return { unpushed: null, remoteAhead: 0 }
+  const [behind = '0', ahead = '0'] = ran.stdout.trim().split(/\s+/)
+  return { unpushed: Number(ahead) || 0, remoteAhead: Number(behind) || 0 }
+}
+
+// ── 提交 / 推送 (v1.68) ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Commits the ticked uncommitted files of a session's branch with the user's message: `git add -A` then
+ * `git commit --only` on exactly those paths (whatever else the agent staged stays staged), hooks and all, with the
+ * login shell's PATH so hooks find their tools. Never on the base branch or a detached HEAD, never with conflicts.
+ */
+export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
+  const request = parsePrCommitRequest(raw)
+  const blockedCommit = (message: string): PrCommitResult => ({ ok: false, reason: 'blocked', message })
+  if (!request || !isProjectRoot(request.root)) return blockedCommit('请求无效')
+  if (creating.has(request.worktree)) return blockedCommit('正在提交或推送')
+  creating.add(request.worktree)
+  try {
+    const info = await branchInfo(request)
+    if (!info) return blockedCommit('不是这个项目的 worktree')
+    if (!info.branch) return blockedCommit('处于分离 HEAD：先切到一个分支再提交')
+    if (!info.base || info.base === info.branch) return blockedCommit('这是基线分支本身：在会话的 worktree 里提交')
+    const files = await uncommittedFiles(info.cwd)
+    if (files.some((f) => f.status === 'U')) return blockedCommit('有没解决的冲突：先解决再提交')
+    const known = new Map(files.map((f) => [f.path, f]))
+    const paths = request.paths.filter((path) => known.has(path))
+    if (paths.length === 0) return blockedCommit('勾选的文件已经没有改动了')
+    // A staged rename's source is gone from the index already (nothing to add), but the commit must take its removal.
+    const sources = paths.map((path) => known.get(path)!.oldPath).filter((p): p is string => Boolean(p))
+    const env = { GIT_LITERAL_PATHSPECS: '1', PATH: await searchPath() }
+    const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
+    const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv(env), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
+    if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added) }
+    const committed = await runProcess('git', ['commit', '--only', '--no-edit', `--message=${request.message}`, ...fromStdin], {
+      cwd: info.cwd,
+      env: gitEnv(env),
+      timeout: COMMIT_TIMEOUT_MS,
+      input: [...new Set([...paths, ...sources])].join('\0')
+    })
+    if (committed.code !== 0) return { ok: false, reason: 'failed', message: '提交没有成功（git hook 或 git 报错）', output: outputTail(committed) }
+    const head = (await gitOut(info.cwd, ['rev-parse', '--short', 'HEAD'])).trim()
+    return { ok: true, commit: head, subject: commitSubject(request.message) }
+  } finally {
+    creating.delete(request.worktree)
+  }
+}
+
+/** What git and its hooks printed, the end of it (hooks print to either stream). */
+function outputTail(ran: Ran): string {
+  const lines = `${ran.stdout.trim()}\n${ran.stderr.trim()}`.split('\n').map((line) => stripControl(line).trimEnd())
+  return lines.filter((line) => line.trim()).slice(-40).join('\n').slice(-4000)
+}
+
+/**
+ * Pushes a session's branch to the upstream it already has — 提交并推送 / 推送 when its PR is open. Refuses when the
+ * remote branch has commits the local one has not (the push would be rejected; pull or rebase first).
+ */
+export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
+  const target = parsePrTarget(raw)
+  const refused = (message: string): PrWriteResult => ({ ok: false, reason: 'blocked', message })
+  if (!target || !isProjectRoot(target.root)) return refused('请求无效')
+  if (creating.has(target.worktree)) return refused('正在提交或推送')
+  creating.add(target.worktree)
+  try {
+    const info = await branchInfo(target)
+    if (!info) return refused('不是这个项目的 worktree')
+    const { cwd, branch, base } = info
+    if (!branch) return refused('处于分离 HEAD，没有分支可以推送')
+    if (!base || base === branch) return refused('这是基线分支本身：Wavi 不往基线分支推送')
+    if (!info.remote || !info.remoteRef) return refused('分支还没有推送过：用「创建 PR」推送')
+    // As of the last fetch; a remote that moved since makes git refuse the push below, and that is said too.
+    const counts = await pushCounts(cwd, branch, { remote: info.remote, remoteRef: info.remoteRef })
+    const behind = `${info.remote} 上的分支有本地没有的提交：先拉取或 rebase，再推送`
+    if (counts.remoteAhead > 0) return refused(behind.replace('有本地', `有 ${counts.remoteAhead} 个本地`))
+    if (counts.unpushed === 0) return { ok: true, outcome: 'pushed', message: '没有要推送的提交' }
+    const env = await pushEnv(cwd)
+    const pushed = await git(cwd, ['push', '--quiet', '--', info.remote, `refs/heads/${branch}:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env })
+    if (pushed.code !== 0) {
+      const output = pushed.stderr || pushed.stdout
+      if (/non-fast-forward|fetch first|\[rejected\]/i.test(output)) return refused(behind)
+      return { ok: false, reason: 'failed', message: `推送失败：${lastLines(output)}` }
+    }
+    await refreshAfterCreate(target.worktree)
+    return { ok: true, outcome: 'pushed', message: `已推送到 ${info.remote}/${info.remoteRef.slice('refs/heads/'.length)}` }
+  } finally {
+    creating.delete(target.worktree)
+  }
 }
 
 async function refreshAfterCreate(worktree: string): Promise<void> {
@@ -977,6 +1107,8 @@ export function registerPullRequestHandlers(): void {
   ipcMain.handle(PR_IPC.create, (event, raw: unknown) => createPullRequest(raw, hostWindowFor(event.sender)))
   ipcMain.handle(PR_IPC.failure, (_event, worktree: unknown) => ciFailure(worktree))
   ipcMain.handle(PR_IPC.draft, (_event, raw: unknown) => prDraft(raw))
+  ipcMain.handle(PR_IPC.commit, (_event, raw: unknown) => commitWorktree(raw))
+  ipcMain.handle(PR_IPC.push, (_event, raw: unknown) => pushBranch(raw))
   ipcMain.handle(PR_IPC.merge, (_event, raw: unknown) => mergePullRequest(raw))
   ipcMain.handle(PR_IPC.cancelMerge, (_event, raw: unknown) => cancelMerge(raw))
   ipcMain.handle(PR_IPC.resolveThreads, (event, raw: unknown) => resolveThreads(raw, hostWindowFor(event.sender)))

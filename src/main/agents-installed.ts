@@ -5,11 +5,11 @@ import { spawn } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { ipcMain } from 'electron'
-import { IPC, type AgentAvailability } from '@shared/ipc'
+import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { IPC, type AgentAvailability, type AgentVersions } from '@shared/ipc'
 
 const TIMEOUT_MS = 5000
 const CACHE_MS = 10_000
-const AGENTS = ['claude', 'codex'] as const
 
 /** PATH from `env` output; rc files may print noise before it, so the last PATH= line wins. */
 export function pathFromEnvOutput(output: string): string | null {
@@ -33,7 +33,7 @@ function isExecutableFile(path: string): boolean {
 export function findOnPath(pathValue: string, isExecutable: (path: string) => boolean = isExecutableFile): AgentAvailability {
   const dirs = pathValue.split(':').filter((d) => d.startsWith('/'))
   const found = (name: string) => dirs.some((dir) => isExecutable(join(dir, name)))
-  return { claude: found(AGENTS[0]), codex: found(AGENTS[1]) }
+  return Object.fromEntries(CLI_AGENTS.map((id) => [id, found(AGENT_SPECS[id].binary)])) as AgentAvailability
 }
 
 function loginShellPath(shell: string): Promise<string | null> {
@@ -86,6 +86,51 @@ export function detectAgents(shell: string = process.env.SHELL || '/bin/zsh'): P
   return result
 }
 
+/** The first version-looking token of a `--version` output (`codex-cli 0.164.0` → `0.164.0`), or null. */
+export function versionFromOutput(output: string): string | null {
+  return /\bv?(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output)?.[1] ?? null
+}
+
+function runVersion(path: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    let output = ''
+    // stdin closed and no TTY: a CLI that would prompt or start its TUI gets EOF instead of waiting.
+    const child = spawn(path, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1', CI: '1' } })
+    const timer = setTimeout(() => child.kill('SIGKILL'), TIMEOUT_MS)
+    const take = (chunk: Buffer): void => {
+      if (output.length < 4096) output += chunk.toString('utf8')
+    }
+    child.stdout.on('data', take)
+    child.stderr.on('data', take)
+    child.once('error', () => {
+      clearTimeout(timer)
+      resolve(null)
+    })
+    child.once('close', () => {
+      clearTimeout(timer)
+      resolve(versionFromOutput(output))
+    })
+  })
+}
+
+let versionsOnce: Promise<AgentVersions> | null = null
+
+/** `--version` of every installed agent CLI, once per app run (设置 · 智能体). */
+export function agentVersions(shell: string = process.env.SHELL || '/bin/zsh'): Promise<AgentVersions> {
+  versionsOnce ??= userLoginPath(shell).then(async (loginPath) => {
+    const pathValue = loginPath ?? process.env.PATH ?? ''
+    const entries = await Promise.all(
+      CLI_AGENTS.map(async (id) => {
+        const path = executableOnPath(pathValue, AGENT_SPECS[id].binary)
+        return path ? ([id, await runVersion(path)] as const) : null
+      })
+    )
+    return Object.fromEntries(entries.filter((e) => e !== null)) as AgentVersions
+  })
+  return versionsOnce
+}
+
 export function registerAgentDetection(): void {
   ipcMain.handle(IPC.appDetectAgents, () => detectAgents())
+  ipcMain.handle(IPC.appAgentVersions, () => agentVersions().catch(() => ({})))
 }

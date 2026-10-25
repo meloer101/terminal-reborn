@@ -1,6 +1,7 @@
 // Worktree view commands: switching to a worktree's session, the row's 更多 menu, delete and 清理. Every removal is
 // confirmed and refused whenever work could be lost (see deleteBlocker; main checks again). `--force` is offered in a
 // second confirmation only for git's submodule refusal.
+import { agentName } from '@shared/agents'
 import type { WorktreeRemoveResult } from '@shared/git-worktrees'
 import type { AgentKind, ProjectId, WorktreeId } from '@shared/types'
 import { restoreArchivedWorktree } from '../../archive/actions'
@@ -11,7 +12,7 @@ import { popupMenu, type MenuAnchor } from '../../ui/menu'
 import { cleanupPlan, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
-const KIND_LABEL: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
+const KIND_LABEL = (kind: AgentKind): string => agentName(kind)
 
 /** Said in every delete confirmation: a plain `git worktree remove` takes ignored files with it. */
 const IGNORED_FILES_NOTE = '被 .gitignore 忽略的文件（如 .env、node_modules）也会一起删除。'
@@ -181,7 +182,7 @@ export async function openRowMenu(
       {
         type: 'submenu',
         label: '在此新建会话',
-        items: kinds.map((kind) => ({ type: 'item', id: `new:${kind}`, label: KIND_LABEL[kind], enabled: row.info.prunable === null }))
+        items: kinds.map((kind) => ({ type: 'item', id: `new:${kind}`, label: KIND_LABEL(kind), enabled: row.info.prunable === null }))
       },
       { type: 'item', id: 'copy-path', label: '复制路径' },
       { type: 'separator' },

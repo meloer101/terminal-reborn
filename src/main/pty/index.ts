@@ -5,6 +5,7 @@
 import { app, ipcMain, utilityProcess, type WebContents } from 'electron'
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
+import { AGENT_SPECS } from '@shared/agents'
 import { agentShellArgs } from '@shared/agent-launch'
 import { IPC, type LivePtySession, type PtyAttachResult, type PtySpawnOptions } from '@shared/ipc'
 import { hostRestartDelay, type HostRestartedEvent } from '@shared/lifecycle'
@@ -21,6 +22,7 @@ import {
   setHookTarget,
   type AgentLaunchHooks
 } from '../hooks'
+import { isDispatchAgent } from '@shared/dispatch'
 import { dispatchLaunchFor } from '../dispatch'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
@@ -327,7 +329,7 @@ async function hostLaunch(
   const script = options.script ? await approvedScript(realCwd, options.script) : null
   const shell = resolveShell(buildPtyEnv(appEnv(), env)).command
   if (options.script === 'run' && script) return { command: shell, args: runShellArgs(script) }
-  const dispatch = agent ? dispatchLaunchFor(agent) : {}
+  const dispatch = isDispatchAgent(agent) ? dispatchLaunchFor(agent) : {}
   const codexConfig = [...(hooks?.codexConfig ?? []), ...(dispatch.codexOverrides ?? [])]
   const args = agentShellArgs(options.agent ?? 'shell', realCwd, shell, {
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
@@ -336,6 +338,7 @@ async function hostLaunch(
     ...(options.resumeAgentSessionId ? { resumeAgentSessionId: options.resumeAgentSessionId } : {}),
     ...(options.model ? { model: options.model } : {}),
     ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
+    ...(hooks?.extraArgs ? { extraArgs: hooks.extraArgs } : {}),
     ...(script ? { before: setupCommand(script) } : {})
   })
   return { command: shell, args }
@@ -367,7 +370,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       : null
   const attached = hooks !== null || shellEnv !== null
   const port = realCwd ? portFor(realCwd) : null
-  const env = { ...options.env, ...hooks?.env, ...shellEnv, ...(port !== null ? { TR_PORT: String(port) } : {}) }
+  const env = { ...options.env, ...(agent ? AGENT_SPECS[agent].env : {}), ...hooks?.env, ...shellEnv, ...(port !== null ? { TR_PORT: String(port) } : {}) }
   let launch: { command: string; args: string[] } | null
   try {
     launch = await hostLaunch(options, realCwd, env, hooks)

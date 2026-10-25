@@ -9,9 +9,11 @@
 // final message as the report with a BLOCKED line (Superset, coder/mux). Nothing is typed into a dispatcher's
 // terminal: reports go through each vendor's own message channel (§6.14).
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
-import type { AgentKind, SessionId, SessionStatus } from './types'
+import type { ClaudeOrCodex } from './agents'
+import type { SessionId, SessionStatus } from './types'
 
-export type DispatchAgent = Exclude<AgentKind, 'shell'>
+/** The CLIs that get Wavi's dispatch MCP server and a report channel (§6.14). */
+export type DispatchAgent = ClaudeOrCodex
 
 /**
  * How Wavi delivers a report to a dispatcher of this kind (§6.14):
@@ -347,9 +349,14 @@ export function childBrief(input: { task: string; parentTitle: string; parentAge
 // --- reports -------------------------------------------------------------------------------------------------------
 
 export const REPORT_HEADER = '[Wavi 派活报告]'
+/** 同任务多解's report to the session its task came from (attempt-groups.ts). */
+export const ATTEMPT_REPORT_HEADER = '[Wavi 同任务多解汇报]'
 
 /** Report text fed back as a task would make a loop (Nimbalyst's guard). */
-export const looksLikeReport = (text: string): boolean => text.trimStart().startsWith(REPORT_HEADER)
+export const looksLikeReport = (text: string): boolean => {
+  const start = text.trimStart()
+  return start.startsWith(REPORT_HEADER) || start.startsWith(ATTEMPT_REPORT_HEADER)
+}
 
 export type ChildEvent = 'done' | 'error' | 'exited'
 

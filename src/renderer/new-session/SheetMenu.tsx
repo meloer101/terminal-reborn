@@ -1,6 +1,7 @@
 // The sheet's dropdown (Figma 15C Popover · 分支): glass like the sheet, an optional search field, grouped items with an
 // icon and right-aligned meta, and a hint line. Rendered into <body> under its anchor: a backdrop-filter inside the
-// sheet would only see the sheet, not the window behind it.
+// sheet would only see the sheet, not the window behind it. `align="selected"` (Figma 24A 智能体) puts the chosen item
+// over the control like a macOS pop-up menu and keeps the whole menu on screen, so a long list need not scroll.
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
@@ -32,6 +33,7 @@ export function SheetMenu({
   search,
   hint,
   empty = '没有匹配的分支',
+  align = 'below',
   onPick,
   onClose
 }: {
@@ -44,6 +46,7 @@ export function SheetMenu({
   search?: string
   hint?: string | null
   empty?: string
+  align?: 'below' | 'selected'
   onPick: (value: string) => void
   onClose: (refocus: boolean) => void
 }) {
@@ -67,6 +70,19 @@ export function SheetMenu({
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
   }, [anchor])
+
+  // Over the control: move the menu up by the chosen item's offset, then clamp it into the window.
+  const placedOnce = box !== null
+  useLayoutEffect(() => {
+    if (align !== 'selected' || !placedOnce || !menu.current) return
+    const rect = anchor.getBoundingClientRect()
+    const option = menu.current.querySelector<HTMLElement>('[aria-selected="true"]')
+    const height = menu.current.scrollHeight
+    const offset = option ? option.getBoundingClientRect().top - menu.current.getBoundingClientRect().top + (option.offsetHeight - rect.height) / 2 : 0
+    const room = window.innerHeight - EDGE * 2
+    const top = Math.max(EDGE, Math.min(rect.top - offset, window.innerHeight - EDGE - Math.min(height, room)))
+    setBox((now) => (now && now.top === top && now.maxHeight === room ? now : { left: rect.left - OUTSET, top, width: rect.width + OUTSET * 2, maxHeight: room }))
+  }, [align, anchor, placedOnce])
 
   // The menu renders once it is placed; then the keyboard goes to its search field (or list).
   const placed = box !== null

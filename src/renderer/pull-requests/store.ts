@@ -6,11 +6,14 @@ import type { PrAutomation } from './auto-fix-model'
 import type { Project, Session, Worktree } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 
+/** What the PR button is doing for a worktree (提交 and 推送 since v1.68). */
+export type PrBusy = 'committing' | 'pushing' | 'creating' | 'fixing'
+
 interface PrStore {
   gh: GhState
   byWorktree: Record<string, PrStatus>
   /** 创建 PR / 让 agent 修复 in flight, per worktree path. */
-  busy: Record<string, 'creating' | 'fixing'>
+  busy: Record<string, PrBusy>
   /** The last 创建 PR / 让 agent 修复 outcome to show under Git · 变更 (UI copy), per worktree path. */
   notice: Record<string, { tone: 'error' | 'muted'; text: string }>
   /** 自动修复 per worktree path (PRD F16 v1.63 · L3). */
@@ -76,7 +79,7 @@ export function useSessionPr(sessionId: string): PullRequestInfo | null {
   return usePr(useWorkspace((s) => worktreePathOf(s, sessionId)))
 }
 
-export function setPrBusy(worktree: string, busy: 'creating' | 'fixing' | null): void {
+export function setPrBusy(worktree: string, busy: PrBusy | null): void {
   usePullRequests.setState((s) => {
     const next = { ...s.busy }
     if (busy) next[worktree] = busy

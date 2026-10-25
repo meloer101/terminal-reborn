@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  commitMessage,
+  commitSubject,
+  parsePrCommitRequest,
+  parseStatusZ,
   actionsIds,
   checksLabel,
   ciFixPrompt,
@@ -466,5 +470,29 @@ describe('cleanFailedLog on a real run (gh 2.92, 2026-10-21)', () => {
       'test\tRun sh test.sh\t2026-10-21T21:42:07.6882945Z ##[error]Process completed with exit code 1.'
     ].join('\n')
     expect(cleanFailedLog(raw)).toBe('sh test.sh\nexpected clamp -5 to be 0, got -5\n##[error]Process completed with exit code 1.')
+  })
+})
+
+describe('提交 (v1.68)', () => {
+  it('reads git status -z: renames with their source, untracked files, deletions and conflicts', () => {
+    const out = ['R  new.ts', 'old.ts', ' M b.ts', '?? n.txt', ' D gone.ts', 'UU c.ts', 'AA both.ts', '!! ignored', ''].join('\0')
+    expect(parseStatusZ(out)).toEqual([
+      { path: 'b.ts', status: 'M' },
+      { path: 'both.ts', status: 'U' },
+      { path: 'c.ts', status: 'U' },
+      { path: 'gone.ts', status: 'D' },
+      { path: 'n.txt', status: 'A', untracked: true },
+      { path: 'new.ts', status: 'R', oldPath: 'old.ts' }
+    ])
+  })
+
+  it('cleans the message and takes only relative paths git could have listed', () => {
+    expect(commitMessage('  Fix\r\n\n\n\n\nbody\u0007 \t\n')).toBe('Fix\n\n\nbody')
+    expect(commitSubject('Fix nav\n\nbody')).toBe('Fix nav')
+    const ok = { root: '/r', worktree: '/r/wt', message: 'Fix', paths: ['a.ts', 'src/b.ts', 'a.ts'] }
+    expect(parsePrCommitRequest(ok)).toEqual({ ...ok, paths: ['a.ts', 'src/b.ts'] })
+    for (const paths of [[], ['../x'], ['/etc/hosts'], ['a//b'], ['./a'], ['a\0b'], [1]]) expect(parsePrCommitRequest({ ...ok, paths })).toBeNull()
+    expect(parsePrCommitRequest({ ...ok, message: ' \n ' })).toBeNull()
+    expect(parsePrCommitRequest({ ...ok, root: 'relative' })).toBeNull()
   })
 })

@@ -1,0 +1,109 @@
+/* Settings · 智能体 (Figma 25B): rows of text with right-aligned meta, no lines (PRD §5 v1.68). */
+
+.page {
+  composes: page from './WorktreePane.module.css';
+}
+
+.form {
+  composes: form from './WorktreePane.module.css';
+  flex-basis: 640px;
+}
+
+.title {
+  composes: title from './WorktreePane.module.css';
+}
+
+.lead {
+  margin: calc(var(--space-24) + var(--space-4)) 0 0;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.hint {
+  margin: var(--space-8) 0 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.agentRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 40px;
+  padding: var(--space-4) 0;
+}
+
+.agentText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.agentName {
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.agentNote {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.command {
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.meta {
+  flex-shrink: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.copy {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--text-body);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.copy:hover {
+  background: var(--bg-hover);
+}
+
+.more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: var(--text-body);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.more svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.copy:focus-visible,
+.more:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

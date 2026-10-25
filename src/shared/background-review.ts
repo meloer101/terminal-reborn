@@ -479,17 +479,15 @@ function nestedMessage(value: unknown): string | null {
 }
 
 /**
- * Claude `--output-format json` (structured_output, cost, duration) or Codex `-o` / agent_message text.
- * Anything that is not the schema is a failure: no findings are returned.
+ * Every JSON value a headless run may carry its answer in: Claude `--output-format json` (structured_output, plus
+ * cost, duration and an error result) or Codex `-o` / agent_message text. Shared with AI 写 (PRD F16 v1.68).
  */
-export function parseReviewResult(raw: string): ParsedReview {
-  const values = jsonValues(raw)
-  if (values.length === 0) return { ok: false, reason: '没有 JSON' }
+export function structuredCandidates(raw: string): { candidates: unknown[]; costUsd?: number; durationMs?: number; error?: string } {
   let costUsd: number | undefined
   let durationMs: number | undefined
   let error: string | undefined
   const candidates: unknown[] = []
-  for (const value of values) {
+  for (const value of jsonValues(raw)) {
     if (!isRecord(value)) continue
     costUsd = finiteNumber(value.total_cost_usd) ?? costUsd
     durationMs = finiteNumber(value.duration_ms) ?? durationMs
@@ -511,6 +509,16 @@ export function parseReviewResult(raw: string): ParsedReview {
       }
     }
   }
+  return { candidates, ...(costUsd !== undefined ? { costUsd } : {}), ...(durationMs !== undefined ? { durationMs } : {}), ...(error !== undefined ? { error } : {}) }
+}
+
+/**
+ * Claude `--output-format json` (structured_output, cost, duration) or Codex `-o` / agent_message text.
+ * Anything that is not the schema is a failure: no findings are returned.
+ */
+export function parseReviewResult(raw: string): ParsedReview {
+  if (jsonValues(raw).length === 0) return { ok: false, reason: '没有 JSON' }
+  const { candidates, costUsd, durationMs, error } = structuredCandidates(raw)
   if (error && !candidates.some((candidate) => findingsPayload(candidate))) return { ok: false, reason: error.slice(0, 500) }
   for (const candidate of candidates) {
     const payload = findingsPayload(candidate)

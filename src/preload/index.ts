@@ -125,6 +125,7 @@ const api: TrApi = {
     reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary),
     keepTimers: (on) => ipcRenderer.send(IPC.appKeepTimers, on),
     detectAgents: () => ipcRenderer.invoke(IPC.appDetectAgents),
+    agentVersions: () => ipcRenderer.invoke(IPC.appAgentVersions),
     userName: () => ipcRenderer.invoke(IPC.appUserName)
   },
   workspace: {
@@ -197,6 +198,10 @@ const api: TrApi = {
     onStatus: (listener) => listen(PR_IPC.status, listener),
     create: (request) => ipcRenderer.invoke(PR_IPC.create, request),
     draft: (target) => ipcRenderer.invoke(PR_IPC.draft, target),
+    commit: (request) => ipcRenderer.invoke(PR_IPC.commit, request),
+    push: (target) => ipcRenderer.invoke(PR_IPC.push, target),
+    write: (request) => ipcRenderer.invoke(PR_IPC.write, request),
+    cancelWrite: (worktree) => ipcRenderer.send(PR_IPC.cancelWrite, worktree),
     failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree),
     merge: (request) => ipcRenderer.invoke(PR_IPC.merge, request),
     cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target),

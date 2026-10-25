@@ -6,10 +6,11 @@ import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
-import type { AgentEvent, HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
+import type { AgentEvent, HookAgent, HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
+import { cliAdapterLaunch } from './cli-adapters'
 import { CodexAccountClient, readClaudeAccountUsage } from './account-usage'
 import { AgentTitleWatcher } from './agent-title'
 import { HookBridge, type BridgeEmitter } from './bridge'
@@ -38,6 +39,8 @@ export interface AgentLaunchHooks {
   settingsPath?: string
   /** `-c` override values for Codex (hook definitions + trust pins); empty when its hooks could not be prepared. */
   codexConfig?: string[]
+  /** Arguments the other CLIs' adapters add after the binary (Gemini `--skip-trust`, Pi `-e <extension>`). */
+  extraArgs?: string[]
 }
 
 /** Where agents' hooks go: our own supervised server, or the pty daemon's socket (then hooks are relayed to us). */
@@ -190,7 +193,7 @@ const emitter: BridgeEmitter = {
     watchdog.disarm(envelope.sessionId)
     trackBilling(envelope.sessionId, envelope.event)
     // A session on a third-party endpoint does not make the account "in use" (it would be asked far more often).
-    if (!offPlan.has(envelope.sessionId)) pollers[envelope.agent]?.nudge()
+    if (!offPlan.has(envelope.sessionId) && (envelope.agent === 'claude' || envelope.agent === 'codex')) pollers[envelope.agent]?.nudge()
     ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope)
   },
   prompt: (prompt) => ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt),
@@ -359,8 +362,8 @@ export async function prepareAgentLaunch(
   /** The agent starts only after something else (the repository's setup script): armStartWatchdog() then. */
   options: { deferStartWatchdog?: boolean; cwd?: string } = {}
 ): Promise<AgentLaunchHooks | null> {
-  if (agent !== 'claude' && agent !== 'codex') return null
-  pollers[agent]?.nudge()
+  if (agent !== 'claude' && agent !== 'codex' && agent !== 'gemini' && agent !== 'qwen' && agent !== 'pi') return null
+  if (agent === 'claude' || agent === 'codex') pollers[agent]?.nudge()
   const rt = await runtime
   // A cheap self-check per launch: an agent must not inherit a socket that is already gone.
   const health = rt ? await rt.supervisor.check() : startFailure
@@ -376,6 +379,17 @@ export async function prepareAgentLaunch(
     // Our statusLine replaces the user's own; the relay runs theirs (resolved for this directory) and prints it as is.
     const userStatusLine = options.cwd ? userStatusLineFor(options.cwd) : ''
     return { env: { ...env, TR_USER_STATUSLINE: userStatusLine }, settingsPath: rt.supervisor.settingsPath }
+  }
+  if (agent !== 'codex') {
+    const adapter = cliAdapterLaunch(agent, dirname(rt.supervisor.settingsPath), hookScriptPath())
+    if (!adapter) {
+      sendSessionSignal(owner, { sessionId, kind: 'unavailable', reason: 'server-unavailable', detail: `could not prepare the ${agent} hooks` })
+      return null
+    }
+    owners.set(sessionId, owner)
+    rt.bridge.attach(sessionId)
+    if (!options.deferStartWatchdog) watchdog.arm(sessionId)
+    return { env: { ...env, ...adapter.env }, ...(adapter.args.length > 0 ? { extraArgs: adapter.args } : {}) }
   }
   const codex = await rt.codex.get()
   // Without trusted hooks Codex would skip ours, so there is nothing to attach (status falls back to titles).
@@ -453,7 +467,7 @@ export function adoptAgentSession(sessionId: string, owner: WebContents, missed:
 export async function handleRelayedHook(request: {
   sessionId: string
   event: string
-  agent: 'claude' | 'codex'
+  agent: HookAgent
   payload: unknown
 }): Promise<{ status: number; body: string }> {
   const rt = await runtime

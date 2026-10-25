@@ -1,5 +1,6 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
+import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
 import type { WorktreeArchive } from '@shared/archive'
 import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
@@ -20,7 +21,10 @@ export interface WorkspaceData {
 
 export const EMPTY_WORKSPACE: WorkspaceData = { projects: [], worktrees: [], sessions: [], activeSessionId: null }
 
-export const DEFAULT_SESSION_TITLE: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
+export const DEFAULT_SESSION_TITLE: Record<AgentKind, string> = {
+  ...(Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])) as Record<AgentKind, string>),
+  shell: '终端'
+}
 
 export type MakeId = (prefix: string) => string
 
@@ -255,6 +259,8 @@ export interface WorkspaceUi {
   recentProjects: readonly string[]
   /** 工作目录 last used in the new-session sheet, by project. */
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
+  /** 智能体 last chosen in the new-session sheet, by project. */
+  newSessionAgent?: Readonly<Record<ProjectId, AgentKind>>
   /** Secondary windows (F20 · 多窗口); `data` holds the main window's panes. */
   secondaryWindows?: readonly PersistedWindow[]
   /** 一题多解 groups; members are kept only while their session exists. */
@@ -308,6 +314,9 @@ export function serializeWorkspace(
     ...(ui.recentProjects.length > 0 ? { recentProjects: [...ui.recentProjects] } : {}),
     ...(Object.keys(ui.newSessionWorkdir).length > 0
       ? { newSessionWorkdir: Object.fromEntries(Object.entries(ui.newSessionWorkdir).filter(([id]) => data.projects.some((p) => p.id === id))) }
+      : {}),
+    ...(ui.newSessionAgent && Object.keys(ui.newSessionAgent).length > 0
+      ? { newSessionAgent: Object.fromEntries(Object.entries(ui.newSessionAgent).filter(([id]) => data.projects.some((p) => p.id === id))) }
       : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
@@ -368,6 +377,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.collapsedProjectIds !== prev.collapsedProjectIds ||
     next.recentProjects !== prev.recentProjects ||
     next.newSessionWorkdir !== prev.newSessionWorkdir ||
+    next.newSessionAgent !== prev.newSessionAgent ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true

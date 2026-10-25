@@ -1,5 +1,6 @@
 // Pure per-session status reducer (PRD §3.1). No timers, no store: the renderer's StatusBridge feeds
 // it signals and a clock. Hooks can drop events, so the reducer also knows how to self-heal.
+import type { ProgramStatus } from './program-status'
 import { currentAction } from './current-action'
 import type { AgentEvent } from './agent-events'
 import type { AgentMarker } from './agent-launch'
@@ -57,6 +58,8 @@ export type Signal =
   | { type: 'pty-exit'; code: number }
   /** Terminal title (OSC 0/2). */
   | { type: 'title'; title: string }
+  /** The program's own state on the terminal (OSC 7501 Program Status, src/shared/program-status.ts). */
+  | { type: 'program-status'; status: ProgramStatus }
   /** The session became visible with the window focused. */
   | { type: 'viewed' }
   /** The session is no longer being looked at (another session selected, or the window lost focus). */
@@ -107,8 +110,10 @@ export interface SessionState {
   hooksSilent: boolean
   /** Since when a `needs_you` session's input footer has been back on screen (it was answered in the TUI). */
   footerSince?: number
-  /** Codex only: `running` was inferred from a busy title alone (no hook event has confirmed it since). */
+  /** Codex and the CLIs without hooks: `running` was inferred from a busy title alone (no hook event has confirmed it since). */
   titleRun?: boolean
+  /** The CLI reports its state with OSC 7501: that wins over its title (hooks still win over both). */
+  programStatus?: boolean
   /** Codex only: `needs_you` was inferred from the `Action Required` title (its own approval dialog is up). */
   titleAction?: boolean
   /** One line of the agent's last reply (see replyLine); cleared when a new prompt starts a turn. */
@@ -518,6 +523,57 @@ function reduceCodexTitle(state: SessionState, title: string, now: number): Sess
   return healCodex(idle, now)
 }
 
+/**
+ * Every CLI but Claude and Codex (an estimate, 设置 · 智能体 says 估计): a braille / circle spinner first in the title is
+ * a turn running, the spinner going away ends it. Their titles say nothing about dialogs. A CLI that reports OSC 7501,
+ * or whose hooks reported lately, is not second-guessed by its title.
+ */
+function reduceOtherTitle(state: SessionState, title: string, now: number): SessionState {
+  if (state.programStatus) return state
+  if (BUSY_TITLE.test(title)) {
+    if ((state.status === 'idle' || state.status === 'done_unread') && now - state.lastEventAt > TITLE_SETTLE_MS) {
+      return { ...state, titleIdle: false, status: 'running', titleRun: true, lastActivityAt: now, lastReply: undefined }
+    }
+    return state.titleIdle ? { ...state, titleIdle: false } : state
+  }
+  const idle: SessionState = state.titleIdle ? state : { ...state, titleIdle: true }
+  if (idle.titleRun && idle.status === 'running') {
+    return { ...idle, status: idle.viewing ? 'idle' : 'done_unread', currentAction: undefined, toolAction: undefined, titleRun: false, finishedAt: now, lastActivityAt: now }
+  }
+  return idle
+}
+
+/**
+ * OSC 7501: the CLI says what it is doing. `working` runs a turn, `blocked` waits on the user (its own dialog),
+ * `done` finished one (unread unless looked at), `error` failed it, `idle` / `clear` is nothing going on. Hook events
+ * stay authoritative for the CLIs that have both; this only moves a session whose hooks have been quiet.
+ */
+function reduceProgramStatus(state: SessionState, status: ProgramStatus, now: number): SessionState {
+  const marked: SessionState = state.programStatus ? state : { ...state, programStatus: true }
+  const up = marked.phase === 'starting' || marked.phase === 'blocked' ? ready(marked, now) : marked
+  if (state.hooksSeen && now - state.lastEventAt < TITLE_SETTLE_MS) return up
+  switch (status.state) {
+    case 'working':
+      if (up.status === 'running' && !up.asks.length) return up
+      return { ...up, status: 'running', currentAction: status.message ?? up.toolAction, asks: NO_ASKS, under: undefined, titleRun: false, lastActivityAt: now, ...(up.status === 'needs_you' ? {} : { lastReply: undefined }) }
+    case 'blocked': {
+      const label = status.message ?? (status.kind === 'question' ? '等你回答' : status.kind === 'auth' ? '等你登录' : up.toolAction ? `等你确认：${up.toolAction}` : '等你确认')
+      if (up.status === 'needs_you' && up.currentAction === label) return up
+      return { ...up, status: 'needs_you', currentAction: label, under: up.status === 'needs_you' ? up.under : underneath(up), lastActivityAt: now }
+    }
+    case 'done':
+      return { ...up, status: up.viewing ? 'idle' : 'done_unread', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined, titleRun: false, finishedAt: now, lastActivityAt: now }
+    case 'error':
+      return { ...up, status: 'error', currentAction: status.message ?? '出错了', asks: NO_ASKS, under: undefined, titleRun: false, lastActivityAt: now }
+    case 'idle':
+    case 'clear':
+      if (up.status === 'idle' || up.status === 'done_unread' || up.status === 'error') return up
+      return { ...up, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined, titleRun: false }
+    default:
+      return up
+  }
+}
+
 /** Next state for a signal at time `now` (epoch ms). Returns the same object when nothing changed. */
 export function reduce(state: SessionState, signal: Signal, now: number): SessionState {
   const next = reduceSignal(state, signal, now)
@@ -622,6 +678,7 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         return state
       }
       if (state.kind === 'codex') return reduceCodexTitle(state, signal.title, now)
+      if (state.kind !== 'claude') return reduceOtherTitle(state, signal.title, now)
       const titleIdle = IDLE_TITLE.test(signal.title)
       if (BUSY_TITLE.test(signal.title)) {
         const answered = dialogsAnswered(state, now)
@@ -635,6 +692,10 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
       }
       return titleIdle === state.titleIdle ? state : { ...state, titleIdle }
     }
+
+    case 'program-status':
+      if (!agent || state.ended || state.phase === 'not-started' || state.phase === 'exited') return state
+      return reduceProgramStatus(state, signal.status, now)
 
     case 'viewed': {
       // A reply the user now sees is read, also one waiting underneath a background agent's ask.

@@ -1,5 +1,6 @@
-// 一题多解 in the overview (PRD F9 v1.59; no Figma frame yet — drawn like the overview's groups and rows): one row per
-// attempt group above the status groups — the task, the base, every member as its status glyph and name — with 比较
+// 同任务多解 in the overview (PRD F9 v1.59 / F4 v1.68, Figma 26G): one row per attempt group above the status groups —
+// the task, the session it reports to (or the base, for groups from before v1.68), every member as its status glyph
+// and name — with 比较
 // (the overlay with the members side by side) and, once one was merged, 归档其余 N 份 (asks first). In the overlay each
 // member's window gets a compare bar under its title bar: what it changed, the checks it ran, how its launch went,
 // 看 diff and 合并这个. Status is the glyph's shape plus text, never color alone.
@@ -13,7 +14,6 @@ import {
   memberLabels,
   promptPreview,
   remainingMembers,
-  type AttemptAgent,
   type AttemptGroup,
   type DiffSummary
 } from '@shared/attempt-groups'
@@ -49,7 +49,8 @@ function useMembers(group: AttemptGroup | undefined): MemberView[] {
       const worktree = session && worktrees.find((w) => w.id === session.worktreeId)
       return session && worktree && !worktree.archived ? [{ session, worktree }] : []
     })
-    const labels = memberLabels(found.map((m): AttemptAgent => (m.session.kind === 'codex' ? 'codex' : 'claude')))
+    // Members are agent sessions; a shell can only be one through a hand-edited file.
+    const labels = memberLabels(found.map((m) => (m.session.kind === 'shell' ? 'claude' : m.session.kind)))
     return found.map((m, i) => ({ session: m.session, label: labels[i] ?? '', branch: m.worktree.branch, path: m.worktree.path }))
   }, [group, sessions, worktrees])
 }
@@ -66,9 +67,9 @@ export function AttemptGroups() {
   const shown = groups.filter((g) => groupShown(g, (id) => listed.has(id)))
   if (shown.length === 0) return null
   return (
-    <section className={styles.section} aria-label="一题多解" data-testid="attempt-groups">
+    <section className={styles.section} aria-label="同任务多解" data-testid="attempt-groups">
       <div className={styles.header}>
-        <h2>一题多解</h2>
+        <h2>同任务多解</h2>
         <span className={styles.count}>{shown.length}</span>
       </div>
       {shown.map((g) => (
@@ -84,6 +85,7 @@ function GroupRow({ group }: { group: AttemptGroup }) {
   const [busy, setBusy] = useState(false)
   const left = remainingMembers(group, listedIn(members))
   const comparable = members.filter((m) => m.session.id !== group.merged?.sessionId)
+  const parentTitle = useWorkspace((s) => (group.reportTo ? (s.sessions.find((x) => x.id === group.reportTo)?.title ?? null) : null))
 
   const archive = async (): Promise<void> => {
     setBusy(true)
@@ -101,7 +103,7 @@ function GroupRow({ group }: { group: AttemptGroup }) {
       <span className={styles.task} title={group.prompt}>
         {promptPreview(group.prompt)}
       </span>
-      <span className={styles.base}>基于 {group.base}</span>
+      <span className={styles.base}>{parentTitle !== null ? `汇报给 ${parentTitle}` : `基于 ${group.base}`}</span>
       <span className={styles.members}>
         {members.map((m) => {
           const status = glyphStatus(m.session)

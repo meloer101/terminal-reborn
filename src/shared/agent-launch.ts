@@ -1,5 +1,6 @@
 // How a session's agent is started inside the user's login shell (PRD §6.2).
 // Pure: the pty-host supplies the shell and the real cwd.
+import { AGENT_SPECS } from './agents'
 import type { AgentKind } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
 
@@ -48,7 +49,15 @@ export interface AgentLaunchOptions {
    * Ignored when resuming.
    */
   initialPrompt?: string
+  /** Arguments an agent's per-launch adapter adds after the binary (e.g. Pi's `-e <extension>`), src/main/hooks. */
+  extraArgs?: readonly string[]
 }
+
+/**
+ * The conversation id a session of a CLI without hooks saves once its agent has run: there is no real id to keep,
+ * and each session has its own worktree, so resuming means “the most recent conversation in this directory”.
+ */
+export const CONTINUE_LATEST = 'wavi-continue-latest'
 
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 
@@ -56,6 +65,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
   const resumeId = isSafeAgentSessionId(options.resumeAgentSessionId) ? options.resumeAgentSessionId : undefined
   const model = options.model !== undefined && MODEL.test(options.model) ? options.model : undefined
   const prompt = !resumeId && options.initialPrompt?.trim() ? ['--', options.initialPrompt] : []
+  if (kind !== 'claude' && kind !== 'codex') return otherAgentArgv(kind, resumeId, model, options)
   if (kind === 'claude') {
     return [
       'claude',
@@ -77,6 +87,39 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
     ...(model ? ['-m', model] : []),
     ...prompt
   ]
+}
+
+/** Every other CLI, from its row in agents.ts: binary, its own fixed arguments, the adapter's, resume, model, first prompt. */
+function otherAgentArgv(kind: Exclude<AgentKind, 'shell' | 'claude' | 'codex'>, resumeId: string | undefined, model: string | undefined, options: AgentLaunchOptions): string[] {
+  const spec = AGENT_SPECS[kind]
+  const resume =
+    resumeId === undefined
+      ? []
+      : resumeId === CONTINUE_LATEST
+        ? [...(spec.continueLatest ?? [])]
+        : (spec.resumeById ?? spec.continueLatest ?? []).map((arg) => arg.replaceAll('{id}', resumeId))
+  const text = resume.length === 0 ? options.initialPrompt?.trim() : undefined
+  const prompt =
+    !text || spec.prompt.kind === 'type'
+      ? []
+      : spec.prompt.kind === 'flag'
+        ? [spec.prompt.flag, options.initialPrompt ?? '']
+        : spec.prompt.separator
+          ? ['--', options.initialPrompt ?? '']
+          : [options.initialPrompt ?? '']
+  return [
+    spec.binary,
+    ...(spec.baseArgs ?? []),
+    ...(options.extraArgs ?? []),
+    ...resume,
+    ...(model && spec.modelFlag ? [spec.modelFlag, model] : []),
+    ...prompt
+  ]
+}
+
+/** Whether a first message can ride on this CLI's command line; when not, it is sent once the TUI is up (§6.9). */
+export function promptOnCommandLine(kind: Exclude<AgentKind, 'shell'>): boolean {
+  return kind === 'claude' || kind === 'codex' || AGENT_SPECS[kind].prompt.kind !== 'type'
 }
 
 /** OSC number the launch script uses to tell the terminal what became of the agent process. */
@@ -108,7 +151,7 @@ export function agentShellArgs(kind: AgentKind, realCwd: string, shell: string, 
   if (kind === 'shell') return before ? ['-l', '-i', '-c', `${before}exec ${shellQuote(shell)} -l`] : ['-l']
   const line = agentArgv(kind, realCwd, options).map(shellQuote).join(' ')
   const marker = (payload: string) => `printf '\\033]${AGENT_MARKER_OSC};${payload}\\007'`
-  const check = `command -v ${kind} >/dev/null 2>&1`
+  const check = `command -v ${AGENT_SPECS[kind].binary} >/dev/null 2>&1`
   const fish = /(?:^|\/)fish$/.test(shell)
   const script = fish
     ? `if ${check}; ${line}; ${marker('exit;%s')} $status; else; ${marker('missing')}; end`

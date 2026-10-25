@@ -1,5 +1,6 @@
 // Per-session status state, notifications and Dock badge. Plain TypeScript with injected
 // dependencies so it can be unit-tested; StatusBridge wires it to the store, window.tr and the DOM.
+import type { ProgramStatus } from '@shared/program-status'
 import type { AgentEvent } from '@shared/agent-events'
 import type { AgentMarker } from '@shared/agent-launch'
 import { healsOnTick, initialState, reduce, ticksFast, watchesScreen, type SessionState, type Signal } from '@shared/session-state-machine'
@@ -171,6 +172,11 @@ export class StatusController {
 
   handleTitle(sessionId: SessionId, title: string): void {
     this.apply(sessionId, { type: 'title', title })
+  }
+
+  /** An OSC 7501 report from the session's CLI (src/shared/program-status.ts). */
+  handleProgramStatus(sessionId: SessionId, status: ProgramStatus): void {
+    this.apply(sessionId, { type: 'program-status', status })
   }
 
   tick(): void {

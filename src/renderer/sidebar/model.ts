@@ -10,6 +10,8 @@ export interface DiffStat {
 
 export interface SessionRowModel {
   session: Session
+  /** The title drawn: a nested session named `<its parent's title> · Codex` (同任务多解) shows only `Codex`. */
+  title: string
   /**
    * Secondary line: the agent's lifecycle or current action; once a turn is over, its last reply
    * (prefixed "已完成" while unread, so the state is never color-only); else where the session lives.
@@ -48,12 +50,19 @@ function afterTurn(session: Session): string | undefined {
   return undefined
 }
 
-function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 0): SessionRowModel {
+/** `Cookie 会话迁移 · Codex` under `Cookie 会话迁移` reads `Codex`: the indent already says whose it is. */
+export function nestedTitle(title: string, parentTitle: string | undefined): string {
+  const prefix = parentTitle ? `${parentTitle} · ` : ''
+  return prefix && title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title
+}
+
+function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 0, parentTitle?: string): SessionRowModel {
   const location = worktree ? (worktree.isMain ? worktree.path : worktree.branch) : ''
   const added = worktree?.added ?? 0
   const removed = worktree?.removed ?? 0
   return {
     session,
+    title: depth === 1 ? nestedTitle(session.title, parentTitle) : session.title,
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? location,
     attention: session.status === 'needs_you',
     stat: added + removed > 0 ? { added, removed } : null,
@@ -65,14 +74,14 @@ function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 
  * Store order, except that a dispatched session follows the session that started it (PRD F21), after that session's
  * earlier children. A child whose dispatcher is not listed here stays where it is, at the top level.
  */
-export function withChildrenNested(sessions: readonly Session[]): Array<{ session: Session; depth: 0 | 1 }> {
+export function withChildrenNested(sessions: readonly Session[]): Array<{ session: Session; depth: 0 | 1; parentTitle?: string }> {
   const listed = new Set(sessions.map((s) => s.id))
   const nested = (s: Session): boolean => s.dispatchedBy !== undefined && listed.has(s.dispatchedBy)
-  const out: Array<{ session: Session; depth: 0 | 1 }> = []
+  const out: Array<{ session: Session; depth: 0 | 1; parentTitle?: string }> = []
   for (const session of sessions) {
     if (nested(session)) continue
     out.push({ session, depth: 0 })
-    for (const child of sessions) if (child.dispatchedBy === session.id && nested(child)) out.push({ session: child, depth: 1 })
+    for (const child of sessions) if (child.dispatchedBy === session.id && nested(child)) out.push({ session: child, depth: 1, parentTitle: session.title })
   }
   return out
 }
@@ -98,7 +107,7 @@ export function buildSidebarGroups({ projects, worktrees, sessions, collapsedPro
     return {
       id: project.id,
       title: project.name,
-      rows: isCollapsed ? [] : withChildrenNested(own).map(({ session, depth }) => toRow(session, worktreeById.get(session.worktreeId), depth)),
+      rows: isCollapsed ? [] : withChildrenNested(own).map(({ session, depth, parentTitle }) => toRow(session, worktreeById.get(session.worktreeId), depth, parentTitle)),
       sessionCount: own.length,
       collapsed: isCollapsed,
       attention: urgent?.status ?? null

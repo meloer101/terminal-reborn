@@ -111,6 +111,102 @@
   line-height: 20px;
 }
 
+.message {
+  width: 100%;
+  height: 64px;
+  padding: var(--space-6) var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  line-height: 20px;
+  color: var(--text-primary);
+  outline: none;
+  resize: vertical;
+  user-select: text;
+}
+
+/* 提交's files (v1.68): one row per file, the first ticks them all. Rows are borderless; the list scrolls past ~6. */
+.files {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--space-4) 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+}
+
+.fileScroll {
+  display: flex;
+  flex-direction: column;
+  max-height: 144px;
+  overflow-y: auto;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  background: transparent;
+  font: var(--text-body);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: default;
+}
+
+.fileRow:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.fileRow:disabled {
+  opacity: 0.6;
+}
+
+.fileRow[aria-checked='true'] .box {
+  border-color: transparent;
+  background: var(--fill-primary);
+}
+
+.fileRow[aria-checked='mixed'] .box {
+  border-color: transparent;
+  background: var(--fill-primary);
+}
+
+.dash {
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-inverse);
+}
+
+.fileStatus {
+  flex-shrink: 0;
+  width: 40px;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.fileStatus[data-status='U'] {
+  color: var(--status-attention);
+}
+
+.filePath {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileRow:first-child .filePath {
+  font: var(--text-caption);
+}
+
+.message:focus-visible,
 .input:focus-visible,
 .body:focus-visible {
   box-shadow: inset 0 0 0 1px var(--border-strong);
@@ -212,9 +308,47 @@
   cursor: default;
 }
 
-.inlineAction:hover {
+.inlineAction:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.inlineAction[data-icon] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: calc(-1 * var(--space-8));
+}
+
+.inlineAction:disabled {
+  opacity: 0.4;
+}
+
+/* AI 写 under a field (v1.68): the button, 正在写… with 取消, or why it did not write. */
+.writeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  min-height: 24px;
+  margin: 0;
+}
+
+.writeText,
+.writeError {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writeText {
+  color: var(--text-secondary);
+}
+
+.writeError {
+  color: var(--text-tertiary);
 }
 
 .failure {
@@ -230,6 +364,28 @@
 .failure svg {
   flex-shrink: 0;
   color: var(--status-error);
+}
+
+/* A failed step: the reason, then what git and its hooks printed (v1.68). */
+.failureBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+}
+
+.output {
+  max-height: 160px;
+  margin: 0 var(--space-20);
+  padding: var(--space-8) var(--space-12);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }
 
 .footer {
@@ -296,6 +452,7 @@
 }
 
 .checkbox:focus-visible,
+.fileRow:focus-visible,
 .inlineAction:focus-visible,
 .cancel:focus-visible,
 .primary:focus-visible {

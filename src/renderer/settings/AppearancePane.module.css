@@ -39,9 +39,9 @@
   width: 220px;
   height: 30px;
   padding: 0 var(--space-12);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  background: var(--bg-selected);
   font: var(--text-body);
   color: var(--text-primary);
   text-align: left;
@@ -49,7 +49,7 @@
 }
 
 .fileButton:hover {
-  border-color: var(--border-strong);
+  background: var(--border-default);
 }
 
 .fileName {
@@ -86,7 +86,7 @@
   text-overflow: ellipsis;
 }
 
-/* 恢复默认 (B15): a quiet bordered button at the end of the form. */
+/* 恢复默认 (B15): a quiet filled button at the end of the form. */
 .footer {
   display: flex;
   align-items: center;
@@ -98,17 +98,16 @@
   flex: none;
   height: 28px;
   padding: 0 var(--space-12);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-md);
-  background: transparent;
+  background: var(--bg-selected);
   font: var(--text-body);
   color: var(--text-primary);
   cursor: default;
 }
 
 .reset:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
+  background: var(--border-default);
 }
 
 .reset:focus-visible {

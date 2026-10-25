@@ -140,6 +140,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
             title={(active?.session.worktreeId === worktree.id ? active.session.title : target?.title) ?? ''}
             sessionId={active?.session.id ?? null}
             agent={target}
+            uncommitted={changes.uncommitted.length + changes.untrackedOmitted}
           />
         )}
         {!nothingToShip && (

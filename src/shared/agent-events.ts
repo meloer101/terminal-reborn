@@ -8,7 +8,8 @@ import type { SessionId } from './types'
 
 export type { AllowAlwaysScope } from './permission-scope'
 
-export type HookAgent = 'claude' | 'codex'
+/** The CLIs whose hooks Wavi injects per launch (PRD §6.6, §6.7; the others since v1.68, ROADMAP 7 ②). */
+export type HookAgent = 'claude' | 'codex' | 'gemini' | 'qwen' | 'opencode' | 'pi'
 
 export type AgentEvent =
   /** `agentSessionId` is the agent's conversation id (Claude/Codex `session_id`), for `--resume`. */

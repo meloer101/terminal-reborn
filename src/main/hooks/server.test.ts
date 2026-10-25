@@ -128,7 +128,7 @@ describe('hook server', () => {
     expect(await rawPost(server, '/hook/Stop?session=bad%20id', headers)).toBe(400)
     expect(await rawPost(server, '/hook/Stop', headers)).toBe(400)
     expect(await rawPost(server, '/other/Stop?session=s1', headers)).toBe(400)
-    expect(await rawPost(server, '/hook/Stop?session=s1&agent=gemini', headers)).toBe(400)
+    expect(await rawPost(server, '/hook/Stop?session=s1&agent=aider', headers)).toBe(400)
     expect(await rawPost(server, '/hook/Stop?session=s1', headers)).toBe(200)
   })
 

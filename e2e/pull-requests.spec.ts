@@ -277,6 +277,44 @@ test.describe('F16 PR / CI status', () => {
     expect(repo.typed()).not.toContain('<ENTER>')
   })
 
+  test('v1.68: uncommitted work is committed from the sheet with the ticked files and the message, then pushed to the open PR', async () => {
+    const wip = repo.paths['jacob/wip']!
+    writeFileSync(join(wip, 'wip.ts'), 'export const wip = 1\n')
+    writeFileSync(join(wip, 'notes.md'), '# notes\n')
+    await row('s-wip').click()
+    await panel().getByRole('tab', { name: /^变更/ }).click()
+    const ship = panel().getByRole('button', { name: '提交并推送' })
+    await expect(ship).toBeEnabled(WITHIN)
+    await ship.click()
+    const sheet = page.getByTestId('create-pr-sheet')
+    await expect(sheet.getByRole('heading')).toHaveText('提交并推送')
+    await expect(sheet).toContainText('jacob/wip  →  PR #13')
+    await expect(sheet.getByRole('checkbox', { name: /wip\.ts/ })).toHaveAttribute('aria-checked', 'true', WITHIN)
+    await expect(sheet.getByRole('textbox', { name: '提交说明' })).toHaveValue('草稿')
+    // An open PR: no title, body or draft to fill in.
+    await expect(sheet.getByRole('textbox', { name: '标题' })).toHaveCount(0)
+    await sheet.getByRole('checkbox', { name: /notes\.md/ }).click()
+    await expect(sheet.getByRole('checkbox', { name: /全部 2 个文件/ })).toHaveAttribute('aria-checked', 'mixed')
+    // AI 写: a headless `claude -p` (the fake) writes the message into the field; the tooltip says who and on whose quota.
+    repo.reviewReply({ message: 'feat(wip): export wip' })
+    const ai = sheet.getByRole('button', { name: 'AI 写', exact: true })
+    await expect(ai).toHaveAttribute('title', '用 Claude（haiku） 写 · 用你的 Claude 额度 · 在设置 · 自动化 · PR 里换模型')
+    await ai.click()
+    await expect(sheet.getByRole('textbox', { name: '提交说明' })).toHaveValue('feat(wip): export wip', WITHIN)
+    expect(repo.reviewPrompt()).toContain('+export const wip = 1')
+    expect(repo.reviewPrompt()).not.toContain('# notes')
+    await sheet.getByRole('textbox', { name: '提交说明' }).fill('Export wip')
+    await shoot('ship-sheet')
+    await sheet.getByRole('button', { name: /^提交并推送/ }).click()
+    await expect(sheet).toHaveCount(0, WITHIN)
+    expect(repo.git(wip, 'log', '-1', '--format=%s').trim()).toBe('Export wip')
+    expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/wip').trim()).toBe(repo.git(wip, 'rev-parse', 'HEAD').trim())
+    // The unticked file stays in the working tree.
+    expect(repo.git(wip, 'status', '--porcelain').trim()).toBe('?? notes.md')
+    await expect(panel().getByRole('textbox', { name: '地址' })).toHaveValue(/\/pull\/13$/, WITHIN)
+    await page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: 'Git' }).click()
+  })
+
   test('22B: GitHub threads sit on their line, PR comments and the two switches under the PR line', async () => {
     await row('s-ci').click()
     await panel().getByRole('tab', { name: /^变更/ }).click()

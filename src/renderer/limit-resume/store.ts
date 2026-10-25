@@ -1,5 +1,6 @@
 // 额度恢复后继续 (PRD F11): what the renderer knows about plan-limit stops and the sends the user asked for. Transient:
 // a request lives as long as this window's page (a hidden window keeps it; ⌘Q, a restart or a reload drop it).
+import { claudeOrCodex } from '@shared/agents'
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { limitStop, type LimitStop, type ResumePlan, type StopFailure } from '@shared/limit-resume'
@@ -50,7 +51,7 @@ export function useLimitStop(sessionId: SessionId): LimitStop | null {
   const session = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId))
   const failure = useLimitResume((s) => s.failures[sessionId])
   const offPlan = useSessionMeta((s) => s.bySession[sessionId]?.plan === false)
-  const usage = useSessionMeta((s) => (session && session.kind !== 'shell' ? s.usage[session.kind] : undefined))
+  const usage = useSessionMeta((s) => (session && claudeOrCodex(session.kind) ? s.usage[claudeOrCodex(session.kind)!] : undefined))
   const stop = session ? limitStop({ session, failure, offPlan, usage, now: Math.max(clock, woke) }) : null
   const resetsAt = stop?.resetsAt
   useEffect(() => {

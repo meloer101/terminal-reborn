@@ -157,7 +157,7 @@ export class AgentTitleWatcher {
       // A resumed conversation already has its title; a new one gets it shortly after the first prompt.
       if (event === 'SessionStart' || event === 'Stop') this.schedule(sessionId, [0])
       else if (event === 'UserPromptSubmit') this.schedule(sessionId, CLAUDE_AFTER_PROMPT_MS)
-    } else {
+    } else if (agent === 'codex') {
       if (isSafeAgentSessionId(payload.session_id)) tracked.threadId = payload.session_id
       if (event === 'Stop') this.schedule(sessionId, CODEX_AFTER_STOP_MS)
       else if (event === 'SessionStart' || event === 'UserPromptSubmit') this.schedule(sessionId, [0])
