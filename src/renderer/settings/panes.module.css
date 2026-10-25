@@ -16,8 +16,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-16);
-  min-height: 43px;
-  padding: var(--space-12) 0;
+  min-height: 40px;
+  padding: var(--space-4) 0;
 }
 
 .aboutName {
@@ -35,16 +35,16 @@
 .button {
   height: 30px;
   padding: 0 var(--space-12);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  background: var(--bg-selected);
   font: var(--text-body);
   color: var(--text-primary);
   cursor: default;
 }
 
 .button:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  background: var(--border-default);
 }
 
 .button:disabled {

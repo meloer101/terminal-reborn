@@ -29,9 +29,9 @@
   width: 88px;
   height: 28px;
   padding: 0 var(--space-8);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  background: var(--bg-selected);
   color: var(--text-primary);
   font: var(--text-mono-s);
   text-align: right;

@@ -25,9 +25,9 @@
   height: 160px;
   margin-bottom: var(--space-12);
   padding: var(--space-6) var(--space-8);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  background: var(--bg-selected);
   color: var(--text-primary);
   font: var(--text-mono-s);
   resize: vertical;
@@ -37,9 +37,9 @@
   width: 180px;
   height: 28px;
   padding: 0 var(--space-8);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  background: var(--bg-selected);
   color: var(--text-primary);
   font: var(--text-mono-s);
 }
@@ -50,8 +50,10 @@
   outline-offset: 1px;
 }
 
+/* An invalid model name is a status, so it may draw a ring. */
 .model[aria-invalid='true'] {
-  border-color: var(--status-error);
+  outline: 1px solid var(--status-error);
+  outline-offset: -1px;
 }
 
 .rules::placeholder,
