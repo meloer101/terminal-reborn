@@ -10,17 +10,6 @@
   composes: title from './WorktreePane.module.css';
 }
 
-.hint {
-  composes: hint from './WorktreePane.module.css';
-  margin-bottom: var(--space-12);
-}
-
-.lead {
-  margin: 0 0 var(--space-12);
-  font: var(--text-caption);
-  color: var(--text-secondary);
-}
-
 .rules {
   height: 160px;
   margin-bottom: var(--space-12);

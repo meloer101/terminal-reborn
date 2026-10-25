@@ -120,10 +120,9 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
   const app = await launchApp()
   const settings = await openSettings(app)
   await settings.getByRole('tab', { name: '自动化' }).click()
-  const toggles = ['合并前自动审阅', 'Wavi 推送前自动审阅', '一轮结束且有新提交时自动审阅']
+  const toggles = ['合并前审阅', '推送前审阅', '每轮结束且有新提交时审阅']
   for (const name of toggles) await expect(settings.getByRole('switch', { name })).toHaveAttribute('aria-checked', 'false')
-  await expect(settings.getByText(/自动审阅会用你自己的登录和额度/)).toBeVisible()
-  await settings.getByRole('switch', { name: '合并前自动审阅' }).click()
+  await settings.getByRole('switch', { name: '合并前审阅' }).click()
   await expect.poll(async () => (await readSettings(settings)).review.beforeMerge).toBe(true)
 
   await settings.getByRole('radio', { name: '自定义' }).click()
@@ -143,7 +142,6 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
   await expect.poll(async () => (await readSettings(settings)).review.codexModel).toBe('gpt-5.5')
   await settings.getByRole('radio', { name: '另一家' }).click()
   await expect.poll(async () => (await readSettings(settings)).review.reviewer).toBe('other')
-  await expect(settings.getByText(/Claude 会话的改动由 Codex 审/)).toBeVisible()
 
   const shot = process.env.TR_SCREENSHOT_DIR
   if (shot) {
@@ -155,7 +153,7 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
     }
   }
 
-  await settings.getByRole('radio', { name: 'agent 自带命令' }).click()
+  await settings.getByRole('radio', { name: '终端命令' }).click()
   await expect.poll(async () => (await readSettings(settings)).review.mode).toBe('agent-command')
   await expect(settings.getByRole('textbox', { name: 'Claude 审阅模型' })).toHaveCount(0)
   await app.close()

@@ -1,5 +1,5 @@
 // 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63; AI 写 v1.68), 派活 (PRD F21) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
-// own Claude / Codex quota. No Figma frame yet; it follows the Worktree pane (16A): sections of label · control rows.
+// own Claude / Codex quota. Copy and layout follow Figma 16C (457:21367): section titles, then label · control rows, no explanatory lines.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
 import type { AlertSettings, DispatchSettings, PrSettings, ReviewSettings } from '@shared/settings'
@@ -34,31 +34,26 @@ export function AutomationPane({
       <div className={styles.form}>
         <h1 className={styles.title}>自动化</h1>
         <Section title="代码审阅">
-          <p className={styles.lead}>Wavi 在后台另起一个只读的 Claude / Codex 审阅改动，结果变成变更里的评论，你勾选后再发给 agent。自动审阅会用你自己的登录和额度，默认都不开。</p>
-          <Row label="合并前">
-            <Toggle label="合并前自动审阅" checked={review.beforeMerge} onChange={(beforeMerge) => update({ beforeMerge })} />
+          <Row label="合并前审阅">
+            <Toggle label="合并前审阅" checked={review.beforeMerge} onChange={(beforeMerge) => update({ beforeMerge })} />
           </Row>
-          <Row label="Wavi 推送前">
-            <Toggle label="Wavi 推送前自动审阅" checked={review.beforePush} onChange={(beforePush) => update({ beforePush })} />
+          <Row label="推送前审阅">
+            <Toggle label="推送前审阅" checked={review.beforePush} onChange={(beforePush) => update({ beforePush })} />
           </Row>
-          <Row label="一轮结束且有新提交时">
-            <Toggle label="一轮结束且有新提交时自动审阅" checked={review.afterTurnWithCommits} onChange={(afterTurnWithCommits) => update({ afterTurnWithCommits })} />
+          <Row label="每轮结束且有新提交时审阅">
+            <Toggle label="每轮结束且有新提交时审阅" checked={review.afterTurnWithCommits} onChange={(afterTurnWithCommits) => update({ afterTurnWithCommits })} />
           </Row>
-          <p className={styles.hint}>自动审阅只提示，不会拦住合并、推送或 agent。打开合并面板时开始审阅；勾了「合并后推送到 origin」时也会审阅。</p>
           <Row label="审阅方式">
             <Segmented
               label="审阅方式"
               value={review.mode}
               options={[
-                { value: 'builtin', label: 'Wavi 内置审阅' },
-                { value: 'agent-command', label: 'agent 自带命令' }
+                { value: 'builtin', label: 'Wavi 内置' },
+                { value: 'agent-command', label: '终端命令' }
               ]}
               onChange={(mode) => update({ mode })}
             />
           </Row>
-          <p className={styles.hint}>
-            {builtin ? '结果按 P0–P3 落成评论。' : '「让 agent 审阅」在会话里发送 /code-review 或 /review，结果留在终端，不解析成评论；自动审阅不会运行。'}
-          </p>
           {builtin && (
             <>
               <Row label="审阅规则">
@@ -73,42 +68,35 @@ export function AutomationPane({
                 />
               </Row>
               {review.rules === 'custom' && <RulesField value={review.customRules} onCommit={(customRules) => update({ customRules })} />}
-              <Row label="谁来审">
+              <Row label="由谁审">
                 <Segmented
-                  label="谁来审"
+                  label="由谁审"
                   value={review.reviewer}
                   options={[
-                    { value: 'same', label: '和会话相同' },
+                    { value: 'same', label: '同一家' },
                     { value: 'other', label: '另一家' }
                   ]}
                   onChange={(reviewer) => update({ reviewer })}
                 />
               </Row>
-              <p className={styles.hint}>
-                {review.reviewer === 'other'
-                  ? 'Claude 会话的改动由 Codex 审，Codex 会话的由 Claude 审；另一家没装时改用会话自己的。'
-                  : '用会话自己的 Claude / Codex 审阅。'}
-              </p>
               <Row label="Claude 审阅模型">
                 <ModelField label="Claude 审阅模型" value={review.model} onCommit={(model) => update({ model })} />
               </Row>
               <Row label="Codex 审阅模型">
                 <ModelField label="Codex 审阅模型" value={review.codexModel} onCommit={(codexModel) => update({ codexModel })} />
               </Row>
-              <p className={styles.hint}>留空用 CLI 自己的默认模型。</p>
             </>
           )}
         </Section>
         <Section title="PR">
-          <p className={styles.lead}>自动修复和通过后合并在变更视图里按 PR 打开，这里定新 PR 一开始是什么样。它们会用你的额度，并以你的 GitHub 账号操作，默认都不开。</p>
           <Row label="PR 正文附上检查和审阅结果">
             <Toggle label="PR 正文附上检查和审阅结果" checked={pr.evidence} onChange={(evidence) => updatePr({ evidence })} />
           </Row>
-          <Row label="新 PR 打开自动修复">
-            <Toggle label="新 PR 打开自动修复" checked={pr.autoFix} onChange={(autoFix) => updatePr({ autoFix })} />
+          <Row label="新 PR 默认自动修复">
+            <Toggle label="新 PR 默认自动修复" checked={pr.autoFix} onChange={(autoFix) => updatePr({ autoFix })} />
           </Row>
-          <Row label="新 PR 打开通过后合并">
-            <Toggle label="新 PR 打开通过后合并" checked={pr.mergeWhenGreen} onChange={(mergeWhenGreen) => updatePr({ mergeWhenGreen })} />
+          <Row label="新 PR 默认检查通过后自动合并">
+            <Toggle label="新 PR 默认检查通过后自动合并" checked={pr.mergeWhenGreen} onChange={(mergeWhenGreen) => updatePr({ mergeWhenGreen })} />
           </Row>
           <Row label="自动修复最多">
             <Segmented
@@ -118,16 +106,15 @@ export function AutomationPane({
               onChange={(n) => updatePr({ maxAutoFixes: Number(n) })}
             />
           </Row>
-          <Row label="也认这些机器人">
+          <Row label="也处理这些机器人的评论">
             <BotsField value={pr.bots} onCommit={(bots) => updatePr({ bots })} />
           </Row>
-          <p className={styles.hint}>自动修复只把你自己和这里列出的机器人（如 coderabbitai[bot]）的评论发给 agent；其他人的评论只显示。有没解决的评论（来自上面这些人）或审阅里有 P0 / P1 时，通过后合并会自己关掉。</p>
-          <Row label="AI 写提交说明和 PR">
+          <Row label="写提交和 PR 的工具">
             <Segmented
-              label="AI 写提交说明和 PR"
+              label="写提交和 PR 的工具"
               value={pr.writer}
               options={[
-                { value: 'session', label: '和会话相同' },
+                { value: 'session', label: '同一会话' },
                 { value: 'claude', label: 'Claude' },
                 { value: 'codex', label: 'Codex' }
               ]}
@@ -140,35 +127,27 @@ export function AutomationPane({
           <Row label="Codex 写作模型">
             <ModelField label="Codex 写作模型" value={pr.writerCodexModel} onCommit={(writerCodexModel) => updatePr({ writerCodexModel })} />
           </Row>
-          <Row label="打开面板时自动写">
-            <Toggle label="打开面板时自动写" checked={pr.writeOnOpen} onChange={(writeOnOpen) => updatePr({ writeOnOpen })} />
+          <Row label="打开 PR 面板时自动写">
+            <Toggle label="打开 PR 面板时自动写" checked={pr.writeOnOpen} onChange={(writeOnOpen) => updatePr({ writeOnOpen })} />
           </Row>
-          <p className={styles.hint}>
-            创建 PR 面板里的「AI 写」在后台另起一次 Claude / Codex（不进你的会话、不带工具），读勾选文件的 diff、最近的提交和 CLAUDE.md / AGENTS.md 里关于提交的约定，写好后填进面板，你看过再提交。用你本机 CLI 的登录和额度；Claude 默认用 Haiku，留空用 CLI 自己的默认模型，Codex 用低推理强度。没装选中的那家时改用另一家。
-          </p>
         </Section>
         <Section title="派活">
-          <p className={styles.lead}>会话里的 agent 可以用 Wavi 的工具开新的 Claude Code / Codex 会话、把任务分出去；它们各在新的 worktree 里干活，做完把结果报告给派活的会话。合并、推送和归档仍由你来做。</p>
-          <Row label="让 agent 能开会话">
-            <Toggle label="让 agent 能开会话" checked={dispatch.tools} onChange={(tools) => updateDispatch({ tools })} />
+          <Row label="允许 agent 开新会话">
+            <Toggle label="允许 agent 开新会话" checked={dispatch.tools} onChange={(tools) => updateDispatch({ tools })} />
           </Row>
-          <Row label="agent 开会话不再确认">
+          <Row label="开新会话时不再确认">
             <Toggle
-              label="agent 开会话不再确认"
+              label="开新会话时不再确认"
               checked={dispatch.autoApprove}
               disabled={!dispatch.tools}
               onChange={(autoApprove) => updateDispatch({ autoApprove })}
             />
           </Row>
-          <p className={styles.hint}>
-            关掉第一项后，之后启动的 agent 不再有这些工具。默认每次开会话都先弹出确认，写明开几个、什么 agent、发什么任务；打开第二项后直接开始，仍然最多同时 4 个，被派出的会话不能再往下派。每个会话都用你自己的额度。
-          </p>
         </Section>
         <Section title="额度提醒">
-          <Row label="额度提醒">
-            <Toggle label="额度提醒" checked={alerts.usage} onChange={(usage) => updateAlerts({ usage })} />
+          <Row label="额度用到 75%、90%、用完时通知">
+            <Toggle label="额度用到 75%、90%、用完时通知" checked={alerts.usage} onChange={(usage) => updateAlerts({ usage })} />
           </Row>
-          <p className={styles.hint}>每个厂商的每个额度窗口，用到 75%、90% 和用完时各发一次系统通知；额度是账号共用的，不按会话重复提醒。</p>
         </Section>
       </div>
     </div>
@@ -232,10 +211,10 @@ function BotsField({ value, onCommit }: { value: string[]; onCommit: (bots: stri
   return (
     <input
       className={styles.model}
-      aria-label="也认这些机器人"
+      aria-label="也处理这些机器人的评论"
       autoComplete="off"
       spellCheck={false}
-      placeholder="没有"
+      placeholder="无"
       value={shown}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onBlur={() => {
