@@ -14,7 +14,7 @@ export const MAX_BODY_BYTES = 32 * 1024 * 1024
 
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
 const EVENT_NAME = /^[A-Za-z]{1,40}$/
-const AGENTS: ReadonlySet<string> = new Set<HookAgent>(['claude', 'codex'])
+const AGENTS: ReadonlySet<string> = new Set<HookAgent>(['claude', 'codex', 'gemini', 'qwen', 'opencode', 'pi'])
 
 export interface HookRequest {
   event: string

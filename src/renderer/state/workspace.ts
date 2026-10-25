@@ -92,6 +92,8 @@ interface WorkspaceState extends WorkspaceData {
   recentProjects: readonly string[]
   /** 工作目录 last used in the new-session sheet, by project (PRD F4). */
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
+  /** 智能体 last chosen in the new-session sheet, by project (PRD F4 v1.68). */
+  newSessionAgent: Readonly<Record<ProjectId, AgentKind>>
   /** Bumped whenever the keyboard should go to the active session's terminal (B7), even if it is already active. */
   focusRequest: number
   /** Bumped by 会话 › 重命名会话: the header starts renaming the active session. */
@@ -144,6 +146,8 @@ interface WorkspaceState extends WorkspaceData {
   addRunSession(worktreeId: WorktreeId): SessionId | null
   /** Remembers the new-session sheet's 工作目录 for a git project. */
   rememberWorkdir(projectId: ProjectId, choice: Workdir): void
+  /** Remembers the new-session sheet's 智能体 for a project. */
+  rememberAgent(projectId: ProjectId, kind: AgentKind): void
   closeSession(id: SessionId): void
   /** Drops linked worktree records whose folder was deleted, with their sessions (Worktree view). */
   forgetWorktrees(ids: WorktreeId[]): void
@@ -275,6 +279,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     mainView: 'session',
     recentProjects: saved?.recentProjects ?? [],
     newSessionWorkdir: saved?.newSessionWorkdir ?? {},
+    newSessionAgent: saved?.newSessionAgent ?? {},
     focusRequest: 0,
     renameRequest: 0,
 
@@ -379,6 +384,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       return result.sessionId
     },
     rememberWorkdir: (projectId, choice) => set((s) => ({ newSessionWorkdir: rememberWorkdir(s.newSessionWorkdir, projectId, choice, true) })),
+    rememberAgent: (projectId, kind) => set((s) => (s.newSessionAgent[projectId] === kind ? {} : { newSessionAgent: { ...s.newSessionAgent, [projectId]: kind } })),
     closeSession: (id) => {
       commit(closeSession(pick(get()), id))
       fillProjectWindow()
@@ -463,6 +469,7 @@ setSnapshotProvider(() => {
       collapsedProjectIds: state.collapsedProjectIds,
       recentProjects: state.recentProjects,
       newSessionWorkdir: state.newSessionWorkdir,
+      newSessionAgent: state.newSessionAgent,
       attemptGroups: attemptGroupsSnapshot()
     },
     drafts.snapshot(),

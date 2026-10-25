@@ -1,4 +1,5 @@
 // Binds one XtermSurface to one PTY session through window.tr.pty.
+import { AGENT_SPECS, type CliAgent } from '@shared/agents'
 import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import { parseScriptMarker, SCRIPT_MARKER_OSC } from '@shared/script-launch'
 import type { AgentKind, SessionId } from '@shared/types'
@@ -21,10 +22,7 @@ function dim(text: string): string {
 }
 
 /** Said in the terminal when the agent's CLI is not on the login shell's PATH (the shell prompt follows). */
-const INSTALL_HINT: Record<Exclude<AgentKind, 'shell'>, string> = {
-  claude: '[没有找到 claude 命令 · 安装：npm install -g @anthropic-ai/claude-code]',
-  codex: '[没有找到 codex 命令 · 安装：npm install -g @openai/codex]'
-}
+const installHint = (kind: CliAgent): string => `[没有找到 ${AGENT_SPECS[kind].binary} 命令 · 安装：${AGENT_SPECS[kind].install}]`
 
 export class SessionTerminal {
   readonly surface = new XtermSurface()
@@ -104,7 +102,7 @@ export class SessionTerminal {
     const markers = this.surface.onOsc(AGENT_MARKER_OSC, (payload) => {
       const marker = parseAgentMarker(payload)
       if (!marker) return
-      if (marker.type === 'missing' && this.agent !== 'shell') this.surface.write(dim(INSTALL_HINT[this.agent]))
+      if (marker.type === 'missing' && this.agent !== 'shell') this.surface.write(dim(installHint(this.agent)))
       emitAgentMarker(id, marker)
     })
     // The repository's setup script reports through its own marker (PRD F4).

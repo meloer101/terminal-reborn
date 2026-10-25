@@ -125,6 +125,7 @@ const api: TrApi = {
     reportActivity: (summary) => ipcRenderer.send(IPC.appReportActivity, summary),
     keepTimers: (on) => ipcRenderer.send(IPC.appKeepTimers, on),
     detectAgents: () => ipcRenderer.invoke(IPC.appDetectAgents),
+    agentVersions: () => ipcRenderer.invoke(IPC.appAgentVersions),
     userName: () => ipcRenderer.invoke(IPC.appUserName)
   },
   workspace: {

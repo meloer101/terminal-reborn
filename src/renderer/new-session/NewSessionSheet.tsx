@@ -2,7 +2,9 @@
 // 项目 · 工作目录 (新 worktree / 当前目录, remembered per project) · 基于 · 智能体 · 高级 (分支名 · 文件夹 · 准备).
 // No task description: the user types the first message in the terminal. Text appears only when something is limited
 // or wrong (15E, 15F). Glass material from PRD §5; solid under "reduce transparency".
-// 智能体 · 多个 (一题多解, PRD F4 v1.59; no Figma frame yet): 份数 per agent and the one 任务 they all get; 创建 N 个并发送
+// 智能体 (Figma 24A, PRD F4 v1.68): a pop-up menu — 已安装 (Claude Code and Codex always, the other CLIs when found, each
+// with its version) and 其他 (终端, 多个智能体一起做); remembered per project; the hint says how many are not installed.
+// 多个 (一题多解, PRD F4 v1.59; no Figma frame yet): 份数 per agent and the one 任务 they all get; 创建 N 个并发送
 // makes N worktrees off 基于 and sends the task to each — the button and the note under the task say exactly that.
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronRight, CircleAlert, GitBranch, GitFork, Globe, Minus, Plus } from 'lucide-react'
@@ -27,6 +29,8 @@ import {
   type AttemptCounts,
   type AttemptPlanProblem
 } from '@shared/attempt-groups'
+import { AGENT_SPECS, agentName, CLI_AGENTS } from '@shared/agents'
+import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import type { AgentKind, ProjectId } from '@shared/types'
 import { runAttemptPlan } from '../attempts/actions'
 import { Toggle } from '../settings/controls'
@@ -43,12 +47,14 @@ const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** 多个 = 一题多解: several agents, one task. */
 type KindChoice = AgentKind | 'multi'
 
-const KINDS: ReadonlyArray<{ value: KindChoice; label: string }> = [
-  { value: 'claude', label: 'Claude Code' },
-  { value: 'codex', label: 'Codex' },
-  { value: 'shell', label: '终端' },
-  { value: 'multi', label: '多个' }
-]
+const MULTI_LABEL = '多个智能体一起做'
+
+const isKindChoice = (value: string): value is KindChoice => value === 'multi' || value === 'shell' || (CLI_AGENTS as readonly string[]).includes(value)
+
+/** 已安装: Claude Code and Codex always (a missing one says so in the terminal), every other CLI only when it is on PATH. */
+export function listedAgents(found: AgentAvailability | null): AgentKind[] {
+  return CLI_AGENTS.filter((id) => id === 'claude' || id === 'codex' || found?.[id] === true)
+}
 
 const WORKDIRS: ReadonlyArray<{ value: Workdir; label: string }> = [
   { value: 'worktree', label: '新 worktree' },
@@ -78,14 +84,19 @@ function Sheet() {
   const [workdirChoice, setWorkdirChoice] = useState<Workdir | null>(null)
   const [baseChoice, setBaseChoice] = useState<string | null>(null)
   const [branchInput, setBranchInput] = useState<string | null>(null)
-  const [kind, setKind] = useState<KindChoice>('claude')
+  const rememberedAgents = useWorkspace((s) => s.newSessionAgent)
+  const [kindChoice, setKindChoice] = useState<KindChoice | null>(null)
+  const kind: KindChoice = kindChoice ?? (projectId ? rememberedAgents[projectId] : undefined) ?? 'claude'
+  const setKind = setKindChoice
   const [counts, setCounts] = useState<AttemptCounts>({ claude: 2, codex: 0 })
-  const [codexInstalled, setCodexInstalled] = useState(true)
+  const [found, setFound] = useState<AgentAvailability | null>(null)
+  const [versions, setVersions] = useState<AgentVersions>({})
+  const codexInstalled = found?.codex !== false
   const [task, setTask] = useState('')
   const taskRef = useRef<HTMLTextAreaElement>(null)
   const [prepareChoice, setPrepareChoice] = useState(true)
   const [advanced, setAdvanced] = useState(false)
-  const [menu, setMenu] = useState<{ kind: 'project' | 'base'; anchor: HTMLElement } | null>(null)
+  const [menu, setMenu] = useState<{ kind: 'project' | 'base' | 'agent'; anchor: HTMLElement } | null>(null)
 
   const sheetRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -109,11 +120,15 @@ function Sheet() {
     let cancelled = false
     void window.tr.app
       .detectAgents()
-      .then((found) => {
+      .then((next) => {
         if (cancelled) return
-        setCodexInstalled(found.codex)
-        if (found.codex) setCounts((c) => (c.claude === 2 && c.codex === 0 ? { claude: 2, codex: 1 } : c))
+        setFound(next)
+        if (next.codex) setCounts((c) => (c.claude === 2 && c.codex === 0 ? { claude: 2, codex: 1 } : c))
       })
+      .catch(() => {})
+    void window.tr.app
+      .agentVersions()
+      .then((next) => !cancelled && setVersions(next))
       .catch(() => {})
     return () => {
       cancelled = true
@@ -164,6 +179,7 @@ function Sheet() {
     setBaseChoice(null)
     setBranchInput(null)
     setPrepareChoice(true)
+    setKindChoice(null)
   }
 
   const create = (): void => {
@@ -203,7 +219,33 @@ function Sheet() {
     })
   }, [])
 
-  const toggleMenu = (kind: 'project' | 'base', anchor: HTMLElement): void => setMenu(menu?.kind === kind ? null : { kind, anchor })
+  const toggleMenu = (kind: 'project' | 'base' | 'agent', anchor: HTMLElement): void => setMenu(menu?.kind === kind ? null : { kind, anchor })
+
+  const agentSections = useCallback(
+    (query: string): SheetMenuSection[] => {
+      const q = query.trim().toLowerCase()
+      const matches = (label: string): boolean => q === '' || label.toLowerCase().includes(q)
+      const check = (value: KindChoice) => (value === kind ? <Check {...ICON} /> : null)
+      const installed = listedAgents(found)
+        .filter((id) => matches(agentName(id)) || (id !== 'shell' && matches(AGENT_SPECS[id].binary)))
+        .map((id) => ({
+          value: id,
+          label: agentName(id),
+          icon: check(id),
+          meta: id !== 'shell' && found && found[id] === false ? '没装' : (id !== 'shell' ? (versions[id] ?? undefined) : undefined)
+        }))
+      const others = [
+        { value: 'shell', label: '终端', icon: check('shell') },
+        ...(notRepo ? [] : [{ value: 'multi', label: `${MULTI_LABEL}…`, icon: check('multi'), meta: '一题多解' }])
+      ].filter((item) => matches(item.label))
+      return [
+        { title: '已安装', items: installed },
+        { title: '其他', items: others }
+      ]
+    },
+    [found, versions, kind, notRepo]
+  )
+  const missingAgents = found ? CLI_AGENTS.filter((id) => !found[id]).length : 0
 
   const projectSections = useCallback(
     (): SheetMenuSection[] => [
@@ -293,14 +335,11 @@ function Sheet() {
           )}
 
           <Field label="智能体" note={kind === 'multi' && notRepo ? '多个 agent 各用一个新 worktree，这个文件夹不是 git 仓库' : null}>
-            <Segmented
+            <SelectButton
               label="智能体"
-              value={kind}
-              options={KINDS.map((o) => ({ ...o, disabled: o.value === 'multi' && notRepo }))}
-              onChange={(next) => {
-                setKind(next)
-                if (next === 'multi') requestAnimationFrame(() => taskRef.current?.focus())
-              }}
+              value={kind === 'multi' ? MULTI_LABEL : agentName(kind)}
+              expanded={menu?.kind === 'agent'}
+              onClick={(anchor) => toggleMenu('agent', anchor)}
             />
           </Field>
 
@@ -411,6 +450,25 @@ function Sheet() {
           onPick={(id) => {
             chooseProject(id)
             closeMenu(true)
+          }}
+          onClose={closeMenu}
+        />
+      )}
+      {menu?.kind === 'agent' && (
+        <SheetMenu
+          anchor={menu.anchor}
+          label="智能体"
+          sections={agentSections}
+          selected={kind}
+          search="搜索智能体"
+          empty="没有匹配的智能体"
+          align="selected"
+          hint={missingAgents > 0 ? `还有 ${missingAgents} 家没装：在设置 · 智能体里看怎么装 · 按项目记住上次的选择` : '按项目记住上次的选择'}
+          onPick={(value) => {
+            if (!isKindChoice(value)) return
+            setKind(value)
+            closeMenu(true)
+            if (value === 'multi') requestAnimationFrame(() => taskRef.current?.focus())
           }}
           onClose={closeMenu}
         />

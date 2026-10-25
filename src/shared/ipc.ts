@@ -2,6 +2,7 @@
 // The preload implements TrApi; main registers handlers for IPC channels.
 // Changing a signature here is a cross-track change — note it in the PR.
 
+import type { CliAgent } from './agents'
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
 import type { ArchiveApi } from './archive'
@@ -318,11 +319,11 @@ export interface UpdateInfo {
   notes?: string
 }
 
-/** Whether each agent CLI is on the user's login-shell PATH (first-run screen, B10). */
-export interface AgentAvailability {
-  claude: boolean
-  codex: boolean
-}
+/** Whether each agent CLI is on the user's login-shell PATH (first-run screen B10, 新建会话, 设置 · 智能体). */
+export type AgentAvailability = Partial<Record<CliAgent, boolean>>
+
+/** What `<cli> --version` printed for each installed agent CLI (设置 · 智能体): a version-looking token, or null. */
+export type AgentVersions = Partial<Record<CliAgent, string | null>>
 
 export interface AppInfoApi {
   /** package.json version of the running app. */
@@ -338,6 +339,8 @@ export interface AppInfoApi {
   keepTimers(on: boolean): void
   /** Which agent CLIs are installed. Never throws (a failed check reports both as missing). */
   detectAgents(): Promise<AgentAvailability>
+  /** The installed agent CLIs' versions (runs `--version` once per app run, 5 s each). Never throws. */
+  agentVersions(): Promise<AgentVersions>
   /** The account's full name for the welcome greeting (PRD F18); '' when unknown. Never throws. */
   userName(): Promise<string>
 }
@@ -478,6 +481,8 @@ export const IPC = {
   appKeepTimers: 'app:keep-timers',
   /** invoke → AgentAvailability */
   appDetectAgents: 'app:detect-agents',
+  /** invoke → AgentVersions */
+  appAgentVersions: 'app:agent-versions',
   appUserName: 'app:user-name',
   /** sync */
   workspaceLoad: 'workspace:load',

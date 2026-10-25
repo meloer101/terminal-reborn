@@ -1,5 +1,6 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
+import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
 import type { SessionId } from '@shared/types'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
 import { clearLaunchIssue, onAgentMarker, useLaunchIssues } from '../lifecycle/launch-issues'
@@ -87,9 +88,19 @@ export function startStatusBridge(): () => void {
           titleSubscriptions.set(session.id, { surface, dispose: () => subscription.dispose() })
         }
         if (!outputSubscriptions.has(session.id)) {
+          // OSC 7501 (the CLIs beyond Claude and Codex, which have hooks): answer the query at once — before the
+          // terminal's own DA1 reply, which xterm writes only once it parses the chunk — and feed the reports.
+          const programStatus = session.kind === 'claude' || session.kind === 'codex' ? null : new ProgramStatusScanner()
+          const sessionId = session.id
           const entry: { unsubscribe(): void; timer: ReturnType<typeof setTimeout> | null } = {
             timer: null,
-            unsubscribe: window.tr.pty.onData(session.id, () => {
+            unsubscribe: window.tr.pty.onData(session.id, (data) => {
+              if (programStatus) {
+                for (const found of programStatus.feed(data)) {
+                  if (found.type === 'query') window.tr.pty.write(sessionId, PROGRAM_STATUS_REPLY)
+                  else controller.handleProgramStatus(sessionId, found.status)
+                }
+              }
               entry.timer ??= setTimeout(() => {
                 entry.timer = null
                 controller.handleOutput(session.id)

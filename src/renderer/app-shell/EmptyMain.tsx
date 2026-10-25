@@ -12,7 +12,7 @@ import { IconButton } from '../ui/IconButton'
 import { Segmented } from '../ui/Segmented'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { formatAccelerator } from '../ui/menu-model'
-import { greeting, INSTALLABLE_AGENTS, needsAgentInstall, pickQuote } from './empty-main'
+import { defaultAgent, greeting, INSTALLABLE_AGENTS, needsAgentInstall, pickQuote } from './empty-main'
 import styles from './EmptyMain.module.css'
 
 /** Picked once per launch, so the line does not change every time the page reappears. */
@@ -32,7 +32,7 @@ function useAgentAvailability(): AgentAvailability | null {
     window.tr.app
       .detectAgents()
       .then((result) => live && setAgents(result))
-      .catch(() => live && setAgents({ claude: false, codex: false }))
+      .catch(() => live && setAgents({}))
     return () => {
       live = false
     }
@@ -98,7 +98,7 @@ export function EmptyMain() {
   const [dragging, setDragging] = useState(false)
 
   // New sessions start the installed agent: Claude Code, else Codex.
-  const kind: AgentKind = agents && !agents.claude && agents.codex ? 'codex' : 'claude'
+  const kind: AgentKind = defaultAgent(agents)
 
   const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
   const onDragOver = (e: DragEvent) => {

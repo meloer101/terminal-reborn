@@ -9,9 +9,11 @@
 // final message as the report with a BLOCKED line (Superset, coder/mux). Nothing is typed into a dispatcher's
 // terminal: reports go through each vendor's own message channel (§6.14).
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
-import type { AgentKind, SessionId, SessionStatus } from './types'
+import type { ClaudeOrCodex } from './agents'
+import type { SessionId, SessionStatus } from './types'
 
-export type DispatchAgent = Exclude<AgentKind, 'shell'>
+/** The CLIs that get Wavi's dispatch MCP server and a report channel (§6.14). */
+export type DispatchAgent = ClaudeOrCodex
 
 /**
  * How Wavi delivers a report to a dispatcher of this kind (§6.14):

@@ -9,6 +9,7 @@
 ## 当前位置
 
 - 已发布 **v0.6.0**（2026-10-22：派活与回报，任何一家 agent 派给任何一家、结果自动回到派活方；PR 闭环到合并：创建 PR 面板、PR 评论回到变更视图、在合并面板合并 GitHub PR、自动修复和通过后合并；审阅结果存盘和另一家来审。之前是 v0.5.0，2026-10-21：多 agent 第二批——这一轮跑过哪些检查、冲突雷达、一题多解 + 总览批量操作、多窗口；文件预览换行和 Markdown；状态准确性、隐藏终端不再重画、守护进程 SIGTERM 修复）。
+- 2026-10-24：原生适配更多 agent（第 7 项 ①②，19 家，PRD §6.15）和设置去分隔线完成；一题多解改从对话里发起（方案 A / B 待作者定）。
 - 2026-10-24：读完 T3 Code 后定下要借鉴的 7 项（PRD v1.68），见下面“进行中：借鉴 T3 Code”；先做一键提交 / 推送 / PR。
 - 下一步（2026-10-21 改）：**外部验证延后到 M5 / M6 之后**（PRD §1.5 v1.55），作者判断产品还不够成熟。多 agent 第二批已全部完成（2026-10-21，v0.5.0）；现在继续做第三批（F21 派活与回报已完成，PRD v1.67）和 M5；分发里剩下的 brew、仓库改名、Discussions 和用户群，以及找人试用，都等那时再开始。
 - 2026-10-21：定下 **PR 闭环做到 L3**（PRD F16 v1.63），排在第三批之前，见下面“进行中：多 agent”的“PR 闭环”。
@@ -124,15 +125,18 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 5. [ ] 定时任务：按间隔或固定时间；每次开一个新会话（新 worktree，首条消息放在命令行上），或在已有会话空闲时发一条；调度放在 PTY 守护进程，⌘Q 后照样跑；列表写明会发什么、发给谁；不做 webhook
 6. [ ] 多仓库项目（必须做，单独设计）：先读社区 fork LoganRupe/t3code 的 `multi-repo-workspaces` 分支和 t3code#7041（▲85）、#15752，再出方案。方向：一个项目包含多个仓库；会话的工作目录是一个工作区文件夹，每个选中的仓库各开一个 worktree，按原来的相对位置摆放；变更、合并、PR 和冲突雷达按仓库分组
 7. [ ] 原生适配更多 agent（作者 2026-10-24 定，取代原来的“在一个窗口里让 agent 来回切换”：同一个窗口里开 Claude / Codex、切换、分屏都已经有了，中途换 agent 不做）：现在新建会话只能选 Claude 和 Codex，要加上 OpenCode、Grok、Pi、Gemini、Qwen 等，能加的尽量都加；只接原生 agent 用它自己的模型（作者 2026-10-24 定：DeepSeek、Kimi、GLM 这类“Claude Code 换接入地址”不做，用户自己用 CC Switch 切）。底线：和 Claude / Codex 一样，在新建会话面板里选了就能直接启动。做到多深（作者 2026-10-24 定，依据是读完 Orca、cmux、Superset、T3 Code、Vibe Kanban 的实现和各家 CLI 的接入口）：
-   - [ ] 先把 agent 抽成一张能力表（代码里有 54 个文件写死了 `'codex'`，`AgentKind` 在 `src/shared/types.ts`），不改界面
-   - [ ] 终端状态协议 OSC 7501（Ghostty 作者提出；Claude ≥2.1.295、Pi ≥1.1、Crush、Goose、Antigravity 已发，Codex 已合进代码）：终端层解析，凡是发它的 agent 不注入就有准确状态；不发的看标题和进程名
-   - [ ] ① 底线，所有能加的都加：新建会话面板里选、在 worktree 里直接启动、能续上之前的对话、能带首条消息
-   - [ ] ② 准确状态（每次启动注入 hooks：准确的“在等你”、权限栏、这一轮跑过的检查）：**OpenCode、Pi、Qwen Code、Gemini CLI**（作者定：用户多，要做）；Copilot CLI、Cline、CodeBuddy 以后看
+   - [x] agent 抽成一张能力表（2026-10-24，`src/shared/agents.ts`，19 家：命令、安装命令、首条消息、续上对话、模型、状态来源；`AgentKind` = 这些 + 终端）。只认 Claude / Codex 的功能（派活、额度、后台审阅、一题多解、发送协议的占位符）改成显式判断，其他 CLI 用通用发送参数
+   - [x] 终端状态协议 OSC 7501（2026-10-24，PRD §6.15）：`src/shared/program-status.ts` 解析 rev 0.4 的根记录，状态桥在输出流上立即回答 `OSC 7501 ; ?`（早于 DA1），报告进状态机；OpenCode 2、Grok、Crush、Goose、Pi ≥1.1 不注入就准确。真 Grok 1.0.67 实测：问答后报出 blocked / permission。不发的 CLI 看标题转圈（估计）
+   - [x] ① 底线（2026-10-24）：新建会话的智能体菜单里选（Figma 24A，按项目记住），在 worktree 里直接启动，能续上之前的对话（有 hooks 的按 id，其余“续上这个目录里最近的”），能带首条消息的带上；设置 · 智能体（25B）列已安装（版本、状态准确 / 估计）和没装的安装命令
+   - [x] ② 准确状态（2026-10-24，PRD §6.15）：Gemini（system-defaults 文件 + `--skip-trust`）、Qwen（system-defaults 文件）、Pi（`-e` 扩展 `resources/hooks/wavi-pi.js`，真 Pi 0.84.1 实测能加载、报 SessionStart / SessionEnd）每次启动注入 hooks；OpenCode 2 的插件跑在共享后台服务里注入不到，改走 OSC 7501（同样准确，但没有“当前在做什么”的工具细节）。测试：`cli-normalize.test.ts`、`cli-adapters.test.ts`、`program-status.test.ts`、`agent-launch.test.ts`、`agents.test.ts`，e2e `more-agents.spec.ts`（假 opencode 问 OSC 7501、报 working / blocked，两种主题截图 `test-results/more-agents/`）
+     - [ ] Gemini、Qwen、OpenCode 和其余各家在真 CLI 上走一遍（本机没装；花额度的步骤列进“待作者手动确认”）
+     - [ ] 权限栏（在 Wavi 里批准）：Gemini 的 hooks 不能批准；Qwen 要在对话框画出来之前答；OpenCode 插件可以 `permission.reply` 但注入不到。暂时都在 TUI 里答
+     - [ ] Copilot CLI、Cline、CodeBuddy 的 hooks 以后看；Copilot / Cursor / Antigravity 的目录信任每个新 worktree 问一次（没有不写全局配置的办法）
    - [ ] Kitty 键盘协议：Copilot、OpenCode、Grok、Droid、Pi 用它区分 Shift+Enter 和 Enter，Wavi 现在关着（PRD §6.3），先实测这几家能不能换行
    - 不做：Grok 的准确状态（只能在 worktree 里放项目级 hooks 再加 `--trust`，会写 Grok 自己的信任列表，算写用户全局配置），Grok 只做 ①；③ 全功能（MCP 派活、额度、审阅）等有人要再做；iFlow（已停服）、社区版 grok-cli、Trae（是 IDE）
-   - [ ] Figma 先画新建会话面板的 agent 选择（现在是 Claude Code / Codex / 多个三段，放不下十几家）和设置里的 agent 列表，作者审过再写界面。2026-10-24 画了第 24 节 `412:16282`（24A 智能体菜单 · 24E 浅色；24B 多个待重画，24C 被 25B 取代，24D 接入地址作废）和设置的智能体页（25B），待作者确认
+   - [x] Figma 先画新建会话面板的 agent 选择（现在是 Claude Code / Codex / 多个三段，放不下十几家）和设置里的 agent 列表，作者审过再写界面。2026-10-24 画了第 24 节 `412:16282`（24A 智能体菜单 · 24E 浅色；24B 多个待重画，24C 被 25B 取代，24D 接入地址作废）和设置的智能体页（25B），待作者确认
 
-8. [ ] 设置去掉分隔线（作者 2026-10-24 定）：行与行之间、导航和内容之间、输入框和按钮的描边、外观页预览框都不画线，分组靠留白和分组标题。Figma 第 25 节 `416:17440`（25A 外观 · 25B 智能体 · 25C Worktree · 25D 自动化 · 25E 关于 · 25F 浅色），待作者确认后再改代码
+8. [x] 设置去掉分隔线（作者 2026-10-24 定，2026-10-24 完成）：行与行之间、导航和内容之间、输入框和按钮的描边、外观页预览框都不画线，分组靠留白和分组标题。Figma 第 25 节 `416:17440`（25A 外观 · 25B 智能体 · 25C Worktree · 25D 自动化 · 25E 关于 · 25F 浅色，作者已确认）。行高 40、分组间距 40，输入框 / 按钮 / 开关 / 预览框 / 字体菜单的分组线都去掉；只留主题色板选中时的一圈和弹窗外沿
 
 不做：中途换 provider（作者 2026-10-24 定）；消息排队（原生 TUI 本来就能排队，最多补“⌘Q 后排着的消息由 Wavi 补发”）；聊天界面。
 

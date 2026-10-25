@@ -1,3 +1,4 @@
+import { claudeOrCodex } from '@shared/agents'
 import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
@@ -135,7 +136,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
           <span className={styles.spacer} />
           {/* Figma 17A: todo · context · usage, after the branch and before the pane icons (PRD F11 / F12). */}
           {/* A plain terminal shows the agent started in it by hand, while it runs. */}
-          <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? shellAgent ?? null : active.session.kind}>
+          <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? shellAgent ?? null : claudeOrCodex(active.session.kind)}>
             {/* After the used-up UsageChip: type 继续 once the plan limit resets (PRD F11). */}
             {limitResume && <LimitResumeButton sessionId={active.session.id} />}
           </SessionMetaChips>

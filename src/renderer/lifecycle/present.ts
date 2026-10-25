@@ -1,8 +1,9 @@
 // How an agent phase reads in the sidebar and the header (Figma Screen 10). Pure.
+import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
 import { hasStartChoice } from '../state/session-start-plan'
 import type { AgentKind, Session, SessionStatus } from '@shared/types'
 
-export const AGENT_NAME: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
+export const AGENT_NAME: Record<AgentKind, string> = { ...Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])), shell: '终端' } as Record<AgentKind, string>
 
 type PhaseView = Pick<Session, 'kind' | 'status' | 'phase'>
 

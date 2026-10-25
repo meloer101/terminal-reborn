@@ -1,12 +1,14 @@
 // Core domain model. See docs/PRD.md §3.
 // Changing these shapes affects every track — keep edits additive.
+import type { CliAgent } from './agents'
 import type { WorktreeArchive } from './archive'
 
 export type ProjectId = string
 export type WorktreeId = string
 export type SessionId = string
 
-export type AgentKind = 'claude' | 'codex' | 'shell'
+/** A session's program: one of the agent CLIs (src/shared/agents.ts) or a plain login shell. */
+export type AgentKind = CliAgent | 'shell'
 
 export type SessionStatus =
   | 'running' // agent is working

@@ -1,8 +1,9 @@
 // Settings content (Figma 07 · 设置 · 外观), shown inside SettingsDialog over the main window.
 import { useRef, useState, type KeyboardEvent } from 'react'
-import { GitBranch, Info, Type, Workflow, X, type LucideIcon } from 'lucide-react'
+import { Bot, GitBranch, Info, Type, Workflow, X, type LucideIcon } from 'lucide-react'
 import { IconButton } from '../ui/IconButton'
 import { AboutPane } from './AboutPane'
+import { AgentsPane } from './AgentsPane'
 import { AppearancePane } from './AppearancePane'
 import { AutomationPane } from './AutomationPane'
 import { useSettings } from './useSettings'
@@ -10,10 +11,11 @@ import { WorktreePane } from './WorktreePane'
 import styles from './SettingsApp.module.css'
 
 // 通用 / 终端 / Agent / 快捷键 come back with their content; an empty "即将推出" pane is a dead end (B11).
-type PaneId = 'appearance' | 'worktree' | 'automation' | 'about'
+type PaneId = 'appearance' | 'agents' | 'worktree' | 'automation' | 'about'
 
 const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
   { id: 'appearance', label: '外观', Icon: Type },
+  { id: 'agents', label: '智能体', Icon: Bot },
   { id: 'worktree', label: 'Worktree', Icon: GitBranch },
   { id: 'automation', label: '自动化', Icon: Workflow },
   { id: 'about', label: '关于', Icon: Info }
@@ -87,6 +89,7 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
             updateDispatch={updateDispatch}
           />
         )}
+        {pane === 'agents' && <AgentsPane />}
         {pane === 'about' && <AboutPane />}
       </main>
     </div>

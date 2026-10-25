@@ -30,6 +30,7 @@ function fail(sessionId: SessionId, kind: AgentKind, message: string): void {
 export function runCreatePlan(projectId: ProjectId, plan: CreatePlan, kind: AgentKind, workdir: Workdir, repo: boolean): SessionId | null {
   const workspace = useWorkspace.getState()
   if (repo) workspace.rememberWorkdir(projectId, workdir)
+  workspace.rememberAgent(projectId, kind)
 
   if (plan.type === 'current') {
     const id = workspace.addSession(projectId, kind)

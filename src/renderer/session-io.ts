@@ -1,5 +1,6 @@
 // Integration seam between UI features and live agent sessions: typing a prompt into an agent's TUI with the
 // measured send protocol (PRD §6.9). Callers never touch PTYs or protocols.
+import { claudeOrCodex } from '@shared/agents'
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
 import { inputLineText, normalizeSendText, planSend, sendRefusal } from '@shared/send-protocol'
 import type { AgentKind, SessionId } from '@shared/types'
@@ -57,7 +58,7 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
  */
 export async function insertPaths(sessionId: SessionId, paths: readonly string[]): Promise<void> {
   if (!useWorkspace.getState().sessions.some((s) => s.id === sessionId)) return
-  const data = attachmentInput(paths, agentIn(sessionId) ?? null, acceptsBracketedPaste(sessionId))
+  const data = attachmentInput(paths, claudeOrCodex(agentIn(sessionId)), acceptsBracketedPaste(sessionId))
   if (!data) return
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
 }

@@ -8,6 +8,7 @@ import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shar
 import { autoCompactRuleFromEnv, parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
 import type { BashResult } from '@shared/check-commands'
 import { isTodoTool } from '@shared/todo-progress'
+import { normalizeAdapter, normalizeGemini, normalizeQwen } from './cli-normalize'
 
 export interface PermissionDraft {
   tool: string
@@ -429,5 +430,17 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
 /** Unknown events and non-object payloads normalize to nothing; they are never an error. */
 export function normalizeHook(agent: HookAgent, event: string, payload: unknown, at = Date.now()): NormalizedHook {
   if (!isRec(payload)) return NONE
-  return agent === 'codex' ? normalizeCodex(event, payload) : normalizeClaude(event, payload, at)
+  switch (agent) {
+    case 'claude':
+      return normalizeClaude(event, payload, at)
+    case 'codex':
+      return normalizeCodex(event, payload)
+    case 'gemini':
+      return normalizeGemini(event, payload)
+    case 'qwen':
+      return normalizeQwen(event, payload)
+    case 'opencode':
+    case 'pi':
+      return normalizeAdapter(event, payload)
+  }
 }

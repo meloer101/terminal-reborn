@@ -1,6 +1,7 @@
 // On-disk shape of the workspace (`<userData>/workspace.json`, phase 2 · A12) and its sanitizer.
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
+import { CLI_AGENTS } from './agents'
 import { archiveRefName, type WorktreeArchive } from './archive'
 import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
@@ -102,6 +103,8 @@ export interface WorkspaceFile {
   recentProjects?: string[]
   /** 工作目录 last used in the new-session sheet, by project id (PRD F4). Absent when empty. */
   newSessionWorkdir?: Record<string, Workdir>
+  /** 智能体 last chosen in the new-session sheet, by project id (PRD F4 v1.68). Absent when empty. */
+  newSessionAgent?: Record<string, AgentKind>
   /** Unsent inline review comments (PRD F5) by worktree path; only worktrees that exist. Absent when empty. */
   reviewComments?: Record<string, ReviewComment[]>
   /** The main area's split (PRD F20): two to four sessions, `activeSessionId` among them. Absent = one session. */
@@ -137,7 +140,7 @@ const MAX_DISPATCH_TASK = 20_000
 const isText = (v: unknown, max = MAX_TEXT): v is string => typeof v === 'string' && v.length <= max && !v.includes('\0')
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
-const KINDS: ReadonlySet<unknown> = new Set<AgentKind>(['claude', 'codex', 'shell'])
+const KINDS: ReadonlySet<unknown> = new Set<AgentKind>([...CLI_AGENTS, 'shell'])
 const TITLE_SOURCES: ReadonlySet<unknown> = new Set<TitleSource>(['prompt', 'agent', 'user'])
 
 function list(v: unknown): Record<string, unknown>[] {
@@ -231,6 +234,10 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
   if (isRecord(value.newSessionWorkdir)) {
     for (const [id, choice] of Object.entries(value.newSessionWorkdir)) if (projectIds.has(id) && isWorkdir(choice)) newSessionWorkdir[id] = choice
   }
+  const newSessionAgent: Record<string, AgentKind> = {}
+  if (isRecord(value.newSessionAgent)) {
+    for (const [id, choice] of Object.entries(value.newSessionAgent)) if (projectIds.has(id) && KINDS.has(choice)) newSessionAgent[id] = choice as AgentKind
+  }
 
   const reviewComments = sanitizeReviewComments(value.reviewComments, new Set(worktrees.map((w) => w.path)))
   const attemptGroups = sanitizeAttemptGroups(value.attemptGroups, sessionIds)
@@ -277,6 +284,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     drafts,
     ...(recentProjects.length > 0 ? { recentProjects } : {}),
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
+    ...(Object.keys(newSessionAgent).length > 0 ? { newSessionAgent } : {}),
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
     ...(split ? { split } : {}),
     ...(windows.length > 0 ? { windows } : {}),

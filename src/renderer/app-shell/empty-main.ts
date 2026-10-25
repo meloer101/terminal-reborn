@@ -1,4 +1,5 @@
 // Pure helpers for the welcome page (EmptyMain.tsx, PRD F18 · Figma 14).
+import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability } from '@shared/ipc'
 
 /** 5–11 早上好 · 11–13 中午好 · 13–18 下午好 · 18–23 晚上好 · 23–5 夜深了. */
@@ -54,7 +55,12 @@ export const INSTALLABLE_AGENTS: readonly InstallableAgent[] = [
   { id: 'grok', name: 'Grok', command: 'curl -fsSL https://x.ai/cli/install.sh | bash' }
 ]
 
-/** The install block shows only once detection finished and neither supported agent is on PATH. */
+/** The install block shows only once detection finished and no agent CLI Wavi can start is on PATH. */
 export function needsAgentInstall(agents: AgentAvailability | null): boolean {
-  return agents !== null && !agents.claude && !agents.codex
+  return agents !== null && !CLI_AGENTS.some((id) => agents[id])
+}
+
+/** What the welcome screen's “新建会话” starts: Claude Code, else Codex, else the first installed CLI. */
+export function defaultAgent(agents: AgentAvailability | null): CliAgent {
+  return CLI_AGENTS.find((id) => agents?.[id]) ?? 'claude'
 }

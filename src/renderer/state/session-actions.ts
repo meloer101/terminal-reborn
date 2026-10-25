@@ -1,5 +1,6 @@
 // User-facing workspace commands: opening projects and creating sessions in them (Figma 09).
 // Menus are the app's own (ui/MenuHost.tsx), anchored to the control or pointer that opened them.
+import { agentName } from '@shared/agents'
 import {
   closeSessionConfirmation,
   countActive,
@@ -17,7 +18,6 @@ import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
 import { projectOfSession } from './workspace-model'
 
-const NEW_SESSION_LABEL: Record<AgentKind, string> = { claude: 'Claude Code', codex: 'Codex', shell: '终端' }
 const KINDS: AgentKind[] = ['claude', 'codex', 'shell']
 
 /**
@@ -148,7 +148,7 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   if (worktree) {
     entries.push(
       { type: 'separator' },
-      { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: NEW_SESSION_LABEL[kind] })) }
+      { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: agentName(kind) })) }
     )
     if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: '归档 worktree…' })
   }

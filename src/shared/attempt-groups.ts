@@ -4,9 +4,11 @@
 // each member shows, and the copy that says exactly what will be sent to whom (PRD §2: never spend tokens silently).
 import type { GitChanges } from './git-graph/log'
 import { branchNameProblem, folderNameFor, type BranchNameProblem, type NewSessionBranch, type WorktreeCreateRequest } from './new-session'
-import type { AgentKind, SessionId } from './types'
+import type { ClaudeOrCodex } from './agents'
+import type { SessionId } from './types'
 
-export type AttemptAgent = Exclude<AgentKind, 'shell'>
+/** 一题多解 runs Claude Code and Codex for now (the entry point is being redesigned, ROADMAP 7). */
+export type AttemptAgent = ClaudeOrCodex
 
 /** Fewer than two is just a session; more than four does not fit side by side in the overview overlay (F9). */
 export const MIN_ATTEMPTS = 2

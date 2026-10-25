@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CONTINUE_LATEST } from '@shared/agent-launch'
 import { AUTO_START_ON_VIEW, agentSessionIdPatch, hasStartChoice, planStart, shouldAutoStart } from './session-start-plan'
 
 const restored = { kind: 'claude' as const, phase: 'not-started' as const, agentSessionId: 'conv-1' }
@@ -59,5 +60,18 @@ describe('agentSessionIdPatch', () => {
     expect(agentSessionIdPatch({ type: 'session-start' })).toBeNull()
     expect(agentSessionIdPatch({ type: 'stop' })).toBeNull()
     expect(agentSessionIdPatch({ type: 'session-end', reason: 'clear' })).toBeNull()
+  })
+})
+
+describe('planStart for a CLI without hooks', () => {
+  it('keeps a continue-latest marker so the next start continues its conversation', () => {
+    expect(planStart({ kind: 'opencode' }, { resume: true })).toEqual({
+      resumeAgentSessionId: undefined,
+      patch: { phase: 'starting', status: 'idle', agentSessionId: CONTINUE_LATEST }
+    })
+    expect(planStart({ kind: 'opencode', agentSessionId: CONTINUE_LATEST }, { resume: true }).resumeAgentSessionId).toBe(CONTINUE_LATEST)
+    // Gemini reports its id through hooks; Goose has no per-folder continue.
+    expect(planStart({ kind: 'gemini' }, { resume: true }).patch.agentSessionId).toBeUndefined()
+    expect(planStart({ kind: 'goose' }, { resume: true }).patch.agentSessionId).toBeUndefined()
   })
 })

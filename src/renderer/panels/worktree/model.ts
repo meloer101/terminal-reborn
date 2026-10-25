@@ -1,12 +1,17 @@
 // Worktree view (PRD F17, Figma 13C): the project's git worktrees joined with the workspace's sessions, grouped
 // into the working list, 可清理 (bulk) and 没有会话 (one by one), plus the delete guard. Pure; WorktreeView renders it.
+import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
 import type { GitWorktreeInfo, GitWorktreeListing } from '@shared/git-worktrees'
 import { isActiveStatus } from '@shared/lifecycle'
 import { PORT_BLOCK } from '@shared/ports'
 import { compareByUrgency } from '@shared/session-status'
 import type { AgentKind, Session, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 
-export const AGENT_LABEL: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex', shell: '终端' }
+export const AGENT_LABEL: Record<AgentKind, string> = {
+  ...(Object.fromEntries(CLI_AGENTS.map((id) => [id, AGENT_SPECS[id].label])) as Record<AgentKind, string>),
+  claude: 'Claude',
+  shell: '终端'
+}
 
 /** What the session line adds after the agent; running and idle say nothing (the glyph shows it). */
 const STATE_TEXT: Partial<Record<SessionStatus, string>> = {

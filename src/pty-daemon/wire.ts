@@ -3,6 +3,7 @@
 // `hello` / `welcome` / `shutdown` are frozen across protocol versions, so a newer app can always retire an older daemon.
 import { createHash } from 'node:crypto'
 import { posix } from 'node:path'
+import type { HookAgent } from '@shared/agent-events'
 import type { HostEvent, HostRequest, HostSessionInfo } from '../pty-host/protocol'
 
 /** Bump on any incompatible change to the messages below or in src/pty-host/protocol.ts. */
@@ -61,7 +62,7 @@ export type DaemonMessage =
   | { type: 'welcome'; protocol: number; pid: number; buildId: string; sessions: HostSessionInfo[]; hooks: HookEndpointInfo | null }
   | { type: 'refused'; reason: string }
   /** A hook from an agent whose session this app has attached; answer with `hook-reply`. */
-  | { type: 'hook'; rid: number; sessionId: string; event: string; agent: 'claude' | 'codex'; payload: unknown }
+  | { type: 'hook'; rid: number; sessionId: string; event: string; agent: HookAgent; payload: unknown }
   | HostEvent
 
 /** What the daemon writes to `daemon.json` once it listens. */

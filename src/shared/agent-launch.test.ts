@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentArgv, agentShellArgs, parseAgentMarker, shellQuote } from './agent-launch'
+import { agentArgv, agentShellArgs, CONTINUE_LATEST, parseAgentMarker, shellQuote } from './agent-launch'
 
 describe('shellQuote', () => {
   it('wraps in single quotes and escapes embedded ones', () => {
@@ -174,5 +174,37 @@ describe('parseAgentMarker', () => {
     expect(parseAgentMarker('exit;')).toBeNull()
     expect(parseAgentMarker('exit;x')).toBeNull()
     expect(parseAgentMarker('')).toBeNull()
+  })
+})
+
+describe('other agent CLIs (agents.ts rows)', () => {
+  it('passes the first message the way each CLI keeps its TUI open', () => {
+    expect(agentArgv('opencode', '/w', { initialPrompt: 'fix it' })).toEqual(['opencode', '--prompt', 'fix it'])
+    expect(agentArgv('qwen', '/w', { initialPrompt: 'fix it' })).toEqual(['qwen', '--prompt-interactive', 'fix it'])
+    expect(agentArgv('pi', '/w', { initialPrompt: 'fix it' })).toEqual(['pi', 'fix it'])
+    expect(agentArgv('grok', '/w', { initialPrompt: '--help me' })).toEqual(['grok', '--', '--help me'])
+    // Kimi takes no prompt argument: the message is not put on the command line.
+    expect(agentArgv('kimi', '/w', { initialPrompt: 'fix it' })).toEqual(['kimi'])
+  })
+
+  it('adds the adapter arguments, the fixed subcommand and the model', () => {
+    expect(agentArgv('gemini', '/w', { extraArgs: ['--skip-trust'], model: 'gemini-3-pro' })).toEqual(['gemini', '--skip-trust', '--model', 'gemini-3-pro'])
+    expect(agentArgv('pi', '/w', { extraArgs: ['-e', '/r/wavi-pi.js'] })).toEqual(['pi', '-e', '/r/wavi-pi.js'])
+    expect(agentArgv('kiro', '/w')).toEqual(['kiro-cli', 'chat', '--tui'])
+    // OpenCode 2 has no root --model: the model is dropped rather than passed as a stray flag.
+    expect(agentArgv('opencode', '/w', { model: 'x/y' })).toEqual(['opencode'])
+  })
+
+  it('resumes by id, or continues the latest conversation for a session without a real id', () => {
+    expect(agentArgv('gemini', '/w', { resumeAgentSessionId: 'abc-1', initialPrompt: 'x' })).toEqual(['gemini', '--resume', 'abc-1'])
+    expect(agentArgv('copilot', '/w', { resumeAgentSessionId: 'abc-1' })).toEqual(['copilot', '--resume=abc-1'])
+    expect(agentArgv('opencode', '/w', { resumeAgentSessionId: CONTINUE_LATEST })).toEqual(['opencode', '--continue'])
+    expect(agentArgv('goose', '/w', { resumeAgentSessionId: CONTINUE_LATEST })).toEqual(['goose', 'session'])
+  })
+
+  it('checks for the CLI by its binary, not its id', () => {
+    const script = agentShellArgs('cursor', '/w', '/bin/zsh')[3] ?? ''
+    expect(script).toContain('command -v cursor-agent >/dev/null 2>&1')
+    expect(script).toContain(`'cursor-agent'`)
   })
 })

@@ -1,4 +1,5 @@
 // Validation for every pty IPC payload. The renderer is not trusted to send well-formed data.
+import { CLI_AGENTS } from '@shared/agents'
 import type { PtySpawnOptions } from '@shared/ipc'
 import type { AgentKind } from '@shared/types'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
@@ -11,7 +12,7 @@ const MAX_STRING = 32 * 1024
 const MAX_ARGS = 256
 const MAX_ENV = 256
 const MAX_DIMENSION = 1000
-const AGENT_KINDS: ReadonlySet<unknown> = new Set<AgentKind>(['claude', 'codex', 'shell'])
+const AGENT_KINDS: ReadonlySet<unknown> = new Set<AgentKind>([...CLI_AGENTS, 'shell'])
 
 export function parseSessionId(value: unknown): string {
   if (typeof value !== 'string' || !SESSION_ID.test(value)) throw new Error('invalid session id')

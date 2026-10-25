@@ -1,4 +1,5 @@
 // Pure palette model: what can be jumped to or run, and in which order. No React, no store access.
+import { agentName } from '@shared/agents'
 import { archivedAgo } from '@shared/archive'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
@@ -68,7 +69,6 @@ export interface RankedEntry {
   ranges: Record<string, Range[]>
 }
 
-const KIND_LABEL = { claude: 'Claude Code', codex: 'Codex', shell: '终端' } as const
 
 /**
  * Sessions in sidebar order — project by project, store order within each, folded projects included (B16) — so the
@@ -103,7 +103,7 @@ export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
           { key: 'project', text: projectName, weight: 2 },
           { key: 'branch', text: worktree?.branch ?? '', weight: 2 },
           { key: 'action', text: session.currentAction ?? '', weight: 1.5 },
-          { key: 'kind', text: KIND_LABEL[session.kind], weight: 1 },
+          { key: 'kind', text: agentName(session.kind), weight: 1 },
           { key: 'status', text: STATUS_LABEL[session.status], weight: 1 }
         ]
       }

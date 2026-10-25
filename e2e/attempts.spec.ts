@@ -126,7 +126,8 @@ test.describe('一题多解 + 广播', () => {
   test('智能体 · 多个 asks for 份数 and one task, and the button says what it sends to whom', async () => {
     await page.keyboard.press('Meta+N')
     await expect(sheet()).toBeVisible()
-    await sheet().getByRole('radio', { name: '多个' }).click()
+    await sheet().getByRole('button', { name: '智能体' }).click()
+    await page.getByRole('listbox', { name: '智能体' }).getByRole('option', { name: /多个智能体一起做/ }).click()
     await expect(sheet().getByRole('group', { name: 'Claude Code 份数' })).toContainText('2', WITHIN)
     // Codex is on the PATH, so the default compares it with Claude.
     await expect(sheet().getByRole('group', { name: 'Codex 份数' })).toContainText('1', WITHIN)
