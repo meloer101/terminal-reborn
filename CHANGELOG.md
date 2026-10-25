@@ -4,6 +4,45 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-25
+
+Start 19 agent CLIs natively, put a PR together from one sheet, run the same task several ways, and read each session's agent and branch in the sidebar.
+原生启动 19 家 agent CLI，一个面板完成提交、推送和 PR，同一个任务开几份比较，侧栏直接看到每个会话是哪家 agent、哪个分支。
+
+### Agents / 智能体
+- 新建会话 now picks from a menu of the CLIs installed on your Mac: Claude Code, Codex, OpenCode, Gemini CLI, Qwen Code, Pi, Copilot, Cursor, Grok, Kimi, Droid, Amp, Kiro, Crush, Goose, Cline, Antigravity, Auggie and CodeBuddy, or a plain terminal. Each starts in its worktree, can be resumed, and takes a first message.
+  新建会话改为下拉菜单，列出本机装了的 CLI：Claude Code、Codex、OpenCode、Gemini CLI、Qwen Code、Pi、Copilot、Cursor、Grok、Kimi、Droid、Amp、Kiro、Crush、Goose、Cline、Antigravity、Auggie、CodeBuddy，或普通终端；每个都在自己的 worktree 里启动、能续上、能带首条消息。
+- Status is exact where the CLI allows it (per-launch hooks for Gemini, Qwen and Pi; the terminal's program-status protocol for OpenCode, Grok, Crush, Goose and Pi 1.1+) and estimated from the title otherwise. 设置 · 智能体 lists each CLI with its version, whether its status is exact or estimated, and the install command for the ones you lack. Wavi never touches their global config.
+  能准确的就准确（Gemini、Qwen、Pi 每次启动注入 hooks；OpenCode、Grok、Crush、Goose、Pi 1.1+ 走终端状态协议），其余看标题估计。设置 · 智能体列出每家的版本、状态是准确还是估计，以及没装的安装命令；不改它们的全局配置。
+- The sidebar shows each session's agent with its own logo, and the worktree's branch, on the row's last line.
+  侧栏每个会话的最后一行写这个会话跑的 agent（用它自己的图标）和 worktree 的分支。
+
+### Same task, several ways / 同任务多解
+- From a conversation, “同任务多解…” (⇧⌘N, also in the session menu, ⌘K and the terminal's right-click menu) opens 2–4 new worktrees off its branch, each with an agent you pick and the task you chose: the text you selected, the agent's plan, or what you said in that session. The session itself is not one of them.
+  从对话里发起：“同任务多解…”（⇧⌘N，也在会话菜单、⌘K 和终端右键菜单里）在它的分支上开 2–4 个新 worktree，各跑你选的 agent，任务是你选中的文字、agent 的计划或你在这个会话里说过的话；原会话不算一份。
+- When they have all stopped, the original session gets one report with every branch, diff size and check result, to compare and recommend; merging stays yours. If it cannot be delivered it waits under the terminal for 送进去.
+  几份都停下后，原会话收到一份汇报（每份的分支、改动量和检查结果），用来比较和推荐，合并仍由你做；送不进去时留在终端下方等你点“送进去”。
+
+### Pull requests / PR
+- The PR button follows the worktree's git state (提交并创建 PR, 创建 PR, 提交并推送, 推送到 PR #N, 打开 PR #N). The sheet gains a 提交 section: tick files, edit the message, then commit, push and create run in order, each step with its progress and the git hook's output if it fails.
+  PR 按钮按 worktree 的 git 状态换文字。面板多一段“提交”：勾文件、改提交说明，然后按提交、推送、创建的顺序做，每一步写明进度，失败时显示 git hook 的输出。
+- AI 写 fills the commit message and PR text from your own Claude or Codex login (Haiku by default); you read it before using it. Model and “write on open” live in 设置 · 自动化 · PR, both off by default.
+  “AI 写”用你本机 Claude 或 Codex 的登录写提交说明和 PR 标题正文，你看过再用；模型和“打开面板时自动写”在设置 · 自动化 · PR，默认关。
+
+### Interface / 界面
+- The context popover shows only the figure and its bar; the usage popover only each vendor's windows (name, %, reset, bar). Captions, the trend line, pace sentences and the per-session shares are gone.
+  context 浮层只留数字和条，额度浮层只留每个厂商的窗口（名称、百分比、重置时间、条）；说明文字、趋势线、速度预测和各会话份额都去掉了。
+- 设置 no longer draws dividers or outlines on rows, navigation, inputs and buttons.
+  设置去掉了行、导航、输入框和按钮上的所有分隔线和描边。
+- The README is English first, with real screenshots; the Chinese one is README.zh-CN.md.
+  README 改为英文在前、配真实截图，中文在 README.zh-CN.md。
+
+### Fixed / 修复
+- Opening a file from a terminal link before the 文件 view had been shown left its tree empty; it now lists the root.
+  先点终端里的文件路径、再打开文件视图时文件树是空的，现在会列出根目录。
+- Where two split hairlines cross, the outer split's line is now the one you grab.
+  分屏里两条分隔线交叉处，现在抓到的是外层那条。
+
 ## [0.6.0] - 2026-10-22
 
 Let agents hand work to each other, and take a PR from review to merge without leaving Wavi.
@@ -256,7 +295,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/meloer101/terminal-reborn/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/meloer101/terminal-reborn/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/meloer101/terminal-reborn/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/meloer101/terminal-reborn/compare/v0.3.0...v0.4.0
