@@ -273,38 +273,24 @@ button.chip:hover {
   background: var(--text-secondary);
 }
 
-/* UsagePopover v2 (360) and ContextPopover (340). */
+/* UsagePopover and ContextPopover (Figma 27B: 340 wide, 16 padding). */
 .popover:has(.usagePanel) {
-  width: 360px;
+  width: 340px;
 }
 
 .popover:has(.contextPanel) {
   width: 340px;
 }
 
-/* UsagePopover: one section per vendor; the second and later ones start with a hairline. */
+/* UsagePopover (Figma 27B): one section per vendor, set apart by space alone. */
 .vendor {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: var(--space-12) var(--space-16);
-}
-
-.vendor + .vendor {
-  padding-top: var(--space-12);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .vendorName {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
   font: var(--text-body-strong);
-}
-
-.vendorCurrent {
-  font: var(--text-caption);
-  color: var(--text-tertiary);
 }
 
 /* Overview top bar: one UsageChip per vendor (Figma 17C PlanUsage), 28 before the filter. */
@@ -317,17 +303,12 @@ button.chip:hover {
   -webkit-app-region: no-drag;
 }
 
-/* ---- Figma 18 · ContextPopover 276:10395 ---- */
+/* ---- Figma 27B · ContextPopover ---- */
 .contextPanel {
   display: flex;
   flex-direction: column;
-}
-
-.figure {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: 0 var(--space-16) var(--space-12);
+  gap: 10px;
+  padding: var(--space-16);
 }
 
 .figureRow {
@@ -355,12 +336,6 @@ button.chip:hover {
 .figurePercent[data-level='high'] {
   font: var(--text-mono-s-medium);
   color: var(--text-primary);
-}
-
-.figureNote {
-  align-self: flex-end;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
 }
 
 /* A 6-high bar inside a 12-high box, so the 80 % mark / elapsed tick can stand out above and below. */
@@ -407,87 +382,18 @@ button.chip:hover {
   top: 0;
   width: 1px;
   height: 12px;
-  background: var(--text-primary);
+  background: var(--text-tertiary);
 }
 
-.trend {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-12) var(--space-16);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.trendHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.trendTitle {
-  flex: 1;
-  font: var(--text-caption-strong);
-  color: var(--text-secondary);
-}
-
-.trendDelta {
-  font: var(--text-mono-s);
-  color: var(--text-tertiary);
-}
-
-.sparkline {
-  display: block;
-  overflow: visible;
-}
-
-.sparkGuide,
-.sparkBreak {
-  stroke-width: 1;
-  stroke-dasharray: 2 3;
-}
-
-.sparkGuide {
-  stroke: var(--border-default);
-}
-
-.sparkBreak {
-  stroke: var(--border-strong);
-}
-
-.sparkLine {
-  fill: none;
-  stroke: var(--text-secondary);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-
-.sparkNow {
-  fill: var(--text-primary);
-}
-
-.trendNote {
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.projection {
-  font: var(--text-caption);
-  color: var(--text-secondary);
-}
-
-.shareRow:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-
-/* ---- Figma 18 · UsagePopover v2 277:10437 ---- */
+/* ---- Figma 27B · UsagePopover ---- */
 .usagePanel {
   display: flex;
   flex-direction: column;
+  gap: 20px;
+  padding: var(--space-16);
 }
 
-/* UsageWindowBlock 277:10429: name · % · reset, the bar, how it is going. */
+/* UsageWindowBlock (Figma 27B): name · % · reset and the bar; ahead of its time tick the figure is heavier. */
 .windowBlock {
   display: flex;
   flex-direction: column;
@@ -508,6 +414,11 @@ button.chip:hover {
 
 .windowValue {
   font: var(--text-mono-s-medium);
+  color: var(--text-secondary);
+}
+
+.windowBlock[data-level='ahead'] .windowValue,
+.windowBlock[data-level='exhausted'] .windowValue {
   color: var(--text-primary);
 }
 
@@ -515,104 +426,4 @@ button.chip:hover {
   font: var(--text-caption);
   color: var(--text-tertiary);
   white-space: nowrap;
-}
-
-.windowNote {
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.windowBlock[data-level='ahead'] .windowNote,
-.windowBlock[data-level='exhausted'] .windowNote {
-  color: var(--text-secondary);
-}
-
-/* SessionShareRow 277:10430: title · project · share bar 64 · %. */
-.shares {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sharesHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding-bottom: var(--space-4);
-}
-
-.sharesTitle {
-  flex: 1;
-  font: var(--text-caption-strong);
-  color: var(--text-secondary);
-}
-
-.sharesNote {
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.shareRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  min-height: 24px;
-  margin: 0 calc(-1 * var(--space-4));
-  padding: var(--space-4);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  text-align: left;
-  cursor: default;
-}
-
-button.shareRow:hover {
-  background: var(--bg-hover);
-}
-
-.shareTitle {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: var(--text-caption);
-  color: var(--text-primary);
-}
-
-.shareRow[data-muted] .shareTitle {
-  color: var(--text-secondary);
-}
-
-.shareProject {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.shareBar {
-  flex: none;
-  position: relative;
-  width: 64px;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--border-default);
-}
-
-.shareUsed {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--text-secondary);
-}
-
-.sharePercent {
-  flex: none;
-  width: 32px;
-  text-align: right;
-  font: var(--text-mono-s);
-  color: var(--text-secondary);
 }

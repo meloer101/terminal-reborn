@@ -106,11 +106,8 @@ function setup() {
     cookie,
     graph,
     nav,
-    cookieTranscript: join(claudeConfig, 'projects', 'acme', 'cookie.jsonl'),
-    navTranscript: join(claudeConfig, 'projects', 'acme', 'nav.jsonl'),
     env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log, CLAUDE_CONFIG_DIR: claudeConfig },
     step: (value: unknown) => appendFileSync(`${log}.steps`, `${JSON.stringify(value)}\n`),
-    navStep: (value: unknown) => appendFileSync(join(nav, '.fake-steps'), `${JSON.stringify(value)}\n`),
     shellStep: (value: unknown) => appendFileSync(join(project, '.fake-steps'), `${JSON.stringify(value)}\n`),
     statusLines: () => {
       try {
@@ -151,29 +148,6 @@ const TODOS = [
   ['更新 README 的认证说明', 'pending'],
   ['跑完整测试并修复失败项', 'pending']
 ].map(([content, status]) => ({ content, status, activeForm: content }))
-
-/** A Claude transcript: one prompt and one reply per turn (`tokens` in the window), a compaction where `null` is. */
-function transcript(turns: (number | null)[], spendPerTurn: number): string {
-  const lines: string[] = []
-  let minute = turns.length + 2
-  for (const [i, tokens] of turns.entries()) {
-    const at = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
-    if (tokens === null) {
-      lines.push(JSON.stringify({ type: 'system', subtype: 'compact_boundary', timestamp: at(minute) }))
-      continue
-    }
-    lines.push(JSON.stringify({ type: 'user', timestamp: at(minute), message: { role: 'user', content: `第 ${i + 1} 轮` } }))
-    lines.push(
-      JSON.stringify({
-        type: 'assistant',
-        timestamp: at(minute - 0.5),
-        message: { id: `msg-${i}`, usage: { input_tokens: 2, cache_creation_input_tokens: spendPerTurn - 102, cache_read_input_tokens: tokens - spendPerTurn + 100, output_tokens: 100 } }
-      })
-    )
-    minute--
-  }
-  return lines.join('\n') + '\n'
-}
 
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(120_000)
@@ -290,34 +264,19 @@ test.describe('session metrics: todo · context · usage', () => {
     expect(repo.typed()).not.toContain('<ENTER>')
   })
 
-  test('clicking context opens its popover: figure, the turns from the transcript with the compaction, the details', async () => {
-    writeFileSync(repo.cookieTranscript, transcript([40_000, 80_000, 120_000, null, 30_000, 70_000, 120_000, 172_000], 5000))
-    repo.step({ hook: 'Stop', payload: { transcript_path: repo.cookieTranscript, stop_hook_active: false } })
-    // Main has read the transcript the Stop hook named (and the hook's own window traffic has settled).
-    const turnsInMain = () =>
-      page.evaluate(async () => {
-        const tr = (globalThis as unknown as { tr: { agent: { getContextHistory(id: string): Promise<{ turns: unknown[] } | null> } } }).tr
-        return (await tr.agent.getContextHistory('s-cookie'))?.turns.length ?? 0
-      })
-    await expect.poll(turnsInMain, WITHIN).toBe(7)
+  test('clicking context opens its popover: the figure and the bar with its mark, nothing else', async () => {
     const chip = header().getByTestId('context-chip')
     await chip.getByRole('button', { name: 'context 已用 86%' }).click()
     const popover = page.getByTestId('context-popover')
     await expect(popover).toBeVisible()
-    await expect(popover).toContainText('Opus 5.5 · 200k 窗口')
     await expect(popover).toContainText('172k/ 200k86%')
-    // Claude Code compacts a 200k window at 167k by itself; the fake reports 172k.
-    await expect(popover.getByTestId('context-mark-note')).toHaveText('刻度 = 自动压缩点 167k · 已到')
-    const trend = popover.getByTestId('context-trend')
-    await expect(trend).toContainText('最近 7 轮', WITHIN)
-    await expect(trend).toContainText('本轮 +26%')
-    await expect(trend).toContainText('虚线处压缩过')
-    // 86 % is already past where Claude compacts (84 %): no "N 轮后" projection.
-    await expect(trend).not.toContainText('轮后')
-    await expect(trend.locator('path')).toHaveCount(2)
-    await expect(popover).not.toContainText('缓存读取')
+    // No model line, no mark note, no trend: the popover is only the number and the bar.
+    await expect(popover).not.toContainText('Opus')
+    await expect(popover).not.toContainText('刻度')
+    await expect(popover).not.toContainText('最近')
+    await expect(popover.locator('svg')).toHaveCount(0)
     await expect(popover.getByRole('button', { name: '/compact' })).toHaveCount(0)
-    await shoot('18A-context-popover')
+    await shoot('27B-context-popover')
     await page.keyboard.press('Escape')
     await expect(popover).toHaveCount(0)
   })
@@ -331,35 +290,20 @@ test.describe('session metrics: todo · context · usage', () => {
         { minutes: 10080, percent: 12, resetsAt: Date.now() + 5 * 86400_000 }
       ]
     })
-    // A second Claude session that spent tokens in the same window (its own fake reads w-nav/.fake-steps).
-    await sidebarRow('s-nav').click()
-    await expect(header().getByText('修复移动端导航抖动')).toBeVisible()
-    writeFileSync(repo.navTranscript, transcript([20_000, 40_000], 4000))
-    repo.navStep({ hook: 'Stop', payload: { transcript_path: repo.navTranscript, stop_hook_active: false } })
-    await page.waitForTimeout(2000)
-    await sidebarRow('s-cookie').click()
-
     repo.step(statusLine(62, { five: 13, seven: 84 }))
     const chip = header().getByTestId('usage-chip-claude')
     await expect(chip).toHaveText('Claude7d 84%', WITHIN)
     await expect(chip).toHaveAttribute('data-level', 'high')
     await chip.click()
     const popover = page.getByTestId('usage-popover')
-    await expect(popover.getByRole('region')).toHaveText([/^Claude当前会话5 小时.*13%.*7 天.*84%/, /^Codex5 小时.*40%.*每周.*12%/])
-    // 5 h: 2 of 5 hours gone, 13 % used — on pace. 7 d: 5 of 7 days gone, 84 % used — ahead.
-    await expect(popover.getByTestId('usage-window-claude-300')).toContainText('时间过了 40% · 按这个速度用得完')
-    await expect(popover.getByTestId('usage-window-claude-10080')).toContainText('用得比时间快 · 按这个速度约')
+    await expect(popover.getByRole('region')).toHaveText([/^Claude5 小时.*13%.*7 天.*84%/, /^Codex5 小时.*40%.*每周.*12%/])
+    // 5 h: 2 of 5 hours gone, 13 % used — on pace. 7 d: 5 of 7 days gone, 84 % used — ahead (a heavier figure, no sentence).
+    await expect(popover.getByTestId('usage-window-claude-300')).toHaveAttribute('data-level', 'normal')
     await expect(popover.getByTestId('usage-window-claude-10080')).toHaveAttribute('data-level', 'ahead')
-    // At API prices (cache write 1.25, cache read 0.1, output 5): cookie's 7 replies 106,138, nav's 2 15,968 → 87 % / 13 %.
-    const shares = popover.getByTestId('usage-shares-claude')
-    await expect(shares).toContainText('这 5 小时里各会话的用量', WITHIN)
-    await expect(shares.getByRole('button')).toHaveText([/^Cookie 会话迁移acme-web87%$/, /^修复移动端导航抖动acme-web13%$/])
-    await expect(popover).not.toContainText('只统计 Wavi 里的会话')
-    await shoot('18B-usage-popover')
-    await shares.getByRole('button', { name: /修复移动端导航抖动/ }).click()
+    for (const gone of ['当前会话', '刚刚更新', '时间过了', '用得比时间快', '各会话的用量', 'API 价格']) await expect(popover).not.toContainText(gone)
+    await shoot('27B-usage-popover')
+    await page.keyboard.press('Escape')
     await expect(popover).toHaveCount(0)
-    await expect(header().getByText('修复移动端导航抖动')).toBeVisible()
-    await sidebarRow('s-cookie').click()
   })
 
   test('crossing 75 % of a window raises one system notification; clicking it opens the overview’s usage popover', async () => {
@@ -433,7 +377,7 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(chip).toHaveText(/^Codex5h 用完 · \d\d:\d\d 恢复$/, WITHIN)
     await expect(chip).toHaveAttribute('data-level', 'exhausted')
     await chip.click()
-    await expect(page.getByTestId('usage-window-codex-300')).toContainText(/已用完 · 还有 3[789] 分钟恢复/)
+    await expect(page.getByTestId('usage-window-codex-300')).toContainText(/100%.*\d\d:\d\d 恢复/)
     await shoot('18C-exhausted')
     await page.keyboard.press('Escape')
   })

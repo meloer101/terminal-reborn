@@ -14,12 +14,14 @@ export interface SessionRowModel {
   title: string
   /**
    * Secondary line: the agent's lifecycle or current action; once a turn is over, its last reply
-   * (prefixed "已完成" while unread, so the state is never color-only); else where the session lives.
+   * (prefixed "已完成" while unread, so the state is never color-only); else the main checkout's folder.
    */
   secondary: string
   /** Only `needs_you` recolors the secondary line (Figma SessionRow `attention`). */
   attention: boolean
   stat: DiffStat | null
+  /** The worktree's branch, drawn on the row's last line next to the agent's mark. */
+  branch: string
   /** 1: started by the session right above it through Wavi's dispatch tools (PRD F21), drawn one step in. */
   depth: 0 | 1
 }
@@ -57,7 +59,8 @@ export function nestedTitle(title: string, parentTitle: string | undefined): str
 }
 
 function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 0, parentTitle?: string): SessionRowModel {
-  const location = worktree ? (worktree.isMain ? worktree.path : worktree.branch) : ''
+  // The branch has its own line now (SessionRow); only the main checkout's folder still says where it lives.
+  const location = worktree?.isMain ? worktree.path : ''
   const added = worktree?.added ?? 0
   const removed = worktree?.removed ?? 0
   return {
@@ -66,6 +69,7 @@ function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? location,
     attention: session.status === 'needs_you',
     stat: added + removed > 0 ? { added, removed } : null,
+    branch: worktree?.branch ?? '',
     depth
   }
 }

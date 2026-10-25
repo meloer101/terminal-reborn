@@ -75,8 +75,8 @@ describe('buildSidebarGroups', () => {
       ]
     })
     const [a, b, c] = group?.rows ?? []
-    expect(a).toMatchObject({ secondary: '编辑 a.ts', attention: false, stat: { added: 3, removed: 1 } })
-    expect(b).toMatchObject({ secondary: 'x/two', stat: null })
+    expect(a).toMatchObject({ secondary: '编辑 a.ts', attention: false, stat: { added: 3, removed: 1 }, branch: 'x/one' })
+    expect(b).toMatchObject({ secondary: '', stat: null, branch: 'x/two' })
     expect(c).toMatchObject({ secondary: '/a', stat: null })
   })
 

@@ -1,8 +1,11 @@
+import { GitBranch } from 'lucide-react'
 import { memo, useEffect, useRef, type PointerEvent } from 'react'
+import { agentName } from '@shared/agents'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
 import { SessionPrTag } from '../pull-requests/PrTag'
 import { TodoLine } from '../session-meta/MetaChips'
+import { AgentIcon } from '../ui/AgentIcon'
 import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { showsTime } from './format-elapsed'
@@ -23,7 +26,7 @@ interface Props {
   onContextMenu?(id: string, anchor: MenuAnchor): void
 }
 
-/** Figma component `SessionRow` (11:51): 52px, glyph · title/activity (+ ports, PR) · time/diff. */
+/** Figma component `SessionRow` (11:51, 27A): glyph · title / activity (+ ports, PR) / agent mark · branch · time / diff. */
 export const SessionRow = memo(function SessionRow({ row, selected, shown = false, onPress, tabStop, onSelect, onContextMenu }: Props) {
   const { session, secondary, attention, stat } = row
   const ref = useRef<HTMLDivElement>(null)
@@ -72,6 +75,15 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
           <span className={styles.activity}>{secondary}</span>
           <PortTags sessionId={session.id} />
           <SessionPrTag sessionId={session.id} />
+        </span>
+        <span className={styles.whereLine} title={row.branch ? `${agentName(session.kind)} · ${row.branch}` : agentName(session.kind)}>
+          <AgentIcon kind={session.kind} size={12} />
+          {row.branch && (
+            <>
+              <GitBranch className={styles.branchIcon} size={12} strokeWidth={1.75} aria-hidden />
+              <span className={styles.branch}>{row.branch}</span>
+            </>
+          )}
         </span>
       </span>
       <span className={styles.meta}>

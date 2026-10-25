@@ -79,12 +79,35 @@
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
+  /* A row with nothing to say yet keeps its height. */
+  min-height: 16px;
 }
 
 .activity {
   flex: 1;
   font: var(--text-caption);
   color: var(--text-secondary);
+}
+
+/* Which agent runs here and on which branch (Figma 27A). */
+.whereLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.branchIcon {
+  flex: none;
+}
+
+.branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row[data-attention='true'] .activity {
