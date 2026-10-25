@@ -3,11 +3,10 @@
 // No task description: the user types the first message in the terminal. Text appears only when something is limited
 // or wrong (15E, 15F). Glass material from PRD §5; solid under "reduce transparency".
 // 智能体 (Figma 24A, PRD F4 v1.68): a pop-up menu — 已安装 (Claude Code and Codex always, the other CLIs when found, each
-// with its version) and 其他 (终端, 多个智能体一起做); remembered per project; the hint says how many are not installed.
-// 多个 (一题多解, PRD F4 v1.59; no Figma frame yet): 份数 per agent and the one 任务 they all get; 创建 N 个并发送
-// makes N worktrees off 基于 and sends the task to each — the button and the note under the task say exactly that.
+// with its version) and 其他 (终端); remembered per project; the hint says how many are not installed. Several agents
+// on one task start from a session instead (同任务多解, attempts/SameTaskSheet).
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, CircleAlert, GitBranch, GitFork, Globe, Minus, Plus } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, CircleAlert, GitBranch, GitFork, Globe } from 'lucide-react'
 import {
   defaultBase,
   generateBranchName,
@@ -16,23 +15,9 @@ import {
   type NewSessionInfo,
   type Workdir
 } from '@shared/new-session'
-import {
-  AGENT_NAME,
-  attemptBranchesText,
-  attemptButtonLabel,
-  attemptKinds,
-  attemptSendNote,
-  MAX_ATTEMPT_PROMPT,
-  planAttempts,
-  stepCount,
-  type AttemptAgent,
-  type AttemptCounts,
-  type AttemptPlanProblem
-} from '@shared/attempt-groups'
 import { AGENT_SPECS, agentName, CLI_AGENTS } from '@shared/agents'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
 import type { AgentKind, ProjectId } from '@shared/types'
-import { runAttemptPlan } from '../attempts/actions'
 import { Toggle } from '../settings/controls'
 import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
@@ -44,12 +29,7 @@ import styles from './NewSessionSheet.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
-/** 多个 = 一题多解: several agents, one task. */
-type KindChoice = AgentKind | 'multi'
-
-const MULTI_LABEL = '多个智能体一起做'
-
-const isKindChoice = (value: string): value is KindChoice => value === 'multi' || value === 'shell' || (CLI_AGENTS as readonly string[]).includes(value)
+const isKindChoice = (value: string): value is AgentKind => value === 'shell' || (CLI_AGENTS as readonly string[]).includes(value)
 
 /** 已安装: Claude Code and Codex always (a missing one says so in the terminal), every other CLI only when it is on PATH. */
 export function listedAgents(found: AgentAvailability | null): AgentKind[] {
@@ -85,15 +65,11 @@ function Sheet() {
   const [baseChoice, setBaseChoice] = useState<string | null>(null)
   const [branchInput, setBranchInput] = useState<string | null>(null)
   const rememberedAgents = useWorkspace((s) => s.newSessionAgent)
-  const [kindChoice, setKindChoice] = useState<KindChoice | null>(null)
-  const kind: KindChoice = kindChoice ?? (projectId ? rememberedAgents[projectId] : undefined) ?? 'claude'
+  const [kindChoice, setKindChoice] = useState<AgentKind | null>(null)
+  const kind: AgentKind = kindChoice ?? (projectId ? rememberedAgents[projectId] : undefined) ?? 'claude'
   const setKind = setKindChoice
-  const [counts, setCounts] = useState<AttemptCounts>({ claude: 2, codex: 0 })
   const [found, setFound] = useState<AgentAvailability | null>(null)
   const [versions, setVersions] = useState<AgentVersions>({})
-  const codexInstalled = found?.codex !== false
-  const [task, setTask] = useState('')
-  const taskRef = useRef<HTMLTextAreaElement>(null)
   const [prepareChoice, setPrepareChoice] = useState(true)
   const [advanced, setAdvanced] = useState(false)
   const [menu, setMenu] = useState<{ kind: 'project' | 'base' | 'agent'; anchor: HTMLElement } | null>(null)
@@ -115,16 +91,11 @@ function Sheet() {
 
   useEffect(() => sheetRef.current?.focus(), [])
 
-  // 多个 starts as Claude ×2 · Codex ×1 when Codex is there (the comparison worth making), else Claude ×2.
   useEffect(() => {
     let cancelled = false
     void window.tr.app
       .detectAgents()
-      .then((next) => {
-        if (cancelled) return
-        setFound(next)
-        if (next.codex) setCounts((c) => (c.claude === 2 && c.codex === 0 ? { claude: 2, codex: 1 } : c))
-      })
+      .then((next) => !cancelled && setFound(next))
       .catch(() => {})
     void window.tr.app
       .agentVersions()
@@ -141,36 +112,18 @@ function Sheet() {
     [info]
   )
 
-  const multi = kind === 'multi' && !notRepo
-  const workdir: Workdir = notRepo ? 'current' : multi ? 'worktree' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
+  const workdir: Workdir = notRepo ? 'current' : (workdirChoice ?? initialWorkdir(remembered, projectId ?? '', true))
   const base = baseChoice ?? (info ? defaultBase(info) : null)
   const branch = branchInput ?? generated
   const prepare = prepareChoice && ((info?.includeCount ?? 0) > 0 || info?.hasSetup === true)
   const form = { workdir, base, branch, prepare }
   const result = project ? planCreate(project.rootPath, info, form) : null
   const baseBranch = info ? selectedBase(info, form) : null
-  // 多个 makes new branches off 基于 even when it is out in a worktree.
-  const elsewhere = !multi && workdir === 'worktree' && isElsewhere(baseBranch) ? baseBranch : null
-  const kinds = attemptKinds(counts)
-  const attempts =
-    multi && project && info && baseBranch
-      ? planAttempts({
-          root: project.rootPath,
-          base: baseBranch.name,
-          stem: branch,
-          counts,
-          prompt: task,
-          prepare,
-          branches: info.branches,
-          worktreesDir: info.worktreesDir,
-          takenFolders: info.takenFolders
-        })
-      : null
-  const problem = multi ? (attempts?.problem ?? null) : (result?.problem ?? null)
+  const elsewhere = workdir === 'worktree' && isElsewhere(baseBranch) ? baseBranch : null
+  const problem = result?.problem ?? null
   const branchProblem = problem === 'exists' || problem === 'invalid' || problem === 'empty' ? problem : null
   const showAdvanced = !!info?.repo && workdir === 'worktree' && !elsewhere
-  const canCreate = multi ? attempts?.members != null : !!result?.plan
-  const sendNote = multi ? attemptSendNote(kinds, baseBranch?.name ?? null) : null
+  const canCreate = !!result?.plan
   const advancedOpen = advanced || branchProblem !== null
 
   const chooseProject = (id: ProjectId): void => {
@@ -183,14 +136,7 @@ function Sheet() {
   }
 
   const create = (): void => {
-    if (multi) {
-      if (!project || !baseBranch || !attempts?.members) return
-      closeNewSessionSheet(false)
-      useWorkspace.getState().rememberWorkdir(project.id, 'worktree')
-      runAttemptPlan(project.id, baseBranch.name, task, attempts.members)
-      return
-    }
-    if (!project || !result?.plan || kind === 'multi') return
+    if (!project || !result?.plan) return
     closeNewSessionSheet(false)
     // A choice made before the git state arrived still counts; only a folder known not to be a repo is not remembered.
     runCreatePlan(project.id, result.plan, kind, workdir, !notRepo)
@@ -225,7 +171,7 @@ function Sheet() {
     (query: string): SheetMenuSection[] => {
       const q = query.trim().toLowerCase()
       const matches = (label: string): boolean => q === '' || label.toLowerCase().includes(q)
-      const check = (value: KindChoice) => (value === kind ? <Check {...ICON} /> : null)
+      const check = (value: AgentKind) => (value === kind ? <Check {...ICON} /> : null)
       const installed = listedAgents(found)
         .filter((id) => matches(agentName(id)) || (id !== 'shell' && matches(AGENT_SPECS[id].binary)))
         .map((id) => ({
@@ -234,16 +180,13 @@ function Sheet() {
           icon: check(id),
           meta: id !== 'shell' && found && found[id] === false ? '没装' : (id !== 'shell' ? (versions[id] ?? undefined) : undefined)
         }))
-      const others = [
-        { value: 'shell', label: '终端', icon: check('shell') },
-        ...(notRepo ? [] : [{ value: 'multi', label: `${MULTI_LABEL}…`, icon: check('multi'), meta: '一题多解' }])
-      ].filter((item) => matches(item.label))
+      const others = [{ value: 'shell', label: '终端', icon: check('shell') }].filter((item) => matches(item.label))
       return [
         { title: '已安装', items: installed },
         { title: '其他', items: others }
       ]
     },
-    [found, versions, kind, notRepo]
+    [found, versions, kind]
   )
   const missingAgents = found ? CLI_AGENTS.filter((id) => !found[id]).length : 0
 
@@ -313,7 +256,7 @@ function Sheet() {
             <Segmented
               label="工作目录"
               value={workdir}
-              options={WORKDIRS.map((o) => ({ ...o, disabled: (o.value === 'worktree' && notRepo) || (o.value === 'current' && multi) }))}
+              options={WORKDIRS.map((o) => ({ ...o, disabled: o.value === 'worktree' && notRepo }))}
               onChange={setWorkdirChoice}
             />
           </Field>
@@ -334,44 +277,9 @@ function Sheet() {
             </Field>
           )}
 
-          <Field label="智能体" note={kind === 'multi' && notRepo ? '多个 agent 各用一个新 worktree，这个文件夹不是 git 仓库' : null}>
-            <SelectButton
-              label="智能体"
-              value={kind === 'multi' ? MULTI_LABEL : agentName(kind)}
-              expanded={menu?.kind === 'agent'}
-              onClick={(anchor) => toggleMenu('agent', anchor)}
-            />
+          <Field label="智能体">
+            <SelectButton label="智能体" value={agentName(kind)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
           </Field>
-
-          {multi && (
-            <>
-              <Field label="份数" error={countProblemText(problem)}>
-                <div className={styles.counts}>
-                  {(['claude', 'codex'] as const).map((agent) => (
-                    <Counter
-                      key={agent}
-                      agent={agent}
-                      value={counts[agent]}
-                      disabledReason={agent === 'codex' && !codexInstalled ? '没有找到 codex 命令' : null}
-                      onStep={(delta) => setCounts((c) => stepCount(c, agent, delta))}
-                    />
-                  ))}
-                </div>
-              </Field>
-              <Field label="任务" note={sendNote} error={problem === 'prompt-too-long' ? `最多 ${MAX_ATTEMPT_PROMPT} 个字` : null}>
-                <textarea
-                  ref={taskRef}
-                  className={styles.textarea}
-                  aria-label="任务"
-                  value={task}
-                  rows={3}
-                  spellCheck={false}
-                  placeholder="发给每个 agent 的同一段话"
-                  onChange={(event) => setTask(event.currentTarget.value)}
-                />
-              </Field>
-            </>
-          )}
 
           {showAdvanced && (
             <button
@@ -382,7 +290,7 @@ function Sheet() {
               disabled={branchProblem !== null}
             >
               <span className={styles.label}>高级</span>
-              {!advancedOpen && <span className={styles.advancedBranch}>{multi ? attemptBranchesText(branch, kinds.length) : branch}</span>}
+              {!advancedOpen && <span className={styles.advancedBranch}>{branch}</span>}
               <span className={styles.spacer} />
               {advancedOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
             </button>
@@ -392,8 +300,7 @@ function Sheet() {
             <>
               <Field
                 label="分支名"
-                error={multi ? attemptBranchProblemText(branchProblem, branch, kinds.length) : branchProblemText(branchProblem, branch)}
-                note={multi && !branchProblem ? `每份一个分支：${attemptBranchesText(branch, kinds.length)}` : null}
+                error={branchProblemText(branchProblem, branch)}
               >
                 <input
                   className={styles.input}
@@ -408,9 +315,7 @@ function Sheet() {
               </Field>
               <Field label="文件夹">
                 <span className={styles.path} title={folderPath}>
-                  {multi && attempts?.members
-                    ? `${tilde(attempts.members[0]?.path ?? '', home)} 等 ${attempts.members.length} 个`
-                    : tilde(folderPath, home)}
+                  {tilde(folderPath, home)}
                 </span>
               </Field>
               <Field label="准备">
@@ -427,14 +332,8 @@ function Sheet() {
           <button type="button" className={styles.cancel} onClick={() => closeNewSessionSheet(true)}>
             取消
           </button>
-          <button
-            type="button"
-            className={styles.primary}
-            disabled={!canCreate}
-            title={multi ? (problem === 'prompt-empty' ? '先写要发给每个 agent 的任务' : (sendNote ?? undefined)) : undefined}
-            onClick={create}
-          >
-            {multi ? attemptButtonLabel(kinds.length) : '创建'}
+          <button type="button" className={styles.primary} disabled={!canCreate} onClick={create}>
+            创建
             <span className={styles.shortcut}>⌘↵</span>
           </button>
         </footer>
@@ -468,7 +367,6 @@ function Sheet() {
             if (!isKindChoice(value)) return
             setKind(value)
             closeMenu(true)
-            if (value === 'multi') requestAnimationFrame(() => taskRef.current?.focus())
           }}
           onClose={closeMenu}
         />
@@ -492,50 +390,11 @@ function Sheet() {
   )
 }
 
-function countProblemText(problem: AttemptPlanProblem | string | null): string | null {
-  return problem === 'too-few' ? '一共至少 2 份' : problem === 'too-many' ? '一共最多 4 份（总览里最多并排 4 个）' : null
-}
-
-function attemptBranchProblemText(problem: 'exists' | 'invalid' | 'empty' | null, stem: string, count: number): string | null {
-  if (problem === 'exists') return `${attemptBranchesText(stem, count)} 里有分支已经存在，换个名字`
-  return branchProblemText(problem, stem)
-}
-
-/** 份数: `Claude Code − 2 +`. */
-function Counter({
-  agent,
-  value,
-  disabledReason,
-  onStep
-}: {
-  agent: AttemptAgent
-  value: number
-  disabledReason: string | null
-  onStep: (delta: 1 | -1) => void
-}) {
-  const name = AGENT_NAME[agent]
-  const disabled = disabledReason !== null
-  return (
-    <span className={styles.counter} role="group" aria-label={`${name} 份数`} title={disabledReason ?? undefined} data-disabled={disabled}>
-      <span className={styles.counterName}>{name}</span>
-      <button type="button" className={styles.step} aria-label={`${name} 少一份`} disabled={value === 0} onClick={() => onStep(-1)}>
-        <Minus size={14} strokeWidth={1.75} aria-hidden />
-      </button>
-      <span className={styles.countValue} aria-live="polite">
-        {value}
-      </span>
-      <button type="button" className={styles.step} aria-label={`${name} 多一份`} disabled={disabled} onClick={() => onStep(1)}>
-        <Plus size={14} strokeWidth={1.75} aria-hidden />
-      </button>
-    </span>
-  )
-}
-
 function notRepoText(loaded: LoadedInfo | undefined): string {
   return loaded === 'error' ? '读不出这个文件夹的 git 状态，只能在当前目录里开' : '这个文件夹不是 git 仓库，只能在当前目录里开'
 }
 
-function Field({
+export function Field({
   label,
   children,
   note,
@@ -567,7 +426,7 @@ function Field({
   )
 }
 
-function SelectButton({
+export function SelectButton({
   label,
   value,
   expanded,

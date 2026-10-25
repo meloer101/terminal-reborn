@@ -1,11 +1,14 @@
-// 一题多解 (PRD F4 / F9 v1.59): what 创建 N 个并发送 does, and what the group offers afterwards. The sheet closes at
-// once and every member appears in the sidebar; the overview opens with the members side by side. In the background
-// the worktrees are created one after another (git locks the repository's config and refs), each member's agent
-// starts as soon as its folder is there — shown or not — and the prompt is typed and submitted once that agent is up
-// (PRD §6.9). The user asked for exactly this by pressing the button, whose text says what is sent to whom (§2).
-import { groupOfSession, remainingMembers, type AttemptGroup, type AttemptMemberPlan } from '@shared/attempt-groups'
+// 同任务多解 (PRD F4 v1.68): what 开 N 份并发送 does, and what the group offers afterwards. The dialog closes at once and
+// every member appears in the sidebar under the session the task came from (they are its dispatched sessions, F21);
+// the overview opens with the members side by side. In the background the worktrees are created one after another
+// (git locks the repository's config and refs); each member's agent starts as soon as its folder is there — shown or
+// not — with Wavi's brief and the task on its command line, or typed once it is up for a CLI that takes no first
+// message there (PRD §6.9). The user asked for exactly this by pressing the button (§2).
+import { attemptBrief, groupOfSession, memberTitle, remainingMembers, type AttemptGroup, type AttemptMemberPlan } from '@shared/attempt-groups'
+import { promptOnCommandLine } from '@shared/agent-launch'
 import type { ProjectId, SessionId } from '@shared/types'
 import { archiveTargetFor, archiveWorktree } from '../archive/actions'
+import { setLaunch } from '../dispatch/store'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
 import { setTab } from '../panels/git/store'
 import { openMergeSheet, targetFor } from '../panels/merge/store'
@@ -13,41 +16,54 @@ import { enterSession, showCompare, useOverviewStore } from '../overview/store'
 import { submitPrompt, whenAgentReady } from '../session-io'
 import { addAttemptGroup, newGroupId, setMemberLaunch, useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
-import { titleFromFirstPrompt } from '../state/workspace-model'
 
 /** A new worktree's agent may first ask to trust the folder; the user answers in its terminal meanwhile. */
 const READY_TIMEOUT_MS = 5 * 60_000
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
+/** The session the task came from: the members hang under it and it gets their report. */
+export interface AttemptParent {
+  id: SessionId
+  title: string
+}
+
+const briefFor = (group: Pick<AttemptGroup, 'prompt' | 'base' | 'members'>, parentTitle: string, branch: string): string =>
+  attemptBrief({ task: group.prompt, parentTitle, count: group.members.length, branch, base: group.base })
+
 /** Adds the members, opens the overview on them and starts the launch. Returns the group's id. */
-export function runAttemptPlan(projectId: ProjectId, base: string, prompt: string, members: readonly AttemptMemberPlan[]): string | null {
+export function runAttemptPlan(projectId: ProjectId, base: string, prompt: string, members: readonly AttemptMemberPlan[], parent: AttemptParent): string | null {
   const ids: SessionId[] = []
+  const placed: AttemptMemberPlan[] = []
   for (const member of members) {
     const id = useWorkspace
       .getState()
       .addBackgroundSession(projectId, { path: member.path, branch: member.request.branch, baseBranch: member.request.base }, member.kind)
     if (!id) continue
-    // Every member is named after the task right away, like a session after its first prompt (PRD F2).
-    const session = useWorkspace.getState().sessions.find((s) => s.id === id)
-    const title = session && titleFromFirstPrompt(session, prompt)
-    if (title) useWorkspace.getState().patchSession(id, { title, titleSource: 'prompt' })
+    useWorkspace.getState().patchSession(id, { title: memberTitle(parent.title, member.label), titleSource: 'prompt', dispatchedBy: parent.id, dispatchTask: prompt })
+    ids.push(id)
+    placed.push(member)
+  }
+  if (ids.length === 0) return null
+  const group: AttemptGroup = { id: newGroupId(), prompt, base, createdAt: Date.now(), members: ids, reportTo: parent.id }
+  for (const [i, id] of ids.entries()) {
+    const member = placed[i]!
+    // On the command line the CLI submits it itself; nothing is typed into a starting TUI (PRD F21).
+    if (promptOnCommandLine(member.kind)) setLaunch(id, { initialPrompt: briefFor(group, parent.title, member.request.branch) })
     // Held until its own worktree exists: they are created one after another.
     holdForWorktree(id)
     setMemberLaunch(id, { phase: 'creating' })
     startEagerly(id)
-    ids.push(id)
   }
-  if (ids.length === 0) return null
-  const group: AttemptGroup = { id: newGroupId(), prompt, base, createdAt: Date.now(), members: ids }
   addAttemptGroup(group)
   showCompare(group.id, ids)
   void (async () => {
     for (const [i, id] of ids.entries()) {
-      const member = members[i]!
+      const member = placed[i]!
       const created = await createWorktreeFor(id, member.kind, member.request)
-      if (created) void deliver(id, prompt)
-      else setMemberLaunch(id, { phase: 'failed', message: '没能创建 worktree，没有发送' })
+      if (!created) setMemberLaunch(id, { phase: 'failed', message: '没能创建 worktree，没有发送' })
+      else if (promptOnCommandLine(member.kind)) setMemberLaunch(id, { phase: 'sent' })
+      else void deliver(id, briefFor(group, parent.title, member.request.branch))
     }
   })()
   return group.id
@@ -66,10 +82,15 @@ async function deliver(id: SessionId, prompt: string): Promise<void> {
   }
 }
 
-/** 再发一次 after a failed send: the group's prompt again, to this member only. */
+/** 再发一次 after a failed send: the brief and task again, typed into this member only. */
 export function resend(id: SessionId): void {
   const group = groupOfSession(useAttemptGroups.getState().groups, id)
-  if (group) void deliver(id, group.prompt)
+  if (!group) return
+  const state = useWorkspace.getState()
+  const session = state.sessions.find((s) => s.id === id)
+  const branch = state.worktrees.find((w) => w.id === session?.worktreeId)?.branch ?? ''
+  const parent = group.reportTo ? state.sessions.find((s) => s.id === group.reportTo) : undefined
+  void deliver(id, group.reportTo ? briefFor(group, parent?.title ?? '', branch) : group.prompt)
 }
 
 /** 看 diff: the member's session with Git · 变更 open (PRD F5). */
@@ -119,7 +140,7 @@ export async function archiveRemaining(group: AttemptGroup): Promise<{ confirmed
   const left = remainingBranches(group)
   if (left.length === 0) return { confirmed: false, failures: [] }
   const ok = await window.tr.ui.confirm({
-    message: `归档一题多解剩下的 ${left.length} 份？`,
+    message: `归档同任务多解剩下的 ${left.length} 份？`,
     detail: `${left.map((m) => m.branch).join('、')}\n停止它们的 agent，存下工作区（含未提交的改动）后从列表里收起；可以在跳转（⌘K）的历史里恢复。`.slice(0, 480),
     confirmLabel: `归档 ${left.length} 份`,
     cancelLabel: '取消'

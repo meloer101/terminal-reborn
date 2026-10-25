@@ -1,8 +1,9 @@
-// Runs the app menu's commands (B8) and the shortcuts that only the menu table defines (⌘B, ⇧⌘B, ⇧⌘M, and the
+// Runs the app menu's commands (B8) and the shortcuts that only the menu table defines (⌘B, ⇧⌘B, ⇧⌘M, ⇧⌘N, and the
 // split's ⌘D, ⇧⌘D, ⌥⌘W, ⌥⌘ arrows — PRD F20). They act in the window with the keyboard (F20 · 多窗口); the ones that
 // only the main window has (overview, right panel, merge sheet) bring the main window forward first.
 import type { MenuCommand } from '@shared/shortcuts'
 import { MAIN_WINDOW, type WindowKey } from '@shared/window-layout'
+import { openSameTaskForActive } from '../attempts/same-task-store'
 import { toggleCommandPalette } from '../command-palette/palette-store'
 import { toggleOverview } from '../overview/store'
 import { jumpToNextAttention } from '../sidebar/shortcuts-runtime'
@@ -39,6 +40,7 @@ const RUN: Record<MenuCommand, () => void> = {
   'toggle-right-panel': inMainWindow(() => useWorkspace.getState().toggleRightPanel()),
   // The sheet is for the session the keyboard is in; it shows in the main window (secondary-windows.tsx).
   'merge-worktree': openMergeForActiveSession,
+  'same-task': openSameTaskForActive,
   'split-right': () => splitFocusedPane('right'),
   'split-down': () => splitFocusedPane('bottom'),
   'close-pane': closeFocusedPane,
@@ -64,7 +66,7 @@ const PANE_ARROWS: Record<string, MenuCommand> = {
   ArrowDown: 'focus-pane-down'
 }
 
-/** ⌘B, ⇧⌘B, ⇧⌘M and the split's keys, in the capture phase so they work while the terminal has focus. */
+/** ⌘B, ⇧⌘B, ⇧⌘M, ⇧⌘N and the split's keys, in the capture phase so they work while the terminal has focus. */
 function keyCommand(e: KeyboardEvent): MenuCommand | null {
   if (!e.metaKey || e.ctrlKey) return null
   if (e.altKey) {
@@ -74,6 +76,7 @@ function keyCommand(e: KeyboardEvent): MenuCommand | null {
   }
   if (e.code === 'KeyB') return e.shiftKey ? 'toggle-right-panel' : 'toggle-sidebar'
   if (e.code === 'KeyM' && e.shiftKey) return 'merge-worktree'
+  if (e.code === 'KeyN' && e.shiftKey) return 'same-task'
   if (e.code === 'KeyD') return e.shiftKey ? 'split-down' : 'split-right'
   return null
 }

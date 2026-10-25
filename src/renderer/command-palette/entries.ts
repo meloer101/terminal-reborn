@@ -17,6 +17,7 @@ export type ActionId =
   | 'new-codex'
   | 'new-shell'
   | 'open-project'
+  | 'same-task'
   | 'toggle-sidebar'
   | 'toggle-overview'
   | 'toggle-right-panel'
@@ -24,7 +25,7 @@ export type ActionId =
   | 'theme-dark'
   | 'theme-light'
 
-export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun' | 'archive'
+export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun' | 'archive' | 'compare'
 
 export type PaletteTarget =
   | { type: 'session'; sessionId: SessionId }
@@ -114,6 +115,7 @@ export function buildSessionEntries(input: PaletteInput): PaletteEntry[] {
 const ACTION_SHORTCUT: Partial<Record<ActionId, string>> = {
   'new-session': SHORTCUTS['new-session'],
   'open-project': SHORTCUTS['open-project'],
+  'same-task': SHORTCUTS['same-task'],
   'toggle-overview': SHORTCUTS['toggle-overview'],
   'toggle-sidebar': SHORTCUTS['toggle-sidebar'],
   'toggle-right-panel': SHORTCUTS['toggle-right-panel']
@@ -154,6 +156,11 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
       action('new-codex', '新建 Codex 会话', 'plus', 'new codex session', project.name),
       action('new-shell', '新建终端', 'plus', 'new shell terminal session zhongduan', project.name)
     )
+  }
+  // 同任务多解 (PRD F4 v1.68) from the session with the keyboard: an agent session's.
+  const active = input.sessions.find((s) => s.id === input.activeSessionId)
+  if (active && active.kind !== 'shell') {
+    entries.push(action('same-task', '同任务多解…', 'compare', 'best of n attempts compare same task 一题多解 再开几份 tongrenwu duojie', active.title))
   }
   entries.push(
     action('open-project', '打开项目…', 'folder-plus', 'open add project folder'),

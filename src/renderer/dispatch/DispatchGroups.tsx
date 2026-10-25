@@ -1,5 +1,5 @@
-// 派出的会话 in the overview (PRD F21; no Figma frame yet — drawn like the 一题多解 section): one row per dispatcher
-// with sessions still open, its name and each session it started as status glyph and name, then 比较 to put them
+// 派出的会话 in the overview (PRD F21; no Figma frame yet — drawn like the 同任务多解 section): one row per dispatcher
+// with sessions still open (同任务多解's members have their own row there, so not here), its name and each session it started as status glyph and name, then 比较 to put them
 // side by side. Clicking a name goes to that session. Status is the glyph's shape plus text, never color alone.
 import { useMemo } from 'react'
 import { Split } from 'lucide-react'
@@ -9,6 +9,7 @@ import { glyphStatus } from '../lifecycle/present'
 import { GROUP_LABEL } from '../overview/model'
 import { enterSession, showCompare } from '../overview/store'
 import enterStyles from '../overview/EnterButton.module.css'
+import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from '../attempts/AttemptGroups.module.css'
@@ -23,14 +24,16 @@ interface Group {
 
 export function DispatchGroups() {
   const { sessions, worktrees } = useWorkspace(useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees })))
+  const attempts = useAttemptGroups((s) => s.groups)
   const groups = useMemo((): Group[] => {
     const archived = new Set(worktrees.filter((w) => w.archived).map((w) => w.id))
+    const inAttempts = new Set(attempts.flatMap((g) => g.members))
     const open = sessions.filter((s) => !archived.has(s.worktreeId))
     return open.flatMap((parent) => {
-      const children = open.filter((s) => s.dispatchedBy === parent.id)
+      const children = open.filter((s) => s.dispatchedBy === parent.id && !inAttempts.has(s.id))
       return children.length > 0 ? [{ parent, children }] : []
     })
-  }, [sessions, worktrees])
+  }, [sessions, worktrees, attempts])
   if (groups.length === 0) return null
   return (
     <section className={styles.section} aria-label="派出的会话" data-testid="dispatch-groups">

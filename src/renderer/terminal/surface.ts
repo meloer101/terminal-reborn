@@ -46,4 +46,9 @@ export interface TerminalSurface extends Disposable {
   onLink(listener: (link: TerminalLink) => void): Disposable
   /** Lets file paths in the output become links: the resolver says which are files of the session (PRD F17). */
   setPathResolver(resolver: PathResolver | null): void
+  /** The text selected in the terminal, '' when none. */
+  getSelection(): string
+  selectAll(): void
+  /** A right-click away from a link (the terminal's own menu: 复制 · 同任务多解… · 全选), in client coordinates. */
+  onContextMenu(listener: (at: { x: number; y: number }) => void): Disposable
 }

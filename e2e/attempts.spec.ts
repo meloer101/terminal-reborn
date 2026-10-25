@@ -1,9 +1,12 @@
-// 一题多解 + 广播 end to end (PRD F4 / F9 / F15 v1.59) on a real repository. Fake agents: two `claude` that run the
-// per-launch hooks (e2e/fake-hook-claude.ts) and a `codex` that only draws its UI; each logs what was typed into it
-// to `.fake-typed` in the folder it runs in. ⌘N · 智能体 · 多个 with Claude Code ×2 · Codex ×1 makes three worktrees off
-// main and sends the task to each exactly once; the overview compares them (diff, checks, compare bar); ⌘-picked rows
-// get one message only after the confirmation; 停止 sends Esc; merging one offers to archive the other two, which
-// happens only after its confirmation. Screenshots in both themes go to test-results/attempts/.
+// 同任务多解 + 广播 end to end (PRD F4 v1.68 / F9 / F15, Figma 26) on a real repository. Fake agents: `claude` that runs
+// the per-launch hooks (e2e/fake-hook-claude.ts) and a `codex` that only draws its UI; each logs its arguments to
+// `.fake-argv` and what was typed into it to `.fake-typed` in the folder it runs in. A Claude session says the task;
+// ⇧⌘N opens 同任务多解 with it, and Claude Code ×2 · Codex ×1 makes three worktrees off that session's branch, each
+// starting with the task on its command line, nested under the session in the sidebar; the overview compares them
+// (diff, checks, compare bar); ⌘-picked rows get one message only after the confirmation; 停止 sends Esc; once all
+// three stopped, the session gets one report (held for 送进去, as the fake has no inbox); merging one offers to
+// archive the other two, which happens only after its confirmation. Screenshots in both themes go to
+// test-results/attempts/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -15,12 +18,19 @@ const WITHIN = { timeout: 30_000 }
 const SHOTS = join(process.cwd(), 'test-results', 'attempts')
 const TASK = '把登录页改成两步'
 const BROADCAST = '先别改 API，只改界面'
+const PLAN = '1. 登录页拆成两步\n2. 补上两步的测试'
 
 // Draws a Codex-like screen (Wavi reads `OpenAI Codex` as its UI) and echoes and logs every byte typed.
 const FAKE_CODEX = `#!/usr/bin/env node
 const fs = require('node:fs')
+// Wavi's version check runs it from its own folder: answer and leave no files behind.
+if (process.argv[2] === '--version') {
+  process.stdout.write('codex-cli 9.9.9\\n')
+  process.exit(0)
+}
 const dir = process.cwd()
 fs.writeFileSync(dir + '/.fake-pid', String(process.pid))
+fs.writeFileSync(dir + '/.fake-argv', JSON.stringify(process.argv.slice(2)))
 process.stdout.write('OpenAI Codex (fake)\\r\\n\\r\\n› ')
 if (process.stdin.isTTY) process.stdin.setRawMode(true)
 process.stdin.on('data', (d) => {
@@ -35,7 +45,7 @@ type Dialogs = { requests: Array<{ message: string; detail?: string; confirmLabe
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(150_000)
 
-test.describe('一题多解 + 广播', () => {
+test.describe('同任务多解 + 广播', () => {
   const fake = fakeHookClaude('tr-e2e-attempts-')
   const home = join(fake.root, 'home')
   const project = join(fake.root, 'demo')
@@ -55,7 +65,8 @@ test.describe('一题多解 + 广播', () => {
   const count = (haystack: string, needle: string) => haystack.split(needle).length - 1
   const overview = () => page.locator('[data-region="overview"]')
   const overlay = () => page.locator('[data-region="overview-overlay"]')
-  const sheet = () => page.getByTestId('new-session-sheet')
+  const sheet = () => page.getByTestId('same-task-sheet')
+  const argv = (dir: string) => (existsSync(join(dir, '.fake-argv')) ? (JSON.parse(readFileSync(join(dir, '.fake-argv'), 'utf8')) as string[]).join('\n') : '')
   const sidebar = () => page.locator('[data-region="sidebar"]')
   const dialogs = () => app.evaluate(() => (globalThis as unknown as { __trDialogs: Dialogs }).__trDialogs.requests)
   const answerDialogs = (answer: boolean) =>
@@ -99,8 +110,11 @@ test.describe('一题多解 + 广播', () => {
         version: 2,
         projects: [{ id: 'p1', name: 'demo', rootPath: project }],
         worktrees: [{ id: 'w-main', projectId: 'p1', branch: 'main', path: project, isMain: true }],
-        sessions: [{ id: 's-shell', worktreeId: 'w-main', kind: 'shell', title: '终端', startedAt: 1, lastActivityAt: 1 }],
-        activeSessionId: 's-shell',
+        sessions: [
+          { id: 's-orig', worktreeId: 'w-main', kind: 'claude', title: '登录改版', startedAt: 1, lastActivityAt: 1 },
+          { id: 's-shell', worktreeId: 'w-main', kind: 'shell', title: '终端', startedAt: 1, lastActivityAt: 1 }
+        ],
+        activeSessionId: 's-orig',
         sidebarCollapsed: false,
         drafts: {}
       })
@@ -113,7 +127,7 @@ test.describe('一题多解 + 广播', () => {
 
   test.afterAll(async () => {
     await app?.close().catch(() => {})
-    for (const dir of folders) {
+    for (const dir of [...folders, project]) {
       const pid = existsSync(join(dir, '.fake-pid')) ? Number(readFileSync(join(dir, '.fake-pid'), 'utf8')) : 0
       try {
         if (pid) process.kill(pid, 'SIGTERM')
@@ -123,33 +137,70 @@ test.describe('一题多解 + 广播', () => {
     }
   })
 
-  test('智能体 · 多个 asks for 份数 and one task, and the button says what it sends to whom', async () => {
+  test('the plan bar opens 同任务多解 from the plan; what was said in the session is the other source', async () => {
+    // The new-session sheet no longer offers several agents at once.
     await page.keyboard.press('Meta+N')
-    await expect(sheet()).toBeVisible()
-    await sheet().getByRole('button', { name: '智能体' }).click()
-    await page.getByRole('listbox', { name: '智能体' }).getByRole('option', { name: /多个智能体一起做/ }).click()
-    await expect(sheet().getByRole('group', { name: 'Claude Code 份数' })).toContainText('2', WITHIN)
-    // Codex is on the PATH, so the default compares it with Claude.
-    await expect(sheet().getByRole('group', { name: 'Codex 份数' })).toContainText('1', WITHIN)
-    const create = sheet().getByRole('button', { name: /^创建 3 个并发送/ })
-    await expect(create).toBeDisabled()
-    // 当前目录 cannot hold several attempts.
-    await expect(sheet().getByRole('radio', { name: '当前目录' })).toBeDisabled()
-    await sheet().getByRole('textbox', { name: '任务' }).fill(TASK)
-    await expect(create).toBeEnabled()
-    await expect(sheet()).toContainText('新建 3 个 worktree（基于 main），各启动一个 agent，把这段话发给每一个并按回车：Claude Code ×2 · Codex ×1。')
-    // One more Claude, then back: the label follows.
+    const newSession = page.getByTestId('new-session-sheet')
+    await expect(newSession).toBeVisible()
+    await newSession.getByRole('button', { name: '智能体' }).click()
+    await expect(page.getByRole('listbox', { name: '智能体' }).getByRole('option', { name: '终端' })).toBeVisible()
+    await expect(page.getByRole('listbox', { name: '智能体' }).getByRole('option', { name: /多个/ })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await expect(newSession).toBeHidden()
+
+    // The session's agent hears the task (its prompt hook), then 同任务多解 starts from it.
+    await expect.poll(() => (existsSync(join(project, '.fake-pid')) ? 1 : 0), WITHIN).toBe(1)
+    step(project, { hook: 'UserPromptSubmit', payload: { prompt: TASK } })
+    step(project, { hook: 'Stop', payload: { last_assistant_message: '先看看。' } })
+    // Its agent writes a plan and waits for it to be approved: the bar under the terminal offers 同任务多解.
+    step(project, { hook: 'PreToolUse', payload: { tool_name: 'ExitPlanMode', tool_input: { plan: PLAN } } })
+    const planBar = page.getByTestId('plan-strip')
+    await expect(planBar).toContainText('Claude Code 写好了计划', WITHIN)
+    await expect(planBar).toContainText('1. 登录页拆成两步')
+    await shoot('plan-strip')
+    await planBar.getByRole('button', { name: /同任务多解/ }).click()
+    await expect(sheet()).toBeVisible(WITHIN)
+    await expect(sheet().getByRole('group', { name: '汇报给' })).toContainText('登录改版 · Claude Code')
+    await expect(sheet().getByRole('button', { name: '任务来自' })).toContainText('Claude Code 写好的计划')
+    await expect(sheet().getByRole('textbox', { name: '任务' })).toHaveValue(PLAN)
+    await sheet().getByRole('button', { name: '任务来自' }).click()
+    await page.getByRole('listbox', { name: '任务来自' }).getByRole('option', { name: /说过的 1 句话/ }).click()
+    await expect(sheet().getByRole('textbox', { name: '任务' })).toHaveValue(TASK)
+    // Approved in its TUI: the bar goes.
+    step(project, { hook: 'PostToolUse', payload: { tool_name: 'ExitPlanMode', tool_input: {}, tool_response: {} } })
+    await expect(planBar).toHaveCount(0, WITHIN)
+    await expect(sheet().getByRole('button', { name: '基于' })).toContainText('main（原会话）', WITHIN)
+    // The session's agent first, then the other installed ones, one part each.
+    await expect(sheet().getByRole('group', { name: 'Claude Code 份数' })).toContainText('1', WITHIN)
+    await expect(sheet().getByRole('group', { name: 'Codex 份数' })).toContainText('1')
+    // CLIs installed on this machine beyond the fakes (the login shell's PATH) are not part of this test.
+    const rows = await sheet()
+      .getByRole('group', { name: /^.+ 份数$/ })
+      .evaluateAll((els) => els.map((el) => (el as unknown as { getAttribute(name: string): string | null }).getAttribute('aria-label') ?? ''))
+    for (const label of rows) {
+      const agent = label.replace(/ 份数$/, '')
+      if (agent !== 'Claude Code' && agent !== 'Codex') await sheet().getByRole('button', { name: `${agent} 少一份` }).click()
+    }
+    // A row stepped down to 0 leaves the list.
+    for (const label of rows) if (!['Claude Code 份数', 'Codex 份数'].includes(label)) await expect(sheet().getByRole('group', { name: label })).toHaveCount(0)
+    await expect(sheet().getByRole('button', { name: /^开 2 份并发送/ })).toBeEnabled()
     await sheet().getByRole('button', { name: 'Claude Code 多一份' }).click()
-    await expect(sheet().getByRole('button', { name: /^创建 4 个并发送/ })).toBeVisible()
-    await expect(sheet().getByRole('button', { name: 'Codex 多一份' })).toBeEnabled()
-    await sheet().getByRole('button', { name: 'Claude Code 少一份' }).click()
-    await sheet().getByRole('button', { name: '高级' }).click()
-    await expect(sheet().getByRole('group', { name: '分支名' })).toContainText(/每份一个分支：jacob\/[a-z]+-[a-z]+-1 … -3/)
+    await expect(sheet().getByRole('button', { name: /^开 3 份并发送/ })).toBeEnabled()
+    // 加一个智能体 lists what is installed and how many each has.
+    await sheet().getByRole('button', { name: '加一个智能体' }).click()
+    const menu = page.getByRole('listbox', { name: '加一个智能体' })
+    await expect(menu.getByRole('option', { name: /Claude Code.*已有 2 份/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    // An emptied task cannot be sent.
+    await sheet().getByRole('textbox', { name: '任务' }).fill('')
+    await expect(sheet().getByRole('button', { name: /^开 3 份并发送/ })).toBeDisabled()
+    await sheet().getByRole('textbox', { name: '任务' }).fill(TASK)
     await shoot('sheet')
   })
 
-  test('创建 makes three worktrees off main, starts each agent and sends the task to each exactly once', async () => {
-    await sheet().getByRole('button', { name: /^创建 3 个并发送/ }).click()
+  test('开 3 份并发送 makes three worktrees off the session’s branch, each starting with the task once, nested under it', async () => {
+    await sheet().getByRole('button', { name: /^开 3 份并发送/ }).click()
     await expect(sheet()).toBeHidden()
     await expect(overview()).toBeVisible()
     await expect(overlay().getByTestId('attempt-compare')).toHaveCount(3, WITHIN)
@@ -160,16 +211,24 @@ test.describe('一题多解 + 广播', () => {
     folders = readdirSync(worktreesDir)
       .sort()
       .map((name) => join(worktreesDir, name))
-    for (const dir of folders) await expect.poll(() => typed(dir), { timeout: 60_000 }).toContain(`${TASK}<ENTER>`)
-    for (const dir of folders) expect(count(typed(dir), TASK)).toBe(1)
-    // Each on its own branch from main.
+    // On the command line, with Wavi's brief; nothing typed into the starting TUI.
+    for (const dir of folders) await expect.poll(() => argv(dir), { timeout: 60_000 }).toContain(TASK)
+    for (const dir of folders) {
+      expect(count(argv(dir), TASK)).toBe(1)
+      expect(argv(dir)).toContain('会话「登录改版」把同一个任务交给了 3 份')
+      expect(typed(dir)).not.toContain(TASK)
+    }
+    // Each on its own branch from main, numbered from 2.
     const branches = git(project, 'branch', '--format=%(refname:short)').trim().split('\n').filter((b) => b !== 'main')
     expect(branches).toHaveLength(3)
-    expect(branches.map((b) => b.slice(-2)).sort()).toEqual(['-1', '-2', '-3'])
+    expect(branches.map((b) => b.slice(-2)).sort()).toEqual(['-2', '-3', '-4'])
     for (const b of branches) expect(git(project, 'merge-base', 'main', b).trim()).toBe(git(project, 'rev-parse', 'main').trim())
-    // The launch status line is gone once sent; the group is saved with the workspace.
     await expect(overlay().getByText('等 agent 启动后发送…')).toHaveCount(0, WITHIN)
-    await expect.poll(() => readFileSync(join(profile, 'workspace.json'), 'utf8'), WITHIN).toContain('"attemptGroups"')
+    await expect.poll(() => readFileSync(join(profile, 'workspace.json'), 'utf8'), WITHIN).toContain('"reportTo":"s-orig"')
+    // In the sidebar they follow the session, one step in, by their agent's name.
+    const nested = sidebar().locator('[data-depth="1"]')
+    await expect(nested).toHaveCount(3, WITHIN)
+    await expect(nested.first()).toContainText('Claude Code 1')
     await shoot('compare')
   })
 
@@ -197,7 +256,7 @@ test.describe('一题多解 + 广播', () => {
     // The group row above the status groups opens the same comparison again.
     const row = overview().getByTestId('attempt-group')
     await expect(row).toContainText(TASK)
-    await expect(row).toContainText('基于 main')
+    await expect(row).toContainText('汇报给 登录改版')
     await expect(row.locator('[data-member-id]')).toHaveCount(3)
     await shoot('overview-group')
   })
@@ -261,6 +320,26 @@ test.describe('一题多解 + 广播', () => {
     await page.keyboard.press('Escape')
   })
 
+  test('once all three stopped, the session gets one report, held for 送进去 without a channel', async () => {
+    // The first and second parts ended their turns above; the Codex part's agent goes away.
+    const codexPid = Number(readFileSync(join(folders[2]!, '.fake-pid'), 'utf8'))
+    process.kill(codexPid, 'SIGTERM')
+    await page.keyboard.press('Escape')
+    await sidebar().locator('[data-session-id="s-orig"]').click()
+    const strip = page.getByTestId('held-attempt-report')
+    await expect(strip).toContainText('同任务多解的 3 份都做完了', { timeout: 45_000 })
+    await expect(strip).toContainText('Claude Code 1 +1')
+    await shoot('report-held')
+    await strip.getByRole('button', { name: '送进去' }).click()
+    await expect.poll(() => typed(project), WITHIN).toContain('[Wavi 同任务多解汇报]')
+    expect(count(typed(project), '[Wavi 同任务多解汇报]')).toBe(1)
+    expect(typed(project)).toContain('改成两步了。')
+    expect(typed(project)).toContain('git diff main...<分支>')
+    await expect(strip).toHaveCount(0)
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(overview()).toBeVisible()
+  })
+
   test('合并这个 goes through the merge sheet, which then offers to archive the other two', async () => {
     await overview().getByTestId('attempt-group').getByRole('button', { name: '比较' }).click()
     const ids = await memberIds()
@@ -269,10 +348,10 @@ test.describe('一题多解 + 广播', () => {
     await expect(merge).toBeVisible(WITHIN)
     await merge.getByRole('button', { name: /^合并/ }).click()
     const offer = merge.getByTestId('attempt-after-merge')
-    await expect(offer).toContainText('一题多解还剩 2 份', WITHIN)
+    await expect(offer).toContainText('同任务多解还剩 2 份', WITHIN)
     await shoot('after-merge')
     await offer.getByRole('button', { name: '归档其余 2 份' }).click()
-    await expect.poll(async () => (await dialogs()).at(-1)?.message, WITHIN).toBe('归档一题多解剩下的 2 份？')
+    await expect.poll(async () => (await dialogs()).at(-1)?.message, WITHIN).toBe('归档同任务多解剩下的 2 份？')
     await expect(offer).toContainText('已归档其余几份', WITHIN)
     for (const id of ids.slice(1)) await expect(sidebar().locator(`[data-session-id="${id}"]`)).toHaveCount(0, WITHIN)
     expect(git(project, 'log', '-1', '--format=%s', 'main').trim()).not.toBe('init')

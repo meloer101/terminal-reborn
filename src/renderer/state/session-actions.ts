@@ -8,6 +8,7 @@ import {
   removeProjectMenuLabel
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
+import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
 import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
 import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive/store'
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
@@ -168,8 +169,8 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
 }
 
 /**
- * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 关闭会话. Renaming is inline in the header,
- * so that choice is handed back to it.
+ * The session header's … (B11): 重命名 · 在 Finder 中显示 · 复制路径 · 同任务多解… · 移到新窗口 · 关闭会话 (Figma 26A).
+ * Renaming is inline in the header, so that choice is handed back to it.
  */
 export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAnchor): Promise<'rename' | null> {
   const state = useWorkspace.getState()
@@ -182,11 +183,14 @@ export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAn
     { type: 'item', id: 'reveal', label: '在 Finder 中显示', enabled: path !== undefined },
     { type: 'item', id: 'copy-path', label: '复制路径', enabled: path !== undefined },
     { type: 'separator' },
+    { type: 'item', id: 'same-task', label: '同任务多解…', accelerator: 'Shift+CmdOrCtrl+N', enabled: canRunSameTask(sessionId) },
+    { type: 'separator' },
     { type: 'item', id: 'window', label: '移到新窗口' },
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]
   const choice = await popupMenu(entries, anchor)
   if (choice === 'rename') return 'rename'
+  if (choice === 'same-task') openSameTask(sessionId)
   if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'reveal' && path) window.tr.ui.revealInFinder(path)
   else if (choice === 'copy-path' && path) void navigator.clipboard.writeText(path).catch(() => {})
@@ -216,6 +220,10 @@ export async function closeActiveSession(): Promise<void> {
   }
   if (isMergeSheetOpen()) {
     closeMergeSheet(true)
+    return
+  }
+  if (isSameTaskOpen()) {
+    closeSameTask(true)
     return
   }
   if (useArchiveSheet.getState().target) {

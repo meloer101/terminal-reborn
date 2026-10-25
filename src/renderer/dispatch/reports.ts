@@ -2,10 +2,11 @@
 // agent exiting queues a report (one per child, newest wins); 3 s after the last one, the batch goes to the dispatcher
 // through its agent's own channel (Claude's inbox, `codex queue`), never typed into its terminal. Without a channel,
 // when delivery fails or past the hourly budget, the batch waits on the dispatcher's row for the user's 送进去.
-import { diffSummary, diffSummaryText } from '@shared/attempt-groups'
+import { diffSummary, diffSummaryText, groupOfSession } from '@shared/attempt-groups'
 import { childEvent, enqueueReport, isDispatchAgent, reportText, takeDue, type ChildEvent, type ChildReport, type DeliverResult } from '@shared/dispatch'
 import type { Session, SessionId } from '@shared/types'
 import { submitPrompt } from '../session-io'
+import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { checksOf, conflictsOf, childrenOf } from './handler'
 import { addHeld, queueOf, setMessage, setQueue, takeHeld, useDispatch } from './store'
@@ -25,6 +26,8 @@ export async function deliverTo(session: Session, text: string): Promise<Deliver
 function queue(child: Session, event: ChildEvent): void {
   const parentId = child.dispatchedBy
   if (!parentId || !isDispatchAgent(child.kind)) return
+  // 同任务多解's members report together once they have all stopped (attempts/report.ts).
+  if (groupOfSession(useAttemptGroups.getState().groups, child.id)?.reportTo === parentId) return
   const worktree = useWorkspace.getState().worktrees.find((w) => w.id === child.worktreeId)
   const report: ChildReport = {
     childId: child.id,

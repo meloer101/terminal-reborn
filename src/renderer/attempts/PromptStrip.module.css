@@ -1,0 +1,81 @@
+/* Figma PromptBar (11:173), as in 26C / 26J: under the terminal, never over it — a status mark, a strong line and a
+ * mono detail on top, the actions under the text. Same card as the other strips there (scripts/SetupStrip). */
+.bar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  margin: 0 var(--space-12) var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  -webkit-app-region: no-drag;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-4) + var(--space-6));
+  min-width: 0;
+}
+
+.question {
+  flex: none;
+  margin: 0;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.detail {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Under the text, past the 14px mark and its gap. */
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  padding-left: var(--space-24);
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 30px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.option:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.option:disabled {
+  opacity: 0.4;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.key {
+  font: var(--text-mono-s-medium);
+  color: var(--status-attention);
+}

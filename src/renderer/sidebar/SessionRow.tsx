@@ -67,7 +67,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
         <StatusGlyph status={status} />
       </span>
       <span className={styles.main}>
-        <span className={styles.title}>{session.title}</span>
+        <span className={styles.title}>{row.title}</span>
         <span className={styles.activityLine}>
           <span className={styles.activity}>{secondary}</span>
           <PortTags sessionId={session.id} />

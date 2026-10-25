@@ -1,8 +1,9 @@
 // A fake `claude` that runs the hook commands of the per-launch `--settings` file Wavi gives it, on steps a test
 // appends to a file — so status travels the real path (hook command → socket → pty daemon relay → main → renderer)
-// with no model and no real CLI. Each launch works in its own folder: it writes its pid to `.fake-pid`, reads its
-// steps from `.fake-steps` and logs every byte typed to `.fake-typed` (Enter as <ENTER>). Typed text is echoed to the
-// screen, as a TUI's input line would show it (the send protocol waits for that before pressing Enter). A step is
+// with no model and no real CLI. Each launch works in its own folder: it writes its pid to `.fake-pid` and its
+// arguments to `.fake-argv`, reads its steps from `.fake-steps` and logs every byte typed to `.fake-typed` (Enter as
+// <ENTER>). Typed text is echoed to the screen, as a TUI's input line would show it, a long paste as Claude's
+// `[Pasted text …]` placeholder (the send protocol waits for that before pressing Enter). A step is
 // `{ hook, payload }`, `{ statusLine: payload }` (runs the settings' statusLine command), `{ print: text }` or
 // `{ exit: code }`.
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -13,10 +14,16 @@ import { outerClaudeEnv } from './fake-claude'
 const FAKE_CLAUDE = `#!/usr/bin/env node
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
+// Wavi's version check runs it from its own folder: answer and leave no files behind.
+if (process.argv[2] === '--version') {
+  process.stdout.write('9.9.9 (Claude Code)\\n')
+  process.exit(0)
+}
 const at = process.argv.indexOf('--settings')
 const settings = at > 0 ? JSON.parse(fs.readFileSync(process.argv[at + 1], 'utf8')) : {}
 const dir = process.cwd()
 fs.writeFileSync(dir + '/.fake-pid', String(process.pid))
+fs.writeFileSync(dir + '/.fake-argv', JSON.stringify(process.argv.slice(2)))
 const run = (command, payload) => {
   try {
     execSync(command, { input: JSON.stringify(payload), timeout: 10000, shell: '/bin/sh', stdio: ['pipe', 'ignore', 'ignore'] })
@@ -45,10 +52,37 @@ setInterval(() => {
   }
 }, 150)
 if (process.stdin.isTTY) process.stdin.setRawMode(true)
+// Like Claude Code 2.1.296: a paste of more than 800 characters or 3+ newlines shows as a placeholder.
+let paste = null
 process.stdin.on('data', (d) => {
   const text = d.toString()
   fs.appendFileSync(dir + '/.fake-typed', text.replace(/\\r/g, '<ENTER>\\n'))
-  process.stdout.write(text.replace(/\\x1b\\[20[01]~/g, '').replace(/\\r/g, '\\r\\n❯ '))
+  let out = ''
+  let rest = text
+  while (rest) {
+    if (paste === null) {
+      const at = rest.indexOf('\\x1b[200~')
+      if (at < 0) {
+        out += rest
+        break
+      }
+      out += rest.slice(0, at)
+      rest = rest.slice(at + 6)
+      paste = ''
+    } else {
+      const end = rest.indexOf('\\x1b[201~')
+      if (end < 0) {
+        paste += rest
+        break
+      }
+      paste += rest.slice(0, end)
+      rest = rest.slice(end + 6)
+      const lines = paste.split(/\\r\\n|\\r|\\n/).length - 1
+      out += paste.length > 800 || lines >= 3 ? '[Pasted text #1 +' + lines + ' lines]' : paste
+      paste = null
+    }
+  }
+  process.stdout.write(out.replace(/\\r/g, '\\r\\n❯ '))
 })
 `
 

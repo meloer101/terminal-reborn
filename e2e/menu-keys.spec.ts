@@ -31,6 +31,7 @@ const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+Shift+KeyA', accelerator: 'CmdOrCtrl+Shift+A', item: ['会话', '总览'] },
   { key: 'Meta+KeyJ', accelerator: 'CmdOrCtrl+J', item: ['会话', '下一个需要你的会话'] },
   { key: 'Meta+Shift+KeyM', accelerator: 'Shift+CmdOrCtrl+M', item: ['会话', '合并到基线…'] },
+  { key: 'Meta+Shift+KeyN', accelerator: 'Shift+CmdOrCtrl+N', item: ['会话', '同任务多解…'] },
   { key: 'Meta+KeyB', accelerator: 'CmdOrCtrl+B', item: ['显示', '显示 / 隐藏侧栏'] },
   { key: 'Meta+Shift+KeyB', accelerator: 'Shift+CmdOrCtrl+B', item: ['显示', '显示 / 隐藏右侧栏'] },
   { key: 'Meta+KeyD', accelerator: 'CmdOrCtrl+D', item: ['显示', '向右拆分'] },
@@ -254,6 +255,13 @@ test.describe('with the keyboard in the terminal', () => {
     await expect(page.getByTestId('merge-sheet')).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('merge-sheet')).toHaveCount(0)
+  })
+
+  test('⇧⌘N opens 同任务多解 once', async () => {
+    expect(await press('Meta+Shift+KeyN')).toBe('page')
+    await expect(page.getByTestId('same-task-sheet')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('same-task-sheet')).toHaveCount(0)
   })
 
   test('⌘+, ⌘=, ⌘- and ⌘0 are left to the menu and step the font size once', async () => {

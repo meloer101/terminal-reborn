@@ -95,6 +95,13 @@ describe('buildEntries', () => {
     ])
   })
 
+  it('offers 同任务多解 for the active agent session only, with ⇧⌘N', () => {
+    const entry = buildActionEntries(input({ activeSessionId: 'running-new' })).find((e) => e.id === 'action:same-task')
+    expect(entry).toMatchObject({ title: '同任务多解…', subtitle: '侧边栏状态聚合', shortcut: 'Shift+CmdOrCtrl+N' })
+    const shell = input({ sessions: [session('t', 'w2', { kind: 'shell' })], activeSessionId: 't' })
+    expect(buildActionEntries(shell).some((e) => e.id === 'action:same-task')).toBe(false)
+  })
+
   it('labels the right panel toggle by panel state', () => {
     const title = (rightPanel: 'files' | 'git' | null) =>
       buildActionEntries(input({ rightPanel })).find((e) => e.id === 'action:toggle-right-panel')!.title

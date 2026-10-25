@@ -10,6 +10,7 @@ import { forgetSetup, handleScriptMarker, takeSetup } from '../scripts/setup-run
 import { loadLiveSessions, takeReattach } from './live-sessions'
 import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
+import { openTerminalMenu } from '../attempts/terminal-menu'
 import { takeDispatchLaunch } from '../dispatch/store'
 
 const ACK_BATCH_UNITS = 32 * 1024
@@ -50,6 +51,7 @@ export class SessionTerminal {
     // the listener and the resolver when disposed.
     this.surface.onLink((link) => handleTerminalLink(sessionId, link))
     this.surface.setPathResolver((paths) => resolveSessionPaths(sessionId, paths))
+    this.surface.onContextMenu((at) => void openTerminalMenu(sessionId, at))
   }
 
   /** The PTY is running (spawn requested, not exited, not disposed). */

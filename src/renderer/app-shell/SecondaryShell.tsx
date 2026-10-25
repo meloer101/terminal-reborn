@@ -12,6 +12,8 @@ import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
+import { PlanStrip } from '../attempts/PlanStrip'
+import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { MenuHost } from '../ui/MenuHost'
 import { sidebarWidthFor } from './layout'
 import styles from './AppShell.module.css'
@@ -53,11 +55,13 @@ export function SecondaryShell() {
           </section>
           <SessionErrorBar />
           <SetupStrip />
+          <PlanStrip />
         </main>
       </div>
       {/* Sheets and the palette open in the window with the keyboard. */}
       {isKey && <CommandPalette />}
       {isKey && <NewSessionSheet />}
+      {isKey && <SameTaskSheet />}
       <MenuHost />
       <SessionDragGhost />
     </div>

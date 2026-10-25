@@ -104,6 +104,7 @@ export class XtermSurface implements TerminalSurface {
   private openPromise: Promise<void> | null = null
   private container: HTMLElement | null = null
   private readonly linkListeners = new Set<(link: TerminalLink) => void>()
+  private readonly menuListeners = new Set<(at: { x: number; y: number }) => void>()
   /** The link under the pointer, so a right-click on it opens the link menu. */
   private hoveredLink: LinkRef | null = null
   /** Which printed paths are files of the session; without one, paths are not links. */
@@ -254,7 +255,7 @@ export class XtermSurface implements TerminalSurface {
       this.term.open(this.container)
       // Hidden terminals that print would otherwise redraw their whole screen every frame (paused-selection.ts).
       deferSelectionRedrawWhilePaused(this.term)
-      this.term.element?.addEventListener('contextmenu', (event) => this.onContextMenu(event))
+      this.term.element?.addEventListener('contextmenu', (event) => this.handleContextMenu(event))
       this.watchTextInput()
       this.syncLigatures()
       this.syncRenderer()
@@ -559,6 +560,19 @@ export class XtermSurface implements TerminalSurface {
     this.pathResolver = resolver
   }
 
+  getSelection(): string {
+    return this.term.getSelection()
+  }
+
+  selectAll(): void {
+    this.term.selectAll()
+  }
+
+  onContextMenu(listener: (at: { x: number; y: number }) => void): Disposable {
+    this.menuListeners.add(listener)
+    return { dispose: () => void this.menuListeners.delete(listener) }
+  }
+
   private activateUrl(event: MouseEvent, url: string): void {
     // Without a listener (the settings preview) window.open goes to main, which hands http(s) to the system browser.
     if (this.linkListeners.size === 0) return void window.open(url, '_blank')
@@ -575,11 +589,16 @@ export class XtermSurface implements TerminalSurface {
     this.term.element?.removeAttribute('title')
   }
 
-  private onContextMenu(event: MouseEvent): void {
+  private handleContextMenu(event: MouseEvent): void {
     const ref = this.hoveredLink
-    if (!ref || this.linkListeners.size === 0) return
+    if (ref && this.linkListeners.size > 0) {
+      event.preventDefault()
+      this.emitLink({ ...ref, action: 'menu', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+      return
+    }
+    if (this.menuListeners.size === 0) return
     event.preventDefault()
-    this.emitLink({ ...ref, action: 'menu', metaKey: event.metaKey, x: event.clientX, y: event.clientY })
+    for (const listener of [...this.menuListeners]) listener({ x: event.clientX, y: event.clientY })
   }
 
   /** Path-looking text in the (wrapped) line at buffer row `y` (1-based) that main confirms is a file of the session. */
@@ -753,6 +772,7 @@ export class XtermSurface implements TerminalSurface {
     if (this.disposed) return
     this.disposed = true
     this.linkListeners.clear()
+    this.menuListeners.clear()
     this.pathResolver = null
     this.themeObserver.disconnect()
     this.unloadWebgl()
