@@ -1,4 +1,4 @@
-// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63), 派活 (PRD F21) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
+// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63; AI 写 v1.68), 派活 (PRD F21) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
 // own Claude / Codex quota. No Figma frame yet; it follows the Worktree pane (16A): sections of label · control rows.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
@@ -122,6 +122,30 @@ export function AutomationPane({
             <BotsField value={pr.bots} onCommit={(bots) => updatePr({ bots })} />
           </Row>
           <p className={styles.hint}>自动修复只把你自己和这里列出的机器人（如 coderabbitai[bot]）的评论发给 agent；其他人的评论只显示。有没解决的评论（来自上面这些人）或审阅里有 P0 / P1 时，通过后合并会自己关掉。</p>
+          <Row label="AI 写提交说明和 PR">
+            <Segmented
+              label="AI 写提交说明和 PR"
+              value={pr.writer}
+              options={[
+                { value: 'session', label: '和会话相同' },
+                { value: 'claude', label: 'Claude' },
+                { value: 'codex', label: 'Codex' }
+              ]}
+              onChange={(writer) => updatePr({ writer })}
+            />
+          </Row>
+          <Row label="Claude 写作模型">
+            <ModelField label="Claude 写作模型" value={pr.writerClaudeModel} onCommit={(writerClaudeModel) => updatePr({ writerClaudeModel })} />
+          </Row>
+          <Row label="Codex 写作模型">
+            <ModelField label="Codex 写作模型" value={pr.writerCodexModel} onCommit={(writerCodexModel) => updatePr({ writerCodexModel })} />
+          </Row>
+          <Row label="打开面板时自动写">
+            <Toggle label="打开面板时自动写" checked={pr.writeOnOpen} onChange={(writeOnOpen) => updatePr({ writeOnOpen })} />
+          </Row>
+          <p className={styles.hint}>
+            创建 PR 面板里的「AI 写」在后台另起一次 Claude / Codex（不进你的会话、不带工具），读勾选文件的 diff、最近的提交和 CLAUDE.md / AGENTS.md 里关于提交的约定，写好后填进面板，你看过再提交。用你本机 CLI 的登录和额度；Claude 默认用 Haiku，留空用 CLI 自己的默认模型，Codex 用低推理强度。没装选中的那家时改用另一家。
+          </p>
         </Section>
         <Section title="派活">
           <p className={styles.lead}>会话里的 agent 可以用 Wavi 的工具开新的 Claude Code / Codex 会话、把任务分出去；它们各在新的 worktree 里干活，做完把结果报告给派活的会话。合并、推送和归档仍由你来做。</p>

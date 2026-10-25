@@ -66,7 +66,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { cancelMerge, catchUpBase, checkWorktree, ciFailure, createPullRequest, detectGh, mergePullRequest, postReview, prDraft, resolveThreads, statusesFor, unwatch, watchTargets } =
+const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, mergePullRequest, postReview, prDraft, pushBranch, resolveThreads, statusesFor, unwatch, watchTargets } =
   await import('./pull-requests')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -490,7 +490,20 @@ describe('回到 GitHub (PRD F16 v1.63)', () => {
 describe('创建 PR 面板 (PRD F16 v1.63)', () => {
   it('starts from the commit subjects, or the repository PR template when there is one', async () => {
     const { root, wt } = setup()
-    expect(await prDraft({ root, worktree: wt })).toEqual({ ok: true, branch: 'feat', base: 'main', remote: 'origin', pushed: false, body: '- Make nav sticky\n- Test nav', fromTemplate: false })
+    expect(await prDraft({ root, worktree: wt })).toEqual({
+      ok: true,
+      branch: 'feat',
+      base: 'main',
+      remote: 'origin',
+      pushed: false,
+      body: '- Make nav sticky\n- Test nav',
+      fromTemplate: false,
+      subjects: ['Make nav sticky', 'Test nav'],
+      files: [],
+      filesOmitted: 0,
+      unpushed: null,
+      remoteAhead: 0
+    })
     mkdirSync(join(wt, '.github'))
     writeFileSync(join(wt, '.github', 'PULL_REQUEST_TEMPLATE.md'), '## 改了什么\n\n## 怎么测\n')
     git(wt, 'add', '.')
@@ -510,6 +523,102 @@ describe('创建 PR 面板 (PRD F16 v1.63)', () => {
     const create = ghCalls('pr create')[0]!
     expect(create).toContain('--draft')
     expect(create.join('\n')).toContain('--body=正文\n\n<!-- wavi -->')
+  })
+})
+
+describe('提交 / 推送 (PRD F16 v1.68)', () => {
+  it('lists the uncommitted files and what is not pushed yet', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    commit(wt, 'd.txt', 'd\n', 'Not pushed')
+    writeFileSync(join(wt, 'b.txt'), 'b2\n')
+    writeFileSync(join(wt, 'new.txt'), 'n\n')
+    git(wt, 'mv', 'c.txt', 'moved.txt')
+    rmSync(join(wt, 'a.txt'))
+    expect(await prDraft({ root, worktree: wt })).toMatchObject({
+      ok: true,
+      pushed: true,
+      unpushed: 1,
+      remoteAhead: 0,
+      subjects: ['Make nav sticky', 'Test nav', 'Not pushed'],
+      files: [
+        { path: 'a.txt', status: 'D' },
+        { path: 'b.txt', status: 'M' },
+        { path: 'moved.txt', status: 'R', oldPath: 'c.txt' },
+        { path: 'new.txt', status: 'A', untracked: true }
+      ]
+    })
+  })
+
+  it('commits exactly the ticked files with the message, and leaves the rest as they were', async () => {
+    const { root, wt } = setup()
+    writeFileSync(join(wt, 'b.txt'), 'b2\n')
+    writeFileSync(join(wt, 'new.txt'), 'n\n')
+    git(wt, 'mv', 'c.txt', 'moved.txt')
+    rmSync(join(wt, 'a.txt'))
+    // Staged by the agent, not ticked: stays staged and out of the commit.
+    writeFileSync(join(wt, 'staged.txt'), 's\n')
+    git(wt, 'add', 'staged.txt')
+    const result = await commitWorktree({ root, worktree: wt, message: '  Sticky nav, take two\r\n\nWith a body\u0007  \n', paths: ['a.txt', 'b.txt', 'moved.txt', 'new.txt'] })
+    expect(result).toEqual({ ok: true, commit: git(wt, 'rev-parse', '--short', 'HEAD').trim(), subject: 'Sticky nav, take two' })
+    expect(git(wt, 'log', '-1', '--format=%B').trim()).toBe('Sticky nav, take two\n\nWith a body')
+    expect(git(wt, 'show', '--name-status', '--format=', 'HEAD').trim().split('\n').sort()).toEqual(['A\tnew.txt', 'D\ta.txt', 'M\tb.txt', 'R100\tc.txt\tmoved.txt'].sort())
+    expect(git(wt, 'status', '--porcelain=v1').trim()).toBe('A  staged.txt')
+  })
+
+  it("runs the repository's hooks and gives back their output when one fails", async () => {
+    const { root, wt } = setup()
+    const hooks = join(base, `hooks-${counter}`)
+    mkdirSync(hooks)
+    writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\necho "lint: 2 problems in b.txt" >&2\nexit 1\n')
+    chmodSync(join(hooks, 'pre-commit'), 0o755)
+    git(root, 'config', 'core.hooksPath', hooks)
+    writeFileSync(join(wt, 'b.txt'), 'b2\n')
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, reason: 'failed', output: 'lint: 2 problems in b.txt' })
+    expect(git(wt, 'rev-parse', 'HEAD').trim()).toBe(head)
+  })
+
+  it('refuses the base branch, a detached HEAD, conflicts, files with no changes and bad input', async () => {
+    const { root, wt } = setup()
+    writeFileSync(join(root, 'a.txt'), 'a2\n')
+    expect(await commitWorktree({ root, worktree: root, message: 'x', paths: ['a.txt'] })).toMatchObject({ ok: false, message: '这是基线分支本身：在会话的 worktree 里提交' })
+    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['nothing.txt'] })).toMatchObject({ ok: false, message: '勾选的文件已经没有改动了' })
+    for (const bad of [{ message: '  \n', paths: ['b.txt'] }, { message: 'x', paths: [] }, { message: 'x', paths: ['../a.txt'] }, { message: 'x', paths: ['/etc/hosts'] }]) {
+      expect(await commitWorktree({ root, worktree: wt, ...bad })).toMatchObject({ ok: false, message: '请求无效' })
+    }
+    // A conflict anywhere in the worktree: nothing is committed until it is resolved.
+    git(wt, 'switch', '-q', '-c', 'side', 'HEAD~1')
+    commit(wt, 'c.txt', 'other\n', 'Other c')
+    git(wt, 'switch', '-q', 'feat')
+    try {
+      git(wt, 'merge', '-q', 'side')
+    } catch {
+      // the conflict is the point
+    }
+    writeFileSync(join(wt, 'b.txt'), 'b2\n')
+    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, message: '有没解决的冲突：先解决再提交' })
+    git(wt, 'merge', '--abort')
+    git(wt, 'switch', '-q', '--detach')
+    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, message: '处于分离 HEAD：先切到一个分支再提交' })
+  })
+
+  it('pushes a pushed branch to its upstream, and refuses one that was never pushed', async () => {
+    const { root, wt, bare } = pushedWithPr()
+    expect(await pushBranch({ root, worktree: wt })).toEqual({ ok: true, outcome: 'pushed', message: '没有要推送的提交' })
+    commit(wt, 'd.txt', 'd\n', 'One more')
+    expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: true, outcome: 'pushed', message: '已推送到 origin/feat' })
+    expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
+    expect(await pushBranch({ root, worktree: root })).toMatchObject({ ok: false, message: '这是基线分支本身：Wavi 不往基线分支推送' })
+    const fresh = setup()
+    expect(await pushBranch({ root: fresh.root, worktree: fresh.wt })).toMatchObject({ ok: false, message: '分支还没有推送过：用「创建 PR」推送' })
+    // Someone else pushed to the branch: git refuses, and Wavi says what to do instead of git's words.
+    const other = join(base, `other-${counter}`)
+    git(base, 'clone', '-q', '-b', 'feat', bare, other)
+    commit(other, 'e.txt', 'e\n', 'From elsewhere')
+    git(other, 'push', '-q', 'origin', 'feat')
+    commit(wt, 'f.txt', 'f\n', 'Mine')
+    expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: false, message: 'origin 上的分支有本地没有的提交：先拉取或 rebase，再推送' })
   })
 })
 

@@ -28,6 +28,7 @@ import { registerGitMergeHandlers } from './git-merge'
 import { registerRepoScriptHandlers } from './repo-scripts'
 import { registerBackgroundReviewHandlers } from './background-review'
 import { registerArchiveHandlers } from './archive'
+import { registerPrWriter } from './pr-writer'
 import { registerPullRequestHandlers } from './pull-requests'
 import { registerConflictRadarHandlers } from './conflict-radar'
 import { registerSecondaryWindowHandlers } from './secondary-windows'
@@ -89,6 +90,7 @@ function boot(): void {
   registerBackgroundReviewHandlers()
   registerArchiveHandlers()
   registerPullRequestHandlers()
+  registerPrWriter()
   registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()

@@ -1,6 +1,7 @@
 // PR / CI status (PRD F16) through the user's own `gh` login: Wavi stores no token and never talks to GitHub itself.
 // Pure: what gh prints becomes a PullRequestInfo, how checks add up, which repository a branch's PR lives in, how
 // often to ask again, and what 让 agent 修复 puts into the input line (§6.9). Processes run in src/main/pull-requests.ts.
+import type { WriteRequest, WriteResult } from './ship-writer'
 
 /** Whether gh can be used: not installed, installed but not logged in, or ready. */
 export type GhState = 'checking' | 'missing' | 'signed-out' | 'ready'
@@ -136,10 +137,46 @@ export interface PrCreateRequest {
   pushApproved?: boolean
 }
 
-/** What 创建 PR 面板 opens with (v1.63): where the PR goes and the body to start from. */
+/** One uncommitted file 提交 can take (v1.68), from `git status`. `oldPath`: where a staged rename came from. */
+export interface ShipFile {
+  path: string
+  oldPath?: string
+  status: 'M' | 'A' | 'D' | 'R' | 'U'
+  untracked?: boolean
+}
+
+/**
+ * What 创建 PR 面板 opens with (v1.63): where the PR goes and the body to start from. v1.68 adds what 提交 and 推送
+ * need: the uncommitted files (`filesOmitted` past the cap), the commit subjects ahead of the base, the commits not
+ * pushed yet (null: the branch was never pushed) and those the remote branch has that the local one has not.
+ */
 export type PrDraft =
-  | { ok: true; branch: string; base: string; remote: string; pushed: boolean; body: string; fromTemplate: boolean }
+  | {
+      ok: true
+      branch: string
+      base: string
+      remote: string
+      pushed: boolean
+      body: string
+      fromTemplate: boolean
+      subjects: string[]
+      files: ShipFile[]
+      filesOmitted: number
+      unpushed: number | null
+      remoteAhead: number
+    }
   | { ok: false; message: string }
+
+/** 提交 (v1.68): commit these uncommitted paths (renames by their new path) with this message, hooks and all. */
+export interface PrCommitRequest extends PrTarget {
+  message: string
+  paths: string[]
+}
+
+export type PrCommitResult =
+  | { ok: true; commit: string; subject: string }
+  /** `output`: the end of what git and its hooks printed. */
+  | { ok: false; reason: 'blocked' | 'failed'; message: string; output?: string }
 
 export type PrCreateResult =
   | { ok: true; url: string; number: number | null; existed: boolean }
@@ -167,6 +204,14 @@ export interface PullRequestApi {
   create(request: PrCreateRequest): Promise<PrCreateResult>
   /** The branch, base and starting body for 创建 PR 面板, or why no PR can be made. */
   draft(target: PrTarget): Promise<PrDraft>
+  /** Commits ticked uncommitted files of the worktree's branch (v1.68). Never on the base branch. */
+  commit(request: PrCommitRequest): Promise<PrCommitResult>
+  /** Pushes the worktree's branch to the upstream it already has (v1.68: 提交并推送 / 推送 for an open PR). */
+  push(target: PrTarget): Promise<PrWriteResult>
+  /** AI 写 (v1.68): a commit message or PR title / body from a headless Claude / Codex run (src/shared/ship-writer.ts). */
+  write(request: WriteRequest): Promise<WriteResult>
+  /** Stops the worktree's AI 写 run. */
+  cancelWrite(worktree: string): void
   /** The failing checks of a watched worktree's PR and the tail of `gh run view --log-failed`; null when none fail. */
   failure(worktree: string): Promise<CiFailure | null>
   /** Merges the worktree's open PR on GitHub (PRD F16 v1.63), now or once its checks pass. */
@@ -209,7 +254,7 @@ export interface PrPostReviewRequest extends PrTarget {
 }
 
 export type PrWriteResult =
-  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'waiting' | 'cancelled' | 'resolved' | 'posted'; message: string }
+  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'waiting' | 'cancelled' | 'resolved' | 'posted' | 'pushed'; message: string }
   | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string }
 
 export const PR_IPC = {
@@ -229,6 +274,14 @@ export const PR_IPC = {
   create: 'pr:create',
   /** invoke(PrTarget) → PrDraft */
   draft: 'pr:draft',
+  /** invoke(PrCommitRequest) → PrCommitResult */
+  commit: 'pr:commit',
+  /** invoke(PrTarget) → PrWriteResult */
+  push: 'pr:push',
+  /** invoke(WriteRequest) → WriteResult */
+  write: 'pr:write',
+  /** send(worktree) */
+  cancelWrite: 'pr:cancel-write',
   /** invoke(worktree) → CiFailure | null */
   failure: 'pr:failure',
   /** invoke(PrMergeRequest) → PrWriteResult */
@@ -458,6 +511,72 @@ export function parsePrCreateRequest(raw: unknown): PrCreateRequest | null {
     ...(raw.draft === true ? { draft: true } : {}),
     ...(raw.pushApproved === true ? { pushApproved: true } : {})
   }
+}
+
+// ── 提交 (v1.68) ────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Longest commit message Wavi passes to git. */
+export const MAX_COMMIT_MESSAGE = 64 * 1024
+/** Most files one commit takes from the sheet (and `git status` entries the sheet lists). */
+export const MAX_SHIP_FILES = 5000
+
+/** A path as `git status` prints it: relative, no `.` / `..` segments, no NUL. */
+function isRelativePath(value: unknown): value is string {
+  if (typeof value !== 'string' || value === '' || value.length > MAX_PATH || value.includes('\0') || value.startsWith('/')) return false
+  return value.split('/').every((part) => part !== '' && part !== '.' && part !== '..')
+}
+
+/** The message with control characters (newline and tab aside) gone, trailing spaces trimmed, at most 3 blank lines. */
+export function commitMessage(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim()
+}
+
+export function parsePrCommitRequest(raw: unknown): PrCommitRequest | null {
+  if (!isRecord(raw) || !isPath(raw.root) || !isPath(raw.worktree) || typeof raw.message !== 'string' || raw.message.length > MAX_COMMIT_MESSAGE) return null
+  if (!Array.isArray(raw.paths) || raw.paths.length === 0 || raw.paths.length > MAX_SHIP_FILES || !raw.paths.every(isRelativePath)) return null
+  const message = commitMessage(raw.message)
+  if (!message) return null
+  return { root: raw.root, worktree: raw.worktree, message, paths: [...new Set(raw.paths as string[])] }
+}
+
+/**
+ * `git status --porcelain=v1 -z`: `XY path` entries, a rename or copy followed by its source. Ignored files are
+ * skipped; anything unmerged (U on either side, AA, DD) is a conflict.
+ */
+export function parseStatusZ(out: string): ShipFile[] {
+  const parts = out.split('\0')
+  const files: ShipFile[] = []
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i]!
+    if (entry.length < 4 || entry[2] !== ' ') continue
+    const x = entry[0]!
+    const y = entry[1]!
+    const path = entry.slice(3)
+    const renamed = x === 'R' || x === 'C'
+    const oldPath = renamed ? parts[++i] : undefined
+    if (x === '!') continue
+    if (x === '?') {
+      files.push({ path, status: 'A', untracked: true })
+      continue
+    }
+    const conflict = x === 'U' || y === 'U' || (x === 'A' && y === 'A') || (x === 'D' && y === 'D')
+    const status: ShipFile['status'] = conflict ? 'U' : x === 'R' ? 'R' : x === 'D' || y === 'D' ? 'D' : x === 'A' ? 'A' : 'M'
+    files.push({ path, status, ...(x === 'R' && oldPath ? { oldPath } : {}) })
+  }
+  return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+}
+
+/** The first line of a commit message (what the PR body lists for it). */
+export function commitSubject(message: string): string {
+  return commitMessage(message).split('\n')[0]!.trim()
 }
 
 /** Where GitHub looks for a PR template, in its order (case does not matter on GitHub; the first found wins). */
