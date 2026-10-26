@@ -4,6 +4,17 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-25
+
+Change the terminal's background, and import a Ghostty or iTerm theme.
+终端底色可以改了，也能导入 Ghostty 和 iTerm 的主题。
+
+### Appearance / 外观
+- 设置 · 外观 · 窗口 has 终端底色 (跟随主题 / 自定义) and 底色值: click the swatch for the system color picker, or type or paste a hex. While the terminal follows the theme, the value is dimmed and shows the color in effect; the last custom color is remembered. The text and ANSI colors follow the background's lightness, so a light background under the dark theme still reads. Gradients and images are still not offered.
+  设置 · 外观 · 窗口多了“终端底色”（跟随主题 / 自定义）和“底色值”：点色块打开系统取色器，也可以直接输入或粘贴十六进制。跟随主题时底色值置灰并显示当前实际的颜色，自定义过的颜色会记着。文字和 16 色按底色的明暗选，所以深色主题下用浅色底也看得清。仍然不提供渐变和图片背景。
+- 导入主题… (under the theme swatches) reads a Ghostty theme file or an iTerm `.itermcolors` preset. Its background, foreground, cursor, selection and 16 ANSI colors are used as they are, so the terminal shows exactly the colors you imported. A file that is not a theme, or lacks a color, is refused with a reason and nothing changes. 恢复默认 clears the imported colors.
+  主题色块下方的“导入主题…”读 Ghostty 主题文件或 iTerm 的 `.itermcolors`。它的背景、前景、光标、选区和 16 色原样用于终端，导入的是什么颜色，终端里看到的就是什么颜色。不是主题的文件、或缺少某个颜色的文件会被拒绝并说明原因，设置不变；“恢复默认”会清掉导入的颜色。
+
 ## [0.7.0] - 2026-10-25
 
 Start 19 agent CLIs natively, put a PR together from one sheet, run the same task several ways, and read each session's agent and branch in the sidebar.
@@ -295,7 +306,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/meloer101/terminal-reborn/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/meloer101/terminal-reborn/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/meloer101/terminal-reborn/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/meloer101/terminal-reborn/compare/v0.4.0...v0.5.0
