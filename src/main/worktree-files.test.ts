@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { classifyChange, isInside, normalizeRelative, resolveFileLinks } from './worktree-files'
+import { classifyChange, isInside, normalizeRelative, resolveFileLinks, walkFiles, watchesRecursively } from './worktree-files'
 
 describe('normalizeRelative', () => {
   it('accepts plain relative paths and the root', () => {
@@ -79,5 +79,43 @@ describe('resolveFileLinks', () => {
     await expect(resolveFileLinks(root, 'src/app.ts')).rejects.toThrow()
     await expect(resolveFileLinks(root, Array.from({ length: 65 }, () => 'a.ts'))).rejects.toThrow()
     await expect(resolveFileLinks('relative/root', ['a.ts'])).rejects.toThrow()
+  })
+})
+
+describe('a root that contains Desktop, Documents and Downloads (the home directory)', () => {
+  // A stand-in home: a note, a project, and the three protected folders with a file each.
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'tr-home-')))
+  const desktop = join(home, 'Desktop')
+  const documents = join(home, 'Documents')
+  const downloads = join(home, 'Downloads')
+  for (const dir of [desktop, documents, downloads, join(home, 'code', 'app')]) mkdirSync(dir, { recursive: true })
+  writeFileSync(join(home, 'notes.txt'), 'x')
+  writeFileSync(join(home, 'code', 'app', 'main.ts'), 'x')
+  writeFileSync(join(desktop, 'todo.txt'), 'x')
+  writeFileSync(join(documents, 'cv.txt'), 'x')
+  writeFileSync(join(downloads, 'a.zip'), 'x')
+  mkdirSync(join(desktop, 'nested'))
+  writeFileSync(join(desktop, 'nested', 'deep.txt'), 'x')
+  const folders = [desktop, documents, downloads]
+
+  it('is walked without entering any of them', async () => {
+    expect((await walkFiles(home, folders)).sort()).toEqual(['code/app/main.ts', 'notes.txt'])
+  })
+
+  it('is watched for its own entries only, not recursively', () => {
+    expect(watchesRecursively(home, folders)).toBe(false)
+    expect(watchesRecursively(join(home, 'code', 'app'), folders)).toBe(true)
+  })
+
+  it('does not resolve a path printed under them, but still resolves the rest', async () => {
+    expect(
+      await resolveFileLinks(home, ['notes.txt', 'code/app/main.ts', 'Desktop/todo.txt', join(desktop, 'nested', 'deep.txt'), join(documents, 'cv.txt'), 'Downloads/../Downloads/a.zip'], folders)
+    ).toEqual(['notes.txt', 'code/app/main.ts', null, null, null, null])
+  })
+
+  it('leaves a project inside Desktop alone: the user chose that folder', async () => {
+    expect((await walkFiles(desktop, folders)).sort()).toEqual(['nested/deep.txt', 'todo.txt'])
+    expect(watchesRecursively(desktop, folders)).toBe(true)
+    expect(await resolveFileLinks(desktop, ['todo.txt', 'nested/deep.txt'], folders)).toEqual(['todo.txt', 'nested/deep.txt'])
   })
 })

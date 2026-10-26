@@ -6,6 +6,7 @@ import { open, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 import { ipcMain, shell, type WebContents } from 'electron'
 import { IPC } from '@shared/ipc'
+import { isGuarded, protectedInside } from './protected-folders'
 import {
   compareEntries,
   looksBinary,
@@ -68,13 +69,16 @@ const MAX_LINK_PATHS = 64
  * Which of the paths printed in a session's terminal are files inside the worktree (PRD F17): each becomes its
  * relative POSIX path, or null. Relative paths are relative to the root; absolute ones must lie inside it.
  */
-export async function resolveFileLinks(root: unknown, paths: unknown): Promise<(string | null)[]> {
+export async function resolveFileLinks(root: unknown, paths: unknown, folders?: readonly string[]): Promise<(string | null)[]> {
   if (!Array.isArray(paths) || paths.length > MAX_LINK_PATHS) throw new Error('invalid paths')
   const realRoot = await resolveRoot(root)
-  return Promise.all(paths.map((path) => resolveFileLink(root as string, realRoot, path).catch(() => null)))
+  // A root that contains Desktop / Documents / Downloads (the home directory) never looks inside them: checking a
+  // printed path there would make macOS ask for access the user never gave.
+  const guarded = protectedInside(realRoot, folders)
+  return Promise.all(paths.map((path) => resolveFileLink(root as string, realRoot, path, guarded).catch(() => null)))
 }
 
-async function resolveFileLink(root: string, realRoot: string, path: unknown): Promise<string | null> {
+async function resolveFileLink(root: string, realRoot: string, path: unknown, guarded: readonly string[]): Promise<string | null> {
   if (typeof path !== 'string' || path === '' || path.length > MAX_PATH || path.includes('\0')) return null
   let rel = isAbsolute(path) ? null : normalizeRelative(path)
   if (isAbsolute(path)) {
@@ -89,6 +93,7 @@ async function resolveFileLink(root: string, realRoot: string, path: unknown): P
     }
   }
   if (!rel) return null
+  if (isGuarded(join(realRoot, rel), guarded)) return null
   const { abs } = await resolveInside(realRoot, rel)
   return (await stat(abs)).isFile() ? rel : null
 }
@@ -180,8 +185,12 @@ async function lineMarks(root: unknown, path: unknown): Promise<LineMarkRange[]>
   }
 }
 
-/** Not a git checkout: walk the tree, skipping the usual heavy folders, until the cap. */
-async function walkFiles(realRoot: string): Promise<string[]> {
+/**
+ * Not a git checkout: walk the tree, skipping the usual heavy folders, until the cap. A root that is the home
+ * directory is walked without Desktop, Documents and Downloads (see protected-folders.ts).
+ */
+export async function walkFiles(realRoot: string, folders?: readonly string[]): Promise<string[]> {
+  const guarded = protectedInside(realRoot, folders)
   const out: string[] = []
   const queue = ['']
   while (queue.length > 0 && out.length < MAX_LISTED_FILES) {
@@ -195,7 +204,7 @@ async function walkFiles(realRoot: string): Promise<string[]> {
     for (const dirent of dirents) {
       const rel = dir ? `${dir}/${dirent.name}` : dirent.name
       if (dirent.isDirectory()) {
-        if (dirent.name !== '.git' && dirent.name !== 'node_modules') queue.push(rel)
+        if (dirent.name !== '.git' && dirent.name !== 'node_modules' && !isGuarded(join(realRoot, rel), guarded)) queue.push(rel)
       } else if (dirent.isFile()) out.push(rel)
     }
   }
@@ -223,6 +232,15 @@ export function classifyChange(file: string): { dir: string; git: boolean } | nu
   }
   const slash = path.lastIndexOf('/')
   return { dir: slash < 0 ? '' : path.slice(0, slash), git: false }
+}
+
+/**
+ * A recursive watch enters every folder below the root, so one on a root that contains Desktop, Documents or
+ * Downloads (the home directory) would raise macOS's access prompt for each. Such a root is watched for changes
+ * to its own entries only.
+ */
+export function watchesRecursively(realRoot: string, folders?: readonly string[]): boolean {
+  return protectedInside(realRoot, folders).length === 0
 }
 
 interface Watch {
@@ -256,7 +274,7 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
     })
   }
   if (forSender.has(root)) return
-  const watcher = watch(realRoot, { recursive: true })
+  const watcher = watch(realRoot, { recursive: watchesRecursively(realRoot) })
   const entry: Watch = { watcher, dirs: new Set(), git: false, timer: null }
   watcher.on('error', () => stopWatch(sender, root))
   watcher.on('change', (_type, filename) => {
