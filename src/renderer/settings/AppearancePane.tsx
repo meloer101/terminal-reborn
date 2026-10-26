@@ -1,10 +1,14 @@
 import { useMemo } from 'react'
 import { DEFAULT_SETTINGS, LIMITS, type AppearanceSettings } from '@shared/settings'
-import { Row, Section, Select, Slider, ThemeSwatches, Toggle, type SelectOption } from './controls'
-import { THEME_OPTIONS, displayFamily, fontSizeOptions, formatLineHeight, formatPercent, previewCaption } from './appearance-form'
+import { Segmented } from '../ui/Segmented'
+import { hasCustomBackground } from '../appearance/map'
+import { buildCustomTheme } from '../terminal/appearance'
+import { HexField, Row, Section, Select, Slider, ThemeSwatches, Toggle, type SelectOption } from './controls'
+import { BACKGROUND_OPTIONS, THEME_OPTIONS, displayFamily, fontSizeOptions, formatLineHeight, formatPercent, previewCaption, sameAppearanceValue } from './appearance-form'
 import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, groupCjkFamilies, withCurrent } from './fonts'
 import { useFontCatalog } from './local-fonts'
 import { PreviewTerminal } from './PreviewTerminal'
+import { useThemeBackground } from './useThemeBackground'
 import styles from './AppearancePane.module.css'
 
 const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
@@ -40,7 +44,15 @@ export function AppearancePane({
     () => groupCjkFamilies(withCurrent(catalog.cjk, appearance.cjkFont)).map(({ family, group }) => ({ ...cjkOption(family), group })),
     [catalog.cjk, appearance.cjkFont]
   )
-  const isDefault = APPEARANCE_RESET_KEYS.every((key) => appearance[key] === DEFAULT_SETTINGS.appearance[key])
+  const isDefault = APPEARANCE_RESET_KEYS.every((key) => sameAppearanceValue(appearance[key], DEFAULT_SETTINGS.appearance[key]))
+  const themeBackground = useThemeBackground()
+  const background = appearance.terminalBackground
+  const custom = hasCustomBackground(appearance)
+  // The preview terminal gets the colors the session terminals get.
+  const customTheme = useMemo(
+    () => (custom ? buildCustomTheme(background.color, appearance.terminalColors) : undefined),
+    [custom, background.color, appearance.terminalColors]
+  )
   const sizeOptions = useMemo<SelectOption[]>(
     () => fontSizeOptions(appearance.fontSize).map((size) => ({ value: String(size), label: String(size) })),
     [appearance.fontSize]
@@ -58,6 +70,9 @@ export function AppearancePane({
             options={THEME_SWATCHES}
             onChange={(theme) => update({ theme })}
           />
+          <button type="button" className={styles.importButton} onClick={() => void window.tr.settings.importTheme()}>
+            导入主题…
+          </button>
         </Section>
 
         <Section title="字体">
@@ -109,6 +124,22 @@ export function AppearancePane({
         </Section>
 
         <Section title="窗口">
+          <Row label="终端底色" id="terminalBackground">
+            <Segmented
+              label="终端底色"
+              value={background.mode}
+              options={BACKGROUND_OPTIONS}
+              onChange={(mode) => update({ terminalBackground: { ...background, mode } })}
+            />
+          </Row>
+          <Row label="底色值" id="terminalBackgroundColor">
+            <HexField
+              label="底色值"
+              value={custom ? background.color : themeBackground}
+              disabled={!custom}
+              onCommit={(color) => update({ terminalBackground: { mode: 'custom', color } })}
+            />
+          </Row>
           <Row label="终端不透明度" id="terminalOpacity">
             <Slider
               label="终端不透明度"
@@ -142,7 +173,7 @@ export function AppearancePane({
 
       <div className={styles.previewColumn}>
         <h2 className={styles.previewTitle}>预览</h2>
-        <PreviewTerminal appearance={appearance} />
+        <PreviewTerminal appearance={{ ...appearance, customTheme }} />
         <p className={styles.caption} data-testid="preview-caption">
           {previewCaption(appearance)}
         </p>

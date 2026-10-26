@@ -1,5 +1,8 @@
 // Pure helpers that turn design tokens into xterm options.
 import type { ITheme } from '@xterm/xterm'
+import { isDarkColor, mixHex } from '@shared/color'
+import type { TerminalColors } from '@shared/settings'
+import { TERMINAL_TOKENS } from '@shared/terminal-tokens'
 import type { TerminalAppearance } from './surface'
 
 /** 13px JetBrains Mono at its natural line height, like a normal terminal (xterm's lineHeight multiplies it). */
@@ -22,30 +25,8 @@ export function buildFontStack(appearance: Pick<TerminalAppearance, 'fontFamily'
   return [quoteFamily(appearance.fontFamily), quoteFamily(appearance.cjkFontFamily), 'monospace'].join(', ')
 }
 
-function parseHex(color: string): [number, number, number] | null {
-  const match = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(color.trim())
-  if (!match?.[1]) return null
-  const n = parseInt(match[1], 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-function toHex([r, g, b]: [number, number, number]): string {
-  return `#${[r, g, b].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`
-}
-
-/** Mixes `amount` (0..1) of `toward` into `base`; returns `base` unchanged if either is not a hex color. */
-export function mixHex(base: string, toward: string, amount: number): string {
-  const a = parseHex(base)
-  const b = parseHex(toward)
-  if (!a || !b) return base
-  return toHex([a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount, a[2] + (b[2] - a[2]) * amount])
-}
-
-function isDark(color: string): boolean {
-  const rgb = parseHex(color)
-  if (!rgb) return true
-  return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 < 0.5
-}
+export { mixHex }
+const isDark = isDarkColor
 
 /** Builds the xterm theme from the `--term-*` variables. `read` returns a variable's resolved value. */
 export function buildXtermTheme(read: (name: string) => string): ITheme {
@@ -89,6 +70,42 @@ export function buildXtermTheme(read: (name: string) => string): ITheme {
     brightMagenta: violet,
     brightCyan: cyan,
     brightWhite: dark ? mixHex(fg, '#ffffff', 0.4) : bg
+  }
+}
+
+/**
+ * The xterm theme on a user-chosen background (PRD F7 v1.71). Without imported colors the foreground and ANSI colors
+ * are the tokens of the tone that suits the background's lightness; with them (an imported Ghostty / iTerm theme) the
+ * theme's own colors are used as they are, so the terminal shows exactly the colors that were imported.
+ */
+export function buildCustomTheme(background: string, colors: TerminalColors | null): ITheme {
+  const tokens: Record<string, string> = { ...TERMINAL_TOKENS[isDark(background) ? 'dark' : 'light'], '--term-bg': background }
+  const base = buildXtermTheme((name) => tokens[name] ?? '')
+  if (!colors) return base
+  const [black, red, green, yellow, blue, magenta, cyan, white, brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta, brightCyan, brightWhite] =
+    colors.ansi
+  return {
+    ...base,
+    foreground: colors.foreground,
+    cursor: colors.cursor,
+    selectionBackground: colors.selection,
+    selectionInactiveBackground: colors.selection,
+    black,
+    red,
+    green,
+    yellow,
+    blue,
+    magenta,
+    cyan,
+    white,
+    brightBlack,
+    brightRed,
+    brightGreen,
+    brightYellow,
+    brightBlue,
+    brightMagenta,
+    brightCyan,
+    brightWhite
   }
 }
 

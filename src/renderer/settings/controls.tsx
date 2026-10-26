@@ -2,6 +2,7 @@
 // Toggle (12:136) and ThemeSwatch (12:162); Segment (9:54) is the shared ui/Segmented.
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
+import { normalizeHex } from '@shared/color'
 import styles from './controls.module.css'
 
 const COMMIT_DELAY_MS = 50
@@ -370,6 +371,49 @@ export function Select({
 }
 
 /* ---------- ColorField ---------- */
+
+/**
+ * 底色值 (Figma 07b): a swatch that opens the system color picker, and the hex typed or pasted beside it. A value
+ * that is not a color is dropped when the field loses focus. Disabled it still shows the color in effect.
+ */
+export function HexField({ value, onCommit, label, disabled = false }: { value: string; onCommit: (value: string) => void; label: string; disabled?: boolean }) {
+  const { shown, push } = useDraft(value, onCommit)
+  const [typed, setTyped] = useState<string | null>(null)
+  const finish = (): void => {
+    const hex = normalizeHex(typed)
+    setTyped(null)
+    if (hex && hex !== value) onCommit(hex)
+  }
+  return (
+    <div className={styles.hex} data-disabled={disabled}>
+      <label className={styles.hexSwatch} style={{ background: shown }}>
+        <input
+          type="color"
+          className={styles.hexPicker}
+          value={shown}
+          disabled={disabled}
+          aria-label={`${label}（取色器）`}
+          onChange={(event) => push(event.currentTarget.value)}
+        />
+      </label>
+      <input
+        type="text"
+        className={styles.hexInput}
+        value={typed ?? shown}
+        disabled={disabled}
+        aria-label={label}
+        spellCheck={false}
+        maxLength={9}
+        onChange={(event) => setTyped(event.currentTarget.value)}
+        onBlur={finish}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+          else if (event.key === 'Escape') setTyped(null)
+        }}
+      />
+    </div>
+  )
+}
 
 export function ColorField({ value, onCommit, label }: { value: string; onCommit: (value: string) => void; label: string }) {
   const { shown, push } = useDraft(value, onCommit)

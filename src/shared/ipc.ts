@@ -298,11 +298,18 @@ export interface TerminalSnapshotApi {
   remove(sessionId: string): void
 }
 
+export type ThemeImportOutcome = { status: 'imported'; name: string } | { status: 'canceled' } | { status: 'failed' }
+
 export interface SettingsApi {
   get(): Promise<AppSettings>
   /** Merges and persists; resolves to the sanitized result. Every window gets onChange. */
   update(patch: SettingsPatch): Promise<AppSettings>
   onChange(listener: (settings: AppSettings) => void): Unsubscribe
+  /**
+   * 导入主题…: opens a file picker for a Ghostty / iTerm theme, applies it (terminal 底色 → custom, its colors) and
+   * resolves to what happened. A file that cannot be read is explained by a native dialog from main.
+   */
+  importTheme(): Promise<ThemeImportOutcome>
   /** A settings write failed (disk full, permissions, …); the change is applied in memory but not saved. */
   onSaveError(listener: (error: SettingsSaveError) => void): Unsubscribe
 }
@@ -469,6 +476,7 @@ export const IPC = {
   uiConfirm: 'ui:confirm',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
+  settingsImportTheme: 'settings:import-theme',
   /** main → every window, payload AppSettings */
   settingsChanged: 'settings:changed',
   /** main → every window, payload SettingsSaveError */

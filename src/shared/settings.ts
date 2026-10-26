@@ -1,9 +1,33 @@
 // User settings (PRD §4 F7). Persisted by main in <userData>/settings.json; every window receives
 // changes through TrApi.settings.onChange. Pure: sanitizing never throws, unknown/invalid values
 // fall back to defaults so a hand-edited file can't break the app.
+import { normalizeHex } from './color'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 
 export type ThemePreference = 'system' | 'dark' | 'light'
+
+/**
+ * 终端底色 (PRD F7 v1.71). `theme`: the terminal follows the app theme (white in light, near-black in dark).
+ * `custom`: the terminal uses `color`; `color` is kept while the mode is `theme`, so switching back restores it.
+ */
+export interface TerminalBackground {
+  mode: 'theme' | 'custom'
+  /** `#rrggbb`. */
+  color: string
+}
+
+/**
+ * The colors of an imported Ghostty / iTerm theme (设置 · 外观 · 导入主题…), used while the 底色 is `custom`. The
+ * background is the 底色 itself. `selection` may carry an alpha (`#rrggbbaa`); `ansi` holds the 16 ANSI colors.
+ */
+export interface TerminalColors {
+  foreground: string
+  cursor: string
+  selection: string
+  ansi: string[]
+}
+
+export const TERMINAL_ANSI_COUNT = 16
 
 export interface AppearanceSettings {
   theme: ThemePreference
@@ -16,8 +40,11 @@ export interface AppearanceSettings {
   /** Terminal line height as a multiple of fontSize (xterm semantics). */
   lineHeight: number
   ligatures: boolean
-  // No background setting (PRD v1.2): the terminal always uses the theme's own color — white in light
-  // mode, near-black in dark — like a normal terminal. Old gradient / image values are dropped on load.
+  // The terminal background is a plain color (PRD v1.71): the theme's own — white in light mode, near-black in
+  // dark — or one the user picks or imports. Old gradient / image values (PRD v1.2) are dropped on load.
+  terminalBackground: TerminalBackground
+  /** Colors of an imported theme; null until one is imported. Applied while terminalBackground.mode is custom. */
+  terminalColors: TerminalColors | null
   /** Opacity of the terminal surface over the background, 0.5–1. */
   terminalOpacity: number
   /** macOS sidebar vibrancy (blur) behind the sidebar. */
@@ -134,6 +161,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     // block-drawn art such as the Claude Code logo.
     lineHeight: 1,
     ligatures: false,
+    terminalBackground: { mode: 'theme', color: '#0a0a0a' },
+    terminalColors: null,
     terminalOpacity: 1,
     sidebarVibrancy: false,
     screenReader: false
@@ -187,6 +216,25 @@ function str(value: unknown, fallback: string, max: number): string {
   return trimmed === '' || trimmed.length > max ? fallback : trimmed
 }
 
+function terminalBackground(value: unknown): TerminalBackground {
+  const d = DEFAULT_SETTINGS.appearance.terminalBackground
+  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return { mode: v.mode === 'custom' ? 'custom' : d.mode, color: normalizeHex(v.color) ?? d.color }
+}
+
+/** All or nothing: one bad color drops the whole imported set, so a half-read theme never reaches the terminal. */
+function terminalColors(value: unknown): TerminalColors | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  const foreground = normalizeHex(v.foreground)
+  const cursor = normalizeHex(v.cursor)
+  const selection = normalizeHex(v.selection, { alpha: true })
+  if (!foreground || !cursor || !selection || !Array.isArray(v.ansi) || v.ansi.length !== TERMINAL_ANSI_COUNT) return null
+  const ansi = v.ansi.map((color) => normalizeHex(color))
+  if (ansi.some((color) => color === null)) return null
+  return { foreground, cursor, selection, ansi: ansi as string[] }
+}
+
 function appearance(value: unknown): AppearanceSettings {
   const d = DEFAULT_SETTINGS.appearance
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
@@ -197,6 +245,8 @@ function appearance(value: unknown): AppearanceSettings {
     fontSize: Math.round(num(v.fontSize, d.fontSize, LIMITS.fontSize)),
     lineHeight: Math.round(num(v.lineHeight, d.lineHeight, LIMITS.lineHeight) * 100) / 100,
     ligatures: typeof v.ligatures === 'boolean' ? v.ligatures : d.ligatures,
+    terminalBackground: terminalBackground(v.terminalBackground),
+    terminalColors: terminalColors(v.terminalColors),
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
     sidebarVibrancy: typeof v.sidebarVibrancy === 'boolean' ? v.sidebarVibrancy : d.sidebarVibrancy,
     screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader

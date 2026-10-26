@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { launchApp } from './launch'
 
@@ -241,4 +244,88 @@ test('the theme never changes by itself: no stale migration, arrows on the swatc
   await settings.keyboard.press('Space')
   await expect.poll(async () => (await readSettings(settings)).appearance.theme).toBe('light')
   await app.close()
+})
+
+/** The settings fields of 终端底色 and imported colors, which TrWindow's narrow type does not list. */
+async function terminalColors(page: Page) {
+  const { appearance } = (await readSettings(page)) as unknown as {
+    appearance: { terminalBackground: { mode: string; color: string }; terminalColors: { foreground: string; ansi: string[] } | null }
+  }
+  return appearance
+}
+
+const themeBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--term-bg').trim())
+const previewBackground = (page: Page) =>
+  page.evaluate(() => {
+    // xterm 6 paints the theme background on its scrollable wrapper.
+    const el = document.querySelector('[data-testid="preview-terminal"] .xterm-scrollable-element')
+    return el ? getComputedStyle(el).backgroundColor : ''
+  })
+
+test('终端底色: 自定义 and an imported Ghostty theme set exactly the colors the terminal shows (F7 v1.71)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'wavi-theme-e2e-'))
+  const ghostty = join(dir, 'Monokai Pro')
+  const palette = ['#262427', '#ff666d', '#b3e03a', '#ffc739', '#00cde8', '#a392e8', '#9deaf6', '#fcfcfa', '#545452', '#ff7e83', '#bee55e', '#ffd05e', '#1bd5eb', '#b0a3eb', '#acedf8', '#fcfcfa']
+  writeFileSync(ghostty, `${palette.map((color, i) => `palette = ${i}=${color}`).join('\n')}\nbackground = #262427\nforeground = #fcfcfa\ncursor-color = #fcfcfa\n`)
+  const notATheme = join(dir, 'notes.txt')
+  writeFileSync(notATheme, 'hello')
+
+  const app = await launchApp()
+  const settings = await openSettings(app)
+  const hex = settings.getByRole('textbox', { name: '底色值', exact: true })
+
+  // Follows the theme at first: the value shows the theme's color but cannot be edited.
+  await expect(hex).toBeDisabled()
+  const themeColor = await themeBackground(settings)
+  await expect(hex).toHaveValue(themeColor)
+
+  // 自定义: type a color; the terminals (and the preview) show exactly that.
+  await settings.getByRole('radio', { name: '自定义' }).click()
+  await expect(hex).toBeEnabled()
+  await hex.fill('#FDF6E3')
+  await hex.press('Enter')
+  await expect.poll(async () => (await terminalColors(settings)).terminalBackground).toEqual({ mode: 'custom', color: '#fdf6e3' })
+  await expect.poll(() => themeBackground(settings)).toBe('#fdf6e3')
+  await expect.poll(() => previewBackground(settings)).toBe('rgb(253, 246, 227)')
+
+  // Back to the theme: the custom color is remembered but no longer in effect.
+  await settings.getByRole('radio', { name: '跟随主题' }).click()
+  await expect.poll(() => themeBackground(settings)).toBe(themeColor)
+  expect((await terminalColors(settings)).terminalBackground).toEqual({ mode: 'theme', color: '#fdf6e3' })
+
+  // 导入主题…: the picker is stubbed to return the file; the background and the colors come from it as they are.
+  const stubDialogs = (path: string) =>
+    app.evaluate(({ dialog }, file) => {
+      const target = globalThis as unknown as { boxes: unknown[] }
+      target.boxes = []
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof dialog.showOpenDialog
+      dialog.showMessageBox = (async (...args: unknown[]) => {
+        target.boxes.push(args)
+        return { response: 0, checkboxChecked: false }
+      }) as typeof dialog.showMessageBox
+    }, path)
+
+  await stubDialogs(notATheme)
+  await settings.getByRole('button', { name: '导入主题…' }).click()
+  await expect.poll(() => app.evaluate(() => (globalThis as unknown as { boxes: unknown[] }).boxes.length)).toBe(1)
+  expect((await terminalColors(settings)).terminalBackground.mode).toBe('theme')
+
+  await stubDialogs(ghostty)
+  await settings.getByRole('button', { name: '导入主题…' }).click()
+  await expect.poll(async () => (await terminalColors(settings)).terminalBackground).toEqual({ mode: 'custom', color: '#262427' })
+  const imported = await terminalColors(settings)
+  expect(imported.terminalColors?.ansi).toEqual(palette)
+  expect(imported.terminalColors?.foreground).toBe('#fcfcfa')
+  await expect(hex).toHaveValue('#262427')
+  await expect.poll(() => themeBackground(settings)).toBe('#262427')
+  await expect.poll(() => previewBackground(settings)).toBe('rgb(38, 36, 39)')
+
+  // 恢复默认 clears the imported colors and the custom background.
+  const reset = settings.getByRole('button', { name: '恢复默认' })
+  await reset.scrollIntoViewIfNeeded()
+  await reset.click()
+  await expect.poll(async () => (await terminalColors(settings)).terminalColors).toBeNull()
+  expect((await terminalColors(settings)).terminalBackground.mode).toBe('theme')
+  await app.close()
+  rmSync(dir, { recursive: true, force: true })
 })

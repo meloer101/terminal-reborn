@@ -7,6 +7,7 @@ import { IPC, type SettingsSaveError } from '@shared/ipc'
 import { applySettingsPatch, type AppSettings } from '@shared/settings'
 import { appWindows } from './app-windows'
 import { loadSettingsFile, SettingsWriter } from './settings-file'
+import { registerThemeImportHandler } from './theme-import'
 
 let current: AppSettings | null = null
 const listeners = new Set<(settings: AppSettings) => void>()
@@ -51,4 +52,5 @@ export async function updateSettings(patch: unknown): Promise<AppSettings> {
 export function registerSettingsHandlers(): void {
   ipcMain.handle(IPC.settingsGet, () => getSettings())
   ipcMain.handle(IPC.settingsUpdate, (_event, patch: unknown) => updateSettings(patch))
+  registerThemeImportHandler()
 }

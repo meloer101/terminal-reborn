@@ -1,7 +1,9 @@
 // Pure mapping from AppearanceSettings to what the renderer needs: xterm options, CSS variables
 // for the terminal layers and <html> data attributes. No DOM access, so it is unit tested.
-// The terminal color itself always comes from the theme (--term-bg): white in light mode, near-black in dark.
+// The terminal color comes from the theme (--term-bg: white in light mode, near-black in dark) unless the user chose
+// or imported one (PRD F7 v1.71): then --term-bg is set on <html> to it and xterm gets the matching customTheme.
 import type { AppearanceSettings } from '@shared/settings'
+import { buildCustomTheme } from '../terminal/appearance'
 import type { TerminalAppearance } from '../terminal/surface'
 
 /** Alpha of the terminal's default cell background: the user's terminal opacity over the theme color. */
@@ -22,8 +24,13 @@ export function toTerminalAppearance(a: AppearanceSettings): TerminalAppearance 
     lineHeight: a.lineHeight,
     ligatures: a.ligatures,
     backgroundAlpha: terminalBackgroundAlpha(a),
+    customTheme: hasCustomBackground(a) ? buildCustomTheme(a.terminalBackground.color, a.terminalColors) : undefined,
     screenReader: a.screenReader
   }
+}
+
+export function hasCustomBackground(a: Pick<AppearanceSettings, 'terminalBackground'>): boolean {
+  return a.terminalBackground.mode === 'custom'
 }
 
 /** CSS `background` of the terminal region: the theme color, or nothing when the cells are translucent. */
@@ -33,8 +40,8 @@ export function backdropCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): str
 }
 
 export interface AppearanceDom {
-  /** Custom properties on <html>. */
-  vars: Record<string, string>
+  /** Custom properties on <html>; null removes the property (the stylesheet's value applies again). */
+  vars: Record<string, string | null>
   /** data-* attributes on <html>, for CSS selectors (sidebar vibrancy). */
   data: Record<string, string>
 }
@@ -43,6 +50,8 @@ export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
   const transparent = needsTransparency(a)
   return {
     vars: {
+      // Only the terminal layers read --term-bg; --term-fg stays the theme's (the diff view uses it on app surfaces).
+      '--term-bg': hasCustomBackground(a) ? a.terminalBackground.color : null,
       '--tr-terminal-backdrop': backdropCss(a),
       // Layers that sit above the backdrop must not repaint it with an opaque fill.
       '--tr-term-surface': transparent ? 'transparent' : 'var(--term-bg)'

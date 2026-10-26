@@ -453,7 +453,7 @@ export class XtermSurface implements TerminalSurface {
 
   /** The document theme with the default background at the configured alpha. */
   private buildTheme(): ITheme {
-    const theme = readThemeFromDocument()
+    const theme = this.appearance.customTheme ?? readThemeFromDocument()
     if (!this.isTransparent() || !theme.background) return theme
     return { ...theme, background: withAlpha(theme.background, this.backgroundAlpha) }
   }

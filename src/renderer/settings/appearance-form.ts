@@ -7,6 +7,16 @@ export const THEME_OPTIONS: ReadonlyArray<{ value: ThemePreference; label: strin
   { value: 'light', label: '浅色' }
 ]
 
+export const BACKGROUND_OPTIONS: ReadonlyArray<{ value: AppearanceSettings['terminalBackground']['mode']; label: string }> = [
+  { value: 'theme', label: '跟随主题' },
+  { value: 'custom', label: '自定义' }
+]
+
+/** Whether two appearance values are the same; the object-valued ones (底色, imported colors) compare by content. */
+export function sameAppearanceValue(a: unknown, b: unknown): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b)
+}
+
 const FONT_SIZES = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28]
 
 /** Font size menu: the presets within LIMITS plus the current value if it is not a preset. */

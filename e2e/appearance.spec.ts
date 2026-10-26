@@ -178,6 +178,20 @@ test('a terminal created after the change starts with the current appearance', a
   await expect.poll(async () => (await info(SECOND))?.fontSize).toBe(13)
 })
 
+test('a custom terminal background and imported colors reach a live terminal, and clearing them restores the theme (F7 v1.71)', async () => {
+  const ansi = Array.from({ length: 16 }, (_, i) => `#${(i * 16 + 15).toString(16).padStart(2, '0').repeat(3)}`)
+  await update({ appearance: { theme: 'dark', terminalBackground: { mode: 'custom', color: '#fdf6e3' } } })
+  await expect.poll(async () => (await info(FIRST))?.background).toBe('#fdf6e3')
+  // The layers around the terminal use the same color: what the terminal shows is the color that was set.
+  await expect
+    .poll(() => terminalRegion().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor))
+    .toBe('rgb(253, 246, 227)')
+  await update({ appearance: { terminalBackground: { mode: 'custom', color: '#262427' }, terminalColors: { foreground: '#fcfcfa', cursor: '#fcfcfa', selection: '#5ea1ff47', ansi } } })
+  await expect.poll(async () => (await info(FIRST))?.background).toBe('#262427')
+  await update({ appearance: { terminalBackground: { mode: 'theme', color: '#262427' }, terminalColors: null } })
+  await expect.poll(async () => (await info(FIRST))?.background).toBe('#0a0a0a')
+})
+
 test('sidebar vibrancy flips the sidebar to see-through and back', async () => {
   const sidebarBackground = () => page.locator('[data-region="sidebar"]').evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor)
   expect(await sidebarBackground()).not.toBe('rgba(0, 0, 0, 0)')

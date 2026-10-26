@@ -116,6 +116,7 @@ const api: TrApi = {
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (patch) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
+    importTheme: () => ipcRenderer.invoke(IPC.settingsImportTheme),
     onChange: (listener) => listen(IPC.settingsChanged, listener),
     onSaveError: (listener) => listen(IPC.settingsSaveFailed, listener)
   },

@@ -1,5 +1,6 @@
 // Terminal rendering abstraction (docs/PRD.md §6.3). xterm.js is the first implementation;
 // keeping callers on this interface leaves room for a libghostty-backed surface later.
+import type { ITheme } from '@xterm/xterm'
 import type { PathResolver, TerminalLink } from './links'
 
 export interface Disposable {
@@ -20,6 +21,11 @@ export interface TerminalAppearance {
    * (`allowTransparency`). Optional, defaults to 1 (opaque).
    */
   backgroundAlpha?: number
+  /**
+   * The colors to use instead of the app theme's (设置 · 外观 · 终端底色 · 自定义, PRD F7 v1.71). Always passed, as
+   * `undefined` when the terminal follows the theme, so a later patch clears an earlier one.
+   */
+  customTheme?: ITheme | undefined
   /** xterm's screen reader mode: an accessible, live-announced copy of the output (B18). */
   screenReader?: boolean
 }

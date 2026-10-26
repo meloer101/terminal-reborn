@@ -13,7 +13,11 @@ export function applyAppearance(appearance: AppearanceSettings): void {
   const root = document.documentElement
   const dom = toAppearanceDom(appearance)
   for (const [name, value] of Object.entries(dom.vars)) {
-    if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value)
+    if (value === null) {
+      if (root.style.getPropertyValue(name) !== '') root.style.removeProperty(name)
+    } else if (root.style.getPropertyValue(name) !== value) {
+      root.style.setProperty(name, value)
+    }
   }
   for (const [name, value] of Object.entries(dom.data)) {
     if (root.dataset[name] !== value) root.dataset[name] = value

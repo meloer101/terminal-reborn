@@ -33,6 +33,32 @@
   gap: var(--space-16);
 }
 
+/* 导入主题… (Figma 07b): under the theme swatches, left-aligned, 24 high, the label centered. */
+.importButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  height: 24px;
+  margin-top: var(--space-8);
+  padding: 0 var(--space-16);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.importButton:hover {
+  background: var(--border-default);
+}
+
+.importButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .fileButton {
   display: flex;
   align-items: center;

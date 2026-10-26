@@ -259,7 +259,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 会话在应用重启后保留（PTY 守护进程，已在 2b 期间完成）
 - ~~GitHub PR 合并、应用内看 PR 评论（o#9512）~~ 移到“进行中：多 agent”的“PR 闭环”（2026-10-21，PRD v1.63）
 - [x] 文件预览：长行自动换行、Markdown 渲染（2026-10-21，PRD F17 v1.59）：react-markdown + remark-gfm，HTML 经 rehype-raw + rehype-sanitize（GitHub 白名单）；链接打开内置浏览器 / 文件预览 / 标题锚点，标题行切换源码。顺带修了切换文件时短暂显示上一个文件内容的问题。纯逻辑 `markdown-model.ts`（链接解析、不越出 worktree、标题锚点），e2e `right-panel.spec.ts`（截图 `13f-markdown`、`13f-wrap`，两种主题）。Figma 13F 待补渲染态；`npm run dev` 下 worktree 图片因页面不是 file:// 加载不出、显示替代文字，安装版正常（未在真机看过）
-- [ ] 导入 Ghostty / iTerm 主题
+- [x] 终端底色可改 + 导入 Ghostty / iTerm 主题（2026-10-25，PRD F7 v1.71，Figma 07b）：设置 · 外观 · 窗口的「终端底色」（跟随主题 / 自定义）和「底色值」，主题色块下的「导入主题…」；底色 + 前景 / 光标 / 选区 / 16 色原样用于终端，没有导入时前景和 16 色按底色明暗选深色或浅色一套（`shared/terminal-tokens.ts`，测试对照 tokens.css）；解析在 `shared/theme-import.ts`，读文件在 `main/theme-file.ts`；读不了的文件用原生对话框说明（这个对话框没在 Figma 里画）。测试：`color` / `theme-import` / `settings-terminal` / `terminal-tokens` / `theme-file` / `custom-theme` / `map-custom`，e2e `settings.spec.ts` 和 `appearance.spec.ts` 各一条。以后：导入后在主题色块里加一个色块、Alacritty / Kitty / WezTerm 格式
 - [ ] 孤儿 worktree 自动回收
 - [x] 总览批量操作（多选后停止、关闭、发送同一条消息）（2026-10-21，随多 agent 第二批的“一题多解 + 广播”提前做完，PRD F9 v1.60）
 - [ ] PRD §4 “P2 储备”中的各项

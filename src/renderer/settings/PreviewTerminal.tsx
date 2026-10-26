@@ -1,14 +1,25 @@
 import { useEffect, useRef } from 'react'
+import type { ITheme } from '@xterm/xterm'
 import type { AppearanceSettings } from '@shared/settings'
 import { buildFontStack } from '../terminal/appearance'
 import { XtermSurface } from '../terminal/xterm-surface'
 import { sampleRows, sampleScreen } from './preview-sample'
 import styles from './PreviewTerminal.module.css'
 
-type PreviewAppearance = Pick<AppearanceSettings, 'latinFont' | 'cjkFont' | 'fontSize' | 'lineHeight' | 'ligatures'>
+type PreviewAppearance = Pick<AppearanceSettings, 'latinFont' | 'cjkFont' | 'fontSize' | 'lineHeight' | 'ligatures'> & {
+  /** The colors of a custom 终端底色, as the session terminals get them; undefined follows the theme. */
+  customTheme?: ITheme | undefined
+}
 
 function toSurface(a: PreviewAppearance) {
-  return { fontFamily: a.latinFont, cjkFontFamily: a.cjkFont, fontSize: a.fontSize, lineHeight: a.lineHeight, ligatures: a.ligatures }
+  return {
+    fontFamily: a.latinFont,
+    cjkFontFamily: a.cjkFont,
+    fontSize: a.fontSize,
+    lineHeight: a.lineHeight,
+    ligatures: a.ligatures,
+    customTheme: a.customTheme
+  }
 }
 
 /**
@@ -66,13 +77,15 @@ export function PreviewTerminal({ appearance }: { appearance: PreviewAppearance 
   }, [])
 
   const { latinFont, cjkFont, fontSize, lineHeight, ligatures } = appearance
+  // The theme object is new on every settings update; its content decides whether the preview needs redrawing.
+  const themeKey = JSON.stringify(appearance.customTheme ?? null)
   useEffect(() => {
     const term = surface.current
     if (!term) return
-    term.setAppearance({ fontFamily: latinFont, cjkFontFamily: cjkFont, fontSize, lineHeight, ligatures })
+    term.setAppearance(toSurface({ latinFont, cjkFont, fontSize, lineHeight, ligatures, customTheme: latest.current.customTheme }))
     layout.current()
     term.write(sampleScreen())
-  }, [latinFont, cjkFont, fontSize, lineHeight, ligatures])
+  }, [latinFont, cjkFont, fontSize, lineHeight, ligatures, themeKey])
 
   return (
     <div
