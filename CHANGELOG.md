@@ -4,6 +4,15 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-26
+
+Stop macOS asking "Wavi would like to access your Desktop" when a session starts in your home folder.
+会话从主目录开始时，不再反复弹出“Wavi 想访问桌面”。
+
+### Fixed / 修复
+- When a session's folder is your home directory (a plain terminal starts there) or contains Desktop, Documents or Downloads, the 文件 and Git views no longer watch it recursively, walk into those three folders, or resolve paths printed under them, so macOS has nothing to ask about. A project that lives inside Desktop is unaffected, and opening one of those folders yourself still lists it. A home directory that is itself a git repository is not covered yet.
+  会话的文件夹是主目录（普通终端默认从这里开始）或包含桌面、文稿、下载时，文件和 Git 视图不再递归监视它、不再遍历这三个文件夹、也不再解析终端里打印的、落在其中的路径，macOS 就没有东西可问了。项目本身在桌面里不受影响，你自己点开某个文件夹仍然照常列出。主目录本身是 git 仓库的情况暂时没处理。
+
 ## [0.8.0] - 2026-10-25
 
 Change the terminal's background, and import a Ghostty or iTerm theme.
@@ -306,7 +315,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/meloer101/terminal-reborn/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/meloer101/terminal-reborn/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/meloer101/terminal-reborn/compare/v0.5.0...v0.6.0
