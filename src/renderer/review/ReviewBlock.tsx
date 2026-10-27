@@ -1,5 +1,5 @@
-// The review result at the top of Git · 变更 (PRD F13 v1.78, Figma 29B2): who reviewed how many files, the
-// reviewer's one-paragraph conclusion, the findings one per line (tick to send, click to jump), 重审 and 发给 <agent>.
+// The review result at the top of Git · 变更 (PRD F13 v1.78, Figma 29B2 / 29K2): who reviewed how many files, the
+// reviewer's conclusion (two lines at most), the findings one per line (tick to send, click to jump), 重审 and 发给 <agent>.
 import { Check } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReviewComment } from '@shared/review-comments'
@@ -16,6 +16,14 @@ import styles from './ReviewBlock.module.css'
 const FAILURE_SHOWN_MS = 4000
 /** The block reads these rows' comments; one stable empty list keeps the memo from running on every store change. */
 const NO_COMMENTS: readonly ReviewComment[] = []
+
+/** Whether the block shows anything for this worktree (running, failed or a result): then it owns 重审 / 取消. */
+export function useReviewShown(root: string): boolean {
+  const status = useBackgroundReview((s) => s.byRoot[root])
+  const comments = useReviewComments((s) => s.byRoot[root]) ?? NO_COMMENTS
+  const findings = useMemo(() => comments.filter((c) => c.origin === 'review'), [comments])
+  return useMemo(() => reviewBlockView(status, findings) !== null, [status, findings])
+}
 
 export function ReviewBlock({ sessionId, root }: { sessionId: SessionId; root: string }) {
   const session = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId))

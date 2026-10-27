@@ -1,12 +1,15 @@
-// Git · 变更's PR parts (PRD F16): one line above the footer with the PR, its checks and the comments nobody answered
-// yet (Figma 29I: 让 Claude 处理 puts them into the agent's input line; 让 Claude 修复 when the checks fail), what went
-// wrong last, or — without a usable gh — how to get one.
+// Git · 变更's PR parts (PRD F16): one line above the footer with the PR, its checks — and that they fail on the base
+// too (Figma 29J) — and the comments nobody answered yet (29I: 让 Claude 处理 puts them into the agent's input line;
+// 让 Claude 修复 when the checks fail), what went wrong last, or — without a usable gh — how to get one. A muted notice
+// (a receipt such as 已创建 PR #3) only stands in while there is no PR to show.
+import { Fragment } from 'react'
+import { GitPullRequest } from 'lucide-react'
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
 import type { Session, Worktree } from '@shared/types'
 import { ChecksMark } from '../../pull-requests/PrTag'
 import { fixWithAgent } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
-import { prLineText } from '../../pull-requests/auto-fix-model'
+import { baseBrokenChecks, prLineParts } from '../../pull-requests/auto-fix-model'
 import { setPrNotice, usePr, usePullRequests } from '../../pull-requests/store'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
@@ -25,7 +28,8 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
   const busy = usePullRequests((s) => s.busy[worktree.path])
   const notice = usePullRequests((s) => s.notice[worktree.path])
   const pr = usePr(worktree.path)
-  if (notice) {
+  const automation = usePullRequests((s) => s.automation[worktree.path])
+  if (notice && (notice.tone === 'error' || !pr)) {
     return (
       <p className={styles.reviewStatus} data-tone={notice.tone} role="status" data-testid="pr-status">
         <span className={styles.reviewStatusText} title={notice.text}>
@@ -47,12 +51,22 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
   const live = pr.state === 'open' || pr.state === 'draft'
   const failing = live && pr.checks.state === 'failing'
   const threads = live ? actionableThreads(pr) : []
-  const text = prLineText(pr, prStateLabel(pr.state), threads.length)
+  const broken = automation?.number === pr.number ? baseBrokenChecks(automation) : []
+  const line = prLineParts(pr, prStateLabel(pr.state), threads.length, { name: worktree.baseBranch ?? 'main', checks: broken })
+  const text = line.parts.join(' · ')
   return (
     <p className={ci.row} role="status" data-testid="pr-status">
-      {live && <ChecksMark state={pr.checks.state} />}
+      <span className={ci.icon}>
+        <GitPullRequest size={16} strokeWidth={1.75} aria-hidden />
+      </span>
       <span className={ci.text} title={text}>
-        {text}
+        {line.parts.map((part, i) => (
+          <Fragment key={i}>
+            {i > 0 && ' · '}
+            {i === line.checks && <ChecksMark state={pr.checks.state} />}
+            {part}
+          </Fragment>
+        ))}
       </span>
       <span className={ci.spacer} />
       {threads.length > 0 && target && (

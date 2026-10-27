@@ -59,6 +59,8 @@ export interface PrAutomation {
   note: string | null
   /** Why 通过后合并 could not be turned on (e.g. the repository has auto-merge off); shown on its row. */
   mergeNote: string | null
+  /** Checks the user chose 不修 for because they fail on the base already; the PR / CI line says so. */
+  baseBroken: string[]
 }
 
 export const freshAutomation = (number: number, autoFix: boolean): PrAutomation => ({
@@ -76,7 +78,8 @@ export const freshAutomation = (number: number, autoFix: boolean): PrAutomation 
   afterPush: null,
   pushedShas: [],
   note: null,
-  mergeNote: null
+  mergeNote: null,
+  baseBroken: []
 })
 
 /**
@@ -213,19 +216,47 @@ export function prChecksText(checks: ChecksSummary): string {
   return checks.state === 'pending' ? `检查 ${checks.passed}/${checks.total} · ${checks.pending} 项在跑` : checksLabel(checks)
 }
 
-/** The PR line: `PR #12 · 已打开 · 检查 2/3 · 1 项在跑 · 3 条评论没解决`; `comments` counts the threads 自动修复 may act on. */
-export function prLineText(pr: PullRequestInfo, stateLabel: string, comments: number): string {
+/**
+ * The PR line's parts (Figma 29I / 29J): `PR #12`, its state, the checks (`checks` is that part's index; the checks
+ * mark goes before it), then `main 上也失败` when the failing checks fail on the base already, comments, review and
+ * merge state. `comments` counts the threads 自动修复 may act on.
+ */
+export function prLineParts(
+  pr: PullRequestInfo,
+  stateLabel: string,
+  comments: number,
+  base?: { name: string; checks: readonly string[] }
+): { parts: string[]; checks: number } {
   const live = pr.state === 'open' || pr.state === 'draft'
   const parts = [`PR #${pr.number}`, stateLabel]
-  if (live) parts.push(prChecksText(pr.checks))
-  if (live && comments > 0) parts.push(`${comments} 条评论没解决`)
+  if (!live) return { parts, checks: -1 }
+  parts.push(prChecksText(pr.checks))
+  const failing = pr.checks.state === 'failing' ? pr.checks.failing.map((c) => c.name) : []
+  if (base && failing.length > 0 && failing.every((name) => base.checks.includes(name))) parts.push(`${base.name} 上也失败`)
+  if (comments > 0) parts.push(`${comments} 条评论没解决`)
   const details = pr.details
-  if (live && details) {
+  if (details) {
     if (details.reviewDecision === 'review-required') parts.push('需要审批')
     else if (details.reviewDecision === 'changes-requested') parts.push('要求修改')
     if (details.mergeState === 'dirty') parts.push('和基线冲突')
   }
-  return parts.join(' · ')
+  return { parts, checks: 2 }
+}
+
+/** The PR line as one string: `PR #12 · 已打开 · 检查 2/3 · 1 项在跑 · 3 条评论没解决`. */
+export function prLineText(pr: PullRequestInfo, stateLabel: string, comments: number, base?: { name: string; checks: readonly string[] }): string {
+  return prLineParts(pr, stateLabel, comments, base).parts.join(' · ')
+}
+
+/** The checks that fail on the base already: the ones being asked about, or the ones the user said 不修 for. */
+export function baseBrokenChecks(state: PrAutomation | undefined): string[] {
+  if (state?.run?.kind === 'stopped' && state.run.decision.kind === 'ask') return state.run.decision.checks
+  return state?.baseBroken ?? []
+}
+
+/** The stopped row's words (Figma 29G / 29J): the brake's reason, or for the base failing already the question its buttons answer. */
+export function stopLineText(decision: StopDecision, attempts?: number): string {
+  return decision.kind === 'ask' ? '自动修复先停：要在这个分支修吗？' : brakeLabel(decision, attempts)
 }
 
 export interface AgentWords {
@@ -244,12 +275,15 @@ function runText(state: PrAutomation, name: string): string | null {
   return null
 }
 
-/** The PR automation row's state words, tertiary and right-aligned (Figma 29I); tone `attention` when 自动修复 stopped. */
+/**
+ * The PR automation row's state words, right-aligned (Figma 29I); tone `attention` when 自动修复 stopped. Nothing while
+ * the stopped row above says why (29J), nor after 不修 (the PR line says the base fails too).
+ */
 export function automationText(state: PrAutomation | undefined, status: Pick<PrStatus, 'pr'>, agent: AgentWords): { text: string; tone: 'muted' | 'attention' } {
   const name = agent.name ?? 'Claude'
   const parts: string[] = []
-  if (state?.stopped) return { text: state.stopped, tone: 'attention' }
-  if (state?.run?.kind === 'stopped') return { text: brakeLabel(state.run.decision, state.attempts), tone: 'attention' }
+  if (state?.run?.kind === 'stopped') return { text: '', tone: 'muted' }
+  if (state?.stopped) return state.baseBroken.length > 0 ? { text: '', tone: 'muted' } : { text: state.stopped, tone: 'attention' }
   const pr = status.pr
   if (state?.autoFix && pr) {
     const running = runText(state, name)
@@ -264,12 +298,11 @@ export function automationText(state: PrAutomation | undefined, status: Pick<PrS
   return { text: parts.join(' · '), tone: 'muted' }
 }
 
-/** The base automation row's state words (Figma 29E). */
+/** The base automation row's state words (Figma 29E); like the PR row's, nothing while the stopped row says why. */
 export function baseAutomationText(state: PrAutomation | undefined, agent: AgentWords): { text: string; tone: 'muted' | 'attention' } {
   const name = agent.name ?? 'Claude'
-  if (!state) return { text: '', tone: 'muted' }
-  if (state.stopped) return { text: state.stopped, tone: 'attention' }
-  if (state.run?.kind === 'stopped') return { text: brakeLabel(state.run.decision, state.attempts), tone: 'attention' }
+  if (!state || state.run?.kind === 'stopped') return { text: '', tone: 'muted' }
+  if (state.stopped) return state.baseBroken.length > 0 ? { text: '', tone: 'muted' } : { text: state.stopped, tone: 'attention' }
   if (!state.autoFix) return { text: '', tone: 'muted' }
   const running = runText(state, name)
   if (running) return { text: running, tone: 'muted' }

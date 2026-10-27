@@ -8,14 +8,17 @@ import {
   automationText,
   autoFixDecision,
   baseAutomationText,
+  baseBrokenChecks,
   baseFixDecision,
   failingChecks,
   fixNote,
   freshAutomation,
   mergeWhenGreenOn,
   prChecksText,
+  prLineParts,
   prLineText,
   stopActions,
+  stopLineText,
   takenOver,
   type FixRun
 } from './auto-fix-model'
@@ -204,7 +207,9 @@ describe('自动修复 on the base (Figma 29E)', () => {
     expect(baseAutomationText(on, { idle: false, wants: true })).toEqual({ text: '等 Claude 空闲', tone: 'muted' })
     expect(baseAutomationText({ ...on, attempts: 1 }, { idle: true, wants: false, name: 'Codex' })).toEqual({ text: '第 1 次 · 等 CI', tone: 'muted' })
     const asking = stoppedRun({ decision: { kind: 'ask', reason: 'base-broken', checks: ['test'] }, since: null })
-    expect(baseAutomationText({ ...on, run: asking }, { idle: true, wants: false })).toEqual({ text: '基线上本来就失败：test', tone: 'attention' })
+    // The stopped row above says why (Figma 29J); after 不修 the CI line does.
+    expect(baseAutomationText({ ...on, run: asking }, { idle: true, wants: false })).toEqual({ text: '', tone: 'muted' })
+    expect(baseAutomationText({ ...on, stopped: '基线上本来就失败：test', baseBroken: ['test'] }, { idle: true, wants: false })).toEqual({ text: '', tone: 'muted' })
     expect(baseAutomationText({ ...on, stopped: '自动修复已停：x' }, { idle: true, wants: false })).toEqual({ text: '自动修复已停：x', tone: 'attention' })
   })
 })
@@ -225,6 +230,26 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
     expect(prLineText({ ...pr(), state: 'merged' }, '已合并', 2)).toBe('PR #7 · 已合并')
   })
 
+  it('says the failing checks fail on the base too, and where the checks mark goes (Figma 29J)', () => {
+    const failing = pr({}, { state: 'failing', total: 1, passed: 0, failing: [{ name: 'check', runId: null, jobId: null }] })
+    expect(prLineParts(failing, '已打开', 0, { name: 'main', checks: ['check'] })).toEqual({ parts: ['PR #7', '已打开', '1 项检查失败：check', 'main 上也失败'], checks: 2 })
+    expect(prLineText(failing, '已打开', 0, { name: 'main', checks: ['lint'] })).toBe('PR #7 · 已打开 · 1 项检查失败：check')
+    expect(prLineParts({ ...pr(), state: 'merged' }, '已合并', 0).checks).toBe(-1)
+  })
+
+  it('knows which checks fail on the base already: asked about, or declined', () => {
+    const on = freshAutomation(7, true)
+    const asking = stoppedRun({ since: null, decision: { kind: 'ask', reason: 'base-broken', checks: ['check'] } })
+    expect(baseBrokenChecks(undefined)).toEqual([])
+    expect(baseBrokenChecks({ ...on, run: asking })).toEqual(['check'])
+    expect(baseBrokenChecks({ ...on, baseBroken: ['check'] })).toEqual(['check'])
+  })
+
+  it('asks instead of repeating the reason when the base fails already', () => {
+    expect(stopLineText({ kind: 'ask', reason: 'base-broken', checks: ['check'] })).toBe('自动修复先停：要在这个分支修吗？')
+    expect(stopLineText({ kind: 'stop', reason: 'repeated' })).toBe('自动修复已停：同一个失败又出现了')
+  })
+
   it('says what is going on', () => {
     const on = freshAutomation(7, true)
     const pending = { pr: pr({}, { state: 'pending' }) }
@@ -238,6 +263,7 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
     })
     expect(automationText(undefined, { pr: pr({ inMergeQueue: true }) }, { idle: true }).text).toBe('排队中')
     expect(automationText({ ...on, stopped: '自动修复已停：x' }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：x', tone: 'attention' })
-    expect(automationText({ ...on, run: stoppedRun() }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：这次修复放宽了检查', tone: 'attention' })
+    expect(automationText({ ...on, run: stoppedRun() }, { pr: pr() }, { idle: true })).toEqual({ text: '', tone: 'muted' })
+    expect(automationText({ ...on, stopped: '基线上本来就失败：check', baseBroken: ['check'] }, { pr: pr() }, { idle: true })).toEqual({ text: '', tone: 'muted' })
   })
 })

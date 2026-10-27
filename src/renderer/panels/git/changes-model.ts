@@ -195,8 +195,9 @@ export function changeItems(
       }
     }
   }
+  // An empty 未提交 is not shown: nothing to say there.
   const count = changes.uncommitted.length + changes.untrackedOmitted
-  items.push({ kind: 'group', title: '未提交', meta: count > 0 ? `${count} 个文件` : '没有改动' })
+  if (count > 0) items.push({ kind: 'group', title: '未提交', meta: `${count} 个文件` })
   files('uncommitted', changes.uncommitted)
   if (changes.untrackedOmitted > 0) {
     items.push({ kind: 'note', key: 'untracked-omitted', text: `还有 ${changes.untrackedOmitted} 个未跟踪文件没有列出` })

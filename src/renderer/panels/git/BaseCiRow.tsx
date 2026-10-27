@@ -1,6 +1,7 @@
 // CI on the base after 合并到 main 并推送 pushed it (PRD F16 v1.78, Figma 29E / 29F / 29G), above the PR line in Git · 变更:
-// the CI row with 打开 CI, the stopped row when 自动修复's brake stopped (or the base was failing already), and the
-// automation row with the switch and what it is doing. Only for a worktree that pushed a base commit.
+// the CI row with 打开 CI, the stopped row when 自动修复's brake stopped (or the base was failing already; its answers are
+// the footer's, FixStopFooter), and the automation row with the switch and what it is doing. Only for a worktree that
+// pushed a base commit.
 import type { Worktree } from '@shared/types'
 import { openPullRequest } from '../../pull-requests/actions'
 import { agentIdle, agentName, baseWantsFix, setBaseAutoFix } from '../../pull-requests/auto-fix'
@@ -9,7 +10,7 @@ import { baseCiText, useBaseCi, useBaseCiOf } from '../../pull-requests/base-ci'
 import { ChecksMark } from '../../pull-requests/PrTag'
 import { Toggle } from '../../ui/Toggle'
 import ci from './CiRows.module.css'
-import { FixStopActions, FixStopButton, FixStopLine, useAgentOf } from './PrRows'
+import { FixStopButton, FixStopLine, useAgentOf } from './PrRows'
 
 export function BaseCiRows({ worktree }: { worktree: Worktree }) {
   const base = useBaseCiOf(worktree.path)
@@ -22,7 +23,7 @@ export function BaseCiRows({ worktree }: { worktree: Worktree }) {
   const stopped = state?.run?.kind === 'stopped' ? state.run : null
   return (
     <>
-      {stopped && <FixStopLine run={stopped} note={state?.note ?? null} />}
+      {stopped && <FixStopLine run={stopped} note={state?.note ?? null} attempts={state?.attempts} />}
       <p className={ci.row} role="status" data-testid="base-ci">
         <ChecksMark state={mark} />
         <span className={ci.text} title={text}>
@@ -57,7 +58,6 @@ export function BaseCiRows({ worktree }: { worktree: Worktree }) {
         )}
         <FixStopButton scope="base" worktreePath={worktree.path} run={state?.run} />
       </div>
-      {stopped && <FixStopActions scope="base" worktreePath={worktree.path} run={stopped} agent={name} />}
     </>
   )
 }

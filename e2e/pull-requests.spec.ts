@@ -341,10 +341,6 @@ test.describe('F16 PR / CI status', () => {
     await expect(panel().getByTestId('pr-status')).toContainText(/已合并到 main 并推送 · [0-9a-f]{7}/)
   })
 
-  // APP BUG, outside e2e/: <BaseCiRows> (src/renderer/panels/git/BaseCiRow.tsx) is never rendered — ChangesView.tsx does not
-  // import it, so main's CI row (data-testid base-ci) and its 自动修复 switch never show although main pushes BaseCi
-  // updates (the main-side watch works: gh gets the check-runs calls). Verified green with `<BaseCiRows worktree={worktree} />`
-  // as the first child of ChangesView's `prBlock` div. Turn this into `test(` once the row is rendered.
   test('main’s CI row follows the pushed commit: running, then ✗ failed with the check names', async () => {
     const ci = panel().getByTestId('base-ci')
     // GitHub needs a moment to register the push's checks: the first ask is a few seconds after the push.

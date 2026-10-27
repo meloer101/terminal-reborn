@@ -49,6 +49,11 @@ describe('changeItems', () => {
     expect(items[2]).toMatchObject({ title: '已提交', meta: '2 个提交 · 对比 main' })
   })
 
+  it('leaves out an empty 未提交 group', () => {
+    const items = changeItems(changes({ uncommitted: [], committed: [file('src/a.ts')] }), new Set(), {})
+    expect(items.map((i) => (i.kind === 'group' ? i.title : i.kind))).toEqual(['已提交', 'file'])
+  })
+
   it('says why a nested repo or a huge file has no diff, and counts untracked files left out', () => {
     const nested = changeKey('uncommitted', 'nested')
     const big = changeKey('uncommitted', 'big.log')

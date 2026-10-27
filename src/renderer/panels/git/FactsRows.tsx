@@ -1,11 +1,12 @@
-// The facts above Git · 变更's footer (PRD F13 v1.78, Figma 29A): one row per risk marker read off the diff (tests
-// deleted or skipped, checks silenced, CI config, dependencies, migrations) and the checks the agent ran this turn.
-// Both are facts from rules and hooks, no model; they inform the exit, they never block it.
-import { Check, CircleAlert, X } from 'lucide-react'
+// The facts under Git · 变更's files, above the ship zone (PRD F13 v1.78, Figma 29A / 29K2): one row per risk marker read
+// off the diff (tests deleted or skipped, checks silenced, CI config, dependencies, migrations) and the checks the agent
+// ran this turn. Both are facts from rules and hooks, no model; they inform the exit, they never block it.
+import { Check, CircleAlert, Minus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { PrTarget } from '@shared/pull-requests'
 import { riskLabel, type RiskMarker } from '@shared/risk-markers'
-import { checksText, type TurnCheckView } from '@shared/turn-checks'
+import type { TurnCheckView } from '@shared/turn-checks'
+import { checksRow } from './facts-model'
 import styles from './FactsRows.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -39,16 +40,10 @@ export function useRisks(target: PrTarget | null, changeKey: string): RiskMarker
   return root && worktree ? risks : []
 }
 
-/** `这一轮跑过：测试 ✓ · lint ✓ · 类型 未跑`; 上一轮 when this turn has not edited or checked yet. */
-export function checksRowText(view: TurnCheckView): string {
-  const when = view.turn === 'current' ? '这一轮' : '上一轮'
-  return view.kinds.length === 0 ? `${when}没跑检查` : `${when}跑过：${checksText(view)}`
-}
-
 export function FactsRows({ risks, checks }: { risks: readonly RiskMarker[]; checks: TurnCheckView | null }) {
   if (risks.length === 0 && !checks) return null
-  const failed = checks?.kinds.some((k) => k.status === 'fail') ?? false
-  const Mark = failed ? X : Check
+  const row = checks ? checksRow(checks) : null
+  const Mark = row?.tone === 'fail' ? X : row?.tone === 'ok' ? Check : Minus
   return (
     <ul className={styles.facts} aria-label="这次改动的事实" data-testid="facts">
       {risks.map((marker) => (
@@ -59,11 +54,11 @@ export function FactsRows({ risks, checks }: { risks: readonly RiskMarker[]; che
           </span>
         </li>
       ))}
-      {checks && (
-        <li className={styles.row} data-tone={failed ? 'fail' : 'ok'}>
+      {row && (
+        <li className={styles.row} data-tone={row.tone}>
           <Mark {...ICON} />
-          <span className={styles.text} title={checksRowText(checks)}>
-            {checksRowText(checks)}
+          <span className={styles.text} title={row.text}>
+            {row.text}
           </span>
         </li>
       )}

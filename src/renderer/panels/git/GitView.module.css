@@ -744,11 +744,27 @@ button.pill:hover {
   visibility: visible;
 }
 
-/* The PR block: hairline above, between the files and the footer (Figma 22B). */
-.prBlock {
+/* The ship zone (Figma 29K2): the base's CI, the PR line, 自动修复 and the footer in one block of its own fill, inset 6
+   from the card's edges, no divider. Each row keeps its own padding and reaches back over the inset, so its text stays
+   on the 14 / 16 lines of the rows above. Nothing in it (no exits, no PR): no block. */
+.shipZone {
   flex: none;
   display: flex;
   flex-direction: column;
-  padding-bottom: var(--space-4);
-  border-top: 1px solid var(--border-subtle);
+  margin: 0 var(--space-6) var(--space-6);
+  padding-top: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-section);
+}
+
+.shipZone > * {
+  margin-inline: calc(-1 * var(--space-6));
+}
+
+.shipZone:has(> .footer:first-child) {
+  padding-top: 0;
+}
+
+.shipZone:empty {
+  display: none;
 }

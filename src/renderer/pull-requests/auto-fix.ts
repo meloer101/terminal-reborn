@@ -399,10 +399,12 @@ export function proceedAnyway(scope: FixScope, worktreePath: string): void {
   step()
 }
 
-/** 不修: leaves the failure alone. */
+/** 不修: leaves the failure alone; the PR / CI line keeps saying it fails on the base too. */
 export function declineFix(scope: FixScope, worktreePath: string): void {
   const state = read(scope, worktreePath)
-  if (state?.run?.kind === 'stopped') write(scope, worktreePath, { ...state, run: null, stopped: brakeLabel(state.run.decision, state.pushed) })
+  if (state?.run?.kind !== 'stopped') return
+  const { decision } = state.run
+  write(scope, worktreePath, { ...state, run: null, stopped: brakeLabel(decision, state.pushed), baseBroken: decision.kind === 'ask' ? decision.checks : state.baseBroken })
 }
 
 /** 停下: interrupts the agent's turn and stops 自动修复 until it is switched on again. */

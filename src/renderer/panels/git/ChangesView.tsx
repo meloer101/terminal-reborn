@@ -1,10 +1,12 @@
 // Git · 变更 (PRD F17 13B2 / F5 / F13 v1.78 / F16 v1.78): the review block, then the worktree's files grouped 未提交 (working
 // tree) and 已提交 (vs the base branch), each expandable to a unified diff. Every row has a fixed height, so long diffs
 // render only the visible window. Diff lines take inline review comments (F5): ＋ on a line opens an editor under it;
-// saved comments stay there until the footer puts them into the agent's input line together. Below: the PR line, the
-// facts (risk markers, this turn's checks) and the footer — 让 agent 审阅 on the left, the two exits on the right
-// (合并到 base 并推送 / 创建 PR, or for a branch whose PR is open, 打开 PR / 合并 PR…). An exit opens the Ship block;
-// ⇧⌘M runs the primary exit (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N….
+// saved comments stay there until the footer puts them into the agent's input line together. Below: the facts (risk
+// markers, this turn's checks), then the ship zone (Figma 29K2, a block of its own fill, no dividers): the base's CI,
+// the PR line, 自动修复 and the footer — 审阅全部改动 on the left while no review shows, the two exits on the right
+// (合并到 base 并推送 / 创建 PR, or for a branch whose PR is open, 打开 PR / 合并 PR…). While 自动修复 stopped, the footer
+// holds that row's answers instead (29G / 29J). An exit opens the Ship block; ⇧⌘M runs the primary exit
+// (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N….
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
@@ -17,7 +19,7 @@ import type { Worktree } from '@shared/types'
 import type { DiffLayout } from '@shared/workspace-file'
 import { commentPicked } from '@shared/review-comments'
 import { loadSavedReview } from '../../review/background'
-import { ReviewBlock } from '../../review/ReviewBlock'
+import { ReviewBlock, useReviewShown } from '../../review/ReviewBlock'
 import { ReviewButton } from '../../review/ReviewButton'
 import { ReviewMarker } from '../../review/ReviewMarker'
 import { markKey, useReviewMarks } from '../../review/marks'
@@ -37,7 +39,8 @@ import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsRows, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
 import { PrStatusLine } from './PullRequest'
-import { PrAutomationRow } from './PrRows'
+import { FixStopFooter, PrAutomationRow, useAgentOf, useStoppedFix } from './PrRows'
+import { agentName } from '../../pull-requests/auto-fix'
 import { usePrStatus } from '../../pull-requests/store'
 import { commentTarget, discardComments, sendComments } from './comments'
 import { toggleFile, type RootGit } from './store'
@@ -95,6 +98,9 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const { settings } = useSettings()
   const turnChecks = useTurnCheckView(target?.id)
   const shipping = useShips((s) => s.byWorktree[worktree.path] !== undefined)
+  const reviewShown = useReviewShown(root)
+  const stopped = useStoppedFix(worktree.path, prLive?.number ?? null)
+  const fixAgent = agentName(useAgentOf(worktree.path))
   // Opening 变更 asks about the branch's PR now rather than at the next poll (main throttles it).
   useEffect(() => window.tr.pr.refresh(worktree.path), [worktree.path])
   useEffect(() => loadSavedReview(root), [root])
@@ -179,8 +185,9 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     )
   }
 
-  // ⇧⌘M runs the primary exit while it is on screen; a PR to merge keeps the PR merge sheet (its button opens it).
-  const shortcutExit = shipping
+  // ⇧⌘M runs the primary exit while it is on screen; a PR to merge keeps the PR merge sheet (its button opens it). A
+  // stopped fix's answers replace the exits, so the shortcut does nothing until it is answered.
+  const shortcutExit = shipping || stopped
     ? () => undefined
     : !nothingToShip && !idlePr && !worktree.isMain
       ? () => (exitBlocker(exits.primary) === null ? go(exits.primary) : undefined)
@@ -195,77 +202,93 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
           {rendered}
         </div>
       </div>
-      <div className={styles.prBlock}>
+      {!shipping && <FactsRows risks={risks} checks={turnChecks} />}
+      <div className={styles.shipZone}>
         <BaseCiRows worktree={worktree} />
         <PrStatusLine worktree={worktree} target={target} />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
-      </div>
-      {shipping ? (
-        <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} />
-      ) : (
-        <>
-          <FactsRows risks={risks} checks={turnChecks} />
-          <div className={styles.footer}>
-            {count > 0 ? (
-              <>
-                <button
-                  type="button"
-                  className={styles.ghostButton}
-                  disabled={!target || picked === 0}
-                  title={
-                    !target
-                      ? '这个 worktree 没有 agent 会话'
-                      : picked === 0
-                        ? '勾选要发送的审阅意见'
-                        : `放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`
-                  }
-                  onClick={() => {
-                    if (!target) return
-                    setSendError(null)
-                    sendComments(root, target).catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error)))
-                  }}
-                >
-                  <MessageSquare size={16} strokeWidth={1.75} aria-hidden />
-                  {sendError ? '没能发送' : `发给 ${target ? agentLabel(target.kind) : 'agent'} · ${picked}`}
+        {shipping ? (
+          <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} />
+        ) : stopped ? (
+          <FixStopFooter
+            scope={stopped.scope}
+            worktreePath={worktree.path}
+            run={stopped.run}
+            agent={fixAgent}
+            leading={
+              prLive && (
+                <button type="button" className={styles.ghostButton} title={`在内置浏览器打开 ${prLive.url}`} onClick={() => openPullRequest(sessionId, prLive.url)}>
+                  打开 PR #{prLive.number}
                 </button>
-                <button type="button" className={styles.ghostButton} onClick={() => void discardComments(root)}>
-                  放弃
-                </button>
-              </>
-            ) : (
-              reviewer && !nothingToShip && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
-            )}
-            <span className={styles.spacer} />
-            {!nothingToShip &&
-              (idlePr ? (
+              )
+            }
+          />
+        ) : (
+          (count > 0 || !nothingToShip) && (
+            <div className={styles.footer}>
+              {count > 0 ? (
                 <>
                   <button
                     type="button"
                     className={styles.ghostButton}
-                    title={`在内置浏览器打开 ${idlePr.url}`}
-                    onClick={() => openPullRequest(sessionId, idlePr.url)}
+                    disabled={!target || picked === 0}
+                    title={
+                      !target
+                        ? '这个 worktree 没有 agent 会话'
+                        : picked === 0
+                          ? '勾选要发送的审阅意见'
+                          : `放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`
+                    }
+                    onClick={() => {
+                      if (!target) return
+                      setSendError(null)
+                      sendComments(root, target).catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error)))
+                    }}
                   >
-                    打开 PR #{idlePr.number}
+                    <MessageSquare size={16} strokeWidth={1.75} aria-hidden />
+                    {sendError ? '没能发送' : `发给 ${target ? agentLabel(target.kind) : 'agent'} · ${picked}`}
                   </button>
-                  <button
-                    type="button"
-                    className={styles.primaryButton}
-                    disabled={worktree.isMain || !projectRoot}
-                    title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
-                    onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
-                  >
-                    合并 PR #{idlePr.number}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+                  <button type="button" className={styles.ghostButton} onClick={() => void discardComments(root)}>
+                    放弃
                   </button>
                 </>
               ) : (
-                <>
-                  {exits.secondary && exitButton(exits.secondary, false)}
-                  {exitButton(exits.primary, true)}
-                </>
-              ))}
-          </div>
-        </>
-      )}
+                // 审阅全部改动 would repeat the block's 重审; the agent's own command (让 agent 审阅) is another action.
+                reviewer &&
+                (!reviewShown || settings.review.mode === 'agent-command') && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
+              )}
+              <span className={styles.spacer} />
+              {!nothingToShip &&
+                (idlePr ? (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.ghostButton}
+                      title={`在内置浏览器打开 ${idlePr.url}`}
+                      onClick={() => openPullRequest(sessionId, idlePr.url)}
+                    >
+                      打开 PR #{idlePr.number}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      disabled={worktree.isMain || !projectRoot}
+                      title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
+                      onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
+                    >
+                      合并 PR #{idlePr.number}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {exits.secondary && exitButton(exits.secondary, false)}
+                    {exitButton(exits.primary, true)}
+                  </>
+                ))}
+            </div>
+          )
+        )}
+      </div>
     </>
   )
 }

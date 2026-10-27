@@ -23,9 +23,10 @@
   color: var(--text-tertiary);
 }
 
-/* Shapes carry the meaning (alert / check / cross); color only repeats it. */
+/* Shapes carry the meaning (alert / check / cross); color only repeats a check result. A risk marker is a fact, not a
+   status: its alert stays neutral (Figma 29B2 / 29J), magenta is for what waits on you. */
 .row[data-tone='risk'] svg {
-  color: var(--status-attention);
+  color: var(--text-secondary);
 }
 
 .row[data-tone='ok'] svg {

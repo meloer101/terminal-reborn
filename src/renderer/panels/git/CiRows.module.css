@@ -1,5 +1,5 @@
-/* Git · 变更's CI rows above the footer (Figma 29E / 29F / 29G / 29I): the base's CI after 合并到 main 并推送, the stopped
-   row of 自动修复 with its buttons, and the automation row. Same rhythm as the PR line in GitView.module.css. */
+/* Git · 变更's CI rows above the footer (Figma 29E / 29F / 29G / 29I / 29J): the base's CI after 合并到 main 并推送, the
+   PR line, the stopped row of 自动修复 (its answers are the footer's) and the automation row. Same rhythm as the facts. */
 
 .row {
   flex: none;
@@ -13,11 +13,23 @@
   color: var(--text-secondary);
 }
 
+.icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
 .text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The checks mark inside the PR line, before the checks part (Figma 29J). */
+.text svg {
+  margin-right: var(--space-2);
+  vertical-align: -2px;
 }
 
 .spacer {
@@ -34,7 +46,7 @@
   width: var(--space-8);
 }
 
-/* Right-aligned state words of the automation row. */
+/* Right-aligned state words of the automation row; a stop reads one step louder, still neutral (color is for marks). */
 .state {
   min-width: 0;
   overflow: hidden;
@@ -44,10 +56,11 @@
 }
 
 .state[data-tone='attention'] {
-  color: var(--status-attention);
+  color: var(--text-secondary);
 }
 
-/* The brake stopped (29G): the alert icon carries the meaning with the words, the words are primary text. */
+/* The brake stopped (29G) or the base fails already (29J): the alert circle carries the meaning with the words, which
+   are primary text; neither is colored. */
 .stop {
   flex: none;
   display: flex;
@@ -63,15 +76,7 @@
 .stopIcon {
   flex: none;
   display: inline-flex;
-  color: var(--status-attention);
-}
-
-.actions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-16) 0 calc(var(--space-12) - var(--space-2));
+  color: var(--text-secondary);
 }
 
 .action {
