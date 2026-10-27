@@ -42,10 +42,10 @@
   color: var(--text-primary);
 }
 
-/* The orbit mark (build/icon.svg, Figma Logo/Mark) as a mask, so it takes the theme's text colour. */
+/* The interlocking-loop mark (build/icon.svg, Figma Logo/交织) as a mask, so it takes the theme's text colour. */
 .mark {
   flex: none;
-  width: 30px;
+  width: 36px;
   height: 36px;
   background: var(--text-primary);
   mask: url('../assets/logo-mark.svg') center / contain no-repeat;
