@@ -366,6 +366,14 @@ button.pill:hover {
   white-space: pre;
 }
 
+/* The `P1` tag of a review finding, at the right end of the line it points at (Figma 29B2). */
+.reviewMark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-8);
+}
+
 .diffNote {
   height: 28px;
   display: flex;
@@ -399,7 +407,8 @@ button.pill:hover {
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
   padding: calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2))
     calc(var(--space-12) + var(--space-2));
 }

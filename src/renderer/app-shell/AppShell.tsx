@@ -20,7 +20,6 @@ import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { SettingsDialog } from '../settings/SettingsDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
-import { CreatePrSheet } from '../pull-requests/CreatePrSheet'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startDispatchBridge } from '../dispatch/bridge'
 import { DispatchSheet } from '../dispatch/DispatchSheet'
@@ -145,7 +144,6 @@ export function AppShell() {
       {isKey && <NewSessionSheet />}
       {isKey && <SameTaskSheet />}
       <MergeSheet />
-      <CreatePrSheet />
       <ArchiveSheet />
       <DispatchSheet />
       <MenuHost />

@@ -12,6 +12,7 @@ import { useWorkspace } from '../../state/workspace'
 import { IconButton } from '../../ui/IconButton'
 import { popupMenu } from '../../ui/menu'
 import { Segmented } from '../../ui/Segmented'
+import { compareLine } from '../../pull-requests/ship-flow'
 import { PaneHeader } from '../PaneHeader'
 import { ChangesView } from './ChangesView'
 import { GraphView } from './GraphView'
@@ -174,9 +175,7 @@ function GitPane({ worktree }: { worktree: Worktree }) {
         ) : (
           <>
             {git.changes?.base && (
-              <span className={styles.aheadBehind}>
-                领先 {git.changes.ahead} · 落后 {git.changes.behind}
-              </span>
+              <span className={styles.aheadBehind}>{compareLine(git.changes.base, git.changes.ahead, git.changes.behind)}</span>
             )}
             <LayoutSwitch layout={layout} roomy={roomy} onChange={setDiffLayout} />
           </>
