@@ -1,14 +1,23 @@
-// Git · 变更's PR parts (PRD F16): the footer's PR button — 提交并创建 PR / 创建 PR / 提交并推送 / 推送到 PR #N /
-// 打开 PR #N by the worktree's git state (v1.68, ship-model) — and one line above the footer with the PR and its checks
-// (让 agent 修复 when they fail), what went wrong last, or — without a usable gh — how to get one.
-import { checksLabel, prReviewSummary, prStateLabel } from '@shared/pull-requests'
+// Git · 变更's PR parts (PRD F16): one line above the footer with the PR, its checks and the comments nobody answered
+// yet (Figma 29I: 让 Claude 处理 puts them into the agent's input line; 让 agent 修复 when the checks fail), what went
+// wrong last, or — without a usable gh — how to get one.
+//
+// LEGACY: PrButton, the footer's PR button (提交并创建 PR / 推送到 PR #N / 打开 PR #N by ship-model), is replaced by
+// the two exits of Figma 29A; delete it with its import in ChangesView.
+import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
 import type { Session, SessionId, Worktree } from '@shared/types'
 import { ChecksMark } from '../../pull-requests/PrTag'
 import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
+import { actionableThreads } from '../../pull-requests/auto-fix'
+import { prLineText } from '../../pull-requests/auto-fix-model'
 import { openCreatePr } from '../../pull-requests/create-sheet'
 import { shipAction } from '../../pull-requests/ship-model'
-import { usePr, usePrStatus, usePullRequests } from '../../pull-requests/store'
+import { setPrNotice, usePr, usePrStatus, usePullRequests } from '../../pull-requests/store'
+import { ensureAgentUp } from '../../lifecycle/agent-up'
+import { insertIntoTerminal } from '../../session-io'
+import { useWorkspace } from '../../state/workspace'
 import { agentLabel } from '../merge/model'
+import ci from './CiRows.module.css'
 import styles from './GitView.module.css'
 
 const BUSY_LABEL = { committing: '正在提交…', pushing: '正在推送…', creating: '正在创建 PR…' } as const
@@ -123,25 +132,48 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
   }
   const live = pr.state === 'open' || pr.state === 'draft'
   const failing = live && pr.checks.state === 'failing'
-  const pending = live && pr.details ? prReviewSummary(pr.details) : ''
-  const text = [`PR #${pr.number}`, prStateLabel(pr.state), ...(live ? [checksLabel(pr.checks)] : []), ...(pending ? [pending] : [])].join(' · ')
+  const threads = live ? actionableThreads(pr) : []
+  const text = prLineText(pr, prStateLabel(pr.state), threads.length)
   return (
-    <p className={styles.reviewStatus} role="status" data-testid="pr-status">
+    <p className={ci.row} role="status" data-testid="pr-status">
       {live && <ChecksMark state={pr.checks.state} />}
-      <span className={styles.reviewStatusText} title={text}>
+      <span className={ci.text} title={text}>
         {text}
       </span>
+      <span className={ci.spacer} />
+      {threads.length > 0 && target && (
+        <button
+          type="button"
+          className={ci.action}
+          title={`把这 ${threads.length} 条评论放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`}
+          onClick={() => void handleComments(worktree.path, target, pr.number, threads)}
+        >
+          {`让 ${agentLabel(target.kind)} 处理`}
+        </button>
+      )}
       {failing && target && (
         <button
           type="button"
-          className={styles.noteAction}
+          className={ci.action}
           disabled={busy === 'fixing'}
           title={`把失败的检查和日志末尾放进 ${agentLabel(target.kind)} 的输入行，看过后按回车发送`}
           onClick={() => void fixWithAgent(worktree.path, target)}
         >
-          {busy === 'fixing' ? '正在读取日志…' : '让 agent 修复'}
+          {busy === 'fixing' ? '正在读取日志…' : `让 ${agentLabel(target.kind)} 修复`}
         </button>
       )}
     </p>
   )
+}
+
+/** 让 Claude 处理: puts the unresolved comments 自动修复 may act on into the agent's input line; Enter stays with the user. */
+async function handleComments(worktreePath: string, target: Session, number: number, threads: PrThread[]): Promise<void> {
+  try {
+    useWorkspace.getState().setActiveSession(target.id)
+    await ensureAgentUp(target.id)
+    await insertIntoTerminal(target.id, prThreadsPrompt(number, threads))
+    useWorkspace.getState().requestTerminalFocus()
+  } catch (error) {
+    setPrNotice(worktreePath, { tone: 'error', text: `没能交给 ${agentLabel(target.kind)}：${error instanceof Error ? error.message : String(error)}` })
+  }
 }
