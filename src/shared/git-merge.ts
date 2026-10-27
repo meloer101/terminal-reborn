@@ -111,6 +111,8 @@ export type MergeResult =
 
 const MAX_PATH = 4096
 const MAX_TITLE = 200
+/** Longest squash message main accepts. */
+export const MAX_MERGE_MESSAGE = 10_000
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/
 
 const isAbsolutePath = (value: unknown): value is string =>
@@ -130,7 +132,25 @@ export function parseMergeRequest(raw: unknown): MergeRequest | null {
     const title = oneLine(r.title).slice(0, MAX_TITLE)
     if (title) request.title = title
   }
+  if (r.message !== undefined) {
+    if (typeof r.message !== 'string' || r.message.length > MAX_MERGE_MESSAGE) return null
+    const message = multiLine(r.message)
+    if (message) request.message = message
+  }
   return request
+}
+
+/** A commit message as typed: line breaks and tabs kept, other control characters out, trailing spaces trimmed. */
+export function multiLine(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim()
 }
 
 /** Control characters and line breaks out, runs of spaces collapsed. */

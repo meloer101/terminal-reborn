@@ -357,7 +357,7 @@ export async function mergeWorktree(raw: unknown): Promise<MergeResult> {
       const message =
         request.method === 'merge'
           ? mergeMessage(check.branch, check.base)
-          : squashMessage(check.branch, await squashCommits(realRoot, check.baseHead, check.head, check.ahead), request.title)
+          : (request.message ?? squashMessage(check.branch, await squashCommits(realRoot, check.baseHead, check.head, check.ahead), request.title))
       const parents = request.method === 'merge' ? ['-p', check.baseHead, '-p', check.head] : ['-p', check.baseHead]
       commit = (await git(realRoot, ['commit-tree', inspection.tree!, ...parents, '-F', '-'], { input: message })).trim()
     }
