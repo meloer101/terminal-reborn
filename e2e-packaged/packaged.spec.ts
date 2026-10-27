@@ -76,10 +76,11 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close()
-  // The daemon outlives the app by design; this profile is a throwaway, so is its daemon.
+  // The daemon outlives the app by design; this profile is a throwaway, so is its daemon. SIGKILL: it keeps its
+  // sessions on pkill's default SIGTERM (PRD §6.8).
   if (!userData) return
   try {
-    execFileSync('pkill', ['-f', join(userData, 'daemon')], { stdio: 'ignore' })
+    execFileSync('pkill', ['-KILL', '-f', join(userData, 'daemon')], { stdio: 'ignore' })
   } catch {
     // Nothing matched: no daemon was started.
   }

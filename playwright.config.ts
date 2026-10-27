@@ -6,6 +6,8 @@ const EXCLUSIVE = [/git-panel-perf\.spec\.ts$/, /browser-panel\.spec\.ts$/, /ter
 
 export default defineConfig({
   testDir: './e2e',
+  // Ends pty daemons a failed test left behind (e2e/global-setup.ts).
+  globalSetup: './e2e/global-setup.ts',
   timeout: 30_000,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',

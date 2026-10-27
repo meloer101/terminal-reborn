@@ -50,6 +50,7 @@
 - [x] 切换会话和右侧栏抽屉结束时终端闪一帧空白（2026-10-27，PRD §6.3）：rAF 里重载 WebGL 或改 canvas 尺寸，重画排到下一帧；addon 还会在 ResizeObserver 里把 canvas 清空。显示改到绘制前，抽屉结束时同步 fit，清空之后立刻补画。e2e `terminal-flicker.spec.ts`，修复前 10 个空白帧，修复后 0
 - [x] 依赖和构建缓存目录的写入不再触发 git 重扫（2026-10-27，PRD F17）：右侧栏开着文件或 Git 视图时，agent 跑 `npm install`、dev server 重建写 `node_modules` / `.next` 等，原来每 250 ms 一次 `git status` + `ls-files`，Git 视图每秒一套约 8 个 git。现在这些目录只刷新已展开的文件夹，状态、文件列表和变更不重读。单元测试 `worktree-files.test.ts`
 - [x] 侧栏和终端容器不再随任意会话的 hook 事件整体重渲染（2026-10-27）：`SessionRow` 按画出来的内容比较（`sameRow`），`TerminalPane` 按自己的 props 比较（`rect` 按值）。单元测试 `sidebar/model.test.ts`
+- [x] e2e 不再留下守护进程（2026-10-27）：守护进程按设计忽略普通 SIGTERM（PRD §6.8），`scale.spec.ts` 和打包测试却用 SIGTERM 清理，机器上积了跑了 6–8 天的守护进程和 agent。改用 SIGKILL（`e2e/daemons.ts`），并在整轮结束时结束本轮各 profile 下还活着的守护进程（`e2e/global-setup.ts`，只碰本轮的 profile）。`pty-daemon.spec.ts` 在负载下丢掉开头几个字（点击时 xterm 还没打开，键盘没进终端），改为等终端拿到焦点、shell 画出提示符再打字：8 路并行 16/16
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）

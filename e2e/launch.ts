@@ -1,5 +1,5 @@
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync } from 'node:fs'
+import { appendFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -18,8 +18,12 @@ export function launchApp(
 ): Promise<ElectronApplication> {
   // A fixed `userDataDir` lets a test relaunch with the same profile (persistence).
   const userData = options.userDataDir ?? mkdtempSync(join(tmpdir(), 'tr-e2e-'))
+  // The run's teardown ends any daemon this profile leaves behind (e2e/global-setup.ts).
+  const profiles = process.env.TR_E2E_PROFILES
+  if (profiles) appendFileSync(profiles, `${userData}\n`)
   const env: Record<string, string | undefined> = {
     ...process.env,
+    TR_E2E_PROFILES: undefined,
     TR_USER_DATA_DIR: userData,
     TR_E2E_DIALOGS: '1',
     TR_KILL_SESSIONS_ON_QUIT: '1',

@@ -48,6 +48,23 @@ test.describe('pty daemon', () => {
     await page.keyboard.press('Enter')
   }
 
+  /**
+   * Clicks the terminal and waits until it has the keyboard and the shell has drawn something. A click before xterm is
+   * open (fonts loading) does not focus it, and keys typed meanwhile never reach the PTY: on a loaded machine the
+   * first characters of `echo PID-$$-END` went missing.
+   */
+  const focusTerminal = async () => {
+    const pane = page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"]`)
+    await expect
+      .poll(async () => {
+        await pane.click()
+        return page.evaluate(() => document.activeElement?.classList.contains('xterm-helper-textarea') ?? false)
+      })
+      .toBe(true)
+    // A login shell under load can take seconds to draw its prompt.
+    await expect.poll(async () => (await screen()).trim().length, { timeout: 20_000 }).toBeGreaterThan(0)
+  }
+
   /** Opens the app on the fixed profile; quitting it leaves the sessions running. */
   const launch = async () => {
     app = await launchApp({ TR_KILL_SESSIONS_ON_QUIT: undefined }, { userDataDir: profile })
@@ -92,7 +109,7 @@ test.describe('pty daemon', () => {
 
   test('quitting leaves the shell running; the relaunch reattaches to the same process', async () => {
     await launch()
-    await page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"]`).click()
+    await focusTerminal()
     await type('echo PID-$$-END')
     await expect.poll(screen).toMatch(/PID-\d+-END/)
     const pid = Number(/PID-(\d+)-END/.exec(await screen())?.[1])
@@ -114,7 +131,7 @@ test.describe('pty daemon', () => {
     expect(Date.now() - started).toBeLessThan(1500)
 
     // The same `cat` gets our input...
-    await page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"]`).click()
+    await focusTerminal()
     await type('typed-after-relaunch')
     await expect.poll(screen).toContain('typed-after-relaunch')
     // ...and the shell under it is the one from before the quit.
@@ -138,7 +155,7 @@ test.describe('pty daemon', () => {
     // The relaunch reattaches the same shell.
     await launch()
     expect(daemonPid()).toBe(daemon)
-    await page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"]`).click()
+    await focusTerminal()
     await type('echo STILL-$$-END')
     await expect.poll(screen).toContain(`STILL-${shellPid}-END`)
 

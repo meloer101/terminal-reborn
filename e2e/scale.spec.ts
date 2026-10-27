@@ -13,10 +13,11 @@
 // macOS phys_footprint of the same processes (what Activity Monitor shows); agents and their shells are not counted.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { outerClaudeEnv } from './fake-claude'
+import { killProfileDaemons } from './daemons'
 import { launchApp, setWindowSize } from './launch'
 
 const AGENT = resolve('e2e/scale-agent.mjs')
@@ -185,12 +186,7 @@ class Rig {
 
   /** Ends the pty daemon and with it every session (after a quit that kept them running). */
   endDaemon(): void {
-    try {
-      const pid = (JSON.parse(readFileSync(join(this.profile, 'daemon', 'daemon.json'), 'utf8')) as { pid: number }).pid
-      process.kill(pid, 'SIGTERM')
-    } catch {
-      // No daemon left.
-    }
+    killProfileDaemons(this.profile)
   }
 
   private daemonPid(): number | null {
