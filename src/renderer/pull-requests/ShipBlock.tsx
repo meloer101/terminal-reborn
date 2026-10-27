@@ -5,6 +5,7 @@ import { Check } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { cancelShip, editShip, handConflictsToAgent, retryShip, submitShip, switchToPr, useShips } from './ship-runner'
 import { glanceFields, STEP_GLYPH_NAME, stepGlyph, submitBlocker, submitLabel, type ShipState } from './ship-flow'
+import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './ShipBlock.module.css'
 
 export function ShipBlock({ worktree, base, hasSession }: { worktree: string; base: string; hasSession: boolean }) {
@@ -56,9 +57,16 @@ export function ShipBlock({ worktree, base, hasSession }: { worktree: string; ba
         <ol className={styles.steps}>
           {state.steps.map((step) => (
             <li key={step.id} className={styles.step} data-state={step.state} data-step={step.id}>
-              <span className={styles.glyph} role="img" aria-label={STEP_GLYPH_NAME[step.state]}>
-                {stepGlyph(step.state)}
-              </span>
+              {step.state === 'working' ? (
+                // ◌ is all but invisible in the UI font; the session spinner is the app's one "in progress" sign.
+                <span className={styles.glyph}>
+                  <StatusGlyph status="running" />
+                </span>
+              ) : (
+                <span className={styles.glyph} role="img" aria-label={STEP_GLYPH_NAME[step.state]}>
+                  {stepGlyph(step.state)}
+                </span>
+              )}
               <span className={styles.stepBody}>
                 <span className={styles.stepText}>
                   {step.label}

@@ -332,6 +332,17 @@ describe('HookBridge · turn checks (PRD F9 / F4)', () => {
     expect(shown(events)).toBe('current 测试 ✓ · lint ✓ · 类型 ✓')
   })
 
+  it('keeps the turn when Wavi itself submits a message (a handoff, an auto-fix)', async () => {
+    const { bridge, events, req } = setup()
+    await bridge.handle(req('UserPromptSubmit', { prompt: 'fix login' }))
+    await bridge.handle(req('PostToolUse', bash('npx vitest run', { tool_response: { stdout: 'Tests  3 passed (3)' } })))
+    expect(shown(events)).toBe('current 测试 ✓')
+    await bridge.handle(req('UserPromptSubmit', { prompt: '（Wavi 写 PR）\n请为分支 x 写 PR 的标题和说明' }))
+    expect(shown(events)).toBe('current 测试 ✓')
+    await bridge.handle(req('UserPromptSubmit', { prompt: 'and now the docs' }))
+    expect(shown(events)).toBe('previous 测试 ✓')
+  })
+
   it('carries the last turn while the next only talks, and starts over on /clear', async () => {
     const { bridge, events, req } = setup()
     await bridge.handle(req('UserPromptSubmit', { prompt: 'a' }))

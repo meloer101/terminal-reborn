@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIX_LOG_MAX, handoffPrompt, HANDOFF_FILES, parseCommitHandoff, parsePrHandoff, type HandoffContext } from './ship-handoff'
+import { FIX_LOG_MAX, handoffPrompt, HANDOFF_FILES, isWaviPrompt, parseCommitHandoff, parsePrHandoff, type HandoffContext } from './ship-handoff'
 
 function context(patch: Partial<HandoffContext> = {}): HandoffContext {
   return {
@@ -275,5 +275,16 @@ describe('parsePrHandoff', () => {
     expect(parsePrHandoff('\n  \n')).toBeNull()
     expect(parsePrHandoff('# ')).toBeNull()
     expect(parsePrHandoff('Co-authored-by: a <b@c.d>')).toBeNull()
+  })
+})
+
+describe('the Wavi mark', () => {
+  it('opens every handoff message, so the hooks can tell it from the user', () => {
+    for (const kind of ['commit', 'pr', 'fix'] as const) {
+      const prompt = handoffPrompt({ kind, path: '/r/.git/wavi/x.md', branch: 'b', base: 'main', template: null, evidence: [] })
+      expect(isWaviPrompt(prompt)).toBe(true)
+    }
+    expect(isWaviPrompt('fix login')).toBe(false)
+    expect(isWaviPrompt('（Wavi 自动修复 第 1 次）')).toBe(true)
   })
 })

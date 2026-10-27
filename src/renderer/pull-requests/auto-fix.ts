@@ -11,7 +11,7 @@
 import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-fix-brakes'
 import { prThreadsPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import { DEFAULT_SETTINGS, type PrSettings } from '@shared/settings'
-import { handoffPrompt, type HandoffContext, type HandoffFailure } from '@shared/ship-handoff'
+import { handoffPrompt, isWaviPrompt, type HandoffContext, type HandoffFailure } from '@shared/ship-handoff'
 import type { Session } from '@shared/types'
 import { interruptAgent, submitPrompt } from '../session-io'
 import { useBackgroundReview } from '../review/background'
@@ -546,7 +546,7 @@ export function startPrAutomation(): () => void {
       return
     }
     // The user's own message in the session: counting starts from zero again (it may also have been the fix).
-    if (event.type !== 'prompt-submit' || event.prompt.startsWith(AUTO_FIX_MARK)) return
+    if (event.type !== 'prompt-submit' || isWaviPrompt(event.prompt)) return
     for (const scope of ['pr', 'base'] as const) {
       const current = read(scope, path)
       if (current && (current.attempts > 0 || current.run)) write(scope, path, takenOver(current))

@@ -199,9 +199,9 @@ test.describe('F13 review block · F16 exit A', () => {
   })
 
   test('F13: 审阅方式 · agent 自带命令 types /code-review into the session', async () => {
-    // What is left of the review (the P3 comment) goes first, so the footer offers the review button again.
-    await panel().getByRole('button', { name: '放弃' }).click()
-    await expect(block().getByRole('listitem')).toHaveCount(0)
+    // Review findings stay in the review block: the footer keeps the review button, never 发给 / 放弃 for them.
+    await expect(block().getByRole('listitem')).toHaveCount(1)
+    await expect(panel().getByRole('button', { name: '放弃' })).toHaveCount(0)
     await updateSettings({ review: { mode: 'agent-command' } })
     const review = panel().getByRole('button', { name: '让 agent 审阅' })
     await expect(review).toHaveAttribute('title', '在终端里发送 /code-review', WITHIN)

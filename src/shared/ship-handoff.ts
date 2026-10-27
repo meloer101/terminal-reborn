@@ -176,15 +176,26 @@ function fixPrompt(context: HandoffContext): string {
   return parts.join('\n\n')
 }
 
+/**
+ * Every message Wavi itself submits into a session starts with this, so what counts the user's turns (the turn's
+ * checks, the auto-fix counters) can tell it from the user's own prompt.
+ */
+export const WAVI_PROMPT_MARK = '（Wavi'
+
+export const isWaviPrompt = (prompt: string): boolean => prompt.trimStart().startsWith(WAVI_PROMPT_MARK)
+
+const HANDOFF_TITLE: Record<HandoffKind, string> = { commit: '写提交说明', pr: '写 PR', fix: '修 CI' }
+
 /** The message Wavi submits into the session for one handoff. */
 export function handoffPrompt(context: HandoffContext): string {
+  const head = `${WAVI_PROMPT_MARK} ${HANDOFF_TITLE[context.kind]}）`
   switch (context.kind) {
     case 'commit':
-      return commitPrompt(context)
+      return `${head}\n${commitPrompt(context)}`
     case 'pr':
-      return prPrompt(context)
+      return `${head}\n${prPrompt(context)}`
     case 'fix':
-      return fixPrompt(context)
+      return `${head}\n${fixPrompt(context)}`
   }
 }
 

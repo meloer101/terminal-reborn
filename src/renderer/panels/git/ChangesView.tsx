@@ -112,8 +112,10 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
   if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
 
-  const count = comments?.length ?? 0
-  const picked = comments?.filter(commentPicked).length ?? 0
+  // The footer's 发给 / 放弃 are for the user's own comments; review findings are sent from the review block.
+  const mine = comments?.filter((c) => c.origin !== 'review') ?? []
+  const count = mine.length
+  const picked = mine.filter(commentPicked).length
   const sessionId = active?.session.id ?? null
   const uncommittedPaths = changes.uncommitted.filter((c) => !c.nested).map((c) => c.path)
   // Nothing to propose or merge (merged already, or no work yet): no exits — the PR line says what happened.

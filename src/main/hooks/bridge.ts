@@ -7,6 +7,7 @@ import { describeAllowAlways, type AllowAlwaysScope } from '@shared/permission-s
 import { sameContext, type ContextUsage, type MetaReading, type VendorUsage } from '@shared/session-meta'
 import { checkRunsOf, type ScriptsLookup } from '@shared/check-commands'
 import { applyTodoTool, sameTodos, type TodoItem } from '@shared/todo-progress'
+import { isWaviPrompt } from '@shared/ship-handoff'
 import { beginTurn, emptyTurnChecks, recordEdit, recordRuns, sameTurnChecks, type TurnChecks } from '@shared/turn-checks'
 import type { AgentTitleWatcher } from './agent-title'
 import { normalizeHook } from './normalize'
@@ -178,7 +179,9 @@ export class HookBridge {
   private followChecks(sessionId: string, agent: HookAgent, at: number, normalized: ReturnType<typeof normalizeHook>): void {
     let checks = this.metaOf(sessionId).checks
     if (normalized.cleared) checks = { ...emptyTurnChecks(), known: checks.known }
-    if (normalized.newTurn) checks = beginTurn(checks, at)
+    // Wavi's own messages (a handoff, an auto-fix) continue the user's turn: its checks are what the evidence quotes.
+    const byWavi = normalized.events.some((e) => e.type === 'prompt-submit' && isWaviPrompt(e.prompt))
+    if (normalized.newTurn && !byWavi) checks = beginTurn(checks, at)
     for (const e of normalized.events) if (e.type === 'tool-end' && e.ok && EDIT_TOOLS.has(e.tool)) checks = recordEdit(checks)
     const call = normalized.bashCall
     if (call) checks = recordRuns(checks, checkRunsOf(call.command, call.result, at, call.dir, this.options.scripts))

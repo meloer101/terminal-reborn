@@ -4,7 +4,7 @@ import { commentPicked, reviewPrompt } from '@shared/review-comments'
 import type { Session, Worktree } from '@shared/types'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
-import { clearComments, commentsOf, removeComments } from '../../state/review-comments'
+import { commentsOf, removeComments } from '../../state/review-comments'
 import { useWorkspace } from '../../state/workspace'
 import { agentSessionFor } from '../merge/model'
 
@@ -17,8 +17,11 @@ export function commentTarget(worktree: Pick<Worktree, 'projectId' | 'path'>, se
   )
 }
 
-/** The comments 发给 … sends: the user's own, and the review comments that are ticked (PRD F13). */
-export const pickedComments = (root: string) => commentsOf(root).filter(commentPicked)
+/** The user's own comments: review findings live in the review block and are sent from there (PRD F13 v1.78). */
+export const userComments = (root: string) => commentsOf(root).filter((c) => c.origin !== 'review')
+
+/** The comments the footer's 发给 … sends: the user's own (always picked). */
+export const pickedComments = (root: string) => userComments(root).filter(commentPicked)
 
 /** One prompt into the agent's input line: the worktree's ticked comments. Sent comments go. */
 export async function sendComments(root: string, target: Session): Promise<void> {
@@ -34,7 +37,8 @@ export async function sendComments(root: string, target: Session): Promise<void>
 }
 
 export async function discardComments(root: string): Promise<void> {
-  const count = commentsOf(root).length
+  const mine = userComments(root)
+  const count = mine.length
   if (count === 0) return
   const confirmed = await window.tr.ui.confirm({
     message: `放弃 ${count} 条评论？`,
@@ -42,5 +46,5 @@ export async function discardComments(root: string): Promise<void> {
     confirmLabel: '放弃',
     destructive: true
   })
-  if (confirmed) clearComments(root)
+  if (confirmed) removeComments(root, new Set(mine.map((c) => c.id)))
 }
