@@ -71,7 +71,7 @@ describe('findMarkItem', () => {
     const unified = changeItems(data, new Set([key]), diffs)
     expect(unified[findMarkItem(unified, key, 'new', 2)]).toMatchObject({ kind: 'diff', row: { kind: 'add' } })
     expect(unified[findMarkItem(unified, key, 'old', 2)]).toMatchObject({ kind: 'diff', row: { kind: 'del' } })
-    const split = changeItems(data, new Set([key]), diffs, [], null, {}, 'split')
+    const split = changeItems(data, new Set([key]), diffs, [], null, 'split')
     expect(split[findMarkItem(split, key, 'new', 2)]).toMatchObject({ kind: 'split', row: { kind: 'pair', new: { new: 2 } } })
   })
 

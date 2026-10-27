@@ -73,7 +73,6 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const scroller = useRef<HTMLDivElement>(null)
   const comments = useReviewComments((s) => s.byRoot[root])
   const draft = useReviewComments((s) => (s.draft?.root === root ? s.draft : null))
-  const opened = useReviewComments((s) => s.opened)
   const place: DraftPlace | null = useMemo(
     () => (draft ? { id: draft.id, group: draft.group, path: draft.path, side: draft.side, endLine: draft.endLine } : null),
     [draft?.id, draft?.group, draft?.path, draft?.side, draft?.endLine] // eslint-disable-line react-hooks/exhaustive-deps
@@ -81,8 +80,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const prStatus = usePrStatus(worktree.path)
   const prLive = prStatus?.pr && (prStatus.pr.state === 'open' || prStatus.pr.state === 'draft') ? prStatus.pr : null
   const items = useMemo(
-    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, opened, layout) : []),
-    [changes, git.expanded, git.diffs, comments, place, opened, layout]
+    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout) : []),
+    [changes, git.expanded, git.diffs, comments, place, layout]
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -338,7 +337,7 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
       return <SplitLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} />
     }
     case 'comment':
-      return <CommentRow root={root} comment={item.comment} top={top} folded={item.folded} split={item.split === true} />
+      return <CommentRow root={root} comment={item.comment} top={top} split={item.split === true} />
     case 'editor':
       return <CommentEditor top={top} split={item.split === true} />
     case 'note':

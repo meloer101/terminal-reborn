@@ -191,7 +191,6 @@ describe('splitRows (F5 并排)', () => {
       { [key]: { kind: 'ready', binary: false, truncated: 0, rows } },
       [comment],
       null,
-      {},
       'split'
     )
     const kinds = items.map((i) => i.kind)

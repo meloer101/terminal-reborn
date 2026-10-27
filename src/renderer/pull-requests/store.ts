@@ -6,25 +6,21 @@ import type { PrAutomation } from './auto-fix-model'
 import type { Project, Session, Worktree } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 
-/** What the PR button is doing for a worktree (提交 and 推送 since v1.68). */
-export type PrBusy = 'committing' | 'pushing' | 'creating' | 'fixing'
+/** What Wavi is doing for a worktree's PR line: reading the failed log for 让 … 修复. */
+export type PrBusy = 'fixing'
 
 interface PrStore {
   gh: GhState
   byWorktree: Record<string, PrStatus>
-  /** 创建 PR / 让 agent 修复 in flight, per worktree path. */
+  /** 让 … 修复 in flight, per worktree path. */
   busy: Record<string, PrBusy>
-  /** The last 创建 PR / 让 agent 修复 outcome to show under Git · 变更 (UI copy), per worktree path. */
+  /** The last 让 … 修复 / 处理评论 outcome to show under Git · 变更 (UI copy), per worktree path. */
   notice: Record<string, { tone: 'error' | 'muted'; text: string }>
   /** 自动修复 per worktree path (PRD F16 v1.63 · L3). */
   automation: Record<string, PrAutomation>
-  /** PR threads unticked in Git · 变更 (ticked is the default), by thread id. */
-  unpicked: Record<string, true>
-  /** PR 评论 · N collapsed, per worktree path. */
-  notesClosed: Record<string, true>
 }
 
-export const usePullRequests = create<PrStore>()(() => ({ gh: 'checking', byWorktree: {}, busy: {}, notice: {}, automation: {}, unpicked: {}, notesClosed: {} }))
+export const usePullRequests = create<PrStore>()(() => ({ gh: 'checking', byWorktree: {}, busy: {}, notice: {}, automation: {} }))
 
 export function acceptPrStatus(status: PrStatus): void {
   usePullRequests.setState((s) => ({ byWorktree: { ...s.byWorktree, [status.worktree]: status } }))
@@ -108,23 +104,5 @@ export function setAutomation(worktree: string, next: PrAutomation | null): void
     if (next) automation[worktree] = next
     else delete automation[worktree]
     return { automation }
-  })
-}
-
-export function setThreadPicked(id: string, picked: boolean): void {
-  usePullRequests.setState((s) => {
-    const unpicked = { ...s.unpicked }
-    if (picked) delete unpicked[id]
-    else unpicked[id] = true
-    return { unpicked }
-  })
-}
-
-export function toggleNotes(worktree: string): void {
-  usePullRequests.setState((s) => {
-    const notesClosed = { ...s.notesClosed }
-    if (notesClosed[worktree]) delete notesClosed[worktree]
-    else notesClosed[worktree] = true
-    return { notesClosed }
   })
 }
