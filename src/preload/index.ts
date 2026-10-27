@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { ARCHIVE_IPC } from '@shared/archive'
 import { REVIEW_IPC } from '@shared/background-review'
 import { PR_IPC } from '@shared/pull-requests'
+import { SHIP_IPC } from '@shared/ship'
 import { RADAR_IPC } from '@shared/conflict-radar'
 import { DISPATCH_IPC } from '@shared/dispatch'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
@@ -208,6 +209,18 @@ const api: TrApi = {
     cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target),
     resolveThreads: (request) => ipcRenderer.invoke(PR_IPC.resolveThreads, request),
     postReview: (request) => ipcRenderer.invoke(PR_IPC.postReview, request)
+  },
+  ship: {
+    preflight: (target) => ipcRenderer.invoke(SHIP_IPC.preflight, target),
+    handoff: (request) => ipcRenderer.invoke(SHIP_IPC.handoff, request),
+    readHandoff: (request) => ipcRenderer.invoke(SHIP_IPC.readHandoff, request),
+    shipToMain: (request) => ipcRenderer.invoke(SHIP_IPC.shipToMain, request),
+    diffSince: (request) => ipcRenderer.invoke(SHIP_IPC.diffSince, request),
+    risks: (target) => ipcRenderer.invoke(SHIP_IPC.risks, target),
+    baseCi: (target) => ipcRenderer.invoke(SHIP_IPC.baseCi, target),
+    baseFailure: (target) => ipcRenderer.invoke(SHIP_IPC.baseFailure, target),
+    baseFailing: (target) => ipcRenderer.invoke(SHIP_IPC.baseFailing, target),
+    onBaseCi: (listener) => listen(SHIP_IPC.baseCiChanged, listener)
   },
   radar: {
     watch: (targets) => ipcRenderer.send(RADAR_IPC.watch, targets),

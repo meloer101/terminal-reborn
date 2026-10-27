@@ -8,6 +8,7 @@ import type { BrowserApi } from './browser'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { PullRequestApi } from './pull-requests'
+import type { ShipApi } from './ship'
 import type { ConflictRadarApi } from './conflict-radar'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
@@ -404,6 +405,8 @@ export interface TrApi {
   archive: ArchiveApi
   /** PR / CI status and 创建 PR through the user's gh login (PRD F16); channels in PR_IPC. */
   pr: PullRequestApi
+  /** The merge chain's two exits, agent handoff files, brakes and base CI (PRD F16 v1.78); channels in SHIP_IPC. */
+  ship: ShipApi
   /** Background pairwise / base merge-tree checks of active worktrees (冲突雷达); channels in RADAR_IPC. */
   radar: ConflictRadarApi
   /** Agents starting sessions and Wavi reporting back (PRD F21); channels in DISPATCH_IPC. */

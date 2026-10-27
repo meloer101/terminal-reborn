@@ -29,6 +29,7 @@ import { registerRepoScriptHandlers } from './repo-scripts'
 import { registerBackgroundReviewHandlers } from './background-review'
 import { registerArchiveHandlers } from './archive'
 import { registerPrWriter } from './pr-writer'
+import { registerShipHandlers } from './ship'
 import { registerPullRequestHandlers } from './pull-requests'
 import { registerConflictRadarHandlers } from './conflict-radar'
 import { registerSecondaryWindowHandlers } from './secondary-windows'
@@ -91,6 +92,7 @@ function boot(): void {
   registerArchiveHandlers()
   registerPullRequestHandlers()
   registerPrWriter()
+  registerShipHandlers()
   registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()

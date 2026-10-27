@@ -76,6 +76,8 @@ export interface MergeRequest {
   push: boolean
   /** Squash only: the commit's subject (the session's title); main falls back to the branch name. */
   title?: string
+  /** Squash only (exit A, PRD F16 v1.78): the whole agent-written message, subject first; wins over `title`. */
+  message?: string
 }
 
 export type MergeFailure =
