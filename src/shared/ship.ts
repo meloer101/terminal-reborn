@@ -43,7 +43,8 @@ export type HandoffSlot = { ok: true; path: string } | { ok: false; message: str
 
 /** 合并到 main 并推送 (exit A): commit `paths` (null: nothing to commit) with `message`, merge into the base, push it. */
 export interface ShipMainRequest extends PrTarget {
-  /** The agent-written commit message, subject first; also the squash commit's message. */
+  /** The agent-written commit message, subject first; also the squash commit's message. '' (only with paths null):
+   *  keep the branch's own commit messages (an auto-fix merging its committed fix into the base again). */
   message: string
   method: MergeMethod
   paths: string[] | null
@@ -73,6 +74,8 @@ export interface BaseCi {
   base: string
   sha: string
   checks: ChecksSummary
+  /** The commit's checks page on GitHub, for 打开 CI; null when not on GitHub. */
+  url: string | null
   checkedAt: number
 }
 
@@ -91,6 +94,9 @@ export interface ShipApi {
   readHandoff(request: HandoffRequest): Promise<string | null>
   shipToMain(request: ShipMainRequest): Promise<ShipMainResult>
   diffSince(request: DiffSinceRequest): Promise<string | null>
+  /** 丢弃 (Figma 29G): moves the worktree's branch back to `since` (a fix the brake stopped). Refuses with
+   *  uncommitted changes or when `since` is not an ancestor of HEAD. */
+  discardSince(request: DiffSinceRequest): Promise<{ ok: true } | { ok: false; message: string }>
   /** Risk markers of the worktree's whole change against its base (Figma 29A), computed from the diff, no model. */
   risks(target: PrTarget): Promise<RiskMarker[]>
   /** The latest CI state of the base commit this worktree pushed, if Wavi pushed one. */
@@ -112,6 +118,8 @@ export const SHIP_IPC = {
   shipToMain: 'ship:to-main',
   /** invoke(DiffSinceRequest) → string | null */
   diffSince: 'ship:diff-since',
+  /** invoke(DiffSinceRequest) → { ok } */
+  discardSince: 'ship:discard-since',
   /** invoke(PrTarget) → RiskMarker[] */
   risks: 'ship:risks',
   /** invoke(PrTarget) → BaseCi | null */

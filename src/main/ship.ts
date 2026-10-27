@@ -11,6 +11,7 @@ export function registerShipHandlers(): void {
   ipcMain.handle(SHIP_IPC.readHandoff, () => null)
   ipcMain.handle(SHIP_IPC.shipToMain, () => ({ ok: false, step: 'merge', reason: 'failed', message: notReady }))
   ipcMain.handle(SHIP_IPC.diffSince, () => null)
+  ipcMain.handle(SHIP_IPC.discardSince, () => ({ ok: false, message: notReady }))
   ipcMain.handle(SHIP_IPC.risks, () => [])
   ipcMain.handle(SHIP_IPC.baseCi, () => null)
   ipcMain.handle(SHIP_IPC.baseFailure, () => null)
