@@ -62,6 +62,8 @@ const shoot = async (name: string) => {
 
 /** Presses on a sidebar row and moves (in steps, so the drag starts) to a point of the terminal area. */
 async function dragRowTo(id: string, at: (box: { x: number; y: number; width: number; height: number }) => { x: number; y: number }, release = true) {
+  // CI's screen caps the window's height below 900: the last rows sit under the fold until the sidebar scrolls.
+  await sidebarRow(id).scrollIntoViewIfNeeded()
   const row = await sidebarRow(id).boundingBox()
   const target = await area().boundingBox()
   if (!row || !target) throw new Error('nothing to drag')
