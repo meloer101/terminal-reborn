@@ -138,6 +138,15 @@ describe('mergeWorktree', () => {
     expect(existsSync(join(root, 'c.txt'))).toBe(true)
   })
 
+  it('squash: an agent-written message wins over the title and keeps its body', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    commit(wt, 'c.txt', 'c\n', 'add c')
+    const result = await mergeWorktree(await request(root, wt, 'squash', { title: 'ignored', message: 'feat(nav): sticky header\n\nWhy: it jumped.' }))
+    expect(result.ok).toBe(true)
+    expect(git(root, 'log', '-1', '--format=%B', 'main').trim()).toBe('feat(nav): sticky header\n\nWhy: it jumped.')
+  })
+
   it('rebase: replays the branch onto the base and fast-forwards the base to it', async () => {
     const { root, wt } = setup()
     commit(wt, 'b.txt', 'b\n', 'add b')

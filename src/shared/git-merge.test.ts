@@ -68,6 +68,15 @@ describe('parseMergeRequest', () => {
     expect(parseMergeRequest({ ...valid, head: '--force' })).toBeNull()
     expect(parseMergeRequest({ ...valid, push: 'yes' })).toBeNull()
     expect(parseMergeRequest({ ...valid, title: 3 })).toBeNull()
+    expect(parseMergeRequest({ ...valid, message: 3 })).toBeNull()
+    expect(parseMergeRequest({ ...valid, message: 'x'.repeat(10_001) })).toBeNull()
+  })
+
+  it('keeps the newlines of a squash message and cleans the rest', () => {
+    const request = parseMergeRequest({ ...valid, message: 'feat: x  \r\n\r\nBody\u0007 line\n\n\n\n\n- a\n' })
+    expect(request?.message).toBe('feat: x\n\nBody line\n\n\n- a')
+    expect(parseMergeRequest({ ...valid, message: '  \n ' })).toEqual(valid)
+    expect(parseMergeRequest({ ...valid, message: 'x'.repeat(10_000) })?.message).toHaveLength(10_000)
   })
 })
 
