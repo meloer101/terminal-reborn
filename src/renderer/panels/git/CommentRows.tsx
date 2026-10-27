@@ -1,19 +1,17 @@
-// Inline review comments in Git · 变更 (PRD F5, Figma 03): the ＋ on a diff line, a saved comment under its line,
+// Inline comments in Git · 变更 (PRD F5, Figma 03): the ＋ on a diff line, a saved comment of the user's under its line,
 // and the editor (⌘↵ 添加评论 · Esc 取消). The text being written lives in the store, so scrolling the editor out of the
 // rendered window and back keeps it.
-import { Check, ChevronDown, ChevronRight, MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
+import { MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
-import { clipCode, commentLocation, commentPicked, type ReviewComment } from '@shared/review-comments'
+import { clipCode, commentLocation, type ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
 import {
   cancelDraft,
   editComment,
   removeComment,
   saveDraft,
-  setCommentPicked,
   setDraftText,
   startComment,
-  toggleCommentFolded,
   useReviewComments
 } from '../../state/review-comments'
 import { codeBetween, rowAnchor, type ChangeGroup } from './changes-model'
@@ -50,11 +48,7 @@ export function CommentAddButton({
 }
 
 /** `split`: on the new (right) half of a 并排 diff, the left half a filler (Figma 17F "Comment row"). */
-export function CommentRow({ root, comment, top, folded, split = false }: { root: string; comment: ReviewComment; top: number; folded: boolean; split?: boolean }) {
-  const review = comment.origin === 'review'
-  const foldable = comment.severity === 'P2' || comment.severity === 'P3'
-  const title = comment.text.split('\n')[0] ?? ''
-  const Chevron = folded ? ChevronRight : ChevronDown
+export function CommentRow({ root, comment, top, folded = false, split = false }: { root: string; comment: ReviewComment; top: number; folded?: boolean; split?: boolean }) {
   return (
     <div
       className={styles.comment}
@@ -62,64 +56,23 @@ export function CommentRow({ root, comment, top, folded, split = false }: { root
       data-comment-id={comment.id}
       data-folded={folded || undefined}
       data-split={split || undefined}
-      data-severity={comment.severity}
       role="note"
-      aria-label={`${review ? `审阅 ${comment.severity} ` : '评论 '}${commentLocation(comment)}`}
+      aria-label={`评论 ${commentLocation(comment)}`}
     >
       <div className={styles.commentHead}>
-        {review && <PickBox root={root} comment={comment} />}
-        {comment.severity && <span className={styles.commentSeverity}>{comment.severity}</span>}
-        {folded ? (
-          <button type="button" className={styles.commentFoldedTitle} title={comment.text} onClick={() => toggleCommentFolded(comment.id)}>
-            {title}
-          </button>
-        ) : (
-          <>
-            <span className={styles.commentWhere}>{lineLabel(comment)}</span>
-            {comment.confidence !== undefined && <span className={styles.commentWhere}>置信度 {Math.round(comment.confidence * 100)}%</span>}
-          </>
-        )}
+        <span className={styles.commentWhere}>{lineLabel(comment)}</span>
         <span className={styles.spacer} />
-        {foldable && (
-          <button type="button" className={styles.commentFold} aria-label={folded ? '展开' : '收起'} aria-expanded={!folded} onClick={() => toggleCommentFolded(comment.id)}>
-            <Chevron {...ICON} />
-          </button>
-        )}
-        {!folded && (
-          <>
-            <button type="button" className={styles.commentIcon} aria-label="编辑评论" onClick={() => editComment(root, comment.id)}>
-              <Pencil {...ICON} />
-            </button>
-            <button type="button" className={styles.commentIcon} aria-label="删除评论" onClick={() => removeComment(root, comment.id)}>
-              <Trash2 {...ICON} />
-            </button>
-          </>
-        )}
+        <button type="button" className={styles.commentIcon} aria-label="编辑评论" onClick={() => editComment(root, comment.id)}>
+          <Pencil {...ICON} />
+        </button>
+        <button type="button" className={styles.commentIcon} aria-label="删除评论" onClick={() => removeComment(root, comment.id)}>
+          <Trash2 {...ICON} />
+        </button>
       </div>
-      {!folded && (
-        <p className={styles.commentText} title={comment.text} onDoubleClick={() => editComment(root, comment.id)}>
-          {comment.text}
-        </p>
-      )}
+      <p className={styles.commentText} title={comment.text} onDoubleClick={() => editComment(root, comment.id)}>
+        {comment.text}
+      </p>
     </div>
-  )
-}
-
-/** Whether 发给 … takes this review comment (PRD F13: the user ticks what goes to the agent). */
-function PickBox({ root, comment }: { root: string; comment: ReviewComment }) {
-  const picked = commentPicked(comment)
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={picked}
-      aria-label={picked ? '发送时包含这条' : '发送时不包含这条'}
-      title={picked ? '发送时包含这条' : '勾选后随评论一起发送'}
-      className={styles.commentPick}
-      onClick={() => setCommentPicked(root, comment.id, !picked)}
-    >
-      {picked && <Check size={10} strokeWidth={2.5} aria-hidden />}
-    </button>
   )
 }
 

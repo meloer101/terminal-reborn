@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import type { PrThread } from '@shared/pull-requests'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, placedThreadIds, rowAnchor, splitAnchors, splitRows } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, rowAnchor, splitAnchors, splitRows } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -120,16 +119,16 @@ describe('review comments in the list (F5)', () => {
     expect(collapsed[1]).toMatchObject({ comments: 1 })
   })
 
-  it('folds P2 / P3 review comments to their head line until opened (F13)', () => {
-    const review = [note({ id: 'p1', origin: 'review', severity: 'P1' }), note({ id: 'p3', origin: 'review', severity: 'P3' })]
+  it('leaves background-review findings out of the list: the review block and the diff tag show them (F13)', () => {
+    const review = [note({ id: 'p1', origin: 'review', severity: 'P1' }), note({ id: 'p3', origin: 'review', severity: 'P3', side: 'old' }), note({ id: 'mine' })]
     const items = changeItems(data, open, diffs, review)
-    const shown = items.filter((i) => i.kind === 'comment')
-    expect(shown.map((i) => [i.comment.id, i.folded, itemHeight(i)])).toEqual([
-      ['p1', false, ITEM_HEIGHT.comment],
-      ['p3', true, ITEM_HEIGHT.commentFolded]
-    ])
-    const opened = changeItems(data, open, diffs, review, null, { p3: true }).filter((i) => i.kind === 'comment')
-    expect(opened.map((i) => i.folded)).toEqual([false, false])
+    expect(kinds(items)).toEqual(['group', 'file', 'hunk', 'context1', 'del2', 'add2', 'comment:mine', 'context3', 'group'])
+    expect(items[1]).toMatchObject({ kind: 'file', comments: 1 })
+    expect(items.filter((i) => i.kind === 'comment').map(itemHeight)).toEqual([ITEM_HEIGHT.comment])
+    // A collapsed file counts only the user's own comments, and findings whose line left the diff are not appended.
+    const gone = changeItems(data, open, diffs, [note({ id: 'f', origin: 'review', line: 99, endLine: 99 })])
+    expect(kinds(gone).slice(-2)).toEqual(['context3', 'group'])
+    expect(changeItems(data, new Set(), diffs, review)[1]).toMatchObject({ comments: 1 })
   })
 
   it('quotes the code of one side between two lines', () => {
@@ -202,32 +201,5 @@ describe('splitRows (F5 并排)', () => {
     expect(items[at]).toMatchObject({ kind: 'comment', split: true })
     expect(items[at - 1]).toMatchObject({ kind: 'split', row: { kind: 'pair', new: { new: 28 } } })
     expect(itemHeight(items[at - 1]!)).toBe(ITEM_HEIGHT.split)
-  })
-})
-
-describe('PR threads in the list (PRD F16 v1.63, Figma 22B)', () => {
-  const rows = [
-    { kind: 'hunk' as const, old: null, new: null, text: '@@ -1,3 +1,3 @@' },
-    { kind: 'context' as const, old: 1, new: 1, text: 'a' },
-    { kind: 'del' as const, old: 2, new: null, text: 'b' },
-    { kind: 'add' as const, old: null, new: 2, text: 'B' }
-  ]
-  const data = changes({ committed: [file('a.ts')], uncommitted: [file('a.ts')] })
-  const key = changeKey('committed', 'a.ts')
-  const open = new Set([key])
-  const diffs = { [key]: { kind: 'ready' as const, rows, binary: false, truncated: 0 } }
-  const thread = (id: string, patch: Partial<PrThread> = {}): PrThread => ({ id, path: 'a.ts', line: 2, startLine: null, side: 'new', outdated: false, comments: [], ...patch })
-
-  it('puts a thread under its line in 已提交, counts it on the file, and leaves the rest for the PR line', () => {
-    const threads = [thread('T1'), thread('T2', { side: 'old' }), thread('T3', { line: 9 }), thread('T4', { outdated: true }), thread('T5', { path: 'b.ts' })]
-    const items = changeItems(data, open, diffs, [], null, {}, 'unified', threads)
-    const order = items.filter((i) => i.kind === 'diff' || i.kind === 'thread').map((i) => (i.kind === 'thread' ? i.thread.id : `${i.row.kind}${i.row.new ?? i.row.old ?? ''}`))
-    expect(order).toEqual(['hunk', 'context1', 'del2', 'T2', 'add2', 'T1'])
-    expect([...placedThreadIds(items)].sort()).toEqual(['T1', 'T2'])
-    const fileItem = items.find((i) => i.kind === 'file' && i.group === 'committed')
-    expect(fileItem).toMatchObject({ comments: 2 })
-    // a.ts also has uncommitted edits: the thread may be about code that changed since.
-    expect(items.find((i) => i.kind === 'thread')).toMatchObject({ changed: true })
-    expect(itemHeight(items.find((i) => i.kind === 'thread')!)).toBe(ITEM_HEIGHT.thread)
   })
 })
