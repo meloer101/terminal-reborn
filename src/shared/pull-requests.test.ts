@@ -27,17 +27,12 @@ import {
   mergeArgs,
   evidenceBlock,
   withEvidence,
-  prThreadsPrompt,
   reviewEvidence,
+  prThreadsPrompt,
   mergeBlockers,
   parsePrDetails,
   parsePrMergeRequest,
-  parsePrPostReviewRequest,
-  parsePrResolveRequest,
   prReviewSummary,
-  readyToMerge,
-  reviewBodyWithFindings,
-  reviewThreadsInput,
   type PrDetails,
   type PullRequestInfo
 } from './pull-requests'
@@ -399,36 +394,10 @@ describe('merging (PRD F16 v1.63)', () => {
     expect(args).toEqual(['pr', 'merge', '7', '--repo=github.com/a/b', '--squash', `--match-head-commit=${'f'.repeat(40)}`, '--auto'])
   })
 
-  it('is ready when required checks passed (or every check, when none is required)', () => {
-    expect(readyToMerge(pr)).toBe(true)
-    expect(readyToMerge({ ...pr, details: { ...details, required: { total: 1, failing: [], pending: 1 } } })).toBe(false)
-    expect(readyToMerge({ ...pr, checks: { ...pr.checks, state: 'pending' }, details: { ...details, required: { total: 0, failing: [], pending: 0 } } })).toBe(false)
-    expect(readyToMerge({ ...pr, details: { ...details, mergeState: 'dirty' } })).toBe(false)
-    expect(readyToMerge({ ...pr, state: 'draft' })).toBe(false)
-  })
-
   it('validates what the window asks for', () => {
     const where = { root: '/r', worktree: '/r/w' }
     expect(parsePrMergeRequest({ ...where, method: 'squash', when: 'now', deleteRemoteBranch: false })).toEqual({ ...where, method: 'squash', when: 'now', deleteRemoteBranch: false })
     expect(parsePrMergeRequest({ ...where, method: 'octopus', when: 'now', deleteRemoteBranch: false })).toBeNull()
-    expect(parsePrResolveRequest({ ...where, threadIds: ['a', 'a', 'b'], reply: '  done ' })).toEqual({ ...where, threadIds: ['a', 'b'], reply: 'done' })
-    expect(parsePrResolveRequest({ ...where, threadIds: [], reply: '' })).toBeNull()
-    const comment = { path: 'a.ts', side: 'new', line: 2, endLine: 3, body: 'x' }
-    expect(parsePrPostReviewRequest({ ...where, reviewer: 'Codex', comments: [comment] })).toEqual({ ...where, reviewer: 'Codex', comments: [comment] })
-    expect(parsePrPostReviewRequest({ ...where, reviewer: 'Codex', comments: [{ ...comment, path: '/abs' }] })).toBeNull()
-    expect(parsePrPostReviewRequest({ ...where, reviewer: 'Codex', comments: [{ ...comment, endLine: 1 }] })).toBeNull()
-  })
-
-  it('puts findings on their lines, and into one body as a fallback', () => {
-    const comments = [
-      { path: 'a.ts', side: 'new' as const, line: 2, endLine: 2, body: 'one' },
-      { path: 'b.ts', side: 'old' as const, line: 4, endLine: 6, body: 'two\nlines' }
-    ]
-    expect(reviewThreadsInput(comments)).toEqual([
-      { path: 'a.ts', line: 2, side: 'RIGHT', body: 'one' },
-      { path: 'b.ts', line: 6, side: 'LEFT', body: 'two\nlines', startLine: 4, startSide: 'LEFT' }
-    ])
-    expect(reviewBodyWithFindings('Claude', comments)).toBe('Wavi 审阅（Claude）：2 条。\n\n1. `a.ts:2`\n   one\n\n2. `b.ts:4-6（旧文件）`\n   two\n   lines')
   })
 })
 

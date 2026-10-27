@@ -57,6 +57,8 @@ export interface PrAutomation {
   pushedShas: string[]
   /** The first lines of what the agent wrote in fix.md for its last attempt (a tooltip). */
   note: string | null
+  /** Why 通过后合并 could not be turned on (e.g. the repository has auto-merge off); shown on its row. */
+  mergeNote: string | null
 }
 
 export const freshAutomation = (number: number, autoFix: boolean): PrAutomation => ({
@@ -73,7 +75,8 @@ export const freshAutomation = (number: number, autoFix: boolean): PrAutomation 
   baseChecked: false,
   afterPush: null,
   pushedShas: [],
-  note: null
+  note: null,
+  mergeNote: null
 })
 
 /**
@@ -199,10 +202,10 @@ export function fixNote(text: string | null, maxLines = 3, maxChars = 240): stri
 
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: 'Squash', merge: 'Merge', rebase: 'Rebase' }
 
-/** Whether 通过后合并 is on for this PR: GitHub auto-merge, Wavi waiting, or already queued. */
-export function mergeWhenGreenOn(status: Pick<PrStatus, 'pr' | 'waiting'>): boolean {
+/** Whether 通过后合并 is on for this PR: GitHub auto-merge, or already queued. */
+export function mergeWhenGreenOn(status: Pick<PrStatus, 'pr'>): boolean {
   const details = status.pr?.details
-  return Boolean(status.waiting || details?.autoMerge || details?.inMergeQueue)
+  return Boolean(details?.autoMerge || details?.inMergeQueue)
 }
 
 /** "检查 2/3 · 1 项在跑", "检查通过 3/3", "2 项检查失败：test、lint", "没有检查" (Figma 29I). */
@@ -242,7 +245,7 @@ function runText(state: PrAutomation, name: string): string | null {
 }
 
 /** The PR automation row's state words, tertiary and right-aligned (Figma 29I); tone `attention` when 自动修复 stopped. */
-export function automationText(state: PrAutomation | undefined, status: Pick<PrStatus, 'pr' | 'waiting'>, agent: AgentWords): { text: string; tone: 'muted' | 'attention' } {
+export function automationText(state: PrAutomation | undefined, status: Pick<PrStatus, 'pr'>, agent: AgentWords): { text: string; tone: 'muted' | 'attention' } {
   const name = agent.name ?? 'Claude'
   const parts: string[] = []
   if (state?.stopped) return { text: state.stopped, tone: 'attention' }
@@ -257,7 +260,7 @@ export function automationText(state: PrAutomation | undefined, status: Pick<PrS
   const details = pr?.details
   if (details?.inMergeQueue) parts.push('排队中')
   else if (details?.autoMerge) parts.push(`检查通过后由 GitHub 合并（${METHOD_LABEL[details.autoMerge]}）`)
-  else if (status.waiting) parts.push('检查通过后由 Wavi 合并（Wavi 要开着）')
+  else if (state?.mergeNote) return { text: state.mergeNote, tone: 'attention' }
   return { text: parts.join(' · '), tone: 'muted' }
 }
 

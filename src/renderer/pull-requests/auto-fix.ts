@@ -6,7 +6,7 @@
 // (`window.tr.ship.handoff`, fix.md) and presses Enter. The agent fixes and COMMITS but never pushes: at its next Stop
 // Wavi looks at the fix's diff against the brakes (src/shared/auto-fix-brakes.ts) and pushes it — `pr.push` for a PR,
 // `ship.shipToMain` for the base — or stops with a row that asks the user (Figma 29G). auto-fix-model.ts decides when to
-// send and what the rows say. 通过后合并 is GitHub auto-merge (or Wavi's own wait); a new allowed thread or a P0 / P1
+// send and what the rows say. 通过后合并 is GitHub auto-merge; a new allowed thread or a P0 / P1
 // review turns it off again, since GitHub would merge past them.
 import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-fix-brakes'
 import { prThreadsPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
@@ -125,7 +125,7 @@ async function headOf(worktreePath: string): Promise<string | null> {
 
 // ── 通过后合并 ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Turns 通过后合并 on (GitHub auto-merge, or Wavi waits) or off. Returns the line to show when it did not work. */
+/** Turns 通过后合并 (GitHub auto-merge) on or off. Returns the line to show when it did not work; the row shows it too. */
 export async function setMergeWhenGreen(worktreePath: string, on: boolean): Promise<string | null> {
   const root = projectRootOf(worktreePath)
   const details = usePullRequests.getState().byWorktree[worktreePath]?.pr?.details
@@ -133,11 +133,16 @@ export async function setMergeWhenGreen(worktreePath: string, on: boolean): Prom
   const result = on
     ? await window.tr.pr.merge({ root, worktree: worktreePath, method: details.repo.defaultMethod, when: 'when-ready', deleteRemoteBranch: false })
     : await window.tr.pr.cancelMerge({ root, worktree: worktreePath })
+  const number = usePullRequests.getState().byWorktree[worktreePath]?.pr?.number
+  const current = usePullRequests.getState().automation[worktreePath]
+  if (number) {
+    const state = current && current.number === number ? current : freshAutomation(number, false)
+    setAutomation(worktreePath, { ...state, mergeNote: result.ok ? null : result.message })
+  }
   if (result.ok) {
     setPrNotice(worktreePath, null)
     return null
   }
-  setPrNotice(worktreePath, { tone: result.reason === 'declined' ? 'muted' : 'error', text: result.message })
   return result.message
 }
 

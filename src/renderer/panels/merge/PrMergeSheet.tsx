@@ -111,9 +111,7 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
   }
 
   const who = view.waitForChecks
-    ? details.repo.autoMergeAllowed
-      ? '检查通过后由 GitHub 合并'
-      : '由 Wavi 等检查通过再合并（Wavi 要开着）'
+    ? '检查通过后由 GitHub 合并'
     : `以 @${details.viewer || '你的账号'} 合并 · 分支保护照样由 GitHub 执行`
 
   return (

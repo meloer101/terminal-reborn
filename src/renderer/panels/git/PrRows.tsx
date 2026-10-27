@@ -118,7 +118,7 @@ export function PrAutomationRow({ worktreePath, status }: { worktreePath: string
           label="通过后合并"
           checked={merging}
           disabled={!pr.details || pr.state === 'draft'}
-          title={pr.state === 'draft' ? '草稿 PR 不能合并' : '检查通过后合并：仓库开了自动合并时由 GitHub 合并，否则 Wavi 开着时由 Wavi 合并'}
+          title={pr.state === 'draft' ? '草稿 PR 不能合并' : '检查通过后由 GitHub 合并（仓库要开着 auto-merge）'}
           onChange={(on) => void setMergeWhenGreen(worktreePath, on)}
         />
         <span className={ci.label}>通过后合并</span>

@@ -210,10 +210,9 @@ describe('自动修复 on the base (Figma 29E)', () => {
 })
 
 describe('通过后合并 and the PR rows (Figma 29I)', () => {
-  it('is on with GitHub auto-merge, Wavi waiting or the queue', () => {
+  it('is on with GitHub auto-merge or the queue', () => {
     expect(mergeWhenGreenOn({ pr: pr() })).toBe(false)
     expect(mergeWhenGreenOn({ pr: pr({ autoMerge: 'squash' }) })).toBe(true)
-    expect(mergeWhenGreenOn({ pr: pr(), waiting: 'merge' })).toBe(true)
     expect(mergeWhenGreenOn({ pr: pr({ inMergeQueue: true }) })).toBe(true)
   })
 
@@ -233,7 +232,10 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
     expect(automationText({ ...on, attempts: 2 }, pending, { idle: true })).toEqual({ text: '第 2 次 · 等 CI', tone: 'muted' })
     expect(automationText(on, { pr: pr() }, { idle: false, wants: true, name: 'Codex' })).toEqual({ text: '等 Codex 空闲', tone: 'muted' })
     expect(automationText(on, { pr: pr({ autoMerge: 'squash' }) }, { idle: true }).text).toBe('检查通过后由 GitHub 合并（Squash）')
-    expect(automationText(undefined, { pr: pr(), waiting: 'merge' }, { idle: true }).text).toBe('检查通过后由 Wavi 合并（Wavi 要开着）')
+    expect(automationText({ ...on, mergeNote: '仓库没开 auto-merge：在 GitHub 设置里打开后才能检查通过后合并' }, { pr: pr() }, { idle: true })).toEqual({
+      text: '仓库没开 auto-merge：在 GitHub 设置里打开后才能检查通过后合并',
+      tone: 'attention'
+    })
     expect(automationText(undefined, { pr: pr({ inMergeQueue: true }) }, { idle: true }).text).toBe('排队中')
     expect(automationText({ ...on, stopped: '自动修复已停：x' }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：x', tone: 'attention' })
     expect(automationText({ ...on, run: stoppedRun() }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：这次修复放宽了检查', tone: 'attention' })

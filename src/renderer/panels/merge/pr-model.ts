@@ -1,13 +1,13 @@
 // 合并到 GitHub PR (PRD F16 v1.63, Figma 22C / 22D), the pure part: the checklist from the PR as main last read it,
 // what stops a merge now, and whether 合并 becomes 检查通过后合并. GitHub's branch protection still has the last word.
-import type { MergeMethod, PrStatus } from '@shared/pull-requests'
+import { AUTO_MERGE_OFF, type MergeMethod, type PrStatus } from '@shared/pull-requests'
 import type { CheckLine } from './model'
 
 export interface PrMergeView {
   lines: CheckLine[]
   /** Reasons 合并 cannot be pressed (main refuses the same). Empty: GitHub decides. */
   blockers: string[]
-  /** Checks still run, or local commits must be pushed first: the button is 检查通过后合并. */
+  /** Checks still run, or local commits must be pushed first: the button is 检查通过后合并 (GitHub auto-merge). */
   waitForChecks: boolean
   methods: MergeMethod[]
   defaultMethod: MergeMethod
@@ -61,6 +61,8 @@ export function prMergeView(status: PrStatus): PrMergeView | null {
   if (pr.state === 'draft') blockers.push('PR 还是草稿：先在 GitHub 上标记为可审阅')
   if (details.inMergeQueue) blockers.push('已经在合并队列里')
   const waitForChecks = !blockers.length && (unpushed || (required.total > 0 ? required.pending > 0 : pr.checks.state === 'pending'))
+  // 检查通过后合并 is GitHub auto-merge only; Wavi does not wait for the checks itself.
+  if (waitForChecks && !details.repo.autoMergeAllowed) blockers.push(AUTO_MERGE_OFF)
   return { lines, blockers, waitForChecks, methods: details.repo.methods, defaultMethod: details.repo.defaultMethod }
 }
 
