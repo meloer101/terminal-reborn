@@ -31,12 +31,6 @@ export interface ReviewComment {
   picked?: boolean
 }
 
-/** P2 / P3 start folded. Opening one records its id; user comments and P0 / P1 stay open. */
-export function reviewCommentFolded(comment: Pick<ReviewComment, 'id' | 'severity'>, opened: Readonly<Record<string, true>>): boolean {
-  if (comment.severity !== 'P2' && comment.severity !== 'P3') return false
-  return opened[comment.id] !== true
-}
-
 /** Whether 发给 … sends this comment. The user's own comments always go. */
 export function commentPicked(comment: ReviewComment): boolean {
   if (comment.origin !== 'review') return true

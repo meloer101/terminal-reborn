@@ -1,7 +1,7 @@
 // 合并到 GitHub PR (PRD F16 v1.63, Figma 22C 364:14009 / 22D 369:14631): the PR's checklist as main last read it —
 // checks, whether the PR is the code here, conflicts, approvals and threads (those only inform), Wavi's review and the
 // agent's own checks — then the methods the repository allows, removing the remote branch and archiving. 合并 is pinned
-// to the head main checked; while checks run it becomes 检查通过后合并 (GitHub auto-merge, else Wavi waits).
+// to the head main checked; while checks run it becomes 检查通过后合并 (GitHub auto-merge; refused when the repository has it off).
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import { severityCounts } from '@shared/background-review'
@@ -13,7 +13,7 @@ import { useReviewComments } from '../../state/review-comments'
 import { useWorkspace } from '../../state/workspace'
 import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { Segmented } from '../../ui/Segmented'
-import { agentSessionFor, type CheckLine } from './model'
+import { agentLabel, agentSessionFor, type CheckLine } from './model'
 import { Checkbox, Line, TurnChecks } from './parts'
 import { METHOD_LABEL, prMergeView } from './pr-model'
 import { closeMergeSheet, type MergeTarget } from './store'
@@ -26,7 +26,14 @@ type Phase = { kind: 'ready' } | { kind: 'merging' } | { kind: 'done'; lines: Ch
 export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTarget; status: PrStatus; targetSwitch: ReactNode }) {
   const titleId = useId()
   const sheetRef = useRef<HTMLDivElement>(null)
-  const view = prMergeView(status)
+  const ids = target.worktreeIds
+  const sessions = useWorkspace((s) => s.sessions)
+  const activeId = useWorkspace((s) => s.activeSessionId)
+  const agent = agentSessionFor(
+    sessions.filter((s) => ids.includes(s.worktreeId)),
+    activeId
+  )
+  const view = prMergeView(status, agent ? agentLabel(agent.kind) : undefined)
   const pr = status.pr!
   const details = pr.details!
   const [method, setMethod] = useState<MergeMethod>(view?.defaultMethod ?? 'squash')
@@ -37,13 +44,6 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' })
   const [failure, setFailure] = useState<string | null>(null)
 
-  const ids = target.worktreeIds
-  const sessions = useWorkspace((s) => s.sessions)
-  const activeId = useWorkspace((s) => s.activeSessionId)
-  const agent = agentSessionFor(
-    sessions.filter((s) => ids.includes(s.worktreeId)),
-    activeId
-  )
   const reviewAgent = agent && (agent.kind === 'claude' || agent.kind === 'codex') ? agent.kind : null
   const review = useBackgroundReview((s) => s.byRoot[target.worktreePath])
   const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
@@ -111,9 +111,7 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
   }
 
   const who = view.waitForChecks
-    ? details.repo.autoMergeAllowed
-      ? '检查通过后由 GitHub 合并'
-      : '由 Wavi 等检查通过再合并（Wavi 要开着）'
+    ? '检查通过后由 GitHub 合并'
     : `以 @${details.viewer || '你的账号'} 合并 · 分支保护照样由 GitHub 执行`
 
   return (

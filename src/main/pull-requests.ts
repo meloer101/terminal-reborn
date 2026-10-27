@@ -8,8 +8,8 @@
 // branch whose PR is open already.
 // 让 agent 修复 reads the failing jobs' `gh run view --log-failed`. Everything from the renderer is validated: project
 // roots must be the workspace's, worktrees theirs, and no value reaches git or gh where it could be read as an option.
-// v1.63 adds the writes (PRD F16 · L2): merging the PR (pinned to the head Wavi checked, GitHub auto-merge or Wavi's own
-// wait), resolving threads and posting Wavi's review. Each runs only on a button the user clicked; several at once ask.
+// v1.63 adds the write (PRD F16 · L2): merging the PR (pinned to the head Wavi checked; GitHub auto-merge when the
+// repository allows it, else 检查通过后合并 is refused). It runs only on a button the user clicked.
 import { spawn } from 'node:child_process'
 import { readFile, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -33,19 +33,11 @@ import {
   parseStatusZ,
   parsePrDetails,
   parsePrMergeRequest,
-  parsePrPostReviewRequest,
-  parsePrResolveRequest,
   parsePrTarget,
   PR_TEMPLATE_PATHS,
   mergeArgs,
   mergeBlockers,
-  readyToMerge,
-  ADD_REVIEW_MUTATION,
-  REPLY_THREAD_MUTATION,
-  RESOLVE_THREAD_MUTATION,
-  reviewBody,
-  reviewBodyWithFindings,
-  reviewThreadsInput,
+  AUTO_MERGE_OFF,
   parsePrTargets,
   pickPullRequest,
   prBody,
@@ -368,8 +360,6 @@ interface Entry {
   lastCheck: number
   /** From the last check that reached gh: where `failure()` reads logs. */
   repo: GitHubRepo | null
-  /** 检查通过后由 Wavi 合并 (auto-merge off in the repository): merged by the first check that finds it ready. */
-  waiting: { method: PrMergeRequest['method']; headOid: string } | null
 }
 
 const entries = new Map<string, Entry>()
@@ -420,21 +410,12 @@ function setStatus(entry: Entry, branch: string | null, pr: PullRequestInfo | nu
     branch,
     pr,
     checkedAt: Date.now(),
-    ...(local ? { local } : {}),
-    ...(entry.waiting ? { waiting: entry.waiting.method } : {})
+    ...(local ? { local } : {})
   }
   entry.status = status
-  const sameExtras = JSON.stringify([previous?.local, previous?.waiting]) === JSON.stringify([status.local, status.waiting])
-  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameExtras) broadcast(status)
+  const sameLocal = JSON.stringify(previous?.local) === JSON.stringify(status.local)
+  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameLocal) broadcast(status)
   return status
-}
-
-/** The status again after `waiting` changed (nothing else did). */
-function rebroadcast(entry: Entry): void {
-  if (!entry.status) return
-  const { waiting: _old, ...rest } = entry.status
-  entry.status = { ...rest, checkedAt: Date.now(), ...(entry.waiting ? { waiting: entry.waiting.method } : {}) }
-  broadcast(entry.status)
 }
 
 async function checkOnce(entry: Entry): Promise<PrStatus | null> {
@@ -478,7 +459,6 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
   }
   const wasOpen = entry.status?.pr?.number === pr?.number && (entry.status?.pr?.state === 'open' || entry.status?.pr?.state === 'draft')
   const status = setStatus(entry, info.branch, pr, local)
-  if (entry.waiting) void mergeWhenReady(entry)
   // Merged on GitHub (auto-merge, the queue, or someone else): bring the base here too, as after Wavi's own merge.
   if (wasOpen && pr?.state === 'merged' && info.remote && info.base) await catchUpBase(info.cwd, info.remote, info.base)
   return status
@@ -528,7 +508,7 @@ export function watchTargets(watcher: PrWatcher, raw: unknown): void {
       if (known.target.root !== target.root) known.target = target
       continue
     }
-    const entry: Entry = { target, status: null, failures: 0, timer: null, inFlight: null, lastCheck: 0, repo: null, waiting: null }
+    const entry: Entry = { target, status: null, failures: 0, timer: null, inFlight: null, lastCheck: 0, repo: null }
     entries.set(target.worktree, entry)
     schedule(entry, 300 * fresh++)
   }
@@ -896,11 +876,6 @@ async function freshEntry(where: { root: string; worktree: string }): Promise<En
   return entry
 }
 
-/** One GraphQL request with its variables on stdin (nothing user-written lands in argv). */
-function graphql(host: string, query: string, variables: Record<string, unknown>): Promise<Ran> {
-  return gh(['api', 'graphql', `--hostname=${host}`, '--input', '-'], { input: JSON.stringify({ query, variables }), timeout: 60_000 })
-}
-
 /** Whether `oid` is a commit the local branch already has (fetching the remote branch first is the user's call). */
 async function localHas(cwd: string, oid: string, branch: string): Promise<boolean> {
   if (!(await refExists(cwd, oid))) return false
@@ -931,23 +906,6 @@ async function runMerge(entry: Entry, method: PrMergeRequest['method'], headOid:
   return gh(mergeArgs(entry.repo, pr.number, method, headOid, auto), { timeout: 120_000 })
 }
 
-/** Wavi's own wait: the first check that finds the PR ready merges it — still pinned to the head the user merged. */
-async function mergeWhenReady(entry: Entry): Promise<void> {
-  const waiting = entry.waiting
-  const pr = entry.status?.pr
-  if (!waiting || !pr) return
-  if (pr.state !== 'open' || !pr.details || pr.details.headOid !== waiting.headOid) {
-    // Merged elsewhere, closed, or new commits: the wait is over (the user merges again after looking).
-    entry.waiting = null
-    rebroadcast(entry)
-    return
-  }
-  if (!readyToMerge(pr)) return
-  entry.waiting = null
-  const ran = await runMerge(entry, waiting.method, waiting.headOid, false)
-  if (ran && ran.code === 0) await afterMerge(entry, false)
-}
-
 async function afterMerge(entry: Entry, deleteRemoteBranch: boolean): Promise<void> {
   const info = await branchInfo(entry.target)
   if (info?.remote && info.base) {
@@ -962,8 +920,8 @@ async function afterMerge(entry: Entry, deleteRemoteBranch: boolean): Promise<vo
 /**
  * 合并 PR (PRD F16 v1.63): checks the PR fresh, refuses what GitHub would refuse anyway or what the user has not seen
  * (commits on the PR that are not local), pushes local commits first, then `gh pr merge` pinned to that head. With
- * `when-ready`, GitHub auto-merge when the repository allows it, else Wavi merges at the first check that finds the
- * checks passed (only while Wavi runs).
+ * `when-ready` (also after pushing local commits, whose checks start over) turns on GitHub auto-merge; a repository
+ * that does not allow it gets a blocked result, since Wavi no longer waits for checks itself.
  */
 export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
   const request = parsePrMergeRequest(raw)
@@ -981,6 +939,8 @@ export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
     const remoteAhead = details ? details.headOid !== localHead && !(await localHas(info.cwd, details.headOid, info.branch)) : false
     const blockers = mergeBlockers({ pr, method: request.method, remoteAhead, when: request.when })
     if (blockers.length > 0 || !details) return writeBlocked(blockers.join('；'))
+    // Local commits the PR lacks are pushed first and their checks start over, so that merge waits too.
+    if ((request.when === 'when-ready' || (localHead && localHead !== details.headOid)) && !details.repo.autoMergeAllowed) return writeBlocked(AUTO_MERGE_OFF)
 
     let headOid = details.headOid
     let when = request.when
@@ -993,17 +953,11 @@ export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
     }
 
     if (when === 'when-ready') {
-      if (details.repo.autoMergeAllowed) {
-        const ran = await runMerge(entry, request.method, headOid, true)
-        if (!ran || ran.code !== 0) return writeFailed('没能打开自动合并', ran ?? { code: -1, stdout: '', stderr: '' })
-        await checkEntry(entry)
-        const queued = entry.status?.pr?.details?.inMergeQueue === true
-        return { ok: true, outcome: queued ? 'queued' : 'auto-merge', message: queued ? `PR #${pr.number} 已进入合并队列` : `检查通过后 GitHub 会合并 PR #${pr.number}` }
-      }
-      entry.waiting = { method: request.method, headOid }
-      rebroadcast(entry)
-      schedule(entry, 5_000)
-      return { ok: true, outcome: 'waiting', message: `检查通过后由 Wavi 合并 PR #${pr.number}（Wavi 要开着）` }
+      const ran = await runMerge(entry, request.method, headOid, true)
+      if (!ran || ran.code !== 0) return writeFailed('没能打开自动合并', ran ?? { code: -1, stdout: '', stderr: '' })
+      await checkEntry(entry)
+      const queued = entry.status?.pr?.details?.inMergeQueue === true
+      return { ok: true, outcome: queued ? 'queued' : 'auto-merge', message: queued ? `PR #${pr.number} 已进入合并队列` : `检查通过后 GitHub 会合并 PR #${pr.number}` }
     }
 
     const ran = await runMerge(entry, request.method, headOid, false)
@@ -1022,92 +976,12 @@ export async function cancelMerge(raw: unknown): Promise<PrWriteResult> {
   if (!where) return writeBlocked('请求无效')
   const entry = entries.get(where.worktree)
   if (!entry || entry.target.root !== where.root) return writeBlocked('这个 worktree 没有在 Wavi 里显示')
-  if (entry.waiting) {
-    entry.waiting = null
-    rebroadcast(entry)
-    return { ok: true, outcome: 'cancelled', message: '不再等检查通过后合并' }
-  }
   const pr = entry.status?.pr
   if (!pr || !entry.repo) return writeBlocked('这个分支没有打开的 PR')
   const ran = await gh(['pr', 'merge', String(pr.number), `--repo=${repoArg(entry.repo)}`, '--disable-auto'])
   if (ran.code !== 0) return writeFailed('没能取消自动合并', ran)
   await checkEntry(entry)
   return { ok: true, outcome: 'cancelled', message: `已取消 PR #${pr.number} 的自动合并` }
-}
-
-/** Resolves threads Wavi showed (ids must be among the PR's unresolved threads), each with the reply first. */
-export async function resolveThreads(raw: unknown, parent?: BrowserWindow | null): Promise<PrWriteResult> {
-  const request = parsePrResolveRequest(raw)
-  if (!request) return writeBlocked('请求无效')
-  const entry = await freshEntry(request)
-  if ('ok' in entry) return entry
-  const details = entry.status?.pr?.details
-  if (!details || !entry.repo) return writeBlocked('没能读到 PR 的评论')
-  const open = new Set(details.threads.map((t) => t.id))
-  const ids = request.threadIds.filter((id) => open.has(id))
-  if (ids.length === 0) return { ok: true, outcome: 'resolved', message: '这些评论已经解决了' }
-  if (ids.length > 1) {
-    const yes = await confirm(
-      {
-        message: `以 @${details.viewer || '你的账号'} 把 ${ids.length} 条评论标记为已解决？`,
-        detail: request.reply ? `每条先回复：${request.reply.slice(0, 200)}` : '会在 GitHub 上标记为已解决，不附回复。',
-        confirmLabel: '标记已解决'
-      },
-      parent
-    )
-    if (!yes) return { ok: false, reason: 'declined', message: '没有改动 GitHub 上的评论' }
-  }
-  let done = 0
-  for (const id of ids) {
-    if (request.reply) {
-      const replied = await graphql(entry.repo.host, REPLY_THREAD_MUTATION, { id, body: request.reply })
-      if (replied.code !== 0) return writeFailed(`回复失败（已处理 ${done} 条）`, replied)
-    }
-    const resolved = await graphql(entry.repo.host, RESOLVE_THREAD_MUTATION, { id })
-    if (resolved.code !== 0) return writeFailed(`标记已解决失败（已处理 ${done} 条）`, resolved)
-    done++
-  }
-  await checkEntry(entry)
-  return { ok: true, outcome: 'resolved', message: `已把 ${done} 条评论标记为已解决` }
-}
-
-/**
- * 把 Wavi 审阅发到 PR: one review with event COMMENT (never an approval or a request for changes), each finding on
- * its lines. GitHub refuses lines outside the PR's diff; then the same findings go out as one body instead.
- */
-export async function postReview(raw: unknown, parent?: BrowserWindow | null): Promise<PrWriteResult> {
-  const request = parsePrPostReviewRequest(raw)
-  if (!request) return writeBlocked('请求无效')
-  const entry = await freshEntry(request)
-  if ('ok' in entry) return entry
-  const pr = entry.status?.pr
-  const details = pr?.details
-  if (!pr || !details || !entry.repo || (pr.state !== 'open' && pr.state !== 'draft')) return writeBlocked('这个分支没有打开的 PR')
-  const yes = await confirm(
-    {
-      message: `以 @${details.viewer || '你的账号'} 在 PR #${pr.number} 上发 ${request.comments.length} 条审阅评论？`,
-      detail: '发成一次“评论”审阅，不会批准也不会要求修改。别人能在 PR 上看到。',
-      confirmLabel: '发到 PR'
-    },
-    parent
-  )
-  if (!yes) return { ok: false, reason: 'declined', message: '没有发到 PR' }
-  const variables = { pr: details.id, oid: details.headOid }
-  let ran = await graphql(entry.repo.host, ADD_REVIEW_MUTATION, {
-    ...variables,
-    body: reviewBody(request.reviewer, request.comments.length),
-    threads: reviewThreadsInput(request.comments)
-  })
-  if (ran.code !== 0 && /line|diff|position|path/i.test(ran.stderr || ran.stdout)) {
-    ran = await graphql(entry.repo.host, ADD_REVIEW_MUTATION, { ...variables, body: reviewBodyWithFindings(request.reviewer, request.comments), threads: [] })
-    if (ran.code === 0) {
-      await checkEntry(entry)
-      return { ok: true, outcome: 'posted', message: `有的行不在 PR 的改动里，已作为一条总评论发到 PR #${pr.number}` }
-    }
-  }
-  if (ran.code !== 0) return writeFailed('没能发到 PR', ran)
-  await checkEntry(entry)
-  return { ok: true, outcome: 'posted', message: `已在 PR #${pr.number} 上发了 ${request.comments.length} 条审阅评论` }
 }
 
 // ── IPC ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1133,8 +1007,6 @@ export function registerPullRequestHandlers(): void {
   ipcMain.handle(PR_IPC.push, (_event, raw: unknown) => pushBranch(raw))
   ipcMain.handle(PR_IPC.merge, (_event, raw: unknown) => mergePullRequest(raw))
   ipcMain.handle(PR_IPC.cancelMerge, (_event, raw: unknown) => cancelMerge(raw))
-  ipcMain.handle(PR_IPC.resolveThreads, (event, raw: unknown) => resolveThreads(raw, hostWindowFor(event.sender)))
-  ipcMain.handle(PR_IPC.postReview, (event, raw: unknown) => postReview(raw, hostWindowFor(event.sender)))
   app.on('browser-window-focus', onFocus)
   app.on('before-quit', () => {
     for (const entry of entries.values()) if (entry.timer) clearTimeout(entry.timer)

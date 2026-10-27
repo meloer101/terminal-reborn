@@ -57,6 +57,8 @@ export interface PrAutomation {
   pushedShas: string[]
   /** The first lines of what the agent wrote in fix.md for its last attempt (a tooltip). */
   note: string | null
+  /** Why 通过后合并 could not be turned on (e.g. the repository has auto-merge off); shown on its row. */
+  mergeNote: string | null
 }
 
 export const freshAutomation = (number: number, autoFix: boolean): PrAutomation => ({
@@ -73,7 +75,8 @@ export const freshAutomation = (number: number, autoFix: boolean): PrAutomation 
   baseChecked: false,
   afterPush: null,
   pushedShas: [],
-  note: null
+  note: null,
+  mergeNote: null
 })
 
 /**
@@ -131,11 +134,10 @@ export function autoFixDecision(state: PrAutomation, input: { pr: PullRequestInf
   const key = [head, failing.join(','), ids.join(',')].join('|')
   if (key === state.lastKey) return { kind: 'wait' }
   if (state.attempts >= input.max) {
-    const what = failing.length > 0 ? `${failing.slice(0, 3).join('、')} 仍失败` : '评论仍没解决'
-    return { kind: 'stop', reason: `自动修复已停：${input.max} 次后 ${what}` }
+    return { kind: 'stop', reason: brakeLabel({ kind: 'stop', reason: 'limit' }, state.attempts) }
   }
   const newThread = ids.some((id) => !state.lastThreads.includes(id))
-  if (state.attempts > 0 && head === state.lastHead && !newThread) return { kind: 'stop', reason: '自动修复已停：上一次之后 agent 没有推送新提交' }
+  if (state.attempts > 0 && head === state.lastHead && !newThread) return { kind: 'stop', reason: brakeLabel({ kind: 'stop', reason: 'no-progress' }) }
   if (!input.agentIdle) return { kind: 'wait' }
   return { kind: 'send', key, head, failing, threads }
 }
@@ -161,17 +163,9 @@ export function baseFixDecision(state: PrAutomation, input: { ci: BaseCi | undef
   const failing = ci.checks.failing.map((c) => c.name).sort()
   const key = [ci.sha, failing.join(',')].join('|')
   if (key === state.lastKey) return { kind: 'wait' }
-  if (state.attempts >= input.max) return { kind: 'stop', reason: `自动修复已停：${input.max} 次后 ${failing.slice(0, 3).join('、')} 仍失败` }
+  if (state.attempts >= input.max) return { kind: 'stop', reason: brakeLabel({ kind: 'stop', reason: 'limit' }, state.attempts) }
   if (!input.agentIdle) return { kind: 'wait' }
   return { kind: 'send', key, head: ci.sha, failing, threads: [] }
-}
-
-/** The base's own failing checks that clash with the ones about to be fixed: ask first (Figma 29G), or go. */
-export function beforeFixDecision(input: { failingChecks: readonly string[]; baseFailing: readonly string[] | null }): { kind: 'go' } | Extract<StopDecision, { kind: 'ask' }> {
-  const known = input.baseFailing
-  if (!known) return { kind: 'go' }
-  const clash = input.failingChecks.filter((name) => known.includes(name))
-  return clash.length > 0 ? { kind: 'ask', reason: 'base-broken', checks: clash } : { kind: 'go' }
 }
 
 /** Fix `run` is pushed: it counts, its failure is remembered, and nothing is sent until the head moves on. */
@@ -184,11 +178,6 @@ export function afterPushed(state: PrAutomation, run: FixRun, from: string | nul
     afterPush: from,
     pushedShas: pushedSha ? [...state.pushedShas, pushedSha] : state.pushedShas
   }
-}
-
-/** What the user reads in the stopped row: the brake's label, or the base failing already. */
-export function stopLabel(decision: StopDecision): string {
-  return decision.kind === 'ask' ? `基线上本来就失败：${decision.checks.slice(0, 3).join('、')}` : brakeLabel(decision)
 }
 
 /** Which of the stopped row's buttons apply. A fix that moved nothing has nothing to push or discard. */
@@ -213,10 +202,10 @@ export function fixNote(text: string | null, maxLines = 3, maxChars = 240): stri
 
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: 'Squash', merge: 'Merge', rebase: 'Rebase' }
 
-/** Whether 通过后合并 is on for this PR: GitHub auto-merge, Wavi waiting, or already queued. */
-export function mergeWhenGreenOn(status: Pick<PrStatus, 'pr' | 'waiting'>): boolean {
+/** Whether 通过后合并 is on for this PR: GitHub auto-merge, or already queued. */
+export function mergeWhenGreenOn(status: Pick<PrStatus, 'pr'>): boolean {
   const details = status.pr?.details
-  return Boolean(status.waiting || details?.autoMerge || details?.inMergeQueue)
+  return Boolean(details?.autoMerge || details?.inMergeQueue)
 }
 
 /** "检查 2/3 · 1 项在跑", "检查通过 3/3", "2 项检查失败：test、lint", "没有检查" (Figma 29I). */
@@ -256,11 +245,11 @@ function runText(state: PrAutomation, name: string): string | null {
 }
 
 /** The PR automation row's state words, tertiary and right-aligned (Figma 29I); tone `attention` when 自动修复 stopped. */
-export function automationText(state: PrAutomation | undefined, status: Pick<PrStatus, 'pr' | 'waiting'>, agent: AgentWords): { text: string; tone: 'muted' | 'attention' } {
+export function automationText(state: PrAutomation | undefined, status: Pick<PrStatus, 'pr'>, agent: AgentWords): { text: string; tone: 'muted' | 'attention' } {
   const name = agent.name ?? 'Claude'
   const parts: string[] = []
   if (state?.stopped) return { text: state.stopped, tone: 'attention' }
-  if (state?.run?.kind === 'stopped') return { text: stopLabel(state.run.decision), tone: 'attention' }
+  if (state?.run?.kind === 'stopped') return { text: brakeLabel(state.run.decision, state.attempts), tone: 'attention' }
   const pr = status.pr
   if (state?.autoFix && pr) {
     const running = runText(state, name)
@@ -271,7 +260,7 @@ export function automationText(state: PrAutomation | undefined, status: Pick<PrS
   const details = pr?.details
   if (details?.inMergeQueue) parts.push('排队中')
   else if (details?.autoMerge) parts.push(`检查通过后由 GitHub 合并（${METHOD_LABEL[details.autoMerge]}）`)
-  else if (status.waiting) parts.push('检查通过后由 Wavi 合并（Wavi 要开着）')
+  else if (state?.mergeNote) return { text: state.mergeNote, tone: 'attention' }
   return { text: parts.join(' · '), tone: 'muted' }
 }
 
@@ -280,7 +269,7 @@ export function baseAutomationText(state: PrAutomation | undefined, agent: Agent
   const name = agent.name ?? 'Claude'
   if (!state) return { text: '', tone: 'muted' }
   if (state.stopped) return { text: state.stopped, tone: 'attention' }
-  if (state.run?.kind === 'stopped') return { text: stopLabel(state.run.decision), tone: 'attention' }
+  if (state.run?.kind === 'stopped') return { text: brakeLabel(state.run.decision, state.attempts), tone: 'attention' }
   if (!state.autoFix) return { text: '', tone: 'muted' }
   const running = runText(state, name)
   if (running) return { text: running, tone: 'muted' }

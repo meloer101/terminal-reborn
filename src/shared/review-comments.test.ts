@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipCode, commentLocation, commentPicked, MAX_CODE_CHARS, replaceReviewComments, reviewCommentFolded, reviewPrompt, sanitizeReviewComments, type ReviewComment } from './review-comments'
+import { clipCode, commentLocation, commentPicked, MAX_CODE_CHARS, replaceReviewComments, reviewPrompt, sanitizeReviewComments, type ReviewComment } from './review-comments'
 
 const comment = (patch: Partial<ReviewComment> = {}): ReviewComment => ({
   id: 'c1',
@@ -86,11 +86,7 @@ describe('background review comments', () => {
   const p1 = { ...base, id: 'p1', origin: 'review' as const, severity: 'P1' as const }
   const p3 = { ...base, id: 'p3', origin: 'review' as const, severity: 'P3' as const }
 
-  it('folds P2 / P3 until opened, and picks P0 / P1 by default', () => {
-    expect(reviewCommentFolded(p3, {})).toBe(true)
-    expect(reviewCommentFolded(p3, { p3: true })).toBe(false)
-    expect(reviewCommentFolded(p1, {})).toBe(false)
-    expect(reviewCommentFolded(mine, {})).toBe(false)
+  it('picks P0 / P1 by default', () => {
     expect(commentPicked(mine)).toBe(true)
     expect(commentPicked(p1)).toBe(true)
     expect(commentPicked(p3)).toBe(false)

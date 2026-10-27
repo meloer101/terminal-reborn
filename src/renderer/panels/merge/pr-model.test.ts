@@ -40,8 +40,16 @@ describe('合并到 GitHub PR (Figma 22C / 22D)', () => {
   })
 
   it('waits for running checks and for local commits to be pushed', () => {
-    expect(prMergeView(status({ required: { total: 3, failing: [], pending: 2 } }))).toMatchObject({ waitForChecks: true, lines: [{ tone: 'working', text: '必需的检查还在跑', meta: '1/3' }, expect.anything()] })
-    expect(prMergeView(status({}, { local: { head: 'b'.repeat(40), remoteAhead: false } }))).toMatchObject({ waitForChecks: true })
+    const auto = { autoMergeAllowed: true, deleteBranchOnMerge: false, methods: ['squash', 'merge'] as PrDetails['repo']['methods'], defaultMethod: 'squash' as const }
+    expect(prMergeView(status({ required: { total: 3, failing: [], pending: 2 }, repo: auto }))).toMatchObject({ waitForChecks: true, lines: [{ tone: 'working', text: '必需的检查还在跑', meta: '1/3' }, expect.anything()] })
+    expect(prMergeView(status({ repo: auto }, { local: { head: 'b'.repeat(40), remoteAhead: false } }))).toMatchObject({ waitForChecks: true, blockers: [] })
+  })
+
+  it('blocks 检查通过后合并 when the repository has auto-merge off: Wavi does not wait itself', () => {
+    const off = '仓库没开 auto-merge：在 GitHub 设置里打开后才能检查通过后合并'
+    expect(prMergeView(status({ required: { total: 3, failing: [], pending: 2 } }))).toMatchObject({ waitForChecks: true, blockers: [off] })
+    expect(prMergeView(status({}, { local: { head: 'b'.repeat(40), remoteAhead: false } }))).toMatchObject({ waitForChecks: true, blockers: [off] })
+    expect(prMergeView(status())!.blockers).toEqual([])
   })
 
   it('blocks failing required checks, commits that are not local, conflicts, drafts and a queued PR', () => {

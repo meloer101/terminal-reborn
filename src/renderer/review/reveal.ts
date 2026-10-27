@@ -71,7 +71,7 @@ export async function revealInDiff(root: string, comment: ReviewComment): Promis
   if (git.changes && scroller) {
     const layout = scroller.dataset.layout === 'split' ? 'split' : 'unified'
     const own = (useReviewComments.getState().byRoot[root] ?? []).filter((c) => c.origin !== 'review')
-    const items = changeItems(git.changes, git.expanded, git.diffs, own, null, {}, layout)
+    const items = changeItems(git.changes, git.expanded, git.diffs, own, null, layout)
     const index = findMarkItem(items, key, comment.side, comment.line)
     if (index >= 0) {
       const offsets = offsetsOf(items.map(itemHeight))

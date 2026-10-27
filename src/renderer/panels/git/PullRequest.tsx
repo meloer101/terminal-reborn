@@ -1,18 +1,13 @@
 // Git · 变更's PR parts (PRD F16): one line above the footer with the PR, its checks and the comments nobody answered
-// yet (Figma 29I: 让 Claude 处理 puts them into the agent's input line; 让 agent 修复 when the checks fail), what went
+// yet (Figma 29I: 让 Claude 处理 puts them into the agent's input line; 让 Claude 修复 when the checks fail), what went
 // wrong last, or — without a usable gh — how to get one.
-//
-// LEGACY: PrButton, the footer's PR button (提交并创建 PR / 推送到 PR #N / 打开 PR #N by ship-model), is replaced by
-// the two exits of Figma 29A; delete it with its import in ChangesView.
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
-import type { Session, SessionId, Worktree } from '@shared/types'
+import type { Session, Worktree } from '@shared/types'
 import { ChecksMark } from '../../pull-requests/PrTag'
-import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
+import { fixWithAgent } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
 import { prLineText } from '../../pull-requests/auto-fix-model'
-import { openCreatePr } from '../../pull-requests/create-sheet'
-import { shipAction } from '../../pull-requests/ship-model'
-import { setPrNotice, usePr, usePrStatus, usePullRequests } from '../../pull-requests/store'
+import { setPrNotice, usePr, usePullRequests } from '../../pull-requests/store'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
@@ -20,84 +15,10 @@ import { agentLabel } from '../merge/model'
 import ci from './CiRows.module.css'
 import styles from './GitView.module.css'
 
-const BUSY_LABEL = { committing: '正在提交…', pushing: '正在推送…', creating: '正在创建 PR…' } as const
-
 const GH_HINT = {
   missing: '创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login',
   'signed-out': 'gh 还没有登录：在终端运行 gh auth login 后可以创建 PR'
 } as const
-
-export function PrButton({
-  worktree,
-  projectRoot,
-  title,
-  sessionId,
-  agent,
-  uncommitted
-}: {
-  worktree: Worktree
-  projectRoot: string | null
-  title: string
-  sessionId: SessionId | null
-  /** The worktree's agent session (its turn checks and review go into the PR body). */
-  agent: Session | null
-  /** Uncommitted files in the worktree: the button commits them first. */
-  uncommitted: number
-}) {
-  const gh = usePullRequests((s) => s.gh)
-  const busy = usePullRequests((s) => s.busy[worktree.path])
-  const status = usePrStatus(worktree.path)
-  const pr = usePr(worktree.path)
-  const openPr = pr && (pr.state === 'open' || pr.state === 'draft') ? pr : null
-  const local = status?.local
-  const unpushed = Boolean(openPr?.details && local && !local.remoteAhead && local.head !== openPr.details.headOid)
-  const action = shipAction({ uncommitted, openPr, unpushed })
-  if (action.kind === 'open' && openPr) {
-    return (
-      <button type="button" className={styles.ghostButton} title={`在内置浏览器打开 ${openPr.url}`} onClick={() => openPullRequest(sessionId, openPr.url)}>
-        {action.label}
-      </button>
-    )
-  }
-  const mode = action.kind === 'sheet' ? action.mode : 'pr'
-  const reason = worktree.isMain
-    ? '项目主目录没有要提 PR 的分支'
-    : gh === 'checking'
-      ? '正在检查 gh…'
-      : gh !== 'ready'
-        ? GH_HINT[gh]
-        : !projectRoot
-          ? '找不到这个 worktree 的项目'
-          : null
-  return (
-    <button
-      type="button"
-      className={styles.ghostButton}
-      disabled={reason !== null || Boolean(busy && busy !== 'fixing')}
-      title={
-        reason ??
-        (mode === 'push'
-          ? `${uncommitted > 0 ? '看过要提交的文件和说明后提交，' : ''}推送到 PR #${openPr?.number ?? ''}`
-          : `${uncommitted > 0 ? '看过要提交的文件和说明后提交，' : ''}写好标题和正文后推送分支，用 gh 创建 PR，然后在内置浏览器打开`)
-      }
-      onClick={() =>
-        projectRoot &&
-        openCreatePr({
-          root: projectRoot,
-          worktree: worktree.path,
-          title,
-          sessionId,
-          agentSessionId: agent?.id ?? null,
-          agent: agent?.kind === 'claude' || agent?.kind === 'codex' ? agent.kind : null,
-          mode,
-          openPr: openPr ? { number: openPr.number, url: openPr.url } : null
-        })
-      }
-    >
-      {busy && busy !== 'fixing' ? BUSY_LABEL[busy] : action.label}
-    </button>
-  )
-}
 
 export function PrStatusLine({ worktree, target }: { worktree: Worktree; target: Session | null }) {
   const gh = usePullRequests((s) => s.gh)
@@ -110,13 +31,6 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
         <span className={styles.reviewStatusText} title={notice.text}>
           {notice.text}
         </span>
-      </p>
-    )
-  }
-  if (busy && busy !== 'fixing') {
-    return (
-      <p className={styles.reviewStatus} role="status" data-testid="pr-status">
-        <span className={styles.reviewStatusText}>{busy === 'committing' ? '正在提交…' : busy === 'pushing' ? '正在推送…' : '正在推送分支并创建 PR…'}</span>
       </p>
     )
   }
