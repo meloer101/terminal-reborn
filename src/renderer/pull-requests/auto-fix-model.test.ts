@@ -243,6 +243,6 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
     expect(automationText(undefined, { pr: pr(), waiting: 'merge' }, { idle: true }).text).toBe('检查通过后由 Wavi 合并（Wavi 要开着）')
     expect(automationText(undefined, { pr: pr({ inMergeQueue: true }) }, { idle: true }).text).toBe('排队中')
     expect(automationText({ ...on, stopped: '自动修复已停：x' }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：x', tone: 'attention' })
-    expect(automationText({ ...on, run: stoppedRun() }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：weakened', tone: 'attention' })
+    expect(automationText({ ...on, run: stoppedRun() }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：这次修复放宽了检查', tone: 'attention' })
   })
 })
