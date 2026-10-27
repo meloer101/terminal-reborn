@@ -1,6 +1,6 @@
 // Background code review (PRD F13, measurements in §6.10). Pure: how a diff is split, how the
 // reviewer CLI is invoked, and how its JSON becomes F5 comments. Nothing here starts a process.
-import { clipCode, type CommentGroup, type CommentSide, type ReviewComment, type ReviewSeverity } from './review-comments'
+import { clipCode, sanitizeReviewComments, type CommentGroup, type CommentSide, type ReviewComment, type ReviewSeverity } from './review-comments'
 
 /** Claude Code 2.1.303 still sends 2_900_000 characters; ~2_950_000 is a local `Prompt is too long`. */
 export const CLAUDE_PROMPT_CHAR_LIMIT = 2_900_000
@@ -132,11 +132,7 @@ export function stampDiffGroup(diff: string, group: CommentGroup): string {
 function groupsByPath(diff: string): Map<string, CommentGroup> {
   const found = new Map<string, Set<CommentGroup>>()
   for (const file of parseUnifiedDiffFiles(diff)) {
-    const group = file.preamble.includes('# wavi-group: committed')
-      ? 'committed'
-      : file.preamble.includes('# wavi-group: uncommitted')
-        ? 'uncommitted'
-        : null
+    const group = fileGroup(file)
     if (!group) continue
     const set = found.get(file.path) ?? new Set<CommentGroup>()
     set.add(group)
@@ -147,6 +143,18 @@ function groupsByPath(diff: string): Map<string, CommentGroup> {
     if (set.size === 1) single.set(path, [...set][0]!)
   }
   return single
+}
+
+/** Which group `stampDiffGroup` marked this file with; null for an unstamped one. */
+export function fileGroup(file: Pick<DiffFile, 'preamble'>): CommentGroup | null {
+  if (file.preamble.includes('# wavi-group: committed')) return 'committed'
+  if (file.preamble.includes('# wavi-group: uncommitted')) return 'uncommitted'
+  return null
+}
+
+/** How many different files a diff touches. */
+export function diffFileCount(text: string): number {
+  return new Set(parseUnifiedDiffFiles(text).map((file) => file.path)).size
 }
 
 function pathFromGitLine(line: string): string {
@@ -183,7 +191,7 @@ export function parseUnifiedDiffFiles(text: string): DiffFile[] {
   return files
 }
 
-function renderFile(file: DiffFile): string {
+export function renderFile(file: DiffFile): string {
   return nl(file.preamble) + file.hunks.map((hunk) => nl(hunk.header) + nl(hunk.body)).join('')
 }
 
@@ -250,6 +258,7 @@ export function segmentReviewDiff(files: readonly DiffFile[], budget: number): R
 
 export const DEFAULT_REVIEW_RULES = [
   '只报告这次 diff 引入的问题，不报告改动之前就有的问题。',
+  '一次把所有问题都列出来，不要找到第一个就停；先把整份 diff 看完，再给 findings。',
   '每条包含文件路径、尽量短的行范围、严重程度 P0–P3、0 到 1 的置信度、一句标题和一段说明。',
   'group 用 uncommitted 或 committed，side 用 new（新文件行号）或 old（删除行的旧文件行号）。',
   '最后用 summary 给整体结论。没有问题就让 findings 为空数组。',
@@ -716,7 +725,12 @@ export interface ReviewRequest {
   trigger: ReviewTrigger
   /** Branch name the 已提交 group compares against; main picks the default branch without it. */
   base?: string
+  /** 重审: review again even when this exact diff was reviewed before (always the whole diff). */
+  force?: boolean
 }
+
+/** `incremental`: only what changed since the worktree's previous review was read; its other findings were kept. */
+export type ReviewScope = 'full' | 'incremental'
 
 export type ReviewPhase = 'running' | 'done' | 'failed' | 'cancelled' | 'skipped'
 
@@ -746,6 +760,11 @@ export interface ReviewStatus {
   counts?: Partial<Record<ReviewSeverity, number>>
   /** This diff was reviewed before: the saved result is what stands. */
   cached?: true
+  /** How many files the worktree's diff has (the whole diff, also for an incremental review). */
+  fileCount?: number
+  /** Who reviewed, for display: `Claude` or `Codex`. */
+  reviewer?: string
+  scope?: ReviewScope
 }
 
 export interface BackgroundReviewApi {
@@ -839,6 +858,40 @@ export function countSeverities(comments: readonly Pick<ReviewComment, 'severity
 /** The other CLI: 另一家来审 (PRD F13 v1.63). */
 export const otherAgent = (agent: ReviewAgent): ReviewAgent => (agent === 'claude' ? 'codex' : 'claude')
 
+/** The reviewer's name as the review block shows it. */
+export const reviewerLabel = (agent: ReviewAgent): string => (agent === 'claude' ? 'Claude' : 'Codex')
+
+/** What one review reads and what it keeps from the previous one (incremental re-review, PRD F13 v1.78). */
+export interface ReviewPlan {
+  scope: ReviewScope
+  /** The files the reviewer reads. */
+  files: DiffFile[]
+  /** The text those files render to: what findings quote their code from. */
+  text: string
+  /** Findings of the previous review kept as they were (incremental only). */
+  carried: ReviewComment[]
+}
+
+/**
+ * `since` is the diff from the previous review's HEAD to the current one (null: no usable previous review, so read
+ * everything). The reviewer then reads that diff's files — limited to what is still in the worktree's diff, so changes
+ * merged in from the base are not reviewed — plus every uncommitted file. The previous findings on all other files
+ * that are still in the diff stay; the ones the user ignored do not. When that leaves nothing out, it is a full review.
+ */
+export function planReview(input: { full: string; since: string | null; previous: readonly ReviewComment[]; dismissed: ReadonlySet<string> }): ReviewPlan {
+  const fullFiles = parseUnifiedDiffFiles(input.full)
+  const whole: ReviewPlan = { scope: 'full', files: fullFiles, text: input.full, carried: [] }
+  if (input.since === null) return whole
+  const committed = new Set(fullFiles.filter((file) => fileGroup(file) === 'committed').map((file) => file.path))
+  const sinceFiles = parseUnifiedDiffFiles(stampDiffGroup(input.since, 'committed')).filter((file) => committed.has(file.path))
+  const files = [...sinceFiles, ...fullFiles.filter((file) => fileGroup(file) === 'uncommitted')]
+  const touched = new Set(files.map((file) => file.path))
+  const present = new Set(fullFiles.map((file) => file.path))
+  if ([...present].every((path) => touched.has(path))) return whole
+  const carried = input.previous.filter((c) => !touched.has(c.path) && present.has(c.path) && !input.dismissed.has(commentDismissKey(c)))
+  return { scope: 'incremental', files, text: files.map(renderFile).join(''), carried }
+}
+
 // Saved results (PRD F13 v1.63): `review-results.json` in Wavi's data directory, by worktree root. A diff reviewed
 // before a restart is not reviewed again, and F16's evidence block reads the latest record.
 
@@ -856,6 +909,13 @@ export interface ReviewRecord {
   counts: Partial<Record<ReviewSeverity, number>>
   durationMs?: number
   costUsd?: number
+  fileCount?: number
+  reviewer?: string
+  scope?: ReviewScope
+  /** HEAD when the diff was read: the next review reads only what came after it, when it is still an ancestor. */
+  head?: string
+  /** The findings this review landed. Only the newest record keeps them: an incremental review starts from these. */
+  comments?: ReviewComment[]
 }
 
 export interface RootReviews {
@@ -885,7 +945,7 @@ function sanitizeCounts(value: unknown): Partial<Record<ReviewSeverity, number>>
   return counts
 }
 
-function sanitizeRecord(value: unknown): ReviewRecord | null {
+function sanitizeRecord(value: unknown, root: string): ReviewRecord | null {
   if (!isRec(value)) return null
   const { hash, agent, trigger, message, startedAt, endedAt, found } = value
   if (typeof hash !== 'string' || !/^[0-9a-f]{8,64}$/.test(hash)) return null
@@ -902,7 +962,12 @@ function sanitizeRecord(value: unknown): ReviewRecord | null {
     ...(finite(value.hidden) && value.hidden > 0 ? { hidden: Math.floor(value.hidden) } : {}),
     counts: sanitizeCounts(value.counts),
     ...(finite(value.durationMs) ? { durationMs: value.durationMs } : {}),
-    ...(finite(value.costUsd) ? { costUsd: value.costUsd } : {})
+    ...(finite(value.costUsd) ? { costUsd: value.costUsd } : {}),
+    ...(finite(value.fileCount) && value.fileCount >= 0 ? { fileCount: Math.floor(value.fileCount) } : {}),
+    ...(typeof value.reviewer === 'string' && value.reviewer.length > 0 && value.reviewer.length <= 40 ? { reviewer: value.reviewer } : {}),
+    ...(value.scope === 'full' || value.scope === 'incremental' ? { scope: value.scope } : {}),
+    ...(typeof value.head === 'string' && /^[0-9a-f]{7,64}$/.test(value.head) ? { head: value.head } : {}),
+    ...(Array.isArray(value.comments) ? { comments: sanitizeReviewComments({ [root]: value.comments }, new Set([root]))[root] ?? [] } : {})
   }
 }
 
@@ -912,7 +977,7 @@ export function sanitizeReviewResults(raw: unknown): ReviewResultsStore {
   if (!isRec(raw)) return store
   for (const [root, value] of Object.entries(raw).slice(0, MAX_ROOTS)) {
     if (!root.startsWith('/') || root.includes('\0') || !isRec(value)) continue
-    const records = Array.isArray(value.records) ? value.records.map(sanitizeRecord).filter((r): r is ReviewRecord => r !== null).slice(-MAX_REVIEW_RECORDS) : []
+    const records = Array.isArray(value.records) ? value.records.map((r) => sanitizeRecord(r, root)).filter((r): r is ReviewRecord => r !== null).slice(-MAX_REVIEW_RECORDS) : []
     const dismissed = Array.isArray(value.dismissed)
       ? value.dismissed.filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 5000).slice(-MAX_DISMISSED)
       : []
@@ -926,7 +991,8 @@ const rootOf = (store: ReviewResultsStore, root: string): RootReviews => store[r
 /** Adds a finished review; the same hash replaces its older record. */
 export function addReviewRecord(store: ReviewResultsStore, root: string, record: ReviewRecord): ReviewResultsStore {
   const current = rootOf(store, root)
-  const records = [...current.records.filter((r) => r.hash !== record.hash), record].slice(-MAX_REVIEW_RECORDS)
+  const older = current.records.filter((r) => r.hash !== record.hash).map(({ comments: _comments, ...rest }) => rest)
+  const records = [...older, record].slice(-MAX_REVIEW_RECORDS)
   return { ...store, [root]: { ...current, records } }
 }
 
@@ -961,6 +1027,9 @@ export function recordStatus(root: string, record: ReviewRecord, cached: boolean
     endedAt: record.endedAt,
     found: record.found,
     counts: record.counts,
+    ...(record.fileCount !== undefined ? { fileCount: record.fileCount } : {}),
+    ...(record.reviewer ? { reviewer: record.reviewer } : {}),
+    ...(record.scope ? { scope: record.scope } : {}),
     ...(record.hidden ? { hidden: record.hidden } : {}),
     ...(record.durationMs !== undefined ? { durationMs: record.durationMs } : {}),
     ...(record.costUsd !== undefined ? { costUsd: record.costUsd } : {}),
