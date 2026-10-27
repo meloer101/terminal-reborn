@@ -5,7 +5,8 @@
 // <ENTER>). Typed text is echoed to the screen, as a TUI's input line would show it, a long paste as Claude's
 // `[Pasted text …]` placeholder (the send protocol waits for that before pressing Enter). A step is
 // `{ hook, payload }`, `{ statusLine: payload }` (runs the settings' statusLine command), `{ print: text }` or
-// `{ exit: code }`.
+// `{ exit: code }`. Run as `claude -p` (Wavi's background review, PRD F13) it saves the prompt from stdin and prints the
+// reply that `reviewReply()` set, as e2e/fake-claude.ts does.
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +18,16 @@ const fs = require('node:fs')
 // Wavi's version check runs it from its own folder: answer and leave no files behind.
 if (process.argv[2] === '--version') {
   process.stdout.write('9.9.9 (Claude Code)\\n')
+  process.exit(0)
+}
+// Wavi's background review (claude -p, PRD F13): the prompt comes in on stdin, the reply is the one the test set.
+if (process.argv[2] === '-p') {
+  const log = process.env.TR_FAKE_LOG || ''
+  fs.writeFileSync(log + '.review-in', fs.readFileSync(0, 'utf8'))
+  fs.writeFileSync(log + '.review-argv', process.argv.slice(2).join('\\n') + '\\n')
+  try {
+    process.stdout.write(fs.readFileSync(log + '.review-out', 'utf8'))
+  } catch {}
   process.exit(0)
 }
 const at = process.argv.indexOf('--settings')
@@ -104,9 +115,15 @@ export function fakeHookClaude(prefix: string) {
   writeFileSync(join(bin, 'claude'), FAKE_CLAUDE)
   chmodSync(join(bin, 'claude'), 0o755)
   writeFileSync(join(zdot, '.zshrc'), `export PATH="${bin}:$PATH"\n`)
+  const log = join(root, 'claude.log')
   return {
     root,
-    env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh' },
+    env: { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', TR_FAKE_LOG: log },
+    /** What the next `claude -p` prints (Claude's --output-format json result). */
+    reviewReply: (structured: unknown) =>
+      writeFileSync(`${log}.review-out`, JSON.stringify({ type: 'result', is_error: false, total_cost_usd: 0.012, duration_ms: 900, structured_output: structured })),
+    /** The prompt the last `claude -p` read from stdin ('' before any). */
+    reviewPrompt: () => (existsSync(`${log}.review-in`) ? readFileSync(`${log}.review-in`, 'utf8') : ''),
     folder(name: string): FakeAgentFolder {
       const path = join(root, name)
       mkdirSync(path, { recursive: true })

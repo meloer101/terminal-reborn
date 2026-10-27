@@ -118,7 +118,7 @@ test.describe('F5 inline review comments', () => {
     await expect(comments()).toHaveCount(2)
     await expect(panel().locator('[data-path="nav.ts"][data-group="committed"]')).toContainText('2')
     await expect(panel().getByRole('button', { name: '发给 Claude · 2' })).toBeVisible()
-    await expect(panel().getByRole('button', { name: '让 agent 审阅' })).toHaveCount(0)
+    await expect(panel().getByRole('button', { name: '审阅全部改动' })).toHaveCount(0)
     await shoot('03-comments')
   })
 
@@ -149,7 +149,7 @@ test.describe('F5 inline review comments', () => {
     expect(typed).toContain('2. nav.ts:2-3')
     expect(typed).toContain('y 可能是负数')
     await expect(comments()).toHaveCount(0)
-    await expect(panel().getByRole('button', { name: '让 agent 审阅' })).toBeVisible()
+    await expect(panel().getByRole('button', { name: '审阅全部改动' })).toBeVisible()
   })
 
   test('放弃 asks, then removes the comments', async () => {

@@ -2,7 +2,8 @@
 // `auth status`, `pr list --head=<branch>` (from pr-<branch>.json, `/` written as `_`), `pr create` (prints the URL
 // and turns after-create-<branch>.json into that branch's list) and `run view` (log-failed.txt), and logs each call.
 // PRD F16 v1.63: `api graphql` answers the PR details query from graphql-<number>.json and takes mutations on stdin
-// (saved as input-<n>.json); `pr merge` is logged and succeeds.
+// (saved as input-<n>.json); `pr merge` is logged and succeeds. PRD F16 v1.78: `api repos/…` answers the base's branch
+// protection (200 / 404) and the check runs of a pushed base commit.
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -19,6 +20,16 @@ case "$1 $2" in
     cat "$d/create-url"; exit 0 ;;
   "run view") cat "$d/log-failed.txt"; exit 0 ;;
   "pr merge") exit 0 ;;
+  "api repos/"*)
+    # REST (PRD F16 v1.78): the base's branch protection (protection.txt: 200 or 404, default 404) and the checks of a
+    # pushed base commit (check-runs.json, commit-status.json).
+    case "$2" in
+      */protection)
+        if [ "$(cat "$d/protection.txt" 2>/dev/null)" = 200 ]; then echo '{}'; exit 0; fi
+        echo "gh: Branch not protected (HTTP 404)" >&2; exit 1 ;;
+      */check-runs*) cat "$d/check-runs.json" 2>/dev/null || echo '{"check_runs":[]}'; exit 0 ;;
+      */status*) cat "$d/commit-status.json" 2>/dev/null || echo '{"statuses":[]}'; exit 0 ;;
+    esac ;;
   "api graphql")
     case "$*" in
       *"--input -"*)
@@ -77,6 +88,21 @@ export function fakeGh(bin: string, dir: string) {
       writeFileSync(join(dir, `after-create-${file(branch)}.json`), prList(prs))
       writeFileSync(join(dir, 'create-url'), `${url}\n`)
     },
+    /** Whether the base branch is protected on GitHub: 200 (yes) or 404 (no, the default). */
+    setProtection: (code: 200 | 404) => writeFileSync(join(dir, 'protection.txt'), String(code)),
+    /** The check runs GitHub reports for any commit (the base CI row). */
+    setCheckRuns: (runs: { name: string; status: string; conclusion: string | null; job?: number }[]) =>
+      writeFileSync(
+        join(dir, 'check-runs.json'),
+        JSON.stringify({
+          check_runs: runs.map((r) => ({
+            name: r.name,
+            status: r.status.toLowerCase(),
+            conclusion: r.conclusion ? r.conclusion.toLowerCase() : null,
+            details_url: `https://github.com/acme/widget/actions/runs/600/job/${r.job ?? 1}`
+          }))
+        })
+      ),
     setFailedLog: (text: string) => writeFileSync(join(dir, 'log-failed.txt'), text),
     /** What PR_DETAILS_QUERY returns for PR `number` (the `data` object). */
     setDetails: (number: number, data: unknown) => writeFileSync(join(dir, `graphql-${number}.json`), JSON.stringify({ data })),

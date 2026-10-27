@@ -2,7 +2,7 @@
 // per-launch hooks with the payloads Claude Code sends for Bash (PostToolUse = exit 0 with stdout, PostToolUseFailure =
 // `Exit code N`, PRD §6.6), so the checks travel the real path (hook → socket → main's classification → renderer).
 // Turn 1 runs the typecheck; turn 2 edits, passes the tests and fails lint, then says it is done. The overview's
-// 待审阅 row and the merge sheet both say `测试 ✓ · lint ✗ · 类型 未跑`, and the merge stays possible.
+// 待审阅 row and Git · 变更's facts row both say `测试 ✓ · lint ✗ · 类型 未跑`, and the merge stays possible.
 // Screenshots in both themes go to test-results/turn-checks/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -30,7 +30,6 @@ test.describe('turn checks', () => {
 
   const sidebarRow = (id: string) => page.locator(`[data-region="sidebar"] [data-session-id="${id}"]`)
   const overview = () => page.locator('[data-region="overview"]')
-  const sheet = () => page.getByTestId('merge-sheet')
   const setTheme = (theme: 'dark' | 'light') =>
     page.evaluate((t) => {
       ;(globalThis as unknown as { document: { documentElement: { dataset: Record<string, string> } } }).document.documentElement.dataset.theme = t
@@ -133,23 +132,16 @@ test.describe('turn checks', () => {
     await expect(overview().getByTestId('turn-checks')).toHaveCount(1)
   })
 
-  test('the merge sheet lists the same checks and still lets the branch merge', async () => {
+  test('Git · 变更 says the same checks in its facts row, and the exit stays open', async () => {
     await page.keyboard.press('Escape')
     await expect(overview()).toBeHidden()
     await sidebarRow(ID).click()
     const panel = page.locator('[data-region="panel"]')
     await panel.getByRole('tab', { name: /^变更/ }).click()
-    await panel.getByRole('button', { name: /^合并到 main/ }).click()
-    await expect(sheet()).toBeVisible(WITHIN)
-    await expect(sheet()).toContainText('Claude 这一轮的 lint 没过', WITHIN)
-    await expect(sheet()).toContainText('测试 ✓ · lint ✗ · 类型 未跑')
-    const runs = sheet().getByTestId('merge-turn-checks')
-    await expect(runs.locator('li')).toHaveText(['npm run lint', 'npm test'])
+    await expect(panel.getByTestId('facts')).toContainText('这一轮跑过：测试 ✓ · lint ✗ · 类型 未跑', WITHIN)
     // Information only: the agent's own checks never block 合并.
-    await expect(sheet().getByRole('button', { name: /^合并/ })).toBeEnabled()
-    await shoot('merge-sheet')
-    await page.keyboard.press('Escape')
-    await expect(sheet()).toBeHidden()
+    await expect(panel.getByRole('button', { name: /^合并到 main( |$)/ })).toBeEnabled(WITHIN)
+    await shoot('facts-row')
   })
 
   test('a turn that only talks keeps showing the last one, as 上一轮', async () => {
