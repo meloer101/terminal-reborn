@@ -10,9 +10,10 @@ export interface ReviewMark {
 export const markKey = (side: CommentSide, line: number): string => `${side}:${line}`
 
 /** The marks of one file in the worktree `root`, keyed by markKey(side, line). */
-export function useReviewMarks(root: string | null, path: string): ReadonlyMap<string, ReviewMark[]> {
+export function useReviewMarks(root: string | null, path: string, group?: 'uncommitted' | 'committed'): ReadonlyMap<string, ReviewMark[]> {
   void root
   void path
+  void group
   return EMPTY
 }
 

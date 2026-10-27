@@ -1,0 +1,44 @@
+/* The facts above the footer (Figma 29A): one caption row each, icon 16 + 8, 14 left / 16 right. */
+.facts {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: var(--space-4) 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 24px;
+  padding: 0 var(--space-16) 0 calc(var(--space-12) + var(--space-2));
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.row svg {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+/* Shapes carry the meaning (alert / check / cross); color only repeats it. */
+.row[data-tone='risk'] svg {
+  color: var(--status-attention);
+}
+
+.row[data-tone='ok'] svg {
+  color: var(--status-done);
+}
+
+.row[data-tone='fail'] svg {
+  color: var(--status-error);
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
