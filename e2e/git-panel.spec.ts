@@ -196,7 +196,7 @@ test.describe('F17 right panel · Git', () => {
     await panel().getByRole('tab', { name: /^变更/ }).click()
     const files = panel().getByRole('list', { name: '改动的文件' })
     await expect(panel()).toContainText('jacob/mobile-nav')
-    await expect(panel()).toContainText('领先 2 · 落后 0')
+    await expect(panel()).toContainText('对比 main · 领先 2')
     await expect(files).toContainText('2 个提交 · 对比 main')
     await expect(files.locator('[data-group="committed"]')).toHaveCount(1)
     await files.locator('[data-path="src/mobile-nav.ts"] button').click()
