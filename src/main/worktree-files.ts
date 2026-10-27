@@ -223,15 +223,27 @@ async function listFiles(root: unknown): Promise<string[]> {
 
 // --- watching -------------------------------------------------------------------------------------------------
 
-/** Folders whose listing a change to `file` affects, and whether it is git's own bookkeeping. */
-export function classifyChange(file: string): { dir: string; git: boolean } | null {
+/** Folders git ignores in practice wherever they are: installs and caches write thousands of files into them. */
+const GENERATED_ANYWHERE = new Set(['node_modules', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache'])
+/** The same, but only at the top of the worktree, where the names are unambiguous (a `src/target/` is source). */
+const GENERATED_AT_ROOT = new Set(['.next', '.nuxt', '.svelte-kit', '.turbo', '.parcel-cache', '.cache', '.venv', '.gradle', 'target'])
+
+/** Inside a dependency or build-cache folder (WorktreeChange.code). */
+export function inGeneratedFolder(path: string): boolean {
+  const parts = path.split('/')
+  if (parts.length > 1 && GENERATED_AT_ROOT.has(parts[0]!)) return true
+  return parts.slice(0, -1).some((part) => GENERATED_ANYWHERE.has(part))
+}
+
+/** Folders whose listing a change to `file` affects, whether it is git's own bookkeeping, and whether it is code. */
+export function classifyChange(file: string): { dir: string; git: boolean; code: boolean } | null {
   const path = file.split(sep).join('/')
   if (path === '.git' || path.startsWith('.git/')) {
     // index, HEAD and refs move on stage / commit / checkout; objects and logs never change what we show.
-    return /^\.git\/(index|HEAD|refs\/)/.test(path) ? { dir: '', git: true } : null
+    return /^\.git\/(index|HEAD|refs\/)/.test(path) ? { dir: '', git: true, code: false } : null
   }
   const slash = path.lastIndexOf('/')
-  return { dir: slash < 0 ? '' : path.slice(0, slash), git: false }
+  return { dir: slash < 0 ? '' : path.slice(0, slash), git: false, code: !inGeneratedFolder(path) }
 }
 
 /**
@@ -247,6 +259,7 @@ interface Watch {
   watcher: FSWatcher
   dirs: Set<string>
   git: boolean
+  code: boolean
   timer: NodeJS.Timeout | null
 }
 
@@ -275,18 +288,20 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
   }
   if (forSender.has(root)) return
   const watcher = watch(realRoot, { recursive: watchesRecursively(realRoot) })
-  const entry: Watch = { watcher, dirs: new Set(), git: false, timer: null }
+  const entry: Watch = { watcher, dirs: new Set(), git: false, code: false, timer: null }
   watcher.on('error', () => stopWatch(sender, root))
   watcher.on('change', (_type, filename) => {
     const change = typeof filename === 'string' ? classifyChange(filename) : null
     if (!change) return
     if (change.git) entry.git = true
     else entry.dirs.add(change.dir)
+    if (change.code) entry.code = true
     entry.timer ??= setTimeout(() => {
       entry.timer = null
-      const payload: WorktreeChange = { root, dirs: [...entry.dirs], git: entry.git }
+      const payload: WorktreeChange = { root, dirs: [...entry.dirs], git: entry.git, code: entry.code }
       entry.dirs.clear()
       entry.git = false
+      entry.code = false
       if (!sender.isDestroyed()) sender.send(IPC.worktreeChanged, payload)
     }, WATCH_DEBOUNCE_MS)
   })

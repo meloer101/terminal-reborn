@@ -190,10 +190,12 @@ export function listenForChanges(): void {
     const c = useFiles.getState().roots[change.root]
     if (!c) return
     for (const dir of change.dirs) if (c.children[dir]) void loadDir(change.root, dir)
-    if (change.dirs.length > 0 && c.allFiles !== null) void loadAllFiles(change.root)
     if (c.preview !== null && (change.git || change.dirs.includes(parentOf(c.preview)))) {
       patchRoot(change.root, (current) => ({ previewRevision: current.previewRevision + 1 }))
     }
+    // Only folders git ignores changed (an install, a rebuild): the file list and the status are as they were.
+    if (!change.code && !change.git) return
+    if (change.code && c.allFiles !== null) void loadAllFiles(change.root)
     void refreshStatus(change.root)
   })
 }

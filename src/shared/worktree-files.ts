@@ -37,6 +37,11 @@ export interface WorktreeChange {
   dirs: string[]
   /** Something under .git changed (commit, checkout, stage): only the status needs a refresh. */
   git: boolean
+  /**
+   * A file outside dependency and build-cache folders (node_modules, .next, …) changed. Only then can git's status or
+   * the file list differ; an `npm install` or a dev server's rebuild alone lists folders in `dirs` but not this.
+   */
+  code: boolean
 }
 
 /** Preview reads stop here; bigger files open in the default editor instead. */

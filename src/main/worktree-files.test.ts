@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { classifyChange, isInside, normalizeRelative, resolveFileLinks, walkFiles, watchesRecursively } from './worktree-files'
+import { classifyChange, inGeneratedFolder, isInside, normalizeRelative, resolveFileLinks, walkFiles, watchesRecursively } from './worktree-files'
 
 describe('normalizeRelative', () => {
   it('accepts plain relative paths and the root', () => {
@@ -39,16 +39,43 @@ describe('isInside', () => {
 
 describe('classifyChange', () => {
   it('maps a changed file to the folder whose listing it affects', () => {
-    expect(classifyChange('src/components/Nav.tsx')).toEqual({ dir: 'src/components', git: false })
-    expect(classifyChange('README.md')).toEqual({ dir: '', git: false })
+    expect(classifyChange('src/components/Nav.tsx')).toEqual({ dir: 'src/components', git: false, code: true })
+    expect(classifyChange('README.md')).toEqual({ dir: '', git: false, code: true })
+  })
+
+  it('still lists dependency and cache folders, but not as code', () => {
+    expect(classifyChange('node_modules/react/index.js')).toEqual({ dir: 'node_modules/react', git: false, code: false })
+    expect(classifyChange('.next/cache/webpack/a.pack')).toEqual({ dir: '.next/cache/webpack', git: false, code: false })
   })
 
   it('keeps only git bookkeeping that changes the status', () => {
-    expect(classifyChange('.git/index')).toEqual({ dir: '', git: true })
-    expect(classifyChange('.git/HEAD')).toEqual({ dir: '', git: true })
-    expect(classifyChange('.git/refs/heads/main')).toEqual({ dir: '', git: true })
+    expect(classifyChange('.git/index')).toEqual({ dir: '', git: true, code: false })
+    expect(classifyChange('.git/HEAD')).toEqual({ dir: '', git: true, code: false })
+    expect(classifyChange('.git/refs/heads/main')).toEqual({ dir: '', git: true, code: false })
     expect(classifyChange('.git/objects/ab/cdef')).toBeNull()
     expect(classifyChange('.git/logs/HEAD')).toBeNull()
+  })
+})
+
+describe('inGeneratedFolder', () => {
+  it('matches dependency folders at any depth', () => {
+    expect(inGeneratedFolder('node_modules/a/b.js')).toBe(true)
+    expect(inGeneratedFolder('packages/web/node_modules/a/b.js')).toBe(true)
+    expect(inGeneratedFolder('pkg/__pycache__/m.cpython-312.pyc')).toBe(true)
+  })
+
+  it('matches build caches only at the top, where the name is unambiguous', () => {
+    expect(inGeneratedFolder('.next/server/app.js')).toBe(true)
+    expect(inGeneratedFolder('target/debug/app')).toBe(true)
+    expect(inGeneratedFolder('src/target/aim.ts')).toBe(false)
+    expect(inGeneratedFolder('docs/.cache/notes.md')).toBe(false)
+  })
+
+  it('never matches a file named like a folder, or source', () => {
+    expect(inGeneratedFolder('node_modules')).toBe(false)
+    expect(inGeneratedFolder('target')).toBe(false)
+    expect(inGeneratedFolder('src/node_modules_shim.ts')).toBe(false)
+    expect(inGeneratedFolder('src/index.ts')).toBe(false)
   })
 })
 

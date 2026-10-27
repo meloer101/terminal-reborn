@@ -299,7 +299,8 @@ export function listenForChanges(): void {
   listening = true
   window.tr.worktree.onChanged((change) => {
     if (!useGit.getState().roots[change.root]) return
-    scheduleChanges(change.root)
+    // An install or a rebuild writing node_modules / .next changes nothing git reports (WorktreeChange.code).
+    if (change.code || change.git) scheduleChanges(change.root)
     if (change.git) void checkForUpdates(change.root)
   })
 }
