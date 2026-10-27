@@ -9,7 +9,6 @@ import {
   autoFixDecision,
   baseAutomationText,
   baseFixDecision,
-  beforeFixDecision,
   failingChecks,
   fixNote,
   freshAutomation,
@@ -86,7 +85,7 @@ describe('自动修复 (PRD F16 v1.63 · L3)', () => {
     expect(autoFixDecision(sent, input(failing))).toEqual({ kind: 'wait' })
     // Same head, another failing check, no new thread: the agent did not push since.
     const other = pr({ required: { total: 2, failing: ['lint', 'test'], pending: 0 } })
-    expect(autoFixDecision(sent, input(other))).toEqual({ kind: 'stop', reason: '自动修复已停：上一次之后 agent 没有推送新提交' })
+    expect(autoFixDecision(sent, input(other))).toEqual({ kind: 'stop', reason: '自动修复已停：这一轮没有新的提交' })
     // A new thread on the same head is new work.
     const withThread = pr({ required: { total: 1, failing: ['test'], pending: 0 }, threads: [thread('T1', 'jacob')] })
     expect(autoFixDecision(sent, input(withThread))).toMatchObject({ kind: 'send' })
@@ -96,7 +95,7 @@ describe('自动修复 (PRD F16 v1.63 · L3)', () => {
 
   it('stops after the cap', () => {
     const state = { ...on, attempts: 3, lastKey: 'x', lastHead: 'c'.repeat(40) }
-    expect(autoFixDecision(state, input(pr({ required: { total: 1, failing: ['test'], pending: 0 } })))).toEqual({ kind: 'stop', reason: '自动修复已停：3 次后 test 仍失败' })
+    expect(autoFixDecision(state, input(pr({ required: { total: 1, failing: ['test'], pending: 0 } })))).toEqual({ kind: 'stop', reason: '自动修复已停：已经修了 3 次' })
     expect(autoFixDecision({ ...state, stopped: 'x' }, input(pr({ required: { total: 1, failing: ['test'], pending: 0 } })))).toEqual({ kind: 'wait' })
   })
 })
@@ -159,12 +158,6 @@ describe('the fix loop around the brakes (Figma 29G)', () => {
     expect(takenOver({ ...state, run: asking }).run).toBe(asking)
   })
 
-  it('asks first when the base already fails the same checks', () => {
-    expect(beforeFixDecision({ failingChecks: ['test', 'lint'], baseFailing: ['lint', 'e2e'] })).toEqual({ kind: 'ask', reason: 'base-broken', checks: ['lint'] })
-    expect(beforeFixDecision({ failingChecks: ['test'], baseFailing: ['lint'] })).toEqual({ kind: 'go' })
-    expect(beforeFixDecision({ failingChecks: ['test'], baseFailing: null })).toEqual({ kind: 'go' })
-  })
-
   it('offers the buttons that make sense for the stop', () => {
     expect(stopActions(stoppedRun())).toEqual({ kind: 'brake', push: true, discard: true })
     expect(stopActions(stoppedRun({ decision: { kind: 'stop', reason: 'no-progress' } }))).toEqual({ kind: 'brake', push: false, discard: false })
@@ -202,7 +195,7 @@ describe('自动修复 on the base (Figma 29E)', () => {
   })
 
   it('stops after the cap', () => {
-    expect(baseFixDecision({ ...on, attempts: 3, lastKey: 'x' }, input(baseCi()))).toEqual({ kind: 'stop', reason: '自动修复已停：3 次后 test 仍失败' })
+    expect(baseFixDecision({ ...on, attempts: 3, lastKey: 'x' }, input(baseCi()))).toEqual({ kind: 'stop', reason: '自动修复已停：已经修了 3 次' })
   })
 
   it('says what is going on', () => {

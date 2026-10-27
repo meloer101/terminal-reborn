@@ -21,7 +21,8 @@ import {
   setMergeWhenGreen,
   stopFix
 } from '../../pull-requests/auto-fix'
-import { automationText, mergeWhenGreenOn, stopActions, stopLabel, type FixRun, type FixScope } from '../../pull-requests/auto-fix-model'
+import { brakeLabel } from '@shared/auto-fix-brakes'
+import { automationText, mergeWhenGreenOn, stopActions, type FixRun, type FixScope } from '../../pull-requests/auto-fix-model'
 import { setPrNotice, setThreadPicked, toggleNotes, usePullRequests } from '../../pull-requests/store'
 import { useWorkspace } from '../../state/workspace'
 import { Toggle } from '../../ui/Toggle'
@@ -108,7 +109,7 @@ export function useAgentOf(worktreePath: string) {
 
 /** The brake stopped, or the base fails already (Figma 29G): an alert icon and the reason in primary text. */
 export function FixStopLine({ run, note }: { run: Extract<FixRun, { kind: 'stopped' }>; note: string | null }) {
-  const text = stopLabel(run.decision)
+  const text = brakeLabel(run.decision)
   return (
     <p className={ci.stop} role="status" data-testid="fix-stop">
       <span className={ci.stopIcon}>

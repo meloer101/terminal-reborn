@@ -8,7 +8,7 @@
 // `ship.shipToMain` for the base — or stops with a row that asks the user (Figma 29G). auto-fix-model.ts decides when to
 // send and what the rows say. 通过后合并 is GitHub auto-merge (or Wavi's own wait); a new allowed thread or a P0 / P1
 // review turns it off again, since GitHub would merge past them.
-import { brakeDecision, failureKey } from '@shared/auto-fix-brakes'
+import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-fix-brakes'
 import { prThreadsPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import { DEFAULT_SETTINGS, type PrSettings } from '@shared/settings'
 import { handoffPrompt, type HandoffContext, type HandoffFailure } from '@shared/ship-handoff'
@@ -22,11 +22,9 @@ import {
   allowedThreads,
   autoFixDecision,
   baseFixDecision,
-  beforeFixDecision,
   fixNote,
   freshAutomation,
   mergeWhenGreenOn,
-  stopLabel,
   takenOver,
   type FixRun,
   type FixScope,
@@ -228,12 +226,12 @@ async function sendFix(c: FixCtx, send: Send, retry?: Retry): Promise<void> {
     let baseFailing = retry?.baseFailing ?? null
     if (!retry && failure && !state.baseChecked) {
       baseFailing = await window.tr.ship.baseFailing(target).catch(() => null)
-      const before = beforeFixDecision({ failingChecks: failure.checks, baseFailing })
+      const before = beforeFix({ failingChecks: failure.checks, baseFailing })
       state = read(c.scope, c.worktree)
       if (!state?.autoFix || state.run) return
       if (before.kind === 'ask') {
         write(c.scope, c.worktree, { ...state, run: { kind: 'stopped', sessionId: c.session.id, since: null, key, checks: failure.checks, baseFailing, decision: before } })
-        notify(c.session, `${placeOf(c)}：${stopLabel(before)}`)
+        notify(c.session, `${placeOf(c)}：${brakeLabel(before)}`)
         return
       }
     }
@@ -252,10 +250,11 @@ async function sendFix(c: FixCtx, send: Send, retry?: Retry): Promise<void> {
       base,
       template: null,
       evidence: [],
-      ...(failure ? { failure } : {})
+      attempt: state.attempts + 1,
+      ...(failure ? { failure } : {}),
+      ...(retry ? { previousStop: retry.previousStop } : {})
     }
     const parts = [`${AUTO_FIX_MARK} 第 ${state.attempts + 1} 次）`]
-    if (retry) parts.push(`上一次修复被停下了：${retry.previousStop}。请换一种做法。`)
     parts.push(handoffPrompt(context))
     if (send.threads.length > 0) parts.push(prThreadsPrompt(pr?.number ?? null, send.threads))
     if (!failure) parts.push(`修好后提交（不要推送），并把改了什么写到 ${slot.path}。`)
@@ -311,7 +310,7 @@ async function handleStop(c: FixCtx): Promise<void> {
       note,
       run: { kind: 'stopped', sessionId: run.sessionId, since: run.since, key: run.key, checks: run.checks, baseFailing: run.baseFailing, decision }
     })
-    notify(c.session, `${placeOf(c)}：${stopLabel(decision)}`)
+    notify(c.session, `${placeOf(c)}：${brakeLabel(decision, state.pushed)}`)
   } finally {
     handling.delete(id)
   }
@@ -360,7 +359,7 @@ export async function pushAnyway(scope: FixScope, worktreePath: string): Promise
   const run = stoppedRunOf(scope, worktreePath)
   const c = ctxFor(scope, worktreePath)
   if (!run || !c || run.since === null) return
-  const confirmed = await window.tr.ui.confirm({ message: '仍然推送这次修复？', detail: stopLabel(run.decision), confirmLabel: '仍然推送', cancelLabel: '取消' })
+  const confirmed = await window.tr.ui.confirm({ message: '仍然推送这次修复？', detail: brakeLabel(run.decision, read(scope, worktreePath)?.pushed), confirmLabel: '仍然推送', cancelLabel: '取消' })
   if (confirmed && read(scope, worktreePath)?.run === run) await pushFix(c, run)
 }
 
@@ -385,7 +384,7 @@ export async function retryFix(scope: FixScope, worktreePath: string): Promise<v
   const pr = usePullRequests.getState().byWorktree[worktreePath]?.pr
   const threads = scope === 'pr' && pr ? allowedThreads(pr, settings.bots) : []
   const send: Send = { key: state.lastKey ?? run.key, head: state.lastHead ?? run.since, failing: run.checks, threads }
-  await sendFix(c, send, { since: run.since, previousStop: stopLabel(run.decision), baseFailing: run.baseFailing })
+  await sendFix(c, send, { since: run.since, previousStop: brakeLabel(run.decision, state.pushed), baseFailing: run.baseFailing })
 }
 
 /** 在这里修: the base failing the same checks does not matter; go on. */
@@ -398,7 +397,7 @@ export function proceedAnyway(scope: FixScope, worktreePath: string): void {
 /** 不修: leaves the failure alone. */
 export function declineFix(scope: FixScope, worktreePath: string): void {
   const state = read(scope, worktreePath)
-  if (state?.run?.kind === 'stopped') write(scope, worktreePath, { ...state, run: null, stopped: stopLabel(state.run.decision) })
+  if (state?.run?.kind === 'stopped') write(scope, worktreePath, { ...state, run: null, stopped: brakeLabel(state.run.decision, state.pushed) })
 }
 
 /** 停下: interrupts the agent's turn and stops 自动修复 until it is switched on again. */
