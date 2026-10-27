@@ -34,10 +34,11 @@
   --titlebar-height: 44px;
   /* Sidebar tree: a session's glyph sits under its project's name (8 inset + 16 chevron + 4 gap). */
   --indent-tree: 28px;
-  /* Right panel card (F17, Figma 13): inset from the window edge; its width is the user's (layout.ts). */
-  --panel-inset: 8px;
   /* Main never gets narrower; the right panel floats over it instead (B13). */
   --main-min-width: 560px;
+  /* Glass shell (PRD §5 玻璃外壳, Figma 28): cards (terminal panes, right panel, overview) sit this far from the
+     window's right and bottom edges and from each other; their corner is --radius-window. */
+  --card-gap: 6px;
 
   /* Type */
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', sans-serif;
@@ -64,6 +65,8 @@
   /* Slide (segmented thumb): a damped spring (ζ 0.7) — pulled off fast, ~4.5% overshoot, settled by the end. */
   --motion-duration-slide: 380ms;
   --motion-spring: linear(0, 0.06, 0.2, 0.37, 0.54, 0.691, 0.813, 0.906, 0.971, 1.012, 1.035, 1.045, 1.045, 1.041, 1.034, 1.026, 1.018, 1.012, 1.007, 1.003, 1);
+  /* Sidebar and right panel opening / closing (AppShell): the same spring, a little longer. Keep DRAWER_MS in step. */
+  --motion-duration-drawer: 460ms;
 }
 
 /* Dark — the default baseline */
@@ -155,6 +158,14 @@
   --shadow-glass: 0 24px 64px #0000008c, 0 4px 12px #00000059;
   --shadow-glass-menu: 0 16px 40px #00000080;
   --shadow-glass-button: 0 2px 8px #00000059;
+  /* Glass shell (Figma 28): the fixed tint over the window's native blur, and the edge of the cards on it. */
+  --glass-shell: #1e1e209e;
+  /* Menus and popovers over the shell: solid (a backdrop blur there darkens the window's glass around it), the shell's
+     hue a step lighter, with the glass's top light and an edge. */
+  --float-bg: #252527;
+  --float-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff14;
+  --card-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff0f;
+  --card-shadow: 0 1px 3px #00000059;
 }
 
 /* Light — applied via data-theme (see renderer/theme.ts), which follows the system by default */
@@ -239,4 +250,10 @@
   --shadow-glass: 0 24px 64px #00000029, 0 4px 12px #00000014;
   --shadow-glass-menu: 0 16px 40px #00000024;
   --shadow-glass-button: 0 2px 8px #0000002e;
+  /* Light: macOS's light material is already pale, so a thin tint is enough to keep it light on any wallpaper. */
+  --glass-shell: #f4f4f580;
+  --float-bg: #fcfcfc;
+  --float-edge: inset 0 0 0 1px #00000014, inset 0 1px 0 #ffffffb3;
+  --card-edge: inset 0 0 0 1px #00000012;
+  --card-shadow: 0 1px 3px #00000014;
 }

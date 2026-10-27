@@ -243,7 +243,7 @@ test.describe('B13: right panel at the minimum window', () => {
     await app.close()
   })
 
-  test('the panel docks when there is room, floats over main when there is not, and closes with ✕', async () => {
+  test('the panel docks (narrowing to fit) when there is room, floats over main when there is not, and closes with ✕', async () => {
     const panel = page.locator('[data-region="panel"]')
     await page.getByRole('button', { name: '文件', exact: true }).click()
     await expect(panel).toBeVisible()
@@ -251,8 +251,8 @@ test.describe('B13: right panel at the minimum window', () => {
       await setSize(app, w, h)
       await expect.poll(() => page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)).toBeLessThanOrEqual(w)
       const width = await page.evaluate(() => (globalThis as unknown as { innerWidth: number }).innerWidth)
-      // The card is 480 wide and 8 in from the window edge (F17).
-      await expect(panel).toHaveAttribute('data-mode', width >= 264 + 480 + 8 + 560 ? 'docked' : 'overlay')
+      // The panel narrows from 480 down to its 400 minimum before it floats (F17, B13); 6 is the glass gap.
+      await expect(panel).toHaveAttribute('data-mode', width >= 264 + 400 + 6 + 560 ? 'docked' : 'overlay')
       expect(await mainWidth(page)).toBeGreaterThanOrEqual(560)
       await expect(panel.getByRole('button', { name: '关闭右侧栏' })).toBeInViewport()
     }

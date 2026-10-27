@@ -43,10 +43,17 @@ export interface PaneChrome {
 }
 
 /**
+ * Which part of the header to draw. While the main window's right panel is open, the focused session's tools sit
+ * above the panel at the window's right edge, where they are when it is closed (Figma 28G / 28H): its own header
+ * keeps the title (and a split pane's ×), and the panel draws the tools part.
+ */
+export type SessionHeaderPart = 'full' | 'title' | 'tools'
+
+/**
  * Figma component `SessionHeader` (11:86). Doubles as the window drag region. Without a `sessionId` it shows the
  * active session; in a split each pane has its own (`pane`).
  */
-export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: PaneChrome } = {}) {
+export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessionId?: string; pane?: PaneChrome; part?: SessionHeaderPart } = {}) {
   const active = useSessionView(sessionId)
   const focused = pane?.focused ?? true
   const lead = pane?.lead ?? true
@@ -64,7 +71,11 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
     useWorkspace.getState().setMainView('overview')
   }
   const rightPanel = useWorkspace((s) => s.rightPanel)
+  const overview = useWorkspace((s) => s.mainView === 'overview')
   const togglePanelView = useWorkspace((s) => s.togglePanelView)
+  const part: SessionHeaderPart = asked === 'full' && focused && active && windowKey === MAIN_WINDOW && rightPanel !== null && !overview ? 'title' : asked
+  const showTitle = part !== 'tools'
+  const showTools = part !== 'title'
   const hooks = useHooksHealth(active?.session.id ?? null)
   const shellAgent = useSessionMeta((s) => (active ? s.bySession[active.session.id]?.agent : undefined))
   const limitResume = useLimitResumeShown(active?.session.id ?? '')
@@ -89,14 +100,14 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
   // The status is in the sidebar row already (F17 dropped the copy here); only a hooks problem is worth repeating.
 
   return (
-    <header className={styles.header} data-sidebar-collapsed={sidebarCollapsed} data-focused={focused} data-drag-region={pane?.top ?? true}>
-      {sidebarCollapsed && (
+    <header className={styles.header} data-part={part} data-sidebar-collapsed={sidebarCollapsed && showTitle} data-focused={focused} data-drag-region={pane?.top ?? true}>
+      {showTitle && sidebarCollapsed && (
         <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft size={16} strokeWidth={1.75} />
         </IconButton>
       )}
       {/* With the sidebar hidden nothing else says another session is waiting (B9). */}
-      {sidebarCollapsed && waiting > 0 && mostUrgent && (
+      {showTitle && sidebarCollapsed && waiting > 0 && mostUrgent && (
         <button type="button" className={styles.waiting} title="打开总览 · ⇧⌘A" onClick={openOverview}>
           <span aria-hidden className={styles.waitingGlyph}>
             <StatusGlyph status={mostUrgent} />
@@ -104,7 +115,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
           {waiting} 个会话需要你
         </button>
       )}
-      {active && (
+      {active && showTitle && (
         <>
           {renaming === active.session.id ? (
             <TitleEditor
@@ -133,7 +144,11 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
             </span>
           )}
           {active.session.dispatchedBy && <DispatchedBy parentId={active.session.dispatchedBy} />}
-          <span className={styles.spacer} />
+        </>
+      )}
+      {active && <span className={styles.spacer} />}
+      {active && showTools && (
+        <>
           {/* Figma 17A: todo · context · usage, after the branch and before the pane icons (PRD F11 / F12). */}
           {/* A plain terminal shows the agent started in it by hand, while it runs. */}
           <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? shellAgent ?? null : claudeOrCodex(active.session.kind)}>
@@ -152,7 +167,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
       {!active && <span className={styles.spacer} />}
       <span className={styles.tools}>
         {/* The run script, paperclip and right panel act on the focused pane's session (PRD F20). */}
-        {focused && active?.worktree && scripts?.scripts.run && (
+        {showTools && focused && active?.worktree && scripts?.scripts.run && (
           <RunButton
             action={runAction(running, runSession?.id === active.session.id)}
             command={scripts.scripts.run}
@@ -163,7 +178,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
           />
         )}
         {/* PRD F19: the files' paths go into the input line; the agent makes images attachments. */}
-        {focused && active && (
+        {showTools && focused && active && (
           <IconButton
             label="添加文件或文件夹"
             title="添加文件或文件夹 · 也可以拖进终端，或 ⌘V 粘贴截图"
@@ -177,7 +192,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
           </IconButton>
         )}
         {/* The right panel is the main window's (F20 · 多窗口: not in other windows yet). */}
-        {focused && active && windowKey === MAIN_WINDOW && (
+        {showTools && focused && active && windowKey === MAIN_WINDOW && (
           <span className={styles.panes} role="group" aria-label="右侧栏">
             {PANE_ICONS.map(({ view, icon: Icon }) => (
               <IconButton
@@ -192,7 +207,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
             ))}
           </span>
         )}
-        {active && (
+        {active && (showTools || pane?.onClose) && (
           <IconButton
             label="会话菜单"
             aria-haspopup="menu"
@@ -206,7 +221,7 @@ export function SessionHeader({ sessionId, pane }: { sessionId?: string; pane?: 
             <Ellipsis size={16} strokeWidth={1.75} />
           </IconButton>
         )}
-        {pane?.onClose && (
+        {showTitle && pane?.onClose && (
           <IconButton label="关掉这一格" title={`关掉这一格，会话继续运行 · ${formatAccelerator(SHORTCUTS['close-pane'])}`} onClick={pane.onClose}>
             <X size={16} strokeWidth={1.75} />
           </IconButton>

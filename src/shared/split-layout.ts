@@ -1,6 +1,6 @@
 // The main area's split (PRD F20 · Figma 21): two to four sessions side by side inside the terminal area, kept as a
 // tree of splits — a split runs its children left to right ('row') or top to bottom ('column'), each child a pane or
-// another split. The panes exactly fill the area; a 1 px hairline between neighbours is where they resize.
+// another split. The panes exactly fill the area; the strip of glass between neighbours is where they resize.
 // Pure: the main area measures and draws it, the workspace store keeps it and workspace.json saves it.
 // The overview overlay (renderer/overview/pane-layout.ts) shares the drop zones and limits below.
 import type { SessionId } from './types'
@@ -10,8 +10,8 @@ export const MAX_PANES = 4
 export const MIN_SHARE = 0.15
 /** Nor smaller than this, in px; the area cannot be split further when the panes would not fit. */
 export const MIN_PANE: Size = { width: 320, height: 200 }
-/** The hairline between two panes, in px. */
-export const SPLIT_GAP = 1
+/** The strip of window glass between two panes, in px (= --card-gap, Figma 28E). */
+export const SPLIT_GAP = 6
 /** The new pane's slot while ⌘D / ⇧⌘D picks its session; never a session id (those are UUIDs or `s-…`). */
 export const PICKER_PANE: SessionId = 'split:picker'
 

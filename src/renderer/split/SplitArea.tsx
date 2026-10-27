@@ -1,6 +1,6 @@
 // The terminal area (PRD F20 · Figma 21 Section 301:15658): one session, or two to four side by side as a split.
 // Each pane is today's session view — its own header and the session's full, interactive terminal — and the panes
-// exactly fill the area, a 1 px hairline between neighbours that drags to resize (double-click evens the two out).
+// exactly fill the area, a strip of glass between neighbours that drags to resize (double-click evens the two out).
 // A session dragged from the sidebar, or a pane by its title, drops on a pane's middle (replace / swap) or an edge
 // (a new pane on that side). The terminals stay where TerminalArea mounted them; this only places them. Every window has
 // its own (F20 · 多窗口): a secondary window's panes borrow their terminals into its document (PaneHosts).
@@ -120,7 +120,7 @@ function PaneHeader({ rect, focused, many }: { rect: PaneBox; focused: boolean; 
   )
 }
 
-/** The hairline between two panes: an 8 px strip that drags to resize, with a short grip always shown in its middle. */
+/** The glass between two panes: an 8 px strip that drags to resize, with a short grip always shown in its middle. */
 function Hairline({ handle }: { handle: SplitHandle }) {
   const across = handle.dir === 'row'
   const [dragging, setDragging] = useState(false)

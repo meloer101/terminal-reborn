@@ -39,10 +39,6 @@ describe('backdropCss', () => {
 })
 
 describe('toAppearanceDom', () => {
-  it('exposes vibrancy as a data attribute', () => {
-    expect(toAppearanceDom({ ...base, sidebarVibrancy: true }).data).toEqual({ vibrancy: 'on' })
-    expect(toAppearanceDom(base).data).toEqual({ vibrancy: 'off' })
-  })
   it('lets the surface layers go transparent only when the terminal is', () => {
     expect(toAppearanceDom(base).vars['--tr-term-surface']).toBe('var(--term-bg)')
     expect(toAppearanceDom({ ...base, terminalOpacity: 0.8 }).vars['--tr-term-surface']).toBe('transparent')

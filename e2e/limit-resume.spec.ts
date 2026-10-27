@@ -229,7 +229,8 @@ test.describe('continue after the plan limit resets', () => {
     // The previous test hid and showed the window, and macOS fits a shown window into the screen again (1024 wide on
     // the CI runner): size it once more so the 文件 panel docks beside the header instead of floating over /compact.
     await setWindowSize(app, page, 1440, 900)
-    const compact = header().getByTestId('context-chip').getByRole('button', { name: '/compact' })
+    // Wherever the session's tools are: its header, or above the right panel once that is open (Figma 28G).
+    const compact = page.getByTestId('context-chip').getByRole('button', { name: '/compact' })
     await expect(compact).toBeVisible(WITHIN)
     await header().getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
     const panel = page.locator('[data-region="panel"]')
@@ -273,7 +274,8 @@ test.describe('continue after the plan limit resets', () => {
     await page.getByRole('menu').getByRole('menuitem', { name: /插入路径到终端/ }).click()
     await expect.poll(typedText, WITHIN).toContain('@notes.txt')
     await expect(panel.getByTestId('files-notice')).toHaveCount(0)
-    await header().getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
+    // With the panel open its toggles are in the tools row above it (Figma 28G).
+    await panel.getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '文件' }).click()
     await expect(panel).toHaveCount(0)
     // Leave the input line empty again.
     await page.locator('[data-region="terminal"] [data-active="true"]').click()

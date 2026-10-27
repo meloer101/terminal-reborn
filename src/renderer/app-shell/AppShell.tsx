@@ -1,18 +1,17 @@
-import { useEffect, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { listenForBrowser } from '../panels/browser/store'
 import { listenForBackgroundReview } from '../review/background'
 import { startPullRequestBridge } from '../pull-requests/store'
 import { startConflictRadarBridge } from '../conflict-radar/store'
 import { startSessionMetaBridge } from '../session-meta/store'
 import { startLimitResumeBridge } from '../limit-resume/bridge'
-import { useWorkspace } from '../state/workspace'
+import { useWorkspace, type PanelView } from '../state/workspace'
 import { useIsKeyWindow, usePaneView } from '../state/window-scope'
 import { startSecondaryWindows } from './secondary-windows'
 import { startActivityReporting } from '../state/activity'
 import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
 import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
 import { SetupStrip } from '../scripts/SetupStrip'
-import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
@@ -36,9 +35,9 @@ import { Overview } from '../overview/Overview'
 import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
 import './menu-commands'
-import { SIDEBAR_WIDTH_DEFAULT } from '@shared/workspace-file'
-import { startColumnResize } from '../ui/column-resize'
-import { panelMode, sidebarWidthFor } from './layout'
+import { panelMode, panelWidthFor, sidebarWidthFor } from './layout'
+import { drawerIsWide, useDrawer } from './drawer-motion'
+import { SidebarDrawer } from './SidebarDrawer'
 import styles from './AppShell.module.css'
 
 const subscribeResize = (onChange: () => void) => {
@@ -48,14 +47,15 @@ const subscribeResize = (onChange: () => void) => {
 const windowWidth = () => window.innerWidth
 
 /**
- * Window layout (Figma Screens 01–08):
- *   sidebar (264 by default, user-sized) │ main: header 44 / terminal — or the overview │ right panel card (F17, 480 by default, user-sized)
- * The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal. The terminal
- * area can hold two to four sessions side by side, each with its own header (PRD F20, split/SplitArea).
+ * Window layout (Figma Screens 01–08, glass shell Figma 28):
+ *   sidebar (264 by default, user-sized) │ main: header 44 / terminal — or the overview │ right panel (F17, 480 by default, user-sized)
+ * The whole window is fixed glass — native vibrancy under a per-theme tint (--glass-shell) — and only content sits in
+ * opaque cards on it: each pane's terminal, the right panel's body, the overview. Headers and the sidebar are on the
+ * glass. The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal. The
+ * terminal area can hold two to four sessions side by side, each with its own header (PRD F20, split/SplitArea).
  * Each region is owned by one feature directory; this file only arranges them.
- * Main never gets narrower than --main-min-width: when docking the panel would squeeze it, the panel floats
- * over main's right edge instead (B13, layout.ts). Main and the panel share one surface (rounded where it meets the
- * sidebar), so the card always floats on the terminal's colour, never on the window or the sidebar's vibrancy.
+ * Main never gets narrower than --main-min-width: the panel narrows to fit, and floats over main's right edge only
+ * when not even its minimum width fits (B13, layout.ts). The sidebar and the panel open and close as drawers (drawer-motion).
  */
 export function AppShell() {
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
@@ -67,12 +67,17 @@ export function AppShell() {
   // The panel follows the active session's worktree, so it shows beside a session (not the overview or welcome page).
   const savedPanel = useWorkspace((s) => s.rightPanel)
   const rightPanel = hasSession && !overview ? savedPanel : null
-  const panelWidth = useWorkspace((s) => s.rightPanelWidth)
+  const savedPanelWidth = useWorkspace((s) => s.rightPanelWidth)
   const width = useSyncExternalStore(subscribeResize, windowWidth)
   const sidebarWidth = sidebarWidthFor(width, useWorkspace((s) => s.sidebarWidth))
-  const mode = rightPanel ? panelMode(width, sidebarCollapsed ? 0 : sidebarWidth, panelWidth) : null
+  // Also while the panel closes (rightPanel is null by then), so it leaves the way it sat.
+  // Narrowed so the session keeps its minimum width; it floats over main only when even its minimum does not fit.
+  const panelWidth = panelWidthFor(width, sidebarCollapsed ? 0 : sidebarWidth, savedPanelWidth)
+  const mode = panelMode(width, sidebarCollapsed ? 0 : sidebarWidth, panelWidth)
   // Every session id, so a new or removed session resubscribes. The string compares by value.
   const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
+  const panelRef = useRef<HTMLElement>(null)
+  const panel = useDrawer<PanelView>(rightPanel, panelRef)
   useEffect(() => startActivityReporting(), [])
   useEffect(() => startSecondaryWindows(), [])
   useEffect(() => listenForBackgroundReview(), [])
@@ -95,13 +100,8 @@ export function AppShell() {
   }, [sessionPortKey])
 
   return (
-    <div className={styles.shell}>
-      {!sidebarCollapsed && (
-        <aside className={styles.sidebar} data-region="sidebar" style={{ width: `${sidebarWidth}px` }}>
-          <Sidebar />
-          <SidebarResizeHandle width={sidebarWidth} />
-        </aside>
-      )}
+    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'}>
+      <SidebarDrawer collapsed={sidebarCollapsed} width={sidebarWidth} resizable />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
           {/* The overview (PRD F9) takes the main area; the terminals stay mounted (hidden) behind it. The panes have
@@ -120,14 +120,20 @@ export function AppShell() {
             <PlanStrip />
           </div>
         </main>
-        {rightPanel && (
+        {panel.shown && (
           <aside
+            ref={panelRef}
             className={styles.panel}
             data-region="panel"
             data-mode={mode}
-            style={{ width: `calc(${panelWidth}px + var(--panel-inset))` }}
+            data-phase={panel.phase}
+            inert={panel.phase === 'closing'}
+            style={{ width: drawerIsWide(panel.phase) ? `calc(${panelWidth}px + var(--card-gap))` : 0 }}
           >
-            <RightPanel view={rightPanel} />
+            {/* Full width the whole time: the aside's width reveals it from the right edge as it springs open. */}
+            <div className={styles.panelInner} style={{ width: `calc(${panelWidth}px + var(--card-gap))` }}>
+              <RightPanel view={panel.shown} />
+            </div>
           </aside>
         )}
       </div>
@@ -145,22 +151,5 @@ export function AppShell() {
       <MenuHost />
       <SessionDragGhost />
     </div>
-  )
-}
-
-/** The sidebar's right edge (where main's rounded corner starts): drag to resize (200–480, saved), double-click for 264. */
-function SidebarResizeHandle({ width }: { width: number }) {
-  const setWidth = useWorkspace((s) => s.setSidebarWidth)
-  // Starts from the width as shown, which can be narrower than the saved one in a small window (layout.ts).
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => startColumnResize(e, 'right', width, setWidth)
-  return (
-    <div
-      className={styles.sidebarResize}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="调整侧栏宽度"
-      onPointerDown={onPointerDown}
-      onDoubleClick={() => setWidth(SIDEBAR_WIDTH_DEFAULT)}
-    />
   )
 }

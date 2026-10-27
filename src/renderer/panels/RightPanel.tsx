@@ -1,5 +1,6 @@
-// Right panel (PRD F17, Figma 13): a floating card beside the terminal. The session header's icons pick the view;
-// the content always follows the active session's worktree. Browser, Git and Worktree land in later milestones.
+// Right panel (PRD F17, Figma 13 / 28G): a card beside the terminal, at the same level. Above it, on the window's glass,
+// the active session's tools stay where they are when the panel is closed (the session header's tools part); their
+// icons pick the view. The content always follows the active session's worktree.
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
@@ -8,6 +9,7 @@ import { FilesView } from './files/FilesView'
 import { GitView } from './git/GitView'
 import { WorktreeView } from './worktree/WorktreeView'
 import { PaneHeader } from './PaneHeader'
+import { SessionHeader } from '../session-header/SessionHeader'
 import { startColumnResize } from '../ui/column-resize'
 import styles from './RightPanel.module.css'
 
@@ -21,6 +23,7 @@ export function RightPanel({ view }: { view: PanelView }) {
   return (
     <>
       <ResizeHandle />
+      <SessionHeader part="tools" />
       <div className={styles.card} data-view={view} data-testid="right-panel">
         {view === 'files' && worktree && active ? (
           <FilesView key={worktree.path} root={worktree.path} sessionId={active.session.id} />
@@ -46,9 +49,13 @@ export function RightPanel({ view }: { view: PanelView }) {
 /** The card's left edge: drag to resize (min 400, saved), double-click for the default width. */
 function ResizeHandle() {
   const setWidth = useWorkspace((s) => s.setRightPanelWidth)
-  // The card is anchored on the right: moving the edge left by n px makes it n px wider.
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) =>
-    startColumnResize(e, 'left', useWorkspace.getState().rightPanelWidth, setWidth)
+  // The card is anchored on the right: moving the edge left by n px makes it n px wider. Starts from the width as
+  // shown, which can be narrower than the saved one in a small window (app-shell/layout.ts).
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const card = e.currentTarget.parentElement?.querySelector('[data-testid="right-panel"]')
+    const shown = card instanceof HTMLElement ? Math.round(card.getBoundingClientRect().width) : useWorkspace.getState().rightPanelWidth
+    startColumnResize(e, 'left', shown, setWidth)
+  }
   return (
     <div
       className={styles.resize}

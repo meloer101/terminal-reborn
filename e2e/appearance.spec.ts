@@ -28,6 +28,7 @@ let page: Page
 
 const pane = (sessionId: string) => page.locator(`[data-region="terminal"] [data-session-id="${sessionId}"]`)
 const terminalRegion = () => page.locator('[data-region="terminal"]')
+const terminalCard = () => terminalRegion().locator('[data-session-id][data-shown="true"]').first()
 
 const hook = <T>(fn: (h: Hook, arg: string) => T, arg = '') =>
   page.evaluate(([source, a]) => (new Function('h', 'a', `return (${source})(h, a)`)(
@@ -182,9 +183,9 @@ test('a custom terminal background and imported colors reach a live terminal, an
   const ansi = Array.from({ length: 16 }, (_, i) => `#${(i * 16 + 15).toString(16).padStart(2, '0').repeat(3)}`)
   await update({ appearance: { theme: 'dark', terminalBackground: { mode: 'custom', color: '#fdf6e3' } } })
   await expect.poll(async () => (await info(FIRST))?.background).toBe('#fdf6e3')
-  // The layers around the terminal use the same color: what the terminal shows is the color that was set.
+  // The terminal's card uses the same color: what the terminal shows is the color that was set.
   await expect
-    .poll(() => terminalRegion().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor))
+    .poll(() => terminalCard().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor))
     .toBe('rgb(253, 246, 227)')
   await update({ appearance: { terminalBackground: { mode: 'custom', color: '#262427' }, terminalColors: { foreground: '#fcfcfa', cursor: '#fcfcfa', selection: '#5ea1ff47', ansi } } })
   await expect.poll(async () => (await info(FIRST))?.background).toBe('#262427')
@@ -192,13 +193,10 @@ test('a custom terminal background and imported colors reach a live terminal, an
   await expect.poll(async () => (await info(FIRST))?.background).toBe('#0a0a0a')
 })
 
-test('sidebar vibrancy flips the sidebar to see-through and back', async () => {
-  const sidebarBackground = () => page.locator('[data-region="sidebar"]').evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor)
-  expect(await sidebarBackground()).not.toBe('rgba(0, 0, 0, 0)')
-  await update({ appearance: { sidebarVibrancy: true } })
-  await expect.poll(sidebarBackground).toBe('rgba(0, 0, 0, 0)')
-  await page.waitForTimeout(300)
-  await page.screenshot({ path: `${SHOTS}/appearance-vibrancy-on-window.png` })
-  await update({ appearance: { sidebarVibrancy: false } })
-  await expect.poll(sidebarBackground).not.toBe('rgba(0, 0, 0, 0)')
+test('the window shell is fixed glass: the sidebar and the header row are see-through, the terminal card is not', async () => {
+  const background = (selector: string) => page.locator(selector).first().evaluate((el) => (globalThis as unknown as Dom).getComputedStyle(el).backgroundColor)
+  expect(await background('[data-region="sidebar"]')).toBe('rgba(0, 0, 0, 0)')
+  expect(await background('[data-region="main"]')).toBe('rgba(0, 0, 0, 0)')
+  expect(await background('[data-region="terminal"] [data-session-id][data-shown="true"]')).not.toBe('rgba(0, 0, 0, 0)')
+  await page.screenshot({ path: `${SHOTS}/appearance-glass-window.png` })
 })

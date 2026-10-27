@@ -1,10 +1,30 @@
+/* The cards' gap from the window's left edge: none beside the sidebar, --card-gap without it. Registered so it can
+   spring along with the sidebar. */
+@property --lead-gap {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+/* The window's fixed glass (PRD §5 玻璃外壳, Figma 28): native vibrancy (main/appearance.ts) under one tint per theme.
+   Only content sits on it in cards; nothing a theme import or terminal colour changes. */
+:global(html),
+:global(body) {
+  background: transparent;
+}
+
 .shell {
+  --lead-gap: 0px;
   position: relative;
   display: flex;
   overflow: hidden;
   height: 100%;
-  /* Shows through the surface's rounded left corners, so it matches the sidebar. */
-  background: var(--bg-sidebar);
+  background: var(--glass-shell);
+  transition: --lead-gap var(--motion-duration-drawer) var(--motion-spring);
+}
+
+.shell[data-sidebar='closed'] {
+  --lead-gap: var(--card-gap);
 }
 
 .sidebar {
@@ -13,18 +33,24 @@
   /* The user's width is set inline (AppShell); this is the default. */
   width: var(--sidebar-width);
   display: flex;
-  flex-direction: column;
-  background: var(--bg-sidebar);
+  /* While the drawer is narrower than its content, the content's right edge leads: it slides in from the left. */
+  justify-content: flex-end;
 }
 
-/* Main and the right panel share one surface: the panel card floats on it, the sidebar sits beside it. */
+/* Always the sidebar's full width; the aside's width reveals it. */
+.sidebarInner {
+  flex: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Main and the right panel side by side on the glass. */
 .surface {
   position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
-  /* Opaque even when the shell behind it is see-through (sidebar vibrancy). */
-  background: var(--bg-app);
 }
 
 .main {
@@ -32,7 +58,6 @@
   min-width: var(--main-min-width);
   display: flex;
   flex-direction: column;
-  background: var(--bg-app);
 }
 
 /* The sidebar's right edge: a 6px grab strip centred on it, above the surface's rounded corner. */
@@ -47,19 +72,10 @@
   -webkit-app-region: no-drag;
 }
 
-/* Next to the sidebar, the surface's left edge is rounded instead of a hairline. */
-.sidebar + .surface {
-  overflow: hidden;
-  border-top-left-radius: var(--radius-main);
-  border-bottom-left-radius: var(--radius-main);
-}
-
 .terminal {
   flex: 1;
   min-height: 0;
   position: relative;
-  /* Set by the appearance runtime: solid, gradient, or image + dim (src/renderer/appearance). */
-  background: var(--tr-terminal-backdrop, var(--term-bg));
 }
 
 /* Hidden while the overview is up; terminals keep running (and keep their scrollback) behind it. */
@@ -75,25 +91,24 @@
   display: none;
 }
 
-/* Sidebar vibrancy: main sets the native vibrancy; the layers in front of it go see-through. */
-:global(html[data-vibrancy='on']),
-:global(html[data-vibrancy='on'] body),
-:global(html[data-vibrancy='on']) .shell,
-:global(html[data-vibrancy='on']) .sidebar {
-  background: transparent;
-}
-
 .panel {
   position: relative;
   flex: none;
   display: flex;
-  flex-direction: column;
-  /* The card (panels/RightPanel) sits 8 in from the window's top, right and bottom; its width is the user's.
-     The inset shows the surface, never the window behind it. */
-  padding: var(--panel-inset) var(--panel-inset) var(--panel-inset) 0;
 }
 
-/* Too narrow to dock (layout.ts): float over main's right edge. */
+/* The panel at its full width (its left edge leads while the drawer is narrower: it slides in from the right): its header row on the glass, its body a card (panels/RightPanel), --card-gap from main
+   and from the window's right and bottom edges. */
+.panelInner {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--card-gap) var(--card-gap) 0;
+}
+
+/* Too narrow to dock (layout.ts): float over main's right edge on the floating surface (no backdrop blur, which would
+   darken the window's glass). */
 .panel[data-mode='overlay'] {
   position: absolute;
   top: 0;
@@ -101,4 +116,77 @@
   bottom: 0;
   z-index: 10;
   max-width: calc(100% - var(--space-40));
+  background: var(--float-bg);
+  box-shadow: var(--shadow-glass-menu);
+}
+
+.panel[data-mode='overlay'] .panelInner {
+  padding-left: var(--card-gap);
+}
+
+/* ---- Opening and closing (drawer-motion.ts) ----
+   The aside's width springs, which moves the cards beside it; the content, full width inside, slides in from the
+   drawer's own edge, out of a slight blur. Closing eases out without the overshoot. */
+.sidebar[data-phase='enter'],
+.sidebar[data-phase='opening'],
+.sidebar[data-phase='closing'],
+.panel[data-phase='enter'],
+.panel[data-phase='opening'],
+.panel[data-phase='closing'] {
+  overflow: hidden;
+  transition: width var(--motion-duration-drawer) var(--motion-spring);
+}
+
+.sidebar[data-phase='closing'],
+.panel[data-phase='closing'] {
+  transition-timing-function: var(--ease-out);
+}
+
+.sidebarInner,
+.panelInner {
+  transition:
+    transform var(--motion-duration-drawer) var(--motion-spring),
+    opacity var(--motion-duration-drawer) var(--ease-out),
+    filter var(--motion-duration-drawer) var(--ease-out);
+}
+
+.sidebarInner {
+  transform-origin: left center;
+}
+
+.panelInner {
+  transform-origin: right center;
+}
+
+.sidebar[data-phase='enter'] .sidebarInner,
+.sidebar[data-phase='closing'] .sidebarInner {
+  transform: translateX(-40px) scale(0.97);
+  opacity: 0;
+  filter: blur(8px);
+}
+
+.panel[data-phase='enter'] .panelInner,
+.panel[data-phase='closing'] .panelInner {
+  transform: translateX(40px) scale(0.97);
+  opacity: 0;
+  filter: blur(8px);
+}
+
+/* Closing: the content rides out with the edge and fades late, so it is seen leaving. */
+.sidebar[data-phase='closing'] .sidebarInner,
+.panel[data-phase='closing'] .panelInner {
+  transition:
+    transform var(--motion-duration-drawer) var(--ease-out),
+    opacity calc(var(--motion-duration-drawer) * 0.6) ease-in calc(var(--motion-duration-drawer) * 0.25),
+    filter var(--motion-duration-drawer) ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .sidebar,
+  .panel,
+  .sidebarInner,
+  .panelInner {
+    transition: none !important;
+  }
 }

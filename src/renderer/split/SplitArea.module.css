@@ -2,43 +2,35 @@
    measureSplit: a header strip here, the terminal below it by TerminalArea. */
 .area {
   position: absolute;
-  inset: 0;
+  /* The cards keep --card-gap from the window's right and bottom edges, and from its left one when the sidebar is
+     closed (--lead-gap, AppShell). The headers sit on the glass above them. */
+  inset: 0 var(--card-gap) var(--card-gap) var(--lead-gap, 0);
 }
 
-/* A pane's header (Figma 21 PaneHeader); its terminal sits right below. */
+/* A pane's header (Figma 28E): on the window's glass, its terminal card right below. */
 .header {
   position: absolute;
   z-index: 2;
-  background: var(--bg-app);
 }
 
-/* The hairline between two panes: an 8 px strip along the 1 px line (Figma 21F), the grip always in its middle. */
+/* The strip of glass between two panes (SPLIT_GAP = --card-gap), 8 px to grab, the grip always in its middle. */
 .hairline {
   position: absolute;
   z-index: 3;
-  /* The inline width / height is the 1 px line; the padding around it is the grab strip. */
+  /* The inline width / height is the gap; the padding around it makes the grab strip 8 px. */
   box-sizing: content-box;
 }
 
 .hairline[data-dir='row'] {
-  margin-left: calc(-0.5 * var(--space-8) + 0.5px);
-  padding: 0 calc(0.5 * var(--space-8) - 0.5px);
+  margin-left: -1px;
+  padding: 0 1px;
   cursor: col-resize;
 }
 
 .hairline[data-dir='column'] {
-  margin-top: calc(-0.5 * var(--space-8) + 0.5px);
-  padding: calc(0.5 * var(--space-8) - 0.5px) 0;
+  margin-top: -1px;
+  padding: 1px 0;
   cursor: row-resize;
-}
-
-/* The 1 px line itself, in the strip's content box. */
-.hairline::before {
-  content: '';
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--border-subtle);
 }
 
 /* SplitHandle (Figma 21): 2 × 32, border/default; border/strong while hovered or dragged. */
@@ -133,13 +125,12 @@
   user-select: none !important;
 }
 
-/* ⌘D / ⇧⌘D's new pane (Figma 21G). */
+/* ⌘D / ⇧⌘D's new pane (Figma 21G): its bar on the glass like a header, the list in a card below. */
 .picker {
   position: absolute;
   z-index: 2;
   display: flex;
   flex-direction: column;
-  background: var(--bg-app);
 }
 
 /* The same strip as a session header (title, then the buttons on the right). */
@@ -159,6 +150,10 @@
 
 .pickerBar[data-sidebar-collapsed='true'] {
   padding-left: 80px;
+}
+
+.pickerBar {
+  transition: padding-left var(--motion-duration-drawer) var(--motion-spring);
 }
 
 .pickerBar button {
@@ -192,6 +187,9 @@
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-8) var(--space-8) 0;
+  border-radius: var(--radius-window);
+  background: var(--bg-app);
+  box-shadow: var(--card-edge), var(--card-shadow);
 }
 
 /* A borderless field: colour only (PRD §5). */

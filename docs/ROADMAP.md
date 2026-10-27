@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-25
+> 最后更新：2026-10-26
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-10-26：窗口外壳固定成玻璃、侧栏和右侧栏有开合动效（PRD v1.73，Figma 28）已完成，还没发版。
 - 将发布 **v0.8.1**（2026-10-26：主目录作为会话文件夹时不再触发“Wavi 想访问桌面”，PRD v1.72）。之前是 **v0.8.0**（2026-10-25：终端底色可以改、导入 Ghostty / iTerm 主题，PRD v1.71）、**v0.7.0**（2026-10-25：19 家 agent CLI 原生启动、一个面板完成提交 / 推送 / PR 和 AI 写、同任务多解、侧栏显示 agent 图标和分支、设置去分隔线、浮层精简）。之前是 **v0.6.0**（2026-10-22：派活与回报，任何一家 agent 派给任何一家、结果自动回到派活方；PR 闭环到合并：创建 PR 面板、PR 评论回到变更视图、在合并面板合并 GitHub PR、自动修复和通过后合并；审阅结果存盘和另一家来审。之前是 v0.5.0，2026-10-21：多 agent 第二批——这一轮跑过哪些检查、冲突雷达、一题多解 + 总览批量操作、多窗口；文件预览换行和 Markdown；状态准确性、隐藏终端不再重画、守护进程 SIGTERM 修复）。
 - 2026-10-25：侧栏会话行多一行「agent 图标 · 分支」，context 和额度浮层只留数字（PRD v1.70，Figma 27）已完成；Claude 的 diff 默认展开、没有只折叠 diff 的设置（只有 `viewMode: focus`，会同时收起所有中途输出）；作者试过后定**不做**设置里的收起开关（Figma 27E 已标取消），用户要的话在自己的终端里用 `--settings '{"viewMode":"focus"}'`。
 - 2026-10-24：原生适配更多 agent（第 7 项 ①②，19 家，PRD §6.15）和设置去分隔线完成；一题多解改从对话里发起（方案 A / B 待作者定）。
@@ -261,6 +262,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - ~~GitHub PR 合并、应用内看 PR 评论（o#9512）~~ 移到“进行中：多 agent”的“PR 闭环”（2026-10-21，PRD v1.63）
 - [x] 文件预览：长行自动换行、Markdown 渲染（2026-10-21，PRD F17 v1.59）：react-markdown + remark-gfm，HTML 经 rehype-raw + rehype-sanitize（GitHub 白名单）；链接打开内置浏览器 / 文件预览 / 标题锚点，标题行切换源码。顺带修了切换文件时短暂显示上一个文件内容的问题。纯逻辑 `markdown-model.ts`（链接解析、不越出 worktree、标题锚点），e2e `right-panel.spec.ts`（截图 `13f-markdown`、`13f-wrap`，两种主题）。Figma 13F 待补渲染态；`npm run dev` 下 worktree 图片因页面不是 file:// 加载不出、显示替代文字，安装版正常（未在真机看过）
 - [x] 终端底色可改 + 导入 Ghostty / iTerm 主题（2026-10-25，PRD F7 v1.71，Figma 07b）：设置 · 外观 · 窗口的「终端底色」（跟随主题 / 自定义）和「底色值」，主题色块下的「导入主题…」；底色 + 前景 / 光标 / 选区 / 16 色原样用于终端，没有导入时前景和 16 色按底色明暗选深色或浅色一套（`shared/terminal-tokens.ts`，测试对照 tokens.css）；解析在 `shared/theme-import.ts`，读文件在 `main/theme-file.ts`；读不了的文件用原生对话框说明（这个对话框没在 Figma 里画）。测试：`color` / `theme-import` / `settings-terminal` / `terminal-tokens` / `theme-file` / `custom-theme` / `map-custom`，e2e `settings.spec.ts` 和 `appearance.spec.ts` 各一条。以后：导入后在主题色块里加一个色块、Alacritty / Kitty / WezTerm 格式
+- [x] 玻璃外壳 + 侧栏 / 右侧栏开合动效（2026-10-26，PRD v1.73 §5，Figma 第 28 节 A–F）：外壳只有深色 / 浅色两套（原生毛玻璃 + `--glass-shell`），导入主题只改终端卡片；会话头、侧栏、右侧栏标题行在玻璃上，终端、右侧栏内容、总览、欢迎页是卡片（圆角 10、间距 6）；分屏的细线换成 6 宽的玻璃缝（`SPLIT_GAP` = 6）；去掉「侧栏毛玻璃」设置。开合：`app-shell/drawer-motion.ts`（宽度弹簧 460 ms、内容滑入 + 模糊，动画中终端不重排、结束时重排一次），侧栏抽成 `SidebarDrawer.tsx`（副窗口共用）。右侧栏放不下时先变窄到 400 再浮起（`panelWidthFor`，作者拖宽右侧栏后它盖住了终端）。右侧栏打开时会话工具在它上方、窗口最右（Figma 28G / 28H，PRD v1.74：`SessionHeader` 的 `part` = full / title / tools，两种窄宽规则分开），菜单和会话头弹出层换成玻璃外壳的浮层（实色 `--float-bg` + 细边 + 高光，不用 `backdrop-filter`：在透明窗口里它会把周围一块玻璃压暗，作者发现的），弹出层画进 body。测试：`drawer-motion.test.ts`、`split-layout.test.ts`、`layout.test.ts`，e2e `appearance` / `right-panel` / `split` / `no-dead-ends` 更新了几何断言（`right-panel.spec.ts` 跑了 13 次有 2 次各挂在不同用例上，改动前 4 次全过，还没查清是不是动效的时序）；用 Playwright 逐帧量过宽度（右侧栏 0 → 508 回弹 → 486，侧栏 → 276 → 264，终端卡片每帧跟随）。没在真实桌面上看过毛玻璃的实际观感（e2e 截图里玻璃后面没有壁纸）
 - [ ] 孤儿 worktree 自动回收
 - [x] 总览批量操作（多选后停止、关闭、发送同一条消息）（2026-10-21，随多 agent 第二批的“一题多解 + 广播”提前做完，PRD F9 v1.60）
 - [ ] PRD §4 “P2 储备”中的各项
@@ -299,7 +301,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 在应用里运行 `vim`、`htop`、`less`（2026-10-20，`tui-apps.spec.ts`：vim、less、top 通过；本机没装 htop，那个用例自动跳过）
 - [ ] 真实桌面：关闭按钮隐藏窗口、Dock 恢复；⌘Q 后 agent 继续运行；⌥⌘Q 弹出确认。逻辑已由 `lifecycle`、`quit-keeps-agents`、`menu-keys` 覆盖，剩清单 B：全屏下关闭、原生确认框的样子
 - [ ] 系统通知、点击通知跳转、Dock 角标。主进程的真实链路已由 `notifications.spec.ts` 覆盖，剩清单 D：横幅的样子和通知权限
-- [ ] 侧栏毛玻璃开 / 关的观感（只能人工，清单 E）
+- [ ] 玻璃外壳在不同壁纸上的观感、侧栏 / 右侧栏开合动效的手感（只能人工，清单 E；原「侧栏毛玻璃开 / 关」已没有开关）
 - [ ] 真实键盘按菜单里的快捷键（⌘N、⌘\、⌘F、⌘J 等）只触发一次（菜单和渲染进程都接这些键，重复的一次会被丢掉）。`menu-keys.spec.ts` 已覆盖，剩清单 C：用真键盘按 30 秒
 - [ ] 下载后 Gatekeeper 提示与 `xattr -cr` 流程（清单 A）。结果决定 README 里“仍要打开”那句备选说法对不对
 - [ ] Codex 在真实模型下的表现（`TR_E2E_AGENTS=codex TR_E2E_CODEX_REAL=1`）。用例已有，会花额度，跑之前要作者同意

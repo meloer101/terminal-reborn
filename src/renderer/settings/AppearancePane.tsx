@@ -151,9 +151,6 @@ export function AppearancePane({
               onCommit={(terminalOpacity) => update({ terminalOpacity })}
             />
           </Row>
-          <Row label="侧栏毛玻璃" id="sidebarVibrancy">
-            <Toggle label="侧栏毛玻璃" checked={appearance.sidebarVibrancy} onChange={(sidebarVibrancy) => update({ sidebarVibrancy })} />
-          </Row>
         </Section>
 
         <Section title="辅助功能">

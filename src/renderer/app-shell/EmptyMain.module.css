@@ -1,7 +1,10 @@
 /* Figma 14 · welcome page (PRD F18). Centred a little above the middle; rhythm 12 / 40 / 32. */
 .empty {
   position: absolute;
-  inset: 0;
+  /* A card on the window's glass, where the terminal would be (Figma 28). */
+  inset: 0 var(--card-gap) var(--card-gap) var(--lead-gap, 0);
+  border-radius: var(--radius-window);
+  box-shadow: var(--card-edge), var(--card-shadow);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -14,9 +14,13 @@
   -webkit-app-region: no-drag;
 }
 
-/* Leave room for the traffic lights when the sidebar is hidden. */
+/* Leave room for the traffic lights when the sidebar is hidden; the title glides with the sidebar's drawer. */
 .header[data-sidebar-collapsed='true'] {
   padding-left: 80px;
+}
+
+.header {
+  transition: padding-left var(--motion-duration-drawer) var(--motion-spring);
 }
 
 .title {
@@ -163,34 +167,57 @@
 }
 
 /* Figma 17B narrow header: as it narrows, the todo's current item goes first, then the usage vendor, then the branch. */
+/* A full header shares its width between the title and the tools: as it narrows the todo item goes, then the vendor,
+   then the branch. */
 @container session-header (max-width: 900px) {
-  .header [data-part='todo-current'] {
+  .header[data-part='full'] [data-part='todo-current'] {
     display: none;
   }
 }
 
 @container session-header (max-width: 800px) {
-  .header [data-part='usage-vendor'] {
+  .header[data-part='full'] [data-part='usage-vendor'] {
     display: none;
   }
 }
 
 @container session-header (max-width: 720px) {
-  .branch {
+  .header[data-part='full'] .branch {
     display: none;
   }
 }
 
 /* Narrower still, as a pane of a split (Figma 21F): the account's usage goes, then the context. */
 @container session-header (max-width: 640px) {
-  .header [data-testid^='usage-chip-'] {
+  .header[data-part='full'] [data-testid^='usage-chip-'] {
     display: none;
   }
 }
 
 @container session-header (max-width: 480px) {
-  .header [data-testid='context-chip'],
-  .header [data-testid='todo-chip'] {
+  .header[data-part='full'] [data-testid='context-chip'],
+  .header[data-part='full'] [data-testid='todo-chip'] {
+    display: none;
+  }
+}
+
+/* The title alone (the tools are above the right panel, Figma 28G): the branch goes only when really narrow. */
+@container session-header (max-width: 400px) {
+  .header[data-part='title'] .branch {
+    display: none;
+  }
+}
+
+/* The tools alone, above the right panel (400–1200 wide): every chip fits down to the panel's minimum except the todo
+   item's text and, on the narrowest panels, the vendor's name. */
+@container session-header (max-width: 640px) {
+  .header[data-part='tools'] [data-part='todo-current'] {
+    display: none;
+  }
+}
+
+@container session-header (max-width: 480px) {
+  .header[data-part='tools'] [data-part='usage-vendor'] {
     display: none;
   }
 }

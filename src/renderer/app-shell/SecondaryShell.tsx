@@ -7,7 +7,6 @@ import { useWorkspace } from '../state/workspace'
 import { useIsKeyWindow, usePaneView, useSecondaryWindow, useSidebarCollapsed, useWindowScope } from '../state/window-scope'
 import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
 import { SetupStrip } from '../scripts/SetupStrip'
-import { Sidebar } from '../sidebar/Sidebar'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
@@ -16,6 +15,7 @@ import { PlanStrip } from '../attempts/PlanStrip'
 import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { MenuHost } from '../ui/MenuHost'
 import { sidebarWidthFor } from './layout'
+import { SidebarDrawer } from './SidebarDrawer'
 import styles from './AppShell.module.css'
 import empty from './SecondaryShell.module.css'
 
@@ -35,12 +35,8 @@ export function SecondaryShell() {
   }, [win])
 
   return (
-    <div className={styles.shell}>
-      {!collapsed && (
-        <aside className={styles.sidebar} data-region="sidebar" style={{ width: `${sidebarWidth}px` }}>
-          <Sidebar />
-        </aside>
-      )}
+    <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'}>
+      <SidebarDrawer collapsed={collapsed} width={sidebarWidth} />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
           {!hasSession && <SessionHeader />}

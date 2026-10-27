@@ -146,7 +146,8 @@ button.chip:hover {
   color: var(--text-primary);
 }
 
-/* Popovers (TodoPopover / UsagePopover): popover surface, hairline, overlay shadow, 320 wide. */
+/* Popovers (TodoPopover / UsagePopover / ContextPopover), 320 wide, above every card: the floating surface of the glass
+   shell (PRD §5). No backdrop blur: in the see-through window it darkens the glass around the popover. */
 .popover {
   position: fixed;
   z-index: 250;
@@ -155,10 +156,9 @@ button.chip:hover {
   width: 320px;
   max-height: calc(100vh - 2 * var(--space-40));
   overflow: hidden auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-popover);
-  box-shadow: var(--shadow-overlay);
+  border-radius: var(--radius-popover);
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
   color: var(--text-primary);
   user-select: none;
   -webkit-app-region: no-drag;
@@ -176,6 +176,7 @@ button.chip:hover {
     animation: none;
   }
 }
+
 
 .popoverHeader {
   display: flex;
@@ -374,7 +375,7 @@ button.chip:hover {
   top: 0;
   width: 1px;
   height: 12px;
-  background: var(--bg-popover);
+  background: var(--float-bg);
 }
 
 .bigBarTick {

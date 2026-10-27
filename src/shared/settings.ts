@@ -47,8 +47,6 @@ export interface AppearanceSettings {
   terminalColors: TerminalColors | null
   /** Opacity of the terminal surface over the background, 0.5–1. */
   terminalOpacity: number
-  /** macOS sidebar vibrancy (blur) behind the sidebar. */
-  sidebarVibrancy: boolean
   /** Terminal screen reader mode (VoiceOver reads the output). */
   screenReader: boolean
 }
@@ -164,7 +162,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     terminalBackground: { mode: 'theme', color: '#0a0a0a' },
     terminalColors: null,
     terminalOpacity: 1,
-    sidebarVibrancy: false,
     screenReader: false
   },
   ports: { base: DEFAULT_PORT_BASE },
@@ -248,7 +245,6 @@ function appearance(value: unknown): AppearanceSettings {
     terminalBackground: terminalBackground(v.terminalBackground),
     terminalColors: terminalColors(v.terminalColors),
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
-    sidebarVibrancy: typeof v.sidebarVibrancy === 'boolean' ? v.sidebarVibrancy : d.sidebarVibrancy,
     screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader
   }
 }

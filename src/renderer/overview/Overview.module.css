@@ -20,6 +20,10 @@
   padding-left: 80px;
 }
 
+.header {
+  transition: padding-left var(--motion-duration-drawer) var(--motion-spring);
+}
+
 .header > :is(button, label, [role='radiogroup']) {
   -webkit-app-region: no-drag;
 }
@@ -79,6 +83,11 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* A card on the window's glass, like the terminals it lists (Figma 28). */
+  margin: 0 var(--card-gap) var(--card-gap) var(--lead-gap, 0);
+  border-radius: var(--radius-window);
+  background: var(--bg-app);
+  box-shadow: var(--card-edge), var(--card-shadow);
   container-type: inline-size;
   display: flex;
   flex-direction: column;

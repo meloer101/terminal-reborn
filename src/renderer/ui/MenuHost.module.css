@@ -1,4 +1,5 @@
-/* Context / dropdown menu (ui/MenuHost.tsx). Same surface as the settings select list: raised, hairline, --radius-md. */
+/* Context / dropdown menu (ui/MenuHost.tsx): the floating surface of the glass shell (PRD §5), shaped like the
+   new-session sheet's glass menus. No backdrop blur: in the see-through window it darkens the glass around the menu. */
 .panel {
   position: fixed;
   z-index: 300;
@@ -9,10 +10,9 @@
   max-height: calc(100vh - 2 * var(--space-8));
   padding: var(--space-4);
   overflow-y: auto;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-popover);
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
   color: var(--text-primary);
   outline: none;
   user-select: none;
@@ -32,6 +32,7 @@
   }
 }
 
+
 .item {
   display: flex;
   flex: none;
@@ -39,7 +40,7 @@
   gap: var(--space-8);
   height: 28px;
   padding: 0 var(--space-8);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-button-glass);
   font: var(--text-body);
   cursor: default;
 }

@@ -136,30 +136,30 @@ describe('normalizeTree', () => {
 })
 
 describe('measureSplit', () => {
-  it('fills the area exactly, with a 1 px hairline between neighbours', () => {
+  it('fills the area exactly, with a strip of glass between neighbours', () => {
     const { panes, handles } = measureSplit(two(), 1176, 900)
     expect(panes).toEqual([
-      { id: 'a', x: 0, y: 0, width: 588, height: 900 },
-      { id: 'b', x: 589, y: 0, width: 587, height: 900 }
+      { id: 'a', x: 0, y: 0, width: 585, height: 900 },
+      { id: 'b', x: 591, y: 0, width: 585, height: 900 }
     ])
-    expect(handles).toEqual([{ path: [], index: 0, dir: 'row', span: 1175, x: 588, y: 0, width: 1, height: 900 }])
+    expect(handles).toEqual([{ path: [], index: 0, dir: 'row', span: 1170, x: 585, y: 0, width: 6, height: 900 }])
   })
 
   it('lays out a 2×2 grid with a handle per hairline', () => {
     const { panes, handles } = measureSplit(four(), 1176, 900)
     expect(panes.map((p) => p.id)).toEqual(['a', 'd', 'b', 'c'])
-    expect(panes.find((p) => p.id === 'c')).toEqual({ id: 'c', x: 589, y: 451, width: 587, height: 449 })
+    expect(panes.find((p) => p.id === 'c')).toEqual({ id: 'c', x: 591, y: 453, width: 585, height: 447 })
     expect(handles.map((h) => `${h.dir}:${h.path.join('.')}:${h.index}`)).toEqual(['column:0:0', 'row::0', 'column:1:0'])
-    // The panes and hairlines cover every pixel of the area once.
+    // The panes and the gaps between them cover every pixel of the area once.
     const covered = panes.reduce((n, p) => n + p.width * p.height, 0) + handles.reduce((n, h) => n + h.width * h.height, 0)
     expect(covered).toBe(1176 * 900)
   })
 })
 
 describe('minimum sizes', () => {
-  it('adds up panes of at least 320 × 200 and the hairlines', () => {
-    expect(minSize(four())).toEqual({ width: 641, height: 401 })
-    expect(minSize(splitPane(two(), 'b', 'right', 'c'))).toEqual({ width: 962, height: 200 })
+  it('adds up panes of at least 320 × 200 and the gaps', () => {
+    expect(minSize(four())).toEqual({ width: 646, height: 406 })
+    expect(minSize(splitPane(two(), 'b', 'right', 'c'))).toEqual({ width: 972, height: 200 })
   })
 
   it('refuses a split that would not fit, or a fifth pane', () => {
@@ -167,16 +167,16 @@ describe('minimum sizes', () => {
     expect(canSplit(splitPane(two(), 'b', 'right', 'c'), 'c', 'right', AREA)).toBe(false)
     expect(canSplit(pane('a'), 'a', 'bottom', { width: 600, height: 380 })).toBe(false)
     expect(canSplit(four(), 'a', 'right', { width: 4000, height: 4000 })).toBe(false)
-    expect(fitsIn(four(), { width: 641, height: 401 })).toBe(true)
+    expect(fitsIn(four(), { width: 646, height: 406 })).toBe(true)
   })
 
   it('resizes within MIN_SHARE and the panes’ minimum size', () => {
     const tree = two()
-    const wider = resizeSplit(tree, [], 0, 2000, 1175)
+    const wider = resizeSplit(tree, [], 0, 2000, 1170)
     const share = wider.type === 'split' ? (wider.sizes[1] ?? 0) : 0
-    expect(share).toBeCloseTo(Math.max(MIN_SHARE, MIN_PANE.width / 1175))
-    const narrower = resizeSplit(tree, [], 0, -100, 1175)
-    expect(narrower.type === 'split' && narrower.sizes[0]).toBeCloseTo(0.5 - 100 / 1175)
+    expect(share).toBeCloseTo(Math.max(MIN_SHARE, MIN_PANE.width / 1170))
+    const narrower = resizeSplit(tree, [], 0, -100, 1170)
+    expect(narrower.type === 'split' && narrower.sizes[0]).toBeCloseTo(0.5 - 100 / 1170)
   })
 
   it('resizes a nested split by its path, and evens a pair out again', () => {
@@ -191,7 +191,7 @@ describe('minimum sizes', () => {
   it('fits shares so a squeezed pane gets back to its minimum', () => {
     const tree: SplitNode = { type: 'split', dir: 'row', sizes: [0.9, 0.1], children: [pane('a'), pane('b')] }
     const fitted = fitShares(tree, AREA)
-    expect(fitted.type === 'split' && (fitted.sizes[1] ?? 0) * 1175).toBeCloseTo(320)
+    expect(fitted.type === 'split' && (fitted.sizes[1] ?? 0) * 1170).toBeCloseTo(320)
   })
 })
 

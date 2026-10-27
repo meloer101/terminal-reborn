@@ -188,7 +188,7 @@ test.describe('F17 right panel · Git', () => {
 
   test('a worktree pill switches to its session; 变更 there compares against the base', async () => {
     await commitRow('Clamp scrollY').locator('[data-kind="worktree"]').click()
-    await expect(page.locator('header')).toContainText('修复移动端导航抖动')
+    await expect(page.locator('[data-region="main"] header').first()).toContainText('修复移动端导航抖动')
     // The panel follows the new session's worktree: its HEAD now carries the ✓.
     await expect(commitRow('Clamp scrollY')).toHaveAttribute('data-head', 'true')
     await expect(commitRow('Release v1.0')).not.toHaveAttribute('data-head', 'true')

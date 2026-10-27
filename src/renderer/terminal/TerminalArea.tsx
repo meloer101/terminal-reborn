@@ -12,6 +12,7 @@ import { runSessionWaits, useRunScripts } from '../scripts/run-script'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
 import { windowOf } from '../app-shell/windows-runtime'
+import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-motion'
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
 import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
@@ -84,16 +85,22 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
     let frame = 0
     // An observer of the host's own window: one from another window never sees its layout change.
     const win = hostWindow(host)
-    const observer = new win.ResizeObserver(() => {
+    const refit = (): void => {
       win.cancelAnimationFrame(frame)
       frame = win.requestAnimationFrame(() => {
         if (host.offsetParent !== null) getSurface(sessionId)?.fit()
       })
+    }
+    // While the sidebar or the right panel slides, the grid stays put and refits once at the end (app-shell/drawer-motion).
+    const observer = new win.ResizeObserver(() => {
+      if (!terminalFitHeld()) refit()
     })
     observer.observe(host)
+    const offReleased = onTerminalFitReleased(refit)
     return () => {
       win.cancelAnimationFrame(frame)
       observer.disconnect()
+      offReleased()
     }
   }, [everActive, sessionId, borrowedHost])
 

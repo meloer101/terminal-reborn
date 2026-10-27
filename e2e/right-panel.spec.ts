@@ -146,14 +146,17 @@ test.describe('F17 right panel · 文件', () => {
     await expect(tree()).toBeVisible()
   })
 
-  test('the card floats 8 in from the edge, 480 wide, and resizes from its left edge (min 400)', async () => {
+  test('the panel sits 6 in from the edge on the glass, 480 wide, and resizes from its left edge (min 400)', async () => {
     const card = panel().getByTestId('right-panel')
     const box = async () => (await card.boundingBox())!
     const width = await page.evaluate(() => window.innerWidth)
+    // It springs open (AppShell's drawer); measure once it has settled.
+    await expect.poll(async () => Math.round((await box()).width)).toBe(480)
+    await expect.poll(async () => Math.round(width - ((await box()).x + (await box()).width))).toBe(6)
     const b = await box()
-    expect(Math.round(b.width)).toBe(480)
-    expect(Math.round(width - (b.x + b.width))).toBe(8)
-    expect(Math.round(b.y)).toBe(8)
+    // --card-gap from the window's right edge; the session's tools are on the glass above it (Figma 28G).
+    expect(Math.round(width - (b.x + b.width))).toBe(6)
+    expect(Math.round(b.y)).toBe(44)
 
     const handle = panel().getByRole('separator', { name: '调整右侧栏宽度' })
     const h = (await handle.boundingBox())!

@@ -1,5 +1,5 @@
-// Applies AppSettings.appearance to the running window: CSS variables / data attributes for the
-// background layers and sidebar vibrancy, and the terminal appearance for every xterm surface.
+// Applies AppSettings.appearance to the running window: CSS variables for the terminal background layers, and the
+// terminal appearance for every xterm surface. The window's glass is fixed (main/appearance.ts, AppShell).
 // Theme (<html data-theme>) is handled by ../theme.ts, which every window runs.
 import type { AppearanceSettings } from '@shared/settings'
 import { markAppearanceKnown } from '../terminal/appearance-ready'
@@ -18,9 +18,6 @@ export function applyAppearance(appearance: AppearanceSettings): void {
     } else if (root.style.getPropertyValue(name) !== value) {
       root.style.setProperty(name, value)
     }
-  }
-  for (const [name, value] of Object.entries(dom.data)) {
-    if (root.dataset[name] !== value) root.dataset[name] = value
   }
   const terminal = toTerminalAppearance(appearance)
   const key = JSON.stringify(terminal)

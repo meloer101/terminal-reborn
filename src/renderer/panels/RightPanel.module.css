@@ -1,22 +1,35 @@
-/* Right panel card — Figma 13 "Pane" (149:6532): bg/float, border/subtle hairline, Elevation/Pane, no dividers inside. */
+/* Right panel card (Figma 28G): at the same level as the terminal's, below the session tools on the glass. The view's
+   own first row (PaneHeader, the browser's address bar) is the card's top row. No dividers inside. */
 .card {
+  position: relative;
+  isolation: isolate;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-window);
-  background: var(--bg-float);
-  box-shadow: var(--shadow-pane);
+  background: var(--bg-app);
+  box-shadow: var(--card-shadow);
   color: var(--text-primary);
+}
+
+/* The card's hairline edge and top light, over the rows (an inset shadow would sit under their backgrounds). */
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow: var(--card-edge);
+  pointer-events: none;
 }
 
 /* Left edge of the card: a 6px grab strip centred on it. */
 .resize {
   position: absolute;
-  top: var(--panel-inset);
-  bottom: var(--panel-inset);
+  top: var(--titlebar-height);
+  bottom: var(--card-gap);
   left: calc(-0.5 * var(--space-6));
   z-index: 1;
   width: var(--space-6);
@@ -24,7 +37,7 @@
   -webkit-app-region: no-drag;
 }
 
-/* Pane header (149:6533): 40 high, 14 left / 6 right, 8 gap. */
+/* Pane header (149:6533, Figma 28G): the card's top row, 40 high, 14 left / 6 right, 8 gap. */
 .header {
   flex: none;
   display: flex;

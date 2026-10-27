@@ -1,7 +1,10 @@
 // A small panel hung under the chip that opened it (Figma 17 TodoPopover 261:9986 / UsagePopover 269:10201):
 // right-aligned to the chip, kept inside the window, closed by Esc, a click elsewhere, a resize or the window losing
 // focus. `data-covers-page` takes the built-in browser's native page away while it is open (it draws above all DOM).
+// It is rendered into the window's body: a header sits in its pane's stacking context and the right panel may be
+// mid-slide (transform / filter), either of which would put a fixed popover under a card or in the wrong place.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { useWindowScope } from '../state/window-scope'
 import styles from './SessionMeta.module.css'
 
@@ -60,7 +63,7 @@ export function Popover({
     }
   }, [anchor, onClose, win])
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       className={styles.popover}
@@ -71,6 +74,7 @@ export function Popover({
       style={position ? { left: position.left, top: position.top } : { visibility: 'hidden' }}
     >
       {children}
-    </div>
+    </div>,
+    win.document.body
   )
 }

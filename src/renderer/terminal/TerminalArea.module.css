@@ -1,15 +1,32 @@
 .area {
   position: absolute;
   inset: 0;
-  background: var(--tr-term-surface, var(--term-bg));
 }
 
+/* Each terminal is a card on the window's glass (Figma 28): only the agent's CLI is inside, its header sits above it
+   on the glass. The background is the terminal's own (theme, picked or imported), never the shell's. */
 .pane {
   position: absolute;
   inset: 0;
-  background: var(--tr-term-surface, var(--term-bg));
+  overflow: hidden;
+  /* Its own stacking context, so the edge overlay below never draws over a header's popover hanging into the card. */
+  isolation: isolate;
+  border-radius: var(--radius-window);
+  background: var(--tr-terminal-backdrop, var(--term-bg));
+  box-shadow: var(--card-shadow);
   user-select: text;
   cursor: text;
+}
+
+/* The card's hairline edge and top light, drawn over xterm's canvas (an inset shadow would sit under it). */
+.pane::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  box-shadow: var(--card-edge);
+  pointer-events: none;
 }
 
 /* Placed by the main area (inline left / top / width / height): one session, or one per pane of a split (PRD F20). */

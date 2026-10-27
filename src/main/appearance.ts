@@ -1,5 +1,5 @@
-// Main-side appearance effects (PRD §4 F7): native theme, window
-// background color (no flash of the wrong color) and sidebar vibrancy for every window.
+// Main-side appearance effects (PRD §4 F7): native theme, and the window's glass for every window. The shell is
+// fixed: native vibrancy behind a transparent window, tinted per theme by the renderer (--glass-shell).
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
 import type { AppSettings } from '@shared/settings'
@@ -8,10 +8,10 @@ import { getSettings, onSettingsChange } from './settings'
 
 function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
   if (win.isDestroyed()) return
-  const { theme, sidebarVibrancy } = settings.appearance
-  const resolved = resolveTheme(theme, nativeTheme.shouldUseDarkColors)
-  win.setBackgroundColor(windowBackgroundColor(resolved, sidebarVibrancy))
-  if (process.platform === 'darwin') win.setVibrancy(sidebarVibrancy ? 'sidebar' : null)
+  const glass = process.platform === 'darwin'
+  const resolved = resolveTheme(settings.appearance.theme, nativeTheme.shouldUseDarkColors)
+  win.setBackgroundColor(windowBackgroundColor(resolved, glass))
+  if (glass) win.setVibrancy('sidebar')
 }
 
 function applyToAll(settings: AppSettings): void {

@@ -322,14 +322,17 @@ test.describe('session metrics: todo · context · usage', () => {
     await sidebarRow('s-cookie').click()
   })
 
-  test('a narrow header drops the todo item, then the vendor, then the branch', async () => {
+  test('with the right panel open the tools sit above it (the todo item and the vendor drop at 480), the branch stays', async () => {
     await header().getByRole('button', { name: 'Git', exact: true }).click()
     await expect(page.locator('[data-region="panel"]')).toBeVisible()
-    await expect.poll(() => header().evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(720)
-    await expect(header().locator('[data-part="todo-current"]')).toBeHidden()
-    await expect(header().locator('[data-part="usage-vendor"]')).toBeHidden()
-    await expect(header().getByText('jacob/session-cookie')).toBeHidden()
-    await expect(header().getByTestId('todo-chip')).toHaveText('3/7', { useInnerText: true })
+    // Figma 28G: the session's tools stay at the window's right edge, in the row above the panel.
+    const tools = page.locator('[data-region="panel"] header')
+    await expect(header().getByTestId('todo-chip')).toHaveCount(0)
+    await expect.poll(() => tools.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(720)
+    await expect(tools.locator('[data-part="todo-current"]')).toBeHidden()
+    await expect(tools.locator('[data-part="usage-vendor"]')).toBeHidden()
+    await expect(header().getByText('jacob/session-cookie')).toBeVisible()
+    await expect(tools.getByTestId('todo-chip')).toHaveText('3/7', { useInnerText: true })
     await shoot('17B-narrow')
     await page.locator('[data-region="panel"]').getByRole('button', { name: '关闭右侧栏' }).click()
   })

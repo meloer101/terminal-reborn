@@ -42,8 +42,6 @@ export function backdropCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): str
 export interface AppearanceDom {
   /** Custom properties on <html>; null removes the property (the stylesheet's value applies again). */
   vars: Record<string, string | null>
-  /** data-* attributes on <html>, for CSS selectors (sidebar vibrancy). */
-  data: Record<string, string>
 }
 
 export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
@@ -55,9 +53,6 @@ export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
       '--tr-terminal-backdrop': backdropCss(a),
       // Layers that sit above the backdrop must not repaint it with an opaque fill.
       '--tr-term-surface': transparent ? 'transparent' : 'var(--term-bg)'
-    },
-    data: {
-      vibrancy: a.sidebarVibrancy ? 'on' : 'off'
     }
   }
 }
