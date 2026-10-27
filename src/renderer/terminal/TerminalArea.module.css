@@ -64,10 +64,14 @@
   overflow: visible !important;
 }
 
-/* The DOM renderer (translucent terminals) lets a row of CJK text run a cell or so past the grid; xterm clips each row
-   div to the grid width, which cuts the last glyph in half. Let it spill into the padding, which has the same color. */
-.host :global(.xterm-rows) > div {
-  overflow: visible !important;
+/* The DOM renderer (translucent terminals) sizes each glyph by measuring it repeated 32 times, then pads it to its
+   cells with letter-spacing. Chromium's default `text-spacing-trim` halves fullwidth punctuation next to more of it
+   (，，… measures 6.7px, not 13px), so every lone ，；。 rendered ~0.8 cell too wide and CJK rows ran past the grid
+   (PRD §6.3). Keep every glyph at full width, and pin `text-autospace` off so a Chromium default change can't add
+   gaps between CJK and Latin either. Inherited, so this reaches the rows and xterm's measuring element alike. */
+.host :global(.xterm) {
+  text-spacing-trim: space-all;
+  text-autospace: no-autospace;
 }
 
 .host :global(.xterm-viewport) {
