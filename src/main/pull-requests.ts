@@ -58,6 +58,7 @@ import {
   repoFromRemoteUrl,
   samePullRequest,
   type CiFailure,
+  type FailingCheck,
   type GhState,
   type GitHubRepo,
   type PrCommitResult,
@@ -100,7 +101,7 @@ const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']
 
 // ── processes ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-interface Ran {
+export interface Ran {
   code: number
   stdout: string
   stderr: string
@@ -151,9 +152,9 @@ function runProcess(bin: string, args: string[], options: { cwd: string; env: No
   })
 }
 
-const lastLines = (text: string): string => text.trim().split('\n').slice(-3).join(' ').slice(0, 500)
+export const lastLines = (text: string): string => text.trim().split('\n').slice(-3).join(' ').slice(0, 500)
 
-function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+export function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     GIT_OPTIONAL_LOCKS: '0',
@@ -196,7 +197,7 @@ async function ghEnv(): Promise<Record<string, string>> {
 let ghSlots = GH_CONCURRENCY
 const ghQueue: (() => void)[] = []
 
-async function gh(args: string[], options: { cwd?: string; tail?: number; timeout?: number; input?: string } = {}): Promise<Ran> {
+export async function gh(args: string[], options: { cwd?: string; tail?: number; timeout?: number; input?: string } = {}): Promise<Ran> {
   const bin = ghBin
   if (!bin) return { code: -1, stdout: '', stderr: 'gh not found' }
   if (ghSlots === 0) await new Promise<void>((resolve) => ghQueue.push(resolve))
@@ -305,7 +306,7 @@ export async function branchInfo(target: PrTarget): Promise<BranchInfo | null> {
 }
 
 /** Where the PR lives (gh's set-default remote, else the branch's remote) and, in a fork workflow, the head's owner. */
-async function prRepoFor(cwd: string, remote: string): Promise<{ repo: GitHubRepo; headOwner: string | null } | null> {
+export async function prRepoFor(cwd: string, remote: string): Promise<{ repo: GitHubRepo; headOwner: string | null } | null> {
   const [url, resolved] = await Promise.all([gitOut(cwd, ['remote', 'get-url', '--', remote]), gitOut(cwd, ['config', '--get-regexp', '^remote\\..*\\.gh-resolved$'])])
   const head = repoFromRemoteUrl(url.trim())
   if (!head) return null
@@ -375,6 +376,22 @@ const entries = new Map<string, Entry>()
 const watchers = new Map<PrWatcher, Set<string>>()
 /** Every gh call waits until then (GitHub said "rate limit"). */
 let pausedUntil = 0
+
+/** The open (or draft) PR number the last check of a watched worktree found, or null (also when it is not watched). */
+export function openPrNumber(worktree: string): number | null {
+  const pr = entries.get(worktree)?.status?.pr
+  return pr && (pr.state === 'open' || pr.state === 'draft') ? pr.number : null
+}
+
+/** When the pause after a GitHub rate limit ends (a time in the past: not paused). */
+export function ghPausedUntil(): number {
+  return pausedUntil
+}
+
+/** A gh call hit GitHub's rate limit: every gh call waits, as after one of this file's own. */
+export function pauseGhForRateLimit(): void {
+  pausedUntil = Date.now() + PR_POLL.rateLimitMs
+}
 
 function focused(): boolean {
   return BrowserWindow.getFocusedWindow() !== null
@@ -561,7 +578,7 @@ const creating = new Set<string>()
 
 const blocked = (message: string): PrCreateResult => ({ ok: false, reason: 'blocked', message })
 
-async function pushEnv(cwd: string): Promise<Record<string, string>> {
+export async function pushEnv(cwd: string): Promise<Record<string, string>> {
   const env: Record<string, string> = {}
   const ssh = sshCommandFor(process.env, (await gitOut(cwd, ['config', '--get', 'core.sshCommand'])).trim())
   if (ssh) env.GIT_SSH_COMMAND = ssh
@@ -831,9 +848,14 @@ export async function ciFailure(worktree: unknown): Promise<CiFailure | null> {
   const pr = entry.status?.pr
   const repo = entry.repo
   if (!pr || pr.checks.state !== 'failing' || !repo) return null
+  return { number: pr.number, checks: pr.checks.failing.map((check) => check.name), log: await failedLogs(repo, pr.checks.failing) }
+}
+
+/** The end of the `--log-failed` output of the first failing Actions jobs (cleaned, one block per job). */
+export async function failedLogs(repo: GitHubRepo, failing: readonly FailingCheck[]): Promise<string> {
   const logs: string[] = []
   const seen = new Set<string>()
-  for (const check of pr.checks.failing) {
+  for (const check of failing) {
     if (logs.length >= LOGS_PER_FAILURE || check.runId === null) continue
     const key = check.jobId !== null ? `job:${check.jobId}` : `run:${check.runId}`
     if (seen.has(key)) continue
@@ -851,7 +873,7 @@ export async function ciFailure(worktree: unknown): Promise<CiFailure | null> {
       }
     }
   }
-  return { number: pr.number, checks: pr.checks.failing.map((check) => check.name), log: logs.join('\n') }
+  return logs.join('\n')
 }
 
 // ── writing to GitHub (v1.63) ───────────────────────────────────────────────────────────────────────────────────
