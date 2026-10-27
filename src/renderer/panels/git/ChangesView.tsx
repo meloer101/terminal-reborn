@@ -3,7 +3,8 @@
 // render only the visible window. Diff lines take inline review comments (F5): ＋ on a line opens an editor under it;
 // saved comments stay there until the footer puts them into the agent's input line together. Below: the PR line, the
 // facts (risk markers, this turn's checks) and the footer — 让 agent 审阅 on the left, the two exits on the right
-// (合并到 base 并推送 / 创建 PR, or for a branch whose PR is open, 打开 PR / 合并 PR…). An exit opens the Ship block.
+// (合并到 base 并推送 / 创建 PR, or for a branch whose PR is open, 打开 PR / 合并 PR…). An exit opens the Ship block;
+// ⇧⌘M runs the primary exit (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N….
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
@@ -28,7 +29,7 @@ import { formatAccelerator } from '../../ui/menu-model'
 import { useActiveSession, useWorkspace } from '../../state/workspace'
 import { useSettings } from '../../settings/useSettings'
 import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
-import { openMergeSheet, targetFor } from '../merge/store'
+import { openMergeSheet, registerPrimaryExit, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
 import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
@@ -175,8 +176,16 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     )
   }
 
+  // ⇧⌘M runs the primary exit while it is on screen; a PR to merge keeps the PR merge sheet (its button opens it).
+  const shortcutExit = shipping
+    ? () => undefined
+    : !nothingToShip && !idlePr && !worktree.isMain
+      ? () => (exitBlocker(exits.primary) === null ? go(exits.primary) : undefined)
+      : null
+
   return (
     <>
+      <PrimaryExitShortcut worktreePath={worktree.path} run={shortcutExit} />
       {reviewSession && <ReviewBlock sessionId={reviewSession} root={root} />}
       <div ref={scroller} className={styles.files} role="list" aria-label="改动的文件" data-layout={layout}>
         <div className={styles.filesCanvas} style={{ height: offsets[items.length] }}>
@@ -255,6 +264,12 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
       )}
     </>
   )
+}
+
+/** Registers what ⇧⌘M does while this view is open on the worktree: the primary exit button (merge/store.ts). */
+function PrimaryExitShortcut({ worktreePath, run }: { worktreePath: string; run: (() => void) | null }) {
+  useEffect(() => (run ? registerPrimaryExit(worktreePath, run) : undefined), [worktreePath, run])
+  return null
 }
 
 function itemKey(item: ChangeItem, index: number): string {

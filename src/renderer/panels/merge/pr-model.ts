@@ -15,7 +15,8 @@ export interface PrMergeView {
 
 const short = (oid: string): string => oid.slice(0, 7)
 
-export function prMergeView(status: PrStatus): PrMergeView | null {
+/** `agent`: the session's agent (Claude / Codex) that the conflict line names. */
+export function prMergeView(status: PrStatus, agent = 'agent'): PrMergeView | null {
   const pr = status.pr
   const details = pr?.details
   if (!pr || !details) return null
@@ -47,7 +48,7 @@ export function prMergeView(status: PrStatus): PrMergeView | null {
   } else lines.push({ tone: 'ok', text: '本地和 PR 是同一份代码', meta: short(details.headOid) })
 
   if (details.mergeState === 'dirty') {
-    lines.push({ tone: 'error', text: '和基线冲突：先让 agent rebase' })
+    lines.push({ tone: 'error', text: `和基线冲突：先让 ${agent} rebase` })
     blockers.push('和基线冲突')
   } else if (details.mergeState === 'behind') lines.push({ tone: 'warn', text: '基线已前进，分支保护可能要求先更新' })
 

@@ -1,5 +1,5 @@
 // Git · 变更's PR parts (PRD F16): one line above the footer with the PR, its checks and the comments nobody answered
-// yet (Figma 29I: 让 Claude 处理 puts them into the agent's input line; 让 agent 修复 when the checks fail), what went
+// yet (Figma 29I: 让 Claude 处理 puts them into the agent's input line; 让 Claude 修复 when the checks fail), what went
 // wrong last, or — without a usable gh — how to get one.
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
 import type { Session, Worktree } from '@shared/types'
