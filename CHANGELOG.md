@@ -4,6 +4,21 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-26
+
+The window is now glass, and the sidebar and right panel slide open with a spring.
+窗口外壳改成了玻璃，侧栏和右侧栏打开、关闭时有弹簧动效。
+
+### Appearance / 外观
+- The window shell is fixed glass: native macOS vibrancy with one dark and one light tint. The sidebar, session headers and the right panel's title sit on the glass; terminals, the right panel's content, the overview and the welcome page are cards with rounded corners and a 6 px gap. Imported themes and the terminal background only change the terminal card. Split panes are separated by a glass gap instead of a thin line. The 侧栏毛玻璃 setting is gone.
+  窗口外壳固定是玻璃：macOS 原生毛玻璃加深色、浅色各一层色调。侧栏、会话头、右侧栏标题在玻璃上；终端、右侧栏内容、总览和欢迎页是圆角卡片，间距 6。导入主题和终端底色只改终端那张卡片。分屏之间的细线改成一条玻璃缝。“侧栏毛玻璃”设置去掉了。
+- The sidebar and right panel open and close with a spring, their content sliding in from its own side. The terminal resizes once, when the animation ends, so the agent's TUI sees one size change. No animation when 减少动态效果 is on in macOS.
+  侧栏和右侧栏打开、关闭时按弹簧展开，内容从自己那一边滑进来。终端只在动画结束时重排一次，agent 的界面只收到一次尺寸变化。系统开了“减少动态效果”时没有动画。
+- With the right panel open, the session's tools (context, usage, attachments, the four view icons, …) stay at the far right of the window above it instead of crowding the header. When the window is narrow, the right panel shrinks to 400 before it floats over the terminal.
+  右侧栏打开时，会话的工具（context、额度、附件、四个视图图标、…）留在窗口最右、右侧栏上方，不再和会话头挤在一行。窗口不够宽时右侧栏先变窄到 400，放不下才浮在终端上。
+- Menus and the session header's popovers share one floating style with rounded corners, a top highlight and a thin edge.
+  菜单和会话头的弹出层统一成同一种浮层：圆角、顶部高光、细边。
+
 ## [0.8.1] - 2026-10-26
 
 Stop macOS asking "Wavi would like to access your Desktop" when a session starts in your home folder.
@@ -316,6 +331,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
 [Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...v0.8.1
+[0.9.0]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/meloer101/terminal-reborn/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/meloer101/terminal-reborn/compare/v0.6.0...v0.7.0
