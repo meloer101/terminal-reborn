@@ -66,7 +66,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, mergePullRequest, postReview, prDraft, pushBranch, resolveThreads, statusesFor, unwatch, watchTargets } =
+const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, mergePullRequest, prDraft, pushBranch, statusesFor, unwatch, watchTargets } =
   await import('./pull-requests')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -171,14 +171,6 @@ const thread = (id: string, path = 'b.txt') => ({
   diffSide: 'RIGHT',
   comments: { nodes: [{ author: { login: 'coderabbitai', __typename: 'Bot' }, body: 'Rename this', url: 'https://github.com/acme/widget/pull/7#r1', createdAt: '2026-10-21T01:00:00Z' }] }
 })
-
-/** The JSON bodies gh read from stdin (`--input -`), in order. */
-function inputs(): { query: string; variables: Record<string, unknown> }[] {
-  return readdirSync(ghDir)
-    .filter((f) => f.startsWith('input-'))
-    .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)))
-    .map((f) => JSON.parse(readFileSync(join(ghDir, f), 'utf8')) as { query: string; variables: Record<string, unknown> })
-}
 
 /** A worktree whose branch is pushed and has open PR #7 with passing checks; fetches never reach the network. */
 function pushedWithPr(details: Partial<Parameters<typeof detailsJson>[0]> = {}) {
@@ -422,67 +414,34 @@ describe('合并 PR (PRD F16 v1.63)', () => {
     unwatch(w)
   })
 
-  it('without auto-merge, Wavi waits and merges at the first check that finds the required checks passed', async () => {
-    const { root, wt, head, w } = pushedWithPr({ requiredState: 'IN_PROGRESS' })
-    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'when-ready', deleteRemoteBranch: false })).toMatchObject({ ok: true, outcome: 'waiting' })
-    await checkWorktree(wt)
+  it('without auto-merge, 通过后合并 is refused with a message and nothing reaches GitHub', async () => {
+    const { root, wt, w } = pushedWithPr({ requiredState: 'IN_PROGRESS' })
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'when-ready', deleteRemoteBranch: false })).toEqual({
+      ok: false,
+      reason: 'blocked',
+      message: '仓库没开 auto-merge：在 GitHub 设置里打开后才能检查通过后合并'
+    })
     expect(ghCalls('pr merge')).toHaveLength(0)
-    writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: head }))
-    writeFileSync(join(ghDir, 'after-merge.json'), prJson({ state: 'MERGED' }))
-    await checkWorktree(wt)
-    await vi.waitFor(() => expect(ghCalls('pr merge')).toHaveLength(1))
-    expect(ghCalls('pr merge')[0]).toEqual(expect.arrayContaining(['--squash', `--match-head-commit=${head}`]))
     unwatch(w)
   })
 
-  it('pushes local commits first and then waits for their checks instead of merging the old head', async () => {
-    const { root, wt, bare, w } = pushedWithPr()
+  it('does not push local commits when their checks could only be waited for by Wavi', async () => {
+    const { root, wt, bare, head, w } = pushedWithPr()
+    commit(wt, 'e.txt', 'e\n', 'Late fix')
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({ ok: false, reason: 'blocked', message: expect.stringContaining('auto-merge') })
+    expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(head)
+    expect(ghCalls('pr merge')).toHaveLength(0)
+    unwatch(w)
+  })
+
+  it('pushes local commits first and then turns on auto-merge pinned to the new head instead of merging the old one', async () => {
+    const { root, wt, bare, w } = pushedWithPr({ autoMergeAllowed: true })
     commit(wt, 'e.txt', 'e\n', 'Late fix')
     const local = git(wt, 'rev-parse', 'HEAD').trim()
-    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({ ok: true, outcome: 'waiting' })
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({ ok: true, outcome: 'auto-merge' })
     expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(local)
-    expect(ghCalls('pr merge')).toHaveLength(0)
-    expect(await cancelMerge({ root, worktree: wt })).toMatchObject({ ok: true, message: '不再等检查通过后合并' })
-    unwatch(w)
-  })
-})
-
-describe('回到 GitHub (PRD F16 v1.63)', () => {
-  it('resolves only threads the PR still has open, replying first, and asks before doing several', async () => {
-    const { root, wt, w } = pushedWithPr({ threads: [thread('T1'), thread('T2')] })
-    await checkWorktree(wt)
-    expect(await resolveThreads({ root, worktree: wt, threadIds: ['T1', 'T2', 'T9'], reply: '已在 abc1234 修复' })).toMatchObject({ ok: true, message: '已把 2 条评论标记为已解决' })
-    expect(confirmAnswer.mock.calls[0]?.[0]).toMatchObject({ message: '以 @jacob 把 2 条评论标记为已解决？' })
-    const sent = inputs()
-    expect(sent.map((i) => [Object.keys(i.variables).sort().join(','), i.variables.id])).toEqual([
-      ['body,id', 'T1'],
-      ['id', 'T1'],
-      ['body,id', 'T2'],
-      ['id', 'T2']
-    ])
-    expect(sent[0]?.query).toContain('addPullRequestReviewThreadReply')
-    expect(sent[1]?.query).toContain('resolveReviewThread')
-
-    confirmAnswer.mockResolvedValue(false)
-    expect(await resolveThreads({ root, worktree: wt, threadIds: ['T1', 'T2'], reply: '' })).toMatchObject({ ok: false, reason: 'declined' })
-    expect(inputs()).toHaveLength(4)
-    unwatch(w)
-  })
-
-  it('posts findings as one COMMENT review on their lines, or as one body when GitHub will not place them', async () => {
-    const { root, wt, head, w } = pushedWithPr()
-    const comments = [{ path: 'b.txt', side: 'new', line: 1, endLine: 2, body: 'P1 越界' }]
-    expect(await postReview({ root, worktree: wt, reviewer: 'Codex', comments })).toMatchObject({ ok: true, outcome: 'posted' })
-    expect(confirmAnswer.mock.calls[0]?.[0]).toMatchObject({ message: '以 @jacob 在 PR #7 上发 1 条审阅评论？' })
-    const [first] = inputs()
-    expect(first?.query).toContain('event: COMMENT')
-    expect(first?.variables).toMatchObject({ pr: 'PR_kw7', oid: head, threads: [{ path: 'b.txt', line: 2, startLine: 1, side: 'RIGHT', startSide: 'RIGHT', body: 'P1 越界' }] })
-
-    writeFileSync(join(ghDir, 'mutation-fail'), 'GraphQL: Pull request review thread line must be part of the diff')
-    expect(await postReview({ root, worktree: wt, reviewer: 'Codex', comments })).toMatchObject({ ok: true, message: expect.stringContaining('总评论') })
-    const fallback = inputs().at(-1)
-    expect(fallback?.variables.threads).toEqual([])
-    expect(String(fallback?.variables.body)).toContain('`b.txt:1-2`')
+    expect(ghCalls('pr merge')).toHaveLength(1)
+    expect(ghCalls('pr merge')[0]).toEqual(expect.arrayContaining(['--squash', `--match-head-commit=${local}`, '--auto']))
     unwatch(w)
   })
 })
@@ -622,14 +581,10 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
   })
 })
 
-describe('status · local head and Wavi waiting (PRD F16 v1.63)', () => {
-  it('says whether the PR is the local branch, and which merge Wavi waits to do', async () => {
-    const { root, wt, head, w } = pushedWithPr({ requiredState: 'IN_PROGRESS' })
+describe('status · local head (PRD F16 v1.63)', () => {
+  it('says whether the PR is the local branch', async () => {
+    const { wt, head, w } = pushedWithPr({ requiredState: 'IN_PROGRESS' })
     expect((await checkWorktree(wt))?.local).toEqual({ head, remoteAhead: false })
-    await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'when-ready', deleteRemoteBranch: false })
-    expect(w.sent.at(-1)).toMatchObject({ worktree: wt, waiting: 'squash' })
-    await cancelMerge({ root, worktree: wt })
-    expect((w.sent.at(-1) as { waiting?: string }).waiting).toBeUndefined()
     writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: 'f'.repeat(40) }))
     expect((await checkWorktree(wt))?.local).toEqual({ head, remoteAhead: true })
     unwatch(w)

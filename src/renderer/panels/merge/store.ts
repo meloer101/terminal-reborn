@@ -1,5 +1,5 @@
 // Whether the merge sheet (PRD F4) is open, and for which worktree. Opened from Git · 变更, the Worktree view's
-// details and ⇧⌘M (the active session's worktree).
+// details and ⇧⌘M (Git · 变更's primary exit, else the active session's worktree).
 import { create } from 'zustand'
 import type { ProjectId, WorktreeId } from '@shared/types'
 import { useWorkspace } from '../../state/workspace'
@@ -36,13 +36,29 @@ export function closeMergeSheet(refocus: boolean): void {
 
 export const isMergeSheetOpen = (): boolean => useMergeSheet.getState().target !== null
 
-/** ⇧⌘M: the merge sheet for the active session's worktree (nothing for the main checkout or without a session). */
+/** The exit Git · 变更 shows as primary for a worktree it is open on (合并到 main 并推送 / 创建 PR); ⇧⌘M runs it. */
+const primaryExits = new Map<string, () => void>()
+
+/** Git · 变更 registers (and on unmount drops) what its primary exit button does; returns the unregister function. */
+export function registerPrimaryExit(worktreePath: string, run: () => void): () => void {
+  primaryExits.set(worktreePath, run)
+  return () => {
+    if (primaryExits.get(worktreePath) === run) primaryExits.delete(worktreePath)
+  }
+}
+
+/**
+ * ⇧⌘M: the primary exit of Git · 变更 when that view is open on the active session's worktree and has one; else the
+ * merge sheet (the PR's when the primary is 合并 PR #N…) for the worktree (nothing for the main checkout or without a session).
+ */
 export function openMergeForActiveSession(): void {
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === state.activeSessionId)
   const worktree = session ? state.worktrees.find((w) => w.id === session.worktreeId) : undefined
   const project = worktree ? state.projects.find((p) => p.id === worktree.projectId) : undefined
   if (!worktree || !project) return
+  const exit = primaryExits.get(worktree.path)
+  if (exit) return exit()
   openMergeSheet(targetFor(project.rootPath, worktree))
 }
 

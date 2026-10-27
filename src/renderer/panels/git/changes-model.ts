@@ -4,7 +4,7 @@
 // line (PRD F13 v1.78, Figma 29B2).
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
-import { reviewCommentFolded, type CommentSide, type ReviewComment } from '@shared/review-comments'
+import type { CommentSide, ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
 
 export type ChangeGroup = 'uncommitted' | 'committed'
@@ -18,7 +18,7 @@ export const MAX_DIFF_LINES = 20_000
  * A folded comment is its head line only: 8 + 16 + 8 (only background-review findings fold, and they are not rows
  * any more, so no row is folded today).
  */
-export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, split: 20, note: 28, comment: 68, commentFolded: 32, editor: 124 } as const
+export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, split: 20, note: 28, comment: 68, editor: 124 } as const
 
 export const changeKey = (group: ChangeGroup, path: string): string => `${group}:${path}`
 
@@ -102,7 +102,7 @@ export type ChangeItem =
   | { kind: 'diff'; key: string; group: ChangeGroup; path: string; row: DiffRow }
   | { kind: 'split'; key: string; group: ChangeGroup; path: string; row: SplitRow }
   /** A comment the user wrote. `split`: drawn on the new (right) half of a 并排 diff. */
-  | { kind: 'comment'; key: string; comment: ReviewComment; folded: boolean; split?: true }
+  | { kind: 'comment'; key: string; comment: ReviewComment; split?: true }
   | { kind: 'editor'; key: string; split?: true }
   /** `open`: offer to open the file in the default editor. */
   | { kind: 'note'; key: string; text: string; open?: string }
@@ -136,7 +136,6 @@ export function changeItems(
   diffs: Readonly<Record<string, DiffView>>,
   comments: readonly ReviewComment[] = [],
   draft: DraftPlace | null = null,
-  opened: Readonly<Record<string, true>> = {},
   layout: DiffLayout = 'unified'
 ): ChangeItem[] {
   const split = layout === 'split' ? ({ split: true } as const) : {}
@@ -168,7 +167,7 @@ export function changeItems(
           if (draftHere?.id === comment.id) {
             draftPlaced = true
             items.push({ kind: 'editor', key, ...split })
-          } else items.push({ kind: 'comment', key, comment, folded: reviewCommentFolded(comment, opened), ...split })
+          } else items.push({ kind: 'comment', key, comment, ...split })
         }
         const commentsAt = (anchor: { side: CommentSide; line: number }) => {
           for (const comment of own) if (comment.side === anchor.side && comment.endLine === anchor.line) commentItem(comment)
@@ -211,5 +210,4 @@ export function changeItems(
   return items
 }
 
-export const itemHeight = (item: ChangeItem): number =>
-  item.kind === 'comment' && item.folded ? ITEM_HEIGHT.commentFolded : ITEM_HEIGHT[item.kind]
+export const itemHeight = (item: ChangeItem): number => ITEM_HEIGHT[item.kind]

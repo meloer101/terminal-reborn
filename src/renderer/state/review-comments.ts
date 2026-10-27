@@ -32,14 +32,11 @@ export interface CommentDraft extends CommentAnchor {
 interface State {
   byRoot: Record<string, ReviewComment[]>
   draft: CommentDraft | null
-  /** Folded (P2 / P3) review comments the user opened. Not saved: they start folded again next launch. */
-  opened: Record<string, true>
 }
 
 export const useReviewComments = create<State>()(() => ({
   byRoot: initialWorkspaceFile()?.reviewComments ?? {},
-  draft: null,
-  opened: {}
+  draft: null
 }))
 
 /** For the workspace snapshot. */
@@ -160,15 +157,6 @@ export function setCommentPicked(root: string, id: string, picked: boolean): voi
     root,
     commentsOf(root).map((c) => (c.id === id ? { ...c, picked } : c))
   )
-}
-
-export function toggleCommentFolded(id: string): void {
-  useReviewComments.setState((s) => {
-    const opened = { ...s.opened }
-    if (opened[id]) delete opened[id]
-    else opened[id] = true
-    return { opened }
-  })
 }
 
 /** After sending: only the comments that went. */

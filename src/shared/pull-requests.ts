@@ -35,7 +35,8 @@ export interface PullRequestInfo {
   details?: PrDetails
 }
 
-export type MergeMethod = 'squash' | 'merge' | 'rebase'
+import type { MergeMethod } from './git-merge'
+export type { MergeMethod }
 
 export type ReviewDecision = 'approved' | 'changes-requested' | 'review-required'
 
@@ -115,8 +116,6 @@ export interface PrStatus {
   checkedAt: number
   /** Open PRs: the local branch head against the PR's (v1.63). `remoteAhead`: the PR has commits the branch has not. */
   local?: { head: string; remoteAhead: boolean }
-  /** 检查通过后由 Wavi 合并 is waiting, with this method (auto-merge off in the repository). */
-  waiting?: MergeMethod
 }
 
 /** A worktree a window shows: `root` is its project's root (main accepts only workspace projects). */
@@ -216,45 +215,20 @@ export interface PullRequestApi {
   failure(worktree: string): Promise<CiFailure | null>
   /** Merges the worktree's open PR on GitHub (PRD F16 v1.63), now or once its checks pass. */
   merge(request: PrMergeRequest): Promise<PrWriteResult>
-  /** Turns off GitHub auto-merge, or Wavi's own wait, for the worktree's PR. */
+  /** Turns off GitHub auto-merge for the worktree's PR. */
   cancelMerge(target: PrTarget): Promise<PrWriteResult>
-  /** Resolves unresolved threads of the worktree's PR, each with an optional reply. Asks first for more than one. */
-  resolveThreads(request: PrResolveRequest): Promise<PrWriteResult>
-  /** Posts ticked Wavi review findings to the worktree's PR as one COMMENT review, after asking. */
-  postReview(request: PrPostReviewRequest): Promise<PrWriteResult>
 }
 
 export interface PrMergeRequest extends PrTarget {
   method: MergeMethod
-  /** `now`: merge if GitHub lets it; `when-ready`: GitHub auto-merge, or Wavi waits when the repository has it off. */
+  /** `now`: merge if GitHub lets it; `when-ready`: GitHub auto-merge (blocked when the repository has it off). */
   when: 'now' | 'when-ready'
   /** After a merge that happened now: delete the branch on the remote (never the local one). */
   deleteRemoteBranch: boolean
 }
 
-export interface PrResolveRequest extends PrTarget {
-  threadIds: string[]
-  /** Posted as a reply on each thread before it is resolved; '' for none. */
-  reply: string
-}
-
-/** One Wavi finding as a PR review comment. */
-export interface PrReviewComment {
-  path: string
-  side: 'new' | 'old'
-  line: number
-  endLine: number
-  body: string
-}
-
-export interface PrPostReviewRequest extends PrTarget {
-  /** Which CLI reviewed, for the heading. */
-  reviewer: string
-  comments: PrReviewComment[]
-}
-
 export type PrWriteResult =
-  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'waiting' | 'cancelled' | 'resolved' | 'posted' | 'pushed'; message: string }
+  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'cancelled' | 'pushed'; message: string }
   | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string }
 
 export const PR_IPC = {
@@ -287,11 +261,7 @@ export const PR_IPC = {
   /** invoke(PrMergeRequest) → PrWriteResult */
   merge: 'pr:merge',
   /** invoke(PrTarget) → PrWriteResult */
-  cancelMerge: 'pr:cancel-merge',
-  /** invoke(PrResolveRequest) → PrWriteResult */
-  resolveThreads: 'pr:resolve-threads',
-  /** invoke(PrPostReviewRequest) → PrWriteResult */
-  postReview: 'pr:post-review'
+  cancelMerge: 'pr:cancel-merge'
 } as const
 
 /** Fields of `gh pr list --json` (gh 2.92). */
@@ -882,8 +852,6 @@ export function prReviewSummary(details: PrDetails): string {
 // ── writing to GitHub (PRD F16 v1.63) ───────────────────────────────────────────────────────────────────────────
 
 const METHODS: ReadonlySet<unknown> = new Set<MergeMethod>(['squash', 'merge', 'rebase'])
-const MAX_REPLY = 2000
-const MAX_REVIEW_COMMENTS = 50
 
 function target(raw: Record<string, unknown>): PrTarget | null {
   return isPath(raw.root) && isPath(raw.worktree) ? { root: raw.root, worktree: raw.worktree } : null
@@ -900,29 +868,8 @@ export function parsePrMergeRequest(raw: unknown): PrMergeRequest | null {
   return { ...where, method: raw.method as MergeMethod, when: raw.when, deleteRemoteBranch: raw.deleteRemoteBranch }
 }
 
-export function parsePrResolveRequest(raw: unknown): PrResolveRequest | null {
-  if (!isRecord(raw)) return null
-  const where = target(raw)
-  if (!where || !Array.isArray(raw.threadIds) || raw.threadIds.length === 0 || raw.threadIds.length > PR_DETAIL_LIMITS.threads) return null
-  if (!raw.threadIds.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 200)) return null
-  if (typeof raw.reply !== 'string' || raw.reply.length > MAX_REPLY) return null
-  return { ...where, threadIds: [...new Set(raw.threadIds as string[])], reply: raw.reply.trim() }
-}
-
-export function parsePrPostReviewRequest(raw: unknown): PrPostReviewRequest | null {
-  if (!isRecord(raw)) return null
-  const where = target(raw)
-  if (!where || typeof raw.reviewer !== 'string' || raw.reviewer.length > 40) return null
-  if (!Array.isArray(raw.comments) || raw.comments.length === 0 || raw.comments.length > MAX_REVIEW_COMMENTS) return null
-  const comments: PrReviewComment[] = []
-  for (const c of raw.comments) {
-    if (!isRecord(c) || typeof c.path !== 'string' || c.path.length === 0 || c.path.length > 4096 || c.path.startsWith('/') || c.path.includes('\0')) return null
-    if ((c.side !== 'new' && c.side !== 'old') || asLine(c.line) === null || asLine(c.endLine) === null || (c.endLine as number) < (c.line as number)) return null
-    if (typeof c.body !== 'string' || c.body.trim() === '' || c.body.length > PR_DETAIL_LIMITS.body) return null
-    comments.push({ path: c.path, side: c.side, line: c.line as number, endLine: c.endLine as number, body: c.body })
-  }
-  return { ...where, reviewer: stripControl(raw.reviewer).trim(), comments }
-}
+/** 通过后合并 needs GitHub auto-merge: Wavi does not wait for checks itself. */
+export const AUTO_MERGE_OFF = '仓库没开 auto-merge：在 GitHub 设置里打开后才能检查通过后合并'
 
 /** What stops a merge now, from the PR as last read and where the local branch stands. Empty: GitHub decides. */
 export function mergeBlockers(input: {
@@ -952,44 +899,6 @@ export function mergeBlockers(input: {
 /** `gh pr merge` arguments. Always pinned to the head Wavi checked; never `--admin` or `--delete-branch`. */
 export function mergeArgs(repo: GitHubRepo, number: number, method: MergeMethod, headOid: string, auto: boolean): string[] {
   return ['pr', 'merge', String(number), `--repo=${repoArg(repo)}`, `--${method}`, `--match-head-commit=${headOid}`, ...(auto ? ['--auto'] : [])]
-}
-
-/** Whether Wavi's own wait (auto-merge off in the repository) may merge now: required checks passed, none pending. */
-export function readyToMerge(pr: PullRequestInfo): boolean {
-  const details = pr.details
-  if (pr.state !== 'open' || !details) return false
-  if (details.required.failing.length > 0 || details.required.pending > 0) return false
-  // Without required checks, all checks count.
-  if (details.required.total === 0 && (pr.checks.state === 'pending' || pr.checks.state === 'failing')) return false
-  return details.mergeState !== 'dirty' && details.mergeState !== 'draft'
-}
-
-export const RESOLVE_THREAD_MUTATION = `mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }`
-export const REPLY_THREAD_MUTATION = `mutation($id: ID!, $body: String!) { addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $id, body: $body }) { comment { id } } }`
-export const ADD_REVIEW_MUTATION = `mutation($pr: ID!, $oid: GitObjectID!, $body: String!, $threads: [DraftPullRequestReviewThread!]) {
-  addPullRequestReview(input: { pullRequestId: $pr, commitOID: $oid, event: COMMENT, body: $body, threads: $threads }) { pullRequestReview { id url } }
-}`
-
-/** The review's own body: who reviewed, and how many findings follow inline. */
-export function reviewBody(reviewer: string, count: number): string {
-  return `Wavi 审阅（${reviewer || 'agent'}）：${count} 条，见行内评论。`
-}
-
-/** The same findings as one body, for when GitHub will not place them on lines (not in the PR's diff). */
-export function reviewBodyWithFindings(reviewer: string, comments: readonly PrReviewComment[]): string {
-  const items = comments.map((c, i) => {
-    const where = `${c.path}:${c.endLine > c.line ? `${c.line}-${c.endLine}` : c.line}${c.side === 'old' ? '（旧文件）' : ''}`
-    return `${i + 1}. \`${where}\`\n${c.body.split('\n').map((l) => `   ${l}`).join('\n')}`
-  })
-  return `Wavi 审阅（${reviewer || 'agent'}）：${comments.length} 条。\n\n${items.join('\n\n')}`.slice(0, 60_000)
-}
-
-/** DraftPullRequestReviewThread inputs: RIGHT is the new file, LEFT the old one. */
-export function reviewThreadsInput(comments: readonly PrReviewComment[]): Record<string, unknown>[] {
-  return comments.map((c) => {
-    const side = c.side === 'old' ? 'LEFT' : 'RIGHT'
-    return { path: c.path, line: c.endLine, side, body: c.body, ...(c.endLine > c.line ? { startLine: c.line, startSide: side } : {}) }
-  })
 }
 
 /**

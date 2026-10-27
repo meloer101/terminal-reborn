@@ -48,13 +48,12 @@ export function CommentAddButton({
 }
 
 /** `split`: on the new (right) half of a 并排 diff, the left half a filler (Figma 17F "Comment row"). */
-export function CommentRow({ root, comment, top, folded = false, split = false }: { root: string; comment: ReviewComment; top: number; folded?: boolean; split?: boolean }) {
+export function CommentRow({ root, comment, top, split = false }: { root: string; comment: ReviewComment; top: number; split?: boolean }) {
   return (
     <div
       className={styles.comment}
       style={{ top }}
       data-comment-id={comment.id}
-      data-folded={folded || undefined}
       data-split={split || undefined}
       role="note"
       aria-label={`评论 ${commentLocation(comment)}`}

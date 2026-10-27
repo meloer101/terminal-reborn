@@ -206,9 +206,7 @@ const api: TrApi = {
     cancelWrite: (worktree) => ipcRenderer.send(PR_IPC.cancelWrite, worktree),
     failure: (worktree) => ipcRenderer.invoke(PR_IPC.failure, worktree),
     merge: (request) => ipcRenderer.invoke(PR_IPC.merge, request),
-    cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target),
-    resolveThreads: (request) => ipcRenderer.invoke(PR_IPC.resolveThreads, request),
-    postReview: (request) => ipcRenderer.invoke(PR_IPC.postReview, request)
+    cancelMerge: (target) => ipcRenderer.invoke(PR_IPC.cancelMerge, target)
   },
   ship: {
     preflight: (target) => ipcRenderer.invoke(SHIP_IPC.preflight, target),

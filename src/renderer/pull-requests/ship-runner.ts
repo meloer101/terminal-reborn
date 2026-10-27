@@ -356,7 +356,7 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
       if (draft.ok && draft.fromTemplate) template = draft.body
     }
     const primary: HandoffKind = wantsPr ? 'pr' : 'commit'
-    const context = {
+    const context: HandoffContext = {
       kind: primary,
       path: slots[primary]!,
       branch: ctx.branch,
@@ -365,7 +365,7 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
       evidence: primary === 'pr' ? evidenceLines(ctx) : [],
       // Exit B with uncommitted work: the same message also asks for the commit message.
       ...(wantsPr && slots.commit ? { commitPath: slots.commit } : {})
-    } as HandoffContext
+    }
     // The agent may be busy with its own work: wait for it, and say so.
     await ensureAgentUp(sessionId)
     if (!agentFree(sessionOf(sessionId))) {
