@@ -3,7 +3,7 @@
 // switching sessions. The main area places the shown ones (PRD F20: one per pane of a split); moving between
 // panes only moves the element, never the terminal. A secondary window's panes (F20 · 多窗口) borrow the terminal into
 // that window's document (PaneHosts): the same xterm, the same PTY stream, only its DOM moves.
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId, Worktree } from '@shared/types'
@@ -42,7 +42,7 @@ interface PaneProps {
 const place = (rect: Rect | undefined): CSSProperties | undefined =>
   rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
 
-function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
+const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   // The overview may show this terminal in its own host for a while (borrow.ts).
   const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
@@ -132,6 +132,27 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
     >
       <div ref={hostRef} className={styles.host} />
     </div>
+  )
+}, samePaneProps)
+
+/**
+ * Every pane re-renders with TerminalArea, which reads the whole session list (any session's hook event changes it);
+ * a pane only needs to when its own props do. `rect` is rebuilt with each layout, so it is compared by value.
+ */
+function samePaneProps(a: PaneProps, b: PaneProps): boolean {
+  return (
+    a.sessionId === b.sessionId &&
+    a.cwd === b.cwd &&
+    a.agent === b.agent &&
+    a.active === b.active &&
+    a.held === b.held &&
+    a.live === b.live &&
+    a.resumeAgentSessionId === b.resumeAgentSessionId &&
+    a.generation === b.generation &&
+    a.rect?.x === b.rect?.x &&
+    a.rect?.y === b.rect?.y &&
+    a.rect?.width === b.rect?.width &&
+    a.rect?.height === b.rect?.height
   )
 }
 

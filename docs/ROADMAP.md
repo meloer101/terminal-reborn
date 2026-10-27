@@ -49,6 +49,7 @@
 - [x] ⌘Q 后重开，守护进程保住的 agent 状态不再卡在“空闲”；弹窗里用真键盘按 ⌘F 不再在弹窗背后打开查找栏。新 e2e：`tui-apps`、`menu-keys`、`quit-keeps-agents`、`notifications`，另加随机事件序列下状态不卡死的性质测试
 - [x] 切换会话和右侧栏抽屉结束时终端闪一帧空白（2026-10-27，PRD §6.3）：rAF 里重载 WebGL 或改 canvas 尺寸，重画排到下一帧；addon 还会在 ResizeObserver 里把 canvas 清空。显示改到绘制前，抽屉结束时同步 fit，清空之后立刻补画。e2e `terminal-flicker.spec.ts`，修复前 10 个空白帧，修复后 0
 - [x] 依赖和构建缓存目录的写入不再触发 git 重扫（2026-10-27，PRD F17）：右侧栏开着文件或 Git 视图时，agent 跑 `npm install`、dev server 重建写 `node_modules` / `.next` 等，原来每 250 ms 一次 `git status` + `ls-files`，Git 视图每秒一套约 8 个 git。现在这些目录只刷新已展开的文件夹，状态、文件列表和变更不重读。单元测试 `worktree-files.test.ts`
+- [x] 侧栏和终端容器不再随任意会话的 hook 事件整体重渲染（2026-10-27）：`SessionRow` 按画出来的内容比较（`sameRow`），`TerminalPane` 按自己的 props 比较（`rect` 按值）。单元测试 `sidebar/model.test.ts`
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）

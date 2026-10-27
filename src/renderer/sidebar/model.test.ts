@@ -5,6 +5,7 @@ import {
   buildSidebarGroups,
   nestedTitle,
   nextAttentionSessionId,
+  sameRow,
   sessionForShortcut,
   visibleSessionIds
 } from './model'
@@ -181,5 +182,27 @@ describe('dispatched sessions (PRD F21)', () => {
     expect(groups[0]?.rows.map((r) => r.title)).toEqual(['Cookie 会话迁移', 'Codex'])
     expect(nestedTitle('别的名字', 'Cookie 会话迁移')).toBe('别的名字')
     expect(nestedTitle('Cookie 会话迁移 · ', 'Cookie 会话迁移')).toBe('Cookie 会话迁移 · ')
+  })
+})
+
+describe('sameRow', () => {
+  const rows = (sessions: Session[], trees = worktrees) => buildSidebarGroups({ projects, worktrees: trees, sessions })[0]!.rows
+
+  it('treats a rebuilt row of an untouched session as the same, and a touched one as different', () => {
+    const s1 = session('s1', 'wa1', 'running')
+    const s3 = session('s3', 'wa2', 'running')
+    const before = rows([s1, s3])
+    // An agent's hook event replaces one session object; the store keeps the others.
+    const after = rows([{ ...s1, lastActivityAt: 5 }, s3])
+    expect(after[1]).not.toBe(before[1])
+    expect(sameRow(before[1]!, after[1]!)).toBe(true)
+    expect(sameRow(before[0]!, after[0]!)).toBe(false)
+  })
+
+  it('notices a changed diff stat from the worktree', () => {
+    const s1 = session('s1', 'wa1', 'running')
+    const before = rows([s1])
+    const after = rows([s1], worktrees.map((w) => (w.id === 'wa1' ? { ...w, added: 4 } : w)))
+    expect(sameRow(before[0]!, after[0]!)).toBe(false)
   })
 })

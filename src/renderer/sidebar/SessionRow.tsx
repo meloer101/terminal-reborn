@@ -10,7 +10,7 @@ import { pointerAnchor, type MenuAnchor } from '../ui/menu'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { showsTime } from './format-elapsed'
 import { SessionTimeLabel } from './SessionTimeLabel'
-import type { SessionRowModel } from './model'
+import { sameRow, type SessionRowModel } from './model'
 import styles from './SessionRow.module.css'
 
 interface Props {
@@ -97,4 +97,17 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
       <TodoLine sessionId={session.id} />
     </div>
   )
-})
+}, sameProps)
+
+/** The row model is rebuilt on every store change; compare what it draws (`sameRow`), the rest by identity. */
+function sameProps(a: Props, b: Props): boolean {
+  return (
+    sameRow(a.row, b.row) &&
+    a.selected === b.selected &&
+    a.shown === b.shown &&
+    a.onPress === b.onPress &&
+    a.tabStop === b.tabStop &&
+    a.onSelect === b.onSelect &&
+    a.onContextMenu === b.onContextMenu
+  )
+}

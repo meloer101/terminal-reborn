@@ -75,6 +75,23 @@ function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 
 }
 
 /**
+ * Whether two models draw the same row. buildSidebarGroups makes new ones on every store change (an agent's hook event
+ * touches one session), so SessionRow compares these instead of the object to redraw only the row that changed.
+ */
+export function sameRow(a: SessionRowModel, b: SessionRowModel): boolean {
+  return (
+    a.session === b.session &&
+    a.title === b.title &&
+    a.secondary === b.secondary &&
+    a.attention === b.attention &&
+    a.branch === b.branch &&
+    a.depth === b.depth &&
+    a.stat?.added === b.stat?.added &&
+    a.stat?.removed === b.stat?.removed
+  )
+}
+
+/**
  * Store order, except that a dispatched session follows the session that started it (PRD F21), after that session's
  * earlier children. A child whose dispatcher is not listed here stays where it is, at the top level.
  */
