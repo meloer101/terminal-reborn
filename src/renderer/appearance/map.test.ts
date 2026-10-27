@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type AppearanceSettings } from '@shared/settings'
-import { backdropCss, needsTransparency, terminalBackgroundAlpha, toAppearanceDom, toTerminalAppearance } from './map'
+import {
+  backdropCss,
+  needsTransparency,
+  ringCss,
+  terminalBackgroundAlpha,
+  toAppearanceDom,
+  toTerminalAppearance
+} from './map'
 
 const base: AppearanceSettings = DEFAULT_SETTINGS.appearance
 
@@ -35,6 +42,13 @@ describe('backdropCss', () => {
   it('is the theme terminal color, or nothing when translucent', () => {
     expect(backdropCss(base)).toBe('var(--term-bg)')
     expect(backdropCss({ ...base, terminalOpacity: 0.7 })).toBe('transparent')
+  })
+})
+
+describe('ringCss', () => {
+  it('repeats the cell color at the terminal opacity around the canvas, nothing when opaque', () => {
+    expect(ringCss(base)).toBe('transparent')
+    expect(ringCss({ ...base, terminalOpacity: 0.72 })).toBe('color-mix(in srgb, var(--term-bg) 72%, transparent)')
   })
 })
 

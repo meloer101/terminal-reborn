@@ -39,6 +39,15 @@ export function backdropCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): str
   return a.terminalOpacity < 1 ? 'transparent' : 'var(--term-bg)'
 }
 
+/**
+ * CSS color of the band around xterm's canvas (its padding and the sub-cell remainder of the fit). Translucent cells are
+ * drawn inside the canvas only, so the band repeats the same color at the same alpha to keep the card one flat tone.
+ */
+export function ringCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): string {
+  if (a.terminalOpacity >= 1) return 'transparent'
+  return `color-mix(in srgb, var(--term-bg) ${+(a.terminalOpacity * 100).toFixed(2)}%, transparent)`
+}
+
 export interface AppearanceDom {
   /** Custom properties on <html>; null removes the property (the stylesheet's value applies again). */
   vars: Record<string, string | null>
@@ -52,7 +61,8 @@ export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
       '--term-bg': hasCustomBackground(a) ? a.terminalBackground.color : null,
       '--tr-terminal-backdrop': backdropCss(a),
       // Layers that sit above the backdrop must not repaint it with an opaque fill.
-      '--tr-term-surface': transparent ? 'transparent' : 'var(--term-bg)'
+      '--tr-term-surface': transparent ? 'transparent' : 'var(--term-bg)',
+      '--tr-term-ring': ringCss(a)
     }
   }
 }

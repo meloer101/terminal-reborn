@@ -56,6 +56,20 @@
   height: 100%;
 }
 
+/* xterm paints the translucent cell color on its scrollable element, which sits inside the padding; this paints the
+   same color around it so no ring of bare glass shows. The shadow stays outside the element (no double layer), and
+   the pane's overflow clip bounds it. */
+.host :global(.xterm-scrollable-element) {
+  box-shadow: 0 0 0 100vmax var(--tr-term-ring, transparent);
+  overflow: visible !important;
+}
+
+/* The DOM renderer (translucent terminals) lets a row of CJK text run a cell or so past the grid; xterm clips each row
+   div to the grid width, which cuts the last glyph in half. Let it spill into the padding, which has the same color. */
+.host :global(.xterm-rows) > div {
+  overflow: visible !important;
+}
+
 .host :global(.xterm-viewport) {
   background: var(--tr-term-surface, var(--term-bg)) !important;
 }
