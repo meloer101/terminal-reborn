@@ -20,6 +20,7 @@ const GH_HINT = {
 
 export function PrButton({
   worktree,
+  onBase,
   projectRoot,
   title,
   sessionId,
@@ -27,6 +28,8 @@ export function PrButton({
   uncommitted
 }: {
   worktree: Worktree
+  /** The main checkout with its base out: no branch to propose (changes-model `onOwnBase`). */
+  onBase: boolean
   projectRoot: string | null
   title: string
   sessionId: SessionId | null
@@ -51,8 +54,8 @@ export function PrButton({
     )
   }
   const mode = action.kind === 'sheet' ? action.mode : 'pr'
-  const reason = worktree.isMain
-    ? '项目主目录没有要提 PR 的分支'
+  const reason = onBase
+    ? '项目主目录检出的是基线分支，没有要提 PR 的分支'
     : gh === 'checking'
       ? '正在检查 gh…'
       : gh !== 'ready'
@@ -90,7 +93,7 @@ export function PrButton({
   )
 }
 
-export function PrStatusLine({ worktree, target }: { worktree: Worktree; target: Session | null }) {
+export function PrStatusLine({ worktree, onBase, target }: { worktree: Worktree; onBase: boolean; target: Session | null }) {
   const gh = usePullRequests((s) => s.gh)
   const busy = usePullRequests((s) => s.busy[worktree.path])
   const notice = usePullRequests((s) => s.notice[worktree.path])
@@ -112,7 +115,7 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
     )
   }
   if (!pr) {
-    if (worktree.isMain || (gh !== 'missing' && gh !== 'signed-out')) return null
+    if (onBase || (gh !== 'missing' && gh !== 'signed-out')) return null
     return (
       <p className={styles.reviewStatus} data-tone="muted" role="status" data-testid="pr-status">
         <span className={styles.reviewStatusText} title={GH_HINT[gh]}>

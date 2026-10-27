@@ -112,6 +112,17 @@ describe('mergeWorktree', () => {
     return { root, worktree: wt, method, head: check.head, baseHead: check.baseHead, push: false, ...extra }
   }
 
+  it('merges a feature branch checked out in the main checkout, moving main by ref', async () => {
+    const { root } = setup()
+    git(root, 'checkout', '-q', '-b', 'logo')
+    commit(root, 'logo.svg', '<svg/>\n', 'add logo')
+    expect(await mergePrecheck(root, root)).toMatchObject({ branch: 'logo', base: 'main', ahead: 1, baseCheckout: null, blocker: null })
+    const result = await mergeWorktree(await request(root, root, 'squash', { title: 'feat: logo' }))
+    expect(result).toMatchObject({ ok: true })
+    expect(git(root, 'show', 'main:logo.svg')).toBe('<svg/>\n')
+    expect(git(root, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('logo')
+  })
+
   it('merge: a merge commit with both parents, and the base checkout follows', async () => {
     const { root, wt } = setup()
     commit(wt, 'b.txt', 'b\n', 'add b')

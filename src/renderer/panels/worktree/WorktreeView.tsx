@@ -248,7 +248,8 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
             >
               打开文件夹
             </button>
-            {info.base && !info.isMain && (
+            {/* No base on the base itself; a feature branch out in the main checkout merges like any other. */}
+            {info.base && (
               <button
                 type="button"
                 className={styles.ghost}

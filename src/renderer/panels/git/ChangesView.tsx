@@ -20,7 +20,7 @@ import { useActiveSession, useWorkspace } from '../../state/workspace'
 import { openMergeSheet, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, itemHeight, placedThreadIds, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, itemHeight, onOwnBase, placedThreadIds, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { PrButton, PrStatusLine } from './PullRequest'
 import { PrAutomationRow, PrNotes, PrThreadRow } from './PrRows'
@@ -76,8 +76,10 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const count = own + pickedThreads.length
   const picked = (comments?.filter(commentPicked).length ?? 0) + pickedThreads.length
   const sessionId = active?.session.id ?? null
+  // The main checkout with a feature branch out ships like a worktree; on its base it has nothing of its own.
+  const onBase = onOwnBase(worktree.isMain, changes)
   // Nothing to propose or merge (merged already, or no work yet): no 创建 PR, no 合并 — the PR line says what happened.
-  const nothingToShip = !worktree.isMain && !prLive && changes.ahead === 0 && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
+  const nothingToShip = !onBase && !prLive && changes.ahead === 0 && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
@@ -92,7 +94,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
       </div>
       <div className={styles.prBlock}>
         <ReviewStatus root={root} agent={target?.kind === 'claude' || target?.kind === 'codex' ? target.kind : undefined} prNumber={prLive?.number ?? null} />
-        <PrStatusLine worktree={worktree} target={target} />
+        <PrStatusLine worktree={worktree} onBase={onBase} target={target} />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
         {prLive?.details && (
           <PrNotes worktreePath={worktree.path} notes={prLive.details.notes} threads={prLive.details.threads.filter((t) => !placed.has(t.id))} sessionId={sessionId} />
@@ -136,6 +138,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         {count === 0 && !nothingToShip && (
           <PrButton
             worktree={worktree}
+            onBase={onBase}
             projectRoot={projectRoot}
             title={(active?.session.worktreeId === worktree.id ? active.session.title : target?.title) ?? ''}
             sessionId={active?.session.id ?? null}
@@ -147,8 +150,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
           <button
             type="button"
             className={styles.primaryButton}
-            disabled={worktree.isMain || !projectRoot}
-            title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
+            disabled={onBase || !projectRoot}
+            title={onBase ? '项目主目录检出的是基线分支，没有要合并的分支' : undefined}
             onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
           >
             {prLive ? `合并 PR #${prLive.number}…` : `合并到 ${changes.base ?? 'main'}…`}

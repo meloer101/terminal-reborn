@@ -3,7 +3,7 @@ import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { PrThread } from '@shared/pull-requests'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, placedThreadIds, rowAnchor, splitAnchors, splitRows } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, placedThreadIds, rowAnchor, splitAnchors, splitRows } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -229,5 +229,24 @@ describe('PR threads in the list (PRD F16 v1.63, Figma 22B)', () => {
     // a.ts also has uncommitted edits: the thread may be about code that changed since.
     expect(items.find((i) => i.kind === 'thread')).toMatchObject({ changed: true })
     expect(itemHeight(items.find((i) => i.kind === 'thread')!)).toBe(ITEM_HEIGHT.thread)
+  })
+})
+
+describe('onOwnBase', () => {
+  it('lets a feature branch checked out in the main checkout merge and open a PR', () => {
+    expect(onOwnBase(true, { branch: 'feat/logo', base: 'main' })).toBe(false)
+    expect(onOwnBase(true, { branch: 'feat/logo', base: 'origin/main' })).toBe(false)
+  })
+
+  it('blocks the main checkout on its base, without a base or detached', () => {
+    // On main itself the base is its upstream.
+    expect(onOwnBase(true, { branch: 'main', base: 'origin/main' })).toBe(true)
+    expect(onOwnBase(true, { branch: 'main', base: 'main' })).toBe(true)
+    expect(onOwnBase(true, { branch: 'main', base: null })).toBe(true)
+    expect(onOwnBase(true, { branch: null, base: 'main' })).toBe(true)
+  })
+
+  it('never blocks a worktree of its own', () => {
+    expect(onOwnBase(false, { branch: 'work', base: null })).toBe(false)
   })
 })
