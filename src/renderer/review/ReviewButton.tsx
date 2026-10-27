@@ -1,6 +1,6 @@
 // 让 agent 审阅 (PRD F13): a ghost button in Git · 变更 and on 待审阅 overview rows. With Wavi's built-in reviewer
-// (the default) it starts a read-only background review whose findings become comments in Git · 变更, and turns into
-// 取消审阅 while it runs. With 审阅方式 · agent 自带命令 it types the agent's own review command into the session,
+// (the default) it starts a read-only background review of all the worktree's changes, shown in the review block at
+// the top of Git · 变更 (label 审阅全部改动), and turns into 取消审阅 while it runs. With 审阅方式 · agent 自带命令 it types the agent's own review command into the session,
 // disabled with the reason as its tooltip while the agent cannot take it.
 import { useEffect, useState } from 'react'
 import type { SessionId } from '@shared/types'
@@ -72,7 +72,7 @@ export function ReviewButton({ sessionId, className }: { sessionId: SessionId; c
       type="button"
       className={className}
       disabled={busy}
-      title={failure ?? `在后台用 ${agentLabel(agent)} 只读审阅这些改动（用你自己的额度），结果变成这里的评论`}
+      title={failure ?? `在后台用 ${agentLabel(agent)} 只读审阅全部改动（用你自己的额度），结果显示在变更的顶部`}
       onClick={(event) => {
         event.stopPropagation()
         setBusy(true)
@@ -82,7 +82,7 @@ export function ReviewButton({ sessionId, className }: { sessionId: SessionId; c
           .finally(() => setBusy(false))
       }}
     >
-      {failure ? '没能开始' : '让 agent 审阅'}
+      {failure ? '没能开始' : '审阅全部改动'}
     </button>
   )
 }

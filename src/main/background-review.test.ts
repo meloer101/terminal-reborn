@@ -200,6 +200,50 @@ describe('startReview', () => {
     expect(last).toMatchObject({ phase: 'cancelled', message: '已取消审阅' })
   })
 
+  it('reads only what changed since the previous review and keeps its other findings (incremental)', async () => {
+    const root = repo('incremental')
+    git(root, 'switch', '-q', '-c', 'feat')
+    for (const name of ['a.ts', 'b.ts', 'c.ts']) writeFileSync(join(root, name), `export const x = '${name}'\n`)
+    git(root, 'add', '.')
+    git(root, 'commit', '-q', '-m', 'work')
+    const finding = (path: string, title: string) => ({ path, startLine: 1, endLine: 1, side: 'new', group: 'committed', severity: 'P1', confidence: 0.9, title, explanation: `${title}。` })
+    fake('claude', `printf '%s' '${claudeJson([finding('b.ts', '乙有问题'), finding('c.ts', '丙有问题')])}'`)
+    const o = owner()
+    await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })
+    const first = await settled(o, root)
+    expect(first).toMatchObject({ phase: 'done', scope: 'full', fileCount: 3, reviewer: 'Claude' })
+    expect(first.comments).toHaveLength(2)
+    const saved = new ReviewResultsFile(resultsPath)
+    useReviewResultsFile(saved)
+    await vi.waitFor(() => expect(saved.get()[root]?.records.at(-1)?.comments).toHaveLength(2))
+    expect(saved.get()[root]!.records.at(-1)).toMatchObject({ head: git(root, 'rev-parse', 'HEAD').trim(), fileCount: 3, scope: 'full' })
+
+    // A new commit touches b.ts only: the reviewer reads b.ts, c.ts's finding stays, b.ts's old one is replaced.
+    writeFileSync(join(root, 'b.ts'), `export const x = 'b2'\n`)
+    git(root, 'add', '.')
+    git(root, 'commit', '-q', '-m', 'fix b')
+    fake('claude', `printf '%s' '${claudeJson([finding('b.ts', '乙还有问题')])}'`)
+    o.sent.length = 0
+    await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })
+    const second = await settled(o, root)
+    expect(second).toMatchObject({ phase: 'done', scope: 'incremental', fileCount: 3 })
+    expect(second.comments?.map((c) => `${c.path}:${c.text.split('\n')[0]}`)).toEqual(['c.ts:丙有问题', 'b.ts:乙还有问题'])
+    expect(second.counts).toEqual({ P1: 2 })
+    const stdin = readFileSync(join(bin, 'claude.stdin'), 'utf8')
+    expect(stdin).toContain('+++ b/b.ts')
+    expect(stdin).not.toContain('+++ b/a.ts')
+    expect(stdin).not.toContain('+++ b/c.ts')
+
+    // 重审 of an unchanged diff reads all of it again.
+    fake('claude', `printf '%s' '${claudeJson([])}'`)
+    o.sent.length = 0
+    expect((await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })).cached).toBe(true)
+    expect((await startReview(o as never, { root, agent: 'claude', trigger: 'manual', force: true })).phase).toBe('running')
+    const third = await settled(o, root)
+    expect(third).toMatchObject({ phase: 'done', scope: 'full', comments: [] })
+    expect(readFileSync(join(bin, 'claude.stdin'), 'utf8')).toContain('+++ b/c.ts')
+  })
+
   it('skips automatic triggers that are off, and nothing to review', async () => {
     const root = repo('auto')
     const o = owner()

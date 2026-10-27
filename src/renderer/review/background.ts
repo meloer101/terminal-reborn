@@ -32,10 +32,22 @@ export function acceptReviewStatus(status: ReviewStatus): void {
   if (!next) return
   if (status.phase === 'done' && status.comments) landReviewComments(status.root, status.comments)
   useBackgroundReview.setState((s) => ({ byRoot: { ...s.byRoot, [status.root]: next } }))
+  if (status.phase === 'cancelled') restoreSavedReview(status.root, status.startedAt)
 }
 
-export async function startBackgroundReview(root: string, agent: ReviewAgent, trigger: ReviewTrigger, base?: string): Promise<ReviewStatus> {
-  const status = await window.tr.review.start({ root, agent, trigger, ...(base ? { base } : {}) })
+/** A cancelled run leaves the earlier result (still saved, its findings still listed) as the worktree's review. */
+function restoreSavedReview(root: string, cancelledAt: number): void {
+  void window.tr.review.latest(root).then((saved) => {
+    const current = useBackgroundReview.getState().byRoot[root]
+    if (!saved || !current || current.phase !== 'cancelled' || current.startedAt !== cancelledAt) return
+    const { comments, cached: _cached, ...rest } = saved
+    useBackgroundReview.setState((s) => ({ byRoot: { ...s.byRoot, [root]: { ...rest, found: comments?.length ?? saved.found ?? 0 } } }))
+  })
+}
+
+/** `force`: 重审, also when this exact diff was reviewed before. */
+export async function startBackgroundReview(root: string, agent: ReviewAgent, trigger: ReviewTrigger, base?: string, force = false): Promise<ReviewStatus> {
+  const status = await window.tr.review.start({ root, agent, trigger, ...(base ? { base } : {}), ...(force ? { force: true } : {}) })
   acceptReviewStatus(status)
   return status
 }

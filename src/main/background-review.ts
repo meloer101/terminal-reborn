@@ -4,7 +4,7 @@
 // when their switch in 设置 · 自动化 · 代码审阅 is on. Nothing here ever types into the coding session.
 // Finished results and the findings the user ignored are saved in `review-results.json` (v1.63), so a restart neither
 // reviews the same diff again nor lands an ignored finding again.
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -17,21 +17,25 @@ import {
   beginReview,
   countSeverities,
   decideReview,
+  diffFileCount,
   DEFAULT_REVIEW_RULES,
   diffHash,
   driveReview,
   emptyReviewMemory,
   latestRecord,
   otherAgent,
-  parseUnifiedDiffFiles,
+  planReview,
   recordFor,
   recordStatus,
   rememberReview,
+  reviewerLabel,
   removeDismissed,
   REVIEW_IPC,
   sanitizeReviewResults,
   type ReviewAgent,
   type ReviewCommandResult,
+  type ReviewPlan,
+  type ReviewRecord,
   type ReviewMemory,
   type ReviewRequest,
   type ReviewResultsStore,
@@ -57,6 +61,11 @@ const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge'
 
 interface Job {
   hash: string
+  /** HEAD when the diff was read ('' when unknown). */
+  head: string
+  plan: ReviewPlan
+  /** The previous review's summary, kept when an incremental review has nothing left to read. */
+  previousMessage: string
   owner: WebContents
   status: ReviewStatus
   cancelled: boolean
@@ -167,12 +176,12 @@ export function triggerAllowed(trigger: ReviewTrigger, settings: ReviewSettings)
 
 export function parseReviewRequest(raw: unknown): ReviewRequest {
   if (typeof raw !== 'object' || raw === null) throw new Error('invalid review request')
-  const { root, agent, trigger, base } = raw as Record<string, unknown>
+  const { root, agent, trigger, base, force } = raw as Record<string, unknown>
   if (typeof root !== 'string' || !root.startsWith('/') || root.length > MAX_ROOT || root.includes('\0')) throw new Error('invalid worktree root')
   if (!AGENTS.has(agent)) throw new Error('invalid agent')
   if (!TRIGGERS.has(trigger)) throw new Error('invalid trigger')
   if (base !== undefined && (typeof base !== 'string' || base.length > 255)) throw new Error('invalid base')
-  return { root, agent: agent as ReviewAgent, trigger: trigger as ReviewTrigger, ...(typeof base === 'string' ? { base } : {}) }
+  return { root, agent: agent as ReviewAgent, trigger: trigger as ReviewTrigger, ...(typeof base === 'string' ? { base } : {}), ...(force === true ? { force: true } : {}) }
 }
 
 function rulesOf(settings: ReviewSettings): string {
@@ -241,18 +250,34 @@ function finishJob(state: RootState, job: Job, patch: Partial<ReviewStatus>, out
         counts: status.counts ?? {},
         ...(status.hidden ? { hidden: status.hidden } : {}),
         ...(status.durationMs !== undefined ? { durationMs: status.durationMs } : {}),
-        ...(status.costUsd !== undefined ? { costUsd: status.costUsd } : {})
+        ...(status.costUsd !== undefined ? { costUsd: status.costUsd } : {}),
+        ...(status.fileCount !== undefined ? { fileCount: status.fileCount } : {}),
+        ...(status.reviewer ? { reviewer: status.reviewer } : {}),
+        ...(status.scope ? { scope: status.scope } : {}),
+        ...(job.head ? { head: job.head } : {}),
+        comments: status.comments ?? []
       })
     )
   }
   send(job.owner, status)
 }
 
-async function drive(state: RootState, job: Job, cwd: string, text: string, settings: ReviewSettings, binary: string, path: string): Promise<void> {
+async function drive(state: RootState, job: Job, cwd: string, settings: ReviewSettings, binary: string, path: string): Promise<void> {
   const agent = job.status.agent
   const started = Date.now()
+  const { plan } = job
   let dir: string | null = null
   try {
+    // Incremental, and everything that changed was already read before: the kept findings are the result.
+    if (plan.scope === 'incremental' && plan.files.length === 0) {
+      finishJob(
+        state,
+        job,
+        { phase: 'done', message: job.previousMessage, comments: plan.carried, counts: countSeverities(plan.carried) },
+        'done'
+      )
+      return
+    }
     dir = await mkdtemp(join(tmpdir(), 'wavi-review-'))
     const schemaPath = join(dir, 'schema.json')
     const env = buildPtyEnv(process.env, { PATH: path })
@@ -260,8 +285,8 @@ async function drive(state: RootState, job: Job, cwd: string, text: string, sett
     const result = await driveReview({
       agent,
       rules: rulesOf(settings),
-      files: parseUnifiedDiffFiles(text),
-      diffText: text,
+      files: plan.files,
+      diffText: plan.text,
       hash: job.hash,
       ...(modelFor(agent, settings) ? { model: modelFor(agent, settings) } : {}),
       dismissed: new Set(resultsFile().get()[job.status.root]?.dismissed ?? []),
@@ -292,14 +317,15 @@ async function drive(state: RootState, job: Job, cwd: string, text: string, sett
       finishJob(state, job, { phase: 'failed', message: result.message, durationMs, ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {}) }, 'failed')
       return
     }
+    const comments = [...plan.carried, ...result.comments]
     finishJob(
       state,
       job,
       {
         phase: 'done',
         message: result.message,
-        comments: result.comments,
-        counts: countSeverities(result.comments),
+        comments,
+        counts: countSeverities(comments),
         durationMs,
         ...(result.hidden ? { hidden: result.hidden } : {}),
         ...(result.costUsd !== undefined ? { costUsd: result.costUsd } : {})
@@ -340,6 +366,35 @@ function quick(request: ReviewRequest, phase: ReviewStatus['phase'], message: st
   return { root: request.root, phase, trigger: request.trigger, agent: request.agent, hash, message, startedAt: now, endedAt: now }
 }
 
+const GIT_TIMEOUT_MS = 60_000
+const GIT_MAX_BUFFER = 64 * 1024 * 1024
+
+function git(cwd: string, args: string[], path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1', PATH: path } },
+      (error, stdout) => (error ? reject(error) : resolve(stdout))
+    )
+  })
+}
+
+/**
+ * What the worktree's previous review leaves to do (incremental re-review, PRD F13 v1.78): the diff from the HEAD it
+ * read to the current one, when that HEAD is still an ancestor; null when there is no usable previous review.
+ */
+async function diffSincePrevious(cwd: string, previous: ReviewRecord | null, head: string, path: string): Promise<string | null> {
+  if (!previous?.head || !previous.comments || !head) return null
+  if (previous.head === head) return ''
+  try {
+    await git(cwd, ['merge-base', '--is-ancestor', previous.head, head], path)
+    return await git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', previous.head, head, '--'], path)
+  } catch {
+    return null
+  }
+}
+
 export async function startReview(owner: WebContents, raw: unknown): Promise<ReviewStatus> {
   const request = parseReviewRequest(raw)
   const settings = getSettings().review
@@ -354,6 +409,9 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   if (diff.text === '') return quick(request, 'skipped', '没有要审阅的改动')
   const hash = diffHash(diff.text)
   const state = stateOf(request.root)
+  // 重审 of a diff that was reviewed: forget that, and read all of it again.
+  const forced = request.force === true && state.memory.reviewed.has(hash) && state.memory.inFlightHash !== hash
+  if (forced) state.memory = { ...state.memory, reviewed: new Set([...state.memory.reviewed].filter((h) => h !== hash)) }
   const decision = decideReview(state.memory, hash)
   if (decision.kind === 'skip') {
     if (decision.reason === 'in-flight' && state.job) return state.job.status
@@ -363,7 +421,17 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
   const path = await searchPath()
   const reviewer = pickReviewer(request.agent, settings.reviewer, (agent) => executableOnPath(path, agent))
   if (!reviewer) return quick(request, 'failed', `找不到 ${request.agent} 命令，没有审阅`, hash)
-  // The await above let another start() through: it owns the run now.
+  const head = await headCommit(diff.cwd)
+  const store = resultsFile().get()
+  const previous = forced ? null : latestRecord(store, request.root)
+  const since = await diffSincePrevious(diff.cwd, previous, head, path)
+  const plan = planReview({
+    full: diff.text,
+    since,
+    previous: previous?.comments ?? [],
+    dismissed: new Set(store[request.root]?.dismissed ?? [])
+  })
+  // The awaits above let another start() through: it owns the run now.
   if (state.memory.inFlightHash === hash && state.job) return state.job.status
   if (state.job) cancelJob(state, state.job, '改动变了，已取消上一次审阅')
   state.memory = beginReview(state.memory, hash)
@@ -374,15 +442,29 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
       : '正在审阅…'
   const job: Job = {
     hash,
+    head,
+    plan,
+    previousMessage: previous?.message ?? '',
     owner,
     cancelled: false,
     child: null,
-    status: { root: request.root, phase: 'running', trigger: request.trigger, agent: reviewer.agent, hash, message, startedAt: Date.now() }
+    status: {
+      root: request.root,
+      phase: 'running',
+      trigger: request.trigger,
+      agent: reviewer.agent,
+      hash,
+      message,
+      startedAt: Date.now(),
+      fileCount: diffFileCount(diff.text),
+      reviewer: reviewerLabel(reviewer.agent),
+      scope: plan.scope
+    }
   }
   state.job = job
   hookOwner(owner)
   send(owner, job.status)
-  void drive(state, job, diff.cwd, diff.text, settings, reviewer.binary, path)
+  void drive(state, job, diff.cwd, settings, reviewer.binary, path)
   return job.status
 }
 

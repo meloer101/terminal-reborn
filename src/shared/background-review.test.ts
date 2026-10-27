@@ -6,7 +6,11 @@ import {
   commentDismissKey,
   countSeverities,
   dismissKey,
+  DEFAULT_REVIEW_RULES,
+  diffFileCount,
   latestRecord,
+  planReview,
+  reviewerLabel,
   MAX_REVIEW_RECORDS,
   otherAgent,
   recordFor,
@@ -41,6 +45,7 @@ import {
   type DiffFile,
   type ReviewCommandResult
 } from './background-review'
+import type { ReviewComment } from './review-comments'
 
 const file = (path: string, hunks: string[]): DiffFile => ({
   path,
@@ -382,5 +387,91 @@ describe('saved results and ignored findings (PRD F13 v1.63)', () => {
     expect(countSeverities([{ severity: 'P1' }, { severity: 'P1' }, { severity: 'P3' }, {}])).toEqual({ P1: 2, P3: 1 })
     expect(otherAgent('claude')).toBe('codex')
     expect(otherAgent('codex')).toBe('claude')
+  })
+})
+
+describe('planReview (incremental re-review, PRD F13 v1.78)', () => {
+  const diffOf = (path: string, line: string): string =>
+    `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,1 @@\n-old\n+${line}\n`
+  const comment = (path: string, title: string): ReviewComment => ({
+    id: `bg-${path}`,
+    group: 'committed',
+    path,
+    side: 'new',
+    line: 1,
+    endLine: 1,
+    code: '',
+    text: title,
+    createdAt: 1,
+    severity: 'P1',
+    origin: 'review'
+  })
+  const full = stampDiffGroup(diffOf('a.ts', 'a') + diffOf('b.ts', 'b') + diffOf('c.ts', 'c'), 'committed') + stampDiffGroup(diffOf('d.ts', 'd'), 'uncommitted')
+  const previous = [comment('a.ts', '甲'), comment('b.ts', '乙'), comment('c.ts', '丙'), comment('gone.ts', '已不在')]
+
+  it('reads everything when there is no usable previous review', () => {
+    const plan = planReview({ full, since: null, previous, dismissed: new Set() })
+    expect(plan).toMatchObject({ scope: 'full', carried: [], text: full })
+    expect(plan.files.map((f) => f.path)).toEqual(['a.ts', 'b.ts', 'c.ts', 'd.ts'])
+  })
+
+  it('reads the files changed since the previous review plus every uncommitted file, and keeps the other findings', () => {
+    // b.ts changed since; x.ts came in from the base and is not part of the worktree's diff.
+    const plan = planReview({ full, since: diffOf('b.ts', 'b') + diffOf('x.ts', 'x'), previous, dismissed: new Set() })
+    expect(plan.scope).toBe('incremental')
+    expect(plan.files.map((f) => f.path)).toEqual(['b.ts', 'd.ts'])
+    expect(plan.text).toContain('+++ b/b.ts')
+    expect(plan.text).not.toContain('a.ts')
+    expect(plan.text).not.toContain('x.ts')
+    // gone.ts is no longer in the diff; b.ts is read again, so its old finding gives way to the new ones.
+    expect(plan.carried.map((c) => c.path)).toEqual(['a.ts', 'c.ts'])
+  })
+
+  it('does not bring back a finding the user ignored', () => {
+    const plan = planReview({ full, since: diffOf('b.ts', 'b'), previous, dismissed: new Set([commentDismissKey(comment('a.ts', '甲'))]) })
+    expect(plan.carried.map((c) => c.path)).toEqual(['c.ts'])
+  })
+
+  it('has nothing to read when only the kept files remain', () => {
+    const onlyCommitted = stampDiffGroup(diffOf('a.ts', 'a') + diffOf('b.ts', 'b'), 'committed')
+    const plan = planReview({ full: onlyCommitted, since: '', previous, dismissed: new Set() })
+    expect(plan).toMatchObject({ scope: 'incremental', files: [], text: '' })
+    expect(plan.carried.map((c) => c.path)).toEqual(['a.ts', 'b.ts'])
+  })
+
+  it('is a full review when everything changed', () => {
+    const plan = planReview({ full, since: diffOf('a.ts', 'a') + diffOf('b.ts', 'b') + diffOf('c.ts', 'c'), previous, dismissed: new Set() })
+    expect(plan).toMatchObject({ scope: 'full', carried: [] })
+  })
+
+  it('counts files once and names the reviewer', () => {
+    expect(diffFileCount(full)).toBe(4)
+    expect(diffFileCount(full + diffOf('a.ts', 'again'))).toBe(4)
+    expect(diffFileCount('')).toBe(0)
+    expect(reviewerLabel('codex')).toBe('Codex')
+    expect(reviewerLabel('claude')).toBe('Claude')
+  })
+
+  it('asks the reviewer for every problem in one pass', () => {
+    expect(DEFAULT_REVIEW_RULES).toContain('一次把所有问题都列出来')
+  })
+})
+
+describe('saved record: head, findings, file count (PRD F13 v1.78)', () => {
+  const base: ReviewRecord = { hash: 'abcdef12', agent: 'codex', trigger: 'manual', message: 'ok', startedAt: 1, endedAt: 2, found: 1, counts: { P1: 1 } }
+  const finding: ReviewComment = { id: 'bg-1', group: 'committed', path: 'a.ts', side: 'new', line: 3, endLine: 3, code: 'x', text: '越界', createdAt: 1, severity: 'P1', origin: 'review' }
+
+  it('keeps the findings only on the newest record, and reads them back sanitized', () => {
+    let store: ReviewResultsStore = addReviewRecord({}, '/w', { ...base, head: 'a'.repeat(40), fileCount: 3, reviewer: 'Codex', scope: 'full', comments: [finding] })
+    store = addReviewRecord(store, '/w', { ...base, hash: 'abcdef13', comments: [] })
+    expect(store['/w']!.records[0]).not.toHaveProperty('comments')
+    expect(store['/w']!.records[1]!.comments).toEqual([])
+    const again = sanitizeReviewResults({ '/w': { records: [{ ...base, head: 'a'.repeat(40), fileCount: 3, reviewer: 'Codex', scope: 'incremental', comments: [finding, { id: '' }] }] } })
+    expect(again['/w']!.records[0]).toMatchObject({ head: 'a'.repeat(40), fileCount: 3, reviewer: 'Codex', scope: 'incremental', comments: [finding] })
+    expect(sanitizeReviewResults({ '/w': { records: [{ ...base, head: 'not a hash', scope: 'x', fileCount: -1 }] } })['/w']!.records[0]).toEqual(base)
+  })
+
+  it('shows file count, reviewer and scope in the saved status', () => {
+    expect(recordStatus('/w', { ...base, fileCount: 3, reviewer: 'Codex', scope: 'incremental' }, false)).toMatchObject({ fileCount: 3, reviewer: 'Codex', scope: 'incremental' })
   })
 })
