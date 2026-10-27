@@ -38,6 +38,11 @@ export interface SurfaceDebugInfo {
   atlasResets: { recreated: number; overflowed: number }
 }
 
+/** The one xterm internal used to draw before the browser paints (see paintNow). Missing in another version is a no-op. */
+interface PaintableTerminal {
+  _core?: { _renderService?: { _renderRows?: (start: number, end: number) => void } }
+}
+
 /** The one addon internal the atlas guard reads (the atlas's pages); every step may be missing in another version. */
 interface AtlasInternals {
   _core?: { _renderService?: { _renderer?: { value?: { _charAtlas?: { pages?: { canvas: HTMLCanvasElement }[] } } } } }
@@ -88,6 +93,14 @@ export class XtermSurface implements TerminalSurface {
   private readonly fitAddon = new FitAddon()
   private readonly serializeAddon = new SerializeAddon()
   private webgl: WebglAddon | null = null
+  /**
+   * Fires after addon-webgl's own device-pixel observer. That observer assigns `canvas.width`, which
+   * clears the bitmap, and only then queues a redraw on a rAF. It runs after animation frames, so the
+   * redraw would land on the next frame and this one would paint empty (a session switch, a drawer
+   * refit). Painting from a later observer of the same canvas fills it before the browser paints.
+   */
+  private canvasPaintObserver: ResizeObserver | null = null
+  private painting = false
   private webglUnavailable = false
   /** The WebGL context was lost: DOM renderer until the terminal is shown again (B18). */
   private webglLost = false
@@ -332,6 +345,9 @@ export class XtermSurface implements TerminalSurface {
       this.fit()
       this.clearAtlas()
       this.term.refresh(0, this.term.rows - 1)
+      // refresh() only queues a rAF, and while the terminal is still paused (the intersection
+      // observer has not run yet) it queues nothing. Paint before the browser does.
+      this.paintNow()
     }
   }
 
@@ -374,6 +390,7 @@ export class XtermSurface implements TerminalSurface {
       this.term.loadAddon(addon)
       this.webgl = addon
       webglSurfaces.add(this)
+      this.watchCanvasPaint()
     } catch {
       this.webglUnavailable = true
       this.webgl = null
@@ -381,6 +398,8 @@ export class XtermSurface implements TerminalSurface {
   }
 
   private unloadWebgl(): void {
+    this.canvasPaintObserver?.disconnect()
+    this.canvasPaintObserver = null
     const addon = this.webgl
     this.webgl = null
     webglSurfaces.delete(this)
@@ -522,8 +541,51 @@ export class XtermSurface implements TerminalSurface {
       } catch {
         // Container has no layout yet; keep the current size.
       }
+      // A resize clears the canvas and leaves the redraw on a rAF. Paint now so a fit that itself
+      // runs inside a frame callback does not present the cleared bitmap.
+      this.paintNow()
     }
     return { cols: this.term.cols, rows: this.term.rows }
+  }
+
+  /**
+   * Draws the current viewport immediately. xterm's own path only schedules a rAF, which misses the
+   * frame when the schedule happens after animation frames (a resize observer clearing the canvas).
+   */
+  private paintNow(): void {
+    if (this.painting || this.disposed || !this.visible || !this.webgl || this.term.rows <= 0) return
+    const service = (this.term as unknown as PaintableTerminal)._core?._renderService
+    const render = service?._renderRows
+    if (!service || !render) return
+    this.painting = true
+    try {
+      render.call(service, 0, this.term.rows - 1)
+    } catch {
+      // Renderer torn down between the check and the call.
+    } finally {
+      this.painting = false
+    }
+  }
+
+  /** See `canvasPaintObserver`. Registered after the addon's observer so this callback runs second. */
+  private watchCanvasPaint(): void {
+    this.canvasPaintObserver?.disconnect()
+    const screen = this.term.element?.querySelector('.xterm-screen')
+    const win = screen?.ownerDocument.defaultView
+    if (!screen || !win || typeof win.ResizeObserver !== 'function') {
+      this.canvasPaintObserver = null
+      return
+    }
+    const observer = new win.ResizeObserver(() => this.paintNow())
+    const box = { box: 'device-pixel-content-box' } as ResizeObserverOptions
+    for (const canvas of screen.querySelectorAll('canvas')) {
+      try {
+        observer.observe(canvas, box)
+      } catch {
+        observer.observe(canvas)
+      }
+    }
+    this.canvasPaintObserver = observer
   }
 
   /** Current grid size, without re-fitting. */

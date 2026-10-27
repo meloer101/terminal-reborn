@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-26
+> 最后更新：2026-10-27
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -47,6 +47,7 @@
 - [x] 和 CC Switch 共存：Claude 被指到第三方端点（settings.json 的 `ANTHROPIC_BASE_URL`、Bedrock / Vertex）或 Codex 用非 `openai` 的 provider 时，会话头不再显示官方账号的额度，token 不计入份额，也不让账号算“在用”（PRD v1.46）。之前同时有官方登录的用户会在 Kimi 会话上看到“Claude 5h 12%”。单元测试 `bridge` / `server`（真实中继脚本）/ `codex-usage` / `transcript-meter`，e2e `session-meta` 新增一条（去掉渲染端的判断它会失败）
 - [x] 守护进程收到 SIGTERM 不再结束全部会话（2026-10-21，PRD §6.8 v1.54；来自作者日志里的 3 次和长跑测试）：查证是停掉一棵进程树时连带发来的（Claude 桌面版退出时停掉开着 `npm run dev` 的后台任务，守护进程当时是应用的子进程），不是注销。守护进程改为启动即被 launchd 收养，SIGTERM 只写盘、照常运行；main 报告注销 / 重启 / 关机后才结束会话。单元测试 `sigterm.test.ts`、`daemon-client.test.ts`，e2e `pty-daemon.spec.ts`（父进程是 launchd；SIGTERM 后同一个 shell 还在，重开接回；报告关机后 SIGTERM 结束它们）
 - [x] ⌘Q 后重开，守护进程保住的 agent 状态不再卡在“空闲”；弹窗里用真键盘按 ⌘F 不再在弹窗背后打开查找栏。新 e2e：`tui-apps`、`menu-keys`、`quit-keeps-agents`、`notifications`，另加随机事件序列下状态不卡死的性质测试
+- [x] 切换会话和右侧栏抽屉结束时终端闪一帧空白（2026-10-27，PRD §6.3）：rAF 里重载 WebGL 或改 canvas 尺寸，重画排到下一帧；addon 还会在 ResizeObserver 里把 canvas 清空。显示改到绘制前，抽屉结束时同步 fit，清空之后立刻补画。e2e `terminal-flicker.spec.ts`，修复前 10 个空白帧，修复后 0
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
@@ -314,6 +315,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - 没有 hook 时（Codex 的 hook 信任没拿到、Claude 的 hooks 不工作）API 报错看起来和一轮正常结束一样（都是空闲）。
 - 20 个会话都填满 1 万行回滚时 footprint 在 1.2–1.5 GB，贴着 PRD §1.3 的 1.5 GB，大头记在 GPU 进程上（D1）。要省可以从回滚长度和隐藏终端的 GPU 资源入手。
 - 隐藏终端不重画的补丁（`paused-selection.ts`）读 xterm RenderService 的三个内部字段，升级 xterm 时要复测（`TR_SCALE=1 TR_SCALE_PROFILE=1 … e2e/scale.spec.ts`）。
+- 终端在尺寸回调里同步补画（`xterm-surface.ts` 的 `paintNow`）调用 RenderService 的 `_renderRows`。升级 xterm 时用 `e2e/terminal-flicker.spec.ts` 复测。
 - 状态规则依赖 Claude Code 2.1.304 的标题：有对话框时 `✳`、在跑时 `◐` / `◑`（PRD §6.6）。CLI 改了要用 `scripts/spikes/` 和模拟器复测。
 - 用户自己在 alias 里追加 `--settings` 会让我们的 hooks 失效（只认最后一个）。
 - Codex 只在第一条 prompt 时才发 SessionStart，也没有 SessionEnd / Interrupt 事件；它的启动和中断靠屏幕与标题判断。

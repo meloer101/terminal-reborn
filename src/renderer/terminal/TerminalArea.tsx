@@ -3,7 +3,7 @@
 // switching sessions. The main area places the shown ones (PRD F20: one per pane of a split); moving between
 // panes only moves the element, never the terminal. A secondary window's panes (F20 · 多窗口) borrow the terminal into
 // that window's document (PaneHosts): the same xterm, the same PTY stream, only its DOM moves.
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId, Worktree } from '@shared/types'
@@ -56,6 +56,12 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
     const host = borrowedHost ?? hostRef.current
     if (!everActive || held || !host) return
     ensureTerminal(sessionId, cwd, agent, resumeAgentSessionId).attach(host)
+    // First mount and a borrow both finish here, once the node is in `host`. Show it in this task,
+    // not on a frame: xterm redraws on a rAF, and a rAF queued from inside a rAF waits a frame, so
+    // the frame that reloads WebGL paints an empty canvas. A hidden main window still runs this
+    // task; it does not need the borrowed window to produce a frame. Session switches do not
+    // re-run this effect. The layout effect below shows a terminal that is already in its host.
+    if (host.offsetParent !== null) getXtermSurface(sessionId)?.setVisible(true)
   }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation, borrowedHost])
 
   // Files dropped on or pasted into the terminal (PRD F19), wherever it is shown.
@@ -65,18 +71,21 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
     return attachFileInput(host, sessionId)
   }, [everActive, held, sessionId, borrowedHost])
 
-  // Refit + resize on show (and on moving between hosts), and release the WebGL context while hidden.
+  // Hidden terminals give the WebGL context back (browsers cap live contexts).
   useEffect(() => {
-    if (!everActive) return
-    const surface = getXtermSurface(sessionId)
-    if (!shown) {
-      surface?.setVisible(false)
-      return
-    }
-    // The frame of the window it is shown in: a hidden main window draws no frames.
-    const win = hostWindow(borrowedHost)
-    const frame = win.requestAnimationFrame(() => getXtermSurface(sessionId)?.setVisible(true))
-    return () => win.cancelAnimationFrame(frame)
+    if (!everActive || shown) return
+    getXtermSurface(sessionId)?.setVisible(false)
+  }, [shown, everActive, sessionId])
+
+  // Showing has to happen before paint. Doing it on a rAF clears the canvas for the frame the pane
+  // is already visible, because xterm's redraw is itself a rAF and does not run until the next one.
+  useLayoutEffect(() => {
+    if (!everActive || !shown) return
+    const host = borrowedHost ?? hostRef.current
+    // A borrow moves the node in the attach effect, after this layout pass, so the xterm is still
+    // in the previous host. That effect shows it once the move is done.
+    if (!host?.querySelector('.xterm')) return
+    getXtermSurface(sessionId)?.setVisible(true)
   }, [shown, everActive, sessionId, borrowedHost])
 
   useEffect(() => {
@@ -96,7 +105,13 @@ function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeA
       if (!terminalFitHeld()) refit()
     })
     observer.observe(host)
-    const offReleased = onTerminalFitReleased(refit)
+    // The release is a timer task, not a frame callback. Fitting here lets xterm's redraw rAF run
+    // before the next paint; fitting inside refit's rAF would clear the canvas for one frame.
+    const offReleased = onTerminalFitReleased(() => {
+      win.cancelAnimationFrame(frame)
+      frame = 0
+      if (host.offsetParent !== null) getSurface(sessionId)?.fit()
+    })
     return () => {
       win.cancelAnimationFrame(frame)
       observer.disconnect()
