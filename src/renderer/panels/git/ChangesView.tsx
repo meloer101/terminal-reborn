@@ -35,6 +35,7 @@ import { agentLabel } from '../merge/model'
 import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsRows, useRisks } from './FactsRows'
+import { BaseCiRows } from './BaseCiRow'
 import { PrStatusLine } from './PullRequest'
 import { PrAutomationRow } from './PrRows'
 import { usePrStatus } from '../../pull-requests/store'
@@ -193,6 +194,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         </div>
       </div>
       <div className={styles.prBlock}>
+        <BaseCiRows worktree={worktree} />
         <PrStatusLine worktree={worktree} target={target} />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
       </div>
