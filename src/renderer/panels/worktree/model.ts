@@ -226,8 +226,9 @@ export function detailLines(info: GitWorktreeInfo, port: number | null = null): 
   return lines
 }
 
-/** The row to show expanded: the user's pick while it still exists, else the active session's worktree. */
-export function selectedRow(rows: readonly WorktreeRow[], picked: string | null, activeWorktreeId: WorktreeId | null): WorktreeRow | null {
+/** The row to show expanded: none once the user closed it, the user's pick while it still exists, else the active session's worktree. */
+export function selectedRow(rows: readonly WorktreeRow[], picked: string | null | false, activeWorktreeId: WorktreeId | null): WorktreeRow | null {
+  if (picked === false) return null
   return (
     rows.find((r) => r.key === picked) ??
     (activeWorktreeId ? rows.find((r) => r.worktreeIds.includes(activeWorktreeId)) : undefined) ??

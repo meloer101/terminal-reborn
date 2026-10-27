@@ -230,4 +230,8 @@ describe('selectedRow', () => {
     expect(selectedRow(working, '/gone', 'w-main')?.name).toBe('main')
     expect(selectedRow(working, null, null)).toBeNull()
   })
+
+  it('shows nothing expanded once the user closed the row, even with an active session', () => {
+    expect(selectedRow(working, false, 'w-main')).toBeNull()
+  })
 })

@@ -1,6 +1,7 @@
 // Worktree view (PRD F17, Figma 13C `149:5973`): every git worktree of the active session's project with the status
-// of its sessions, uncommitted stats and ahead / behind; the selected row expands into details and actions. Merged
-// worktrees without a session sit in 可清理 (one 清理 for all); other session-less ones in 没有会话 (one by one).
+// of its sessions, uncommitted stats and ahead / behind; the selected row expands into details and actions, and a
+// second click closes it. Merged worktrees without a session sit in 可清理 (one 清理 for all); other session-less ones
+// in 没有会话 (one by one).
 // Refreshes on window focus, when git's worktree / branch files change, every POLL_MS while visible, and — only the
 // worktrees concerned — when their sessions change.
 import { Ellipsis, Plus } from 'lucide-react'
@@ -22,7 +23,7 @@ import { RadarTag } from '../../conflict-radar/RadarTag'
 import { useWorktreeRadarMark } from '../../conflict-radar/store'
 import { useRepoScripts } from '../../scripts/run-script'
 import { PaneHeader } from '../PaneHeader'
-import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
+import { cleanUpInteractive, collapseRow, openRowMenu, selectRow } from './actions'
 import { buildRows, detailLines, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
 import { patchRoot, refreshWorktrees, useWorktrees, worktreesOf } from './store'
 import styles from './WorktreeView.module.css'
@@ -197,7 +198,7 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
   const rebaseTarget = radar && wantsRebase(radar.self) ? agentSessionFor(row.sessions, activeSessionId) : null
   return (
     <li className={styles.item} data-selected={selected} data-path={info.path}>
-      <button type="button" className={styles.row} aria-expanded={selected} onClick={() => selectRow(root, row)}>
+      <button type="button" className={styles.row} aria-expanded={selected} onClick={() => (selected ? collapseRow(root) : selectRow(root, row))}>
         <span className={styles.line}>
           {row.status ? (
             <StatusGlyph status={row.status} />

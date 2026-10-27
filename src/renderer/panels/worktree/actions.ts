@@ -26,6 +26,11 @@ export function selectRow(root: string, row: WorktreeRow): void {
   if (target && !(active && row.worktreeIds.includes(active.worktreeId))) state.setActiveSession(target.id)
 }
 
+/** Click on the expanded row: close it, until the user picks a row or switches session. */
+export function collapseRow(root: string): void {
+  patchRoot(root, { picked: false, notice: null })
+}
+
 export function startSessionIn(projectId: ProjectId, row: WorktreeRow, kind: AgentKind): void {
   useWorkspace.getState().addSessionInWorktree(projectId, { path: row.openPath, branch: row.info.branch ?? '' }, kind)
 }
