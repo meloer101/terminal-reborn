@@ -1,5 +1,6 @@
 // The right panel's 浏览器 view (PRD F17 · Figma 13A / 13E) and the minimal port detection behind it (F14).
 // Pure: address parsing, console summarising and port-list parsing / diffing, shared by main and renderer.
+import { AGENT_SPECS } from './agents'
 import type { SessionId } from './types'
 
 /** Only these schemes are ever loaded in the built-in browser. */
@@ -385,6 +386,18 @@ export function serverLabel(args: string): string {
   }
   const binary = lower.split(/\s+/)[0]?.split('/').pop() ?? ''
   return binary && !RUNTIMES.has(binary) && !/^python\d/.test(binary) ? binary.slice(0, 16) : ''
+}
+
+const AGENT_BINARIES = new Set(Object.values(AGENT_SPECS).map((spec) => spec.binary))
+
+/**
+ * Whether a process is an agent CLI itself (its args as `ps` prints them). Its own listeners (Claude Code's local
+ * sockets) are not the user's dev servers, so they get no tag. Claude Code runs as `…/claude/versions/2.1.310`.
+ */
+export function isAgentCli(args: string): boolean {
+  const parts = (args.trim().split(/\s+/)[0] ?? '').split('/')
+  const name = parts.pop() ?? ''
+  return AGENT_BINARIES.has(name) || (parts.includes('claude') && /^\d+(\.\d+)+$/.test(name))
 }
 
 /**

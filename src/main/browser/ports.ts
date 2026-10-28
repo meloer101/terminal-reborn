@@ -4,7 +4,7 @@
 // session's latest scan found listening (`sessionListener`); there is no IPC that signals an arbitrary pid.
 import { execFile } from 'node:child_process'
 import type { WebContents } from 'electron'
-import { BROWSER_IPC, parseLsofListen, parsePs, portsChanged, processTree, serverLabel, type ListeningPort, type SessionPorts } from '@shared/browser'
+import { BROWSER_IPC, isAgentCli, parseLsofListen, parsePs, portsChanged, processTree, serverLabel, type ListeningPort, type SessionPorts } from '@shared/browser'
 import { onSessionRootsChanged, sessionRoots, type SessionRoot } from '../pty'
 import { PortWatches } from './port-watches'
 
@@ -85,7 +85,10 @@ async function poll(): Promise<void> {
   for (const root of current) {
     if (!still.has(root.sessionId)) continue
     const tree = trees.get(root.sessionId) ?? new Map<number, string>()
-    const ports = listening.filter((l) => tree.has(l.pid)).map((l) => ({ ...l, label: serverLabel(tree.get(l.pid) ?? '') }))
+    // The agent CLI's own listeners are not dev servers: keep them out of the tags, the browser list and the overview.
+    const ports = listening
+      .filter((l) => tree.has(l.pid) && !isAgentCli(tree.get(l.pid) ?? ''))
+      .map((l) => ({ ...l, label: serverLabel(tree.get(l.pid) ?? '') }))
     publish(root, ports)
   }
   clearMissing(still)

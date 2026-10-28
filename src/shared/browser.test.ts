@@ -17,6 +17,7 @@ import {
   parseAddress,
   parseLsofListen,
   parsePs,
+  isAgentCli,
   portsChanged,
   processTree,
   serverLabel,
@@ -187,6 +188,17 @@ describe('serverLabel', () => {
     expect(serverLabel('/usr/local/bin/caddy run')).toBe('caddy')
     expect(serverLabel('node server.js')).toBe('')
     expect(serverLabel('python3 -m http.server 8000')).toBe('')
+  })
+})
+
+describe('isAgentCli', () => {
+  it('recognises the agent CLI itself, not the servers it or the user starts', () => {
+    expect(isAgentCli('/Users/m/.local/share/claude/versions/2.1.310')).toBe(true)
+    expect(isAgentCli('claude --resume')).toBe(true)
+    expect(isAgentCli('codex')).toBe(true)
+    expect(isAgentCli('node /x/node_modules/.bin/vite --port 5173')).toBe(false)
+    expect(isAgentCli('node server.js')).toBe(false)
+    expect(isAgentCli('/usr/local/bin/caddy run')).toBe(false)
   })
 })
 
