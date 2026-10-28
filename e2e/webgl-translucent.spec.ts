@@ -94,7 +94,8 @@ test('a translucent terminal draws on WebGL with the DOM renderer’s look, and 
   }, BACKDROP)
 
   // The shell may still be starting and eat the first keystrokes: type once it shows a prompt.
-  await expect.poll(screen, { timeout: 20_000 }).toMatch(/❯/)
+  // Any shell's prompt end (zsh themes, bash's `$` on CI runners), not one theme's glyph.
+  await expect.poll(screen, { timeout: 20_000 }).toMatch(/[$%#>❯] ?$/m)
   // Dim and italic cells, an explicit background, and Chinese, all on one row.
   await write(`clear; printf '\\033[2mdim dim dim\\033[0m \\033[3mitalic italic\\033[0m plain plain \\033[41m red \\033[0m 你好世界\\n'; echo ready-$((40+2))\r`)
   await expect.poll(screen, { timeout: 10_000 }).toMatch(/^ready-42$/m)

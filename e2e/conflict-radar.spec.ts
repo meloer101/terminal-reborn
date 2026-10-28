@@ -141,7 +141,10 @@ test.describe('conflict radar', () => {
     const rowB = panel().locator(`li[data-path$="/wt-b"]`)
     await expect(rowB.getByTestId('radar-tag')).toHaveText('和 main 会冲突', WITHIN)
     await expect(panel().locator(`li[data-path$="/wt-c"]`).getByTestId('radar-tag')).toHaveText('main 已前进 · 落后 1')
-    await rowB.getByRole('button').first().click()
+    // The active session's row starts expanded, and clicking an expanded row collapses it: expand only when needed.
+    const rowButton = rowB.getByRole('button').first()
+    if ((await rowButton.getAttribute('aria-expanded')) !== 'true') await rowButton.click()
+    await expect(rowButton).toHaveAttribute('aria-expanded', 'true')
     await expect(rowB.getByTestId('radar-detail').first()).toHaveText(/冲突main · README\.md/)
     await shoot('worktree-view')
 
