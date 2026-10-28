@@ -49,7 +49,8 @@ done`
     const outcome = await readClaudeAccountUsage(shell, { now: () => AT })
     expect(outcome).toEqual({
       kind: 'ok',
-      usage: { vendor: 'claude', at: AT, complete: true, windows: [{ minutes: 300, percent: 20, resetsAt: Date.parse('2026-10-20T07:40:00Z') }] }
+      usage: { vendor: 'claude', at: AT, complete: true, windows: [{ minutes: 300, percent: 20, resetsAt: Date.parse('2026-10-20T07:40:00Z') }] },
+      plan: 'max'
     })
     const command = readFileSync(`${shell}.args`, 'utf8')
     expect(command).toMatch(/^exec 'claude' '-p' '--input-format' 'stream-json'/)
@@ -60,13 +61,13 @@ done`
 
   it('gives up on an account without plan limits, an older Claude, or none at all', async () => {
     const apiKey = fakeShell('claude-key', claude(answer({ subscription_type: null, rate_limits_available: false, rate_limits: null })))
-    expect(await readClaudeAccountUsage(apiKey)).toMatchObject({ kind: 'unsupported' })
+    expect(await readClaudeAccountUsage(apiKey)).toMatchObject({ kind: 'unsupported', state: 'no-plan' })
     const old = fakeShell(
       'claude-old',
       claude(`'${JSON.stringify({ type: 'control_response', response: { subtype: 'error', request_id: 'usage', error: 'Unsupported control request subtype: get_usage' } })}'`)
     )
-    expect(await readClaudeAccountUsage(old)).toMatchObject({ kind: 'unsupported', detail: expect.stringContaining('Unsupported') })
-    expect(await readClaudeAccountUsage(fakeShell('claude-missing', 'exit 127'))).toMatchObject({ kind: 'unsupported' })
+    expect(await readClaudeAccountUsage(old)).toMatchObject({ kind: 'unsupported', state: 'outdated', detail: expect.stringContaining('Unsupported') })
+    expect(await readClaudeAccountUsage(fakeShell('claude-missing', 'exit 127'))).toMatchObject({ kind: 'unsupported', state: 'missing' })
     // Three login shells in a row: more than the default 5 s when the whole suite runs at once.
   }, 15_000)
 
@@ -80,10 +81,12 @@ done`
 
 describe('CodexAccountClient (codex app-server)', () => {
   // Answers by request id; after a rate-limit read it also pushes an update of another bucket and of the plan's own.
-  const codex = (reply: string) => `while IFS= read -r line; do
+  // `login` is account/read's answer (0.165 shape).
+  const codex = (reply: string, login = '\\"result\\":{\\"account\\":{\\"type\\":\\"chatgpt\\",\\"planType\\":\\"plus\\"}}') => `while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":\\([0-9]*\\).*/\\1/p')
   case "$line" in
     *'"initialize"'*) echo "{\\"id\\":$id,\\"result\\":{}}" ;;
+    *'"account/read"'*) echo "{\\"id\\":$id,${login}}" ;;
     *'account/rateLimits/read'*) echo "{\\"id\\":$id,${reply}}"
       echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"codex_bengalfox","primary":{"usedPercent":99,"windowDurationMins":300}}}}'
       echo '{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":42,"windowDurationMins":300,"resetsAt":1792420883}}}}' ;;
@@ -99,7 +102,11 @@ done`
     const pushed: VendorUsage[] = []
     const client = new CodexAccountClient(shell, (u) => pushed.push(u), { now: () => AT })
     try {
-      expect(await client.read()).toEqual({ kind: 'ok', usage: { vendor: 'codex', at: AT, complete: true, windows: [{ minutes: 300, percent: 41, resetsAt: 1792420883_000 }] } })
+      expect(await client.read()).toEqual({
+        kind: 'ok',
+        usage: { vendor: 'codex', at: AT, complete: true, windows: [{ minutes: 300, percent: 41, resetsAt: 1792420883_000 }] },
+        plan: 'plus'
+      })
       expect(await client.read()).toMatchObject({ kind: 'ok' })
       expect(starts(shell)).toBe(1)
       await new Promise((resolve) => setTimeout(resolve, 100))
@@ -117,6 +124,7 @@ done`
   id=$(printf '%s' "$line" | sed -n 's/.*"id":\\([0-9]*\\).*/\\1/p')
   case "$line" in
     *'"initialize"'*) echo "{\\"id\\":$id,\\"result\\":{}}" ;;
+    *'"account/read"'*) echo "{\\"id\\":$id,\\"error\\":{\\"code\\":-32600,\\"message\\":\\"Invalid request: unknown variant account/read\\"}}" ;;
     *'excludeResetCreditDetails'*) echo "{\\"id\\":$id,\\"error\\":{\\"code\\":-32600,\\"message\\":\\"Invalid request: invalid type: map, expected unit\\"}}" ;;
     *'account/rateLimits/read'*) echo "{\\"id\\":$id,\\"result\\":${result.replaceAll('"', '\\"')}}" ;;
   esac
@@ -131,16 +139,26 @@ done`
     }
   })
 
-  it('gives up on an API-key login or a missing codex, and starts over after the app-server goes away', async () => {
-    const apiKey = fakeShell('codex-key', codex('\\"error\\":{\\"code\\":-32600,\\"message\\":\\"chatgpt authentication required to read rate limits\\"}'))
-    const client = new CodexAccountClient(apiKey, () => undefined)
-    try {
-      expect(await client.read()).toMatchObject({ kind: 'unsupported', detail: expect.stringContaining('authentication required') })
-    } finally {
-      client.close()
+  it('gives up on an API-key login, a signed-out one or a missing codex, and starts over after the app-server goes away', async () => {
+    const denied = '\\"error\\":{\\"code\\":-32600,\\"message\\":\\"chatgpt authentication required to read rate limits\\"}'
+    const cases: [string, string, string][] = [
+      ['codex-key', '\\"result\\":{\\"account\\":{\\"type\\":\\"apiKey\\"}}', 'api-key'],
+      ['codex-out', '\\"result\\":{\\"account\\":null,\\"requiresOpenaiAuth\\":true}', 'signed-out'],
+      // A third-party provider: no OpenAI login, and none needed.
+      ['codex-provider', '\\"result\\":{\\"account\\":null,\\"requiresOpenaiAuth\\":false}', 'no-plan'],
+      // A Codex that does not know account/read: only the rate-limit read's refusal says anything.
+      ['codex-noread', '\\"error\\":{\\"code\\":-32601,\\"message\\":\\"method not found\\"}', 'no-plan']
+    ]
+    for (const [name, login, state] of cases) {
+      const client = new CodexAccountClient(fakeShell(name, codex(denied, login)), () => undefined)
+      try {
+        expect(await client.read()).toMatchObject({ kind: 'unsupported', state })
+      } finally {
+        client.close()
+      }
     }
     const missing = new CodexAccountClient(fakeShell('codex-missing', 'exit 127'), () => undefined)
-    expect(await missing.read()).toMatchObject({ kind: 'unsupported' })
+    expect(await missing.read()).toMatchObject({ kind: 'unsupported', state: 'missing' })
     const crashing = fakeShell('codex-crash', 'exit 3')
     const flaky = new CodexAccountClient(crashing, () => undefined)
     expect(await flaky.read()).toMatchObject({ kind: 'error', detail: expect.stringContaining('code 3') })

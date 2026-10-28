@@ -82,7 +82,7 @@ export interface ArchiveSettings {
   afterMerge: boolean
 }
 
-/** 设置 · 自动化 · 额度提醒 (PRD F11, Figma 18D). On by default: it only notifies. */
+/** 设置 · 额度 · 提醒 (PRD F11, Figma 18D). On by default: it only notifies. */
 export interface AlertSettings {
   /** A plan window crossed 75 % / 90 % / used up: one system notification each, per period. */
   usage: boolean

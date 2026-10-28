@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { VendorUsage } from '@shared/session-meta'
+import type { UsageAccount, VendorUsage } from '@shared/session-meta'
 import { ACTIVE_MS, claudeInterval, codexInterval, PlanUsagePoller, UNSUPPORTED_RETRY_MS, type PollOutcome } from './plan-usage-poller'
 
 const usage = (percent: number): VendorUsage => ({ vendor: 'codex', at: 0, complete: true, windows: [{ minutes: 300, percent }] })
@@ -10,6 +10,8 @@ function harness(answers: PollOutcome[]) {
   let timers: { at: number; fn: () => void; id: number }[] = []
   let nextId = 1
   const applied: VendorUsage[] = []
+  const shown: VendorUsage[] = []
+  const accounts: UsageAccount[] = []
   let fetches = 0
   const poller = new PlanUsagePoller({
     vendor: 'codex',
@@ -18,6 +20,8 @@ function harness(answers: PollOutcome[]) {
       return answers.shift() ?? { kind: 'ok', usage: usage(10) }
     },
     apply: (u) => applied.push(u),
+    show: (u) => shown.push(u),
+    account: (a) => accounts.push(a),
     interval: codexInterval,
     minRefreshGapMs: 15_000,
     now: () => now,
@@ -44,7 +48,7 @@ function harness(answers: PollOutcome[]) {
     }
     now = end
   }
-  return { poller, applied, advance, settle, fetches: () => fetches, pending: () => timers.map((t) => t.at - now) }
+  return { poller, applied, shown, accounts, advance, settle, fetches: () => fetches, pending: () => timers.map((t) => t.at - now) }
 }
 
 describe('PlanUsagePoller', () => {
@@ -82,7 +86,7 @@ describe('PlanUsagePoller', () => {
     const h = harness([
       { kind: 'error', detail: 'boom' },
       { kind: 'error', detail: '429', retryAfterMs: 20 * 60_000 },
-      { kind: 'unsupported', detail: 'API key' }
+      { kind: 'unsupported', state: 'api-key', detail: 'API key' }
     ])
     h.poller.nudge()
     await h.advance(0)
@@ -110,6 +114,72 @@ describe('PlanUsagePoller', () => {
     expect(h.pending()).toEqual([0])
     await h.advance(0)
     expect(h.fetches()).toBe(2)
+  })
+
+  it('says what each ask of the account said: the plan, no windows, why not, or a failure', async () => {
+    const h = harness([
+      { kind: 'ok', usage: usage(10), plan: 'plus' },
+      { kind: 'ok', usage: null },
+      { kind: 'error', detail: 'timeout' },
+      { kind: 'unsupported', state: 'signed-out', detail: 'signed out' }
+    ])
+    h.poller.nudge()
+    await h.advance(0)
+    await h.advance(60_000)
+    await h.advance(60_000)
+    await h.advance(60_000)
+    expect(h.accounts.map(({ state, plan }) => (plan ? `${state}:${plan}` : state))).toEqual(['ok:plus', 'no-plan', 'error', 'signed-out'])
+  })
+
+  it('on the 额度 page asks a vendor never used here once, without starting its cadence', async () => {
+    const h = harness([{ kind: 'ok', usage: usage(30), plan: 'plus' }, { kind: 'error', detail: 'down' }])
+    h.poller.refresh()
+    await h.advance(0)
+    expect(h.fetches()).toBe(0)
+    h.poller.refresh(true)
+    await h.settle()
+    expect(h.fetches()).toBe(1)
+    // Shown, not kept: kept usage would start the cadence on the next run.
+    expect(h.shown).toHaveLength(1)
+    expect(h.applied).toHaveLength(0)
+    expect(h.pending()).toEqual([])
+    // Again within the minimum gap: nothing; after it, one more ask — a failure does not start a backoff either.
+    h.poller.refresh(true)
+    await h.settle()
+    expect(h.fetches()).toBe(1)
+    await h.advance(15_000)
+    h.poller.refresh(true)
+    await h.settle()
+    expect(h.fetches()).toBe(2)
+    expect(h.pending()).toEqual([])
+  })
+
+  it('a failed one-off ask does not hold back the vendor’s first use', async () => {
+    const h = harness([{ kind: 'error', detail: 'claude exited before answering' }, { kind: 'ok', usage: usage(20) }])
+    h.poller.refresh(true)
+    await h.settle()
+    expect(h.accounts.map((a) => a.state)).toEqual(['error'])
+    expect(h.pending()).toEqual([])
+    h.poller.nudge()
+    expect(h.pending()).toHaveLength(1)
+    await h.advance(h.pending()[0] ?? 0)
+    expect(h.applied.map((u) => u.windows[0]?.percent)).toEqual([20])
+  })
+
+  it('on the 额度 page asks again an account that said it has no plan figures, and resumes once it has', async () => {
+    const h = harness([{ kind: 'unsupported', state: 'signed-out', detail: 'signed out' }, { kind: 'ok', usage: usage(20) }])
+    h.poller.nudge()
+    await h.advance(0)
+    expect(h.pending()).toEqual([])
+    h.poller.refresh()
+    await h.settle()
+    expect(h.fetches()).toBe(1)
+    await h.advance(60_000)
+    h.poller.refresh(true)
+    await h.settle()
+    expect(h.fetches()).toBe(2)
+    expect(h.accounts.map((a) => a.state)).toEqual(['signed-out', 'ok'])
+    expect(h.pending()).toHaveLength(1)
   })
 
   it('stops for good', async () => {

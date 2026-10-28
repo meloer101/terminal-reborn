@@ -434,6 +434,21 @@ test.describe('session metrics: todo · context · usage', () => {
     await page.keyboard.press('Escape')
   })
 
+  test('the sidebar’s 额度 opens 设置 · 额度: the fullest vendor first, with its plan and every window (F11 · 额度页)', async () => {
+    await fromMain('agent:usage-account', { vendor: 'codex', state: 'ok', plan: 'plus', at: Date.now() })
+    await fromMain('agent:usage-account', { vendor: 'claude', state: 'ok', plan: 'max', at: Date.now() })
+    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^额度/ }).click()
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    await expect(dialog.getByRole('tab', { name: '额度' })).toHaveAttribute('aria-selected', 'true')
+    // Codex has a used-up window, so it comes before Claude.
+    await expect(dialog.locator('section[data-testid^="usage-page-"]')).toHaveText([/^CodexPlus5 小时100%\d\d:\d\d 恢复每周30%/, /^ClaudeMax5 小时\d+%.*7 天\d+%/])
+    await expect(dialog.getByTestId('usage-page-window-codex-300')).toHaveAttribute('data-level', 'exhausted')
+    await expect(dialog.getByRole('switch', { name: '用到 75%、90% 和用完时发通知' })).toHaveAttribute('aria-checked', 'true')
+    await shoot('33E-usage-page')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+  })
+
   test('/clear forgets the todo list and the context; usage stays', async () => {
     await sidebarRow('s-cookie').click()
     await expect(header().getByTestId('todo-chip')).toBeVisible()

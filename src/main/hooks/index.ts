@@ -7,7 +7,7 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import type { AgentEvent, HookAgent, HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
-import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
+import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { cliAdapterLaunch } from './cli-adapters'
@@ -112,6 +112,18 @@ let usageStore: UsageStore | null = null
 /** The account asked directly, per vendor (./plan-usage-poller.ts); none when `TR_ACCOUNT_USAGE=off` (e2e). */
 let pollers: Partial<Record<UsageVendor, PlanUsagePoller>> = {}
 let codexAccount: CodexAccountClient | null = null
+/** What each account said when last asked this run (the 额度 page's status per vendor). */
+const accounts = new Map<UsageVendor, UsageAccount>()
+
+/** A one-off ask's figures (./plan-usage-poller.ts · show): to every window, not kept. */
+function showUsage(usage: VendorUsage): void {
+  for (const win of appWindows()) if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentUsage, usage)
+}
+
+function broadcastAccount(account: UsageAccount): void {
+  accounts.set(account.vendor, account)
+  for (const win of appWindows()) if (!win.webContents.isDestroyed()) win.webContents.send(IPC.agentUsageAccount, account)
+}
 
 function createPollers(): void {
   if (process.env.TR_ACCOUNT_USAGE === 'off') return
@@ -121,8 +133,8 @@ function createPollers(): void {
   codexAccount = new CodexAccountClient(shell, apply)
   const codex = codexAccount
   pollers = {
-    claude: new PlanUsagePoller({ vendor: 'claude', fetch: () => readClaudeAccountUsage(shell), apply, interval: claudeInterval, minRefreshGapMs: 60_000, log }),
-    codex: new PlanUsagePoller({ vendor: 'codex', fetch: () => codex.read(), apply, interval: codexInterval, minRefreshGapMs: 15_000, log })
+    claude: new PlanUsagePoller({ vendor: 'claude', fetch: () => readClaudeAccountUsage(shell), apply, show: showUsage, account: broadcastAccount, interval: claudeInterval, minRefreshGapMs: 60_000, log }),
+    codex: new PlanUsagePoller({ vendor: 'codex', fetch: () => codex.read(), apply, show: showUsage, account: broadcastAccount, interval: codexInterval, minRefreshGapMs: 15_000, log })
   }
   // Used before (held from an earlier run): keep it fresh at the slow pace until a session says more.
   for (const usage of usageStore?.list() ?? []) pollers[usage.vendor]?.start()
@@ -161,7 +173,7 @@ function createUsageStore(): UsageStore {
     save: (usage) => writeJson(file, usage, 'plan usage'),
     loadMarks: () => readJson(marks),
     saveMarks: (list) => writeJson(marks, list, 'usage alerts'),
-    // The account's alert is announced once, by one window (the renderer checks 设置 · 自动化 · 额度提醒).
+    // The account's alert is announced once, by one window (the renderer checks 设置 · 额度 · 提醒).
     alert: (alert: UsageAlert) => {
       const win = appWindows().find((w) => !w.webContents.isDestroyed())
       win?.webContents.send(IPC.agentUsageAlert, alert)
@@ -309,10 +321,11 @@ export function registerHookHandlers(): void {
 
   ipcMain.handle(IPC.agentGetUsage, (): VendorUsage[] => usageStore?.list() ?? [])
 
-  // The usage popover opened: ask the account now (each poller keeps its own minimum gap).
-  ipcMain.on(IPC.agentRefreshUsage, () => {
-    for (const poller of Object.values(pollers)) poller.refresh()
+  // The usage popover or the 额度 page opened: ask the accounts now (each poller keeps its own minimum gap).
+  ipcMain.on(IPC.agentRefreshUsage, (_event, all: unknown) => {
+    for (const poller of Object.values(pollers)) poller.refresh(all === true)
   })
+  ipcMain.handle(IPC.agentGetUsageAccounts, (): UsageAccount[] => [...accounts.values()])
 
   ipcMain.handle(IPC.agentContextHistory, async (_event, sessionId: unknown): Promise<ContextHistory | null> => {
     if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 128) return null

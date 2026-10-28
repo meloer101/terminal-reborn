@@ -1,21 +1,29 @@
 // Settings content (Figma 07 · 设置 · 外观), shown inside SettingsDialog over the main window.
-import { useRef, useState, type KeyboardEvent } from 'react'
-import { Bot, GitBranch, Info, Type, Workflow, X, type LucideIcon } from 'lucide-react'
+import { useRef, type KeyboardEvent } from 'react'
+import { Bot, Gauge, GitBranch, Info, Type, Workflow, X, type LucideIcon } from 'lucide-react'
+import { create } from 'zustand'
 import { IconButton } from '../ui/IconButton'
 import { AboutPane } from './AboutPane'
 import { AgentsPane } from './AgentsPane'
 import { AppearancePane } from './AppearancePane'
 import { AutomationPane } from './AutomationPane'
+import { UsagePane } from './UsagePane'
 import { useSettings } from './useSettings'
 import { WorktreePane } from './WorktreePane'
 import styles from './SettingsApp.module.css'
 
 // 通用 / 终端 / Agent / 快捷键 come back with their content; an empty "即将推出" pane is a dead end (B11).
-type PaneId = 'appearance' | 'agents' | 'worktree' | 'automation' | 'about'
+export type SettingsPaneId = 'appearance' | 'agents' | 'usage' | 'worktree' | 'automation' | 'about'
+type PaneId = SettingsPaneId
+
+/** The pane on show; openSettings('usage') (the sidebar's 额度, ⇧⌘U) sets it. */
+export const useSettingsPane = create<{ pane: PaneId }>()(() => ({ pane: 'appearance' }))
+const setPane = (pane: PaneId) => useSettingsPane.setState({ pane })
 
 const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
   { id: 'appearance', label: '外观', Icon: Type },
   { id: 'agents', label: '智能体', Icon: Bot },
+  { id: 'usage', label: '额度', Icon: Gauge },
   { id: 'worktree', label: 'Worktree', Icon: GitBranch },
   { id: 'automation', label: '自动化', Icon: Workflow },
   { id: 'about', label: '关于', Icon: Info }
@@ -23,7 +31,7 @@ const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
 
 export function SettingsApp({ onClose }: { onClose(): void }) {
   const { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch } = useSettings()
-  const [pane, setPane] = useState<PaneId>('appearance')
+  const pane = useSettingsPane((s) => s.pane)
   const items = useRef(new Map<PaneId, HTMLButtonElement>())
 
   const onNavKeyDown = (event: KeyboardEvent): void => {
@@ -81,8 +89,6 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
           <AutomationPane
             review={settings.review}
             update={updateReview}
-            alerts={settings.alerts}
-            updateAlerts={updateAlerts}
             pr={settings.pr}
             updatePr={updatePr}
             dispatch={settings.dispatch}
@@ -90,6 +96,7 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
           />
         )}
         {pane === 'agents' && <AgentsPane />}
+        {pane === 'usage' && <UsagePane alerts={loaded ? settings.alerts : null} updateAlerts={updateAlerts} />}
         {pane === 'about' && <AboutPane />}
       </main>
     </div>

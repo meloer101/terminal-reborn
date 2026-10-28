@@ -11,7 +11,7 @@ import type { PullRequestApi } from './pull-requests'
 import type { ShipApi } from './ship'
 import type { ConflictRadarApi } from './conflict-radar'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
-import type { ContextHistory, SessionSpend, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
+import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
@@ -372,8 +372,14 @@ export interface AgentApi {
   onUsage(listener: (usage: VendorUsage) => void): Unsubscribe
   /** A plan window crossed 75 / 90 / 100 % for the first time this period (sent to one window; Figma 18D). */
   onUsageAlert(listener: (alert: UsageAlert) => void): Unsubscribe
-  /** Someone is looking at the usage (the popover opened): main asks the accounts now, within its own limits. */
-  refreshUsage(): void
+  /**
+   * Someone is looking at the usage (the popover opened): main asks the accounts now, within its own limits. `all`
+   * (the 额度 page) also asks vendors never used here and ones that last said they have no plan figures.
+   */
+  refreshUsage(all?: boolean): void
+  /** What the last ask of each vendor's account said (PRD F11 · 额度页); only vendors asked this run. */
+  getUsageAccounts(): Promise<UsageAccount[]>
+  onUsageAccount(listener: (account: UsageAccount) => void): Unsubscribe
   /** The session's context over its turns, from the agent's transcript (null: nothing read yet). Figma 18A. */
   getContextHistory(sessionId: string): Promise<ContextHistory | null>
   /** Tokens each of the vendor's sessions spent since `since` (epoch ms), closed ones included. Figma 18B. */
@@ -456,8 +462,12 @@ export const IPC = {
   agentUsage: 'agent:usage',
   /** main → one window, payload UsageAlert */
   agentUsageAlert: 'agent:usage-alert',
-  /** renderer → main (send), no payload: poll the accounts now */
+  /** renderer → main (send), payload `all` (boolean, optional): poll the accounts now */
   agentRefreshUsage: 'agent:refresh-usage',
+  /** invoke → UsageAccount[] */
+  agentGetUsageAccounts: 'agent:get-usage-accounts',
+  /** main → every window, payload UsageAccount */
+  agentUsageAccount: 'agent:usage-account',
   /** invoke(sessionId) → ContextHistory | null */
   agentContextHistory: 'agent:context-history',
   /** invoke(vendor, since) → SessionSpend[] */

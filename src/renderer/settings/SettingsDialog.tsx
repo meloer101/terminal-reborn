@@ -1,8 +1,9 @@
 // Settings as a dialog over the main window (Figma 07 · 设置 · 外观, presented as a sheet).
-// Open with ⌘, (app menu → main → onShowSettings), the sidebar's 设置, or openSettings().
+// Open with ⌘, (app menu → main → onShowSettings), the sidebar's 设置, or openSettings(); the sidebar's 额度 and ⇧⌘U
+// open it on 额度.
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { create } from 'zustand'
-import { SettingsApp } from './SettingsApp'
+import { SettingsApp, useSettingsPane, type SettingsPaneId } from './SettingsApp'
 import styles from './SettingsDialog.module.css'
 
 const useDialog = create<{ open: boolean }>()(() => ({ open: false }))
@@ -12,7 +13,11 @@ export const useSettingsDialog = useDialog
 
 let restoreFocus: HTMLElement | null = null
 
-export function openSettings(): void {
+/** `pane`: the one to show (also when the dialog is already up); otherwise the one shown last. */
+export function openSettings(pane?: SettingsPaneId): void {
+  if (pane) useSettingsPane.setState({ pane })
+  // Already on 额度 (the pane does not mount again): ⇧⌘U still asks the accounts now.
+  if (pane === 'usage') window.tr.agent.refreshUsage(true)
   if (useDialog.getState().open) return
   const active = document.activeElement
   restoreFocus = active instanceof HTMLElement && active !== document.body ? active : null
@@ -33,7 +38,7 @@ export function SettingsDialog() {
   const sheetRef = useRef<HTMLDivElement>(null)
 
   // ⌘, from the app menu arrives as an IPC message.
-  useEffect(() => window.tr.ui.onShowSettings(openSettings), [])
+  useEffect(() => window.tr.ui.onShowSettings(() => openSettings()), [])
 
   useEffect(() => {
     if (open) sheetRef.current?.focus()

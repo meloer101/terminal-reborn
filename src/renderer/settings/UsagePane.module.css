@@ -1,0 +1,92 @@
+/* 设置 · 额度 (Figma 33E): a 640 column like the other panes' forms; every row is 32 high on one set of column lines —
+   name 120 · bar 280 · value 48 · reset 144, 16 apart. The agent's mark hangs left of the text column. Groups are
+   set apart by 16 of space, no lines (PRD §5 v1.68). */
+.page {
+  display: flex;
+  padding: var(--titlebar-height) 40px 40px 48px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 640px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0 0 28px;
+  font: var(--text-title-l);
+  letter-spacing: var(--tracking-title-l);
+  color: var(--text-primary);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.agentRow,
+.windowRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 120px minmax(80px, 280px) 48px minmax(0, 144px);
+  column-gap: var(--space-16);
+  align-items: center;
+  height: 32px;
+}
+
+.icon {
+  position: absolute;
+  top: 9px;
+  left: -23px;
+  display: flex;
+}
+
+.name {
+  overflow: hidden;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status {
+  grid-column: 2 / -1;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.windowLabel {
+  overflow: hidden;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.value {
+  font: var(--text-mono-s-medium);
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.reset {
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Used past the window's time, high, or used up: the figure in text/primary (the bar does the same). */
+.windowRow[data-level='ahead'] .value,
+.windowRow[data-level='exhausted'] .value,
+.windowRow[data-level='exhausted'] .reset {
+  color: var(--text-primary);
+}

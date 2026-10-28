@@ -13,6 +13,7 @@ import {
   isHigh,
   liveWindows,
   orderVendors,
+  paceBar,
   topWindow,
   usageChipText,
   VENDOR_LABEL,
@@ -137,12 +138,26 @@ export function TodoLine({ sessionId }: { sessionId: SessionId }) {
 // Meter
 // ---------------------------------------------------------------------------------------------
 
-/** Figma 18 MiniMeter 274:10397: used, and (for plan windows) a tick where the window's time stands. */
-function MiniMeter({ percent, elapsed }: { percent: number; elapsed?: number | undefined }) {
+/** Figma 18 MiniMeter 274:10397: how much is used (the context chip; plan windows use PaceMeter). */
+function MiniMeter({ percent }: { percent: number }) {
   return (
     <span className={styles.meter} aria-hidden>
       <span className={styles.meterUsed} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
-      {elapsed !== undefined && <span className={styles.meterTick} style={{ left: `${Math.round(elapsed * 100)}%` }} />}
+    </span>
+  )
+}
+
+/**
+ * A plan window's bar (Figma 33F · A): under the used part, how much of the window's time has passed; the used part
+ * past that is heavier. Used up, the whole bar is heavy. `mini` is the chip's 28 × 4.
+ */
+export function PaceMeter({ w, now, mini = false }: { w: UsageWindow; now: number; mini?: boolean }) {
+  const bar = paceBar(w, now)
+  return (
+    <span className={mini ? `${styles.paceMeter} ${styles.paceMini}` : styles.paceMeter} data-ahead={bar.ahead} data-exhausted={bar.exhausted} aria-hidden>
+      {bar.pace !== undefined && <span className={styles.pacePace} style={{ width: `${bar.pace}%` }} />}
+      <span className={styles.paceUsed} style={{ width: `${bar.used}%` }} />
+      {bar.over > 0 && <span className={styles.paceOver} style={{ left: `${bar.used}%`, width: `${bar.over}%` }} />}
     </span>
   )
 }
@@ -243,7 +258,7 @@ function ContextPanel({ context }: { context: ContextUsage }) {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * UsageChip v2 (Figma 18 274:10443): one vendor's most used window with a tick for its elapsed time, or
+ * UsageChip v2 (Figma 18 274:10443): one vendor's most used window on a PaceMeter (Figma 33F · A), or
  * `5h 用完 · 14:20 恢复`. Clicking lists every vendor. `current` is the view's vendor (null on the overview);
  * with `opensOnRequest` it also opens when a usage notification was clicked (store · usageOpenPending).
  */
@@ -287,7 +302,7 @@ export function UsageChip({ usage, current, all, opensOnRequest = false }: { usa
         <span className={styles.usageVendor} data-part="usage-vendor">
           {label}
         </span>
-        {!pace.exhausted && <MiniMeter percent={top.percent} elapsed={pace.elapsed} />}
+        {!pace.exhausted && <PaceMeter w={top} now={now} mini />}
         <span className={styles.usageValue}>{usageChipText(top, now)}</span>
       </button>
       {open && (
@@ -318,10 +333,10 @@ function UsageList({ all, current, now }: { all: VendorUsage[]; current: UsageVe
   )
 }
 
-/** Figma 27B: name · % · reset and a bar with a tick where the window's time stands; ahead of that tick reads heavier. */
+/** Figma 27B: name · % · reset and the PaceMeter; used past the window's time (or high) reads heavier. */
 function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; now: number }) {
   const pace = windowPace(w, now)
-  const level = pace.exhausted ? 'exhausted' : pace.runsOutAt !== undefined || isHigh(w.percent) ? 'ahead' : 'normal'
+  const level = pace.exhausted ? 'exhausted' : paceBar(w, now).ahead || isHigh(w.percent) ? 'ahead' : 'normal'
   return (
     <div className={styles.windowBlock} data-level={level} data-testid={`usage-window-${vendor}-${windowKey(w).replace(':', '-')}`}>
       <div className={styles.windowHead}>
@@ -331,10 +346,7 @@ function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; 
           {w.resetsAt !== undefined ? (pace.exhausted ? `${formatClock(w.resetsAt, now)} 恢复` : formatReset(w.resetsAt, now)) : ''}
         </span>
       </div>
-      <span className={styles.bigBar} aria-hidden>
-        <span className={styles.bigBarUsed} style={{ width: `${Math.min(100, w.percent)}%` }} />
-        {!pace.exhausted && pace.elapsed !== undefined && <span className={styles.bigBarTick} style={{ left: `${Math.round(pace.elapsed * 100)}%` }} />}
-      </span>
+      <PaceMeter w={w} now={now} />
     </div>
   )
 }

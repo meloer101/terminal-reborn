@@ -88,11 +88,11 @@ button.chip:hover {
 }
 
 .chip[data-level='high'] .meterUsed,
-.usageChip[data-level='high'] .meterUsed {
+.usageChip[data-level='high'] .paceUsed {
   background: var(--text-primary);
 }
 
-/* MiniMeter 274:10397: 28 × 4; the tick (plan windows) is how much of the window's time has passed. */
+/* MiniMeter 274:10397: 28 × 4, the context chip's. */
 .meter {
   flex: none;
   position: relative;
@@ -109,11 +109,58 @@ button.chip:hover {
   background: var(--text-secondary);
 }
 
-.meterTick {
+/*
+ * PaceMeter (Figma 33F · A): a 6-high track; under the used part, how much of the window's time has passed (pace);
+ * the used part past it (over) and a used-up window in text/primary. The chip's is 28 × 4.
+ */
+.paceMeter {
+  position: relative;
+  display: block;
+  flex: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-subtle);
+}
+
+.paceMini {
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.pacePace,
+.paceUsed,
+.paceOver {
   position: absolute;
-  top: -2px;
-  width: 1px;
-  height: 8px;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: inherit;
+}
+
+.pacePace {
+  background: var(--border-strong);
+}
+
+.paceUsed {
+  background: var(--text-secondary);
+}
+
+.paceOver {
+  background: var(--text-primary);
+}
+
+.paceMeter[data-ahead='true'] .paceUsed {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.paceMeter[data-ahead='true'] .paceOver {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.paceMeter[data-exhausted='true'] .paceUsed {
   background: var(--text-primary);
 }
 
@@ -341,7 +388,7 @@ button.chip:hover {
   color: var(--text-primary);
 }
 
-/* A 6-high bar inside a 12-high box, so the 80 % mark / elapsed tick can stand out above and below. */
+/* ContextPopover: a 6-high bar inside a 12-high box, so the compaction mark can stand out above and below. */
 .bigBar {
   position: relative;
   display: block;
@@ -365,9 +412,7 @@ button.chip:hover {
   background: var(--text-secondary);
 }
 
-.bigBar[data-level='high'] .bigBarUsed,
-.windowBlock[data-level='ahead'] .bigBarUsed,
-.windowBlock[data-level='exhausted'] .bigBarUsed {
+.bigBar[data-level='high'] .bigBarUsed {
   background: var(--text-primary);
 }
 
@@ -380,13 +425,6 @@ button.chip:hover {
   background: var(--float-bg);
 }
 
-.bigBarTick {
-  position: absolute;
-  top: 0;
-  width: 1px;
-  height: 12px;
-  background: var(--text-tertiary);
-}
 
 /* ---- Figma 27B · UsagePopover ---- */
 .usagePanel {
