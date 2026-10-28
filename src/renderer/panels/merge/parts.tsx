@@ -1,5 +1,5 @@
 // Pieces both merge sheets use (PRD F4 · F16 v1.63): a checklist line, the agent's own checks this turn, a checkbox.
-import { Check, CircleAlert, CircleX } from 'lucide-react'
+import { Check, CircleAlert, CircleX, Minus } from 'lucide-react'
 import { runNote, type TurnCheckView } from '@shared/turn-checks'
 import { CheckMark } from '../../turn-checks/TurnChecksTag'
 import { StatusGlyph } from '../../ui/StatusGlyph'
@@ -16,6 +16,8 @@ export function Line({ line }: { line: CheckLine }) {
       <CircleAlert {...ICON} />
     ) : line.tone === 'working' ? (
       <StatusGlyph status="running" />
+    ) : line.tone === 'muted' ? (
+      <Minus {...ICON} />
     ) : (
       <CircleX {...ICON} />
     )

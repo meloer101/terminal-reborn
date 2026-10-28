@@ -242,17 +242,17 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
           <div className={styles.actions}>
             <button
               type="button"
-              className={styles.ghost}
+              className={styles.action}
               disabled={info.prunable !== null}
               onClick={() => window.tr.worktree.reveal(row.openPath, '')}
             >
               打开文件夹
             </button>
-            {/* No base on the base itself; a feature branch out in the main checkout merges like any other. */}
-            {info.base && (
+            {/* No base on the base itself; a feature branch out in the main checkout merges like any other; once merged, nothing to merge. */}
+            {info.base && !info.merged && (
               <button
                 type="button"
-                className={styles.ghost}
+                className={styles.action}
                 disabled={info.prunable !== null}
                 onClick={() =>
                   openMergeSheet({ projectId, root, worktreePath: info.path, worktreeIds: row.worktreeIds, isMain: info.isMain })
@@ -264,7 +264,7 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
             {radar && rebaseTarget && (
               <button
                 type="button"
-                className={styles.ghost}
+                className={styles.action}
                 title={`把 rebase 说明放进 ${agentLabel(rebaseTarget.kind)} 的输入行，看过后按回车发送`}
                 onClick={() =>
                   void rebaseWithAgent(radar.self, rebaseTarget).then((error) => {

@@ -157,6 +157,7 @@
   flex: 1;
 }
 
+
 /* Button · Ghost · S (9:30): 24 high, 8 side padding, caption in secondary. */
 .ghost {
   flex: none;
@@ -187,6 +188,22 @@
 .ghost:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
+}
+
+/* The selected row's actions (Figma 30D): a gray block one step above the row's fill, no border; its left edge is the
+   label column, so the text sits inside the block instead of looking indented. */
+.action {
+  composes: ghost;
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.action:hover:not(:disabled, [aria-disabled='true']) {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-selected);
+}
+
+.action + .action {
+  margin-left: var(--space-8);
 }
 
 .shortcut {

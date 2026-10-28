@@ -32,6 +32,7 @@ import {
   failureText,
   METHOD_NOTE,
   methodOptions,
+  nothingToMerge,
   removeBlocker,
   resultLines,
   testBlocksMerge,
@@ -135,6 +136,8 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
 
   const ready = phase.kind === 'ready' ? phase.check : null
   const gitMergeable = ready !== null && ready.blocker === null && ready.conflicts.length === 0
+  // Nothing to merge (Figma 30B / 30C): one line saying where the branch stands, then 关闭 — no review, no checks.
+  const settled = ready !== null && nothingToMerge(ready)
   const repo = useRepoScripts(target.worktreePath)
   const scriptsKnown = repo !== null
   const testScript = repo?.scripts.test
@@ -196,7 +199,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
   const review = useBackgroundReview((s) => s.byRoot[target.worktreePath])
   const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
   const autoTrigger = !settingsLoaded || !builtin ? null : settings.review.beforeMerge ? 'merge' : settings.review.beforePush && willPush ? 'push' : null
-  const reviewBase = ready?.base
+  const reviewBase = settled ? undefined : ready?.base
   useEffect(() => loadSavedReview(target.worktreePath), [target.worktreePath])
   useEffect(() => {
     if (!autoTrigger || !reviewAgent || !reviewBase) return
@@ -289,7 +292,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
   }
 
   const primary = (): void => {
-    if (phase.kind === 'done') closeMergeSheet(true)
+    if (phase.kind === 'done' || settled) closeMergeSheet(true)
     else if (mergeable) void merge()
     else if (ready && ready.conflicts.length > 0 && !ready.blocker && agent) void handToAgent()
   }
@@ -355,7 +358,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
           {phase.kind === 'done' && phase.lines.map((line) => <Line key={line.text} line={line} />)}
           {phase.kind === 'done' && attemptGroup && <AfterMerge groupId={attemptGroup.groupId} />}
           {shown && phase.kind !== 'done' && checkLines(shown).map((line) => <Line key={line.text} line={line} />)}
-          {shown && phase.kind !== 'done' && reviewCheck && (
+          {shown && phase.kind !== 'done' && !settled && reviewCheck && (
             <Line
               line={{
                 tone: reviewCheck.tone === 'muted' ? 'warn' : reviewCheck.tone,
@@ -364,7 +367,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
               }}
             />
           )}
-          {shown && phase.kind !== 'done' && agent && checksView && <TurnChecks view={checksView} kind={agent.kind} />}
+          {shown && phase.kind !== 'done' && !settled && agent && checksView && <TurnChecks view={checksView} kind={agent.kind} />}
           {shown && phase.kind !== 'done' && testState && (
             <TestResult line={testLine(testState)} onRerun={() => setTestAttempt((n) => n + 1)} />
           )}
@@ -428,7 +431,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
               {agent ? `说明会放进 ${agentLabel(agent.kind)} 的输入行，看过后按回车发送` : '在终端里解决冲突后重新打开'}
             </span>
           )}
-          {phase.kind === 'ready' && builtin && reviewAgent && conflicts.length === 0 && (
+          {phase.kind === 'ready' && !settled && builtin && reviewAgent && conflicts.length === 0 && (
             <button
               type="button"
               className={styles.cancel}
@@ -443,12 +446,17 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
             </button>
           )}
           <span className={styles.spacer} />
-          {phase.kind !== 'done' && (
+          {phase.kind !== 'done' && !settled && (
             <button type="button" className={styles.cancel} disabled={busy} onClick={() => closeMergeSheet(true)}>
               取消
             </button>
           )}
-          {phase.kind === 'done' ? (
+          {settled ? (
+            <button type="button" className={styles.close} onClick={() => closeMergeSheet(true)}>
+              关闭
+              <span className={styles.shortcut}>esc</span>
+            </button>
+          ) : phase.kind === 'done' ? (
             <button type="button" className={styles.primary} onClick={() => closeMergeSheet(true)}>
               完成
               <span className={styles.shortcut}>⌘↵</span>

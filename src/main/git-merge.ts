@@ -26,7 +26,7 @@ import {
   type MergePrecheck,
   type MergeResult
 } from '@shared/git-merge'
-import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
+import { hadOwnCommits, mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
 import { gitAvailable, sshCommandFor } from './git-graph'
 import { isProjectRoot } from './workspace-store'
@@ -236,7 +236,10 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
     check.upstreamAhead = Number((await orEmpty(git(realRoot, ['rev-list', '--count', `${baseHead}..refs/remotes/${upstream}`]))).trim()) || 0
   }
 
-  if (check.ahead === 0) return done({ kind: 'nothing' })
+  if (check.ahead === 0) {
+    const reflog = await orEmpty(git(realRoot, ['reflog', 'show', '--format=%gs', `refs/heads/${check.branch}`, '--']))
+    return done({ kind: 'nothing', merged: hadOwnCommits(reflog) })
+  }
 
   let merged: { tree: string; conflicts: MergeConflict[] }
   try {

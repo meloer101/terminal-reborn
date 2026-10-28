@@ -3,7 +3,8 @@ import type { GitOperation, MergeBlocker, MergeConflict, MergeMethod, MergePrech
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 
-export type CheckTone = 'ok' | 'warn' | 'error' | 'working'
+/** `muted`: a plain fact, neither good nor bad (还没有自己的提交). */
+export type CheckTone = 'ok' | 'warn' | 'error' | 'working' | 'muted'
 
 export interface CheckLine {
   tone: CheckTone
@@ -26,7 +27,7 @@ export function blockerText(blocker: MergeBlocker, check: Pick<MergePrecheck, 'b
     case 'busy':
       return `${blocker.where === 'worktree' ? '这个 worktree' : `${check.base} 所在的目录`}正在${OPERATION[blocker.operation]}，先完成或中止它`
     case 'nothing':
-      return `${check.branch} 没有 ${check.base} 之外的提交，没有要合并的内容`
+      return blocker.merged ? `${check.branch} 已经全部合并到 ${check.base}` : `${check.branch} 还没有自己的提交`
     case 'old-git':
       return 'git 版本太旧，需要 2.38 或更新'
     case 'base-dirty':
@@ -40,27 +41,43 @@ export function blockerText(blocker: MergeBlocker, check: Pick<MergePrecheck, 'b
   }
 }
 
+/** Nothing to merge (Figma 30B / 30C): the sheet only says where the branch stands and offers 关闭. */
+export function nothingToMerge(check: MergePrecheck): boolean {
+  return check.blocker?.kind === 'nothing'
+}
+
 /** The checklist under the title, most important first. */
 export function checkLines(check: MergePrecheck): CheckLine[] {
   const lines: CheckLine[] = []
-  if (check.blocker && check.blocker.kind !== 'nothing') return [{ tone: 'error', text: blockerText(check.blocker, check) }]
-  if (check.blocker?.kind === 'nothing') lines.push({ tone: 'error', text: blockerText(check.blocker, check) })
-  else lines.push({ tone: 'ok', text: `领先 ${check.base} ${check.ahead} 个提交`, meta: `↑${check.ahead}` })
+  if (check.blocker?.kind === 'nothing') {
+    // An outcome, not an error. Uncommitted work is still said: it is why there is nothing yet.
+    const text = blockerText(check.blocker, check)
+    lines.push(check.blocker.merged ? { tone: 'ok', text, meta: check.head.slice(0, 7) } : { tone: 'muted', text, meta: '领先 0' })
+    lines.push(...uncommittedLines(check))
+    return lines
+  }
+  if (check.blocker) return [{ tone: 'error', text: blockerText(check.blocker, check) }]
+  lines.push({ tone: 'ok', text: `领先 ${check.base} ${check.ahead} 个提交`, meta: `↑${check.ahead}` })
   if (check.conflicts.length > 0) {
     lines.push({
       tone: 'warn',
       text: check.behind > 0 ? `${check.base} 有 ${check.behind} 个新提交，与本分支冲突` : `与 ${check.base} 冲突`,
       meta: check.behind > 0 ? `↓${check.behind}` : undefined
     })
-  } else if (check.behind > 0 && !check.blocker) {
+  } else if (check.behind > 0) {
     lines.push({ tone: 'ok', text: `${check.base} 有 ${check.behind} 个新提交，可以自动合并`, meta: `↓${check.behind}` })
   }
-  if (check.uncommitted === null) lines.push({ tone: 'warn', text: '读不出 worktree 里有没有未提交的改动' })
-  else if (check.uncommitted > 0) lines.push({ tone: 'warn', text: `worktree 里有 ${check.uncommitted} 个未提交的改动，不会合并进去` })
+  lines.push(...uncommittedLines(check))
   if (check.upstream && check.upstreamAhead > 0) {
     lines.push({ tone: 'warn', text: `${check.upstream} 有 ${check.upstreamAhead} 个提交还没拉到本地 ${check.base}` })
   }
   return lines
+}
+
+function uncommittedLines(check: MergePrecheck): CheckLine[] {
+  if (check.uncommitted === null) return [{ tone: 'warn', text: '读不出 worktree 里有没有未提交的改动' }]
+  if (check.uncommitted > 0) return [{ tone: 'warn', text: `worktree 里有 ${check.uncommitted} 个未提交的改动，不会合并进去` }]
+  return []
 }
 
 /** One line of the merge checklist for `[scripts] test` (Figma 16B). Absent when the file has no test. */
