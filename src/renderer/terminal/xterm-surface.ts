@@ -366,9 +366,10 @@ export class XtermSurface implements TerminalSurface {
 
   private syncRenderer(): void {
     if (this.disposed || !this.term.element) return
-    // WebGL paints italic/dim/underlined cells with an opaque background when the surface is
-    // transparent (research §2.2, xterm #6116), so transparent terminals use the DOM renderer.
-    const wantWebgl = this.visible && !this.webglUnavailable && !this.webglLost && !this.isTransparent()
+    // Translucent terminals use WebGL too: the DOM renderer measures and pads every glyph on its own and drifts off the
+    // cell grid for CJK (PRD §6.3). addon-webgl paints an opaque rectangle behind italic/dim cells on a transparent
+    // surface (xterm #6116); patches/@xterm+addon-webgl+*.patch fixes that. DOM is the fallback when WebGL is gone.
+    const wantWebgl = this.visible && !this.webglUnavailable && !this.webglLost
     if (wantWebgl && !this.webgl) this.loadWebgl()
     else if (!wantWebgl && this.webgl) this.unloadWebgl()
   }
@@ -828,6 +829,12 @@ export class XtermSurface implements TerminalSurface {
     if (mode === 'rebind') this.term.options.theme = { ...this.term.options.theme }
     else this.clearAtlas()
     this.term.refresh(0, this.term.rows - 1)
+  }
+
+  /** Test hook (e2e/cjk-dom-width.spec.ts): `dom` runs the terminal on the DOM renderer, as when WebGL is unavailable. */
+  debugRenderer(mode: 'auto' | 'dom'): void {
+    this.webglUnavailable = mode === 'dom'
+    this.syncRenderer()
   }
 
   dispose(): void {

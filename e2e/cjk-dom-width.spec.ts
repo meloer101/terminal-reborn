@@ -1,4 +1,5 @@
-// Regression: in translucent terminals (DOM renderer) a wrapped Chinese line must stay inside the cell grid.
+// Regression: on the DOM renderer (translucent terminals used it before they moved to WebGL; it is still the fallback
+// when WebGL is unavailable) a wrapped Chinese line must stay inside the cell grid.
 // xterm sizes each glyph by measuring it repeated 32 times and pads it to its cells with letter-spacing. Chromium's
 // default `text-spacing-trim` halves fullwidth punctuation next to more of it, so ，；measured 6.7px instead of 13px
 // and each one then rendered ~0.8 cell too wide: highlighted blocks (Claude Code's prompt) got a ragged right edge,
@@ -16,6 +17,7 @@ interface Globals {
   __trTerminals: {
     readScreen(id: string, scrollbackLines?: number): string
     info(id: string): { renderer: 'webgl' | 'dom'; cols: number } | null
+    renderer(id: string, mode: 'auto' | 'dom'): void
   }
   tr: { pty: { write(id: string, data: string): void }; settings: { update(patch: unknown): Promise<unknown> } }
 }
@@ -29,7 +31,7 @@ interface RowMeasure {
   cjkCellPairs: number[]
 }
 
-test('wrapped Chinese text stays on the cell grid in a translucent terminal', async () => {
+test('wrapped Chinese text stays on the cell grid on the DOM renderer', async () => {
   test.setTimeout(60_000)
   const app = await launchApp()
   const page = await app.firstWindow()
@@ -41,6 +43,9 @@ test('wrapped Chinese text stays on the cell grid in a translucent terminal', as
   await expect.poll(screen, { timeout: 20_000 }).not.toBe('')
 
   await page.evaluate(() => (globalThis as unknown as Globals).tr.settings.update({ appearance: { theme: 'dark', terminalOpacity: 0.8 } }))
+  // Translucent terminals draw with WebGL now; force the fallback this spec is about.
+  await expect.poll(() => page.evaluate((id) => (globalThis as unknown as Globals).__trTerminals.info(id)?.renderer, SESSION)).toBe('webgl')
+  await page.evaluate((id) => (globalThis as unknown as Globals).__trTerminals.renderer(id, 'dom'), SESSION)
   await expect.poll(() => page.evaluate((id) => (globalThis as unknown as Globals).__trTerminals.info(id)?.renderer, SESSION)).toBe('dom')
 
   // A full-width highlighted block, like Claude Code's user prompt: background on every cell, \e[K to the edge.

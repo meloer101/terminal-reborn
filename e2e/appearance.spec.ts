@@ -135,7 +135,7 @@ test('terminal opacity makes the surface transparent only when below 1', async (
   await update({ appearance: { theme: 'dark', terminalOpacity: 0.8 } })
   await expect.poll(async () => (await info(FIRST))?.allowTransparency).toBe(true)
   expect((await info(FIRST))?.background.toLowerCase()).toBe('#0a0a0acc')
-  expect((await info(FIRST))?.renderer).toBe('dom')
+  expect((await info(FIRST))?.renderer).toBe('webgl')
   await shoot('appearance-opacity-dark')
   await update({ appearance: { terminalOpacity: 1 } })
   await expect.poll(async () => (await info(FIRST))?.allowTransparency).toBe(false)
