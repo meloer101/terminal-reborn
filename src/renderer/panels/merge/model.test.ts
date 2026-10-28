@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
+import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, nothingToMerge, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
 import { turnCheckView } from '@shared/turn-checks'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
@@ -65,7 +65,18 @@ describe('checkLines', () => {
     expect(checkLines(check({ blocker: { kind: 'busy', where: 'base', operation: 'rebase' } }))).toEqual([
       { tone: 'error', text: 'main 所在的目录正在变基，先完成或中止它' }
     ])
-    expect(checkLines(check({ ahead: 0, blocker: { kind: 'nothing' } }))[0]).toMatchObject({ tone: 'error', text: 'jacob/nav 没有 main 之外的提交，没有要合并的内容' })
+  })
+
+  it('nothing to merge is an outcome, not an error (Figma 30B / 30C)', () => {
+    const merged = check({ ahead: 0, head: '7d23312aaaa', blocker: { kind: 'nothing', merged: true }, upstream: 'origin/main', upstreamAhead: 2 })
+    expect(nothingToMerge(merged)).toBe(true)
+    expect(checkLines(merged)).toEqual([{ tone: 'ok', text: 'jacob/nav 已经全部合并到 main', meta: '7d23312' }])
+    expect(checkLines(check({ ahead: 0, blocker: { kind: 'nothing' } }))).toEqual([{ tone: 'muted', text: 'jacob/nav 还没有自己的提交', meta: '领先 0' }])
+    expect(checkLines(check({ ahead: 0, uncommitted: 3, blocker: { kind: 'nothing', merged: false } })).map((l) => l.text)).toEqual([
+      'jacob/nav 还没有自己的提交',
+      'worktree 里有 3 个未提交的改动，不会合并进去'
+    ])
+    expect(nothingToMerge(check())).toBe(false)
   })
 })
 

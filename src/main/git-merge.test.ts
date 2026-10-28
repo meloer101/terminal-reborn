@@ -51,7 +51,15 @@ describe('mergePrecheck', () => {
   it('says there is nothing to merge before the branch has commits', async () => {
     const { root, wt } = setup()
     const check = await mergePrecheck(root, wt)
-    expect(check).toMatchObject({ branch: 'feat', base: 'main', ahead: 0, blocker: { kind: 'nothing' } })
+    expect(check).toMatchObject({ branch: 'feat', base: 'main', ahead: 0, blocker: { kind: 'nothing', merged: false } })
+  })
+
+  it('tells a branch already merged into the base from one that never committed', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    git(root, 'merge', '-q', '--ff-only', 'feat')
+    const check = await mergePrecheck(root, wt)
+    expect(check).toMatchObject({ ahead: 0, behind: 0, blocker: { kind: 'nothing', merged: true } })
   })
 
   it('reports ahead, behind, uncommitted files and a clean merge', async () => {

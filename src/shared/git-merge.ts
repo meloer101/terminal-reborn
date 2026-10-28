@@ -25,8 +25,11 @@ export type MergeBlocker =
   | { kind: 'base-missing'; base: string }
   /** a merge / rebase / cherry-pick / revert is in progress in the worktree or in the base's checkout */
   | { kind: 'busy'; where: 'worktree' | 'base'; operation: GitOperation }
-  /** the branch has no commits the base lacks */
-  | { kind: 'nothing' }
+  /**
+   * the branch has no commits the base lacks; `merged` when it made commits of its own (all in the base now, as
+   * `isMergedInto` in git-worktrees), not when it never committed
+   */
+  | { kind: 'nothing'; merged?: boolean }
   /** git is older than 2.38 (no `merge-tree --write-tree`) */
   | { kind: 'old-git' }
   /** the base's checkout has uncommitted changes in files the merge changes */

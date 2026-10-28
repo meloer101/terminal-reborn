@@ -173,6 +173,32 @@ test.describe('F17 right panel · Worktree', () => {
     await expect(page.locator('header h1')).toHaveText('Cookie 会话迁移')
   })
 
+  test('a merged worktree offers no 合并到 main…, and ⇧⌘M only says it is merged (Figma 30B / 30D)', async () => {
+    await item(repo.busy).locator('button[aria-expanded]').click()
+    const busy = item(repo.busy)
+    await expect(page.locator('header h1')).toHaveText('还在看的')
+    await expect(busy.locator('button[aria-expanded]')).toHaveAttribute('aria-expanded', 'true')
+    // The row's own button reads “… · 已合并到 main”; the action starts with 合并到.
+    await expect(busy.getByRole('button', { name: /^合并到/ })).toHaveCount(0)
+    // The action is a gray block whose left edge is the label column (Figma 30D).
+    const open = busy.getByRole('button', { name: '打开文件夹' })
+    expect(await open.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+    const labelX = await busy.getByText('基线', { exact: true }).evaluate((el) => el.getBoundingClientRect().left)
+    const openX = await open.evaluate((el) => el.getBoundingClientRect().left)
+    expect(Math.abs(openX - labelX)).toBeLessThan(0.5)
+    await shoot('30d-worktree-merged')
+
+    await page.keyboard.press('Meta+Shift+KeyM')
+    const sheet = page.getByTestId('merge-sheet')
+    await expect(sheet).toBeVisible()
+    await expect(sheet).toContainText('jacob/busy 已经全部合并到 main')
+    await expect(sheet.getByRole('button', { name: /关闭/ })).toBeVisible()
+    for (const name of ['合并', '先审阅', '取消']) await expect(sheet.getByRole('button', { name, exact: true })).toHaveCount(0)
+    await shoot('30b-merge-nothing')
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+  })
+
   test('deleting a worktree with uncommitted changes is refused before any confirmation', async () => {
     await item(repo.feature).locator('button[aria-expanded]').click()
     await item(repo.feature).getByRole('button', { name: '更多' }).click()

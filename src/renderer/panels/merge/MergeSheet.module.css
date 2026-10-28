@@ -107,6 +107,37 @@
   color: var(--status-working);
 }
 
+.line[data-tone='muted'] .lineIcon {
+  color: var(--text-tertiary);
+}
+
+/* 关闭 when there is nothing to merge (Figma 30B / 30C): a gray block, no border. */
+/* Not composed from the sheet's .cancel: its transparent background would race this one across the two files. */
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  color: var(--text-primary);
+  font: var(--text-body-strong);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.close:hover {
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-selected);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .output {
   margin: 0 0 var(--space-4) var(--space-24);
   max-height: 120px;
