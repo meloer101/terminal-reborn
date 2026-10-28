@@ -1,0 +1,38 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #aeons-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-aeo01" id="root" data-composition-id="aeons" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-aeo02" id="aeons-stage" class="clip" data-start="0" data-duration="8">
+      <canvas data-hf-id="hf-aeo03" id="aeons-gl" aria-label="An engraved drowned city whose ink tendrils crawl out of the plate across both pages; the rule They run after ⌘Q. and Lovecraft's couplet That is not dead which can eternal lie, And with strange aeons even death may die. take the ink, a blood seal, and the last leaf turns."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film;
+      const FILM0 = 32; const D = 8;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"']).then(() => {
+        const flesh = M.boards();
+        const book = new F.Book(document.getElementById('aeons-gl'), { leftTop: M.TOPS.s5.left, rightTop: M.TOPS.s5.right, flesh });
+        const city = M.cityPage();
+        const rule = M.ruleAeonsPage();
+        const colophon = M.colophonPage();
+        const sign = M.signPage();
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          city.frame(t); rule.frame(t); sign.frame(t);
+          const th = M.turn(t, 39.2, 0.8);
+          book.pages({ left: city, right: th > 0 ? sign : rule, leaf: th > 0 ? { recto: rule, verso: colophon, theta: th } : null });
+          book.render(t);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['aeons'] = film;
+      });
+    })();
+  </script>
+</template>

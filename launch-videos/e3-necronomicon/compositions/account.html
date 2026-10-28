@@ -1,0 +1,35 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #account-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-acc01" id="root" data-composition-id="account" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-acc02" id="account-stage" class="clip" data-start="0" data-duration="4">
+      <canvas data-hf-id="hf-acc03" id="account-gl" aria-label="An engraved eye fills the left page; on the right the rule No account. No telemetry. takes the ink and is sealed in blood; the camera dives into the engraved eye's black pupil."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film;
+      const FILM0 = 20; const D = 4;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"']).then(() => {
+        const flesh = M.boards();
+        const book = new F.Book(document.getElementById('account-gl'), { leftTop: M.TOPS.s3.left, rightTop: M.TOPS.s3.right, flesh });
+        const plate = M.eyePlatePage();
+        const rule = M.ruleAccountPage();
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          rule.frame(t);
+          book.pages({ left: plate, right: rule });
+          book.render(t);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['account'] = film;
+      });
+    })();
+  </script>
+</template>

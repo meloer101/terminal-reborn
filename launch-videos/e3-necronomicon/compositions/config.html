@@ -1,0 +1,38 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #config-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-con01" id="root" data-composition-id="config" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-con02" id="config-stage" class="clip" data-start="0" data-duration="4">
+      <canvas data-hf-id="hf-con03" id="config-gl" aria-label="The frame is full of blood; it drains down the open book, revealing an engraved casket bound in chains with ~/.claude/settings.json on its lid, and the rule Touch not the config of thy fathers., HANDS OFF YOUR CONFIG and a padlock seal in blood. The right leaf turns over."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film;
+      const FILM0 = 16; const D = 4;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"']).then(() => {
+        const flesh = M.boards();
+        const book = new F.Book(document.getElementById('config-gl'), { leftTop: M.TOPS.s2.left, rightTop: M.TOPS.s2.right, flesh });
+        const casket = M.casketPage();
+        const rule = M.ruleConfigPage();
+        const eyePlate = M.eyePlatePage();
+        const next = M.ruleAccountPage();
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          casket.frame(t); rule.frame(t); next.frame(t);
+          const th = M.turn(t, 19.2, 0.8);
+          book.pages({ left: casket, right: th > 0 ? next : rule, leaf: th > 0 ? { recto: rule, verso: eyePlate, theta: th } : null });
+          book.render(t);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['config'] = film;
+      });
+    })();
+  </script>
+</template>

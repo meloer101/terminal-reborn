@@ -1,0 +1,66 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #030202; }
+    #sign-tv, #sign-gl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+    #sign-tv { z-index: 0; }
+    #sign-gl { z-index: 1; }
+  </style>
+  <div data-hf-id="hf-sig01" id="root" data-composition-id="sign" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-sig02" id="sign-stage" class="clip" data-start="0" data-duration="12">
+      <canvas data-hf-id="hf-sig04" id="sign-tv" aria-label="Behind the page: the site's old television, first showing the Wavi mark as a line screen, then the sky-filled WAVI wordmark and a Download for macOS button."></canvas>
+      <canvas data-hf-id="hf-sig03" id="sign-gl" aria-label="The last spread: One person, many threads. on the left; on the right a ring inscribed NO ACCOUNT · NO TELEMETRY · HANDS OFF YOUR CONFIG · AGENTS RUN AFTER ⌘Q. The Wavi mark is pressed into its centre in blood, darkens, ignites and burns through the page; the burn runs out across the vellum and stops at the frame's edges, still smouldering, around the television."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const F = window.Folio; const M = window.Film; const T = window.WaviTube; const C = window.WaviCard;
+      const FILM0 = 40; const D = 12;
+      // The scene is authored at 1x; the film plays it at SPEED (clip times above are already divided by it).
+      const SPEED = 1.5;
+      const tl = gsap.timeline();
+      Promise.all([F.fonts(['140px "Wavi Fraktur"', '600 52px "Wavi Bodoni"', '500 34px "Wavi Bodoni Italic"', '700 54px "Wavi Archivo"']), T.image('assets/brand/sky-wavi.png')]).then(([, img]) => {
+        const flesh = M.boards();
+        const top = M.TOPS.s6;
+        const book = new F.Book(document.getElementById('sign-gl'), { alpha: true, leftTop: top.left, rightTop: top.right, flesh });
+        const B = M.burnField();
+        const ember = document.createElement('canvas'); ember.width = B.w; ember.height = B.h;
+        const left = M.colophonPage();
+        const right = M.signPage({ B, ember });
+        // the right page can burn through, and what the burn opens is the television behind this canvas
+        book.burnable(ember);
+
+        const tube = T.create(document.getElementById('sign-tv'));
+        const orbit = C.orbitLayer(tube.W, tube.H);
+        const card = C.waviCard(tube.W, tube.H, img, { width: 0.5 });
+        const S = M.SIGN;
+        F.drive(tl, D * SPEED, (ta) => {
+          const t = FILM0 + ta / SPEED;
+          right.frame(t);
+          book.pages({ left, right });
+          // the edge still smoulders after the front stops
+          book.burning(t >= 44, 0.75 + 0.25 * F.hash(Math.floor(t * 12) * 1.3));
+          book.render(t, null, { drift: 1 - F.ramp(t, 47, 47.8) });
+          if (t >= 43.9) {
+            const ctx = tube.ctx;
+            ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, tube.W, tube.H);
+            if (t < 48) {
+              // the tube shows the mark where the blood mark is, at its size, so the burn opens onto it
+              const c = book.project(1, S.x / F.TEX_W, 1 - S.y / F.TEX_H);
+              const a = book.project(1, S.x / F.TEX_W, 1 - (S.y - S.h / 2) / F.TEX_H);
+              const b = book.project(1, S.x / F.TEX_W, 1 - (S.y + S.h / 2) / F.TEX_H);
+              orbit(ctx, t, c.x, c.y, Math.abs(b.y - a.y) * 1.02);
+            } else {
+              card(ctx, t - 48);
+            }
+            const ch = T.channel(t, 48.0, 0.8);
+            const calm = F.ramp(t, 48.8, 49.1);
+            tube.render(t, { power: 1, snow: 0.05 + ch.snow, glitch: 0.04 * (1 - calm) + ch.glitch, roll: ch.roll, bandAmp: 0.4 * (1 - calm) + 0.1, curve: 0.05, calm });
+          }
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['sign'] = film;
+      });
+    })();
+  </script>
+</template>
