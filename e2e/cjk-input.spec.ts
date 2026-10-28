@@ -396,6 +396,41 @@ test.describe('input methods', () => {
   })
 })
 
+/** Every box from xterm's textarea up to the page that is scrolled, as `class scrollLeft,scrollTop`. */
+const scrolledAncestors = () =>
+  page.evaluate((id) => {
+    const textarea = document.querySelector(`[data-region="terminal"] [data-session-id="${id}"] .xterm-helper-textarea`)
+    const out: string[] = []
+    for (let el: Element | null = textarea; el; el = el.parentElement)
+      if (el.scrollLeft !== 0 || el.scrollTop !== 0) out.push(`${el.className || el.tagName} ${el.scrollLeft},${el.scrollTop}`)
+    return out
+  }, SESSION)
+
+/** The preedit xterm draws lies within the terminal's screen. */
+const preeditInside = () =>
+  page.evaluate((id) => {
+    const xterm = document.querySelector(`[data-region="terminal"] [data-session-id="${id}"] .xterm`)
+    const view = xterm?.querySelector('.composition-view.active')?.getBoundingClientRect()
+    const screen = xterm?.querySelector('.xterm-screen')?.getBoundingClientRect()
+    return !!view && !!screen && view.width > 0 && view.left >= screen.left - 0.5 && view.right <= screen.right + 0.5
+  }, SESSION)
+
+test('a long preedit at the right edge does not scroll the terminal sideways', async () => {
+  await pane().click()
+  // The cursor parks 2 cells from the right edge, where an agent's TUI may leave it.
+  await page.keyboard.type(`clear; printf '\\033[5;%sH' $(($(tput cols) - 2)); sleep 60`)
+  await page.keyboard.press('Enter')
+  await betweenKeys()
+  const seen = await ownCompositions(async () => {
+    await pinyin('zhongwenshurufaceshizhongwenshurufa')
+    const composing = { scrolled: await scrolledAncestors(), inside: await preeditInside() }
+    await imeKey(' ', 'Space', 32, () => commit('中文输入法测试中文输入法'))
+    return { composing, afterCommit: await scrolledAncestors() }
+  })
+  expect(seen).toEqual({ composing: { scrolled: [], inside: true }, afterCommit: [] })
+  await page.keyboard.press('Control+C')
+})
+
 /** The value of the focused text field, or null when focus is elsewhere (never waits for an element). */
 const focusedValue = () =>
   page.evaluate(() => {

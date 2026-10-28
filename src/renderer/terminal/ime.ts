@@ -1,4 +1,5 @@
-// Text the macOS input system inserts into xterm's textarea that no key typed. Pure; the surface wires it up.
+// Input-method helpers for xterm's textarea: text the macOS input system inserts that no key typed, and where the
+// preedit goes. Pure; the surface wires them up.
 
 /** How long after the terminal's last input an inserted ". " still counts as the double-space substitution. */
 export const AUTO_PERIOD_WINDOW_MS = 1000
@@ -28,4 +29,15 @@ export function isAutoPeriod(insertion: TextInsertion): boolean {
     insertion.lastInput.endsWith(' ') &&
     insertion.msSinceLastInput <= AUTO_PERIOD_WINDOW_MS
   )
+}
+
+/**
+ * Where xterm's preedit (its composition view, and the textarea it sizes to match) goes in a screen `room` px wide.
+ * xterm puts it at the cursor at its full width; at the right edge it ran past the card, Chromium scrolled the card
+ * (overflow: hidden) sideways to keep the caret in view, and after a commit xterm leaves the textarea that wide, so
+ * the card stayed scrolled. It ends at the right edge instead, and is never wider than the screen.
+ */
+export function placePreedit(left: number, width: number, room: number): { left: number; width: number } {
+  const fitted = Math.min(width, room)
+  return { left: Math.max(0, Math.min(left, room - fitted)), width: fitted }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AUTO_PERIOD_WINDOW_MS, isAutoPeriod, type TextInsertion } from './ime'
+import { AUTO_PERIOD_WINDOW_MS, isAutoPeriod, placePreedit, type TextInsertion } from './ime'
 
 const insertion = (facts: Partial<TextInsertion> = {}): TextInsertion => ({
   inputType: 'insertText',
@@ -27,5 +27,20 @@ describe('isAutoPeriod', () => {
     expect(isAutoPeriod(insertion({ lastInput: '' }))).toBe(false)
     expect(isAutoPeriod(insertion({ msSinceLastInput: AUTO_PERIOD_WINDOW_MS + 1 }))).toBe(false)
     expect(isAutoPeriod(insertion({ inputType: 'deleteContentBackward' }))).toBe(false)
+  })
+})
+
+describe('placePreedit', () => {
+  it('stays at the cursor while it fits', () => {
+    expect(placePreedit(100, 80, 600)).toEqual({ left: 100, width: 80 })
+    expect(placePreedit(520, 80, 600)).toEqual({ left: 520, width: 80 })
+  })
+
+  it('ends at the right edge instead of running past it', () => {
+    expect(placePreedit(580, 120, 600)).toEqual({ left: 480, width: 120 })
+  })
+
+  it('is never wider than the screen', () => {
+    expect(placePreedit(300, 900, 600)).toEqual({ left: 0, width: 600 })
   })
 })

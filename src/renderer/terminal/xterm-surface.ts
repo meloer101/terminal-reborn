@@ -10,7 +10,7 @@ import { whenAppearanceKnown } from './appearance-ready'
 import { atlasAction } from './atlas-guard'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { defersToTextInput, macKeyToBytes } from './keymap'
-import { isAutoPeriod } from './ime'
+import { isAutoPeriod, placePreedit } from './ime'
 import { findLigatureRanges } from './ligatures'
 import { deferSelectionRedrawWhilePaused } from './paused-selection'
 import { cellText, findPathCandidates, resolvedCandidates, type Cell } from './file-links'
@@ -323,6 +323,27 @@ export class XtermSurface implements TerminalSurface {
     }
     element.addEventListener('beforeinput', dropAutoPeriod, true)
     element.addEventListener('input', dropAutoPeriod, true)
+    this.keepPreeditInside(element, textarea)
+  }
+
+  /**
+   * Keeps xterm's preedit and its textarea inside the screen (placePreedit). xterm places both at the cursor on every
+   * composition update and redraw; the observer's microtask runs after each, before the IME text lands and Chromium
+   * scrolls the caret into view.
+   */
+  private keepPreeditInside(element: HTMLElement, textarea: HTMLTextAreaElement): void {
+    const view = element.querySelector<HTMLElement>('.composition-view')
+    const screen = element.querySelector<HTMLElement>('.xterm-screen')
+    if (!view || !screen) return
+    const place = (): void => {
+      if (!view.classList.contains('active')) return
+      const { left, width } = placePreedit(parseFloat(view.style.left) || 0, view.offsetWidth, screen.clientWidth)
+      const px = (n: number) => `${n}px`
+      if (view.style.left !== px(left)) view.style.left = px(left)
+      if (textarea.style.left !== px(left)) textarea.style.left = px(left)
+      if (width < view.offsetWidth && textarea.style.width !== px(width)) textarea.style.width = px(width)
+    }
+    new MutationObserver(place).observe(view, { attributes: true, attributeFilter: ['style', 'class'], childList: true, characterData: true, subtree: true })
   }
 
   /** xterm measures cells at open(); make sure the web font is in so they are right. */
