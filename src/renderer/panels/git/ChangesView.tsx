@@ -1,12 +1,14 @@
-// Git · 变更 (PRD F17 13B2 / F5 / F13 v1.78 / F16 v1.78): the review block, then the worktree's files grouped 未提交 (working
-// tree) and 已提交 (vs the base branch), each expandable to a unified diff. Every row has a fixed height, so long diffs
-// render only the visible window. Diff lines take inline review comments (F5): ＋ on a line opens an editor under it;
-// saved comments stay there until the footer puts them into the agent's input line together. Below: the facts (risk
-// markers, this turn's checks), then the ship zone (Figma 29K2, a block of its own fill, no dividers): the base's CI,
-// the PR line, 自动修复 and the footer — 审阅全部改动 on the left while no review shows, the two exits on the right
-// (合并到 base 并推送 / 创建 PR, or for a branch whose PR is open, 打开 PR / 合并 PR…). While 自动修复 stopped, the footer
-// holds that row's answers instead (29G / 29J). An exit opens the Ship block; ⇧⌘M runs the primary exit
-// (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N….
+// Git · 变更 (PRD F17 13B2 / F5 / F13 v1.78 / F16 v1.78, Figma 29R): the review block, then the worktree's files grouped
+// 未提交 (working tree) and 已提交 (vs the base branch), each expandable to a unified diff. Every row has a fixed height, so
+// long diffs render only the visible window; an open file's row and its diff are one block inset 6 from the card, and
+// once its row scrolls away it is pinned to the top of the list, where one click folds it. Diff lines take inline
+// review comments (F5): ＋ on a line opens an editor under it; saved comments stay there until the footer puts them into
+// the agent's input line together. Below: the ship zone (a block of its own fill, no dividers, every row 28 high): the
+// base's CI, the PR headline with PR #N, one facts line (this turn's checks, risk markers, the PR's facts, what its
+// switches do), the switches, then either the decision surface of a stopped 自动修复 (29G / 29J) or the footer —
+// 审阅全部改动 on the left while no review shows, the two exits on the right (合并到 base 并推送 / 创建 PR, or for a
+// branch whose PR is open, 合并 PR…). An exit opens the Ship block; ⇧⌘M runs the primary exit (merge/store.ts), or
+// opens the PR merge sheet when the primary is 合并 PR #N….
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
@@ -34,12 +36,12 @@ import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { openMergeSheet, registerPrimaryExit, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, itemHeight, onOwnBase, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, endsOpenFile, itemHeight, onOwnBase, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
-import { FactsRows, useRisks } from './FactsRows'
+import { FactsLine, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
-import { PrStatusLine } from './PullRequest'
-import { FixStopFooter, PrAutomationRow, useAgentOf, useStoppedFix } from './PrRows'
+import { PrStatusLine, usePrLines } from './PullRequest'
+import { FixStopFooter, PrAutomationRow, useAgentOf, usePrAutomationWords, useStoppedFix } from './PrRows'
 import { agentName } from '../../pull-requests/auto-fix'
 import { usePrStatus } from '../../pull-requests/store'
 import { commentTarget, discardComments, sendComments } from './comments'
@@ -101,6 +103,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const reviewShown = useReviewShown(root)
   const stopped = useStoppedFix(worktree.path, prLive?.number ?? null)
   const fixAgent = agentName(useAgentOf(worktree.path))
+  const prLines = usePrLines(worktree)
+  const prWords = usePrAutomationWords(worktree.path, prStatus)
   // Opening 变更 asks about the branch's PR now rather than at the next poll (main throttles it).
   useEffect(() => window.tr.pr.refresh(worktree.path), [worktree.path])
   useEffect(() => loadSavedReview(root), [root])
@@ -131,7 +135,18 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
-    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} />)
+    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} end={endsOpenFile(items, i)} />)
+  }
+  // The open file whose row scrolled away is pinned to the top: one click folds it and lands on its row (Figma 29L).
+  const sticky = stickyFileIndex(items, offsets, viewport.top)
+  const stickyItem = sticky === null ? null : items[sticky]
+  let blockEnd = sticky ?? 0
+  while (sticky !== null && blockEnd < items.length - 1 && !endsOpenFile(items, blockEnd)) blockEnd++
+  // Near the end of its block the pinned row slides up with it instead of covering the next row.
+  const stickyShift = sticky === null ? 0 : Math.min(0, offsets[blockEnd + 1]! - viewport.top - itemHeight(items[sticky]!))
+  const fold = (index: number, key: string): void => {
+    toggleFile(root, key)
+    if (scroller.current) scroller.current.scrollTop = offsets[index]!
   }
 
   const exits = shipExits({ preflight, remembered, unpushed })
@@ -200,31 +215,30 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
       <PrimaryExitShortcut worktreePath={worktree.path} run={shortcutExit} />
       {reviewSession && <ReviewBlock sessionId={reviewSession} root={root} />}
       <div ref={scroller} className={styles.files} role="list" aria-label="改动的文件" data-layout={layout}>
+        {stickyItem?.kind === 'file' && (
+          <div className={styles.stickyFile} data-testid="sticky-file" role="presentation" style={{ transform: `translateY(${stickyShift}px)` }}>
+            <FileRow item={stickyItem} pinned onToggle={() => fold(sticky!, stickyItem.key)} />
+          </div>
+        )}
         <div className={styles.filesCanvas} style={{ height: offsets[items.length] }}>
           {rendered}
         </div>
       </div>
-      {!shipping && <FactsRows risks={risks} checks={turnChecks} />}
       <div className={styles.shipZone}>
-        <BaseCiRows worktree={worktree} />
-        <PrStatusLine worktree={worktree} onBase={onBase} target={target} />
+        <BaseCiRows worktree={worktree} openIn={sessionId} />
+        <PrStatusLine worktree={worktree} onBase={onBase} target={target} openIn={sessionId} />
+        {/* While shipping, the change's own facts give way to the Ship block; the PR's stay. */}
+        <FactsLine
+          risks={shipping ? [] : risks}
+          checks={shipping ? null : turnChecks}
+          more={[...(prLines?.facts ?? []), ...(prWords?.text ? [prWords.text] : [])]}
+          note={prWords?.note ?? null}
+        />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
         {shipping ? (
           <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} />
         ) : stopped ? (
-          <FixStopFooter
-            scope={stopped.scope}
-            worktreePath={worktree.path}
-            run={stopped.run}
-            agent={fixAgent}
-            leading={
-              prLive && (
-                <button type="button" className={styles.ghostButton} title={`在内置浏览器打开 ${prLive.url}`} onClick={() => openPullRequest(sessionId, prLive.url)}>
-                  打开 PR #{prLive.number}
-                </button>
-              )
-            }
-          />
+          <FixStopFooter scope={stopped.scope} worktreePath={worktree.path} run={stopped.run} agent={fixAgent} note={stopped.note} attempts={stopped.attempts} />
         ) : (
           (count > 0 || !nothingToShip) && (
             <div className={styles.footer}>
@@ -265,14 +279,6 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
                   <>
                     <button
                       type="button"
-                      className={styles.ghostButton}
-                      title={`在内置浏览器打开 ${idlePr.url}`}
-                      onClick={() => openPullRequest(sessionId, idlePr.url)}
-                    >
-                      打开 PR #{idlePr.number}
-                    </button>
-                    <button
-                      type="button"
                       className={styles.primaryButton}
                       disabled={onBase || !projectRoot}
                       title={onBase ? '项目主目录检出的是基线分支，没有要合并的分支' : undefined}
@@ -311,8 +317,9 @@ function itemKey(item: ChangeItem, index: number): string {
   return `${item.kind}:${item.key}:${index}`
 }
 
-function Item({ root, git, item, top, draft }: { root: string; git: RootGit; item: ChangeItem; top: number; draft: CommentDraft | null }) {
+function Item({ root, git, item, top, draft, end }: { root: string; git: RootGit; item: ChangeItem; top: number; draft: CommentDraft | null; end: boolean }) {
   const style = { top }
+  const edge = end || undefined
   switch (item.kind) {
     case 'group':
       return (
@@ -321,31 +328,12 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
           <span className={styles.groupMeta}>{item.meta}</span>
         </div>
       )
-    case 'file': {
-      const { change, open } = item
-      const Chevron = open ? ChevronDown : ChevronRight
+    case 'file':
       return (
-        <div role="listitem" className={styles.fileItem} style={style} data-path={change.path} data-group={item.group}>
-          <button
-            type="button"
-            className={styles.fileRow}
-            aria-expanded={open}
-            title={`${STATUS_LABEL[change.status]}${change.untracked ? '（未跟踪）' : ''}${change.oldPath ? ` · 原 ${change.oldPath}` : ''}`}
-            onClick={() => toggleFile(root, item.key)}
-          >
-            <Chevron size={16} strokeWidth={1.75} className={styles.fileChevron} />
-            <span className={styles.filePath}>{change.path}</span>
-            {item.comments > 0 && (
-              <span className={styles.fileComments} aria-label={`${item.comments} 条评论`}>
-                <MessageSquare size={12} strokeWidth={1.75} aria-hidden />
-                {item.comments}
-              </span>
-            )}
-            <FileCounts change={change} />
-          </button>
+        <div role="listitem" className={styles.fileItem} style={style} data-path={item.change.path} data-group={item.group} data-end={edge}>
+          <FileRow item={item} onToggle={() => toggleFile(root, item.key)} />
         </div>
       )
-    }
     case 'diff': {
       const view = git.diffs[item.key]
       const rows = () => (view?.kind === 'ready' ? view.rows : [])
@@ -359,7 +347,7 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
         draft.side === anchor.side &&
         anchor.line >= draft.line &&
         anchor.line <= draft.endLine
-      return <DiffLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} />
+      return <DiffLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} end={end} />
     }
     case 'split': {
       const view = git.diffs[item.key]
@@ -378,15 +366,15 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
         )
       }
       const marked = item.row.kind === 'pair' && (inDraft(item.row.old, 'old') || inDraft(item.row.new, 'new'))
-      return <SplitLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} />
+      return <SplitLine row={item.row} top={top} owner={item.key} root={root} group={item.group} path={item.path} rows={rows} marked={marked} end={end} />
     }
     case 'comment':
-      return <CommentRow root={root} comment={item.comment} top={top} split={item.split === true} />
+      return <CommentRow root={root} comment={item.comment} top={top} split={item.split === true} end={end} />
     case 'editor':
-      return <CommentEditor top={top} split={item.split === true} />
+      return <CommentEditor top={top} split={item.split === true} end={end} />
     case 'note':
       return (
-        <p className={styles.diffNote} style={style} data-owner={item.key}>
+        <p className={styles.diffNote} style={style} data-owner={item.key} data-end={edge}>
           {item.text}
           {item.open && (
             <button type="button" className={styles.noteAction} onClick={() => void window.tr.worktree.open(root, item.open!)}>
@@ -396,6 +384,32 @@ function Item({ root, git, item, top, draft }: { root: string; git: RootGit; ite
         </p>
       )
   }
+}
+
+/** A file's row (Figma FileRow 12:79 / 12:85): chevron, path, comment count, +/−. Also drawn pinned (sticky). */
+function FileRow({ item, onToggle, pinned = false }: { item: Extract<ChangeItem, { kind: 'file' }>; onToggle: () => void; pinned?: boolean }) {
+  const { change, open } = item
+  const Chevron = open ? ChevronDown : ChevronRight
+  return (
+    <button
+      type="button"
+      className={styles.fileRow}
+      aria-expanded={open}
+      aria-label={pinned ? `收起 ${change.path}` : undefined}
+      title={`${STATUS_LABEL[change.status]}${change.untracked ? '（未跟踪）' : ''}${change.oldPath ? ` · 原 ${change.oldPath}` : ''}`}
+      onClick={onToggle}
+    >
+      <Chevron size={16} strokeWidth={1.75} className={styles.fileChevron} />
+      <span className={styles.filePath}>{change.path}</span>
+      {item.comments > 0 && (
+        <span className={styles.fileComments} aria-label={`${item.comments} 条评论`}>
+          <MessageSquare size={12} strokeWidth={1.75} aria-hidden />
+          {item.comments}
+        </span>
+      )}
+      <FileCounts change={change} />
+    </button>
+  )
 }
 
 function FileCounts({ change }: { change: GitFileChange }) {
@@ -421,7 +435,8 @@ function DiffLine({
   group,
   path,
   rows,
-  marked
+  marked,
+  end
 }: {
   row: DiffRow
   top: number
@@ -431,6 +446,7 @@ function DiffLine({
   path: string
   rows: () => readonly DiffRow[]
   marked: boolean
+  end: boolean
 }) {
   const marks = useReviewMarks(root, path, group)
   const anchor = rowAnchor(row)
@@ -443,6 +459,7 @@ function DiffLine({
       data-owner={owner}
       data-line={row.new ?? row.old ?? undefined}
       data-marked={marked || undefined}
+      data-end={end || undefined}
     >
       <CommentAddButton root={root} group={group} path={path} row={row} rows={rows} />
       <span className={styles.gutter}>{row.old ?? ''}</span>
@@ -470,7 +487,8 @@ function SplitLine({
   group,
   path,
   rows,
-  marked
+  marked,
+  end
 }: {
   row: SplitRow
   top: number
@@ -480,17 +498,18 @@ function SplitLine({
   path: string
   rows: () => readonly DiffRow[]
   marked: boolean
+  end: boolean
 }) {
   if (row.kind === 'hunk') {
     return (
-      <div className={styles.diffLine} style={{ top }} data-kind="hunk" data-split data-owner={owner}>
+      <div className={styles.diffLine} style={{ top }} data-kind="hunk" data-split data-owner={owner} data-end={end || undefined}>
         <span className={styles.splitHunk}>{row.row.text}</span>
       </div>
     )
   }
   const line = row.new?.new ?? row.old?.old ?? undefined
   return (
-    <div className={styles.splitLine} style={{ top }} data-owner={owner} data-line={line} data-marked={marked || undefined}>
+    <div className={styles.splitLine} style={{ top }} data-owner={owner} data-line={line} data-marked={marked || undefined} data-end={end || undefined}>
       <SplitSide row={row.old} side="old" root={root} group={group} path={path} />
       <span className={styles.splitDivider} aria-hidden />
       <SplitSide row={row.new} side="new" root={root} group={group} path={path}>

@@ -17,13 +17,15 @@ interface Flash {
   finding: string | null
   /** The tag on a diff line. */
   marker: string | null
+  /** The finding last opened in the diff: its row stays marked while its file is open (Figma 29R). */
+  active: string | null
 }
 
-export const useReviewFlash = create<Flash>()(() => ({ finding: null, marker: null }))
+export const useReviewFlash = create<Flash>()(() => ({ finding: null, marker: null, active: null }))
 
-const timers: Partial<Record<keyof Flash, number>> = {}
+const timers: Partial<Record<'finding' | 'marker', number>> = {}
 
-function flash(part: keyof Flash, id: string): void {
+function flash(part: 'finding' | 'marker', id: string): void {
   window.clearTimeout(timers[part])
   useReviewFlash.setState(part === 'finding' ? { finding: id } : { marker: id })
   timers[part] = window.setTimeout(() => useReviewFlash.setState(part === 'finding' ? { finding: null } : { marker: null }), FLASH_MS)
@@ -63,6 +65,7 @@ function markerFor(commentId: string): Element | null {
 
 /** From a finding in the block: opens its file in 变更, scrolls to its line and highlights the tag there. */
 export async function revealInDiff(root: string, comment: ReviewComment): Promise<void> {
+  useReviewFlash.setState({ active: comment.id })
   const key = changeKey(comment.group, comment.path)
   if (!gitOf(root).expanded.has(key)) toggleFile(root, key)
   await diffReady(root, key)

@@ -15,10 +15,12 @@ import {
   freshAutomation,
   mergeWhenGreenOn,
   prChecksText,
+  prHeadline,
   prLineParts,
   prLineText,
   stopActions,
   stopLineText,
+  stopParts,
   takenOver,
   type FixRun
 } from './auto-fix-model'
@@ -237,6 +239,15 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
     expect(prLineParts({ ...pr(), state: 'merged' }, '已合并', 0).checks).toBe(-1)
   })
 
+  it('splits the PR into the ship zone’s headline (checks) and facts (Figma 29R)', () => {
+    const failing = pr({}, { state: 'failing', total: 1, passed: 0, failing: [{ name: 'check', runId: null, jobId: null }] })
+    const onBase = prHeadline(failing, '已打开', 2, { name: 'main', checks: ['check'] })
+    expect(onBase.headline).toBe('1 项检查失败：check · main 上也失败')
+    expect(onBase.facts).toEqual(['2 条评论没解决'])
+    expect(prHeadline({ ...pr(), state: 'merged' }, '已合并', 0)).toEqual({ headline: '已合并', facts: [] })
+    expect(prHeadline({ ...failing, state: 'draft' }, '草稿', 0).facts).toEqual(['草稿'])
+  })
+
   it('knows which checks fail on the base already: asked about, or declined', () => {
     const on = freshAutomation(7, true)
     const asking = stoppedRun({ since: null, decision: { kind: 'ask', reason: 'base-broken', checks: ['check'] } })
@@ -248,6 +259,8 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
   it('asks instead of repeating the reason when the base fails already', () => {
     expect(stopLineText({ kind: 'ask', reason: 'base-broken', checks: ['check'] })).toBe('自动修复先停：要在这个分支修吗？')
     expect(stopLineText({ kind: 'stop', reason: 'repeated' })).toBe('自动修复已停：同一个失败又出现了')
+    expect(stopParts({ kind: 'ask', reason: 'base-broken', checks: ['check'] })).toEqual({ fact: '自动修复先停', question: '要在这个分支修吗？' })
+    expect(stopParts({ kind: 'stop', reason: 'repeated' })).toEqual({ fact: null, question: stopLineText({ kind: 'stop', reason: 'repeated' }) })
   })
 
   it('says what is going on', () => {

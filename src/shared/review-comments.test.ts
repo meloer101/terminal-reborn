@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { clipCode, commentLocation, commentPicked, MAX_CODE_CHARS, replaceReviewComments, reviewPrompt, sanitizeReviewComments, type ReviewComment } from './review-comments'
+import {
+  clipCode,
+  commentLocation,
+  commentPicked,
+  MAX_CODE_CHARS,
+  replaceReviewComments,
+  reviewPrompt,
+  sanitizeReviewComments,
+  withDefaultPicks,
+  type ReviewComment
+} from './review-comments'
 
 const comment = (patch: Partial<ReviewComment> = {}): ReviewComment => ({
   id: 'c1',
@@ -97,6 +107,15 @@ describe('background review comments', () => {
   it('replaces the previous review and keeps the user’s comments', () => {
     const next = { ...p1, id: 'next' }
     expect(replaceReviewComments([mine, p1, p3], [next]).map((c) => c.id)).toEqual(['mine', 'next'])
+  })
+
+  it('ticks the most severe findings of a review without P0 / P1, and keeps picks already made', () => {
+    const p2 = { ...p3, id: 'p2', severity: 'P2' as const }
+    const p2b = { ...p2, id: 'p2b', picked: false }
+    const landed = withDefaultPicks([p2, p2b, p3])
+    expect(landed.map(commentPicked)).toEqual([true, false, false])
+    expect(withDefaultPicks([p1, p3]).map(commentPicked)).toEqual([true, false])
+    expect(replaceReviewComments([mine], [p2, p3]).map(commentPicked)).toEqual([true, true, false])
   })
 
   it('keeps severity, confidence and picked through the workspace file', () => {

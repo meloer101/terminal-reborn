@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, rowAnchor, splitAnchors, splitRows } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -224,5 +224,29 @@ describe('onOwnBase', () => {
 
   it('never blocks a worktree of its own', () => {
     expect(onOwnBase(false, { branch: 'work', base: null })).toBe(false)
+  })
+})
+
+describe('stickyFileIndex / endsOpenFile', () => {
+  const rows: DiffRow[] = Array.from({ length: 10 }, (_, i) => ({ kind: 'add', old: null, new: i + 1, text: `line ${i + 1}` }))
+  const list = changeItems(
+    changes({ committed: [file('a.ts'), file('b.ts')] }),
+    new Set([changeKey('committed', 'a.ts')]),
+    { [changeKey('committed', 'a.ts')]: { kind: 'ready', rows, binary: false, truncated: 0 } }
+  )
+  const offsets = list.reduce<number[]>((acc, item) => [...acc, acc[acc.length - 1]! + itemHeight(item)], [0])
+  // group 0–32, a.ts 32–64, its lines 64–264, b.ts 264–296.
+
+  it('pins an open file once its row has scrolled above the top, while its diff is still there', () => {
+    expect(stickyFileIndex(list, offsets, 0)).toBeNull()
+    expect(stickyFileIndex(list, offsets, 32)).toBeNull()
+    expect(stickyFileIndex(list, offsets, 40)).toBe(1)
+    expect(stickyFileIndex(list, offsets, 200)).toBe(1)
+    expect(stickyFileIndex(list, offsets, 270)).toBeNull()
+  })
+
+  it('marks the last line of an open file, not the file row of a closed one', () => {
+    expect(list.map((_, i) => endsOpenFile(list, i)).lastIndexOf(true)).toBe(11)
+    expect(endsOpenFile(list, 12)).toBe(false)
   })
 })

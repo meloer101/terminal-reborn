@@ -243,6 +243,24 @@ export function prLineParts(
   return { parts, checks: 2 }
 }
 
+/**
+ * The ship zone's two lines for a PR (Figma 29R): the headline is what the checks say — and that they fail on the base
+ * too — or, with no checks or a PR that is no longer open, its state; the facts are the rest (草稿, comments nobody
+ * answered, review, conflicts). `PR #12` itself is the link at the end of the headline, so it is in neither.
+ */
+export function prHeadline(
+  pr: PullRequestInfo,
+  stateLabel: string,
+  comments: number,
+  base?: { name: string; checks: readonly string[] }
+): { headline: string; facts: string[] } {
+  const { parts, checks } = prLineParts(pr, stateLabel, comments, base)
+  if (checks < 0 || pr.checks.state === 'none') return { headline: stateLabel, facts: parts.slice(checks < 0 ? 2 : 3) }
+  const failsOnBase = base ? parts[checks + 1] === `${base.name} 上也失败` : false
+  const end = checks + (failsOnBase ? 2 : 1)
+  return { headline: parts.slice(checks, end).join(' · '), facts: [...(pr.state === 'draft' ? [stateLabel] : []), ...parts.slice(end)] }
+}
+
 /** The PR line as one string: `PR #12 · 已打开 · 检查 2/3 · 1 项在跑 · 3 条评论没解决`. */
 export function prLineText(pr: PullRequestInfo, stateLabel: string, comments: number, base?: { name: string; checks: readonly string[] }): string {
   return prLineParts(pr, stateLabel, comments, base).parts.join(' · ')
@@ -257,6 +275,14 @@ export function baseBrokenChecks(state: PrAutomation | undefined): string[] {
 /** The stopped row's words (Figma 29G / 29J): the brake's reason, or for the base failing already the question its buttons answer. */
 export function stopLineText(decision: StopDecision, attempts?: number): string {
   return decision.kind === 'ask' ? '自动修复先停：要在这个分支修吗？' : brakeLabel(decision, attempts)
+}
+
+/**
+ * A stopped fix in the ship zone (Figma 29R): what the facts line says (自动修复先停 while it asks; nothing for a brake,
+ * whose reason is the question) and the words on the decision surface next to the answers.
+ */
+export function stopParts(decision: StopDecision, attempts?: number): { fact: string | null; question: string } {
+  return decision.kind === 'ask' ? { fact: '自动修复先停', question: '要在这个分支修吗？' } : { fact: null, question: brakeLabel(decision, attempts) }
 }
 
 export interface AgentWords {

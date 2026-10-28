@@ -157,8 +157,7 @@ test.describe('F13 review block · F16 exit A', () => {
     await expect(review).toBeEnabled(WITHIN)
     await review.click()
 
-    await expect(block()).toContainText('Claude 审阅 · 全部 3 个文件', WITHIN)
-    await expect(block()).toContainText('1 个 P1 · 1 个 P3')
+    await expect(block()).toContainText('Claude 审阅 · 3 个文件', WITHIN)
     await expect(block()).toContainText('两处')
     const rows = block().getByRole('list', { name: '审阅发现' }).getByRole('listitem')
     await expect(rows).toHaveCount(2)

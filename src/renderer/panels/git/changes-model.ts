@@ -223,3 +223,34 @@ export function onOwnBase(isMain: boolean, changes: Pick<GitChanges, 'branch' | 
 }
 
 export const itemHeight = (item: ChangeItem): number => ITEM_HEIGHT[item.kind]
+
+/** The open file an item belongs to (its diff lines, notes, comments, editor); null for headers and list notes. */
+const fileKeyOf = (item: ChangeItem | undefined): string | null => {
+  if (!item || item.kind === 'group') return null
+  if (item.kind === 'file') return item.open ? item.key : null
+  // The list's own note (还有 N 个未跟踪文件) has no file.
+  return item.key.includes(':') ? item.key : null
+}
+
+/**
+ * The open file whose row has scrolled above `top` while its diff still shows there (Figma 29L): that row is pinned to
+ * the top of the list so the file can be folded from where the user is reading. Index of its file item, or null.
+ */
+export function stickyFileIndex(items: readonly ChangeItem[], offsets: readonly number[], top: number): number | null {
+  if (top <= 0) return null
+  let at = -1
+  for (let i = 0; i < items.length && offsets[i]! <= top; i++) at = i
+  const key = fileKeyOf(items[at])
+  if (key === null) return null
+  for (let i = at; i >= 0; i--) {
+    const item = items[i]!
+    if (item.kind === 'file') return item.key === key && offsets[i]! < top ? i : null
+  }
+  return null
+}
+
+/** Whether an item is the last one of its open file's block (its bottom corners round, Figma 29L). */
+export function endsOpenFile(items: readonly ChangeItem[], index: number): boolean {
+  const key = fileKeyOf(items[index])
+  return key !== null && fileKeyOf(items[index + 1]) !== key
+}

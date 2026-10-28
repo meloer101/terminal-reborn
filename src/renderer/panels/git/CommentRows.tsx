@@ -48,13 +48,14 @@ export function CommentAddButton({
 }
 
 /** `split`: on the new (right) half of a 并排 diff, the left half a filler (Figma 17F "Comment row"). */
-export function CommentRow({ root, comment, top, split = false }: { root: string; comment: ReviewComment; top: number; split?: boolean }) {
+export function CommentRow({ root, comment, top, split = false, end = false }: { root: string; comment: ReviewComment; top: number; split?: boolean; end?: boolean }) {
   return (
     <div
       className={styles.comment}
       style={{ top }}
       data-comment-id={comment.id}
       data-split={split || undefined}
+      data-end={end || undefined}
       role="note"
       aria-label={`评论 ${commentLocation(comment)}`}
     >
@@ -75,7 +76,7 @@ export function CommentRow({ root, comment, top, split = false }: { root: string
   )
 }
 
-export function CommentEditor({ top, split = false }: { top: number; split?: boolean }) {
+export function CommentEditor({ top, split = false, end = false }: { top: number; split?: boolean; end?: boolean }) {
   const draft = useReviewComments((s) => s.draft)
   const ref = useRef<HTMLTextAreaElement>(null)
   // The keyboard comes back here when the editor opens and whenever ⇧-click on a ＋ changes its range.
@@ -102,7 +103,7 @@ export function CommentEditor({ top, split = false }: { top: number; split?: boo
   }
 
   return (
-    <div className={styles.editor} style={{ top }} role="group" aria-label="写评论" data-split={split || undefined}>
+    <div className={styles.editor} style={{ top }} role="group" aria-label="写评论" data-split={split || undefined} data-end={end || undefined}>
       <textarea
         ref={ref}
         className={styles.editorText}

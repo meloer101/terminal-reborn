@@ -276,6 +276,11 @@ export function toggleFile(root: string, key: string): void {
   void loadDiff(root, key)
 }
 
+/** 全部收起 (the Git pane's ⋯ menu): every open file folds. */
+export function collapseAll(root: string): void {
+  if (gitOf(root).expanded.size > 0) patch(root, { expanded: new Set() })
+}
+
 /** After the lists reload: forget files that are gone, refetch only the open diffs whose file changed. */
 function refreshOpenDiffs(root: string, before: GitChanges | null): void {
   const c = gitOf(root)

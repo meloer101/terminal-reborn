@@ -379,8 +379,9 @@ test.describe('F16 PR / CI status', () => {
     await row('s-ci').click()
     await showChanges()
     const status = panel().getByTestId('pr-status')
-    await expect(status).toContainText('PR #12 · 已打开 · 1 项检查失败：test', WITHIN)
-    await expect(panel().getByRole('button', { name: '打开 PR #12' })).toBeVisible()
+    // The headline says what the checks say; PR #12 is the link at its end (Figma 29R).
+    await expect(status).toContainText('1 项检查失败：test', WITHIN)
+    await expect(status.getByRole('button', { name: '打开 PR #12' })).toHaveText('PR #12')
     await expect(panel().getByRole('button', { name: /^合并 PR #12/ })).toBeVisible()
     // Not a branch to push: the exits are the PR's own.
     await expect(panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
@@ -392,6 +393,26 @@ test.describe('F16 PR / CI status', () => {
     // In the input line, not sent: nothing after it until the user presses Enter.
     await page.waitForTimeout(500)
     expect(typedBy(repo.agents['jacob/ci']!).endsWith('exit code 1.')).toBe(true)
+  })
+
+  test('自动修复 on a PR whose check fails on main too asks first, on the decision surface (Figma 29R)', async () => {
+    await row('s-ci').click()
+    await showChanges()
+    const automation = panel().getByTestId('pr-automation')
+    const autoFix = automation.getByRole('switch', { name: '自动修复' })
+    await autoFix.click()
+    const decision = panel().getByTestId('fix-stop-actions')
+    await expect(decision.getByTestId('fix-stop')).toHaveText('要在这个分支修吗？', { timeout: 40_000 })
+    await expect(panel().getByTestId('facts')).toContainText('自动修复先停')
+    await expect(decision.getByRole('button', { name: '在这里修' })).toBeVisible()
+    // The question replaces the exits.
+    await expect(panel().getByRole('button', { name: /^合并 PR #12/ })).toHaveCount(0)
+    await shoot('changes-ask')
+    await decision.getByRole('button', { name: '不修' }).click()
+    await expect(decision).toHaveCount(0)
+    await expect(panel().getByTestId('pr-status')).toContainText('main 上也失败')
+    await autoFix.click()
+    await expect(autoFix).toHaveAttribute('aria-checked', 'false')
   })
 
   test('uncommitted work on a branch with an open PR: 提交并推送到 PR #13 — the agent writes commit.md, Wavi commits and pushes', async () => {
@@ -451,11 +472,13 @@ test.describe('F16 PR / CI status', () => {
     await expect(panel().locator('[data-owner="committed:ci.ts"][data-line="1"]')).toBeVisible()
     await expect(panel().locator('[data-thread-id]')).toHaveCount(0)
     // Only the user's own comments and the allowed bots' count (设置 · 自动化 · PR): amy's is neither, coderabbitai's not yet.
-    await expect(panel().getByTestId('pr-status')).toContainText('1 项检查失败：test · 需要审批', WITHIN)
-    await expect(panel().getByTestId('pr-status')).not.toContainText('条评论没解决')
+    // The headline is what the checks say; the PR's other facts are on the facts line under it (Figma 29R).
+    await expect(panel().getByTestId('pr-status')).toContainText('1 项检查失败：test', WITHIN)
+    await expect(panel().getByTestId('facts')).toContainText('需要审批', WITHIN)
+    await expect(panel().getByTestId('facts')).not.toContainText('条评论没解决')
     await expect(panel().getByTestId('pr-status').getByRole('button', { name: '让 Claude 处理' })).toHaveCount(0)
     await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ pr: { bots: ['coderabbitai'] } }))
-    await expect(panel().getByTestId('pr-status')).toContainText('1 项检查失败：test · 1 条评论没解决 · 需要审批', WITHIN)
+    await expect(panel().getByTestId('facts')).toContainText('1 条评论没解决 · 需要审批', WITHIN)
     const automation = panel().getByTestId('pr-automation')
     await expect(automation.getByRole('switch', { name: '自动修复' })).toHaveAttribute('aria-checked', 'false')
     await expect(automation.getByRole('switch', { name: '通过后合并' })).toHaveAttribute('aria-checked', 'false')

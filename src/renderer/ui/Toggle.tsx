@@ -1,4 +1,4 @@
-// A switch (Figma Toggle 12:136): 28 × 16, the knob slides right and the track fills when on. The same look as
+// A switch (Figma Toggle 12:136, square corners per 31-G1): 28 × 16, the knob slides right and the track fills when on. The same look as
 // 设置's Toggle; this one is for panels outside the settings dialog (Git · 变更's PR switches, PRD F16 v1.63).
 import styles from './Toggle.module.css'
 

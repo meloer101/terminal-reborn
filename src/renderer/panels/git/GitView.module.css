@@ -238,6 +238,63 @@ button.pill:hover {
   right: 0;
 }
 
+/* Rows of files and diffs sit 6 in from the card's edges, like the review block and the ship zone; an open file's row
+   and everything under it read as one block with round corners at its top and bottom (Figma 29L). Paddings give the
+   inset back, so text stays on the 14 / 36 / 16 lines. */
+.fileItem,
+.diffLine,
+.splitLine,
+.diffNote,
+.comment,
+.editor {
+  left: var(--space-6);
+  right: var(--space-6);
+}
+
+.diffLine[data-end],
+.splitLine[data-end],
+.splitLine[data-end] .splitSide,
+.diffNote[data-end],
+.comment[data-end],
+.editor[data-end] {
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+.splitLine[data-end] .splitSide[data-side='old'] {
+  border-bottom-right-radius: 0;
+}
+
+.splitLine[data-end] .splitSide[data-side='new'] {
+  border-bottom-left-radius: 0;
+}
+
+/* 并排: a comment or the editor ending the block sits on the right half; the filler on the left takes the left corner. */
+.comment[data-split][data-end],
+.editor[data-split][data-end] {
+  border-bottom-left-radius: 0;
+}
+
+.comment[data-split][data-end]::before,
+.editor[data-split][data-end]::before {
+  border-bottom-left-radius: var(--radius-md);
+}
+
+/* The open file whose row scrolled away, pinned to the top of the list; click folds it. Opaque, the lines pass under. */
+.stickyFile {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 32px;
+  margin: 0 var(--space-6) -32px;
+}
+
+/* Beats .fileRow[aria-expanded='true']'s translucent fill: the panel colour under the same hover tint. */
+.stickyFile .fileRow[aria-expanded] {
+  background: var(--bg-panel);
+  box-shadow: inset 0 0 0 100vmax var(--bg-hover);
+}
+
 /* Group header (147:7372): 12 above, 4 below, 14 sides, 6 apart. */
 .groupHeader {
   height: 32px;
@@ -261,15 +318,17 @@ button.pill:hover {
   text-overflow: ellipsis;
 }
 
-/* FileRow (12:79 / 12:85): 8 vertical, 12 left / 16 right, 8 apart; open = bg/hover. */
+/* FileRow (12:79 / 12:85): 8 vertical, chevron on 12 and path on 36 from the card, counts end on 16; 8 apart. Hover
+   and open = bg/hover; an open row keeps its top corners only, its diff continues under it. */
 .fileRow {
   height: 32px;
   display: flex;
   align-items: center;
   gap: var(--space-8);
   width: 100%;
-  padding: var(--space-8) var(--space-16) var(--space-8) var(--space-12);
+  padding: var(--space-8) calc(var(--space-16) - var(--space-6)) var(--space-8) var(--space-6);
   border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   text-align: left;
@@ -278,6 +337,11 @@ button.pill:hover {
 .fileRow:hover,
 .fileRow[aria-expanded='true'] {
   background: var(--bg-hover);
+}
+
+.fileRow[aria-expanded='true'] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .fileChevron {
@@ -380,7 +444,7 @@ button.pill:hover {
   align-items: center;
   gap: var(--space-8);
   margin: 0;
-  padding: var(--space-4) var(--space-16) var(--space-8) var(--space-40);
+  padding: var(--space-4) calc(var(--space-16) - var(--space-6)) var(--space-8) calc(var(--space-40) - var(--space-6));
   overflow: hidden;
   font: var(--text-caption);
   color: var(--text-tertiary);
@@ -402,15 +466,16 @@ button.pill:hover {
   color: var(--text-primary);
 }
 
-/* Footer (147:7378): 10 vertical, 14 left / 10 right; Ghost + the view's one Primary. */
+/* Footer (147:7378, Figma 29R): Ghost + the view's one Primary. */
 .footer {
   flex: none;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-4) var(--space-8);
-  padding: calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2))
-    calc(var(--space-12) + var(--space-2));
+  /* Figma 29R: a ghost button's words start on 36 and the primary's edge ends on 16, like the rows above; 2 above keeps
+     it near the 28 pitch of the switches row. */
+  padding: var(--space-2) var(--space-16) var(--space-6) calc(var(--space-12) * 2);
 }
 
 .ghostButton,
@@ -506,11 +571,9 @@ button.pill:hover {
 .comment,
 .editor {
   position: absolute;
-  left: 0;
-  right: 0;
   display: flex;
   flex-direction: column;
-  padding: var(--space-8) var(--space-12) var(--space-8) calc(var(--space-12) + var(--space-2));
+  padding: var(--space-8) calc(var(--space-12) - var(--space-6)) var(--space-8) calc(var(--space-12) + var(--space-2) - var(--space-6));
   background: var(--bg-inset);
 }
 
@@ -534,7 +597,8 @@ button.pill:hover {
   gap: var(--space-8);
   min-height: 28px;
   margin: 0;
-  padding: var(--space-4) var(--space-16) 0 calc(var(--space-12) + var(--space-2));
+  /* A fact like the facts line under it (Figma 29R): text on 36. */
+  padding: 0 var(--space-16) 0 calc(var(--space-12) * 3);
   font: var(--text-caption);
   color: var(--text-secondary);
 }
@@ -636,8 +700,6 @@ button.pill:hover {
 
 .splitLine {
   position: absolute;
-  left: 0;
-  right: 0;
   display: flex;
   height: 20px;
   font: var(--text-mono-code);
@@ -744,20 +806,25 @@ button.pill:hover {
   visibility: visible;
 }
 
-/* The ship zone (Figma 29K2): the base's CI, the PR line, 自动修复 and the footer in one block of its own fill, inset 6
-   from the card's edges, no divider. Each row keeps its own padding and reaches back over the inset, so its text stays
-   on the 14 / 16 lines of the rows above. Nothing in it (no exits, no PR): no block. */
+/* The ship zone (Figma 29R): the base's CI, the PR headline, the facts line, the switches, then the decision surface
+   or the footer, in one block of its own fill inset 6 from the card's edges, no divider. Each row keeps its own
+   padding and reaches back over the inset, so its text stays on the 12 / 36 / 16 lines of the rows above; the decision
+   surface keeps its own margins. Nothing in it (no exits, no PR): no block. */
 .shipZone {
   flex: none;
   display: flex;
   flex-direction: column;
   margin: 0 var(--space-6) var(--space-6);
-  padding-top: var(--space-4);
+  padding: var(--space-4) 0;
   border-radius: var(--radius-md);
   background: var(--bg-section);
 }
 
-.shipZone > * {
+.shipZone:has(> .footer:last-child) {
+  padding-bottom: 0;
+}
+
+.shipZone > :not([data-decision]) {
   margin-inline: calc(-1 * var(--space-6));
 }
 

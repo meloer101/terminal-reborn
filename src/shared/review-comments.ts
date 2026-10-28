@@ -27,7 +27,10 @@ export interface ReviewComment {
   confidence?: number
   /** `review` comments are replaced as a set the next time a background review lands. */
   origin?: 'review'
-  /** Review comments only: whether 发给 … includes it. Unset = P0 / P1 yes, P2 / P3 no. */
+  /**
+   * Review comments only: whether 发给 … includes it. Unset = P0 / P1 yes, P2 / P3 no; a review without P0 / P1 lands
+   * with its most severe findings set to yes (`withDefaultPicks`).
+   */
   picked?: boolean
 }
 
@@ -37,10 +40,25 @@ export function commentPicked(comment: ReviewComment): boolean {
   return comment.picked ?? (comment.severity === 'P0' || comment.severity === 'P1')
 }
 
+const SEVERITY_RANK: Record<ReviewSeverity, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
+
+/**
+ * A review's findings as they land (Figma 29O): with no P0 / P1 among them, the most severe ones present start ticked,
+ * so 发给 … is never a dead button on a review that found something. A pick the user already made is kept.
+ */
+export function withDefaultPicks(incoming: readonly ReviewComment[]): ReviewComment[] {
+  const review = incoming.filter((c) => c.origin === 'review' && c.severity)
+  if (review.some((c) => c.severity === 'P0' || c.severity === 'P1')) return [...incoming]
+  const top = Math.min(...review.map((c) => SEVERITY_RANK[c.severity!]))
+  return incoming.map((c) =>
+    c.origin === 'review' && c.picked === undefined && c.severity && SEVERITY_RANK[c.severity] === top ? { ...c, picked: true } : c
+  )
+}
+
 /** A background review landed: the previous review's comments go, the user's stay, the new ones follow (capped). */
 export function replaceReviewComments(existing: readonly ReviewComment[], incoming: readonly ReviewComment[]): ReviewComment[] {
   const own = existing.filter((c) => c.origin !== 'review')
-  return [...own, ...incoming].slice(0, MAX_COMMENTS_PER_WORKTREE)
+  return [...own, ...withDefaultPicks(incoming)].slice(0, MAX_COMMENTS_PER_WORKTREE)
 }
 
 export const MAX_COMMENTS_PER_WORKTREE = 200

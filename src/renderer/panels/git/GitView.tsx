@@ -19,6 +19,7 @@ import { GraphView } from './GraphView'
 import type { SessionsByPath } from './graph-model'
 import {
   checkForUpdates,
+  collapseAll,
   fetchRemotes,
   gitAvailable,
   gitOf,
@@ -126,7 +127,14 @@ function GitPane({ worktree }: { worktree: Worktree }) {
           label="更多"
           aria-haspopup="menu"
           onClick={(e) => {
-            void popupMenu([{ type: 'item', id: 'refresh', label: '刷新' }], e.currentTarget).then((choice) => {
+            void popupMenu(
+              [
+                { type: 'item', id: 'refresh', label: '刷新' },
+                ...(onGraph ? [] : [{ type: 'item' as const, id: 'collapse', label: '全部收起', enabled: git.expanded.size > 0 }])
+              ],
+              e.currentTarget
+            ).then((choice) => {
+              if (choice === 'collapse') return collapseAll(root)
               if (choice !== 'refresh') return
               void loadGraph(root)
               void loadChanges(root)

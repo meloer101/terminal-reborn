@@ -1,35 +1,59 @@
-/* Git · 变更's CI rows above the footer (Figma 29E / 29F / 29G / 29I / 29J): the base's CI after 合并到 main 并推送, the
-   PR line, the stopped row of 自动修复 (its answers are the footer's) and the automation row. Same rhythm as the facts. */
+/* Git · 变更's ship zone rows (PRD F16, Figma 29R): every row is 28 high with its content centred, so the rows sit on
+   one pitch. The headline carries a mark on the 12 column and strong text on the 36 column; the facts and the switches
+   start with text on 36; everything ends on the 16 line. A stopped fix asks on a surface of its own (the decision),
+   hung out by its padding so its words stay on 36 and its last button ends on 16. */
 
-.row {
+.headline,
+.facts,
+.switches {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  min-height: 28px;
+  height: 28px;
   margin: 0;
-  padding: var(--space-4) var(--space-16) 0 calc(var(--space-12) + var(--space-2));
+  padding: 0 var(--space-16) 0 calc(var(--space-12) + var(--space-16) + var(--space-8));
   font: var(--text-caption);
   color: var(--text-secondary);
 }
 
-.icon {
-  flex: none;
-  display: inline-flex;
-  color: var(--text-tertiary);
+/* The mark takes the 12 column, so the words still start on 36. */
+.headline {
+  padding-left: var(--space-12);
+  font: var(--text-body-strong);
+  color: var(--text-primary);
 }
 
-.text {
+.mark {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-secondary);
+}
+
+.mark[data-checks='passing'] {
+  color: var(--status-done);
+}
+
+.mark[data-checks='failing'] {
+  color: var(--status-error);
+}
+
+.mark[data-checks='pending'] {
+  color: var(--status-working);
+}
+
+.headlineText,
+.facts,
+.question {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The checks mark inside the PR line, before the checks part (Figma 29J). */
-.text svg {
-  margin-right: var(--space-2);
-  vertical-align: -2px;
+.facts {
+  display: block;
+  line-height: 28px;
 }
 
 .spacer {
@@ -41,42 +65,51 @@
   flex: none;
 }
 
+/* Between the two switches. */
 .gap {
   flex: none;
   width: var(--space-8);
 }
 
-/* Right-aligned state words of the automation row; a stop reads one step louder, still neutral (color is for marks). */
-.state {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-tertiary);
-  text-overflow: ellipsis;
+/* PR #12 / 打开 CI at the end of the headline: a link, its words end on the 16 line. */
+.link {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   white-space: nowrap;
 }
 
-.state[data-tone='attention'] {
-  color: var(--text-secondary);
+.link:hover {
+  color: var(--text-primary);
 }
 
-/* The brake stopped (29G) or the base fails already (29J): the alert circle carries the meaning with the words, which
-   are primary text; neither is colored. */
-.stop {
+.link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The decision: the question (or the brake's reason) and its answers on a surface of their own, 28 → 468 from the
+   card, padding 8 / 4 so the words start on 36 and the primary button ends on 464. */
+.decision {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  min-height: 28px;
-  margin: 0;
-  padding: var(--space-4) var(--space-16) 0 calc(var(--space-12) + var(--space-2));
-  font: var(--text-caption);
-  color: var(--text-primary);
+  height: 32px;
+  margin: var(--space-4) calc(var(--space-12) - var(--space-6)) var(--space-2) calc(var(--space-12) + var(--space-16) - var(--space-6));
+  padding: 0 var(--space-4) 0 var(--space-8);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
 }
 
-.stopIcon {
-  flex: none;
-  display: inline-flex;
-  color: var(--text-secondary);
+.question {
+  font: var(--text-body);
+  color: var(--text-primary);
 }
 
 .action {

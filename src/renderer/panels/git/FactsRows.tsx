@@ -1,15 +1,12 @@
-// The facts under Git · 变更's files, above the ship zone (PRD F13 v1.78, Figma 29A / 29K2): one row per risk marker read
-// off the diff (tests deleted or skipped, checks silenced, CI config, dependencies, migrations) and the checks the agent
-// ran this turn. Both are facts from rules and hooks, no model; they inform the exit, they never block it.
-import { Check, CircleAlert, Minus, X } from 'lucide-react'
+// The facts in Git · 变更's ship zone (PRD F13 v1.78, Figma 29R): the risk markers read off the diff (tests deleted or
+// skipped, checks silenced, CI config, dependencies, migrations) and the checks the agent ran this turn, on one line
+// with the PR's facts. All facts from rules and hooks, no model; they inform the exit, they never block it.
 import { useEffect, useRef, useState } from 'react'
 import type { PrTarget } from '@shared/pull-requests'
 import { riskLabel, type RiskMarker } from '@shared/risk-markers'
 import type { TurnCheckView } from '@shared/turn-checks'
 import { checksRow } from './facts-model'
-import styles from './FactsRows.module.css'
-
-const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
+import ci from './CiRows.module.css'
 /** The change list moves in bursts while the agent works: ask for the markers once it settles. */
 const DEBOUNCE_MS = 1000
 
@@ -40,28 +37,28 @@ export function useRisks(target: PrTarget | null, changeKey: string): RiskMarker
   return root && worktree ? risks : []
 }
 
-export function FactsRows({ risks, checks }: { risks: readonly RiskMarker[]; checks: TurnCheckView | null }) {
-  if (risks.length === 0 && !checks) return null
-  const row = checks ? checksRow(checks) : null
-  const Mark = row?.tone === 'fail' ? X : row?.tone === 'ok' ? Check : Minus
+/**
+ * The ship zone's facts line (Figma 29R): one quiet row of what is known about the change and the PR — this turn's
+ * checks, the risk markers, the PR's own facts and what its switches are doing — joined, the whole of it in the tooltip.
+ */
+export function FactsLine({
+  risks,
+  checks,
+  more,
+  note = null
+}: {
+  risks: readonly RiskMarker[]
+  checks: TurnCheckView | null
+  more: readonly string[]
+  /** What the agent wrote about its last fix (fix.md), for the tooltip. */
+  note?: string | null
+}) {
+  const parts = [...(checks ? [checksRow(checks).text] : []), ...risks.map(riskLabel), ...more]
+  if (parts.length === 0) return null
+  const text = parts.join(' · ')
   return (
-    <ul className={styles.facts} aria-label="这次改动的事实" data-testid="facts">
-      {risks.map((marker) => (
-        <li key={`${marker.kind}:${marker.path}`} className={styles.row} data-tone="risk">
-          <CircleAlert {...ICON} />
-          <span className={styles.text} title={riskLabel(marker)}>
-            {riskLabel(marker)}
-          </span>
-        </li>
-      ))}
-      {row && (
-        <li className={styles.row} data-tone={row.tone}>
-          <Mark {...ICON} />
-          <span className={styles.text} title={row.text}>
-            {row.text}
-          </span>
-        </li>
-      )}
-    </ul>
+    <p className={ci.facts} data-testid="facts" aria-label="这次改动的事实" title={note ? `${text}\n${note}` : text}>
+      {text}
+    </p>
   )
 }

@@ -32,8 +32,8 @@ describe('countsText', () => {
 
 describe('headerText', () => {
   it('names the reviewer and the files of the whole diff', () => {
-    expect(headerText({ agent: 'codex', reviewer: 'Codex', fileCount: 3 })).toBe('Codex 审阅 · 全部 3 个文件')
-    expect(headerText({ agent: 'claude', fileCount: 1 })).toBe('Claude 审阅 · 全部 1 个文件')
+    expect(headerText({ agent: 'codex', reviewer: 'Codex', fileCount: 3 })).toBe('Codex 审阅 · 3 个文件')
+    expect(headerText({ agent: 'claude', fileCount: 1 })).toBe('Claude 审阅 · 1 个文件')
   })
 
   it('drops the file count of a result saved before it was recorded', () => {
@@ -102,7 +102,7 @@ describe('reviewBlockView', () => {
     const view = reviewBlockView(done, [finding('b', { severity: 'P2', path: 'src/b.ts' }), finding('a')])
     expect(view).toMatchObject({
       kind: 'done',
-      header: 'Codex 审阅 · 全部 3 个文件',
+      header: 'Codex 审阅 · 3 个文件',
       counts: '1 个 P1 · 1 个 P2',
       summary: '整体可以合并，有两处要先改。',
       picked: 1

@@ -24,7 +24,17 @@ export interface FindingRow {
 export type BlockView =
   | { kind: 'running'; text: string }
   | { kind: 'failed'; text: string }
-  | { kind: 'done'; header: string; counts: string; summary: string; rows: FindingRow[]; picked: number }
+  | {
+      kind: 'done'
+      header: string
+      /** Shown only when there are no rows (没有发现问题); with rows the P tags carry the severities. */
+      counts: string
+      /** 另有 N 条你之前忽略过, or ''. */
+      ignored: string
+      summary: string
+      rows: FindingRow[]
+      picked: number
+    }
 
 const SEVERITIES: readonly ReviewSeverity[] = ['P0', 'P1', 'P2', 'P3']
 const SEVERITY_ORDER: Record<ReviewSeverity, number> = { P0: 0, P1: 1, P2: 2, P3: 3 }
@@ -47,10 +57,10 @@ export function shortPath(path: string): string {
   return `…/${parts.slice(-2).join('/')}`
 }
 
-/** "Codex 审阅 · 全部 3 个文件"; without a file count (a result saved by an older version) just "Codex 审阅". */
+/** "Codex 审阅 · 3 个文件" (Figma 29R); without a file count (a result saved by an older version) just "Codex 审阅". */
 export function headerText(status: Pick<BlockStatus, 'agent' | 'reviewer' | 'fileCount'>): string {
   const who = `${status.reviewer || reviewerLabel(status.agent)} 审阅`
-  return status.fileCount !== undefined && status.fileCount > 0 ? `${who} · 全部 ${status.fileCount} 个文件` : who
+  return status.fileCount !== undefined && status.fileCount > 0 ? `${who} · ${status.fileCount} 个文件` : who
 }
 
 /** P0 first, then by file and line. */
@@ -99,6 +109,7 @@ export function reviewBlockView(status: BlockStatus | undefined, findings: reado
     kind: 'done',
     header: headerText(status),
     counts: doneCounts(status, findings),
+    ignored: status.hidden ? `另有 ${status.hidden} 条你之前忽略过` : '',
     summary: status.message.trim(),
     rows,
     picked: rows.filter((row) => row.picked).length

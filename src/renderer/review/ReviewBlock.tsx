@@ -1,19 +1,25 @@
-// The review result at the top of Git · 变更 (PRD F13 v1.78, Figma 29B2 / 29K2): who reviewed how many files, the
-// reviewer's conclusion (two lines at most), the findings one per line (tick to send, click to jump), 重审 and 发给 <agent>.
-import { Check } from 'lucide-react'
+// The review result at the top of Git · 变更 (PRD F13 v1.78, Figma 29R): who reviewed how many files with 重审 and
+// 发给 <agent> on the same row, the reviewer's conclusion (one line when there are findings, two otherwise), then the
+// findings — tag, title and location under it; tick to send, click to open it in the diff — the first three and
+// 其余 N 条. The finding last opened stays marked while its file is open.
+import { Check, ChevronDown, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReviewComment } from '@shared/review-comments'
 import type { SessionId } from '@shared/types'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { setCommentPicked, useReviewComments } from '../state/review-comments'
 import { useWorkspace } from '../state/workspace'
+import { changeKey } from '../panels/git/changes-model'
+import { useGit } from '../panels/git/store'
 import { cancelBackgroundReview, loadSavedReview, startBackgroundReview, useBackgroundReview } from './background'
 import { revealInDiff, useReviewFlash } from './reveal'
-import { reviewBlockView, sendLabel, type FindingRow } from './review-block-model'
+import { reviewBlockView, sendLabel, sortFindings, type FindingRow } from './review-block-model'
 import { sendFindings } from './send'
 import styles from './ReviewBlock.module.css'
 
 const FAILURE_SHOWN_MS = 4000
+/** Findings listed before 其余 N 条 (Figma 29N). */
+const FIRST_ROWS = 3
 /** The block reads these rows' comments; one stable empty list keeps the memo from running on every store change. */
 const NO_COMMENTS: readonly ReviewComment[] = []
 
@@ -31,7 +37,10 @@ export function ReviewBlock({ sessionId, root }: { sessionId: SessionId; root: s
   const status = useBackgroundReview((s) => s.byRoot[root])
   const comments = useReviewComments((s) => s.byRoot[root]) ?? NO_COMMENTS
   const flashing = useReviewFlash((s) => s.finding)
+  const active = useReviewFlash((s) => s.active)
+  const expandedFiles = useGit((s) => s.roots[root]?.expanded)
   const [busy, setBusy] = useState<'review' | 'send' | null>(null)
+  const [expanded, setExpanded] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
 
   useEffect(() => loadSavedReview(root), [root])
@@ -42,7 +51,13 @@ export function ReviewBlock({ sessionId, root }: { sessionId: SessionId; root: s
   }, [failure])
 
   const findings = useMemo(() => comments.filter((c) => c.origin === 'review'), [comments])
+  // A finding flashed from its diff tag beyond the first rows opens the whole list, and it stays open (set while
+  // rendering: the list must already be open when the flash scrolls to the row).
+  if (!expanded && flashing && sortFindings(findings).findIndex((c) => c.id === flashing) >= FIRST_ROWS) setExpanded(true)
   const view = useMemo(() => reviewBlockView(status, findings), [status, findings])
+  // The opened finding stays marked while its file is open in the list.
+  const opened = active ? findings.find((c) => c.id === active) : undefined
+  const activeShown = opened && expandedFiles?.has(changeKey(opened.group, opened.path)) ? opened.id : null
   if (!view) return null
 
   const agent = session?.kind === 'claude' || session?.kind === 'codex' ? session.kind : null
@@ -101,22 +116,53 @@ export function ReviewBlock({ sessionId, root }: { sessionId: SessionId; root: s
     if (comment) void revealInDiff(root, comment)
   }
 
+  // A fourth row costs what 其余 1 条 would.
+  const all = expanded || view.rows.length <= FIRST_ROWS + 1
+  const rows = all ? view.rows : view.rows.slice(0, FIRST_ROWS)
+  const rest = view.rows.length - rows.length
+
   return (
     <section className={styles.block} aria-label="审阅" data-testid="review-block">
       <div className={styles.head}>
         <span className={styles.title}>{view.header}</span>
         <span className={styles.spacer} />
-        <span className={styles.counts}>{view.counts}</span>
+        {view.rows.length === 0 && view.counts && <span className={styles.counts}>{view.counts}</span>}
+        <button
+          type="button"
+          className={styles.iconAction}
+          aria-label="重审"
+          title="重审"
+          disabled={!agent || busy !== null}
+          onClick={reviewAgain}
+        >
+          <RotateCw size={16} strokeWidth={1.75} aria-hidden />
+        </button>
+        {agent && view.rows.length > 0 && (
+          <button type="button" className={styles.action} disabled={view.picked === 0 || busy !== null} onClick={send}>
+            {sendLabel(agent, view.picked)}
+          </button>
+        )}
       </div>
       {view.summary && (
-        <p className={styles.summary} title={view.summary}>
+        <p className={styles.summary} data-lines={view.rows.length > 0 ? 1 : 2} title={view.summary}>
           {view.summary}
         </p>
       )}
-      {view.rows.length > 0 && (
-        <ul className={styles.list} aria-label="审阅发现">
-          {view.rows.map((row) => (
-            <li key={row.id} className={styles.finding} data-finding-id={row.id} data-flash={flashing === row.id || undefined}>
+      {failure && (
+        <p className={styles.failed} role="status">
+          {failure}
+        </p>
+      )}
+      {rows.length > 0 && (
+        <ul className={styles.list} aria-label="审阅发现" data-all={all || undefined}>
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className={styles.finding}
+              data-finding-id={row.id}
+              data-flash={flashing === row.id || undefined}
+              data-active={activeShown === row.id || undefined}
+            >
               <button
                 type="button"
                 role="checkbox"
@@ -134,25 +180,31 @@ export function ReviewBlock({ sessionId, root }: { sessionId: SessionId; root: s
                     {row.severity}
                   </span>
                 )}
-                <span className={styles.location}>{row.location}</span>
-                <span className={styles.findingTitle}>{row.title}</span>
+                <span className={styles.findingText}>
+                  <span className={styles.findingTitle}>{row.title}</span>
+                  <span className={styles.location}>{row.location}</span>
+                </span>
               </button>
             </li>
           ))}
         </ul>
       )}
-      <div className={styles.actions}>
-        {failure && <span className={styles.failed}>{failure}</span>}
-        <span className={styles.spacer} />
-        <button type="button" className={styles.action} disabled={!agent || busy !== null} onClick={reviewAgain}>
-          重审
-        </button>
-        {agent && (
-          <button type="button" className={styles.action} disabled={view.picked === 0 || busy !== null} onClick={send}>
-            {sendLabel(agent, view.picked)}
-          </button>
-        )}
-      </div>
+      {view.rows.length > 0 && (rest > 0 || view.ignored) && (
+        <div className={styles.more}>
+          {/* The checkbox and tag columns, so 其余 N 条 starts where the titles do. */}
+          <span className={styles.pickSpace} aria-hidden />
+          <span className={styles.severity} data-placeholder aria-hidden>
+            P0
+          </span>
+          {rest > 0 && (
+            <button type="button" className={styles.moreButton} aria-expanded={false} onClick={() => setExpanded(true)}>
+              其余 {rest} 条
+              <ChevronDown size={16} strokeWidth={1.75} aria-hidden />
+            </button>
+          )}
+          {view.ignored && <span className={styles.counts}>{view.ignored}</span>}
+        </div>
+      )}
     </section>
   )
 }
