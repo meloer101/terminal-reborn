@@ -1,0 +1,22 @@
+X:1
+T:Wavi · launch (minimal techno)
+M:4/4
+L:1/8
+Q:1/4=112
+K:Am
+V:KK inst=drums kit=808 gain=0.9
+z8 | C,,2 C,,2 C,,2 C,,2 | C,,2 z6 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | z8 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 z4 | z8 |
+V:HT inst=drums kit=808 gain=0.55
+z2 ^F,,2 z2 ^F,,2 | z ^A,, z ^A,, z ^A,, z ^A,, | z8 | z ^A,, z ^A,, z ^A,, z ^A,, | z ^A,, z ^A,, z ^A,, z ^A,, | z ^A,, z ^A,, z ^A,, z ^A,, | ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ | z8 | z ^A,, z ^A,, z ^A,, z ^A,, | z ^A,, z ^A,, z ^A,, z ^A,, | ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ | ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ | z8 | z2 ^F,,2 z2 ^F,,2 |
+V:CP inst=drums kit=808 gain=0.7
+z8 | z8 | z8 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | z8 | z8 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | ^D,,2 ^D,,2 ^D,,2 ^D,,2 | z8 | z8 |
+V:BS inst=synbass gain=0.75
+z8 | A,, A,, z A,, A,, z A,, A,, | F,,8 | F,, F,, z F,, F,, z F,, F,, | C, C, z C, C, z C, C, | C, C, z C, C, z C, C, | G,, G,, z G,, G,, z G,, G,, | G,,8 | A,, A,, z A,, A,, z A,, A,, | F,, F,, z F,, F,, z F,, F,, | C, C, z C, C, z C, C, | G,, G,, z G,, G,, z G,, G,, | A,,8 | z8 |
+V:ST inst=sqlead gain=0.4
+z8 | z8 | z8 | z2 [acf]/ z/ z z2 [acf]/ z/ z | z2 [ceg]/ z/ z z2 [ceg]/ z/ z | z2 [ceg]/ z/ z z2 [ceg]/ z/ z | [Bdg]2 [Bdg]2 [Bdg]2 [Bdg]2 | z8 | z8 | z4 [acf]2 z2 | z2 [ceg]/ z/ z z2 [ceg]/ z/ z | [Bdg]2 [Bdg]2 [Bdg]2 [Bdg]2 | z4 [ace]2 z2 | [ace]2 z6 |
+V:PD inst=warmpad gain=0.5
+!pp! !mark:overview! [A,CE]8 | [A,CE]8 | !p! [F,A,C]8 | !mf! !mark:split! [F,A,C]8 | [CEG]8 | [CEG]8 | !f! !mark:themes! [G,B,D]8 | !mp! [G,B,D]8 | !mf! !mark:agents! [A,CE]8 | [F,A,C]8 | !ff! !mark:automate! [CEG]8 | [G,B,D]8 | !mf! !mark:end! [A,CE]8 | !p! [A,CE]8 |
+V:PL inst=synpluck gain=0.4
+z8 | z8 | z8 | z8 | z8 | c/e/g/e/ c/e/g/e/ c/e/g/e/ c/e/g/e/ | z8 | B/d/g/d/ B/d/g/d/ B/d/g/d/ B/d/g/d/ | A/c/e/c/ A/c/e/c/ A/c/e/c/ A/c/e/c/ | A/c/f/c/ A/c/f/c/ A/c/f/c/ A/c/f/c/ | c/e/g/e/ c/e/g/e/ c/e/g/e/ c/e/g/e/ | B/d/g/d/ B/d/g/d/ B/d/g/d/ B/d/g/d/ | z8 | z8 |
+V:MT inst=glock gain=0.5
+E2 A2 c2 e2 | z8 | z8 | z8 | z8 | z8 | z8 | z8 | E/A/c/e/ E/A/c/e/ E/A/c/e/ E/A/c/e/ | z8 | z8 | E/A/c/e/ E/A/c/e/ E/A/c/e/ E/A/c/e/ | z8 | z2 E2 A2 e2 |

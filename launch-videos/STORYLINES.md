@@ -32,3 +32,11 @@ Viewer: a developer on macOS running several Claude Code / Codex agents, each on
 - Beats: task → fork → work → conflict → wait → compare → merge → graph → end card.
 - Look: the graph's lines as the carrier on black; colour only for status.
 - Sound: one rising pad; a tick on each fork and merge.
+
+## F — One idea, many threads (2026-10-28, `f-one-idea/`)
+
+- Device: one object becomes a world. Form: one continuous take from a "?" to a release tag, Chinese on screen.
+- What the viewer sees: the site's "?" bursts into ten session rows tumbling in 3D; they brake and line up as Wavi's sidebar; the window builds round it, a click opens one session, three more are dragged in as split panes; the git panel opens, the window lies down and its graph becomes a runway the camera runs along until every lane folds into main at v1.0.0 (上线。); the site's CRT hero ends it.
+- Beats: idea → order → split → git runway → ship → end card.
+- Look: the app's own dark UI at 2x on #050505; the site's chrome "?" and WAVI; colour only for status.
+- Sound: the intro of the A/B/C track under the "?", the beat drops on the burst; clicks and drops on the cursor's actions; a riser along the runway into an impact on v1.0.0.

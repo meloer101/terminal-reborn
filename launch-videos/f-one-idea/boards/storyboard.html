@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wavi F 分镜</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; margin: 0; }
+      body { background: #f4f4f2; color: #161616; font: 15px/1.55 Inter, 'PingFang SC', system-ui, sans-serif; padding: 40px 16px 64px; }
+      main { max-width: 1240px; margin: 0 auto; }
+      h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
+      .lede { margin-top: 6px; color: #5c5c5c; }
+      .act { display: block; margin: 36px 0 12px; font-size: 13px; font-weight: 600; color: #6b6b6b; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
+      .frame { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px #0000000f; }
+      .frame img { display: block; width: 100%; aspect-ratio: 16 / 9; background: #050505; }
+      .frame .title, .frame .time, .frame .words { padding: 0 16px; }
+      .frame .title { padding-top: 14px; font-weight: 600; }
+      .frame .time { color: #8a8a8a; font: 13px/1.4 'JetBrains Mono', ui-monospace, monospace; }
+      .frame .words { padding-top: 8px; padding-bottom: 16px; color: #3a3a3a; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Wavi 发布片 F · 一个想法，多线程</h1>
+      <p class="lede">40 秒 · 1920×1080 · 30 fps · 每个镜头一张关键帧</p>
+      <section class="act">第一幕 · 想法炸开，再排好队</section>
+      <div class="grid">
+        <div class="frame">
+          <img src="stills/frame-00-at-3s.png" alt="" />
+          <div class="title">01: 想法</div>
+          <div class="time">0.0 to 5.0s</div>
+          <p class="words">一个问号跟着节拍跳两下，然后炸开，十个会话行在 3D 空间里翻滚着飞出来，离镜头近的带运动模糊。</p>
+        </div>
+        <div class="frame">
+          <img src="stills/frame-01-at-9s.png" alt="" />
+          <div class="title">02: 排好队</div>
+          <div class="time">5.0 to 10.0s</div>
+          <p class="words">飞出的行刹车、放平，一行接一行落进侧边栏，按项目分组；最后一行还在落位。</p>
+        </div>
+      </div>
+      <section class="act">第二幕 · 一个人驾驭多个窗口</section>
+      <div class="grid">
+        <div class="frame">
+          <img src="stills/frame-02-at-17.5s.png" alt="" />
+          <div class="title">03: 分屏</div>
+          <div class="time">10.0 to 20.0s</div>
+          <p class="words">点开 Cookie 会话迁移，它占满终端；再把会话一行行拖进终端区，落点显示「显示」。这一帧是正在拖第四个。</p>
+        </div>
+        <div class="frame">
+          <img src="stills/frame-03-at-25s.png" alt="" />
+          <div class="title">04: Git 跑道</div>
+          <div class="time">20.0 to 28.0s</div>
+          <p class="words">点右上角的 Git 图标打开图谱；整个窗口向后倒成地面，图谱变成跑道，镜头贴着它往前冲，提交一个个从脚下掠过。</p>
+        </div>
+      </div>
+      <section class="act">第三幕 · 做完，发布</section>
+      <div class="grid">
+        <div class="frame">
+          <img src="stills/frame-04-at-32s.png" alt="" />
+          <div class="title">05: 上线</div>
+          <div class="time">28.0 to 33.0s</div>
+          <p class="words">八条分支依次并进 main，镜头升起俯视最后一个节点；v1.0.0 标签落上去，「上线。」落在旁边。</p>
+        </div>
+        <div class="frame">
+          <img src="stills/frame-05-at-39.5s.png" alt="" />
+          <div class="title">06: 片尾</div>
+          <div class="time">33.0 to 40.0s</div>
+          <p class="words">切到官网的 CRT 首屏：WAVI、十个问号、一个人，多线程。、下载按钮和说明，停 2.5 秒。</p>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+<template>
+  <style>
+    @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+    @font-face { font-family: 'Wavi Sans SC'; src: url('assets/fonts/noto-sans-sc-film-subset.woff') format('woff'); font-weight: 100 900; }
+    @font-face { font-family: 'Wavi Mono'; src: url('assets/fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); font-weight: 100 800; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    .clip.stage { position: absolute; inset: 0; }
+    .grain { position: absolute; inset: -40px; opacity: 0.04; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); pointer-events: none; }
+
+    .row { position: relative; display: flex; align-items: flex-start; gap: 16px; padding: 16px 24px 16px 56px; border-radius: 12px; }
+    .row .glyph { flex: none; margin-top: 4px; }
+    .row .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .row .t { font: 400 26px/36px Inter, 'Wavi Sans SC', sans-serif; color: #ededed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row .a { font: 400 24px/32px Inter, 'Wavi Sans SC', sans-serif; color: #a1a1a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row .w { display: flex; align-items: center; gap: 8px; height: 32px; font: 400 24px/32px Inter, 'Wavi Sans SC', sans-serif; color: #6b6b6b; white-space: nowrap; overflow: hidden; }
+    .row .w img { width: 24px; height: 24px; flex: none; }
+    .row .w .ic { flex: none; margin-left: 4px; }
+    .row .meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font: 400 24px/32px 'Wavi Mono', 'JetBrains Mono', 'Wavi Sans SC', monospace; color: #6b6b6b; white-space: nowrap; }
+    .row .meta span:first-child { line-height: 36px; }
+    .sb-head { display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 24px 0 16px; font: 600 26px/1 Inter, 'Wavi Sans SC', sans-serif; color: #ededed; }
+    .sb-head .ic { color: #6b6b6b; }
+    .sb-head b { flex: 1; font-weight: 600; }
+    .sb-head .count { font: 400 24px/1 'Wavi Mono', 'JetBrains Mono', 'Wavi Sans SC', monospace; color: #6b6b6b; }
+    #o-sb { position: absolute; left: 576px; top: 44px; width: 768px; display: flex; flex-direction: column; padding: 0 20px; }
+    #o-sb .sb-head { margin-top: 16px; }
+    #o-sb .sb-head:first-child { margin-top: 0; }
+    .row.landing { transform: translateY(-22px); filter: blur(2px); opacity: 0.9; }
+  </style>
+  <div id="root" data-composition-id="order" data-width="1920" data-height="1080">
+    <div id="order-stage" class="clip stage" data-start="0" data-duration="5" data-layout-allow-overflow data-layout-allow-overlap>
+      <div class="grain"></div>
+      <div id="o-sb">
+        <div class="sb-head"><svg class="ic " width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><b>acme-web</b><span class="count">4</span></div>
+        <div class="row " id="row-cookie"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></svg><div class="main"><div class="t">Cookie 会话迁移</div><div class="a">编辑 src/auth/session.ts</div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>jacob/session-cookie</span></div></div><div class="meta"><span>4m</span><span>+42 −18</span></div></div>
+        <div class="row " id="row-checkout"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></svg><div class="main"><div class="t">结算页性能优化</div><div class="a">运行 pnpm test checkout</div><div class="w"><img src="assets/brand/codex.svg" alt="" /><svg class="ic " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>jacob/checkout-perf</span></div></div><div class="meta"><span>12m</span><span>+128 −35</span></div></div>
+        <div class="row " id="row-mobile"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg><div class="main"><div class="t">修复移动端导航抖动</div><div class="a">已完成，等你审阅</div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>jacob/mobile-nav</span></div></div><div class="meta"><span>2m 前</span><span>+23 −9</span></div></div>
+        <div class="sb-head"><svg class="ic " width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><b>terminal-reborn</b><span class="count">4</span></div>
+        <div class="row " id="row-agg"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></svg><div class="main"><div class="t">侧边栏状态聚合</div><div class="a">读取 src/state/agents.ts</div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>jacob/sidebar-status</span></div></div><div class="meta"><span>6m</span><span>+61 −4</span></div></div>
+        <div class="row " id="row-lanes"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></svg><div class="main"><div class="t">Git 图谱布局算法</div><div class="a">编辑 src/shared/git-graph/lanes.ts</div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>jacob/graph-lanes</span></div></div><div class="meta"><span>18m</span><span>+210 −12</span></div></div>
+        <div class="row landing" id="row-vite"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></svg><div class="main"><div class="t">迁移到 Vite 7</div><div class="a">编辑 vite.config.ts</div><div class="w"><img src="assets/brand/codex.svg" alt="" /><svg class="ic " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>jacob/vite-7</span></div></div><div class="meta"><span>3m</span><span>+40 −31</span></div></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      // Posed key frame for the storyboard; the animation replaces it once the stills are approved.
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines = window.__timelines || {};
+      window.__timelines['order'] = tl;
+    })();
+  </script>
+</template>

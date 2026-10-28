@@ -1,0 +1,9 @@
+# huashu-motion renders, history and the share kit are rebuilt locally; stills are review scratch.
+out/
+.om/
+stills/
+directions/*.png
+directions-palettes.png
+*.mp4
+*.mov
+*.webm

@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[
+  {"id":"h1a","type":"string","label":"Headline, line 1","default":"Every thread,"},
+  {"id":"h1b","type":"string","label":"Headline, line 2","default":"at a glance."},
+  {"id":"claim","type":"string","label":"Closing claim","default":"One person, many threads."},
+  {"id":"cta","type":"string","label":"Call to action","default":"Download for macOS"},
+  {"id":"accent","type":"color","label":"Accent (only for what waits on you)","default":"#ff5fb0","group":"Look"},
+  {"id":"ground","type":"color","label":"Ground","default":"#050505","group":"Look"},
+  {"id":"ink","type":"color","label":"Ink","default":"#eeeeee","group":"Look"}
+]'>
+<head>
+<meta charset="utf-8">
+<title>Wavi · Every thread, at a glance</title>
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/om.js"></script>
+<style id="om-fonts">
+@font-face { font-family: "Wavi Archivo"; src: url("assets/fonts/archivo-wdth-wght-subset.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; }
+</style>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--ground); }
+  #film { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--ground); color: var(--ink); font-family: "Wavi Archivo", -apple-system, sans-serif; }
+  #glow { position: absolute; inset: 0; background: radial-gradient(1500px 900px at 68% 58%, #131315 0%, var(--ground) 72%); }
+  #stage { position: absolute; inset: 0; overflow: hidden; }
+  #world { position: absolute; left: 0; top: 0; width: 6700px; height: 2300px; }
+
+  .win { position: absolute; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px #ffffff14, 0 50px 120px #000c; background: #0a0a0a; }
+  .win img { position: absolute; left: 0; top: 0; display: block; }
+  .fill img { width: 100%; height: 100%; }
+
+  .ring { position: absolute; border: 2px solid var(--accent); border-radius: 9px; box-shadow: 0 0 36px #ff5fb066; opacity: 0; }
+  .ring.soft { border-color: #ffffff59; box-shadow: none; }
+  .wlabel { position: absolute; font-weight: 800; font-stretch: 82%; letter-spacing: -.02em; color: var(--accent); opacity: 0; white-space: nowrap; }
+  .key { position: absolute; padding: 4px 10px; border-radius: 7px; background: #202022; border: 1px solid #ffffff26; box-shadow: 0 8px 24px #000a; font: 700 15px "Wavi Archivo"; color: var(--ink); opacity: 0; letter-spacing: .02em; }
+  .hl { position: absolute; background: #ff5fb02e; border-left: 3px solid var(--accent); opacity: 0; }
+  .glyph { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #181818; opacity: 0; }
+  .glyph svg { position: absolute; inset: 0; }
+  .cover { position: absolute; background: #0a0a0a; transform-origin: 50% 100%; }
+  .layer { position: absolute; inset: 0; opacity: 0; }
+
+  #vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 55% 50%, #0000 62%, #0005 100%); pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: linear-gradient(90deg, var(--ground) 0, var(--ground) 30%, #05050000 52%); opacity: 1; }
+  #bfade { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: linear-gradient(#0000, var(--ground) 80%); opacity: 0; }
+
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .t { position: absolute; margin: 0; opacity: 0; font-weight: 900; font-stretch: 80%; letter-spacing: -.035em; line-height: .94; color: var(--ink); }
+  .t em { font-style: normal; color: var(--accent); }
+  #h1 { left: 96px; top: 92px; font-size: 150px; opacity: 1; }
+  #h1 .ln { display: block; overflow: hidden; padding-bottom: 14px; margin-bottom: -14px; }
+  #h1 .ch { display: inline-block; }
+  #h1 em { color: var(--accent); }
+  .kick { position: absolute; left: 100px; top: 58px; font: 500 22px "Wavi Archivo"; letter-spacing: 6px; color: #8c8c8c; opacity: 1; }
+  .cap { left: 96px; bottom: 150px; font-size: 104px; }
+  .capb { left: 0; right: 0; bottom: 64px; text-align: center; font-size: 84px; }
+  .big { left: 96px; top: 96px; font-size: 230px; letter-spacing: -.05em; white-space: nowrap; }
+  .sub { left: 100px; top: 790px; font-size: 150px; }
+  .names { position: absolute; left: 104px; top: 410px; width: 800px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 20px; opacity: 0; }
+  .names span { font-weight: 800; font-stretch: 82%; font-size: 36px; padding: 7px 0; letter-spacing: -.02em; opacity: 0; color: var(--ink); white-space: nowrap; }
+
+  #end { position: absolute; inset: 0; opacity: 1; }
+  #end .claim { left: 0; right: 0; top: 330px; text-align: center; font-size: 150px; }
+  #end .mark { position: absolute; left: 0; right: 0; top: 130px; display: flex; justify-content: center; align-items: center; gap: 22px; opacity: 0; }
+  #end .mark img { width: 84px; height: 84px; }
+  #end .mark b { font-weight: 900; font-stretch: 100%; font-size: 64px; letter-spacing: .22em; }
+  #end .cta { position: absolute; left: 50%; top: 700px; transform: translateX(-50%); padding: 24px 54px; background: var(--ink); color: var(--ground); font: 700 34px "Wavi Archivo"; border-radius: 8px; white-space: nowrap; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="film" data-composition-id="film" data-width="1920" data-height="1080">
+  <audio id="om-sound" src="assets/sound.wav" data-start="0" data-duration="30" data-track-index="8" data-volume="1"></audio>
+  <div id="glow"></div>
+
+  <div id="stage" data-om-id="stage">
+    <div id="world">
+      <!-- row 1: overview · hero (permission prompt) · split + themes + settings · agents -->
+      <div class="win fill" id="w-overview" data-om-id="overview" style="left:0;top:0;width:1440px;height:900px"><img src="materials/app-readme/overview-dark.png"></div>
+
+      <div class="win fill" id="w-hero" data-om-id="hero" style="left:1700px;top:0;width:1440px;height:900px"><img src="materials/app-readme/hero-dark.png"></div>
+
+      <div class="win fill" id="w-split" data-om-id="split" style="left:3400px;top:0;width:1440px;height:900px">
+        <img src="materials/app-capture/split-dark.png">
+        <img class="layer" id="th-light" src="materials/app-capture/split-light.png" style="width:100%;height:100%">
+        <img class="layer" id="th-dracula" src="materials/app-capture/split-dracula.png" style="width:100%;height:100%">
+        <img class="layer" id="th-nord" src="materials/app-capture/split-nord.png" style="width:100%;height:100%">
+        <div class="cover" id="c1" style="left:265px;top:45px;width:580px;height:400px"></div>
+        <div class="cover" id="c2" style="left:853px;top:45px;width:580px;height:400px"></div>
+        <div class="cover" id="c3" style="left:265px;top:495px;width:580px;height:400px"></div>
+        <div class="cover" id="c4" style="left:853px;top:495px;width:580px;height:400px"></div>
+        <img class="layer" id="th-appearance" src="materials/app-capture/settings-appearance-dark.png" style="width:100%;height:100%">
+      </div>
+
+      <div class="win fill" id="w-agents" data-om-id="agents" style="left:5100px;top:0;width:1440px;height:900px"><img src="materials/app-capture/settings-agents-dark.png"></div>
+
+      <!-- row 2: review · automation · merge -->
+      <div class="win fill" id="w-review" data-om-id="review" style="left:0;top:1200px;width:1440px;height:900px"><img src="materials/app-readme/review-dark.png"></div>
+      <div class="win fill" id="w-auto" data-om-id="automation" style="left:1700px;top:1200px;width:1440px;height:900px"><img src="materials/app-capture/settings-automation-dark.png"></div>
+      <div class="win" id="w-merge" data-om-id="merge" style="left:3400px;top:1200px;width:1000px;height:677px"><img src="materials/app-readme/merge-dark.png" style="width:100%;height:100%"></div>
+
+      <!-- overlays in world space -->
+      <div class="ring" id="r-head" style="left:316px;top:8px;width:136px;height:30px"></div>
+      <div class="wlabel" id="l-need" style="left:466px;top:6px;font-size:30px">2 need you.</div>
+      <div class="ring soft" id="r-err" style="left:276px;top:84px;width:1152px;height:42px"></div>
+      <div class="ring soft" id="r-done" style="left:276px;top:174px;width:1152px;height:36px"></div>
+      <div class="ring soft" id="r-run" style="left:276px;top:262px;width:1152px;height:158px"></div>
+
+      <div class="ring" id="r-wait" style="left:1708px;top:187px;width:250px;height:54px"></div>
+      <div class="key" id="k-j" style="left:1980px;top:203px;transform-origin:0 50%">⌘J</div>
+      <div class="hl" id="hl-yes" style="left:1984px;top:768px;width:596px;height:21px"></div>
+      <div class="glyph" id="g-wait" style="left:1731px;top:194px"><svg viewBox="0 0 22 22"><circle cx="11" cy="11" r="7" fill="none" stroke="#6e8bd6" stroke-width="2.2" stroke-dasharray="14 30" stroke-linecap="round"/></svg></div>
+
+      <div class="ring" id="r-import" style="left:3786px;top:284px;width:102px;height:32px"></div>
+    </div>
+  </div>
+
+  <div id="vig"></div>
+  <div id="fade" data-om-id="fade"></div>
+  <div id="bfade"></div>
+
+  <div id="flash"></div>
+  <div class="kick" data-om-id="kicker">WAVI</div>
+  <h1 class="t" id="h1" data-om-id="headline"></h1>
+
+  <div class="t cap" id="cap-jump" data-om-id="cap-jump">Jump to it.</div>
+  <div class="t cap" id="cap-answer" data-om-id="cap-answer">Answer it.<br>It keeps going.</div>
+  <div class="t capb" id="cap-split" data-om-id="cap-split">Four threads. One screen.</div>
+  <div class="t capb" id="cap-theme" data-om-id="cap-theme">Make it yours.</div>
+  <div class="t cap" id="cap-import" data-om-id="cap-import">Import<br>any theme.</div>
+
+  <div class="t big" id="big" data-om-id="agent-count"><span id="bigN">0</span> agents.</div>
+  <div class="t sub" id="sub" data-om-id="agent-sub">One window.</div>
+  <div class="names" id="names" data-om-id="agent-names"></div>
+
+  <div class="t cap" id="cap-r1" data-om-id="cap-review">Review.</div>
+  <div class="t cap" id="cap-r2" data-om-id="cap-autoreview">Auto-review.</div>
+  <div class="t cap" id="cap-r3" data-om-id="cap-pr">Auto-PR.</div>
+  <div class="t cap" id="cap-r4" data-om-id="cap-commit">Auto-commit.</div>
+  <div class="t cap" id="cap-r5" data-om-id="cap-merge">Merge.</div>
+  <div class="t cap" id="cap-r6" data-om-id="cap-home">Every branch<br>comes home.</div>
+
+  <div id="end" data-om-id="end">
+    <div class="mark" id="mark"><img src="materials/app-readme/icon.svg" alt=""><b>WAVI</b></div>
+    <div class="t claim" id="claim" data-om-id="claim" data-om-var="claim"></div>
+    <div class="cta" id="cta" data-om-id="cta" data-var-text="cta">Download for macOS</div>
+  </div>
+</div>
+
+<script type="text/vnd.abc" id="om-score">
+X:1
+T:Wavi · launch (minimal techno)
+M:4/4
+L:1/8
+Q:1/4=112
+K:Am
+V:KK inst=drums kit=808 gain=0.9
+z8 | C,,2 C,,2 C,,2 C,,2 | C,,2 z6 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | z8 | z8 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 C,,2 C,,2 | C,,2 C,,2 z4 | z8 |
+V:HT inst=drums kit=808 gain=0.55
+z2 ^F,,2 z2 ^F,,2 | z ^A,, z ^A,, z ^A,, z ^A,, | z8 | z ^A,, z ^A,, z ^A,, z ^A,, | z ^A,, z ^A,, z ^A,, z ^A,, | z ^A,, z ^A,, z ^A,, z ^A,, | ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ | z8 | z8 | z ^A,, z ^A,, z ^A,, z ^A,, | ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ | ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ ^F,,/^F,,/ | z8 | z2 ^F,,2 z2 ^F,,2 |
+V:CP inst=drums kit=808 gain=0.7
+z8 | z8 | z8 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | z8 | z8 | z2 ^D,,2 z2 ^D,,2 | z2 ^D,,2 z2 ^D,,2 | ^D,,2 ^D,,2 ^D,,2 ^D,,2 | z8 | z8 |
+V:BS inst=synbass gain=0.75
+z8 | A,, A,, z A,, A,, z A,, A,, | F,,8 | F,, F,, z F,, F,, z F,, F,, | C, C, z C, C, z C, C, | C, C, z C, C, z C, C, | G,, G,, z G,, G,, z G,, G,, | G,,8 | A,, A,, z A,, A,, z A,, A,, | F,, F,, z F,, F,, z F,, F,, | C, C, z C, C, z C, C, | G,, G,, z G,, G,, z G,, G,, | A,,8 | z8 |
+V:ST inst=sqlead gain=0.4
+z8 | z8 | z8 | z2 [acf]/ z/ z z2 [acf]/ z/ z | z2 [ceg]/ z/ z z2 [ceg]/ z/ z | z2 [ceg]/ z/ z z2 [ceg]/ z/ z | [Bdg]2 [Bdg]2 [Bdg]2 [Bdg]2 | z8 | z8 | z4 [acf]2 z2 | z2 [ceg]/ z/ z z2 [ceg]/ z/ z | [Bdg]2 [Bdg]2 [Bdg]2 [Bdg]2 | z4 [ace]2 z2 | [ace]2 z6 |
+V:PD inst=warmpad gain=0.5
+!pp! !mark:overview! [A,CE]8 | [A,CE]8 | !p! [F,A,C]8 | !mf! !mark:split! [F,A,C]8 | [CEG]8 | [CEG]8 | !f! !mark:themes! [G,B,D]8 | !mp! [G,B,D]8 | !mf! !mark:agents! [A,CE]8 | [F,A,C]8 | !ff! !mark:automate! [CEG]8 | [G,B,D]8 | !mf! !mark:end! [A,CE]8 | !p! [A,CE]8 |
+V:PL inst=synpluck gain=0.4
+z8 | z8 | z8 | z8 | z8 | c/e/g/e/ c/e/g/e/ c/e/g/e/ c/e/g/e/ | z8 | B/d/g/d/ B/d/g/d/ B/d/g/d/ B/d/g/d/ | A/c/e/c/ A/c/e/c/ A/c/e/c/ A/c/e/c/ | A/c/f/c/ A/c/f/c/ A/c/f/c/ A/c/f/c/ | c/e/g/e/ c/e/g/e/ c/e/g/e/ c/e/g/e/ | B/d/g/d/ B/d/g/d/ B/d/g/d/ B/d/g/d/ | z8 | z8 |
+V:MT inst=glock gain=0.5
+E2 A2 c2 e2 | z8 | z8 | z8 | z8 | z8 | z8 | z8 | E/A/c/e/ E/A/c/e/ E/A/c/e/ E/A/c/e/ | z8 | z8 | E/A/c/e/ E/A/c/e/ E/A/c/e/ E/A/c/e/ | z8 | z2 E2 A2 e2 |
+</script>
+<script>
+  const V = OM.vars();
+  const BPM = 112, BEAT = 60 / BPM;
+  const T = (bar, beat = 1) => ((bar - 1) * 4 + (beat - 1)) * BEAT;   // bar 1 beat 1 = 0 s
+  const esc = (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] || c;
+  const letters = (el, text) => { el.innerHTML = [...text].map((c) => c === ' ' ? ' ' : `<span class="ch">${esc(c)}</span>`).join(''); };
+
+  // Headline: each line is masked, letters rise into it.
+  const h1 = document.getElementById('h1');
+  h1.innerHTML = `<span class="ln" id="h1a"></span><span class="ln" id="h1b"></span>`;
+  letters(document.getElementById('h1a'), V.h1a);
+  letters(document.getElementById('h1b'), V.h1b);
+  letters(document.getElementById('claim'), V.claim);
+
+  // The 19 launchable agent CLIs (PRD §6.15), in the settings page's own order, the first five installed.
+  const NAMES = ['Claude Code', 'Codex', 'Pi', 'Cursor Agent', 'Grok', 'OpenCode', 'Gemini CLI', 'Qwen Code', 'Copilot CLI', 'Kimi Code', 'Droid', 'Amp', 'Kiro', 'Crush', 'Goose', 'Cline', 'Antigravity', 'Auggie', 'CodeBuddy'];
+  const namesEl = document.getElementById('names');
+  namesEl.innerHTML = NAMES.map((n) => `<span>${n}</span>`).join('');
+
+  gsap.set(['#r-head', '#l-need', '#r-err', '#r-done', '#r-run', '#r-wait', '#k-j', '#hl-yes', '#g-wait', '#r-import'], { opacity: 0 });
+  gsap.set('#end .t, #end .mark, #end .cta', { opacity: 0 });
+  gsap.set('#c1,#c2,#c3,#c4', { scaleY: 1 });
+
+  const tl = gsap.timeline({ paused: true, defaults: { ease: 'power3.out' } });
+  const cam = OM.camera('#world', { width: 1920, height: 1080 });
+  cam.set({ focus: [0, 0], anchor: [930, 400], zoom: 1.18 });
+  const cut = (at, p) => cam.to(tl, at, { ...p, duration: 0.001, ease: 'none' });
+  const pop = (sel, at, d = 0.35) => tl.fromTo(sel, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: d, ease: 'expo.out', immediateRender: false }, at);
+  const flash = (at, a = 0.14) => tl.set('#flash', { opacity: a }, at).to('#flash', { opacity: 0, duration: 0.16, ease: 'power2.out' }, at);
+  const out = (sel, at, d = 0.18) => tl.to(sel, { opacity: 0, duration: d, ease: 'power2.in' }, at);
+
+  // ── bars 1–3 · overview, then answer ────────────────────────────────────────
+  tl.addLabel('scene:overview', 0);
+  cam.to(tl, 0, { focus: [60, 20], zoom: 1.56, anchor: [840, 330], duration: T(1, 3) + 0.1, ease: 'power1.out' });
+  cam.to(tl, T(1, 3), { focus: [380, 130], anchor: [1120, 520], zoom: 2.0, duration: BEAT * 2, ease: 'expo.inOut' });
+  out('#h1', T(1, 4), 0.3); out('.kick', T(1, 4), 0.3);
+  tl.fromTo('#r-head', { opacity: 0, scale: 1.4 }, { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(2)', immediateRender: false }, T(1, 3));
+  tl.fromTo('#r-err', { opacity: 0 }, { opacity: 1, duration: 0.15, immediateRender: false }, T(1, 4)).to('#r-err', { opacity: 0, duration: 0.2 }, T(2, 1) - 0.05);
+  tl.fromTo('#r-done', { opacity: 0 }, { opacity: 1, duration: 0.15, immediateRender: false }, T(2, 1)).to('#r-done', { opacity: 0, duration: 0.2 }, T(2, 2) - 0.05);
+  tl.fromTo('#r-run', { opacity: 0 }, { opacity: 1, duration: 0.15, immediateRender: false }, T(2, 2)).to('#r-run', { opacity: 0, duration: 0.2 }, T(2, 3) - 0.1);
+  out('#l-need', T(2, 3) - 0.1, 0.2);
+  tl.fromTo('#l-need', { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, ease: 'expo.out', immediateRender: false }, T(2, 1));
+  cam.to(tl, T(2, 1), { focus: [700, 230], anchor: [1100, 540], zoom: 1.8, duration: BEAT * 3, ease: 'sine.inOut' });
+  OM.sfx('pop', T(1, 3) + 0.08, { note: 3 });
+  OM.sfx('tick', T(1, 4));
+  OM.sfx('thud', T(2, 1) + 0.04);
+  OM.sfx('tick', T(2, 2));
+
+  tl.addLabel('scene:answer', T(2, 3));
+  // ⌘J: the camera whips to the one that waits, then down to its prompt.
+  tl.fromTo('#k-j', { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(2.4)', immediateRender: false }, T(2, 3) + 0.35);
+  tl.fromTo('#r-wait', { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(2)', immediateRender: false }, T(2, 3) + 0.3);
+  cam.to(tl, T(2, 3) - 0.02, { focus: [1830, 214], anchor: [1000, 440], zoom: 2.2, duration: 0.66, ease: 'expo.inOut' });
+  OM.sfx('whoosh', T(2, 3) + 0.3);
+  OM.sfx('click', T(2, 3) + 0.4);
+  pop('#cap-jump', T(2, 3) + 0.5);
+  out('#cap-jump', T(3, 1) - 0.1);
+  cam.to(tl, T(3, 1) - 0.1, { focus: [2290, 790], anchor: [1330, 560], zoom: 1.8, duration: 0.7, ease: 'power3.inOut' });
+  out(['#r-wait', '#k-j'], T(3, 1) - 0.1, 0.2);
+  tl.fromTo('#hl-yes', { opacity: 0 }, { opacity: 1, duration: 0.12, immediateRender: false }, T(3, 2)).to('#hl-yes', { opacity: 0, duration: 0.4 }, T(3, 2) + 0.4);
+  OM.sfx('type', T(3, 2) - 0.1, { dur: 0.3 });
+  OM.sfx('click', T(3, 2) + 0.12);
+  pop('#cap-answer', T(3, 3));
+  cam.to(tl, T(3, 3), { focus: [1830, 214], anchor: [1000, 440], zoom: 2.2, duration: 0.6, ease: 'power3.inOut' });
+  tl.fromTo('#r-wait', { opacity: 0 }, { opacity: 1, duration: 0.05, immediateRender: false }, T(3, 3) + 0.5).to('#r-wait', { opacity: 0, duration: 0.3 }, T(3, 3) + 0.7);
+  // The waiting dot turns into a running spinner.
+  tl.set('#g-wait', { opacity: 1 }, T(3, 4));
+  tl.fromTo('#g-wait svg', { rotation: 0, transformOrigin: '50% 50%' }, { rotation: 1440, duration: T(4, 1) - T(3, 4) + 0.2, ease: 'none' }, T(3, 4));
+  OM.sfx('pop', T(3, 4), { note: 5 });
+  OM.sfx('chime', T(3, 4) + 0.05, { gain: 0.5 });
+  out('#cap-answer', T(4, 1) - 0.15);
+
+  // ── bars 4–6 · four threads, one screen ─────────────────────────────────────
+  tl.addLabel('scene:split', T(4, 1));
+  cam.to(tl, T(4, 1) - 0.05, { focus: [4120, 450], anchor: [960, 470], zoom: 0.92, duration: 0.6, ease: 'expo.inOut' });
+  tl.to('#fade', { opacity: 0, duration: 0.4 }, T(4, 1) - 0.1);
+  OM.sfx('whoosh', T(4, 1) - 0.1);
+  ['#c1', '#c2', '#c3', '#c4'].forEach((c, i) => {
+    tl.to(c, { scaleY: 0, duration: BEAT * 0.9, ease: 'steps(14)' }, T(4, 1) + 0.4 + i * BEAT);
+    OM.sfx('tick', T(4, 1) + 0.4 + i * BEAT, { gain: 0.8 });
+  });
+  pop('#cap-split', T(4, 2));
+  cam.to(tl, T(4, 1) + 0.62, { focus: [4140, 445], anchor: [960, 470], zoom: 1.03, duration: T(5, 1) - (T(4, 1) + 0.62), ease: 'sine.inOut' });
+  cam.to(tl, T(5, 1), { focus: [3955, 250], anchor: [960, 470], zoom: 1.55, duration: BEAT * 4, ease: 'sine.inOut' });
+  cam.to(tl, T(6, 1) - 0.4, { focus: [4543, 690], anchor: [960, 470], zoom: 1.55, duration: BEAT * 4, ease: 'sine.inOut' });
+  out('#cap-split', T(5, 1) + 0.2);
+
+  // ── bars 7–8 · make it yours: four theme flips on the beat, then the settings ─
+  tl.addLabel('scene:themes', T(7, 1));
+  cam.to(tl, T(6, 4) + 0.1, { focus: [4120, 450], anchor: [960, 470], zoom: 0.92, duration: 0.5, ease: 'expo.inOut' });
+  pop('#cap-theme', T(7, 1));
+  const flips = [['#th-light', 1], ['#th-dracula', 2], ['#th-nord', 3]];
+  flips.forEach(([sel, beat]) => {
+    tl.set(sel, { opacity: 1 }, T(7, beat));
+    flips.forEach(([other]) => { if (other !== sel) tl.set(other, { opacity: 0 }, T(7, beat)); });
+    OM.sfx('hit', T(7, beat), { gain: 0.9 });
+    flash(T(7, beat), 0.1);
+  });
+  tl.set(['#th-light', '#th-dracula', '#th-nord'], { opacity: 0 }, T(7, 4));
+  OM.sfx('hit', T(7, 4), { gain: 0.9 });
+  out('#cap-theme', T(8, 3) - 0.15);
+  tl.to('#fade', { opacity: 1, duration: 0.3 }, T(8, 3) - 0.1);
+  tl.fromTo('#th-appearance', { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.35, ease: 'expo.out', immediateRender: false }, T(8, 1));
+  OM.sfx('whoosh', T(8, 1) - 0.05);
+  pop('#cap-import', T(8, 3));
+  cam.to(tl, T(8, 3), { focus: [3836, 300], anchor: [1250, 440], zoom: 2.3, duration: BEAT * 1.5, ease: 'expo.inOut' });
+  tl.fromTo('#r-import', { opacity: 0, scale: 1.5 }, { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(2)', immediateRender: false }, T(8, 4) + 0.2);
+  OM.sfx('pop', T(8, 4) + 0.3, { note: 4 });
+  out(['#cap-import', '#r-import'], T(9, 1) - 0.2, 0.2);
+
+  // ── bars 9–10 · 19 agents, one window ───────────────────────────────────────
+  tl.addLabel('scene:agents', T(9, 1));
+  cam.to(tl, T(9, 1) - 0.05, { focus: [5820, 450], anchor: [1390, 540], zoom: 1.25, duration: 0.7, ease: 'expo.inOut' });
+  tl.to('#fade', { opacity: 1, duration: 0.4 }, T(9, 1));
+  OM.sfx('whoosh', T(9, 1) - 0.1);
+  tl.set('#names', { opacity: 1 }, T(9, 1));
+  tl.fromTo('#big', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.4, ease: 'expo.out', immediateRender: false }, T(9, 1) + 0.2);
+  const count = { v: 0 };
+  tl.to(count, { v: 19, duration: BEAT * 6, ease: 'none', onUpdate: () => { document.getElementById('bigN').textContent = String(Math.round(count.v)); } }, T(9, 1) + 0.3);
+  namesEl.querySelectorAll('span').forEach((s, i) => {
+    const at = T(9, 1) + 0.3 + (i / 19) * BEAT * 6;
+    tl.fromTo(s, { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.25, ease: 'expo.out', immediateRender: false }, at);
+    if (i % 4 === 0) OM.sfx('pop', at + 0.05, { note: 1 + (i / 4) % 5, gain: 0.7 });
+  });
+  tl.fromTo('#sub', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: 'expo.out', immediateRender: false }, T(10, 3));
+  OM.sfx('impact', T(10, 3) + 0.1, { gain: 0.8 });
+  cam.to(tl, T(9, 3), { focus: [5880, 470], anchor: [1410, 540], zoom: 1.3, duration: BEAT * 6, ease: 'sine.inOut' });
+  out(['#big', '#sub', '#names'], T(11, 1) - 0.06, 0.1);
+
+  // ── bars 11–12 · five cuts on the beat: review · commit · PR · merge · home ──
+  tl.addLabel('scene:automate', T(11, 1));
+  const poseAt = [
+    { focus: [1192, 1603], anchor: [1130, 540], zoom: 1.6 },   // diff + a review comment
+    { focus: [2320, 1535], anchor: [1130, 540], zoom: 1.7 },   // 设置 · 自动化: code review
+    { focus: [2320, 1898], anchor: [1130, 540], zoom: 1.7 },   // PR group
+    { focus: [2320, 1991], anchor: [1130, 540], zoom: 2.3 },   // who writes the commit and the PR
+    { focus: [3900, 1540], anchor: [1130, 540], zoom: 1.55 },  // merge sheet
+    { focus: [2892, 461], anchor: [1130, 540], zoom: 1.5 }     // git graph, every branch
+  ];
+  const capFor = ['#cap-r1', '#cap-r2', '#cap-r3', '#cap-r4', '#cap-r5', '#cap-r6'];
+  poseAt.forEach((p, i) => {
+    const at = T(11, 1) + i * BEAT;
+    cut(at, p);
+    tl.set(capFor[i], { opacity: 1 }, at);
+    if (i > 0) tl.set(capFor[i - 1], { opacity: 0 }, at);
+    flash(at);
+    cam.to(tl, at + 0.02, { focus: p.focus, anchor: p.anchor, zoom: p.zoom * 1.08, duration: BEAT * 0.96, ease: 'power2.out' });
+    OM.sfx('hit', at, { gain: 0.9 });
+    if (i === 4) OM.sfx('thud', at + 0.05);
+  });
+  tl.to('#fade', { opacity: 1, duration: 0.1 }, T(11, 1));
+  OM.sfx('reverse', T(11, 1), { dur: 0.9 });
+  cam.to(tl, T(11, 7), { focus: [2892, 470], anchor: [1130, 540], zoom: 1.62, duration: BEAT * 6, ease: 'sine.inOut' });
+
+  // ── bars 13–14 · pull all the way out, then the claim ───────────────────────
+  tl.addLabel('scene:end', T(13, 1));
+  cam.to(tl, T(13, 1), { focus: [3270, 1050], anchor: [960, 540], zoom: 0.27, duration: BEAT * 4, ease: 'power3.inOut' });
+  out('#cap-r6', T(13, 1), 0.2);
+  tl.to('#fade', { opacity: 0, duration: 0.5 }, T(13, 1) + 0.25);
+  OM.sfx('riser', T(13, 1) + BEAT * 4, { dur: BEAT * 4 });
+  tl.to('#stage', { opacity: 0.16, duration: BEAT * 3, ease: 'sine.inOut' }, T(13, 3));
+  tl.fromTo('#claim .ch', { yPercent: 120, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.7, stagger: 0.02, ease: 'expo.out', immediateRender: false }, T(13, 3) + 0.4);
+  tl.set('#claim', { opacity: 1 }, T(13, 3) + 0.4);
+  OM.sfx('impact', T(13, 3) + 0.45, { gain: 0.9 });
+  OM.sfx('subdrop', T(13, 3) + 0.45, { dur: 1.4 });
+  tl.fromTo('#mark', { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out', immediateRender: false }, T(14, 1));
+  tl.fromTo('#cta', { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out', immediateRender: false }, T(14, 2));
+  OM.sfx('chime', T(14, 1) + 0.1, { gain: 0.8 });
+  OM.sfx('pop', T(14, 2) + 0.1, { note: 5 });
+  tl.to({}, { duration: 0.01 }, 29.99);
+
+  window.__timelines = window.__timelines || {};
+  window.__timelines['film'] = tl;
+</script>
+</body>
+</html>

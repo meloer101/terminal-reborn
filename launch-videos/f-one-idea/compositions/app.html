@@ -1,0 +1,206 @@
+<template>
+  <style>
+    @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+    @font-face { font-family: 'Wavi Sans SC'; src: url('assets/fonts/noto-sans-sc-film-subset.woff') format('woff'); font-weight: 100 900; }
+    @font-face { font-family: 'Wavi Mono'; src: url('assets/fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); font-weight: 100 800; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    .stage { position: absolute; inset: 0; }
+    .grain { position: absolute; inset: -40px; opacity: 0.04; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); }
+
+    .win { position: absolute; left: 0; top: 0; width: 2880px; height: 1800px; border-radius: 24px; background: rgba(30, 30, 32, 0.62); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.1), inset 0 2px 0 rgba(255, 255, 255, 0.06); }
+    .lights { position: absolute; left: 32px; top: 32px; display: flex; gap: 16px; }
+    .lights i { width: 24px; height: 24px; border-radius: 50%; }
+    .sbtoggle { position: absolute; left: 460px; top: 16px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; color: #a1a1a1; }
+    .nav { position: absolute; left: 16px; width: 496px; height: 60px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-radius: 10px; color: #ededed; }
+    .nav .ic { flex: none; color: #a1a1a1; }
+    .nav b { flex: 1; font: 400 26px/36px Inter, 'Wavi Sans SC', sans-serif; }
+    .nav span { font: 400 24px/32px 'Wavi Mono', 'JetBrains Mono', 'Wavi Sans SC', monospace; color: #6b6b6b; }
+    .sb-head { position: absolute; left: 16px; width: 496px; height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 24px 0 16px; color: #ededed; }
+    .sb-head .ic { color: #6b6b6b; }
+    .sb-head b { font: 600 26px/36px Inter, 'Wavi Sans SC', sans-serif; }
+    .row { position: absolute; display: flex; align-items: flex-start; gap: 16px; padding: 16px 24px 16px 56px; border-radius: 10px; }
+    .row .glyph { flex: none; margin-top: 4px; }
+    .row .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .row .t { font: 400 26px/36px Inter, 'Wavi Sans SC', sans-serif; color: #ededed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row .a { position: relative; height: 32px; font: 400 24px/32px Inter, 'Wavi Sans SC', sans-serif; color: #a1a1a1; white-space: nowrap; }
+    .row .a span { position: absolute; left: 0; top: 0; right: 0; overflow: hidden; text-overflow: ellipsis; }
+    .row .a .a2 { opacity: 0; }
+    .row .w { display: flex; align-items: center; gap: 8px; height: 32px; font: 400 24px/32px Inter, 'Wavi Sans SC', sans-serif; color: #6b6b6b; white-space: nowrap; overflow: hidden; }
+    .row .w img, .row .w .term-mark { width: 24px; height: 24px; flex: none; display: flex; }
+    .row .w .ic { flex: none; }
+    .row .meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font: 400 24px/32px 'Wavi Mono', 'JetBrains Mono', 'Wavi Sans SC', monospace; color: #6b6b6b; white-space: nowrap; }
+    .row .meta span:first-child { line-height: 36px; }
+    .row.sel { background: rgba(255, 255, 255, 0.07); }
+    .row.shown { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.11); }
+    .ph { position: absolute; height: 88px; display: flex; align-items: center; gap: 24px; padding: 0 16px 0 32px; }
+    .ph b { flex: 1; min-width: 0; font: 600 30px/40px Inter, 'Wavi Sans SC', sans-serif; letter-spacing: -0.2px; color: #a1a1a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ph b.f { position: absolute; left: 32px; color: #ededed; opacity: 0; }
+    .ph.focus b.f { opacity: 1; }
+    .tools { position: relative; flex: none; display: flex; align-items: center; gap: 16px; color: #a1a1a1; }
+    .tools .grp { display: flex; gap: 4px; }
+    .ib { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+    .cardbox { position: absolute; border-radius: 20px; background: #0a0a0a; box-shadow: 0 2px 6px #00000059; overflow: hidden; }
+    .cardbox::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px #ffffff14, inset 0 2px 0 #ffffff0f; pointer-events: none; }
+    .term { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 40px 48px 32px; font: 400 26px/40px 'Wavi Mono', 'JetBrains Mono', 'Wavi Sans SC', monospace; color: #e5e5e5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .term > * { flex: none; }
+    .term .ln { min-height: 40px; }
+    .term .rule { flex: none; height: 2px; margin: 19px 0; background: #5c5c5c; }
+    .term .g { color: #3dd68c; } .term .bl { color: #5ea1ff; } .term .o { color: #e08a5e; } .term .d { color: #808080; } .term .r { color: #ff5c5c; } .term .w { color: #f2f2f2; } .term .bd { font-weight: 700; color: #f2f2f2; }
+    .grip { position: absolute; border-radius: 6px; background: rgba(255, 255, 255, 0.11); }
+    .drop { position: absolute; display: grid; place-items: center; border: 4px solid #5ea1ff; border-radius: 20px; background: rgba(255, 255, 255, 0.07); }
+    .hint { padding: 12px 24px; border: 2px solid rgba(255, 255, 255, 0.11); border-radius: 10px; background: #121212; box-shadow: 0 8px 32px #00000029, 0 2px 6px #0000001a; font: 500 24px/32px Inter, 'Wavi Sans SC', sans-serif; color: #ededed; white-space: nowrap; }
+    .ghost { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 16px; padding: 12px 24px 12px 16px; border: 2px solid rgba(255, 255, 255, 0.11); border-radius: 10px; background: #161616; box-shadow: 0 8px 32px #00000029, 0 2px 6px #0000001a; font: 500 26px/36px Inter, 'Wavi Sans SC', sans-serif; color: #ededed; white-space: nowrap; opacity: 0; z-index: 30; }
+    .cursor { position: absolute; left: 0; top: 0; z-index: 40; }
+    #a-cam { position: absolute; left: 0; top: 0; width: 2880px; height: 1800px; transform-origin: 0 0; }
+  </style>
+  <div id="root" data-composition-id="app" data-width="1920" data-height="1080">
+    <div id="app-stage" class="clip stage" data-start="0" data-duration="10" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion>
+      <div id="a-cam">
+        <div class="win" id="a-win"></div>
+        <div id="a-chrome">
+<div class="lights" id="a-lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+<div class="sbtoggle" id="a-sbtoggle"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></div>
+<div class="nav" id="a-nav0" style="top:96px"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><b>打开项目…</b><span>⌘O</span></div>
+<div class="nav" id="a-nav1" style="top:160px"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><b>跳转到…</b><span>⌘K</span></div>
+<div class="nav" id="a-nav2" style="top:224px"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/></svg><b>总览</b><span>⇧⌘A</span></div>
+<div class="nav" id="a-nav3" style="top:1716px"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><b>设置</b><span>⌘,</span></div>
+        </div>
+<div class="sb-head" id="a-head-0" style="top:316px"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><b>acme-web</b></div>
+<div class="sb-head" id="a-head-1" style="top:984px"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><b>terminal-reborn</b></div>
+<div class="row " id="a-row-cookie" style="left:16px;top:376px;width:496px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><div class="main"><div class="t">Cookie 会话迁移</div><div class="a"><span>运行 pnpm test src/auth</span></div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>session-cookie</span></div></div><div class="meta"><span>4m</span><span>+42 −18</span></div></div>
+<div class="row " id="a-row-checkout" style="left:16px;top:520px;width:496px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><div class="main"><div class="t">结算页性能优化</div><div class="a"><span>编辑 src/checkout/PriceList.tsx</span></div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>perf-checkout</span></div></div><div class="meta"><span>12m</span><span>+128 −35</span></div></div>
+<div class="row " id="a-row-mobile" style="left:16px;top:664px;width:496px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg><div class="main"><div class="t">修复移动端导航抖动</div><div class="a"><span class="a1">已完成 · 等你审阅</span></div><div class="w"><img src="assets/brand/codex.svg" alt="" /><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>fix-nav-jitter</span></div></div><div class="meta"><span>2m</span><span>+23 −9</span></div></div>
+<div class="row " id="a-row-main" style="left:16px;top:808px;width:496px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.25" fill="none" stroke="#6b6b6b" stroke-width="1.5"/></svg><div class="main"><div class="t">终端</div><div class="a"><span class="a1">~/code/acme-web</span></div><div class="w"><span class="term-mark"><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg></span><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>main</span></div></div></div>
+<div class="row " id="a-row-agg" style="left:16px;top:1044px;width:496px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><div class="main"><div class="t">侧栏状态聚合</div><div class="a"><span>编辑 src/state/agents.ts</span></div><div class="w"><img src="assets/brand/claude.svg" alt="" /><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>sidebar-agg</span></div></div><div class="meta"><span>6m</span><span>+61 −4</span></div></div>
+<div class="row " id="a-row-lanes" style="left:16px;top:1188px;width:496px"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#ff5c5c"/></svg><div class="main"><div class="t">Git 图谱布局算法</div><div class="a"><span class="a1">pnpm build 失败 · 2 个类型错误</span></div><div class="w"><img src="assets/brand/codex.svg" alt="" /><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span>graph-layout</span></div></div><div class="meta"><span>18m</span><span>+210 −12</span></div></div>
+<div class="ph focus" id="a-ph-cookie" style="left:528px;top:0px;width:2340px"><b>Cookie 会话迁移</b><b class="f" id="a-pf-cookie">Cookie 会话迁移</b><span class="tools"><span class="grp" id="a-pt-cookie" style="opacity:1"><span class="ib" id="a-ib-cookie-clip"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span><span class="ib" id="a-ib-cookie-globe"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span><span class="ib" id="a-ib-cookie-branch"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span><span class="ib" id="a-ib-cookie-fork"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg></span><span class="ib" id="a-ib-cookie-folder"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span></span><span class="grp"><span class="ib"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span><span class="ib" id="a-x-cookie" style="opacity:0"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span></span></div>
+<div class="cardbox" id="a-card-cookie" style="left:528px;top:88px;width:2340px;height:1700px"><div class="term" id="a-term-cookie"><div class="ln out"><span class="d">> 把登录态从 localStorage 迁移到 httpOnly cookie，过期后自动刷新</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="g">● </span><span class="bd">Read</span>(src/auth/session.ts)</div><div class="ln out"><span class="d">  ⎿  Read 84 lines</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="w">● 现在 token 存在 localStorage，每次请求由客户端手动附带。我会改成由 /api/session 写入 httpOnly cookie，并在 middleware 里统一处理过期刷新。</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="g">● </span><span class="bd">Update</span>(src/auth/session.ts)</div><div class="ln out"><span class="d">  ⎿  Updated </span><span class="bd">src/auth/session.ts</span><span class="d"> with 12 additions and 9 removals</span></div><div class="ln out"><span class="r">       19 -   const token = await issueToken(user)</span></div><div class="ln out"><span class="r">       20 -   localStorage.setItem(KEY, token)</span></div><div class="ln out"><span class="g">       19 +   await fetch('/api/session', { method: 'POST' })</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="bl">● </span><span class="bd">Bash</span>(pnpm test src/auth)</div><div class="ln out"><span class="d">  ⎿  Running…</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="o">✻ Simmering… </span><span class="d">(42s · ↓ 2.1k tokens · esc to interrupt)</span></div><div class="ln">&nbsp;</div><div class="rule"></div><div class="ln"><span class="d">> </span></div><div class="rule"></div><div class="ln"><span class="o">  ▸▸ auto mode on</span><span class="d"> (shift+tab to cycle)</span></div></div></div>
+<div class="ph" id="a-ph-checkout" style="left:1704px;top:0px;width:1164px"><b>结算页性能优化</b><b class="f" id="a-pf-checkout">结算页性能优化</b><span class="tools"><span class="grp" id="a-pt-checkout" style="opacity:0"><span class="ib" id="a-ib-checkout-clip"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span><span class="ib" id="a-ib-checkout-globe"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span><span class="ib" id="a-ib-checkout-branch"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span><span class="ib" id="a-ib-checkout-fork"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg></span><span class="ib" id="a-ib-checkout-folder"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span></span><span class="grp"><span class="ib"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span><span class="ib" id="a-x-checkout" style="opacity:1"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span></span></div>
+<div class="cardbox" id="a-card-checkout" style="left:1704px;top:88px;width:1164px;height:1700px"><div class="term" id="a-term-checkout"><div class="ln out"><span class="d">> 结算页首屏太慢，先找出瓶颈再改</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="w">● 我先跑一遍性能测试，拿到现在的基线。</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="g">● </span><span class="bd">Bash</span>(pnpm test:perf checkout)</div><div class="ln out"><span class="d">  ⎿  checkout › first paint    1840 ms</span></div><div class="ln out"><span class="d">     checkout › price render    620 ms</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="w">● 首屏主要卡在价格计算：每个商品都同步调用了一次 formatPrice。改成批量计算，并缓存汇率。</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="g">● </span><span class="bd">Update</span>(src/checkout/PriceList.tsx)</div><div class="ln out"><span class="d">  ⎿  Updated with 6 additions and 11 removals</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="bl">● </span><span class="bd">Bash</span>(pnpm test checkout)</div><div class="ln out"><span class="d">  ⎿  Running…</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="o">✻ Pondering… </span><span class="d">(1m 12s · ↓ 3.4k tokens · esc to interrupt)</span></div><div class="ln">&nbsp;</div><div class="rule"></div><div class="ln"><span class="d">> </span></div><div class="rule"></div><div class="ln"><span class="o">  ▸▸ auto mode on</span><span class="d"> (shift+tab to cycle)</span></div></div></div>
+<div class="ph" id="a-ph-mobile" style="left:1704px;top:900px;width:1164px"><b>修复移动端导航抖动</b><b class="f" id="a-pf-mobile">修复移动端导航抖动</b><span class="tools"><span class="grp" id="a-pt-mobile" style="opacity:0"><span class="ib" id="a-ib-mobile-clip"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span><span class="ib" id="a-ib-mobile-globe"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span><span class="ib" id="a-ib-mobile-branch"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span><span class="ib" id="a-ib-mobile-fork"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg></span><span class="ib" id="a-ib-mobile-folder"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span></span><span class="grp"><span class="ib"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span><span class="ib" id="a-x-mobile" style="opacity:1"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span></span></div>
+<div class="cardbox" id="a-card-mobile" style="left:1704px;top:988px;width:1164px;height:800px"><div class="term" id="a-term-mobile"><div class="ln out"><span class="d">› 修复 iOS Safari 下滚动时顶部导航抖动</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="w">• 问题出在 MobileNav 直接用 scrollY 驱动 transform，iOS 回弹时 scrollY 会变成负值。</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="o">• </span><span class="bd">Edited</span> src/components/MobileNav.tsx (+14 -6)</div><div class="ln out"><span class="o">• </span><span class="bd">Edited</span> src/styles/nav.css (+6 -2)</div><div class="ln out"><span class="o">• </span><span class="bd">Ran</span> pnpm test MobileNav</div><div class="ln out"><span class="d">  └ </span><span class="g">PASS</span><span class="d"> src/components/MobileNav.test.tsx (6 tests)</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="w">• 已修复：scrollY 限制在 [0, maxScroll]，导航改为 sticky。等你审阅。</span></div><div class="ln">&nbsp;</div><div class="rule"></div><div class="ln"><span class="d">› </span></div><div class="rule"></div><div class="ln"><span class="d">  100% context left</span></div></div></div>
+<div class="ph" id="a-ph-agg" style="left:528px;top:900px;width:1164px"><b>侧栏状态聚合</b><b class="f" id="a-pf-agg">侧栏状态聚合</b><span class="tools"><span class="grp" id="a-pt-agg" style="opacity:0"><span class="ib" id="a-ib-agg-clip"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span><span class="ib" id="a-ib-agg-globe"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span><span class="ib" id="a-ib-agg-branch"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span><span class="ib" id="a-ib-agg-fork"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg></span><span class="ib" id="a-ib-agg-folder"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span></span><span class="grp"><span class="ib"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span><span class="ib" id="a-x-agg" style="opacity:1"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></span></span></div>
+<div class="cardbox" id="a-card-agg" style="left:528px;top:988px;width:1164px;height:800px"><div class="term" id="a-term-agg"><div class="ln out"><span class="d">> 侧栏按状态把会话聚合起来</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="g">● </span><span class="bd">Read</span>(src/state/agents.ts)</div><div class="ln out"><span class="d">  ⎿  Read 92 lines</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="g">● </span><span class="bd">Search</span>(pattern: "needsAttention")</div><div class="ln out"><span class="d">  ⎿  Found 7 files</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="bl">● </span><span class="bd">Update</span>(src/state/agents.ts)</div><div class="ln out"><span class="d">  ⎿  Group rows by status</span></div><div class="ln out">&nbsp;</div><div class="ln out"><span class="o">✻ Thinking… </span><span class="d">(18s · ↓ 640 tokens · esc to interrupt)</span></div><div class="ln">&nbsp;</div><div class="rule"></div><div class="ln"><span class="d">> </span></div><div class="rule"></div><div class="ln"><span class="o">  ▸▸ auto mode on</span><span class="d"> (shift+tab to cycle)</span></div></div></div>
+        <div class="grip" id="a-gv" style="left:1696px;top:906px;width:4px;height:64px;opacity:0"></div>
+        <div class="grip" id="a-gr" style="left:2254px;top:892px;width:64px;height:4px;opacity:0"></div>
+        <div class="grip" id="a-gl" style="left:1078px;top:892px;width:64px;height:4px;opacity:0"></div>
+<div class="drop" id="a-drop-b" style="left:1704px;top:88px;width:1164px;height:1700px;opacity:0"><span class="hint">松开在这里显示这个会话</span></div>
+<div class="drop" id="a-drop-c" style="left:1704px;top:988px;width:1164px;height:800px;opacity:0"><span class="hint">松开在这里显示这个会话</span></div>
+<div class="drop" id="a-drop-d" style="left:528px;top:988px;width:1164px;height:800px;opacity:0"><span class="hint">松开在这里显示这个会话</span></div>
+<div class="ghost" id="a-ghost-checkout"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><span>结算页性能优化</span></div>
+<div class="ghost" id="a-ghost-mobile"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#3dd68c"/></svg><span>修复移动端导航抖动</span></div>
+<div class="ghost" id="a-ghost-agg"><svg class="glyph" width="28" height="28" viewBox="0 0 14 14"><g class="spin"><circle cx="7" cy="7" r="5.1" fill="none" stroke="#ffffff2e" stroke-width="1.8"/><path d="M7 1.9 A5.1 5.1 0 0 1 9.32 11.54" fill="none" stroke="#5ea1ff" stroke-width="1.8"/></g></svg><span>侧栏状态聚合</span></div>
+        <svg id="a-cursor" class="cursor" width="65" height="96" viewBox="-1 -1 19 27"><path d="M0 0 L0 22.5 L5.4 17.4 L8.9 25.6 L12.6 24 L9.2 16 L16.4 16 Z" fill="#ffffff" stroke="#000000" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+
+      const P = {"enter":[3080,1960],"cookie":[156,412],"checkout":[156,556],"mobile":[156,700],"agg":[156,1080],"right":[2192.88,1448],"br":[2192.88,1628],"bl":[1016.88,1628],"focusB":[2286,488],"git":[2572,44]};
+      const CAM = {"list":{"x":722.4,"y":-199.8,"scale":0.9},"full":{"x":96,"y":0,"scale":0.6},"rows":{"x":0,"y":0,"scale":1},"one":{"x":96,"y":0,"scale":0.6},"b":{"x":9.6,"y":0,"scale":0.66},"c":{"x":9.6,"y":-108,"scale":0.66},"d":{"x":9.6,"y":-108,"scale":0.66}};
+      const R = {"full":{"x":528,"y":0,"w":2340,"h":1788},"left":{"x":528,"y":0,"w":1164,"h":1788},"right":{"x":1704,"y":0,"w":1164,"h":1788},"tl":{"x":528,"y":0,"w":1164,"h":888},"tr":{"x":1704,"y":0,"w":1164,"h":888},"bl":{"x":528,"y":900,"w":1164,"h":888},"br":{"x":1704,"y":900,"w":1164,"h":888}};
+      const C = {"full":{"x":528,"y":88,"w":2340,"h":1700},"left":{"x":528,"y":88,"w":1164,"h":1700},"right":{"x":1704,"y":88,"w":1164,"h":1700},"tl":{"x":528,"y":88,"w":1164,"h":800},"tr":{"x":1704,"y":88,"w":1164,"h":800},"bl":{"x":528,"y":988,"w":1164,"h":800},"br":{"x":1704,"y":988,"w":1164,"h":800}};
+      const H44 = 88;
+      tl.fromTo('#a-cam .spin', { rotation: 0 }, { rotation: 360 * 12, duration: 10, ease: 'none', svgOrigin: '7 7' }, 0);
+      const cam = (t, d, c, ease) => tl.to('#a-cam', { x: c.x, y: c.y, scale: c.scale, duration: d, ease: ease || 'power2.inOut' }, t);
+      const move = (t, d, p, ease) => tl.to('#a-cursor', { x: p[0] - 2, y: p[1] - 2, duration: d, ease: ease || 'power2.inOut' }, t);
+      const press = (t) => tl.fromTo('#a-cursor', { scale: 1 }, { keyframes: [{ scale: 0.86, duration: 0.07 }, { scale: 1, duration: 0.14 }], transformOrigin: '2px 2px', immediateRender: false }, t);
+      const lines = (id, t0, gap) => gsap.utils.toArray('#a-term-' + id + ' .out').forEach((el, i) => tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.01 }, t0 + i * gap));
+      // A pane's header and card move together from rect o (where CSS puts them) to rect r.
+      const place = (id, o, r, t, d) => {
+        tl.to('#a-ph-' + id, { x: r.x - o.x, y: r.y - o.y, width: r.w, duration: d, ease: 'power3.out' }, t);
+        tl.to('#a-card-' + id, { x: r.x - o.x, y: r.y - o.y, width: r.w, height: r.h - H44, duration: d, ease: 'power3.out' }, t);
+      };
+      // The keyboard moves: the tools go with it and its title steps forward.
+      const focus = (on, off, t) => {
+        tl.to(['#a-pt-' + on, '#a-pf-' + on], { opacity: 1, duration: 0.15 }, t);
+        if (off) tl.to(['#a-pt-' + off, '#a-pf-' + off], { opacity: 0, duration: 0.15 }, t);
+      };
+      const select = (id, prev, t) => {
+        tl.to('#a-row-' + id, { backgroundColor: 'rgba(255, 255, 255, 0.07)', boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0)', opacity: 1, duration: 0.1 }, t);
+        if (prev) tl.to('#a-row-' + prev, { backgroundColor: 'rgba(255, 255, 255, 0)', boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.11)', duration: 0.1 }, t);
+      };
+      // DragGhost 21D: the row steps back, a small pill follows the pointer (14 right, 16 below its tip); the DropTarget rings where it lands.
+      const drag = (id, to, drop, t, d) => {
+        tl.to('#a-row-' + id, { opacity: 0.4, duration: 0.1 }, t);
+        tl.fromTo('#a-ghost-' + id, { x: P[id][0] + 28, y: P[id][1] + 32, opacity: 0 }, { opacity: 1, duration: 0.12, ease: 'power2.out' }, t);
+        tl.to('#a-ghost-' + id, { x: to[0] + 28, y: to[1] + 32, duration: d, ease: 'power2.inOut' }, t + 0.05);
+        move(t + 0.05, d, to);
+        tl.fromTo('#a-drop-' + drop, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: 'power2.out' }, t + 0.05 + d * 0.6);
+      };
+      const release = (id, drop, t) => {
+        tl.to('#a-ghost-' + id, { opacity: 0, duration: 0.12, ease: 'power3.in' }, t);
+        tl.to('#a-drop-' + drop, { opacity: 0, duration: 0.2, ease: 'power2.out' }, t + 0.05);
+        tl.fromTo(['#a-ph-' + id, '#a-card-' + id], { opacity: 0, scale: 0.97, filter: 'blur(8px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.4, ease: 'expo.out' }, t + 0.05);
+        lines(id, t + 0.3, 0.07);
+      };
+
+      // Initial: exactly the frame shot 2 ended on (the list, nothing else).
+      tl.set('#a-cam', { x: CAM.list.x, y: CAM.list.y, scale: CAM.list.scale }, 0);
+      tl.set('#a-cursor', { x: P.enter[0], y: P.enter[1] }, 0);
+      tl.set(['#a-ph-checkout', '#a-card-checkout', '#a-ph-mobile', '#a-card-mobile', '#a-ph-agg', '#a-card-agg', '#a-ph-cookie', '#a-card-cookie'], { opacity: 0 }, 0);
+      // 0-0.8 · the glass window builds round the list as the camera pulls back to the whole window on black.
+      cam(0, 0.8, CAM.full);
+      tl.fromTo('#a-win', { opacity: 0, scale: 0.985, transformOrigin: '50% 50%' }, { opacity: 1, scale: 1, duration: 0.6, ease: 'expo.out' }, 0.15);
+      tl.fromTo('#a-chrome > *', { opacity: 0, x: -24, filter: 'blur(8px)' }, { opacity: 1, x: 0, filter: 'blur(0px)', duration: 0.45, ease: 'expo.out', stagger: 0.04 }, 0.3);
+      // 0.7-1.5 · the cursor comes in; the camera leans in on it.
+      move(0.7, 0.8, P.cookie);
+      cam(0.9, 0.7, CAM.rows);
+      // 1.6 · click: the row widens into the terminal card; its name lands on the glass above it.
+      press(1.6);
+      select('cookie', null, 1.6);
+      tl.fromTo('#a-card-cookie', { opacity: 1, x: 16 - C.full.x, y: 376 - C.full.y, width: 496, height: 140, filter: 'blur(0px)' },
+        { x: 0, y: 0, width: C.full.w, height: C.full.h, duration: 0.5, ease: 'power3.out', immediateRender: false }, 1.62);
+      tl.to('#a-card-cookie', { keyframes: [{ filter: 'blur(8px)', duration: 0.18 }, { filter: 'blur(0px)', duration: 0.3 }] }, 1.62);
+      tl.fromTo('#a-ph-cookie', { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.35, ease: 'expo.out', immediateRender: false }, 1.85);
+      lines('cookie', 2.0, 0.08);
+      cam(1.9, 0.8, CAM.one);
+
+      // 3.0-4.4 · drag the checkout session to the right half.
+      move(3.0, 0.45, P.checkout);
+      cam(3.2, 1.0, CAM.b);
+      press(3.5);
+      drag('checkout', P.right, 'b', 3.5, 0.6);
+      tl.set('#a-x-cookie', { opacity: 1 }, 4.2);
+      place('cookie', R.full, R.left, 4.2, 0.4);
+      tl.to('#a-gv', { opacity: 1, duration: 0.2 }, 4.3);
+      release('checkout', 'b', 4.2);
+      select('checkout', 'cookie', 4.2);
+      focus('checkout', 'cookie', 4.25);
+
+      // 5.0-6.3 · the mobile session to the bottom right.
+      move(5.0, 0.4, P.mobile);
+      cam(5.1, 1.0, CAM.c);
+      press(5.45);
+      drag('mobile', P.br, 'c', 5.45, 0.6);
+      place('checkout', R.right, R.tr, 6.1, 0.4);
+      tl.to('#a-gr', { opacity: 1, duration: 0.2 }, 6.2);
+      release('mobile', 'c', 6.1);
+      select('mobile', 'checkout', 6.1);
+      focus('mobile', 'checkout', 6.15);
+
+      // 6.9-8.2 · the sidebar rollup session to the bottom left.
+      move(6.9, 0.4, P.agg);
+      cam(7.0, 1.0, CAM.d);
+      press(7.35);
+      drag('agg', P.bl, 'd', 7.35, 0.6);
+      place('cookie', R.full, R.tl, 8.1, 0.4);
+      tl.to('#a-gl', { opacity: 1, duration: 0.2 }, 8.2);
+      release('agg', 'd', 8.1);
+      select('agg', 'mobile', 8.1);
+      focus('agg', 'mobile', 8.15);
+      cam(8.25, 0.7, CAM.full);
+
+      // 8.6-10 · click into the top-right pane, then head for its git-branch icon.
+      move(8.6, 0.45, P.focusB);
+      press(9.08);
+      select('checkout', 'agg', 9.08);
+      focus('checkout', 'agg', 9.1);
+      move(9.3, 0.6, P.git);
+      window.__timelines = window.__timelines || {};
+      window.__timelines['app'] = tl;
+    })();
+  </script>
+</template>

@@ -1,0 +1,35 @@
+<template>
+  <style>
+    @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+    @font-face { font-family: 'Wavi Sans SC'; src: url('assets/fonts/noto-sans-sc-film-subset.woff') format('woff'); font-weight: 100 900; }
+    @font-face { font-family: 'Wavi Mono'; src: url('assets/fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); font-weight: 100 800; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    .clip.stage { position: absolute; inset: 0; }
+    .grain { position: absolute; inset: -40px; opacity: 0.04; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); pointer-events: none; }
+
+    #h-svg { position: absolute; left: 0; top: 0; }
+    #h-tag { position: absolute; left: 770px; top: 410px; padding: 0 22px; border-radius: 12px; background: #ededed; color: #0a0a0a; font: 600 40px/60px 'Wavi Mono', 'JetBrains Mono', 'Wavi Sans SC', monospace; }
+    #h-title { position: absolute; left: 1150px; top: 312px; font: 900 200px/1 'Wavi Sans SC', sans-serif; letter-spacing: -0.02em; color: #ededed; }
+  </style>
+  <div id="root" data-composition-id="ship" data-width="1920" data-height="1080">
+    <div id="ship-stage" class="clip stage" data-start="0" data-duration="5" data-layout-allow-overflow data-layout-allow-overlap>
+      <div class="grain"></div>
+      <svg id="h-svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+        <line x1="700" y1="440" x2="700" y2="-20" stroke="#a1a1a1" stroke-width="7" opacity="0.35"/>
+        <path d="M300 1120 L300 840 C300 530, 700 560, 700 440" fill="none" stroke="#5ea1ff" stroke-width="7" stroke-linecap="round"/><path d="M400 1120 L400 805 C400 530, 700 560, 700 440" fill="none" stroke="#b794ff" stroke-width="7" stroke-linecap="round"/><path d="M500 1120 L500 770 C500 530, 700 560, 700 440" fill="none" stroke="#3dd68c" stroke-width="7" stroke-linecap="round"/><path d="M600 1120 L600 735 C600 530, 700 560, 700 440" fill="none" stroke="#5ea1ff" stroke-width="7" stroke-linecap="round"/><line x1="700" y1="1120" x2="700" y2="440" stroke="#a1a1a1" stroke-width="7" stroke-linecap="round"/><path d="M800 1120 L800 735 C800 530, 700 560, 700 440" fill="none" stroke="#5ea1ff" stroke-width="7" stroke-linecap="round"/><path d="M900 1120 L900 770 C900 530, 700 560, 700 440" fill="none" stroke="#b794ff" stroke-width="7" stroke-linecap="round"/><path d="M1000 1120 L1000 805 C1000 530, 700 560, 700 440" fill="none" stroke="#e08a5e" stroke-width="7" stroke-linecap="round"/><circle cx="300" cy="840" r="15" fill="#0a0a0a" stroke="#5ea1ff" stroke-width="7"/><circle cx="400" cy="805" r="15" fill="#0a0a0a" stroke="#b794ff" stroke-width="7"/><circle cx="500" cy="770" r="15" fill="#0a0a0a" stroke="#3dd68c" stroke-width="7"/><circle cx="600" cy="735" r="15" fill="#0a0a0a" stroke="#5ea1ff" stroke-width="7"/><circle cx="800" cy="735" r="15" fill="#0a0a0a" stroke="#5ea1ff" stroke-width="7"/><circle cx="900" cy="770" r="15" fill="#0a0a0a" stroke="#b794ff" stroke-width="7"/><circle cx="1000" cy="805" r="15" fill="#0a0a0a" stroke="#e08a5e" stroke-width="7"/>
+        <circle cx="700" cy="440" r="40" fill="#3dd68c"/>
+        <path d="M684 441 l11 11 l22 -24" fill="none" stroke="#0a0a0a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div id="h-tag">v1.0.0</div>
+      <div id="h-title">上线。</div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      // Posed key frame for the storyboard; the animation replaces it once the stills are approved.
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines = window.__timelines || {};
+      window.__timelines['ship'] = tl;
+    })();
+  </script>
+</template>

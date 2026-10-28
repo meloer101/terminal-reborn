@@ -1,0 +1,69 @@
+<template>
+  <style>
+    @font-face { font-family: 'Wavi Archivo'; src: url('assets/fonts/archivo-wdth-wght-subset.woff2') format('woff2'); font-weight: 100 900; font-stretch: 62% 125%; }
+    @font-face { font-family: 'Wavi Sans SC'; src: url('assets/fonts/noto-sans-sc-film-subset.woff') format('woff'); font-weight: 100 900; }
+    @font-face { font-family: 'Wavi Mono'; src: url('assets/fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); font-weight: 100 800; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    .stage { position: absolute; inset: 0; }
+    .grain { position: absolute; inset: -40px; opacity: 0.04; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"); }
+
+    #e-screen { position: absolute; inset: 0; transform-origin: 50% 50%; }
+    #e-mark, #e-qs { position: absolute; left: 0; width: 1920px; }
+    #e-mark { top: 40px; height: 250px; }
+    #e-mark text { font-family: 'Wavi Archivo', sans-serif; font-weight: 900; font-stretch: 125%; font-size: 230px; letter-spacing: -5px; }
+    #e-qs { top: 300px; height: 190px; }
+    #e-qs text { font-family: 'Wavi Archivo', sans-serif; font-weight: 900; font-stretch: 112%; font-size: 190px; }
+    #e-title { position: absolute; left: 0; right: 0; top: 520px; text-align: center; font: 900 150px/1 'Wavi Sans SC', sans-serif; letter-spacing: -0.02em; color: #ededed; }
+    #e-sub { position: absolute; left: 0; right: 0; top: 712px; text-align: center; font: 400 32px/50px Inter, 'Wavi Sans SC', sans-serif; color: #a1a1a1; }
+    #e-sub div { height: 50px; }
+    #e-sub em { font-style: normal; color: #ff5fb0; }
+    #e-btns { position: absolute; left: 0; right: 0; top: 842px; display: flex; justify-content: center; gap: 22px; }
+    #e-btns span { padding: 0 40px; font: 600 34px/88px Inter, 'Wavi Sans SC', sans-serif; }
+    #e-btns .p { background: #ededed; color: #0a0a0a; }
+    #e-btns .s { box-shadow: inset 0 0 0 2px #ffffff52; color: #ededed; }
+    #e-note { position: absolute; left: 0; right: 0; top: 976px; text-align: center; font: 400 28px/1 Inter, 'Wavi Sans SC', sans-serif; color: #a1a1a1; }
+    #e-scan { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0, 0, 0, 0.28) 3px 4px); }
+    #e-band { position: absolute; left: 0; right: 0; top: 0; height: 140px; background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.05), transparent); }
+  </style>
+  <div id="root" data-composition-id="end" data-width="1920" data-height="1080" data-composition-variables='[{"id":"title","type":"string","label":"Claim","default":"一个人，多线程。"},{"id":"sub1","type":"string","label":"Sub line","default":"给同时跑好几个 Claude Code 和 Codex 的个人开发者。"},{"id":"cta","type":"string","label":"Download button","default":"下载 macOS 版"},{"id":"note","type":"string","label":"Note","default":"免费开源 · macOS 13+ · Apple 芯片与 Intel"}]'>
+    <div id="end-stage" class="clip stage" data-start="0" data-duration="7" data-layout-allow-overflow data-layout-allow-overlap data-layout-allow-occlusion>
+      <div class="grain" id="e-grain"></div>
+      <div id="e-screen">
+        <svg id="e-mark" viewBox="0 0 1920 250" aria-label="WAVI"><defs><linearGradient id="em-chrome" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfd8ff"/><stop offset="0.5" stop-color="#ffffff"/><stop offset="0.72" stop-color="#ffd3e8"/><stop offset="0.92" stop-color="#fff6cd"/></linearGradient><pattern id="em-lines" width="8" height="14" patternUnits="userSpaceOnUse"><rect y="11" width="8" height="2" fill="#000" opacity="0.45"/></pattern></defs><g data-layout-ignore id="e-fringe"><text x="954" y="212" text-anchor="middle" fill="#2141ff">WAVI</text><text x="964.8" y="218.6" text-anchor="middle" fill="#ff2a12">WAVI</text><text x="961.2" y="221" text-anchor="middle" fill="#ffd000">WAVI</text><text x="960" y="215" text-anchor="middle" fill="#000">WAVI</text></g><text x="960" y="215" text-anchor="middle" fill="url(#em-chrome)">WAVI</text><text x="960" y="215" text-anchor="middle" fill="url(#em-lines)">WAVI</text></svg>
+        <svg id="e-qs" viewBox="0 0 1920 190" aria-label="??????????"><defs><linearGradient id="eq-chrome" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfd8ff"/><stop offset="0.5" stop-color="#ffffff"/><stop offset="0.72" stop-color="#ffd3e8"/><stop offset="0.92" stop-color="#fff6cd"/></linearGradient><pattern id="eq-lines" width="8" height="14" patternUnits="userSpaceOnUse"><rect y="11" width="8" height="2" fill="#000" opacity="0.45"/></pattern></defs><g class="q" id="e-q0"><g data-layout-ignore><text x="101" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="110" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="107" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="106" y="150" text-anchor="middle" fill="#000">?</text></g><text x="106" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="106" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q1"><g data-layout-ignore><text x="291" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="300" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="297" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="296" y="150" text-anchor="middle" fill="#000">?</text></g><text x="296" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="296" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q2"><g data-layout-ignore><text x="481" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="490" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="487" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="486" y="150" text-anchor="middle" fill="#000">?</text></g><text x="486" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="486" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q3"><g data-layout-ignore><text x="671" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="680" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="677" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="676" y="150" text-anchor="middle" fill="#000">?</text></g><text x="676" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="676" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q4"><g data-layout-ignore><text x="861" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="870" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="867" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="866" y="150" text-anchor="middle" fill="#000">?</text></g><text x="866" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="866" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q5"><g data-layout-ignore><text x="1051" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="1060" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="1057" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="1056" y="150" text-anchor="middle" fill="#000">?</text></g><text x="1056" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="1056" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q6"><g data-layout-ignore><text x="1241" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="1250" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="1247" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="1246" y="150" text-anchor="middle" fill="#000">?</text></g><text x="1246" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="1246" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q7"><g data-layout-ignore><text x="1431" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="1440" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="1437" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="1436" y="150" text-anchor="middle" fill="#000">?</text></g><text x="1436" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="1436" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q8"><g data-layout-ignore><text x="1621" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="1630" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="1627" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="1626" y="150" text-anchor="middle" fill="#000">?</text></g><text x="1626" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="1626" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g><g class="q" id="e-q9"><g data-layout-ignore><text x="1811" y="147.5" text-anchor="middle" fill="#2141ff">?</text><text x="1820" y="153" text-anchor="middle" fill="#ff2a12">?</text><text x="1817" y="155" text-anchor="middle" fill="#ffd000">?</text><text x="1816" y="150" text-anchor="middle" fill="#000">?</text></g><text x="1816" y="150" text-anchor="middle" fill="url(#eq-chrome)">?</text><text x="1816" y="150" text-anchor="middle" fill="url(#eq-lines)">?</text></g></svg>
+        <div id="e-title" data-var-text="title">一个人，多线程。</div>
+        <div id="e-sub"><div id="e-sub1" data-var-text="sub1">给同时跑好几个 Claude Code 和 Codex 的个人开发者。</div><div id="e-sub2">agent 各干各的，只在需要你时<em>叫你</em>。</div></div>
+        <div id="e-btns"><span class="p" id="e-dl" data-var-text="cta">下载 macOS 版</span><span class="s" id="e-gh">GitHub ↗</span></div>
+        <div id="e-note" data-var-text="note">免费开源 · macOS 13+ · Apple 芯片与 Intel</div>
+      </div>
+      <div id="e-band"></div>
+      <div id="e-scan"></div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo('#e-grain', { x: 0, y: 0 }, { x: 53, y: -31, duration: 7, ease: 'steps(84)' }, 0);
+      // 0 · hard cut: the tube switches on, a bright line opening into the picture.
+      tl.fromTo('#e-screen', { scaleY: 0.02, scaleX: 0.7, filter: 'brightness(3)' }, { scaleY: 1, scaleX: 1, filter: 'brightness(1)', duration: 0.28, ease: 'expo.out' }, 0);
+      tl.fromTo('#e-band', { y: -160 }, { y: 1120, duration: 2.6, ease: 'none' }, 0.1);
+      tl.fromTo('#e-band', { y: -160 }, { y: 1120, duration: 2.6, ease: 'none', immediateRender: false }, 4.2);
+      // 0.3 · WAVI wipes in, its fringe settling.
+      tl.fromTo('#e-mark', { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.45, ease: 'power3.out' }, 0.3);
+      tl.fromTo('#e-fringe', { x: -12 }, { keyframes: [{ x: 0, duration: 0.3 }, { x: -5, y: 2, duration: 0.03, delay: 1.6 }, { x: 0, y: 0, duration: 0.03 }] }, 0.3);
+      // 0.9 · ten "?" flick on, one after another.
+      for (let i = 0; i < 10; i++) {
+        tl.fromTo('#e-q' + i, { opacity: 0 }, { keyframes: [{ opacity: 1, duration: 0.02 }, { opacity: 0.3, duration: 0.03 }, { opacity: 1, duration: 0.02 }] }, 0.9 + i * 0.06);
+      }
+      // 1.7 · the line; 2.6 the sub; 3.4 the buttons and the note.
+      tl.fromTo('#e-title', { opacity: 0, filter: 'blur(12px)', scale: 1.02 }, { opacity: 1, filter: 'blur(0px)', scale: 1, duration: 0.2, ease: 'power2.out' }, 1.7);
+      tl.fromTo('#e-sub1', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, ease: 'power2.out' }, 2.6);
+      tl.fromTo('#e-sub2', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.18, ease: 'power2.out' }, 2.9);
+      tl.fromTo('#e-btns span', { opacity: 0, scale: 0.94, filter: 'blur(6px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.3, ease: 'expo.out', stagger: 0.08 }, 3.4);
+      tl.fromTo('#e-note', { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'power2.out' }, 3.7);
+      window.__timelines = window.__timelines || {};
+      window.__timelines['end'] = tl;
+    })();
+  </script>
+</template>
