@@ -166,7 +166,6 @@ function GitPane({ worktree }: { worktree: Worktree }) {
               void popupMenu(
                 [
                   ...(['all', 'worktrees'] as const).map((scope) => ({ type: 'item' as const, id: scope, label: SCOPE_LABEL[scope] })),
-                  { type: 'separator' },
                   { type: 'item', id: 'remotes', label: git.remotes ? '隐藏远程分支' : '显示远程分支', enabled: git.scope === 'all' }
                 ],
                 e.currentTarget

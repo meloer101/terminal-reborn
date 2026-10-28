@@ -144,10 +144,8 @@ function usePageContextMenu(worktree: string, slot: RefObject<HTMLDivElement | n
           [
             { type: 'item', id: 'back', label: '后退', enabled: menu.canGoBack, accelerator: 'CmdOrCtrl+[' },
             { type: 'item', id: 'reload', label: '刷新', accelerator: 'CmdOrCtrl+R' },
-            { type: 'separator' },
             { type: 'item', id: 'copy', label: '复制', enabled: menu.canCopy, accelerator: 'CmdOrCtrl+C' },
             { type: 'item', id: 'paste', label: '粘贴', enabled: menu.canPaste, accelerator: 'CmdOrCtrl+V' },
-            { type: 'separator' },
             { type: 'item', id: 'inspect', label: '检查元素' }
           ],
           { x: rect.left + menu.x, y: rect.top + menu.y }

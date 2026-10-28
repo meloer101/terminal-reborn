@@ -192,7 +192,6 @@ export async function openRowMenu(
         items: kinds.map((kind) => ({ type: 'item', id: `new:${kind}`, label: KIND_LABEL(kind), enabled: row.info.prunable === null }))
       },
       { type: 'item', id: 'copy-path', label: '复制路径' },
-      { type: 'separator' },
       archivedId
         ? { type: 'item', id: 'restore', label: '恢复归档' }
         : { type: 'item', id: 'archive', label: '归档…', enabled: !row.info.isMain && row.worktreeIds.length > 0 },

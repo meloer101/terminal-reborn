@@ -16,7 +16,6 @@ export type MenuEntry =
       icon?: MenuIcon
     }
   | { type: 'submenu'; label: string; items: MenuEntry[] }
-  | { type: 'separator' }
 
 export interface Size {
   width: number
@@ -110,7 +109,7 @@ export function formatAccelerator(accelerator: string): string {
   return mods.join('') + (KEY_SYMBOL[key.toLowerCase()] ?? (key.length === 1 ? key.toUpperCase() : key))
 }
 
-/** Items and submenus that can be activated (separators and disabled items are skipped). */
+/** Items and submenus that can be activated (disabled items are skipped). */
 export function isActionable(entry: MenuEntry): boolean {
   return entry.type === 'submenu' || (entry.type === 'item' && entry.enabled !== false)
 }
