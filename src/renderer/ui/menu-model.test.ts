@@ -43,21 +43,20 @@ describe('formatAccelerator', () => {
 describe('stepIndex', () => {
   const entries: MenuEntry[] = [
     { type: 'item', id: 'a', label: 'A' },
-    { type: 'separator' },
     { type: 'item', id: 'b', label: 'B', enabled: false },
     { type: 'submenu', label: 'C', items: [] }
   ]
 
-  it('skips separators and disabled items, and wraps', () => {
+  it('skips disabled items, and wraps', () => {
     expect(stepIndex(entries, -1, 1)).toBe(0)
-    expect(stepIndex(entries, 0, 1)).toBe(3)
-    expect(stepIndex(entries, 3, 1)).toBe(0)
-    expect(stepIndex(entries, 0, -1)).toBe(3)
-    expect(stepIndex(entries, entries.length, -1)).toBe(3)
+    expect(stepIndex(entries, 0, 1)).toBe(2)
+    expect(stepIndex(entries, 2, 1)).toBe(0)
+    expect(stepIndex(entries, 0, -1)).toBe(2)
+    expect(stepIndex(entries, entries.length, -1)).toBe(2)
   })
 
   it('returns -1 when nothing can be chosen', () => {
-    expect(stepIndex([{ type: 'separator' }], -1, 1)).toBe(-1)
+    expect(stepIndex([{ type: 'item', id: 'x', label: 'X', enabled: false }], -1, 1)).toBe(-1)
     expect(stepIndex([], -1, 1)).toBe(-1)
   })
 })

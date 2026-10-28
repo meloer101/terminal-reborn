@@ -87,10 +87,8 @@ export async function openProjectMenu(projectId: ProjectId, anchor: MenuAnchor):
   const entries: MenuEntry[] = [
     { type: 'item', id: 'new', label: '新建会话…', accelerator: 'CmdOrCtrl+N' },
     { type: 'item', id: 'window', label: '在新窗口中打开' },
-    { type: 'separator' },
     { type: 'item', id: 'reveal', label: '在 Finder 中显示' },
     { type: 'item', id: 'copy-path', label: '复制路径' },
-    { type: 'separator' },
     { type: 'item', id: 'remove', label: removeProjectMenuLabel(sessionCount) }
   ]
   const choice = await popupMenu(entries, anchor)
@@ -143,12 +141,10 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   const worktree = state.worktrees.find((w) => w.id === session?.worktreeId)
   const entries: MenuEntry[] = [
     { type: 'item', id: 'window', label: '移到新窗口' },
-    { type: 'separator' },
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]
   if (worktree) {
     entries.push(
-      { type: 'separator' },
       { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: agentName(kind) })) }
     )
     if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: '归档 worktree…' })
@@ -179,12 +175,9 @@ export async function openSessionHeaderMenu(sessionId: SessionId, anchor: MenuAn
   const path = state.worktrees.find((w) => w.id === session.worktreeId)?.path
   const entries: MenuEntry[] = [
     { type: 'item', id: 'rename', label: '重命名…' },
-    { type: 'separator' },
     { type: 'item', id: 'reveal', label: '在 Finder 中显示', enabled: path !== undefined },
     { type: 'item', id: 'copy-path', label: '复制路径', enabled: path !== undefined },
-    { type: 'separator' },
     { type: 'item', id: 'same-task', label: '同任务多解…', accelerator: 'Shift+CmdOrCtrl+N', enabled: canRunSameTask(sessionId) },
-    { type: 'separator' },
     { type: 'item', id: 'window', label: '移到新窗口' },
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]

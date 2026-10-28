@@ -89,10 +89,3 @@
   margin-left: var(--space-16);
   color: var(--text-tertiary);
 }
-
-.separator {
-  flex: none;
-  height: 1px;
-  margin: var(--space-4) calc(-1 * var(--space-4));
-  background: var(--border-subtle);
-}

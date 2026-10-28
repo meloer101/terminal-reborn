@@ -134,7 +134,7 @@ const CommitRow = memo(function CommitRow({ index, commit, row, head, pills, age
     e.preventDefault()
     void popupMenu(
       [
-        ...(sessionPill ? [{ type: 'item' as const, id: 'session', label: `切换到会话 · ${sessionPill.name}` }, { type: 'separator' as const }] : []),
+        ...(sessionPill ? [{ type: 'item' as const, id: 'session', label: `切换到会话 · ${sessionPill.name}` }] : []),
         { type: 'item', id: 'sha', label: '复制 SHA' },
         { type: 'item', id: 'subject', label: '复制提交说明' }
       ],

@@ -154,41 +154,37 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
         onContextMenu={(event) => event.preventDefault()}
       >
         {entries.map((entry, index) =>
-          entry.type === 'separator' ? (
-            <div key={index} className={styles.separator} role="separator" />
-          ) : (
-            <div
-              key={index}
-              id={`${id}-${index}`}
-              className={styles.item}
-              role="menuitem"
-              data-index={index}
-              data-active={index === active}
-              aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
-              aria-haspopup={entry.type === 'submenu' ? 'menu' : undefined}
-              aria-expanded={entry.type === 'submenu' ? submenu?.index === index : undefined}
-              aria-keyshortcuts={entry.type === 'item' && entry.accelerator ? ariaShortcut(entry.accelerator) : undefined}
-              onPointerMove={() => onRowPointerMove(index)}
-              onClick={() => activate(index, false)}
-            >
-              {entry.type === 'item' && entry.icon && (
-                <span className={styles.icon} aria-hidden>
-                  <entry.icon size={16} strokeWidth={1.75} />
-                </span>
-              )}
-              <span className={styles.label}>{entry.label}</span>
-              {entry.type === 'item' && entry.accelerator && (
-                <span className={styles.shortcut} aria-hidden>
-                  {formatAccelerator(entry.accelerator)}
-                </span>
-              )}
-              {entry.type === 'submenu' && (
-                <span className={styles.chevron} aria-hidden>
-                  <ChevronRight size={16} strokeWidth={1.75} />
-                </span>
-              )}
-            </div>
-          )
+          <div
+            key={index}
+            id={`${id}-${index}`}
+            className={styles.item}
+            role="menuitem"
+            data-index={index}
+            data-active={index === active}
+            aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
+            aria-haspopup={entry.type === 'submenu' ? 'menu' : undefined}
+            aria-expanded={entry.type === 'submenu' ? submenu?.index === index : undefined}
+            aria-keyshortcuts={entry.type === 'item' && entry.accelerator ? ariaShortcut(entry.accelerator) : undefined}
+            onPointerMove={() => onRowPointerMove(index)}
+            onClick={() => activate(index, false)}
+          >
+            {entry.type === 'item' && entry.icon && (
+              <span className={styles.icon} aria-hidden>
+                <entry.icon size={16} strokeWidth={1.75} />
+              </span>
+            )}
+            <span className={styles.label}>{entry.label}</span>
+            {entry.type === 'item' && entry.accelerator && (
+              <span className={styles.shortcut} aria-hidden>
+                {formatAccelerator(entry.accelerator)}
+              </span>
+            )}
+            {entry.type === 'submenu' && (
+              <span className={styles.chevron} aria-hidden>
+                <ChevronRight size={16} strokeWidth={1.75} />
+              </span>
+            )}
+          </div>
         )}
       </div>
       {submenu && sub?.type === 'submenu' && (

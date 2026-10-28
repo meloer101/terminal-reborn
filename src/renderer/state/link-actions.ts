@@ -59,7 +59,6 @@ async function openLinkMenu(sessionId: SessionId, url: string, at: { x: number; 
   const entries: MenuEntry[] = [
     { type: 'item', id: 'internal', label: '在内置浏览器打开' },
     { type: 'item', id: 'external', label: '用系统浏览器打开' },
-    { type: 'separator' },
     { type: 'item', id: 'copy', label: '复制链接' }
   ]
   const choice = await popupMenu(entries, at)
@@ -93,7 +92,6 @@ async function openFileLinkMenu(file: FileLink, at: { x: number; y: number }): P
     { type: 'item', id: 'preview', label: '预览' },
     { type: 'item', id: 'open', label: '用默认编辑器打开' },
     { type: 'item', id: 'reveal', label: '在 Finder 中显示' },
-    { type: 'separator' },
     { type: 'item', id: 'copy', label: '复制路径' }
   ]
   const choice = await popupMenu(entries, at)

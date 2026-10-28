@@ -58,7 +58,6 @@ export function fileMenuEntries(target: Pick<FileTarget, 'dir'>, { withPreview =
       : []),
     { type: 'item', id: 'open', label: '用默认编辑器打开', icon: Code, accelerator: FILE_SHORTCUTS.open },
     { type: 'item', id: 'reveal', label: '在 Finder 中显示', icon: FolderOpen, accelerator: FILE_SHORTCUTS.reveal },
-    { type: 'separator' },
     { type: 'item', id: 'insert', label: '插入路径到终端', icon: AtSign, accelerator: FILE_SHORTCUTS.insert },
     { type: 'item', id: 'copy', label: '复制相对路径', icon: Copy, accelerator: FILE_SHORTCUTS.copy }
   ]

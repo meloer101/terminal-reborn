@@ -12,7 +12,6 @@ export async function openTerminalMenu(sessionId: SessionId, at: { x: number; y:
   const entries: MenuEntry[] = [
     { type: 'item', id: 'copy', label: '复制', accelerator: 'CmdOrCtrl+C', enabled: selection !== '' },
     { type: 'item', id: 'same-task', label: '同任务多解…', accelerator: 'Shift+CmdOrCtrl+N', enabled: canRunSameTask(sessionId) },
-    { type: 'separator' },
     { type: 'item', id: 'select-all', label: '全选', accelerator: 'CmdOrCtrl+A' }
   ]
   const choice = await popupMenu(entries, at)
