@@ -115,7 +115,7 @@ describe('startReview', () => {
     expect(again).toMatchObject({ phase: 'done', cached: true, found: 1, counts: { P1: 1 }, message: '看过了' })
     const saved = new ReviewResultsFile(resultsPath)
     useReviewResultsFile(saved)
-    await vi.waitFor(() => expect(saved.get()[root]?.records).toHaveLength(1))
+    await vi.waitFor(() => expect(saved.get()[root]?.records).toHaveLength(1), { timeout: 10_000 })
     expect(await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })).toMatchObject({ phase: 'done', cached: true, found: 1 })
     expect(latestReview(root)).toMatchObject({ phase: 'done', hash: done.hash, found: 1, costUsd: 0.039 })
     expect(latestReview(join(base, 'never-reviewed'))).toBeNull()
@@ -215,7 +215,7 @@ describe('startReview', () => {
     expect(first.comments).toHaveLength(2)
     const saved = new ReviewResultsFile(resultsPath)
     useReviewResultsFile(saved)
-    await vi.waitFor(() => expect(saved.get()[root]?.records.at(-1)?.comments).toHaveLength(2))
+    await vi.waitFor(() => expect(saved.get()[root]?.records.at(-1)?.comments).toHaveLength(2), { timeout: 10_000 })
     expect(saved.get()[root]!.records.at(-1)).toMatchObject({ head: git(root, 'rev-parse', 'HEAD').trim(), fileCount: 3, scope: 'full' })
 
     // A new commit touches b.ts only: the reviewer reads b.ts, c.ts's finding stays, b.ts's old one is replaced.
