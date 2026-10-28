@@ -165,5 +165,6 @@ done`
     expect(await flaky.read()).toMatchObject({ kind: 'error' })
     expect(starts(crashing)).toBe(2)
     flaky.close()
-  })
+    // Six login shells in a row: more than the default 5 s when the whole suite runs at once.
+  }, 15_000)
 })
