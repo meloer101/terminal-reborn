@@ -221,3 +221,17 @@
     display: none;
   }
 }
+
+/* The panel's narrowest widths (container widths are the header's content box, 24 less than the panel): the account's
+   usage goes below a 464 panel, then the context below 408, so no chip runs into the tools. */
+@container session-header (max-width: 440px) {
+  .header[data-part='tools'] [data-testid^='usage-chip-'] {
+    display: none;
+  }
+}
+
+@container session-header (max-width: 384px) {
+  .header[data-part='tools'] [data-testid='context-chip'] {
+    display: none;
+  }
+}

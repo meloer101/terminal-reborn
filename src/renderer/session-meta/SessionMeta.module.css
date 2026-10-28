@@ -9,6 +9,8 @@
   align-items: center;
   gap: var(--space-4);
   margin-right: calc(-1 * var(--space-8));
+  /* Whatever still does not fit is cut here rather than drawn over the tools (popovers are portals, not clipped). */
+  overflow: hidden;
   -webkit-app-region: no-drag;
 }
 

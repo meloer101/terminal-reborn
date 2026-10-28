@@ -337,6 +337,52 @@ test.describe('session metrics: todo · context · usage', () => {
     await page.locator('[data-region="panel"]').getByRole('button', { name: '关闭右侧栏' }).click()
   })
 
+  test('with a narrow right panel the chips above it never run into the tools: usage goes, then context', async () => {
+    await header().getByRole('button', { name: 'Git', exact: true }).click()
+    const card = page.locator('[data-region="panel"]').getByTestId('right-panel')
+    await expect(card).toBeVisible()
+    // It springs open; drag only once it has settled at its default width.
+    await expect.poll(async () => Math.round((await card.boundingBox())!.width)).toBe(480)
+    await expect.poll(async () => card.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(6)
+    const tools = page.locator('[data-region="panel"] header')
+    // At the default width every chip is there: todo, context and the account's usage.
+    await expect(tools.getByTestId('context-chip')).toBeVisible()
+    await expect(tools.getByTestId('usage-chip-claude')).toBeVisible()
+    const handle = page.locator('[data-region="panel"]').getByRole('separator', { name: '调整右侧栏宽度' })
+    // Drag the panel's left edge so the panel is `width` wide (it springs, so poll until it settles).
+    const widen = async (width: number) => {
+      const h = (await handle.boundingBox())!
+      const right = await card.evaluate((el) => el.getBoundingClientRect().right)
+      await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(right - width, h.y + h.height / 2, { steps: 5 })
+      await page.mouse.up()
+      await expect.poll(async () => Math.round((await card.boundingBox())!.width)).toBe(width)
+    }
+    // How far the visible chips reach past the first tool button (≤ 0: no overlap).
+    const overlap = () =>
+      tools.evaluate((el) => {
+        const chips = el.querySelector('[data-testid="session-meta"]')
+        const toolbar = el.lastElementChild
+        if (!chips || !toolbar) return -1
+        const visible = (node: Element) => node instanceof HTMLElement && node.offsetParent !== null && node.getBoundingClientRect().width > 0
+        const chipRight = Math.max(...[...chips.children].filter(visible).map((c) => c.getBoundingClientRect().right), -Infinity)
+        const toolLeft = Math.min(...[...toolbar.children].filter(visible).map((c) => c.getBoundingClientRect().left), Infinity)
+        return chipRight === -Infinity ? -1 : Math.round(chipRight - toolLeft)
+      })
+    for (const width of [440, 400]) {
+      await widen(width)
+      expect(await overlap(), `chips overlap the tools at ${width}`).toBeLessThanOrEqual(0)
+    }
+    // At the panel's minimum the account's usage and the context have gone; the todo count stays.
+    await expect(tools.getByTestId('usage-chip-claude')).toBeHidden()
+    await expect(tools.getByTestId('context-chip')).toBeHidden()
+    await expect(tools.getByTestId('todo-chip')).toBeVisible()
+    await shoot('17B-narrowest')
+    await handle.dblclick()
+    await page.locator('[data-region="panel"]').getByRole('button', { name: '关闭右侧栏' }).click()
+  })
+
   test('a Codex session shows its context and Codex usage, and no todo', async () => {
     await fromMain('agent:event', { sessionId: 's-graph', agent: 'codex', at: Date.now(), event: { type: 'context', context: { percent: 41, usedTokens: 105000, windowTokens: 258400 } } })
     await sidebarRow('s-graph').click()
