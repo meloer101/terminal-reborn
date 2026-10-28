@@ -4,6 +4,35 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-28
+
+Every agent's plan usage on one page, and a calmer Git · 变更.
+每个 agent 的套餐额度集中到一页，Git · 变更 更安静。
+
+### Usage / 额度
+- 额度 above 设置 in the sidebar (⇧⌘U) opens 设置 · 额度: every installed agent's plan usage, the fullest first, and why a vendor has no figures (signed out, API key login, no plan figures, CLI too old, read failed). The usage alert setting moved here.
+  侧栏「设置」上方的「额度」（⇧⌘U）打开设置 · 额度：列出每个装了的 agent 的套餐额度，最紧的在前；没有数字时写原因（没登录、API key 登录、没有套餐额度、CLI 版本太旧、读取失败）。额度提醒的开关挪到这一页。
+- Plan bars show the window's elapsed time as an underlayer instead of a tick, in the session header, the usage popover and the new page.
+  额度条把这个窗口已过去的时间画成底层，不再用竖线，会话头、额度浮层和这一页一致。
+
+### Merge and PR / 合并与 PR
+- In Git · 变更, an open file's row stays pinned at the top while you scroll its diff, and one click folds it; the ⋯ menu adds 全部收起.
+  Git · 变更 里，展开的文件滚动时文件行吸顶，点一下即可收起；⋯ 菜单新增「全部收起」。
+- The review block and the merge area are realigned: findings on two lines with the first three shown, every merge row the same height, switches label-first with square corners. A review with no P0 / P1 lands with its most severe findings ticked.
+  审阅块和出口区重新对齐：每条发现两行、先显示前三条，出口区每行等高，开关标签在前、方角。没有 P0 / P1 的审阅默认勾选最高一级的发现。
+
+### Interface / 界面
+- In-app menus no longer draw separators.
+  应用内菜单去掉分隔线。
+- A second click on the expanded worktree row collapses it.
+  再点一次展开的 worktree 行会收起。
+- Port tags and the browser's port bar no longer list the agent CLI's own local sockets.
+  端口标签和浏览器端口栏不再列出 agent CLI 自己的本地端口。
+
+### Terminal / 终端
+- Typing Chinese with the cursor near the right edge no longer shifts the terminal sideways.
+  光标靠近右边时输入中文，终端不再整体横向错位。
+
 ## [0.10.0] - 2026-10-27
 
 Git · 变更 now carries a change from diff to main or a PR in one place: the agent in the session writes the text and fixes CI, Wavi commits, merges, pushes and keeps the brakes on.
@@ -361,7 +390,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/meloer101/terminal-reborn/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...v0.8.1
