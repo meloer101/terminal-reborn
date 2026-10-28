@@ -1,0 +1,91 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #coda-stage { position: absolute; inset: 0; }
+    #coda-cam, #coda-osd { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-00jm" id="root" data-composition-id="coda" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-8eg5" id="coda-stage" class="clip" data-start="0" data-duration="8.137">
+      <canvas data-hf-id="hf-rtf2" id="coda-cam" aria-label="Command Q: the Wavi window quits; its eight running spinners stay and keep turning in a row on the dark tape. That is not dead which can eternal lie, / And with strange aeons even death may die. Then: AGENTS RUN AFTER Command Q. The tape stops."></canvas>
+      <canvas data-hf-id="hf-jokd" id="coda-osd" aria-hidden="true"></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const R = window.Rec;
+      const N = window.Night;
+      const W = window.WaviUI;
+      const SPEED = 1.5;
+      const D = 8.137 * SPEED;
+      const FILM0 = 36.613;
+      const bar = N.bar;
+      const COPY = {
+        l1: 'That is not dead which can eternal lie,',
+        l2: 'And with strange aeons even death may die.',
+        claim: 'AGENTS RUN AFTER ⌘Q',
+        quit: 'Quit Wavi'
+      };
+      const HUD = 0.0;
+      const QUIT = N.BEAT;          // ⌘Q on beat 2
+      const FLY = QUIT + 0.25;
+      const L1 = bar(0.5);
+      const L2 = bar(1);
+      const CLAIM = bar(3);
+      const STOP = D - 0.5;         // the camcorder stops
+
+      const tl = gsap.timeline();
+      R.fonts(['400 64px "Wavi Bodoni"', '900 112px "Wavi Archivo"', '400 26px "Wavi Archivo"', '600 30px "Wavi Archivo"', '700 34px "Wavi Mono"', '500 44px Inter', '400 26px "Wavi Mono"']).then(() => {
+        const rec = R.create(document.getElementById('coda-cam'), document.getElementById('coda-osd'));
+        const ui = rec.ui;
+        ui.save(); ui.font = '900 150px ' + R.SANS; ui.fontStretch = 'expanded'; ui.letterSpacing = '-3px';
+        const ALL_PX = Math.min(150, Math.floor(150 * 1030 / ui.measureText('ALL RUNNING.').width));
+        ui.restore();
+        R.drive(tl, D, (u) => {
+          rec.begin('#050505');
+          const t = u / SPEED;
+          // The window as Wavi left it, until ⌘Q quits it.
+          const wa = 1 - R.ramp(u, QUIT + 0.05, QUIT + 0.3);
+          if (wa > 0) {
+            ui.save();
+            const s = 1 - 0.02 * R.ramp(u, QUIT + 0.05, QUIT + 0.3);
+            ui.setTransform(s, 0, 0, s, 960 * (1 - s), 540 * (1 - s));
+            ui.globalAlpha = wa;
+            W.sidebar(ui, { t, waiting: 0, sel: 0, hideSub: false });
+            W.main(ui, { t, alpha: 1, status: 'running', title: 'Session cookie migration', path: 'acme-web/session-cookie' });
+            R.text(ui, 'ALL RUNNING.', 830, 610, { font: '900 ' + ALL_PX + 'px ' + R.SANS, stretch: 'expanded', fill: '#ededed', tracking: '-3px' });
+            R.text(ui, 'One person, many threads.', 836, 720, { font: '500 46px ' + R.SANS, fill: '#a1a1a1' });
+            ui.restore();
+          }
+          // The eight agents keep running: their glyphs leave the sidebar and line up, still spinning.
+          W.ROWS.forEach((r, i) => {
+            const g = W.glyphAt(r);
+            const k = R.io3(R.ramp(u, FLY + i * 0.04, FLY + i * 0.04 + 0.9));
+            const x = R.lerp(g.x, 960 + (i - 3.5) * 132, k);
+            const y = R.lerp(g.y, 820, k);
+            W.glyph(ui, x, y, 'running', t + i * 0.13, R.lerp(1, 2.4, k));
+          });
+          ui.globalAlpha = 1;
+          if (u >= L1 && u < CLAIM) {
+            R.text(ui, COPY.l1, 960, 420, { font: '400 76px ' + R.SERIF, align: 'center', fill: '#ededed', alpha: R.ramp(u, L1, L1 + 0.3) });
+            if (u >= L2) R.text(ui, COPY.l2, 960, 530, { font: '400 76px ' + R.SERIF, align: 'center', fill: '#ededed', alpha: R.ramp(u, L2, L2 + 0.3) });
+          }
+          if (u >= CLAIM) {
+            const k = R.out3(R.ramp(u, CLAIM, CLAIM + 0.35));
+            ui.save();
+            ui.beginPath(); ui.rect(0, 370, 1920, 200); ui.clip();
+            R.text(ui, COPY.claim, 960, 530 + 150 * (1 - k), { font: '900 112px ' + R.SANS, stretch: 'semi-expanded', align: 'center', fill: '#ededed', tracking: '-2px' });
+            ui.restore();
+          }
+          const pw = 1 - R.ramp(u, STOP, STOP + 0.45);
+          rec.render(FILM0 + t, { grade: 0.62, keepM: 1, keepB: 0.75, bloodOn: 0, power: pw, focus: 4 * R.bump(u, QUIT + 0.1, 0.5) });
+          if (pw > 0.98) R.osd(rec.osd, { mode: 'rec', t, clock: 3 * 3600 + 17 * 60 + 19 + t });
+          const h = R.ramp(u, HUD, HUD + 0.01) * (1 - R.ramp(u, QUIT + 0.45, QUIT + 0.65));
+          W.hud(rec.osd, ['⌘', 'Q'], COPY.quit, 960, 800, h, u >= QUIT ? 1 - R.ramp(u, QUIT + 0.15, QUIT + 0.3) + 0.0001 : 0);
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['coda'] = film;
+      });
+    })();
+  </script>
+</template>

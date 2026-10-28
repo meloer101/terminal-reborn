@@ -1,0 +1,70 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #000; }
+    #end-stage { position: absolute; inset: 0; }
+    #end-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-gwfo" id="root" data-composition-id="end" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-allp" id="end-stage" class="clip" data-start="0" data-duration="6.102">
+      <canvas data-hf-id="hf-wvag" id="end-cam" aria-label="The tape is off. The sky-filled WAVI wordmark fills from the bottom like a rising liquid, then Download for macOS."></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const R = window.Rec;
+      const N = window.Night;
+      const SPEED = 1.5;
+      const D = 6.102 * SPEED;
+      const FILM0 = 44.75;
+      const bar = N.bar;
+      const COPY = { cta: 'Download for macOS' };
+      const FILL0 = 0.15;
+      const FILL1 = bar(0.85);
+      const CTA = bar(1);
+      const tl = gsap.timeline();
+      Promise.all([R.fonts(['600 38px Inter', '600 38px "Wavi Archivo"']), R.image('assets/brand/sky-wavi.png')]).then(([, img]) => {
+        const rec = R.create(document.getElementById('end-cam'), null);
+        const ui = rec.ui;
+        // The wordmark: the image's letters span 8.6-91 % of its width and 22.5-46.5 % of its height.
+        const IW = 1180; const IH = IW * img.height / img.width;
+        const IX = 960 - IW / 2; const IY = 430 - IH / 2;
+        const top = IY + IH * 0.215; const bot = IY + IH * 0.475;
+        R.drive(tl, D, (u) => {
+          rec.begin('#000');
+          const t = u / SPEED;
+          const k = R.io3(R.ramp(u, FILL0, FILL1));
+          const lv = R.lerp(bot + 6, top - 14, k);
+          ui.save();
+          ui.beginPath();
+          ui.moveTo(IX, IY + IH);
+          for (let x = IX; x <= IX + IW + 1; x += 8) {
+            const w = (1 - k) * (7 * Math.sin(x * 0.012 + u * 3.1) + 4 * Math.sin(x * 0.031 - u * 4.7));
+            ui.lineTo(x, lv + w);
+          }
+          ui.lineTo(IX + IW, IY + IH);
+          ui.closePath();
+          ui.clip();
+          ui.drawImage(img, IX, IY, IW, IH);
+          ui.restore();
+          if (u >= CTA) {
+            const a = R.out3(R.ramp(u, CTA, CTA + 0.4));
+            ui.save();
+            ui.globalAlpha = a;
+            ui.font = '600 38px Inter, ' + R.SANS;
+            const w = ui.measureText(COPY.cta).width + 96;
+            const y = 780 + 24 * (1 - a);
+            ui.fillStyle = '#ededed';
+            ui.beginPath(); ui.roundRect(960 - w / 2, y, w, 94, 16); ui.fill();
+            R.text(ui, COPY.cta, 960, y + 60, { font: '600 38px Inter, ' + R.SANS, align: 'center', fill: '#0a0a0a' });
+            ui.restore();
+          }
+          const pw = R.ramp(u, 0, 0.3) * 0.999 + 0.001;
+          rec.render(FILM0 + t, { grade: 0, bloodOn: 0, grain: 0.035, jitter: 0, hsw: 0, vig: 0.18, power: u < 0.3 ? pw : 1 });
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['end'] = film;
+      });
+    })();
+  </script>
+</template>

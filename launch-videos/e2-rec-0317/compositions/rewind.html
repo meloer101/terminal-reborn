@@ -1,0 +1,45 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; background: #050505; }
+    #rewind-stage { position: absolute; inset: 0; }
+    #rewind-cam, #rewind-osd { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  </style>
+  <div data-hf-id="hf-9auo" id="root" data-composition-id="rewind" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-nwdg" id="rewind-stage" class="clip" data-start="0" data-duration="4.068">
+      <canvas data-hf-id="hf-ug2m" id="rewind-cam" aria-label="REW: the tape rewinds through tearing bands; the night runs backwards, the blood drains back up into the letters, the chant turns back into logs, the clock runs back; PLAY on the clean wall of eight terminals."></canvas>
+      <canvas data-hf-id="hf-7qwn" id="rewind-osd" aria-hidden="true"></canvas>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const R = window.Rec;
+      const N = window.Night;
+      const SPEED = 1.5;
+      const D = 4.068 * SPEED;
+      const FILM0 = 22.375;
+      const BAR = N.BAR;
+      // The night is run backwards from the red frame (bar 10) to just before the bleed (bar 1.55), then PLAY.
+      const FROM = N.bar(10);
+      const TO = N.bar(1.55);
+      const REW0 = 0.2;
+      const REW1 = BAR * 1.62;
+      const PLAY = BAR * 1.72;
+      const tl = gsap.timeline();
+      R.fonts(['400 15px "Wavi Mono"', '700 34px "Wavi Mono"', '500 13px "Wavi Archivo"', '400 15px "JetBrains Mono"']).then(() => {
+        const rec = R.create(document.getElementById('rewind-cam'), document.getElementById('rewind-osd'));
+        R.drive(tl, D, (u) => {
+          const k = R.ramp(u, REW0, REW1);
+          const e = k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);
+          const tau = R.lerp(FROM, TO, e);
+          const st = N.paint(rec, tau);
+          const rw = u < REW0 ? 0 : u < REW1 ? 0.55 + 0.45 * Math.sin(Math.PI * k) : 1 - R.ramp(u, REW1, PLAY + 0.35);
+          rec.render(FILM0 + u / SPEED, Object.assign({}, st.fx, { rew: rw, jitter: 0.6 + 4 * rw, focus: 0, grain: 0.07 + 0.08 * rw }));
+          R.osd(rec.osd, { mode: u < PLAY ? 'rew' : 'play', t: u / SPEED, clock: st.clock });
+        });
+        const film = gsap.timeline({ paused: true });
+        film.add(tl.timeScale(SPEED), 0);
+        window.__timelines['rewind'] = film;
+      });
+    })();
+  </script>
+</template>
