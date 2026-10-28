@@ -11,6 +11,7 @@ import {
   formatSync,
   keptText,
   mergeListing,
+  COLLAPSED,
   selectedRow,
   sessionLine,
   tildePath
@@ -229,5 +230,9 @@ describe('selectedRow', () => {
     expect(selectedRow(working, '/wt/feature', 'w-main')?.name).toBe('jacob/feature')
     expect(selectedRow(working, '/gone', 'w-main')?.name).toBe('main')
     expect(selectedRow(working, null, null)).toBeNull()
+  })
+
+  it('shows nothing expanded once the user collapsed the row', () => {
+    expect(selectedRow(working, COLLAPSED, 'w-main')).toBeNull()
   })
 })
