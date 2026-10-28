@@ -197,7 +197,7 @@ function Row({ row, selected, projectId, root, refresh }: RowProps) {
   const rebaseTarget = radar && wantsRebase(radar.self) ? agentSessionFor(row.sessions, activeSessionId) : null
   return (
     <li className={styles.item} data-selected={selected} data-path={info.path}>
-      <button type="button" className={styles.row} aria-expanded={selected} onClick={() => selectRow(root, row)}>
+      <button type="button" className={styles.row} aria-expanded={selected} onClick={() => selectRow(root, row, selected)}>
         <span className={styles.line}>
           {row.status ? (
             <StatusGlyph status={row.status} />

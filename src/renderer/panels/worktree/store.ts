@@ -8,7 +8,7 @@ export interface ProjectWorktrees {
   /** undefined while the first listing loads; null when the project is not a git repository. */
   listing: GitWorktreeListing | null | undefined
   failed: boolean
-  /** Resolved path of the row the user clicked (null = follow the active session). */
+  /** Resolved path of the row the user clicked (null = follow the active session, COLLAPSED = none open). */
   picked: string | null
   notice: string | null
   /** A delete or cleanup is running. */

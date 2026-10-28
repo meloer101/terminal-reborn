@@ -9,7 +9,7 @@ import { openArchiveSheet } from '../../archive/store'
 import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
-import { cleanupPlan, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
+import { cleanupPlan, COLLAPSED, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
 
 const KIND_LABEL = (kind: AgentKind): string => agentName(kind)
@@ -17,8 +17,15 @@ const KIND_LABEL = (kind: AgentKind): string => agentName(kind)
 /** Said in every delete confirmation: a plain `git worktree remove` takes ignored files with it. */
 const IGNORED_FILES_NOTE = '被 .gitignore 忽略的文件（如 .env、node_modules）也会一起删除。'
 
-/** Click on a row: show it expanded, and switch to its most urgent session (a worktree without one only expands). */
-export function selectRow(root: string, row: WorktreeRow): void {
+/**
+ * Click on a row: show it expanded, and switch to its most urgent session (a worktree without one only expands).
+ * Clicking the row that is already expanded collapses it.
+ */
+export function selectRow(root: string, row: WorktreeRow, expanded: boolean): void {
+  if (expanded) {
+    patchRoot(root, { picked: COLLAPSED, notice: null })
+    return
+  }
   patchRoot(root, { picked: row.key, notice: null })
   const state = useWorkspace.getState()
   const active = state.sessions.find((s) => s.id === state.activeSessionId)

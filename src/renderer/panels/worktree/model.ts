@@ -226,11 +226,14 @@ export function detailLines(info: GitWorktreeInfo, port: number | null = null): 
   return lines
 }
 
-/** The row to show expanded: the user's pick while it still exists, else the active session's worktree. */
+/** `picked` value for "the user collapsed the open row": no row is expanded, and the active session is not followed. */
+export const COLLAPSED = ''
+
+/** The row to show expanded: the user's pick while it still exists, else the active session's worktree (unless collapsed). */
 export function selectedRow(rows: readonly WorktreeRow[], picked: string | null, activeWorktreeId: WorktreeId | null): WorktreeRow | null {
   return (
     rows.find((r) => r.key === picked) ??
-    (activeWorktreeId ? rows.find((r) => r.worktreeIds.includes(activeWorktreeId)) : undefined) ??
+    (picked === COLLAPSED ? undefined : activeWorktreeId ? rows.find((r) => r.worktreeIds.includes(activeWorktreeId)) : undefined) ??
     null
   )
 }
