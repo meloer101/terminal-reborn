@@ -93,9 +93,18 @@ test('a translucent terminal draws on WebGL with the DOM renderer’s look, and 
     doc.body.appendChild(backdrop)
   }, BACKDROP)
 
-  // The shell may still be starting and eat the first keystrokes: type once it shows a prompt.
-  // Any shell's prompt end (zsh themes, bash's `$` on CI runners), not one theme's glyph.
-  await expect.poll(screen, { timeout: 20_000 }).toMatch(/[$%#>❯] ?$/m)
+  // The shell may still be starting and eat the first keystrokes. Prompts differ (zsh themes, bash's `$` on CI), so ask
+  // the shell itself: only once it runs commands does `42` show up on a line of its own (the echoed command has `$((6*7))`).
+  await expect
+    .poll(
+      async () => {
+        await write('\x15echo shell-$((6*7))\r')
+        await page.waitForTimeout(400)
+        return screen()
+      },
+      { timeout: 20_000 }
+    )
+    .toMatch(/^shell-42$/m)
   // Dim and italic cells, an explicit background, and Chinese, all on one row.
   await write(`clear; printf '\\033[2mdim dim dim\\033[0m \\033[3mitalic italic\\033[0m plain plain \\033[41m red \\033[0m 你好世界\\n'; echo ready-$((40+2))\r`)
   await expect.poll(screen, { timeout: 10_000 }).toMatch(/^ready-42$/m)
@@ -123,6 +132,8 @@ test('a translucent terminal draws on WebGL with the DOM renderer’s look, and 
   // The same screen on the DOM renderer (the fallback) is the reference.
   await page.evaluate((id) => (globalThis as unknown as Globals).__trTerminals.renderer(id, 'dom'), SESSION)
   await expect.poll(renderer).toBe('dom')
+  // A slow runner (software GL on CI) takes a while to paint the DOM rows: wait for the styled line in them.
+  await expect(page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"] .xterm-rows`)).toContainText('dim dim dim', { timeout: 10_000 })
   await page.waitForTimeout(500)
   const dom = await sample('translucent-dom-dim-italic')
   for (const key of ['plain', 'dim', 'italic', 'red'] as const) {
