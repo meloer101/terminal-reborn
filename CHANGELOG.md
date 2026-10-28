@@ -4,6 +4,37 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-27
+
+Git · 变更 now carries a change from diff to main or a PR in one place: the agent in the session writes the text and fixes CI, Wavi commits, merges, pushes and keeps the brakes on.
+Git · 变更 在一处把改动从 diff 带到 main 或 PR：会话里的 agent 写文字、修 CI，Wavi 负责提交、合并、推送，并替你踩刹车。
+
+### Merge and PR / 合并与 PR
+- Three checkpoints and two exits. Look at the diff, optionally have an agent review it, then 合并到 main 并推送 or 创建 PR. The commit message, PR title and body, and CI fixes are written by the agent in the session into files Wavi reads back; Wavi runs commit, merge, push and `gh`. ⇧⌘M runs the primary exit.
+  三个检查点、两个出口：看 diff，可选让 agent 审阅，然后「合并到 main 并推送」或「创建 PR」。提交说明、PR 标题和正文、CI 修复都由会话里的 agent 写进文件，Wavi 读回来；提交、合并、推送和 `gh` 由 Wavi 执行。⇧⌘M 执行主出口。
+- The review result sits at the top of Git · 变更: who reviewed how many files, the conclusion, one finding per line (tick to send, click to jump), and a `P1` tag on the diff line it points at. Re-review only looks at what changed since.
+  审阅结果放在 Git · 变更 顶部：谁审了几个文件、结论、每条发现一行（勾选后发送，点击跳到 diff），对应的 diff 行上有 `P1` 小标。重审只看之后改了的部分。
+- After 合并到 main 并推送, main's CI shows up in the same session. A failure goes back to that session's agent to fix, with brakes: a limited number of attempts, and a fix that deletes or skips tests or loosens checks is stopped.
+  合并到 main 并推送后，main 的 CI 结果回到原会话。失败会交给这个会话的 agent 去修，并带刹车：次数有限，删测试、跳过测试或放宽检查的修复会被拦下。
+- A feature branch checked out in the project's main folder can merge and open a PR. A worktree already merged no longer offers 合并到 main…, and the merge sheet only states the outcome when there is nothing to merge.
+  项目主目录检出的功能分支也能合并和创建 PR。已经合并的 worktree 不再显示「合并到 main…」，没东西可合时合并面板只写结果。
+
+### Terminal / 终端
+- Translucent terminals are drawn with WebGL instead of the DOM renderer, and Chinese text stays on the cell grid at any opacity.
+  半透明终端改用 WebGL 绘制，任何不透明度下中文都对齐网格。
+- The glass ring around translucent terminals is filled, the last CJK glyph of a row is no longer clipped, and a terminal paints at once after it is shown or resized.
+  半透明终端外圈的玻璃边填满了，行尾的中文不再被裁掉一半，终端显示或改变大小后立即重画。
+
+### Appearance / 外观
+- New logo: two interlocking loops on a warm off-white tile.
+  新 logo：米白底上两条交织的环。
+- With a narrow right panel, the context and usage above it hide instead of running into the view icons.
+  右侧栏拖窄时，上方的 context 和额度会收起，不再压到视图图标上。
+
+### Performance / 性能
+- Only the sidebar row and terminal pane that changed are redrawn, and changes inside dependency or cache folders no longer trigger git rescans.
+  只重画有变化的侧栏行和终端；依赖、缓存文件夹里的变化不再触发 git 重新扫描。
+
 ## [0.9.0] - 2026-10-26
 
 The window is now glass, and the sidebar and right panel slide open with a spring.
@@ -330,8 +361,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...HEAD
-[0.8.1]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...v0.8.1
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/meloer101/terminal-reborn/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/meloer101/terminal-reborn/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/meloer101/terminal-reborn/compare/v0.7.0...v0.8.0
