@@ -34,7 +34,7 @@ import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { openMergeSheet, registerPrimaryExit, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, itemHeight, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, itemHeight, onOwnBase, rowAnchor, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsRows, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
@@ -125,7 +125,9 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const sessionId = active?.session.id ?? null
   const uncommittedPaths = changes.uncommitted.filter((c) => !c.nested).map((c) => c.path)
   // Nothing to propose or merge (merged already, or no work yet): no exits — the PR line says what happened.
-  const nothingToShip = !worktree.isMain && !prLive && changes.ahead === 0 && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
+  // The main checkout with a feature branch out ships like a worktree; on its base it has nothing of its own.
+  const onBase = onOwnBase(worktree.isMain, changes)
+  const nothingToShip = !onBase && !prLive && changes.ahead === 0 && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
@@ -138,7 +140,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const reviewSession = target?.id ?? reviewer
   const baseName = preflight?.ok ? preflight.base : (changes.base ?? 'main')
   const exitBlocker = (exit: ShipExit): string | null => {
-    if (worktree.isMain) return '项目主目录没有要合并到的分支'
+    if (onBase) return '项目主目录检出的是基线分支，没有要合并的分支'
     if (!projectRoot) return '找不到这个 worktree 的项目'
     if (!preflight) return '正在检查…'
     if (!preflight.ok) return preflight.message
@@ -189,7 +191,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   // stopped fix's answers replace the exits, so the shortcut does nothing until it is answered.
   const shortcutExit = shipping || stopped
     ? () => undefined
-    : !nothingToShip && !idlePr && !worktree.isMain
+    : !nothingToShip && !idlePr && !onBase
       ? () => (exitBlocker(exits.primary) === null ? go(exits.primary) : undefined)
       : null
 
@@ -205,7 +207,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
       {!shipping && <FactsRows risks={risks} checks={turnChecks} />}
       <div className={styles.shipZone}>
         <BaseCiRows worktree={worktree} />
-        <PrStatusLine worktree={worktree} target={target} />
+        <PrStatusLine worktree={worktree} onBase={onBase} target={target} />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
         {shipping ? (
           <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} />
@@ -272,8 +274,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
                     <button
                       type="button"
                       className={styles.primaryButton}
-                      disabled={worktree.isMain || !projectRoot}
-                      title={worktree.isMain ? '项目主目录没有要合并到的分支' : undefined}
+                      disabled={onBase || !projectRoot}
+                      title={onBase ? '项目主目录检出的是基线分支，没有要合并的分支' : undefined}
                       onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
                     >
                       合并 PR #{idlePr.number}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>

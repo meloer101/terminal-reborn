@@ -23,7 +23,7 @@ const GH_HINT = {
   'signed-out': 'gh 还没有登录：在终端运行 gh auth login 后可以创建 PR'
 } as const
 
-export function PrStatusLine({ worktree, target }: { worktree: Worktree; target: Session | null }) {
+export function PrStatusLine({ worktree, onBase, target }: { worktree: Worktree; onBase: boolean; target: Session | null }) {
   const gh = usePullRequests((s) => s.gh)
   const busy = usePullRequests((s) => s.busy[worktree.path])
   const notice = usePullRequests((s) => s.notice[worktree.path])
@@ -39,7 +39,7 @@ export function PrStatusLine({ worktree, target }: { worktree: Worktree; target:
     )
   }
   if (!pr) {
-    if (worktree.isMain || (gh !== 'missing' && gh !== 'signed-out')) return null
+    if (onBase || (gh !== 'missing' && gh !== 'signed-out')) return null
     return (
       <p className={styles.reviewStatus} data-tone="muted" role="status" data-testid="pr-status">
         <span className={styles.reviewStatusText} title={GH_HINT[gh]}>

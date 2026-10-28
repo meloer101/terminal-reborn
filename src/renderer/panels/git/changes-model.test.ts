@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, rowAnchor, splitAnchors, splitRows } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, rowAnchor, splitAnchors, splitRows } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -205,5 +205,24 @@ describe('splitRows (F5 并排)', () => {
     expect(items[at]).toMatchObject({ kind: 'comment', split: true })
     expect(items[at - 1]).toMatchObject({ kind: 'split', row: { kind: 'pair', new: { new: 28 } } })
     expect(itemHeight(items[at - 1]!)).toBe(ITEM_HEIGHT.split)
+  })
+})
+
+describe('onOwnBase', () => {
+  it('lets a feature branch checked out in the main checkout merge and open a PR', () => {
+    expect(onOwnBase(true, { branch: 'feat/logo', base: 'main' })).toBe(false)
+    expect(onOwnBase(true, { branch: 'feat/logo', base: 'origin/main' })).toBe(false)
+  })
+
+  it('blocks the main checkout on its base, without a base or detached', () => {
+    // On main itself the base is its upstream.
+    expect(onOwnBase(true, { branch: 'main', base: 'origin/main' })).toBe(true)
+    expect(onOwnBase(true, { branch: 'main', base: 'main' })).toBe(true)
+    expect(onOwnBase(true, { branch: 'main', base: null })).toBe(true)
+    expect(onOwnBase(true, { branch: null, base: 'main' })).toBe(true)
+  })
+
+  it('never blocks a worktree of its own', () => {
+    expect(onOwnBase(false, { branch: 'work', base: null })).toBe(false)
   })
 })

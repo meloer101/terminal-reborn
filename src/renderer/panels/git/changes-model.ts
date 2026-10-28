@@ -211,4 +211,15 @@ export function changeItems(
   return items
 }
 
+/**
+ * Whether the worktree has no branch of its own to merge or propose: the project's main checkout while it has its base
+ * out (on the base itself the base is its upstream), no base, or a detached HEAD. A feature branch checked out in the
+ * main checkout merges and opens PRs like any worktree's (PRD F4 / F16).
+ */
+export function onOwnBase(isMain: boolean, changes: Pick<GitChanges, 'branch' | 'base'>): boolean {
+  if (!isMain) return false
+  const { branch, base } = changes
+  return !branch || !base || base === branch || base === `origin/${branch}`
+}
+
 export const itemHeight = (item: ChangeItem): number => ITEM_HEIGHT[item.kind]
