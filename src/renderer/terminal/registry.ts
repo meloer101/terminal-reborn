@@ -162,6 +162,7 @@ interface E2eGlobal {
     size(sessionId: SessionId): { cols: number; rows: number } | null
     info(sessionId: SessionId): SurfaceDebugInfo | null
     redraw(sessionId: SessionId, mode: 'rebind' | 'rebuild'): void
+    renderer(sessionId: SessionId, mode: 'auto' | 'dom'): void
   }
 }
 const e2e = globalThis as unknown as E2eGlobal
@@ -170,6 +171,7 @@ if (e2e.__TR_E2E__ || e2e.__TR_TERMINAL_PROBE__) {
     readScreen: (sessionId, scrollbackLines) => terminals.get(sessionId)?.surface.readScreen(scrollbackLines) ?? '',
     size: (sessionId) => terminals.get(sessionId)?.surface.size ?? null,
     info: (sessionId) => terminals.get(sessionId)?.surface.debugInfo() ?? null,
-    redraw: (sessionId, mode) => terminals.get(sessionId)?.surface.debugRedraw(mode)
+    redraw: (sessionId, mode) => terminals.get(sessionId)?.surface.debugRedraw(mode),
+    renderer: (sessionId, mode) => terminals.get(sessionId)?.surface.debugRenderer(mode)
   }
 }
