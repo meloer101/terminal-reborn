@@ -173,11 +173,12 @@ test('a translucent terminal draws on WebGL with the DOM renderer’s look, and 
   const block = near(modalColor(raster, padded, first, 1, 2), [0x44, 0x44, 0x44], 4)
   expect(block, 'the first row is the highlighted block').toBe(true)
   const rowHeight = cjk.clip.height / cjk.rows
-  const blockColor = pixel(raster, padded, 6 + 1, (first + 0.5) * rowHeight)
+  // The block's color is what most of a cell is painted with; one pixel can be a glyph's edge (1x screens on CI).
+  const blockColor = modalColor(raster, padded, first, 1, 2)
   let blockRows = 0
   for (let row = first; row < cjk.rows; row++) {
     const y = (row + 0.5) * rowHeight
-    if (!near(pixel(raster, padded, 6 + 1, y), blockColor, 2)) break
+    if (!near(modalColor(raster, padded, row, 1, 2), blockColor, 2)) break
     blockRows++
     expect(near(pixel(raster, padded, 6 + cjk.clip.width - 2, y), blockColor, 2), `row ${row} reaches the last cell`).toBe(true)
     expect(near(pixel(raster, padded, 6 + cjk.clip.width + 3, y), blockColor, 2), `row ${row} stops at the grid`).toBe(false)
