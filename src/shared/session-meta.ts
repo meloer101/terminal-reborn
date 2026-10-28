@@ -77,6 +77,38 @@ export interface VendorUsage {
   complete?: boolean
 }
 
+/**
+ * What the last ask of the account said (PRD F11 · 额度页): `ok`, or why there are no plan figures — not signed in,
+ * an API-key login, a login without plan limits (Claude: API key, gateway or signed out), a CLI too old to say, no CLI,
+ * or a failed read.
+ */
+export type UsageAccountState = 'ok' | 'signed-out' | 'api-key' | 'no-plan' | 'outdated' | 'missing' | 'error'
+
+export interface UsageAccount {
+  vendor: UsageVendor
+  state: UsageAccountState
+  /** The plan as the CLI names it (`max`, `plus`); absent when it did not say. */
+  plan?: string
+  /** Epoch ms of the answer. */
+  at: number
+}
+
+/** The 额度 page's status text for a vendor without figures. */
+export const ACCOUNT_STATE_LABEL: Record<Exclude<UsageAccountState, 'ok'>, string> = {
+  'signed-out': '没登录',
+  'api-key': 'API key 登录',
+  'no-plan': '没有套餐额度',
+  outdated: 'CLI 版本太旧',
+  missing: '没装',
+  error: '读取失败'
+}
+
+/** `max` → `Max`, `chatgpt_plus` → `Plus`; at most 20 characters. */
+export function planLabel(plan: string): string {
+  const word = plan.trim().replace(/^chatgpt[_-]?/i, '').replace(/[_-]+/g, ' ').slice(0, 20)
+  return word.replace(/\b[a-z]/g, (c) => c.toUpperCase())
+}
+
 /** A window's identity across readings. */
 export function windowKey(w: Pick<UsageWindow, 'minutes' | 'scope'>): string {
   return w.scope ? `${w.minutes}:${w.scope}` : String(w.minutes)
@@ -583,6 +615,51 @@ export function windowPace(w: UsageWindow, now: number): WindowPace {
     if (at < w.resetsAt) pace.runsOutAt = Math.round(at)
   }
   return pace
+}
+
+/**
+ * A plan window's bar (Figma 33F · A): under the used part lies how much of the window's time has passed (`pace`),
+ * so "used less than the time" shows the pace layer beyond it, and "used more" shows the part past it (`over`) heavier.
+ * All 0–100; `pace` is absent when the reset time is unknown, and when used up (the whole bar is then heavy).
+ */
+export interface PaceBar {
+  /** The used part drawn in the normal tone: all of it, or up to the pace when ahead. */
+  used: number
+  /** The used part past the pace (0 unless ahead). */
+  over: number
+  pace?: number
+  ahead: boolean
+  exhausted: boolean
+}
+
+export function paceBar(w: UsageWindow, now: number): PaceBar {
+  const used = Math.min(100, Math.max(0, w.percent))
+  const { exhausted, elapsed } = windowPace(w, now)
+  if (exhausted || elapsed === undefined) return { used, over: 0, ahead: false, exhausted }
+  const pace = Math.round(elapsed * 1000) / 10
+  const ahead = used > pace
+  return ahead ? { used: pace, over: used - pace, pace, ahead, exhausted } : { used, over: 0, pace, ahead, exhausted }
+}
+
+/** The 额度 page's order: the fullest vendor first (a used-up window counts as 100), Claude before Codex on a tie. */
+export function orderByTightest<T extends { vendor: UsageVendor }>(rows: readonly T[], usage: Partial<Record<UsageVendor, VendorUsage>>, now: number): T[] {
+  const top = (v: UsageVendor) => {
+    const u = usage[v]
+    return u ? (topWindow(u, now)?.percent ?? -1) : -1
+  }
+  return [...rows].sort((a, b) => top(b.vendor) - top(a.vendor) || (a.vendor === 'claude' ? -1 : b.vendor === 'claude' ? 1 : 0))
+}
+
+/**
+ * The 额度 page's first row of a plan vendor: the plan next to its windows, or why there are none — what the account
+ * last said, else 读取中… (the page has just asked and nothing has answered yet).
+ */
+export function vendorStatus(usage: VendorUsage | undefined, account: UsageAccount | undefined, now: number): { text: string; windows: UsageWindow[] } {
+  const windows = usage ? liveWindows(usage, now) : []
+  // The account answered and every window has reset since: nothing open right now, nothing being read either.
+  if (windows.length > 0 || account?.state === 'ok') return { text: account?.plan ? planLabel(account.plan) : '', windows }
+  if (account) return { text: ACCOUNT_STATE_LABEL[account.state], windows }
+  return { text: '读取中…', windows }
 }
 
 /** UsageChip v2 text: `5h 62%`, `7d Sonnet 84%`, or `5h 用完 · 14:20 恢复` once the window is used up. */

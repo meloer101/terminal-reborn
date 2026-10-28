@@ -46,6 +46,7 @@ const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+Minus', accelerator: 'CmdOrCtrl+-', item: ['显示', '缩小'] },
   { key: 'Meta+Digit0', accelerator: 'CmdOrCtrl+0', item: ['显示', '实际大小'] },
   { key: 'Meta+Comma', accelerator: 'CmdOrCtrl+,', item: ['app', '设置…'] },
+  { key: 'Meta+Shift+KeyU', accelerator: 'Shift+CmdOrCtrl+U', item: ['app', '额度…'] },
   { key: 'Alt+Meta+KeyQ', accelerator: 'Alt+CmdOrCtrl+Q', item: ['app', '退出并结束所有会话…'] },
   { key: 'Meta+KeyQ', accelerator: 'CmdOrCtrl+Q', item: 'quit' }
 ]
@@ -282,6 +283,13 @@ test.describe('with the keyboard in the terminal', () => {
   test('⌘, is left to the menu and opens settings', async () => {
     expect(await press('Meta+Comma')).toBe('menu')
     await expect(settings()).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(settings()).toHaveCount(0)
+  })
+
+  test('⇧⌘U is left to the menu and opens settings on 额度 (PRD F11 · 额度页)', async () => {
+    expect(await press('Meta+Shift+KeyU')).toBe('menu')
+    await expect(settings().getByRole('tab', { name: '额度' })).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('Escape')
     await expect(settings()).toHaveCount(0)
   })

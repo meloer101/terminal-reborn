@@ -12,6 +12,7 @@ import { closeActiveSession, openProjectInNewWindowInteractive, openProjectInter
 import { useWorkspace, windowEffects } from '../state/workspace'
 import { openTerminalSearch } from '../terminal/search-store'
 import { openMergeForActiveSession } from '../panels/merge/store'
+import { openSettings } from '../settings/SettingsDialog'
 import { closeFocusedPane, focusPaneToward, moveFocusedPaneToNewWindow, splitFocusedPane } from '../split/commands'
 import { everyWindow } from './windows-runtime'
 
@@ -49,7 +50,8 @@ const RUN: Record<MenuCommand, () => void> = {
   'focus-pane-up': () => focusPaneToward('up'),
   'focus-pane-down': () => focusPaneToward('down'),
   'open-project-in-window': () => void openProjectInNewWindowInteractive(),
-  'pane-to-window': moveFocusedPaneToNewWindow
+  'pane-to-window': moveFocusedPaneToNewWindow,
+  'open-usage': () => openSettings('usage')
 }
 
 /** `windowKey`: the secondary window the command was picked in (it has the keyboard); absent for the main window. */

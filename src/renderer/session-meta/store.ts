@@ -3,7 +3,7 @@
 // session of a vendor and is kept by main across runs, so a fresh window asks for it once.
 import { create } from 'zustand'
 import type { AgentEvent, HookAgent } from '@shared/agent-events'
-import { usageAlertText, type ContextUsage, type UsageVendor, type VendorUsage } from '@shared/session-meta'
+import { usageAlertText, type ContextUsage, type UsageAccount, type UsageVendor, type VendorUsage } from '@shared/session-meta'
 import type { TodoItem } from '@shared/todo-progress'
 import type { TurnChecks } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
@@ -23,6 +23,8 @@ export interface SessionMetrics {
 interface SessionMetaState {
   bySession: Record<SessionId, SessionMetrics>
   usage: Partial<Record<UsageVendor, VendorUsage>>
+  /** What each account said when main last asked it this run (the 额度 page). */
+  accounts: Partial<Record<UsageVendor, UsageAccount>>
   /** A usage notification was clicked: the overview's first usage chip opens its popover and clears this. */
   usageOpenPending: boolean
   requestUsageOpen(): void
@@ -31,6 +33,7 @@ interface SessionMetaState {
   setTodos(sessionId: SessionId, items: TodoItem[]): void
   setChecks(sessionId: SessionId, checks: TurnChecks): void
   setUsage(usage: VendorUsage): void
+  setAccount(account: UsageAccount): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
   setPlan(sessionId: SessionId, plan: boolean): void
   /** The hand-started agent of a plain terminal ended: everything it reported goes. */
@@ -46,6 +49,7 @@ function patchSession(state: SessionMetaState, sessionId: SessionId, patch: (cur
 export const useSessionMeta = create<SessionMetaState>()((set) => ({
   bySession: {},
   usage: {},
+  accounts: {},
   usageOpenPending: false,
   requestUsageOpen: () => set({ usageOpenPending: true }),
   consumeUsageOpen: () => set({ usageOpenPending: false }),
@@ -93,6 +97,11 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
       const held = s.usage[usage.vendor]
       return held && held.at > usage.at ? {} : { usage: { ...s.usage, [usage.vendor]: usage } }
     }),
+  setAccount: (account) =>
+    set((s) => {
+      const held = s.accounts[account.vendor]
+      return held && held.at > account.at ? {} : { accounts: { ...s.accounts, [account.vendor]: account } }
+    }),
   retain: (live) =>
     set((s) => {
       const ids = Object.keys(s.bySession)
@@ -121,7 +130,8 @@ export const USAGE_NOTIFICATION_TAG = 'wavi:usage'
 export function startSessionMetaBridge(): () => void {
   const offEvents = window.tr.agent.onEvent(({ sessionId, event, agent }) => applyMetaEvent(sessionId, event, agent))
   const offUsage = window.tr.agent.onUsage((usage) => useSessionMeta.getState().setUsage(usage))
-  // Main sends each crossing once, to one window; 设置 · 自动化 · 额度提醒 decides whether it becomes a notification.
+  const offAccount = window.tr.agent.onUsageAccount((account) => useSessionMeta.getState().setAccount(account))
+  // Main sends each crossing once, to one window; 设置 · 额度 · 提醒 decides whether it becomes a notification.
   const offAlert = window.tr.agent.onUsageAlert((alert) => {
     void window.tr.settings.get().then((settings) => {
       if (!settings.alerts.usage) return
@@ -138,6 +148,10 @@ export function startSessionMetaBridge(): () => void {
     if (!live) return
     for (const usage of list) useSessionMeta.getState().setUsage(usage)
   })
+  void window.tr.agent.getUsageAccounts().then((list) => {
+    if (!live) return
+    for (const account of list) useSessionMeta.getState().setAccount(account)
+  })
   // Closed sessions take their metrics with them.
   const offSessions = useWorkspace.subscribe((state, prev) => {
     if (state.sessions !== prev.sessions) useSessionMeta.getState().retain(new Set(state.sessions.map((x) => x.id)))
@@ -146,6 +160,7 @@ export function startSessionMetaBridge(): () => void {
     live = false
     offEvents()
     offUsage()
+    offAccount()
     offAlert()
     offClick()
     offSessions()

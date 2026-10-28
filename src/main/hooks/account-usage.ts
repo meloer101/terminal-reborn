@@ -80,11 +80,11 @@ export function readClaudeAccountUsage(shell: string, options: { timeoutMs?: num
       resolve(outcome)
     }
     const timer = setTimeout(() => finish({ kind: 'error', detail: 'claude did not answer get_usage in time' }), options.timeoutMs ?? ACCOUNT_TIMEOUT_MS)
-    child.once('error', (error) => finish({ kind: 'unsupported', detail: `could not start ${shell}: ${error.message}` }))
+    child.once('error', (error) => finish({ kind: 'unsupported', state: 'missing', detail: `could not start ${shell}: ${error.message}` }))
     child.once('close', (code, signal) =>
       finish(
         code === EXIT_COMMAND_NOT_FOUND
-          ? { kind: 'unsupported', detail: 'claude was not found on PATH in a login shell' }
+          ? { kind: 'unsupported', state: 'missing', detail: 'claude was not found on PATH in a login shell' }
           : { kind: 'error', detail: `claude exited before answering (${signal ?? `code ${String(code)}`})` }
       )
     )
@@ -101,13 +101,14 @@ export function readClaudeAccountUsage(shell: string, options: { timeoutMs?: num
       }
       if (response.request_id !== 'usage') return
       // An older Claude Code does not know the request.
-      if (response.subtype === 'error') return finish({ kind: 'unsupported', detail: `get_usage: ${errorText(response.error)}` })
+      if (response.subtype === 'error') return finish({ kind: 'unsupported', state: 'outdated', detail: `get_usage: ${errorText(response.error)}` })
       const body = response.response as Record<string, unknown> | undefined
       if (!body || (body.rate_limits_available !== true && !body.subscription_type)) {
-        return finish({ kind: 'unsupported', detail: 'no claude.ai plan limits for this login (API key or gateway)' })
+        return finish({ kind: 'unsupported', state: 'no-plan', detail: 'no claude.ai plan limits for this login (API key or gateway)' })
       }
       if (body.rate_limits_available !== true) return finish({ kind: 'error', detail: 'claude could not read the plan limits right now' })
-      finish({ kind: 'ok', usage: parseClaudeAccountUsage(body, now()) })
+      const usage = parseClaudeAccountUsage(body, now())
+      finish(typeof body.subscription_type === 'string' && body.subscription_type ? { kind: 'ok', usage, plan: body.subscription_type } : { kind: 'ok', usage })
     })
     send({ type: 'control_request', request_id: 'init', request: { subtype: 'initialize' } })
   })
@@ -118,6 +119,12 @@ export const CODEX_ACCOUNT_ARGS = ['codex', '-s', 'read-only', '-a', 'never', '-
 
 /** After this long without a request the app-server is closed (an idle poll every 10 minutes starts a new one). */
 export const CODEX_IDLE_CLOSE_MS = 3 * 60_000
+
+/** What `account/read` said: a reason there are no plan figures, or the plan. */
+interface CodexLogin {
+  state?: 'signed-out' | 'api-key' | 'no-plan'
+  plan?: string
+}
 
 interface Pending {
   resolve(result: unknown): void
@@ -137,6 +144,8 @@ export class CodexAccountClient {
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   /** Codex before 0.151 takes no params for the read ("expected unit"); remembered once seen. */
   private plainRead = false
+  /** This Codex did not answer account/read; not asked again. */
+  private noLogin = false
 
   constructor(
     private readonly shell: string,
@@ -147,15 +156,43 @@ export class CodexAccountClient {
   async read(): Promise<PollOutcome> {
     try {
       await this.start()
-      return { kind: 'ok', usage: parseCodexAccountRateLimits(await this.readRateLimits(), this.now()) }
+      const login = await this.readLogin()
+      if (login?.state) return { kind: 'unsupported', state: login.state, detail: `codex account: ${login.state}` }
+      const usage = parseCodexAccountRateLimits(await this.readRateLimits(), this.now())
+      return login?.plan ? { kind: 'ok', usage, plan: login.plan } : { kind: 'ok', usage }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      // API-key logins and third-party providers have no plan limits (0.142.5: "chatgpt authentication required…").
-      if (/authentication required|not installed|not found on PATH/i.test(detail)) return { kind: 'unsupported', detail }
+      if (/not installed|not found on PATH/i.test(detail)) return { kind: 'unsupported', state: 'missing', detail }
+      // API-key logins, signed-out and third-party providers have no plan limits (0.165: "chatgpt authentication required…").
+      if (/authentication required/i.test(detail)) return { kind: 'unsupported', state: 'no-plan', detail }
       return { kind: 'error', detail }
     } finally {
       this.armIdleClose()
     }
+  }
+
+  /**
+   * `account/read` (0.165, PRD §6.7): `{ account: null | { type: 'apiKey' } | { type: 'chatgpt', planType }, requiresOpenaiAuth }`.
+   * Null when this Codex does not answer it (the rate-limit read then says what it can); only a Codex that does not know
+   * the request is not asked again — a timeout or a closing app-server is.
+   */
+  private async readLogin(): Promise<CodexLogin | null> {
+    if (this.noLogin) return null
+    let result: unknown
+    try {
+      result = await this.request('account/read', {})
+    } catch (error) {
+      if (error instanceof Error && /unknown variant|method not found|-32601/i.test(error.message)) this.noLogin = true
+      return null
+    }
+    if (typeof result !== 'object' || result === null || !('account' in result)) return null
+    const { account, requiresOpenaiAuth } = result as { account: unknown; requiresOpenaiAuth?: unknown }
+    // No OpenAI login and none needed: a third-party provider, which has no plan windows.
+    if (account === null) return { state: requiresOpenaiAuth === false ? 'no-plan' : 'signed-out' }
+    if (typeof account !== 'object') return null
+    const { type, planType } = account as { type?: unknown; planType?: unknown }
+    if (type === 'apiKey') return { state: 'api-key' }
+    return typeof planType === 'string' && planType ? { plan: planType } : {}
   }
 
   /** Newer Codex skips its reset-credit lookup for a background poll when asked; an older one rejects any params. */

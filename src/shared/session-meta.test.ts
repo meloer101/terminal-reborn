@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  orderByTightest,
+  paceBar,
+  planLabel,
+  vendorStatus,
   autoCompactRuleFromEnv,
   claudeCompactAt,
   codexCompactAt,
@@ -402,6 +406,43 @@ describe('Figma 18 · plan window pace', () => {
     expect(formatClock(new Date(2026, 9, 20, 9, 5).getTime(), noon)).toBe('10 月 20 日 09:05')
     expect(formatUpdatedNote(noon - 60_000, noon)).toBe('1 分钟前更新')
     expect(formatUpdatedNote(noon - 35 * 60_000, noon)).toBe('35 分钟前更新 · 可能不是最新')
+  })
+})
+
+describe('Figma 33 · 额度页', () => {
+  const HOUR = 3_600_000
+  const reset = AT + 3 * HOUR
+  // 2 of 5 hours gone: the pace is 40 %.
+  const fiveHour = (percent: number) => ({ minutes: 300, percent, resetsAt: reset })
+
+  it('draws the pace under the used part, and the part past it as over', () => {
+    expect(paceBar(fiveHour(28), AT)).toEqual({ used: 28, over: 0, pace: 40, ahead: false, exhausted: false })
+    expect(paceBar(fiveHour(84), AT)).toEqual({ used: 40, over: 44, pace: 40, ahead: true, exhausted: false })
+    expect(paceBar(fiveHour(100), AT)).toEqual({ used: 100, over: 0, ahead: false, exhausted: true })
+    expect(paceBar({ minutes: 300, percent: 50 }, AT)).toEqual({ used: 50, over: 0, ahead: false, exhausted: false })
+  })
+
+  it('lists the fullest vendor first, Claude first on a tie and before a vendor without figures', () => {
+    const claude = { vendor: 'claude' as const, at: AT, windows: [fiveHour(28)] }
+    const codex = { vendor: 'codex' as const, at: AT, windows: [fiveHour(84)] }
+    const rows = [{ vendor: 'claude' as const }, { vendor: 'codex' as const }]
+    expect(orderByTightest(rows, { claude, codex }, AT).map((r) => r.vendor)).toEqual(['codex', 'claude'])
+    expect(orderByTightest(rows, { claude }, AT).map((r) => r.vendor)).toEqual(['claude', 'codex'])
+    expect(orderByTightest([...rows].reverse(), {}, AT).map((r) => r.vendor)).toEqual(['claude', 'codex'])
+  })
+
+  it('names the plan, or says why there are no figures', () => {
+    expect(planLabel('max')).toBe('Max')
+    expect(planLabel('chatgpt_plus')).toBe('Plus')
+    expect(planLabel('team')).toBe('Team')
+    const usage = { vendor: 'codex' as const, at: AT, windows: [fiveHour(30)] }
+    expect(vendorStatus(usage, { vendor: 'codex', state: 'ok', plan: 'plus', at: AT }, AT)).toEqual({ text: 'Plus', windows: [fiveHour(30)] })
+    expect(vendorStatus(usage, undefined, AT).text).toBe('')
+    expect(vendorStatus(undefined, { vendor: 'codex', state: 'api-key', at: AT }, AT)).toEqual({ text: 'API key 登录', windows: [] })
+    expect(vendorStatus(undefined, { vendor: 'claude', state: 'outdated', at: AT }, AT).text).toBe('CLI 版本太旧')
+    expect(vendorStatus(undefined, undefined, AT).text).toBe('读取中…')
+    // Every window has reset since the account answered: no windows, and not 读取中… (nothing is being read).
+    expect(vendorStatus({ ...usage, windows: [{ minutes: 300, percent: 90, resetsAt: AT - 1 }] }, { vendor: 'codex', state: 'ok', plan: 'plus', at: AT }, AT)).toEqual({ text: 'Plus', windows: [] })
   })
 })
 

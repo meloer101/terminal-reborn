@@ -27,7 +27,9 @@ export const MENU_COMMANDS = [
   'focus-pane-down',
   // Several windows (PRD F20 · 多窗口).
   'open-project-in-window',
-  'pane-to-window'
+  'pane-to-window',
+  // 设置 · 额度 straight away (PRD F11 · 额度页).
+  'open-usage'
 ] as const
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number]
@@ -64,6 +66,7 @@ export const SHORTCUTS = {
   'focus-pane-down': 'Alt+CmdOrCtrl+Down',
   'open-project-in-window': 'Shift+CmdOrCtrl+O',
   settings: 'CmdOrCtrl+,',
+  'open-usage': 'Shift+CmdOrCtrl+U',
   'font-bigger': 'CmdOrCtrl+Plus',
   'font-smaller': 'CmdOrCtrl+-',
   'font-reset': 'CmdOrCtrl+0'

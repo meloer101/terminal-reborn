@@ -1,8 +1,8 @@
-// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63; AI 写 v1.68), 派活 (PRD F21) and 额度提醒 (PRD F11, Figma 18D). Every automatic review is off until the user turns it on: a review spends their
+// 设置 · 自动化 · 代码审阅 (PRD F13), PR (PRD F16 v1.63; AI 写 v1.68) and 派活 (PRD F21); 额度提醒 moved to 设置 · 额度. Every automatic review is off until the user turns it on: a review spends their
 // own Claude / Codex quota. Copy and layout follow Figma 16C (457:21367): section titles, then label · control rows, no explanatory lines.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
-import type { AlertSettings, DispatchSettings, PrSettings, ReviewSettings } from '@shared/settings'
+import type { DispatchSettings, PrSettings, ReviewSettings } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
 import { Row, Section, Toggle } from './controls'
 import styles from './AutomationPane.module.css'
@@ -12,8 +12,6 @@ const MODEL = /^[A-Za-z0-9._:@/-]{0,64}$/
 export function AutomationPane({
   review,
   update,
-  alerts,
-  updateAlerts,
   pr,
   updatePr,
   dispatch,
@@ -21,8 +19,6 @@ export function AutomationPane({
 }: {
   review: ReviewSettings
   update: (patch: Partial<ReviewSettings>) => void
-  alerts: AlertSettings
-  updateAlerts: (patch: Partial<AlertSettings>) => void
   pr: PrSettings
   updatePr: (patch: Partial<PrSettings>) => void
   dispatch: DispatchSettings
@@ -142,11 +138,6 @@ export function AutomationPane({
               disabled={!dispatch.tools}
               onChange={(autoApprove) => updateDispatch({ autoApprove })}
             />
-          </Row>
-        </Section>
-        <Section title="额度提醒">
-          <Row label="额度用到 75%、90%、用完时通知">
-            <Toggle label="额度用到 75%、90%、用完时通知" checked={alerts.usage} onChange={(usage) => updateAlerts({ usage })} />
           </Row>
         </Section>
       </div>

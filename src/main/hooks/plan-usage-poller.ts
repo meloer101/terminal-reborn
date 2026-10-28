@@ -6,13 +6,18 @@
 // Cadence: faster while the vendor is in use here (a hook or a reading in the last 10 minutes) and the closer its
 // fullest window is to the limit; slow when idle; never before anything says the vendor is used. An account that has
 // no plan limits (API key, third-party provider) is left alone until the vendor is used again, 30 minutes later.
-import type { UsageVendor, VendorUsage } from '@shared/session-meta'
+// The 额度 page asks every vendor once when it opens, used here or not (`refresh(true)`); that one answer does not
+// start the cadence of a vendor never used here.
+import type { UsageAccount, UsageAccountState, UsageVendor, VendorUsage } from '@shared/session-meta'
+
+/** Why an account will not say: the 额度 page's status for that vendor. */
+export type UnsupportedState = Exclude<UsageAccountState, 'ok' | 'error'>
 
 export type PollOutcome =
-  /** The account answered; null when it has no plan windows right now. */
-  | { kind: 'ok'; usage: VendorUsage | null }
+  /** The account answered; null when it has no plan windows right now. `plan` as the CLI names it. */
+  | { kind: 'ok'; usage: VendorUsage | null; plan?: string }
   /** It never will (API-key login, CLI too old or missing): stop until the vendor is used again. */
-  | { kind: 'unsupported'; detail: string }
+  | { kind: 'unsupported'; state: UnsupportedState; detail: string }
   | { kind: 'error'; detail: string; retryAfterMs?: number }
 
 /** In use: a hook or a reading of this vendor within this long. */
@@ -26,6 +31,13 @@ export interface PollerOptions {
   vendor: UsageVendor
   fetch(): Promise<PollOutcome>
   apply(usage: VendorUsage): void
+  /**
+   * A one-off ask's figures (the 额度 page, a vendor not used here): shown, not kept — kept usage starts the cadence on
+   * the next run (PRD F11 · 额度页) — and no alert. Without it they go to `apply`.
+   */
+  show?(usage: VendorUsage): void
+  /** What the account said, after every ask. */
+  account?(account: UsageAccount): void
   /** The wait after an answer, given whether the vendor is in use and its fullest window (0–100). */
   interval(active: boolean, topPercent: number): number
   /** On-demand refreshes (the usage popover opened) come no closer than this to the last poll. */
@@ -81,11 +93,16 @@ export class PlanUsagePoller {
     if (now + due < this.dueAt) this.schedule(due)
   }
 
-  /** Someone is looking (the usage popover): poll now unless the last poll was very recent. */
-  refresh(): void {
-    if (this.stopped || !this.started || this.unsupportedAt !== null || this.inFlight) return
+  /**
+   * Someone is looking (the usage popover): poll now unless the last poll was very recent. `all` (the 额度 page) also
+   * asks a vendor never used here, once, and one that said it has no plan figures (it may have been signed in since).
+   */
+  refresh(all = false): void {
+    if (this.stopped || this.inFlight) return
+    if (!all && (!this.started || this.unsupportedAt !== null)) return
     if (this.now() - this.lastPollAt < this.o.minRefreshGapMs) return
-    this.schedule(0)
+    if (this.started && this.unsupportedAt === null) this.schedule(0)
+    else void this.poll()
   }
 
   /** The account's latest figures (from any source): the cadence follows the fullest window. */
@@ -130,25 +147,36 @@ export class PlanUsagePoller {
 
   private settle(outcome: PollOutcome): void {
     if (this.stopped) return
+    const at = this.now()
     if (outcome.kind === 'unsupported') {
       this.o.log?.(`${this.o.vendor} plan usage is not available: ${outcome.detail}`)
-      this.unsupportedAt = this.now()
+      this.o.account?.({ vendor: this.o.vendor, state: outcome.state, at })
+      this.unsupportedAt = at
       this.cancel()
       return
     }
     if (outcome.kind === 'error') {
+      this.o.log?.(`${this.o.vendor} plan usage poll failed: ${outcome.detail}`)
+      this.o.account?.({ vendor: this.o.vendor, state: 'error', at })
+      // A one-off ask (the 额度 page) of a vendor never used here does not keep trying, nor hold back the first use.
+      if (!this.started) return
       this.failures++
       const backoff = Math.min(MAX_BACKOFF_MS, 60_000 * 2 ** (this.failures - 1))
-      this.o.log?.(`${this.o.vendor} plan usage poll failed (${this.failures}): ${outcome.detail}`)
       this.schedule(Math.max(backoff, Math.min(outcome.retryAfterMs ?? 0, 60 * 60_000)))
       return
     }
     this.failures = 0
+    this.unsupportedAt = null
+    // Signed in with a plan but no window right now says the same as a login without one.
+    const account: UsageAccount = { vendor: this.o.vendor, state: outcome.usage ? 'ok' : 'no-plan', at }
+    if (outcome.plan) account.plan = outcome.plan
+    this.o.account?.(account)
     if (outcome.usage) {
       this.observe(outcome.usage)
-      this.o.apply(outcome.usage)
+      if (this.started || !this.o.show) this.o.apply(outcome.usage)
+      else this.o.show(outcome.usage)
     }
-    this.schedule(this.o.interval(this.active(), this.top))
+    if (this.started) this.schedule(this.o.interval(this.active(), this.top))
   }
 }
 

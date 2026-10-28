@@ -150,6 +150,7 @@ export function installAppMenu(): void {
         { role: 'about', label: `关于 ${app.name}` },
         { type: 'separator' },
         { label: '设置…', accelerator: SHORTCUTS.settings, click: (_item, window) => showSettings(window instanceof BrowserWindow ? window : null) },
+        { label: '额度…', accelerator: SHORTCUTS['open-usage'], ...command('open-usage') },
         { type: 'separator' },
         { role: 'services', label: '服务' },
         { type: 'separator' },
