@@ -113,14 +113,15 @@ test('a translucent terminal draws on WebGL with the DOM renderer’s look, and 
   const row = (await screen()).split('\n').findIndex((line) => line.startsWith('dim dim dim'))
   expect(row, 'the styled line is on screen').toBeGreaterThanOrEqual(0)
 
-  const sample = async (name: string) => {
+  // `red` is where the red cells are drawn, in cells (fractional): the grid's columns, or the DOM span's own box.
+  const sample = async (name: string, red: [number, number] = [38, 43]) => {
     const raster = decodePng(await page.screenshot({ path: join(SHOTS, `${name}.png`), clip: grid.clip }))
     return {
       raster,
       plain: modalColor(raster, grid, row, 60, 100),
       dim: modalColor(raster, grid, row, 0, 11),
       italic: modalColor(raster, grid, row, 12, 25),
-      red: modalColor(raster, grid, row, 38, 43)
+      red: modalColor(raster, grid, row, red[0], red[1])
     }
   }
   const webgl = await sample('translucent-webgl-dim-italic')
@@ -135,7 +136,25 @@ test('a translucent terminal draws on WebGL with the DOM renderer’s look, and 
   // A slow runner (software GL on CI) takes a while to paint the DOM rows: wait for the styled line in them.
   await expect(page.locator(`[data-region="terminal"] [data-session-id="${SESSION}"] .xterm-rows`)).toContainText('dim dim dim', { timeout: 10_000 })
   await page.waitForTimeout(500)
-  const dom = await sample('translucent-dom-dim-italic')
+  // This compares colors, not the grid (cjk-dom-width does that): on CI's runners the DOM renderer spaces glyphs wider
+  // than the cells, so the red cells are sampled where its span is drawn.
+  const domRed = await page.evaluate(
+    ([id, r, cols]) => {
+      const doc = (globalThis as unknown as { document: Document }).document
+      const screen = doc.querySelector(`[data-region="terminal"] [data-session-id="${id}"] .xterm-screen`)!
+      const span = Array.from(screen.querySelectorAll('.xterm-rows > div')[r]?.querySelectorAll('span') ?? []).find(
+        (el) => el.textContent === ' red '
+      )
+      if (!span) return null
+      const box = screen.getBoundingClientRect()
+      const cell = box.width / cols
+      const own = span.getBoundingClientRect()
+      return [(own.left - box.left) / cell, (own.right - box.left) / cell] as [number, number]
+    },
+    [SESSION, row, grid.cols] as const
+  )
+  expect(domRed, 'the DOM renderer drew the red cells in a span of their own').not.toBeNull()
+  const dom = await sample('translucent-dom-dim-italic', domRed!)
   for (const key of ['plain', 'dim', 'italic', 'red'] as const) {
     expect(near(webgl[key], dom[key], 3), `${key}: webgl ${webgl[key]} vs dom ${dom[key]}`).toBe(true)
   }

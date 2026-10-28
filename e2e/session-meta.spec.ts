@@ -349,15 +349,18 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(tools.getByTestId('context-chip')).toBeVisible()
     await expect(tools.getByTestId('usage-chip-claude')).toBeVisible()
     const handle = page.locator('[data-region="panel"]').getByRole('separator', { name: '调整右侧栏宽度' })
-    // Drag the panel's left edge so the panel is `width` wide (it springs, so poll until it settles).
+    // Drag the panel's left edge so the panel is `width` wide (it springs, so poll until it settles). A slow runner can
+    // drop a drag, so it is dragged again until the width is there.
     const widen = async (width: number) => {
-      const h = (await handle.boundingBox())!
-      const right = await card.evaluate((el) => el.getBoundingClientRect().right)
-      await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2)
-      await page.mouse.down()
-      await page.mouse.move(right - width, h.y + h.height / 2, { steps: 5 })
-      await page.mouse.up()
-      await expect.poll(async () => Math.round((await card.boundingBox())!.width)).toBe(width)
+      await expect(async () => {
+        const h = (await handle.boundingBox())!
+        const right = await card.evaluate((el) => el.getBoundingClientRect().right)
+        await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2)
+        await page.mouse.down()
+        await page.mouse.move(right - width, h.y + h.height / 2, { steps: 5 })
+        await page.mouse.up()
+        await expect.poll(async () => Math.round((await card.boundingBox())!.width), { timeout: 2_000 }).toBe(width)
+      }).toPass({ timeout: 15_000 })
     }
     // How far the visible chips reach past the first tool button (≤ 0: no overlap).
     const overlap = () =>
