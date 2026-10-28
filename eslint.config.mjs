@@ -4,7 +4,11 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
 export default tseslint.config(
-  { ignores: ['.claude/', 'out/', 'dist/', 'release/', 'node_modules/', 'coverage/', 'test-results/', 'site/dist/', 'site/.astro/'] },
+  {
+    ignores: ['.claude/', 'out/', 'dist/', 'release/', 'node_modules/', 'coverage/', 'test-results/', 'site/dist/', 'site/.astro/',
+      // Launch films: HyperFrames compositions rendered to video (browser scripts, vendored libraries), not app code.
+      'launch-videos/']
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
