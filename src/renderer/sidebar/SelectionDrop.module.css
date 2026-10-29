@@ -1,0 +1,32 @@
+/* Figma 37: the glass block under the selected row. Shape and position come from SelectionDrop each frame. */
+.drop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  border-radius: 10px;
+  background: var(--drop-fill);
+  box-shadow: var(--drop-edge);
+  pointer-events: none;
+  will-change: transform, height;
+}
+
+.drop[data-visible='false'] {
+  display: none;
+}
+
+/* A thin rim of light, faintly split into colours. */
+.drop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--drop-iris);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}

@@ -169,6 +169,10 @@
   --float-bg: #252527;
   --float-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff14;
   --card-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff0f;
+  /* The sidebar's selection drop (Figma 37): clear glass, a lit top edge, a rim faintly split into colours. */
+  --drop-fill: linear-gradient(180deg, #ffffff38, #ffffff12 55%, #ffffff21);
+  --drop-edge: inset 0 1px 0 #ffffff8c, inset 0 -1px 0 #ffffff2e, inset 0 0 0 0.5px #ffffff59, 0 6px 18px #0000002e;
+  --drop-iris: linear-gradient(115deg, #ffffffe6, #a0d2ff66 30%, #ffaae659 55%, #fff5b459 75%, #ffffffb3);
   --card-shadow: 0 1px 3px #00000059;
 }
 
@@ -260,5 +264,8 @@
   --float-bg: #fcfcfc;
   --float-edge: inset 0 0 0 1px #00000014, inset 0 1px 0 #ffffffb3;
   --card-edge: inset 0 0 0 1px #00000012;
+  --drop-fill: linear-gradient(180deg, #ffffffb3, #ffffff73 55%, #ffffff8c);
+  --drop-edge: inset 0 1px 0 #ffffff, inset 0 -1px 0 #ffffff80, inset 0 0 0 0.5px #0000000f, 0 4px 12px #00000017;
+  --drop-iris: linear-gradient(115deg, #ffffff, #a0d2ff80 30%, #ffaae673 55%, #fff5b473 75%, #ffffffcc);
   --card-shadow: 0 1px 3px #00000014;
 }

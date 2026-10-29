@@ -16,6 +16,7 @@ import { toggleOverview } from '../overview/store'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { openSettings } from '../settings/SettingsDialog'
 import { ProjectHeader } from './ProjectHeader'
+import { SelectionDrop } from './SelectionDrop'
 import { SessionRow } from './SessionRow'
 import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
 import './shortcuts-runtime'
@@ -115,6 +116,7 @@ export function Sidebar() {
         />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
+        <SelectionDrop selectedId={overview ? null : activeSessionId} />
         {groups.map((group) => (
           <section key={group.id} className={styles.group} aria-label={group.title}>
             <ProjectHeader
