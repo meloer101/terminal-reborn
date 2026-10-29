@@ -19,6 +19,7 @@ export function applyAppearance(appearance: AppearanceSettings): void {
       root.style.setProperty(name, value)
     }
   }
+  for (const [name, value] of Object.entries(dom.attrs)) if (root.getAttribute(name) !== value) root.setAttribute(name, value)
   const terminal = toTerminalAppearance(appearance)
   const key = JSON.stringify(terminal)
   if (key !== lastTerminal) {

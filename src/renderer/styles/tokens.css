@@ -69,6 +69,20 @@
   --motion-spring: linear(0, 0.06, 0.2, 0.37, 0.54, 0.691, 0.813, 0.906, 0.971, 1.012, 1.035, 1.045, 1.045, 1.041, 1.034, 1.026, 1.018, 1.012, 1.007, 1.003, 1);
   /* Sidebar and right panel opening / closing (AppShell): the same spring, a little longer. Keep DRAWER_MS in step. */
   --motion-duration-drawer: 460ms;
+  /* 全屏背景 (PRD v1.97, Figma 38): the light field behind the glass in full screen — sky, a glow on the horizon,
+     ground, the corners tinted. Palettes sampled from the author's 配图底托; fixed in both themes. */
+  --fsb-sky: radial-gradient(70% 34% at 50% 47%, #9bb2c7, transparent 70%), radial-gradient(55% 45% at 0% 0%, #4973b7, transparent 70%), radial-gradient(55% 45% at 100% 0%, #729ac3, transparent 70%), radial-gradient(55% 45% at 0% 100%, #d0c3af, transparent 70%), radial-gradient(55% 45% at 100% 100%, #eddcc2, transparent 70%), linear-gradient(180deg, #6591c2 0%, #8aa9c7 30%, #9bb2c7 46%, #b0b9bf 62%, #ddccb5 100%);
+  --fsb-meadow: radial-gradient(70% 34% at 50% 47%, #97ac8d, transparent 70%), radial-gradient(55% 45% at 0% 0%, #7a98a0, transparent 70%), radial-gradient(55% 45% at 100% 0%, #99afbb, transparent 70%), radial-gradient(55% 45% at 0% 100%, #364827, transparent 70%), radial-gradient(55% 45% at 100% 100%, #3d512e, transparent 70%), linear-gradient(180deg, #85a1aa 0%, #8da490 30%, #97ac8d 46%, #6f8b61 62%, #354727 100%);
+  --fsb-lake: radial-gradient(70% 34% at 50% 47%, #91abb6, transparent 70%), radial-gradient(55% 45% at 0% 0%, #7396a8, transparent 70%), radial-gradient(55% 45% at 100% 0%, #8cabb9, transparent 70%), radial-gradient(55% 45% at 0% 100%, #263e46, transparent 70%), radial-gradient(55% 45% at 100% 100%, #2b424b, transparent 70%), linear-gradient(180deg, #7c9fae 0%, #88a6b1 30%, #91abb6 46%, #507584 62%, #243b43 100%);
+  --fsb-dune: radial-gradient(70% 34% at 50% 47%, #c1bdab, transparent 70%), radial-gradient(55% 45% at 0% 0%, #9eafb9, transparent 70%), radial-gradient(55% 45% at 100% 0%, #8e9ea6, transparent 70%), radial-gradient(55% 45% at 0% 100%, #8d6137, transparent 70%), radial-gradient(55% 45% at 100% 100%, #976c3e, transparent 70%), linear-gradient(180deg, #92a3ad 0%, #aeaea4 30%, #c1bdab 46%, #ac9b79 62%, #8b5e36 100%);
+  --fsb-pine: radial-gradient(70% 34% at 50% 47%, #99a9a3, transparent 70%), radial-gradient(55% 45% at 0% 0%, #7f9597, transparent 70%), radial-gradient(55% 45% at 100% 0%, #9cafb0, transparent 70%), radial-gradient(55% 45% at 0% 100%, #203027, transparent 70%), radial-gradient(55% 45% at 100% 100%, #24352b, transparent 70%), linear-gradient(180deg, #8a9ea0 0%, #889c98 30%, #99a9a3 46%, #5a6f65 62%, #1d2f24 100%);
+  --fsb-dusk: radial-gradient(70% 34% at 50% 47%, #a466a6, transparent 70%), radial-gradient(55% 45% at 0% 0%, #7e6fbb, transparent 70%), radial-gradient(55% 45% at 100% 0%, #b1a6e8, transparent 70%), radial-gradient(55% 45% at 0% 100%, #e06845, transparent 70%), radial-gradient(55% 45% at 100% 100%, #cf7c69, transparent 70%), linear-gradient(180deg, #9284cf 0%, #9e71b4 30%, #a466a6 46%, #b16596 62%, #d46f5d 100%);
+  --fsb-coral: radial-gradient(70% 34% at 50% 47%, #e86e4d, transparent 70%), radial-gradient(55% 45% at 0% 0%, #f9bf99, transparent 70%), radial-gradient(55% 45% at 100% 0%, #ea8c6d, transparent 70%), radial-gradient(55% 45% at 0% 100%, #d64038, transparent 70%), radial-gradient(55% 45% at 100% 100%, #bd3a43, transparent 70%), linear-gradient(180deg, #f1a986 0%, #ea8868 30%, #e86e4d 46%, #e95e42 62%, #dd4539 100%);
+  --fsb-sunset: radial-gradient(70% 34% at 50% 47%, #8f505e, transparent 70%), radial-gradient(55% 45% at 0% 0%, #6b5a93, transparent 70%), radial-gradient(55% 45% at 100% 0%, #955188, transparent 70%), radial-gradient(55% 45% at 0% 100%, #c34738, transparent 70%), radial-gradient(55% 45% at 100% 100%, #d05432, transparent 70%), linear-gradient(180deg, #725893 0%, #845374 30%, #8f505e 46%, #ac5044 62%, #e0622f 100%);
+  --fsb-ember: radial-gradient(70% 34% at 50% 47%, #7a4d3d, transparent 70%), radial-gradient(55% 45% at 0% 0%, #4a6473, transparent 70%), radial-gradient(55% 45% at 100% 0%, #4a6372, transparent 70%), radial-gradient(55% 45% at 0% 100%, #2b1f22, transparent 70%), radial-gradient(55% 45% at 100% 100%, #371f21, transparent 70%), linear-gradient(180deg, #4b6776 0%, #4a494d 30%, #7a4d3d 46%, #ad4b2f 62%, #422322 100%);
+  --fsb-plum: radial-gradient(70% 34% at 50% 47%, #9c4f60, transparent 70%), radial-gradient(55% 45% at 0% 0%, #ecac83, transparent 70%), radial-gradient(55% 45% at 100% 0%, #cb7655, transparent 70%), radial-gradient(55% 45% at 0% 100%, #432e53, transparent 70%), radial-gradient(55% 45% at 100% 100%, #5a345f, transparent 70%), linear-gradient(180deg, #e49c74 0%, #bc7368 30%, #9c4f60 46%, #804260 62%, #3f2b4e 100%);
+  /* Film grain over the field (the 配图底托 are grainy). */
+  --fs-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 /* Dark — the default baseline */
@@ -169,6 +183,10 @@
   --float-bg: #252527;
   --float-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff14;
   --card-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff0f;
+  /* Full screen (Figma 38): a veil over the field so text stays readable, light caught on the glass, a lit top edge on cards. */
+  --fs-veil: #0e101466;
+  --fs-sheen: linear-gradient(165deg, #ffffff1a 0%, transparent 28%, transparent 72%, #ffffff1a 100%);
+  --fs-card-edge: inset 0 0 0 1px #ffffff14, inset 0 1px 0 #ffffff66;
   /* The sidebar's selection drop (Figma 37): clear glass, a lit top edge, a rim faintly split into colours. */
   --drop-fill: linear-gradient(180deg, #ffffff38, #ffffff12 55%, #ffffff21);
   --drop-edge: inset 0 1px 0 #ffffff8c, inset 0 -1px 0 #ffffff2e, inset 0 0 0 0.5px #ffffff59, 0 6px 18px #0000002e;
@@ -264,6 +282,9 @@
   --float-bg: #fcfcfc;
   --float-edge: inset 0 0 0 1px #00000014, inset 0 1px 0 #ffffffb3;
   --card-edge: inset 0 0 0 1px #00000012;
+  --fs-veil: #fafafc4d;
+  --fs-sheen: linear-gradient(165deg, #ffffff59 0%, transparent 28%, transparent 72%, #ffffff59 100%);
+  --fs-card-edge: inset 0 0 0 1px #00000012, inset 0 1px 0 #ffffff;
   --drop-fill: linear-gradient(180deg, #ffffffb3, #ffffff73 55%, #ffffff8c);
   --drop-edge: inset 0 1px 0 #ffffff, inset 0 -1px 0 #ffffff80, inset 0 0 0 0.5px #0000000f, 0 4px 12px #00000017;
   --drop-iris: linear-gradient(115deg, #ffffff, #a0d2ff80 30%, #ffaae673 55%, #fff5b473 75%, #ffffffcc);

@@ -27,6 +27,28 @@
   --lead-gap: var(--card-gap);
 }
 
+/* 全屏背景 (PRD v1.97, Figma 38): full screen leaves no desktop behind the window for the glass to show, so the shell
+   draws its own field (the palette <html data-fs-backdrop> names; auto follows the theme), film grain, a veil that keeps
+   text readable and the light caught on the glass; cards get a lit top edge. */
+:global(:root[data-fs-backdrop='sky']),
+:global(:root[data-fs-backdrop='auto'][data-theme='light']) { --fs-field: var(--fsb-sky); }
+:global(:root[data-fs-backdrop='meadow']) { --fs-field: var(--fsb-meadow); }
+:global(:root[data-fs-backdrop='lake']) { --fs-field: var(--fsb-lake); }
+:global(:root[data-fs-backdrop='dune']) { --fs-field: var(--fsb-dune); }
+:global(:root[data-fs-backdrop='pine']) { --fs-field: var(--fsb-pine); }
+:global(:root[data-fs-backdrop='dusk']) { --fs-field: var(--fsb-dusk); }
+:global(:root[data-fs-backdrop='coral']) { --fs-field: var(--fsb-coral); }
+:global(:root[data-fs-backdrop='sunset']) { --fs-field: var(--fsb-sunset); }
+:global(:root[data-fs-backdrop='ember']),
+:global(:root[data-fs-backdrop='auto'][data-theme='dark']) { --fs-field: var(--fsb-ember); }
+:global(:root[data-fs-backdrop='plum']) { --fs-field: var(--fsb-plum); }
+
+.shell[data-fullscreen='true'] {
+  --card-edge: var(--fs-card-edge);
+  background: var(--fs-sheen), linear-gradient(var(--fs-veil), var(--fs-veil)), var(--fs-grain), var(--fs-field);
+  background-blend-mode: normal, normal, overlay, normal;
+}
+
 .sidebar {
   position: relative;
   flex: none;

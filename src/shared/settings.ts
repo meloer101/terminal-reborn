@@ -29,8 +29,17 @@ export interface TerminalColors {
 
 export const TERMINAL_ANSI_COUNT = 16
 
+/**
+ * 设置 · 外观 · 全屏背景 (PRD v1.97, Figma 38): the light field drawn behind the glass in full screen, where there is no
+ * desktop behind the window for the Liquid Glass to show. Palettes from the author's 配图底托; colours in tokens.css.
+ * `auto` takes 晴空 in light mode and 夜火 in dark.
+ */
+export const FULLSCREEN_BACKDROPS = ['sky', 'meadow', 'lake', 'dune', 'pine', 'dusk', 'coral', 'sunset', 'ember', 'plum'] as const
+export type FullscreenBackdrop = 'auto' | (typeof FULLSCREEN_BACKDROPS)[number]
+
 export interface AppearanceSettings {
   theme: ThemePreference
+  fullscreenBackdrop: FullscreenBackdrop
   /** Latin monospace family for the terminal. */
   latinFont: string
   /** CJK family placed right after latinFont in the stack. */
@@ -152,6 +161,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   version: 1,
   appearance: {
     theme: 'system',
+    fullscreenBackdrop: 'auto',
     latinFont: 'JetBrains Mono Variable',
     cjkFont: 'PingFang SC',
     fontSize: 13,
@@ -237,6 +247,10 @@ function appearance(value: unknown): AppearanceSettings {
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return {
     theme: v.theme === 'dark' || v.theme === 'light' || v.theme === 'system' ? v.theme : d.theme,
+    fullscreenBackdrop:
+      v.fullscreenBackdrop === 'auto' || (FULLSCREEN_BACKDROPS as readonly unknown[]).includes(v.fullscreenBackdrop)
+        ? (v.fullscreenBackdrop as FullscreenBackdrop)
+        : d.fullscreenBackdrop,
     latinFont: str(v.latinFont, d.latinFont, LIMITS.fontName),
     cjkFont: str(v.cjkFont, d.cjkFont, LIMITS.fontName),
     fontSize: Math.round(num(v.fontSize, d.fontSize, LIMITS.fontSize)),

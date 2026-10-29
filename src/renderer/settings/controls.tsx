@@ -108,7 +108,8 @@ export function ThemeSwatches<T extends string>({
   label
 }: {
   value: T
-  options: ReadonlyArray<{ value: T; label: string; kind: SwatchKind }>
+  /** `kind` draws a theme miniature; `preview` draws anything else in the same frame (全屏背景, Figma 38). */
+  options: ReadonlyArray<{ value: T; label: string; kind?: SwatchKind; preview?: ReactNode }>
   onChange: (value: T) => void
   label: string
 }) {
@@ -149,10 +150,14 @@ export function ThemeSwatches<T extends string>({
           onClick={() => onChange(option.value)}
         >
           <span className={styles.swatchPreview} data-kind={option.kind}>
-            <span className={styles.swatchSidebar} />
-            <span className={styles.swatchLine} style={{ left: 32, top: 12, width: 36, background: 'var(--swatch-accent)' }} />
-            <span className={styles.swatchLine} style={{ left: 32, top: 22, width: 48, background: 'var(--swatch-blue)' }} />
-            <span className={styles.swatchLine} style={{ left: 32, top: 32, width: 28, background: 'var(--swatch-green)' }} />
+            {option.preview ?? (
+              <>
+                <span className={styles.swatchSidebar} />
+                <span className={styles.swatchLine} style={{ left: 32, top: 12, width: 36, background: 'var(--swatch-accent)' }} />
+                <span className={styles.swatchLine} style={{ left: 32, top: 22, width: 48, background: 'var(--swatch-blue)' }} />
+                <span className={styles.swatchLine} style={{ left: 32, top: 32, width: 28, background: 'var(--swatch-green)' }} />
+              </>
+            )}
           </span>
           <span className={styles.swatchName}>{option.label}</span>
         </button>

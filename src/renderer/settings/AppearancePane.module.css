@@ -150,3 +150,19 @@
   font: var(--text-caption);
   color: var(--text-tertiary);
 }
+
+/* 全屏背景 swatches (Figma 38): the field itself, fixed whatever the theme; 自动 shows its two halves. */
+.backdropField {
+  position: absolute;
+  inset: 0;
+}
+
+.backdropHalf {
+  position: absolute;
+  inset: 0 0 0 50%;
+  overflow: hidden;
+}
+
+.backdropHalf .backdropField {
+  left: -100%;
+}

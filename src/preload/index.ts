@@ -96,6 +96,7 @@ const api: TrApi = {
       if (isSecondaryKey(key)) listener(key)
     }),
     onWindowState: (listener) => listen(IPC.uiWindowState, listener),
+    onFullScreen: (listener) => listen(IPC.uiFullScreen, listener),
     confirm: (options) => ipcRenderer.invoke(IPC.uiConfirm, options),
     revealInFinder: (path) => ipcRenderer.send(IPC.uiRevealInFinder, path)
   },

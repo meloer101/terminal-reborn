@@ -27,6 +27,15 @@ describe('sanitizeSettings', () => {
   })
 })
 
+describe('全屏背景 (PRD v1.97)', () => {
+  it('defaults to auto and keeps only the known palettes', () => {
+    expect(DEFAULT_SETTINGS.appearance.fullscreenBackdrop).toBe('auto')
+    expect(sanitizeSettings({ appearance: { fullscreenBackdrop: 'ember' } }).appearance.fullscreenBackdrop).toBe('ember')
+    expect(sanitizeSettings({ appearance: { fullscreenBackdrop: 'neon' } }).appearance.fullscreenBackdrop).toBe('auto')
+    expect(sanitizeSettings({ appearance: { fullscreenBackdrop: 3 } }).appearance.fullscreenBackdrop).toBe('auto')
+  })
+})
+
 describe('applySettingsPatch', () => {
   it('merges appearance fields and keeps the rest', () => {
     const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { cjkFont: 'Noto Sans SC', fontSize: 14 } })

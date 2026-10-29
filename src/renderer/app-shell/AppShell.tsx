@@ -37,6 +37,7 @@ import './menu-commands'
 import { panelMode, panelWidthFor, sidebarWidthFor } from './layout'
 import { drawerIsWide, useDrawer } from './drawer-motion'
 import { SidebarDrawer } from './SidebarDrawer'
+import { useMainFullScreen } from './full-screen'
 import styles from './AppShell.module.css'
 
 const subscribeResize = (onChange: () => void) => {
@@ -58,6 +59,7 @@ const windowWidth = () => window.innerWidth
  */
 export function AppShell() {
   const sidebarCollapsed = useWorkspace((s) => s.sidebarCollapsed)
+  const fullScreen = useMainFullScreen()
   const overview = useWorkspace((s) => s.mainView === 'overview')
   // The main window's own panes (F20 · 多窗口: the keyboard may be in another window).
   const mainActive = usePaneView().activeSessionId
@@ -99,7 +101,7 @@ export function AppShell() {
   }, [sessionPortKey])
 
   return (
-    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'}>
+    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'} data-fullscreen={fullScreen}>
       <SidebarDrawer collapsed={sidebarCollapsed} width={sidebarWidth} resizable />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">
