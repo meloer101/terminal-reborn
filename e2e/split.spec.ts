@@ -119,10 +119,14 @@ test('dragging a sidebar session onto the right edge makes two panes side by sid
   await expect.poll(shape).toBe('row(s-cookie s-perf)')
   await expect(terminalOf('s-perf')).toBeVisible()
   await expect(terminalOf('s-cookie')).toBeVisible()
-  // The dropped session gets the keyboard; both are marked in the sidebar, the focused one strongest.
+  // The dropped session gets the keyboard; both panes' sessions have a glass block in the sidebar (Figma 37B), and
+  // the new pane's dripped in.
   await expect.poll(activeId).toBe('s-perf')
   await expect(sidebarRow('s-perf')).toHaveAttribute('data-selected', 'true')
-  await expect(sidebarRow('s-cookie')).toHaveAttribute('data-shown', 'true')
+  await expect(sidebarRow('s-cookie')).toHaveAttribute('data-shown', 'false')
+  await expect(page.locator('[data-region="sidebar"] [data-drop-for]')).toHaveCount(2)
+  await expect(page.locator('[data-region="sidebar"] [data-drop-for="s-cookie"]')).toBeVisible()
+  await expect(page.locator('[data-region="sidebar"] [data-drop-for="s-perf"]')).toBeVisible()
   await expect.poll(() => screen('s-perf'), { timeout: 20_000 }).not.toBe('')
   await shoot('21A-two-panes')
 })
