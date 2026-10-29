@@ -16,7 +16,7 @@ import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-moti
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
 import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
-import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal } from './registry'
+import { ensureTerminal, getSurface, getXtermSurface, pruneTerminals, resyncTerminal, setTerminalShown } from './registry'
 import { attachFileInput } from './file-input'
 import { closeTerminalSearch } from './search-store'
 import { TerminalSearch } from './TerminalSearch'
@@ -63,6 +63,13 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
     // re-run this effect. The layout effect below shows a terminal that is already in its host.
     if (host.offsetParent !== null) getXtermSurface(sessionId)?.setVisible(true)
   }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation, borrowedHost])
+
+  // A hidden terminal's process gets far less output in flight, so a shown one's echo never queues behind it. After
+  // the attach effect above, which creates the terminal in the same commit; `generation` too, because a restart
+  // (startSession) disposes the terminal and the new one starts out shown.
+  useEffect(() => {
+    if (everActive && !held) setTerminalShown(sessionId, shown)
+  }, [shown, everActive, held, sessionId, generation])
 
   // Files dropped on or pasted into the terminal (PRD F19), wherever it is shown.
   useEffect(() => {

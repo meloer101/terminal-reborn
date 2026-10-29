@@ -112,6 +112,17 @@ export class SessionHost {
           if (session?.attached && session.flow.onAck(message.count) && session.paused) this.resume(session)
         })
         break
+      case 'visible':
+        this.guard(`visible ${message.id}`, () => {
+          const session = this.live(message.id)
+          if (!session?.attached) return
+          const next = session.flow.setVisible(message.visible)
+          if (next === 'pause' && !session.paused) {
+            session.paused = true
+            session.proc.pause()
+          } else if (next === 'resume' && session.paused) this.resume(session)
+        })
+        break
       case 'attach':
         this.guard(`attach ${message.id}`, () => this.attach(message.id))
         break

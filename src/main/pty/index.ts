@@ -28,7 +28,7 @@ import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { shouldKillLateSpawn } from './late-spawn'
 import { assertCwdExists } from './preflight'
-import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
+import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
 const ATTACH_TIMEOUT_MS = 5_000
@@ -572,6 +572,11 @@ export function registerPtyHandlers(): void {
   ipcMain.on(IPC.ptyAck, (event, sessionId: unknown, count: unknown) => {
     const id = ownedSession(event.sender, sessionId)
     if (id) send({ type: 'ack', id, count: parseAckCount(count) })
+  })
+
+  ipcMain.on(IPC.ptyVisible, (event, sessionId: unknown, visible: unknown) => {
+    const id = ownedSession(event.sender, sessionId)
+    if (id) send({ type: 'visible', id, visible: parseVisible(visible) })
   })
 
   // `will-quit` (not `before-quit`): the quit guard may still cancel a quit after before-quit fired.

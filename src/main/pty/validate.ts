@@ -35,6 +35,11 @@ export function parseAckCount(value: unknown): number {
   return Math.floor(value)
 }
 
+export function parseVisible(value: unknown): boolean {
+  if (typeof value !== 'boolean') throw new Error('invalid visibility')
+  return value
+}
+
 function parseString(value: unknown, name: string): string {
   if (typeof value !== 'string' || value.length > MAX_STRING || value.includes('\0')) throw new Error(`invalid ${name}`)
   return value

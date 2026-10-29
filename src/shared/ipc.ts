@@ -102,6 +102,8 @@ export interface PtyApi {
   kill(sessionId: SessionId): void
   /** Flow control: tells the PTY host how many UTF-16 units of output the terminal has finished parsing. */
   ack(sessionId: SessionId, count: number): void
+  /** Flow control: whether a pane shows the session; a hidden one gets far less output in flight (pty-host/flow-control.ts). */
+  setVisible(sessionId: SessionId, visible: boolean): void
   /** `seq`: the session's output position at the end of `data` (see PtyAttachResult.seq). */
   onData(sessionId: SessionId, listener: (data: string, seq: number) => void): Unsubscribe
   onExit(sessionId: SessionId, listener: (exit: PtyExit) => void): Unsubscribe
@@ -431,6 +433,7 @@ export const IPC = {
   ptyResize: 'pty:resize',
   ptyKill: 'pty:kill',
   ptyAck: 'pty:ack',
+  ptyVisible: 'pty:visible',
   /** main → renderer, payload { sessionId, data, seq } */
   ptyData: 'pty:data',
   /** main → renderer, payload { sessionId, exit } */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseWriteData } from './validate'
+import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
 
 const base = { sessionId: 's-1', cwd: '/tmp', cols: 80, rows: 24 }
 
@@ -67,5 +67,8 @@ describe('other payloads', () => {
     expect(parseAckCount(10.9)).toBe(10)
     expect(() => parseAckCount(-1)).toThrow()
     expect(() => parseAckCount(Number.NaN)).toThrow()
+    expect(parseVisible(false)).toBe(false)
+    expect(() => parseVisible('false')).toThrow()
+    expect(() => parseVisible(undefined)).toThrow()
   })
 })

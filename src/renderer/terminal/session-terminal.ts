@@ -39,6 +39,8 @@ export class SessionTerminal {
   private readonly cleanups: Array<() => void> = []
   /** Output arrived since the last snapshot. */
   private dirty = false
+  /** A pane shows this terminal; the PTY host gives a hidden one far less output in flight (pty-host/flow-control.ts). */
+  private shown = true
   private readonly snapshotQuiet = new QuietTimer(SNAPSHOT_QUIET_MS, () =>
     requestIdleCallback(() => this.saveSnapshot(), { timeout: 2000 })
   )
@@ -60,6 +62,18 @@ export class SessionTerminal {
   /** The PTY is running (spawn requested, not exited, not disposed). */
   get alive(): boolean {
     return this.started && !this.exited && !this.disposed
+  }
+
+  /** A pane started or stopped showing this terminal. */
+  setShown(shown: boolean): void {
+    if (shown === this.shown) return
+    this.shown = shown
+    if (this.ready && !this.exited && !this.disposed) window.tr.pty.setVisible(this.sessionId, shown)
+  }
+
+  /** The host counts a new or reattached process as shown: say so when it is not. */
+  private sendHidden(): void {
+    if (!this.shown) window.tr.pty.setVisible(this.sessionId, false)
   }
 
   /** Attaches to a container; the first call also starts the PTY at the fitted size. */
@@ -167,6 +181,7 @@ export class SessionTerminal {
     }
     this.listen()
     this.ready = true
+    this.sendHidden()
     for (const data of this.queuedInput) pty.write(id, data)
     this.queuedInput = []
     // Now that resizes reach the PTY: fit the container (a different size makes the program redraw for it).
@@ -205,6 +220,7 @@ export class SessionTerminal {
     }
     if (this.disposed) return false
     this.ready = true
+    this.sendHidden()
     for (const data of this.queuedInput) pty.write(id, data)
     this.queuedInput = []
     return true

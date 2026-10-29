@@ -1,6 +1,7 @@
 // Real PTYs (node-pty) driven through SessionHost: what the daemon relies on for reattaching.
 import { afterEach, describe, expect, it } from 'vitest'
 import type { HostEvent } from './protocol'
+import { HIDDEN_HIGH_WATERMARK } from './flow-control'
 import { SessionHost } from './session-host'
 
 function harness(mirror = true, onDetachedOutput?: (id: string) => void) {
@@ -117,6 +118,21 @@ describe('SessionHost', () => {
     expect(new Set(unseen)).toEqual(new Set(['s1']))
     await expect.poll(async () => (await host.screen('s1'))?.data, { timeout: 5000 }).toContain('unseen-Y')
     expect(await host.screen('nope')).toBeNull()
+  })
+
+  it('holds a hidden session to the hidden watermark and lets it run on once it is shown', async () => {
+    const { host, events, waitFor } = harness(false)
+    cleanup = host
+    // 400 000 characters once a line arrives; nobody acks, so only flow control decides how much comes out.
+    host.handle({ type: 'spawn', id: 's1', cwd: '/', command: '/bin/sh', args: ['-c', 'read x; head -c 400000 /dev/zero | tr "\\0" a; printf "@@end@@"; sleep 30'], cols: 80, rows: 24 })
+    await waitFor(is('spawned'))
+    host.handle({ type: 'visible', id: 's1', visible: false })
+    host.handle({ type: 'write', id: 's1', data: 'go\r' })
+    await expect.poll(() => output(events).length, { timeout: 5000 }).toBeGreaterThan(HIDDEN_HIGH_WATERMARK)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(output(events)).not.toContain('@@end@@')
+    host.handle({ type: 'visible', id: 's1', visible: true })
+    await expect.poll(() => output(events), { timeout: 5000 }).toContain('@@end@@')
   })
 
   it('answers attach-miss without a mirror (the fallback host) or for an unknown id', async () => {

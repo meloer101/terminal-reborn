@@ -78,6 +78,11 @@ export function getXtermSurface(sessionId: SessionId): XtermSurface | undefined 
   return terminals.get(sessionId)?.surface
 }
 
+/** A pane started or stopped showing the session's terminal (flow control; see SessionTerminal.setShown). */
+export function setTerminalShown(sessionId: SessionId, shown: boolean): void {
+  terminals.get(sessionId)?.setShown(shown)
+}
+
 /** Redraws a session's terminal and re-sends its size to the PTY (after sleep, a display change, refocus). */
 export function resyncTerminal(sessionId: SessionId): void {
   terminals.get(sessionId)?.resync()
