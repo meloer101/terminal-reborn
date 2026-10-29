@@ -114,18 +114,17 @@ async function hasUncommitted(place: Place): Promise<boolean> {
   }
 }
 
-/** Calls their agent gave up (Esc) before or while they waited on the user; see `cancelDispatchCall`. */
-const cancelledCalls = new Set<string>()
+/** start_sessions calls between their request and their launch, and whether their agent gave them up (Esc). */
+const starting = new Map<string, { cancelled: boolean }>()
 
 /** The agent cancelled a call (PRD F21 · §6.14): what it still waits on the user for goes away, as if declined. */
 export function cancelDispatchCall(callId: string): void {
-  cancelledCalls.add(callId)
+  const call = starting.get(callId)
+  if (call) call.cancelled = true
   settleConfirm(callId, false)
 }
 
 function confirm(caller: Place, callId: string, plans: ChildPlan[], base: string, reason: string | undefined, uncommitted: boolean): Promise<'start' | 'declined' | 'timeout'> {
-  // Cancelled while Wavi was still planning the batch: never show it.
-  if (cancelledCalls.delete(callId)) return Promise.resolve('declined')
   return new Promise((resolve) => {
     const timer = window.setTimeout(() => {
       settleConfirm(callId, false)
@@ -150,6 +149,16 @@ function confirm(caller: Place, callId: string, plans: ChildPlan[], base: string
 }
 
 async function start(caller: Place, request: DispatchRequest): Promise<DispatchToolResult> {
+  const call = { cancelled: false }
+  starting.set(request.callId, call)
+  try {
+    return await planAndStart(caller, request, call)
+  } finally {
+    starting.delete(request.callId)
+  }
+}
+
+async function planAndStart(caller: Place, request: DispatchRequest, call: { cancelled: boolean }): Promise<DispatchToolResult> {
   if (caller.session.kind === 'shell') return toolFail('not_allowed', 'Only agent sessions can start sessions.')
   const parsed = parseStartArgs(request.args, await installedAgents())
   if (!parsed.ok) return parsed.result
@@ -176,8 +185,13 @@ async function start(caller: Place, request: DispatchRequest): Promise<DispatchT
     prepare: info.includeCount > 0 || info.hasSetup
   })
   const uncommitted = await hasUncommitted(caller)
+  // Cancelled while Wavi was still planning the batch: never show it, and never start it (自动开始 included). Nobody
+  // reads the answer; main has dropped the call.
+  const cancelled = (): DispatchToolResult => toolFail('declined', 'The agent cancelled this call; nothing was started.')
+  if (call.cancelled) return cancelled()
   if (!settings.autoApprove) {
     const decision = await confirm(caller, request.callId, plans, base, parsed.request.reason, uncommitted)
+    if (call.cancelled) return cancelled()
     if (decision === 'declined') return toolFail('declined', 'The user declined to start these sessions. Do not retry unless the user asks; carry on yourself or ask them.')
     if (decision === 'timeout') return toolFail('timeout', 'The user did not answer within 10 minutes; nothing was started. Ask them before trying again.')
   }

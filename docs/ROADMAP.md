@@ -137,7 +137,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] 真实 Claude / Codex 互相派一次活（2026-10-22，作者同意后跑，PRD §6.14）：Claude（Haiku）派给 Codex、Codex 派给 Claude 都走通，Claude 派完会按工具说明结束这一轮，报告到了会读、会自己调 `read_result`。作者的 Codex 服务商当天对 `gpt-6-sol` 返回 503，所以 Codex 用的是真 CLI + 本地假模型；真 Codex 模型自己会不会照说明派活还没看到。顺带修了两处：Codex 默认对每次 MCP 工具调用都先问用户（现在注入 `default_tools_approval_mode="approve"`），以及一轮结束却没有回复时报告写明“可能出错了”
   - [x] Figma 补 F21 的画面（2026-10-29，Figma 第 40 节；总览一节和待送报告条照旧，没有另画）
   - [x] 确认挂在派活会话下（2026-10-29，PRD v1.99，Figma 40B–40F）：派活会话变“等你处理”、写 `想开 N 个会话`；终端下方的确认条代替全窗面板；侧栏状态图形列画细线连到每个子会话
-  - [x] Esc 打断等待中的 `start_sessions` 时收掉确认条（2026-10-29，PRD F21 v1.99 / §6.14 实测：Claude 发 MCP `notifications/cancelled`，Wavi 的 server 转成 `WaviCancel`）；agent 退出时自动当作拒绝。Codex 按 Esc 时发什么没实测
+  - [x] Esc 打断等待中的 `start_sessions` 时收掉确认条（2026-10-29，PRD F21 v1.99 / §6.14 实测：Claude 发 MCP `notifications/cancelled`，Wavi 的 server 转成 `WaviCancel`）；agent 退出时自动当作拒绝。Codex 按 Esc 时发什么没实测。修（2026-10-29）：开着「自动开始」时，Wavi 还在准备这批会话就按 Esc，会话照样开出来；取消过的 callId 也一直留在内存里（`handler.test.ts`）
 - [ ] agent teams 的队友和子 agent 只显示、不接管（PRD F21 v1.66 改）：在派活会话下列出 Claude 自己开的队友 / 子 agent 的名字和状态（来自 hook 的 `agent_id`、`TeammateIdle`），不变成 Wavi 会话。~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
 - [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
 - [ ] 读 `claude agents --json`，把 Claude 自己在后台开的会话（会自己建 worktree、开 draft PR）也显示到总览
