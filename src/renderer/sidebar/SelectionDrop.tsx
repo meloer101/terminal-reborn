@@ -4,7 +4,13 @@
 // only says which sessions are shown. First show, coming back from the overview and 减少动态效果 place the blocks
 // without motion. No backdrop filter: the window is transparent, so a backdrop filter reads empty pixels and darkens
 // the block (PRD §5 v1.74).
-import { useEffect, useLayoutEffect, useRef } from 'react'
+//
+// Cost: the sidebar re-renders on every session patch, so nothing here runs per render. Rows are measured when the
+// shown sessions change, and otherwise only from a ResizeObserver on the projects and their rows (it fires after
+// layout, so reading offsets there forces none): a row that grows or shrinks, a project folding, the sidebar
+// resizing. Frames write width / height rather than a scale: a scaled block would stretch its 1px rim, its shadow
+// and its corners into ellipses, and the bead (12 px) would lose them altogether.
+import { useLayoutEffect, useRef } from 'react'
 import { advance, changes, dripOnto, evaporate, flowTo, follow, frameOf, moving, restAt, type DropState, type RowBox } from './selection-drop'
 import styles from './SelectionDrop.module.css'
 
@@ -12,17 +18,22 @@ interface Block {
   el: HTMLDivElement
   /** null while the session's row is not drawn (its project folded). */
   state: DropState | null
+  /** The style last written, so a frame that did not change writes nothing. */
+  drawn: string
 }
 
 const boxOf = (row: HTMLElement): RowBox => ({ top: row.offsetTop, height: row.offsetHeight, left: row.offsetLeft, width: row.offsetWidth })
 
 function draw(block: Block): void {
   const f = block.state && frameOf(block.state)
+  const drawn = f ? `${f.left} ${f.top} ${f.width} ${f.height} ${f.radius} ${f.opacity}` : 'none'
+  if (drawn === block.drawn) return
+  block.drawn = drawn
+  const s = block.el.style
   if (!f) {
-    block.el.style.display = 'none'
+    s.display = 'none'
     return
   }
-  const s = block.el.style
   s.display = ''
   s.transform = `translate(${f.left}px, ${f.top}px)`
   s.width = `${f.width}px`
@@ -31,55 +42,84 @@ function draw(block: Block): void {
   s.opacity = String(f.opacity)
 }
 
-/** `ids`: the sessions this window's panes show, in pane order; empty while the overview covers them. */
-export function SelectionDrops({ ids }: { ids: readonly string[] }) {
-  const layer = useRef<HTMLDivElement>(null)
-  const blocks = useRef(new Map<string, Block>())
-  const leaving = useRef<Block[]>([])
-  // What the blocks showed at the last render; null when nothing was shown, so the next show places them still.
-  const before = useRef<string[] | null>(null)
-  const frame = useRef({ raf: 0, last: 0 })
+interface Drops {
+  /** The sessions shown now, in pane order; empty while the overview covers them. */
+  show(ids: readonly string[]): void
+  dispose(): void
+}
 
-  useLayoutEffect(() => {
-    const root = layer.current
-    const list = root?.parentElement
-    if (!root || !list) return
-    const live = blocks.current
-    const boxFor = (id: string): RowBox | null => {
-      const row = list.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`)
-      return row ? boxOf(row) : null
-    }
-    const make = (id: string, state: DropState | null): Block => {
-      const el = document.createElement('div')
-      el.className = styles.drop ?? ''
-      el.dataset.testid = 'selection-drop'
-      el.dataset.dropFor = id
-      root.appendChild(el)
-      const block = { el, state }
-      live.set(id, block)
-      return block
-    }
-    const drop = (block: Block): void => block.el.remove()
+/** The blocks on `root`, a layer inside `list` (the session list, whose sections hold the rows). */
+function createDrops(root: HTMLElement, list: HTMLElement): Drops {
+  const live = new Map<string, Block>()
+  let leaving: Block[] = []
+  // What the blocks showed last; null when nothing was shown, so the next show places them still.
+  let before: string[] | null = null
+  let raf = 0
+  let last = 0
 
+  const boxFor = (id: string): RowBox | null => {
+    const row = list.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`)
+    return row ? boxOf(row) : null
+  }
+  const make = (id: string, state: DropState | null): Block => {
+    const el = document.createElement('div')
+    el.className = styles.drop ?? ''
+    el.dataset.testid = 'selection-drop'
+    el.dataset.dropFor = id
+    root.appendChild(el)
+    const block = { el, state, drawn: '' }
+    live.set(id, block)
+    return block
+  }
+  const drop = (block: Block): void => block.el.remove()
+  const all = (): Block[] => [...live.values(), ...leaving]
+  const anyMoving = (): boolean => all().some((b) => b.state !== null && moving(b.state))
+
+  const tick = (now: number): void => {
+    const dt = Math.min(0.032, (now - last) / 1000)
+    last = now
+    for (const block of all()) {
+      if (!block.state) continue
+      for (let i = 0; i < 4; i++) block.state = advance(block.state, dt / 4)
+      draw(block)
+    }
+    leaving = leaving.filter((b) => (b.state?.phase === 'gone' ? (drop(b), false) : true))
+    raf = anyMoving() ? requestAnimationFrame(tick) : 0
+  }
+
+  /** Every shown session has a block that follows its row (the layout may have moved it). */
+  const place = (): void => {
+    for (const id of before ?? []) {
+      const box = boxFor(id)
+      const block = live.get(id) ?? make(id, null)
+      if (!box) block.state = null
+      else block.state = block.state ? follow(block.state, box) : restAt(box)
+    }
+    for (const block of all()) draw(block)
+    if (raf || !anyMoving()) return
+    last = performance.now()
+    raf = requestAnimationFrame(tick)
+  }
+
+  const show = (ids: readonly string[]): void => {
     if (ids.length === 0) {
-      for (const block of [...live.values(), ...leaving.current]) drop(block)
+      for (const block of all()) drop(block)
       live.clear()
-      leaving.current = []
-      before.current = null
+      leaving = []
+      before = null
       return
     }
-
-    const still = before.current === null || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const still = before === null || window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (still) {
-      for (const block of leaving.current) drop(block)
-      leaving.current = []
+      for (const block of leaving) drop(block)
+      leaving = []
       for (const [id, block] of live) {
         if (ids.includes(id)) continue
         drop(block)
         live.delete(id)
       }
     } else {
-      const change = changes(before.current ?? [], ids)
+      const change = changes(before ?? [], ids)
       for (const { from, to } of change.flow) {
         const block = live.get(from)
         live.delete(from)
@@ -99,61 +139,78 @@ export function SelectionDrops({ ids }: { ids: readonly string[] }) {
         if (!block) continue
         if (block.state) {
           block.state = evaporate(block.state)
-          leaving.current.push(block)
+          leaving.push(block)
         } else drop(block)
       }
     }
-    // Every shown session has a block that follows its row (the layout may have moved it).
-    for (const id of ids) {
-      const box = boxFor(id)
-      const block = live.get(id) ?? make(id, null)
-      if (!box) block.state = null
-      else block.state = block.state ? follow(block.state, box) : restAt(box)
-    }
-    before.current = [...ids]
-    for (const block of [...live.values(), ...leaving.current]) draw(block)
+    before = [...ids]
+    place()
+  }
 
-    const anyMoving = (): boolean => [...live.values(), ...leaving.current].some((b) => b.state !== null && moving(b.state))
-    const f = frame.current
-    if (f.raf || !anyMoving()) return
-    f.last = performance.now()
-    const tick = (now: number): void => {
-      const dt = Math.min(0.032, (now - f.last) / 1000)
-      f.last = now
-      for (const block of [...live.values(), ...leaving.current]) {
-        if (!block.state) continue
-        for (let i = 0; i < 4; i++) block.state = advance(block.state, dt / 4)
-        draw(block)
-      }
-      leaving.current = leaving.current.filter((b) => (b.state?.phase === 'gone' ? (drop(b), false) : true))
-      f.raf = anyMoving() ? requestAnimationFrame(tick) : 0
-    }
-    f.raf = requestAnimationFrame(tick)
+  // A row moves when anything above it changes height (rows have 1–3 lines), a project folds or the sidebar resizes:
+  // each of those resizes a project section or a row. Sections and rows come and go, so the observed set follows them.
+  const resized = new ResizeObserver(() => {
+    if (before !== null) place()
   })
+  const observed = new Set<Element>()
+  const watch = (el: Element): void => {
+    if (observed.has(el)) return
+    observed.add(el)
+    resized.observe(el)
+  }
+  const sync = (): void => {
+    for (const el of observed) {
+      if (el.isConnected) continue
+      resized.unobserve(el)
+      observed.delete(el)
+    }
+    for (const section of list.children) {
+      if (section === root) continue
+      watch(section)
+      structure.observe(section, { childList: true })
+      for (const child of section.children) watch(child)
+    }
+  }
+  const structure = new MutationObserver(sync)
+  structure.observe(list, { childList: true })
+  sync()
 
-  // The list reflows when the sidebar is resized: keep resting blocks on their rows.
-  useEffect(() => {
+  return {
+    show,
+    dispose() {
+      resized.disconnect()
+      structure.disconnect()
+      cancelAnimationFrame(raf)
+      raf = 0
+      for (const block of all()) drop(block)
+      live.clear()
+      leaving = []
+    }
+  }
+}
+
+/** `ids`: the sessions this window's panes show, in pane order; empty while the overview covers them. */
+export function SelectionDrops({ ids }: { ids: readonly string[] }) {
+  const layer = useRef<HTMLDivElement>(null)
+  const drops = useRef<Drops | null>(null)
+  // By content: the sidebar re-renders (and may rebuild `ids`) on every session patch.
+  const key = ids.join('\n')
+
+  useLayoutEffect(() => {
     const root = layer.current
     const list = root?.parentElement
     if (!root || !list) return
-    const observer = new ResizeObserver(() => {
-      for (const [id, block] of blocks.current) {
-        if (block.state?.phase !== 'rest') continue
-        const row = list.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`)
-        if (row) {
-          block.state = restAt(boxOf(row))
-          draw(block)
-        }
-      }
-    })
-    observer.observe(list)
-    const f = frame.current
+    const d = createDrops(root, list)
+    drops.current = d
     return () => {
-      observer.disconnect()
-      cancelAnimationFrame(f.raf)
-      f.raf = 0
+      d.dispose()
+      drops.current = null
     }
   }, [])
+
+  useLayoutEffect(() => {
+    drops.current?.show(key === '' ? [] : key.split('\n'))
+  }, [key])
 
   return <div ref={layer} className={styles.layer} aria-hidden />
 }
