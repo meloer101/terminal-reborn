@@ -4,6 +4,43 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-29
+
+Liquid Glass on macOS 26, a sidebar that reads on one line, and dispatch that asks under its own terminal.
+macOS 26 上用系统的 Liquid Glass，侧栏每行从同一条线读起，派活确认挂在派活会话自己的终端下面。
+
+### Sidebar / 侧栏
+- Session rows are rearranged: the status glyph hangs in the left column and every line starts on the same text line (title · time / what it is doing / branch · agent mark). Each status has its own shape (a turning arc, a check, a warning triangle, a ring, a dash), and agent marks are one colour.
+  会话行重排：状态图形在左边一列，每一行文字都从同一条线起（标题 · 时间 / 在做什么 / 分支 · agent 标志）。每种状态一个形状（转动的弧、对勾、警告三角、圆环、短横），agent 标志改为单色。
+- The selection is a glass drop that flows between rows. With split panes, each pane's session gets one: a new pane's drips in, a closed pane's evaporates.
+  选中会话是一块在行间流动的玻璃水滴。分屏时每一格的会话下各有一块：新开一格滴下来，关掉一格收缩消失。
+- 更新 at the bottom of the sidebar shows the running version and 检查更新; settings no longer has a 关于 page.
+  侧栏底部新增「更新」，显示当前版本并可检查更新；设置去掉「关于」页。
+
+### Look / 外观
+- On macOS 26 the window shell is the system's Liquid Glass; earlier macOS keeps the frosted shell.
+  macOS 26 上窗口外壳换成系统的 Liquid Glass；更早的系统保持原来的毛玻璃。
+- In full screen a light field is drawn behind the glass; choose one of 10 palettes or 自动 in 设置 · 外观 · 全屏背景.
+  全屏时玻璃后面画一层光场，在设置 · 外观 · 全屏背景里选 10 种配色之一或「自动」。
+- A boot screen from the first frame: dots gather into the mark, and the welcome page carries it into place.
+  启动画面：第一帧就有内容，细点聚成标志，欢迎页接过标志滑到位。
+- 设置 · 智能体 and 设置 · 额度 show each agent's mark on the left edge.
+  设置 · 智能体 和 设置 · 额度 在左边线上显示每家 agent 的标志。
+
+### Dispatch / 派活
+- An agent's request to start sessions waits in a strip under its own terminal instead of a sheet over the window. Its session shows 等你处理 and the other sessions stay usable; the started sessions are tied to it by a line in the sidebar.
+  agent 请求开新会话时，确认条出现在它自己的终端下方，不再盖住整个窗口。这个会话显示「等你处理」，其他会话照常可用；开出来的会话在侧栏里用细线连到它。
+- Esc in the agent withdraws the request. A request withdrawn while Wavi is still preparing it never starts sessions, with 自动开始 on as well.
+  在 agent 里按 Esc 撤回请求。Wavi 还在准备时被撤回的请求不会开出会话，开着「自动开始」也一样。
+
+### Performance / 性能
+- Large hook payloads (a whole file read, long command output, a file written) are trimmed before they reach the app, so they no longer hold up every terminal's output.
+  hook 里的大载荷（读入的整个文件、长命令输出、写入的文件内容）在送进应用前裁掉，不再拖住所有终端的输出。
+- Terminal screens are saved and restored without blocking, the sidebar's glass drop no longer forces a layout on every status update, and startup no longer runs `sw_vers`.
+  终端画面的保存和恢复不再阻塞，侧栏的水滴不再在每次状态更新时强制排版，启动时不再同步执行 `sw_vers`。
+- Sessions no pane shows get far less output in flight, so typing in a shown session stays quick while hidden ones dump output (10 hidden sessions writing 32 MB each: input latency p95 from ~420 ms to ~60 ms).
+  没有显示在任何格子里的会话，在途输出上限大幅降低：后台会话大量输出时，前台会话打字仍然及时（10 个隐藏会话各写 32 MB 时，输入延迟 p95 从约 420 ms 降到约 60 ms）。
+
 ## [0.11.0] - 2026-10-28
 
 Every agent's plan usage on one page, and a calmer Git · 变更.
@@ -390,7 +427,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/meloer101/terminal-reborn/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/meloer101/terminal-reborn/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/meloer101/terminal-reborn/compare/v0.8.1...v0.9.0
