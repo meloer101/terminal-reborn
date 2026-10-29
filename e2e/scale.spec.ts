@@ -6,15 +6,17 @@
 // Opt-in:
 //   TR_SCALE=1 npx playwright test e2e/scale.spec.ts                          cold start, 10 and 20 sessions (~10 min)
 //   TR_SCALE=1 TR_SCALE_SOAK_MIN=480 npx playwright test e2e/scale.spec.ts -g soak    the 8-hour soak
+//   TR_SCALE=1 npx playwright test e2e/scale.spec.ts -g burst                   background sessions dumping output
 // Knobs: TR_SCALE_SESSIONS (10,20) · TR_SCALE_LPS (reply lines per second per working session, 20) ·
-// TR_SCALE_SOAK_SESSIONS (20) · TR_SCALE_SOAK_SAMPLE_S (60) · TR_SCALE_OUT (evidence; default test-results/scale) ·
+// TR_SCALE_SOAK_SESSIONS (20) · TR_SCALE_SOAK_SAMPLE_S (60) · TR_SCALE_BURST_K (hidden sessions bursting at once, 3,10)
+// · TR_SCALE_BURST_MB (MB each, 32) · TR_SCALE_OUT (evidence; default test-results/scale) ·
 // TR_SCALE_APP (an app folder to launch instead of this checkout, e.g. a frozen copy of out/ for a soak that must not
 // pick up rebuilds). Memory is the sum of the app's processes (Electron's working set) plus the pty daemon's RSS, and
 // macOS phys_footprint of the same processes (what Activity Monitor shows); agents and their shells are not counted.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { loadavg, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { outerClaudeEnv } from './fake-claude'
 import { killProfileDaemons } from './daemons'
@@ -28,8 +30,13 @@ const LPS = Number(process.env.TR_SCALE_LPS ?? 20)
 const SOAK_MIN = Number(process.env.TR_SCALE_SOAK_MIN ?? 0)
 const SOAK_SESSIONS = Number(process.env.TR_SCALE_SOAK_SESSIONS ?? 20)
 const SOAK_SAMPLE_MS = Number(process.env.TR_SCALE_SOAK_SAMPLE_S ?? 60) * 1000
+const BURST_K = (process.env.TR_SCALE_BURST_K ?? '3,10').split(',').map(Number).filter((n) => n > 0)
+const BURST_MB = Number(process.env.TR_SCALE_BURST_MB ?? 32)
 const LATENCY_KEYS = 40
-/** TR_SCALE_PROFILE=1: a renderer CPU profile (and long tasks) of the streaming phase, saved to OUT, for chasing slow keys. */
+/**
+ * TR_SCALE_PROFILE=1: a renderer CPU profile (and long tasks) of the streaming phase, saved to OUT, for chasing slow
+ * keys; the burst scenario profiles the pty daemon too (its inspector, opened with SIGUSR1).
+ */
 const PROFILE = Boolean(process.env.TR_SCALE_PROFILE)
 const PER_PROJECT = 5
 
@@ -37,7 +44,20 @@ interface Globals {
   /** Screen reading with the real workspace (`__TR_E2E__` would swap in the fixture sessions). */
   __TR_TERMINAL_PROBE__: boolean
   __trTerminals: { readScreen(sessionId: string, scrollbackLines?: number): string }
-  tr: { pty: { write(id: string, data: string): void } }
+  tr: { pty: { write(id: string, data: string): void; onData(id: string, listener: (data: string) => void): () => void } }
+}
+
+/** What the page records during a burst (performance.now() times unless named wall). */
+interface BurstProbe {
+  start: number
+  /** Key n's echo reaching the renderer over IPC, and when the agent printed it (Date.now()). */
+  arrivals: Record<number, { wall: number; perf: number; agent: number }>
+  /** Key-downs in order, Date.now(). */
+  keyWall: number[]
+  /** Per bursting session: chars received, `@@burst-done@@` received and on screen (parsed). */
+  sessions: Record<string, { chars: number; delivered: number; parsed: number }>
+  longTasks: { at: number; ms: number }[]
+  stop(): void
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -89,8 +109,10 @@ function world(prefix: string, sessions: number) {
       drafts: {}
     })
   )
-  const env = { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', CLAUDE_CONFIG_DIR: claudeConfig, TR_SCALE_LPS: String(LPS) }
-  return { root, profile, env, ids }
+  const bursts = join(root, 'bursts')
+  mkdirSync(bursts)
+  const env = { ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', CLAUDE_CONFIG_DIR: claudeConfig, TR_SCALE_LPS: String(LPS), TR_SCALE_BURST_MB: String(BURST_MB), TR_SCALE_BURST_DIR: bursts }
+  return { root, profile, env, ids, bursts }
 }
 
 /** One running app with its sessions' agents up. */
@@ -195,6 +217,58 @@ class Rig {
     return line ? Number(line.trim().split(/\s+/)[0]) : null
   }
 
+  /** CPU seconds so far of each pid (`ps` TIME: [[h:]m:]s), for CPU in % of one core. */
+  private cpuSecondsOf(pids: number[]): Map<number, number> {
+    const out = new Map<number, number>()
+    const text = execFileSync('ps', ['-o', 'pid=,time=', '-p', pids.join(',')], { encoding: 'utf8' })
+    for (const line of text.trim().split('\n')) {
+      const [pid, time] = line.trim().split(/\s+/)
+      out.set(Number(pid), time!.split(':').reduce((a, part) => a * 60 + Number(part), 0))
+    }
+    return out
+  }
+
+  /** The pty daemon's V8 profiler, through the inspector SIGUSR1 opens (its URL is in the daemon's log); null if it fails. */
+  async profileDaemon(): Promise<{ stop(file: string): Promise<void> } | null> {
+    const pid = this.daemonPid()
+    if (!pid) return null
+    process.kill(pid, 'SIGUSR1')
+    const log = join(this.profile, 'daemon', 'daemon.log')
+    let url: string | undefined
+    for (let i = 0; i < 20 && !url; i++) {
+      await new Promise((r) => setTimeout(r, 100))
+      url = [...readFileSync(log, 'utf8').matchAll(/Debugger listening on (ws:\/\/\S+)/g)].at(-1)?.[1]
+    }
+    if (!url) return null
+    const ws = new WebSocket(url)
+    await new Promise((r, j) => {
+      ws.onopen = r
+      ws.onerror = j
+    })
+    let next = 0
+    const pending = new Map<number, (result: unknown) => void>()
+    ws.onmessage = (event) => {
+      const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown }
+      if (message.id !== undefined) pending.get(message.id)?.(message.result)
+    }
+    const send = (method: string, params: object = {}) =>
+      new Promise<unknown>((r) => {
+        const id = ++next
+        pending.set(id, r)
+        ws.send(JSON.stringify({ id, method, params }))
+      })
+    await send('Profiler.enable')
+    await send('Profiler.setSamplingInterval', { interval: 1000 })
+    await send('Profiler.start')
+    return {
+      stop: async (file: string) => {
+        const { profile } = (await send('Profiler.stop')) as { profile: unknown }
+        ws.close()
+        writeFileSync(`${file}-daemon.cpuprofile`, JSON.stringify(profile))
+      }
+    }
+  }
+
   private daemonCpuSeconds(): number {
     const pid = this.daemonPid()
     if (!pid) return 0
@@ -233,7 +307,7 @@ class Rig {
   }
 
   /** Types `k` into the shown session; each comes back as `@@key n@@`. Key-down → first frame showing it, in ms. */
-  async latency(id: string): Promise<{ p50: number; p95: number; max: number; lost: number }> {
+  async latency(id: string): Promise<{ p50: number; p95: number; max: number; lost: number; samples: { down: number; seen: number }[] }> {
     await this.page.locator(`[data-region="terminal"] [data-session-id="${id}"]`).click()
     const base = this.keysTyped.get(id) ?? 0
     this.keysTyped.set(id, base + LATENCY_KEYS)
@@ -263,11 +337,181 @@ class Rig {
     const samples = await this.page.evaluate(() => {
       const lat = (globalThis as unknown as { __lat: { down: number[]; seen: Map<number, number>; stop: boolean; base: number } }).__lat
       lat.stop = true
-      return lat.down.map((t, i) => (lat.seen.get(lat.base + i + 1) ?? Number.NaN) - t)
+      return lat.down.map((t, i) => ({ down: t, seen: lat.seen.get(lat.base + i + 1) ?? Number.NaN }))
     })
-    const sorted = samples.filter((s) => Number.isFinite(s)).sort((a, b) => a - b)
-    const at = (q: number) => Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? Number.NaN)
-    return { p50: at(0.5), p95: at(0.95), max: Math.round(sorted.at(-1) ?? Number.NaN), lost: samples.length - sorted.length }
+    return { ...quantiles(samples.map((s) => s.seen - s.down)), samples }
+  }
+
+  /**
+   * `bursting` (hidden) each dump TR_SCALE_BURST_MB at once while keys are typed into the shown `focused`. Returns the
+   * latency of keys typed while a burst was still being parsed, split into key-down → agent (inbound), agent → main's
+   * webContents.send (pty, daemon, socket, main's parsing), send → renderer IPC listener (Electron IPC, waiting for the
+   * renderer's main thread) and IPC → frame (parsing queue, render); the
+   * renderer's long tasks; main's event-loop lag; CPU from the first byte to the last burst on screen; and when the
+   * bursts were written (agent), delivered (renderer IPC) and parsed.
+   */
+  async burst(focused: string, bursting: readonly string[], dir: string) {
+    for (const file of readdirSync(dir)) rmSync(join(dir, file))
+    await this.page.evaluate(([fid, bids]) => {
+      const g = globalThis as unknown as Globals & { __burst: BurstProbe }
+      const offs: (() => void)[] = []
+      const probe: BurstProbe = { start: 0, arrivals: {}, keyWall: [], sessions: {}, longTasks: [], stop: () => offs.forEach((off) => off()) }
+      g.__burst = probe
+      let carry = ''
+      offs.push(
+        g.tr.pty.onData(fid as string, (data) => {
+          const text = carry + data
+          for (const m of text.matchAll(/@@key (\d+)@@ t=(\d{13})/g)) probe.arrivals[Number(m[1])] ??= { wall: Date.now(), perf: performance.now(), agent: Number(m[2]) }
+          carry = text.slice(-40)
+        })
+      )
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === 'k') probe.keyWall.push(Date.now())
+      }
+      document.addEventListener('keydown', onKey, true)
+      offs.push(() => document.removeEventListener('keydown', onKey, true))
+      for (const id of bids as string[]) {
+        const s = { chars: 0, delivered: 0, parsed: 0 }
+        probe.sessions[id] = s
+        let tail = ''
+        offs.push(
+          g.tr.pty.onData(id, (data) => {
+            s.chars += data.length
+            if (!s.delivered && (tail + data).includes('@@burst-done@@')) s.delivered = performance.now()
+            tail = data.slice(-16)
+          })
+        )
+      }
+      const timer = setInterval(() => {
+        for (const [id, s] of Object.entries(probe.sessions)) {
+          if (s.delivered && !s.parsed && g.__trTerminals.readScreen(id, 0).includes('@@burst-done@@')) s.parsed = performance.now()
+        }
+      }, 50)
+      offs.push(() => clearInterval(timer))
+      const observer = new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) probe.longTasks.push({ at: e.startTime, ms: e.duration })
+      })
+      observer.observe({ type: 'longtask' })
+      offs.push(() => observer.disconnect())
+    }, [focused, bursting] as const)
+    // When main hands each echo to the renderer: wraps webContents.send (Date.now()).
+    await this.app.evaluate(({ BrowserWindow }, fid) => {
+      const g = globalThis as unknown as { __mainKeys: Record<number, number>; __unwrapSend: () => void }
+      const keys: Record<number, number> = {}
+      g.__mainKeys = keys
+      const undo: (() => void)[] = []
+      for (const win of BrowserWindow.getAllWindows()) {
+        const contents = win.webContents
+        const original = contents.send
+        contents.send = function (this: typeof contents, channel: string, ...args: unknown[]) {
+          const payload = args[0] as { sessionId?: unknown; data?: unknown } | undefined
+          if (payload?.sessionId === fid && typeof payload.data === 'string') for (const m of payload.data.matchAll(/@@key (\d+)@@/g)) keys[Number(m[1])] ??= Date.now()
+          return original.call(this, channel, ...args)
+        }
+        undo.push(() => {
+          contents.send = original
+        })
+      }
+      g.__unwrapSend = () => undo.forEach((u) => u())
+    }, focused)
+    // Main's event loop: a 10 ms tick that records how late it fires.
+    await this.app.evaluate(() => {
+      const g = globalThis as unknown as { __mainLag?: { max: number; over50: number; stop(): void } }
+      let last = performance.now()
+      const lag = { max: 0, over50: 0, stop: () => clearInterval(timer) }
+      const timer = setInterval(() => {
+        const now = performance.now()
+        const late = now - last - 10
+        last = now
+        lag.max = Math.max(lag.max, late)
+        if (late > 50) lag.over50++
+      }, 10)
+      g.__mainLag = lag
+    })
+    const types = new Map((await this.app.evaluate(({ app }) => app.getAppMetrics())).map((m) => [m.pid, m.type as string]))
+    const daemonPid = this.daemonPid()
+    if (daemonPid) types.set(daemonPid, 'daemon')
+    const cpuBefore = this.cpuSecondsOf([...types.keys()])
+    const t0 = Date.now()
+    const load = { start: loadavg().map((n) => Math.round(n * 100) / 100), end: [] as number[] }
+    await this.page.evaluate(() => {
+      ;(globalThis as unknown as { __burst: BurstProbe }).__burst.start = performance.now()
+    })
+    for (const id of bursting) await this.write(id, 'b')
+
+    // CPU is taken when the last burst is on screen (or when the keys are done, if that is later).
+    const allParsed = () => this.page.evaluate(() => Object.values((globalThis as unknown as { __burst: BurstProbe }).__burst.sessions).every((s) => s.parsed > 0))
+    const done = (async () => {
+      await expect.poll(allParsed, { timeout: 5 * 60_000, intervals: [100] }).toBe(true)
+      return { cpu: this.cpuSecondsOf([...types.keys()]), metrics: await this.app.evaluate(({ app }) => app.getAppMetrics()), at: Date.now() }
+    })()
+    await this.page.waitForTimeout(300)
+    const latency = await this.latency(focused)
+    const end = await done
+    load.end = loadavg().map((n) => Math.round(n * 100) / 100)
+    // % of one core (ps), by process type.
+    const cpu: Record<string, number> = {}
+    for (const [pid, type] of types) {
+      const used = (end.cpu.get(pid) ?? 0) - (cpuBefore.get(pid) ?? 0)
+      cpu[type] = Math.round((cpu[type] ?? 0) + (used / ((end.at - t0) / 1000)) * 100)
+    }
+    // Electron's own figure for the same span (what the 10 / 20 session runs report), for comparing the two.
+    const electronCpu: Record<string, number> = {}
+    for (const m of end.metrics) electronCpu[m.type] = Math.round(((electronCpu[m.type] ?? 0) + m.cpu.percentCPUUsage) * 10) / 10
+    const mainLag = await this.app.evaluate(() => {
+      const lag = (globalThis as unknown as { __mainLag: { max: number; over50: number; stop(): void } }).__mainLag
+      lag.stop()
+      return { max: Math.round(lag.max), over50: lag.over50 }
+    })
+    const mainKeys = await this.app.evaluate(() => {
+      const g = globalThis as unknown as { __mainKeys: Record<number, number>; __unwrapSend: () => void }
+      g.__unwrapSend()
+      return g.__mainKeys
+    })
+    const probe = await this.page.evaluate(() => {
+      const p = (globalThis as unknown as { __burst: BurstProbe }).__burst
+      p.stop()
+      return { start: p.start, arrivals: p.arrivals, keyWall: p.keyWall, sessions: p.sessions, longTasks: p.longTasks }
+    })
+    const written = readdirSync(dir).map((file) => JSON.parse(readFileSync(join(dir, file), 'utf8')) as { start: number; end: number; bytes: number })
+
+    const sessions = Object.values(probe.sessions)
+    const parsedAt = Math.max(...sessions.map((s) => s.parsed))
+    const base = (this.keysTyped.get(focused) ?? LATENCY_KEYS) - LATENCY_KEYS
+    const under = latency.samples.map((s, i) => ({ ...s, i, n: base + i + 1 })).filter((s) => s.down < parsedAt)
+    const split = under.map((s) => {
+      const arrival = probe.arrivals[s.n]
+      const wall = probe.keyWall[s.i]
+      const sent = mainKeys[s.n]
+      return arrival && wall !== undefined && sent !== undefined
+        ? { inbound: arrival.agent - wall, toMain: sent - arrival.agent, toRenderer: arrival.wall - sent, render: s.seen - arrival.perf }
+        : null
+    }).filter((s) => s !== null)
+    const sum = probe.longTasks.reduce((a, t) => a + t.ms, 0)
+    const ms = (n: number) => Math.round(n)
+    return {
+      bursting: bursting.length,
+      mbEach: BURST_MB,
+      load,
+      latency: { ...quantiles(under.map((s) => s.seen - s.down)), keys: under.length, ofKeys: latency.samples.length },
+      latencySplit: {
+        inbound: quantiles(split.map((s) => s.inbound)),
+        toMain: quantiles(split.map((s) => s.toMain)),
+        toRenderer: quantiles(split.map((s) => s.toRenderer)),
+        render: quantiles(split.map((s) => s.render))
+      },
+      longTasks: { count: probe.longTasks.length, max: ms(Math.max(0, ...probe.longTasks.map((t) => t.ms))), totalMs: ms(sum) },
+      mainLag,
+      cpu,
+      electronCpu,
+      burstMs: {
+        written: Math.max(...written.map((w) => w.end)) - Math.min(...written.map((w) => w.start)),
+        delivered: ms(Math.max(...sessions.map((s) => s.delivered)) - probe.start),
+        parsed: ms(parsedAt - probe.start)
+      },
+      mbPerSecondParsed: Math.round((written.reduce((a, w) => a + w.bytes, 0) / 1048576 / ((parsedAt - probe.start) / 1000)) * 10) / 10,
+      burstsWritten: written.length
+    }
   }
 
   /** Samples the renderer's main thread (1 ms) and records long tasks until `stop`, which writes `<file>.cpuprofile`. */
@@ -298,6 +542,12 @@ class Rig {
   async close(): Promise<void> {
     await this.app?.close().catch(() => {})
   }
+}
+
+function quantiles(values: number[]): { p50: number; p95: number; max: number; lost: number } {
+  const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b)
+  const at = (q: number) => Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? Number.NaN)
+  return { p50: at(0.5), p95: at(0.95), max: Math.round(sorted.at(-1) ?? Number.NaN), lost: values.length - sorted.length }
 }
 
 const mb = (n: number) => `${Math.round(n)} MB`
@@ -397,6 +647,51 @@ for (const size of SIZES) {
     }
   })
 }
+
+test('burst: 20 sessions, hidden ones dumping MBs of output while keys go to a quiet shown one', async () => {
+  test.setTimeout(20 * 60_000)
+  const w = world('tr-scale-burst-', 20)
+  const rig = new Rig(w.profile, w.env, w.ids)
+  try {
+    await rig.launch()
+    await rig.enableHooks()
+    await rig.startAll()
+    const focused = w.ids[0]!
+    await rig.activate(focused)
+    await rig.page.waitForTimeout(5_000)
+    // The same run's quiet latency, for comparison under whatever else this machine is doing.
+    const quiet = { load: loadavg().map((n) => Math.round(n * 100) / 100), latency: await rig.latency(focused) }
+    const runs = []
+    for (const k of BURST_K) {
+      const profiler = PROFILE ? await rig.startProfile() : null
+      const daemonProfiler = PROFILE ? await rig.profileDaemon() : null
+      const run = await rig.burst(focused, w.ids.slice(1, 1 + k), w.bursts)
+      if (profiler) await profiler.stop(join(OUT, `burst-${k}`))
+      if (daemonProfiler) await daemonProfiler.stop(join(OUT, `burst-${k}`))
+      runs.push(run)
+      console.log(
+        `burst ${k}×${BURST_MB} MB (load ${run.load.start.join(' ')} → ${run.load.end.join(' ')}${run.load.start[0]! > 4 ? ', UNRELIABLE' : ''}): ` +
+          `latency p50 ${run.latency.p50} p95 ${run.latency.p95} max ${run.latency.max} ms over ${run.latency.keys}/${run.latency.ofKeys} keys; ` +
+          `split p50/p95 inbound ${run.latencySplit.inbound.p50}/${run.latencySplit.inbound.p95} agent→main ${run.latencySplit.toMain.p50}/${run.latencySplit.toMain.p95} main→renderer ${run.latencySplit.toRenderer.p50}/${run.latencySplit.toRenderer.p95} render ${run.latencySplit.render.p50}/${run.latencySplit.render.p95}; ` +
+          `long tasks ${run.longTasks.count} (max ${run.longTasks.max}, total ${run.longTasks.totalMs} ms); main lag max ${run.mainLag.max} ms; cpu % of a core ${JSON.stringify(run.cpu)} (Electron's percentCPUUsage ${JSON.stringify(run.electronCpu)}); ` +
+          `burst ms written ${run.burstMs.written} delivered ${run.burstMs.delivered} parsed ${run.burstMs.parsed} (${run.mbPerSecondParsed} MB/s)`
+      )
+      await rig.page.waitForTimeout(3_000)
+    }
+    const { samples: _, ...quietLatency } = quiet.latency
+    const result = { at: new Date().toISOString(), quiet: { load: quiet.load, latency: quietLatency }, runs }
+    writeFileSync(join(OUT, 'burst.json'), JSON.stringify(result, null, 2))
+    appendFileSync(join(OUT, 'burst-runs.jsonl'), `${JSON.stringify(result)}\n`)
+    console.log(`burst quiet (load ${quiet.load.join(' ')}): latency p50 ${quietLatency.p50} p95 ${quietLatency.p95} max ${quietLatency.max} ms`)
+    for (const run of runs) {
+      expect(run.burstsWritten).toBe(run.bursting)
+      expect(run.latency.lost).toBe(0)
+    }
+  } finally {
+    await rig.close()
+    rig.endDaemon()
+  }
+})
 
 /** Least-squares slope of y over x (per hour when x is in hours). */
 function slope(points: { x: number; y: number }[]): number {
