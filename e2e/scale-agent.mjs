@@ -10,17 +10,20 @@
 //   w  work: turns back to back, $TR_SCALE_LPS reply lines per second (default 20), 1 s between turns
 //   c  cycle, like a person's agent: turns of 20–120 s at 5–30 lines per second, 30–300 s idle in between; some tool
 //      calls ask for permission (answered by itself after 3–15 s), some run two subagents in parallel
-//   k  print `@@key <n>@@` at once (input latency)
+//   k  print `@@key <n>@@ t=<ms>` at once (input latency; t is when the key arrived, Date.now())
+//   b  burst: $TR_SCALE_BURST_MB (default 32) MB of colored Chinese reply lines as fast as the PTY takes them, like a
+//      `cat` of a big log; then `@@burst-done@@`, and {start, end, bytes} in $TR_SCALE_BURST_DIR/<folder>.json
 //   q / Ctrl+C  quit
 // Every switch to idle prints `@@idle@@`. Deterministic per working folder.
 import { spawn } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 
 const at = process.argv.indexOf('--settings')
 const settings = at > 0 ? JSON.parse(readFileSync(process.argv[at + 1], 'utf8')) : {}
 const cwd = process.cwd()
 const linesPerSecond = Number(process.env.TR_SCALE_LPS ?? 20) || 20
+const burstBytes = (Number(process.env.TR_SCALE_BURST_MB ?? 32) || 32) * 1048576
 
 function hash(text) {
   let h = 2166136261
@@ -253,6 +256,28 @@ async function loop() {
   }
 }
 
+let bursting = false
+async function burst() {
+  if (bursting) return
+  bursting = true
+  // One block of reply lines, written again and again: drawing it fresh each time would make the agent the bottleneck.
+  const lines = []
+  for (let i = 0; i < 400; i++) lines.push(replyLine())
+  const block = Buffer.from(`\r\x1b[2K${lines.join('\r\n')}\r\n`)
+  const start = Date.now()
+  let bytes = 0
+  while (bytes < burstBytes) {
+    bytes += block.length
+    if (!process.stdout.write(block)) await new Promise((r) => process.stdout.once('drain', r))
+  }
+  out('\x1b[0m@@burst-done@@\r\n')
+  const end = Date.now()
+  const dir = process.env.TR_SCALE_BURST_DIR
+  if (dir) writeFileSync(join(dir, `${basename(cwd)}.json`), JSON.stringify({ start, end, bytes }))
+  bursting = false
+  drawIdle()
+}
+
 function setMode(next) {
   if (next === mode) return
   mode = next
@@ -264,7 +289,8 @@ process.stdin.setRawMode?.(true)
 process.stdin.on('data', (data) => {
   for (const byte of data) {
     const command = String.fromCharCode(byte)
-    if (command === 'k') print(`\x1b[0m@@key ${++keys}@@`)
+    if (command === 'k') print(`\x1b[0m@@key ${++keys}@@ t=${Date.now()}`)
+    else if (command === 'b') void burst()
     else if (command === 'w') setMode('work')
     else if (command === 'c') setMode('cycle')
     else if (command === 'i') setMode('idle')
