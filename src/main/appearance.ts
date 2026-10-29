@@ -28,21 +28,16 @@ function attachGlass(win: BrowserWindow): void {
     void win.webContents.insertCSS(NO_TINT)
   }
   win.webContents.on('did-finish-load', apply)
-  // A glass view added while the window is still hidden (did-finish-load can come before ready-to-show) is not drawn
-  // until something redraws the window — the author saw the shell stay opaque until switching the theme. So it goes
-  // on once the page has loaded and the window is on screen, and the transparent fill is set again to redraw it.
-  let loaded = false
-  const add = (): void => {
-    if (win.isDestroyed() || !loaded || !win.isVisible()) return
-    win.removeListener('show', add)
-    liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: GLASS_RADIUS })
-    win.setBackgroundColor('#00000000')
+  // The glass goes on before the window is first shown, so its first frame already has it: the boot screen (PRD F18)
+  // shows the window before the page has finished loading, and until the glass is there the transparent window is black.
+  // A glass view added while the window is hidden is not drawn until something redraws the window (the author saw the
+  // shell stay opaque until switching the theme), so the transparent fill is set again once it is on screen.
+  liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: GLASS_RADIUS })
+  const redraw = (): void => {
+    if (!win.isDestroyed()) win.setBackgroundColor('#00000000')
   }
-  win.webContents.once('did-finish-load', () => {
-    loaded = true
-    add()
-  })
-  win.on('show', add)
+  if (win.isVisible()) redraw()
+  else win.once('show', redraw)
 }
 
 function applyToWindow(win: BrowserWindow, settings: AppSettings): void {

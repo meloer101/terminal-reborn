@@ -33,6 +33,7 @@ import { RightPanel } from '../panels/RightPanel'
 import { Overview } from '../overview/Overview'
 import { MenuHost } from '../ui/MenuHost'
 import { EmptyMain } from './EmptyMain'
+import { claimBoot } from './boot'
 import './menu-commands'
 import { panelMode, panelWidthFor, sidebarWidthFor } from './layout'
 import { drawerIsWide, useDrawer } from './drawer-motion'
@@ -79,6 +80,11 @@ export function AppShell() {
   const sessionPortKey = useWorkspace((s) => s.sessions.map((session) => session.id).join('\n'))
   const panelRef = useRef<HTMLElement>(null)
   const panel = useDrawer<PanelView>(rightPanel, panelRef)
+  // The boot screen (public/boot.js): with a session on screen its dots scatter; the welcome page takes its mark itself.
+  const sessionAtStart = useRef(hasSession)
+  useEffect(() => {
+    if (sessionAtStart.current) void claimBoot('away')
+  }, [])
   useEffect(() => startActivityReporting(), [])
   useEffect(() => startSecondaryWindows(), [])
   useEffect(() => listenForBackgroundReview(), [])
