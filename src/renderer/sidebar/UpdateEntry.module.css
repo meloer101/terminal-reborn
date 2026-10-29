@@ -1,0 +1,67 @@
+/* Figma 36I — 248 wide (the 更新 row's own width), padding 14/16, 12 between version, status and the button. */
+.panel {
+  width: 248px;
+  gap: var(--space-12);
+  padding: 14px var(--space-16);
+}
+
+.version {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.name {
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+.number {
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  user-select: text;
+}
+
+.status {
+  margin: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.status[data-new='true'] {
+  color: var(--text-primary);
+}
+
+/* A full-width 28 block: grey to check again, solid when there is something to download. */
+.button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: default;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--border-default);
+}
+
+.button:disabled {
+  color: var(--text-disabled);
+}
+
+.primary,
+.primary:hover {
+  background: var(--text-primary);
+  color: var(--text-inverse);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

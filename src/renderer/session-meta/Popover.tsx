@@ -16,13 +16,18 @@ export function Popover({
   label,
   onClose,
   children,
-  testId
+  testId,
+  placement = 'below',
+  className
 }: {
   anchor: RefObject<HTMLElement | null>
   label: string
   onClose(): void
   children: ReactNode
   testId?: string
+  /** `above`: over the anchor, left edges aligned — for an anchor near the window's foot (the sidebar's 更新, Figma 36G). */
+  placement?: 'below' | 'above'
+  className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   // The window the chip is in (F20 · 多窗口).
@@ -34,9 +39,11 @@ export function Popover({
     const box = anchor.current?.getBoundingClientRect()
     if (!panel || !box) return
     const width = panel.offsetWidth
-    const left = Math.max(EDGE, Math.min(box.right - width, win.innerWidth - EDGE - width))
-    setPosition({ left, top: box.bottom + GAP })
-  }, [anchor, win])
+    const wanted = placement === 'above' ? box.left : box.right - width
+    const left = Math.max(EDGE, Math.min(wanted, win.innerWidth - EDGE - width))
+    const top = placement === 'above' ? Math.max(EDGE, box.top - GAP - panel.offsetHeight) : box.bottom + GAP
+    setPosition({ left, top })
+  }, [anchor, win, placement])
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -66,7 +73,7 @@ export function Popover({
   return createPortal(
     <div
       ref={ref}
-      className={styles.popover}
+      className={className ? `${styles.popover} ${className}` : styles.popover}
       role="dialog"
       aria-label={label}
       data-covers-page

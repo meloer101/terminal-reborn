@@ -2,7 +2,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  padding: var(--titlebar-height) 40px 40px 48px;
+  /* The column sits in the middle of the area right of the nav, 40 clear on both sides (Figma 36E). */
+  justify-content: center;
+  padding: var(--titlebar-height) 40px 40px;
 }
 
 .form {

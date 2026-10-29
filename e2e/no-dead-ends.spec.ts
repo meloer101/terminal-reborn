@@ -219,7 +219,7 @@ test('B11: settings lists only panes with content', async () => {
   await page.waitForSelector('[data-region="sidebar"]')
   await page.evaluate(() => (globalThis as unknown as { tr: { ui: { openSettings(): void } } }).tr.ui.openSettings())
   const dialog = page.getByRole('dialog', { name: '设置' })
-  await expect(dialog.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化', '关于'])
+  await expect(dialog.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化'])
   await expect(dialog.getByText('即将推出')).toHaveCount(0)
   await shootAll(app, page, 'b11-settings')
   await app.close()
