@@ -9,6 +9,7 @@ import { newSessionInProject, openProjectInteractive, openProjectMenu, openSessi
 import { IconButton } from '../ui/IconButton'
 import type { MenuAnchor } from '../ui/menu'
 import { NavItem } from './NavItem'
+import { UpdateEntry } from './UpdateEntry'
 import { openCommandPalette } from '../command-palette'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { toggleOverview } from '../overview/store'
@@ -150,6 +151,7 @@ export function Sidebar() {
         )}
       </div>
       <div className={styles.footer}>
+        <UpdateEntry />
         <NavItem icon={<Gauge {...ICON} />} label="额度" shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
         <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={() => openSettings()} />
       </div>

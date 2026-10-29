@@ -4,8 +4,9 @@
   align-items: flex-start;
   column-gap: 48px;
   row-gap: var(--space-32);
-  /* Titlebar height above, 40px below/right, 48px left (Figma 07 "Content"). */
-  padding: var(--titlebar-height) 40px 40px 48px;
+  /* Titlebar height above, 40px on the other sides; the form and its preview sit in the middle (Figma 36E). */
+  justify-content: center;
+  padding: var(--titlebar-height) 40px 40px;
 }
 
 .form {

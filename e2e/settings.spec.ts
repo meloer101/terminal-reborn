@@ -162,14 +162,24 @@ test('自动化 pane: every automatic review starts off; switches, method, rules
   await app.close()
 })
 
-test('about pane shows the version and checks for updates', async () => {
+test('the sidebar\'s 更新 shows the version and checks for updates; settings has no 关于 (Figma 36G / 36E)', async () => {
   const app = await launchApp()
   const settings = await openSettings(app)
-  await settings.getByRole('tab', { name: '关于' }).click()
-  await expect(settings.getByTestId('app-version')).not.toBeEmpty()
-  await expect(settings.getByRole('button', { name: '检查更新' })).toBeVisible()
   // Panes without content yet are not listed (B11): no 即将推出 dead ends.
-  await expect(settings.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化', '关于'])
+  await expect(settings.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化'])
+  await settings.keyboard.press('Escape')
+  await expect(settings.getByRole('dialog', { name: '设置' })).toHaveCount(0)
+  const entry = settings.locator('[data-region="sidebar"]').getByRole('button', { name: '更新', exact: true })
+  await entry.click()
+  const panel = settings.getByTestId('update-popover')
+  await expect(panel.getByTestId('app-version')).not.toBeEmpty()
+  await expect(panel.getByRole('button', { name: '检查更新' })).toBeVisible()
+  // It opens above its row, inside the sidebar's width.
+  const [row, box] = await Promise.all([entry.boundingBox(), panel.boundingBox()])
+  expect(box!.y + box!.height).toBeLessThanOrEqual(row!.y)
+  expect(Math.round(box!.x)).toBe(Math.round(row!.x))
+  await settings.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
   await app.close()
 })
 

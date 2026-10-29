@@ -4,7 +4,9 @@
    lines (PRD §5 v1.68). */
 .page {
   display: flex;
-  padding: var(--titlebar-height) 40px 40px 48px;
+  /* Centred in the area right of the nav, like every pane (Figma 36E). */
+  justify-content: center;
+  padding: var(--titlebar-height) 40px 40px;
 }
 
 .form {
