@@ -1,10 +1,11 @@
-// Settings · 智能体 (Figma 25B, PRD F4 v1.68): the agent CLIs 新建会话 can start. 已安装 lists each with its version and
+// Settings · 智能体 (Figma 25B; agent marks and the copy button's edge from 35A, PRD v1.92; PRD F4 v1.68): the agent CLIs 新建会话 can start. 已安装 lists each with its version and
 // whether Wavi knows its state exactly (准确: per-launch hooks or the terminal's program-status protocol) or only
 // estimates it from the title (估计); 没装 offers the vendor's install command to copy — Wavi never installs anything.
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
+import { AgentIcon } from '../ui/AgentIcon'
 import { agentStatusNote, statusAccuracy } from './agents-model'
 import { Section } from './controls'
 import styles from './AgentsPane.module.css'
@@ -63,7 +64,7 @@ export function AgentsPane() {
                 return (
                   <div key={id} className={styles.agentRow} role="group" aria-label={AGENT_SPECS[id].label} data-agent={id}>
                     <span className={styles.agentText}>
-                      <span className={styles.agentName}>{AGENT_SPECS[id].label}</span>
+                      <AgentName id={id} />
                       {note && <span className={styles.agentNote}>{note}</span>}
                     </span>
                     {versions[id] && <span className={styles.meta}>{versions[id]}</span>}
@@ -77,7 +78,7 @@ export function AgentsPane() {
                 {shownMissing.map((id) => (
                   <div key={id} className={styles.agentRow} role="group" aria-label={AGENT_SPECS[id].label} data-agent={id}>
                     <span className={styles.agentText}>
-                      <span className={styles.agentName}>{AGENT_SPECS[id].label}</span>
+                      <AgentName id={id} />
                       <span className={styles.command}>{AGENT_SPECS[id].install}</span>
                     </span>
                     <button type="button" className={styles.copy} onClick={() => copy(id)}>
@@ -97,5 +98,15 @@ export function AgentsPane() {
         )}
       </div>
     </div>
+  )
+}
+
+/** The CLI's mark on the section's left edge, its name after it (Figma 35A, as 设置 · 额度 in 33I). */
+function AgentName({ id }: { id: CliAgent }) {
+  return (
+    <span className={styles.nameLine}>
+      <AgentIcon kind={id} />
+      <span className={styles.agentName}>{AGENT_SPECS[id].label}</span>
+    </span>
   )
 }
