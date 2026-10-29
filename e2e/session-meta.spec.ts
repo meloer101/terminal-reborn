@@ -5,7 +5,7 @@
 // bridge sends them (its rollout reader is unit-tested). Context history and session shares come from transcript files
 // the test writes under a temporary CLAUDE_CONFIG_DIR, named by the hooks the way Claude names them. Screenshots in
 // both themes go to test-results/session-meta/.
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -444,7 +444,22 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(dialog.locator('section[data-testid^="usage-page-"]')).toHaveText([/^CodexPlus5 小时100%\d\d:\d\d 恢复每周30%/, /^ClaudeMax5 小时\d+%.*7 天\d+%/])
     await expect(dialog.getByTestId('usage-page-window-codex-300')).toHaveAttribute('data-level', 'exhausted')
     await expect(dialog.getByRole('switch', { name: '用到 75%、90% 和用完时发通知' })).toHaveAttribute('aria-checked', 'true')
-    await shoot('33E-usage-page')
+    // Figma 33I: the agent's mark on the title's left edge; window labels start where the agent's name does.
+    const textLeft = (l: Locator) =>
+      l.evaluate((el) => {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        return Math.round(range.getBoundingClientRect().left)
+      })
+    const boxLeft = async (l: Locator) => Math.round((await l.boundingBox())!.x)
+    const codex = dialog.getByTestId('usage-page-codex')
+    const edge = await textLeft(dialog.getByRole('heading', { name: '额度' }))
+    expect(await boxLeft(codex.locator('svg').first())).toBe(edge)
+    expect(await textLeft(dialog.getByRole('heading', { name: '提醒' }))).toBe(edge)
+    const nameLeft = await textLeft(codex.getByText('Codex', { exact: true }))
+    expect(nameLeft).toBe(edge + 22)
+    expect(await textLeft(dialog.getByTestId('usage-page-window-codex-300').locator('span').first())).toBe(nameLeft)
+    await shoot('33I-usage-page')
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
   })

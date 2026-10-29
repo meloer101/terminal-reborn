@@ -88,14 +88,16 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
   )
 }
 
-/** The agent's mark hangs left of the text column, so every row starts with text (Figma 33E). */
+/** The agent's mark sits on the column's left edge with the title; the name follows it (Figma 33I). */
 function AgentRow({ agent, name, status }: { agent: CliAgent; name: string; status: string }) {
   return (
     <div className={styles.agentRow}>
-      <span className={styles.icon}>
-        <AgentIcon kind={agent} />
+      <span className={styles.lead}>
+        <span className={styles.icon}>
+          <AgentIcon kind={agent} />
+        </span>
+        <span className={styles.name}>{name}</span>
       </span>
-      <span className={styles.name}>{name}</span>
       <span className={styles.status}>{status}</span>
     </div>
   )

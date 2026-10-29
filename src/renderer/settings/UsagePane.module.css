@@ -1,6 +1,7 @@
 /* 设置 · 额度 (Figma 33E): a 640 column like the other panes' forms; every row is 32 high on one set of column lines —
-   name 120 · bar 280 · value 48 · reset 144, 16 apart. The agent's mark hangs left of the text column. Groups are
-   set apart by 16 of space, no lines (PRD §5 v1.68). */
+   name 120 · bar 280 · value 48 · reset 144, 16 apart. The agent's mark sits on the column's left edge with the
+   title and 提醒 (Figma 33I); the name and the window labels start after it. Groups are set apart by 16 of space, no
+   lines (PRD §5 v1.68). */
 .page {
   display: flex;
   padding: var(--titlebar-height) 40px 40px 48px;
@@ -33,7 +34,7 @@
 
 .agentRow,
 .windowRow {
-  position: relative;
+  --usage-indent: calc(14px + var(--space-8));
   display: grid;
   grid-template-columns: 120px minmax(80px, 280px) 48px minmax(0, 144px);
   column-gap: var(--space-16);
@@ -41,11 +42,17 @@
   height: 32px;
 }
 
-.icon {
-  position: absolute;
-  top: 9px;
-  left: -23px;
+/* Mark (14) + 8, so the name lands where the window labels start. */
+.lead {
   display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.icon {
+  display: flex;
+  flex: none;
 }
 
 .name {
@@ -63,6 +70,7 @@
 }
 
 .windowLabel {
+  padding-left: var(--usage-indent);
   overflow: hidden;
   font: var(--text-body);
   color: var(--text-secondary);
