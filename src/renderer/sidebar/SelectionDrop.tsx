@@ -9,7 +9,8 @@ import styles from './SelectionDrop.module.css'
 /** Lives inside the sidebar's scrolling session list (its parent element), which it measures rows against. */
 export function SelectionDrop({ selectedId }: { selectedId: string | null }) {
   const ref = useRef<HTMLDivElement>(null)
-  const motion = useRef<{ upper: Spring; lower: Spring; raf: number; last: number; shownId: string | null } | null>(null)
+  // Vertical edges ride springs; left and width are the target row's (the list's own 8px padding stays clear).
+  const motion = useRef<{ upper: Spring; lower: Spring; left: number; width: number; raf: number; last: number; shownId: string | null } | null>(null)
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -23,6 +24,8 @@ export function SelectionDrop({ selectedId }: { selectedId: string | null }) {
     }
     const top = row.offsetTop
     const bottom = top + row.offsetHeight
+    const left = row.offsetLeft
+    const width = row.offsetWidth
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const m = motion.current
     const draw = (): void => {
@@ -31,18 +34,20 @@ export function SelectionDrop({ selectedId }: { selectedId: string | null }) {
       const f = shape(s.upper, s.lower)
       el.style.transform = `translateY(${f.top}px)`
       el.style.height = `${f.height}px`
-      el.style.left = `${f.inset}px`
-      el.style.right = `${f.inset}px`
+      el.style.left = `${s.left + f.inset}px`
+      el.style.width = `${s.width - 2 * f.inset}px`
       el.style.borderRadius = `${f.radius}px`
     }
     el.dataset.visible = 'true'
     // First show, after nothing was selected, or with 减少动态效果: no travel.
     if (m === null || m.shownId === null || reduce) {
       if (m) cancelAnimationFrame(m.raf)
-      motion.current = { upper: spring(top), lower: spring(bottom), raf: 0, last: 0, shownId: selectedId }
+      motion.current = { upper: spring(top), lower: spring(bottom), left, width, raf: 0, last: 0, shownId: selectedId }
       draw()
       return
     }
+    m.left = left
+    m.width = width
     if (m.shownId === selectedId) {
       // The sidebar redraws on every agent event: mid-flight, only follow the row; at rest, snap if it moved.
       if (m.raf) aim(m.upper, m.lower, top, bottom)
@@ -91,8 +96,12 @@ export function SelectionDrop({ selectedId }: { selectedId: string | null }) {
       if (!row) return
       m.upper = spring(row.offsetTop)
       m.lower = spring(row.offsetTop + row.offsetHeight)
+      m.left = row.offsetLeft
+      m.width = row.offsetWidth
       el.style.transform = `translateY(${row.offsetTop}px)`
       el.style.height = `${row.offsetHeight}px`
+      el.style.left = `${row.offsetLeft}px`
+      el.style.width = `${row.offsetWidth}px`
     })
     observer.observe(container)
     return () => {
