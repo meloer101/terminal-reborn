@@ -79,7 +79,12 @@ export const MAX_FRAME_CHARS = 64 * 1024 * 1024
 
 /** Splits a UTF-8 text stream into JSON messages, one per line. */
 export class LineReader {
-  private buffer = ''
+  /**
+   * The unfinished frame's chunks, joined once its newline arrives: each chunk is scanned once and a multi-MB frame
+   * is not re-copied per chunk.
+   */
+  private pending: string[] = []
+  private pendingChars = 0
 
   constructor(
     /** Replaceable, so a client can hand the stream over once its handshake is done. */
@@ -88,30 +93,41 @@ export class LineReader {
   ) {}
 
   push(chunk: string): void {
-    this.buffer += chunk
     let start = 0
-    let newline = this.buffer.indexOf('\n')
+    let newline = chunk.indexOf('\n')
     while (newline !== -1) {
-      const line = this.buffer.slice(start, newline)
+      let line = chunk.slice(start, newline)
+      if (this.pending.length > 0) {
+        this.pending.push(line)
+        line = this.pending.join('')
+        this.reset()
+      }
       start = newline + 1
       if (line.length > 0) {
         let message: unknown
         try {
           message = JSON.parse(line)
         } catch {
-          this.buffer = ''
+          this.reset()
           this.onError(new Error('malformed frame'))
           return
         }
         this.onMessage(message)
       }
-      newline = this.buffer.indexOf('\n', start)
+      newline = chunk.indexOf('\n', start)
     }
-    this.buffer = this.buffer.slice(start)
-    if (this.buffer.length > MAX_FRAME_CHARS) {
-      this.buffer = ''
+    if (start === chunk.length) return
+    this.pending.push(start === 0 ? chunk : chunk.slice(start))
+    this.pendingChars += chunk.length - start
+    if (this.pendingChars > MAX_FRAME_CHARS) {
+      this.reset()
       this.onError(new Error('frame too large'))
     }
+  }
+
+  private reset(): void {
+    this.pending = []
+    this.pendingChars = 0
   }
 }
 

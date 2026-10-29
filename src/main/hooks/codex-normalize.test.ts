@@ -158,3 +158,16 @@ describe('normalizeHook · codex Bash results for the turn checks (PRD F9 / F4, 
     expect(call.events).toEqual([{ type: 'tool-end', tool: 'Bash', input: {}, ok: true }])
   })
 })
+
+describe('normalizeHook · codex large payloads', () => {
+  it('a huge apply_patch still names its files; a huge shell result keeps its exit code', () => {
+    const patch = ['*** Begin Patch', '*** Add File: a.txt', '+x\n'.repeat(1_000_000), '*** Update File: b.ts', '*** End Patch'].join('\n')
+    expect(codex('PreToolUse', { ...fx.PreToolUse_apply_patch, tool_input: { command: patch } }).events[0]).toMatchObject({
+      tool: 'Edit',
+      input: { file_path: 'a.txt', files: ['a.txt', 'b.ts'] }
+    })
+    const result = codex('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: `Exit code: 2\n${'y'.repeat(3_000_000)}FAIL` })
+    expect(result.bashCall?.result.exitCode).toBe(2)
+    expect(result.bashCall?.result.output.endsWith('FAIL')).toBe(true)
+  })
+})
