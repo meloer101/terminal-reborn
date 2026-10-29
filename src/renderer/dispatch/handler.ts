@@ -1,7 +1,7 @@
 // What a window does when an agent calls a dispatch tool (PRD F21). The calling session is known from its hook
 // environment; every target must be a session it started. Starting sessions waits for the user's 开始 in the
-// confirmation panel (PRD §2) unless 设置 · 自动化 · 派活 says otherwise; children start in new worktrees off the
-// dispatcher's branch with Wavi's brief as their first message, given on the command line (§6.14).
+// confirmation strip under its terminal (PRD §2) unless 设置 · 自动化 · 派活 says otherwise; children start in new
+// worktrees off the dispatcher's branch with Wavi's brief as their first message, given on the command line (§6.14).
 import { diffSummary, diffSummaryText } from '@shared/attempt-groups'
 import {
   ackReport,
@@ -76,6 +76,8 @@ export async function handleDispatchRequest(request: DispatchRequest): Promise<D
     return { tools, agents: tools ? await installedAgents() : [] }
   }
   if (!caller) return toolFail('not_found', 'Wavi does not know this session.')
+  // The bridge takes cancels before they get here (cancelDispatchCall).
+  if (request.tool === 'cancel') return toolFail('invalid_request', 'Nothing to answer for a cancel.')
   try {
     switch (request.tool) {
       case DISPATCH_TOOL.start:
@@ -112,7 +114,18 @@ async function hasUncommitted(place: Place): Promise<boolean> {
   }
 }
 
+/** Calls their agent gave up (Esc) before or while they waited on the user; see `cancelDispatchCall`. */
+const cancelledCalls = new Set<string>()
+
+/** The agent cancelled a call (PRD F21 · §6.14): what it still waits on the user for goes away, as if declined. */
+export function cancelDispatchCall(callId: string): void {
+  cancelledCalls.add(callId)
+  settleConfirm(callId, false)
+}
+
 function confirm(caller: Place, callId: string, plans: ChildPlan[], base: string, reason: string | undefined, uncommitted: boolean): Promise<'start' | 'declined' | 'timeout'> {
+  // Cancelled while Wavi was still planning the batch: never show it.
+  if (cancelledCalls.delete(callId)) return Promise.resolve('declined')
   return new Promise((resolve) => {
     const timer = window.setTimeout(() => {
       settleConfirm(callId, false)

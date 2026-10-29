@@ -18,6 +18,11 @@ export interface SessionRowModel {
   branch: string
   /** 1: started by the session right above it through Wavi's dispatch tools (PRD F21), drawn one step in. */
   depth: 0 | 1
+  /**
+   * The line in the glyph column that ties a dispatcher to its children (Figma 40C): `parent` starts it under the
+   * glyph, `child` carries it on with a tick to its glyph, `last` turns into its glyph and ends it.
+   */
+  tree?: 'parent' | 'child' | 'last'
 }
 
 export interface SidebarGroup {
@@ -52,7 +57,7 @@ export function nestedTitle(title: string, parentTitle: string | undefined): str
   return prefix && title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title
 }
 
-function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 0, parentTitle?: string): SessionRowModel {
+function toRow(session: Session, worktree: Worktree | undefined, { depth, parentTitle, tree }: NestedRow): SessionRowModel {
   // The project header already says which folder this is; the branch has its own line (Figma 34P).
   return {
     session,
@@ -60,7 +65,8 @@ function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
     branch: worktree?.branch ?? '',
-    depth
+    depth,
+    tree
   }
 }
 
@@ -75,22 +81,33 @@ export function sameRow(a: SessionRowModel, b: SessionRowModel): boolean {
     a.secondary === b.secondary &&
     a.attention === b.attention &&
     a.branch === b.branch &&
-    a.depth === b.depth
+    a.depth === b.depth &&
+    a.tree === b.tree
   )
+}
+
+export interface NestedRow {
+  session: Session
+  depth: 0 | 1
+  parentTitle?: string
+  tree?: SessionRowModel['tree']
 }
 
 /**
  * Store order, except that a dispatched session follows the session that started it (PRD F21), after that session's
  * earlier children. A child whose dispatcher is not listed here stays where it is, at the top level.
  */
-export function withChildrenNested(sessions: readonly Session[]): Array<{ session: Session; depth: 0 | 1; parentTitle?: string }> {
+export function withChildrenNested(sessions: readonly Session[]): NestedRow[] {
   const listed = new Set(sessions.map((s) => s.id))
   const nested = (s: Session): boolean => s.dispatchedBy !== undefined && listed.has(s.dispatchedBy)
-  const out: Array<{ session: Session; depth: 0 | 1; parentTitle?: string }> = []
+  const out: NestedRow[] = []
   for (const session of sessions) {
     if (nested(session)) continue
-    out.push({ session, depth: 0 })
-    for (const child of sessions) if (child.dispatchedBy === session.id && nested(child)) out.push({ session: child, depth: 1, parentTitle: session.title })
+    const children = sessions.filter((child) => child.dispatchedBy === session.id && nested(child))
+    out.push(children.length > 0 ? { session, depth: 0, tree: 'parent' } : { session, depth: 0 })
+    children.forEach((child, i) =>
+      out.push({ session: child, depth: 1, parentTitle: session.title, tree: i === children.length - 1 ? 'last' : 'child' })
+    )
   }
   return out
 }
@@ -116,7 +133,7 @@ export function buildSidebarGroups({ projects, worktrees, sessions, collapsedPro
     return {
       id: project.id,
       title: project.name,
-      rows: isCollapsed ? [] : withChildrenNested(own).map(({ session, depth, parentTitle }) => toRow(session, worktreeById.get(session.worktreeId), depth, parentTitle)),
+      rows: isCollapsed ? [] : withChildrenNested(own).map((nested) => toRow(nested.session, worktreeById.get(nested.session.worktreeId), nested)),
       sessionCount: own.length,
       collapsed: isCollapsed,
       attention: urgent?.status ?? null

@@ -29,6 +29,46 @@
   --row-text-inset: calc(var(--indent-tree) + var(--space-16));
 }
 
+/*
+ * Figma 40C: a hairline down the glyph column (centre 16, under the dispatcher's glyph) ties a dispatcher to its
+ * children. It starts 4 below the dispatcher's glyph and runs through the 2 gap between rows; each child gets a tick
+ * on its title line (centre 15) that stops 3 short of its glyph (from 25), and the last one turns into its tick.
+ */
+.row[data-tree]::after,
+.row[data-tree='child']::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-16) - 0.5px);
+  pointer-events: none;
+}
+
+.row[data-tree='parent']::after {
+  top: calc(var(--space-6) + 18px + var(--space-2));
+  bottom: calc(-1 * var(--space-2));
+  border-left: 1px solid var(--border-default);
+}
+
+.row[data-tree='child']::after {
+  top: 0;
+  bottom: calc(-1 * var(--space-2));
+  border-left: 1px solid var(--border-default);
+}
+
+.row[data-tree='child']::before {
+  top: calc(var(--space-6) + 9px);
+  width: calc(var(--space-6) + 1px);
+  border-top: 1px solid var(--border-default);
+}
+
+.row[data-tree='last']::after {
+  top: 0;
+  width: calc(var(--space-6) + 1px);
+  height: calc(var(--space-6) + 9px + 1px);
+  border-bottom: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
 /* The selected row draws no block of its own: the selection drop (Figma 37) sits under it, and the row's content above. */
 .row {
   z-index: 1;

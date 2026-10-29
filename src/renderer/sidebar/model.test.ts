@@ -170,6 +170,8 @@ describe('dispatched sessions (PRD F21)', () => {
       ]
     })
     expect(groups[0]?.rows.map((r) => `${r.session.id}:${r.depth}`)).toEqual(['parent:0', 'child-b:1', 'child-a:1', 'other:0', 'orphan:0'])
+    // The line in the glyph column (Figma 40C): from the dispatcher, through each child, ending at the last.
+    expect(groups[0]?.rows.map((r) => r.tree)).toEqual(['parent', 'child', 'last', undefined, undefined])
   })
 
   it('shows a nested 同任务多解 part by the name after its parent’s title', () => {

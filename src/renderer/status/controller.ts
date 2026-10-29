@@ -48,6 +48,8 @@ export interface StatusDeps {
   later?(fn: () => void, ms: number): void
   /** A session now needs the fast tick (it runs, or its screen is watched): self-heal must not wait for a slow one. */
   needsFastTicks?(): void
+  /** The agent behind a session with an open Wavi ask has gone (see `setWaviAsk`): drop what it asked. */
+  onWaviAskAbandoned?(id: SessionId): void
 }
 
 /** Tag of a notification that stands for several sessions: clicking it opens the overview. */
@@ -67,6 +69,12 @@ export class StatusController {
   private lastBadge = -1
   /** Finished turns waiting to be announced together. */
   private pendingDone: SessionId[] = []
+  /**
+   * Wavi's own questions about a session, not its agent's (PRD F21: the agent asked to start sessions). The session
+   * shows `needs_you` with this label while one is open. The state machine never sees them: the agent's busy title
+   * and its input footer on screen would heal an ask of its own away.
+   */
+  private readonly waviAsks = new Map<SessionId, { label: string; since: number }>()
 
   constructor(private readonly deps: StatusDeps) {}
 
@@ -121,6 +129,7 @@ export class StatusController {
       }
     }
     for (const id of [...this.states.keys()]) if (!live.has(id)) this.states.delete(id)
+    for (const id of [...this.waviAsks.keys()]) if (!live.has(id)) this.waviAsks.delete(id)
     this.refreshViewing()
     this.updateBadge()
   }
@@ -221,6 +230,22 @@ export class StatusController {
     return active ? [active] : []
   }
 
+  /** Opens (`label`) or closes (null) Wavi's own question about a session; see `waviAsks`. */
+  setWaviAsk(id: SessionId, label: string | null): void {
+    const open = this.waviAsks.get(id)
+    if (label === null) {
+      if (!open) return
+      this.waviAsks.delete(id)
+    } else {
+      if (open?.label === label) return
+      this.waviAsks.set(id, { label, since: open?.since ?? this.deps.now() })
+    }
+    const state = this.states.get(id)
+    if (!state) return
+    this.deps.patch(id, this.patchOf(id, state))
+    this.updateBadge()
+  }
+
   /** A system notification was clicked: jump to its session, or to the overview for a merged one. */
   handleNotificationClick(tag: string): void {
     if (tag === OVERVIEW_TAG) this.deps.openOverview?.()
@@ -247,18 +272,31 @@ export class StatusController {
       next.statusSince !== prev.statusSince ||
       next.turnStartedAt !== prev.turnStartedAt
     ) {
-      this.deps.patch(id, {
-        status: next.status,
-        currentAction: next.currentAction,
-        lastActivityAt: next.lastActivityAt,
-        ...(next.phase ? { phase: next.phase } : {}),
-        lastReply: next.lastReply,
-        finishedAt: next.finishedAt,
-        statusSince: next.statusSince,
-        turnStartedAt: next.turnStartedAt
-      })
-      if (next.status !== prev.status) this.maybeNotify(id, next)
+      this.deps.patch(id, this.patchOf(id, next))
+      // Wavi notified when it asked; what the agent does underneath is not news while that question is open.
+      if (next.status !== prev.status && !this.waviAsks.has(id)) this.maybeNotify(id, next)
       this.updateBadge()
+    }
+
+    // The agent that asked is gone (its process ended, or the terminal did): nobody waits for the answer any more.
+    // A turn that merely ends is no sign of that: Claude moves an MCP call that runs over 2 minutes to the background
+    // and still takes its result (PRD §6.14).
+    const gone = (s: SessionState): boolean => s.ended || s.phase === 'exited'
+    if (this.waviAsks.has(id) && gone(next) && !gone(prev)) this.deps.onWaviAskAbandoned?.(id)
+  }
+
+  /** The store's view of a session: its agent's state, unless Wavi has a question of its own open about it. */
+  private patchOf(id: SessionId, state: SessionState): StatusPatch {
+    const ask = this.waviAsks.get(id)
+    return {
+      status: ask ? 'needs_you' : state.status,
+      currentAction: ask ? ask.label : state.currentAction,
+      lastActivityAt: state.lastActivityAt,
+      ...(state.phase ? { phase: state.phase } : {}),
+      lastReply: state.lastReply,
+      finishedAt: state.finishedAt,
+      statusSince: ask ? ask.since : state.statusSince,
+      turnStartedAt: state.turnStartedAt
     }
   }
 

@@ -3,6 +3,7 @@ import {
   ackReport,
   childBrief,
   childEvent,
+  confirmLabels,
   DISPATCH_LIMITS,
   dispatchToolDefs,
   emptyQueue,
@@ -182,5 +183,20 @@ describe('planChildren', () => {
     expect(plans.map((p) => p.branch)).toEqual(['jacob/fix-login-2', 'jacob/fix-login-3', 'jacob/amber-badger'])
     expect(plans[0]?.request).toEqual({ root: '/code/acme', branch: 'jacob/fix-login-2', base: 'jacob/plan', folder: plans[0]?.request.folder, prepare: true })
     expect(new Set(plans.map((p) => p.path)).size).toBe(3)
+  })
+})
+
+describe('confirmLabels', () => {
+  it('says how many sessions each dispatcher is waiting to start, adding up its batches', () => {
+    const labels = confirmLabels([
+      { parentId: 'a', count: 2 },
+      { parentId: 'b', count: 1 },
+      { parentId: 'a', count: 1 }
+    ])
+    expect([...labels]).toEqual([
+      ['a', '想开 3 个会话'],
+      ['b', '想开 1 个会话']
+    ])
+    expect(confirmLabels([]).size).toBe(0)
   })
 })

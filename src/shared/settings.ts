@@ -132,7 +132,7 @@ export interface PrSettings {
 export interface DispatchSettings {
   /** Agents get Wavi's dispatch tools (takes effect for agents started from now on). */
   tools: boolean
-  /** Start the sessions an agent asks for without the confirmation panel (the limits still apply). */
+  /** Start the sessions an agent asks for without the confirmation strip (the limits still apply). */
   autoApprove: boolean
 }
 

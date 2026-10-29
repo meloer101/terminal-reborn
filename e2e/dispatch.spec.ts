@@ -84,6 +84,8 @@ setInterval(() => {
     if (step.exit !== undefined) process.exit(step.exit)
     if (step.hook) hook(step.hook, step.payload || {})
     if (step.call) mcpSend({ id: step.call.id, method: 'tools/call', params: { name: step.call.name, arguments: step.call.args, _meta: { progressToken: step.call.id } } })
+    // What Claude 2.1.312 sends its MCP server when the user presses Esc during the call (PRD §6.14).
+    if (step.cancel !== undefined) mcpSend({ method: 'notifications/cancelled', params: { requestId: step.cancel, reason: 'AbortError: user-cancel' } })
   }
 }, 150)
 if (process.stdin.isTTY) process.stdin.setRawMode(true)
@@ -135,7 +137,7 @@ test.describe('派活与回报', () => {
     await expect.poll(() => response(dir, id), { timeout }).not.toBeNull()
     return response(dir, id)!
   }
-  const sheet = () => page.getByTestId('dispatch-sheet')
+  const strip = () => page.getByTestId('dispatch-strip')
   const sidebar = () => page.locator('[data-region="sidebar"]')
   const setTheme = (theme: 'dark' | 'light') =>
     page.evaluate((t) => {
@@ -220,21 +222,30 @@ test.describe('派活与回报', () => {
         }
       }
     })
-    await expect(sheet()).toBeVisible(WITHIN)
-    await expect(sheet()).toContainText('「规划登录改版」想开 2 个会话')
-    await expect(sheet()).toContainText('基于 main')
-    await expect(sheet()).toContainText('界面和测试可以同时做')
-    await expect(sheet().getByTestId('dispatch-row')).toHaveCount(2)
-    await expect(sheet().getByTestId('dispatch-row').first()).toContainText('Claude Code')
-    await expect(sheet().getByTestId('dispatch-row').first()).toContainText('jacob/fix-login')
-    await expect(sheet().getByTestId('dispatch-row').nth(1)).toContainText('Codex')
-    await expect(sheet()).toContainText('做完后把结果报告给「规划登录改版」')
+    // Under the dispatcher's own terminal, not over the window; its row says it is waiting on the user.
+    await expect(strip()).toBeVisible(WITHIN)
+    await expect(page.locator('[data-region="split"] [data-testid="dispatch-strip"]')).toHaveCount(0)
+    await expect(strip()).toContainText('想开 2 个会话')
+    await expect(strip()).toContainText('基于 main')
+    await expect(strip()).toContainText('界面和测试可以同时做')
+    await expect(strip().getByTestId('dispatch-row')).toHaveCount(2)
+    await expect(strip().getByTestId('dispatch-row').first().locator('[data-agent="claude"]')).toHaveCount(1)
+    await expect(strip().getByTestId('dispatch-row').first()).toContainText('jacob/fix-login')
+    await expect(strip().getByTestId('dispatch-row').nth(1).locator('[data-agent="codex"]')).toHaveCount(1)
+    await strip().getByTestId('dispatch-row').first().getByRole('button').click()
+    await expect(strip().getByTestId('dispatch-row').first()).toContainText('Keep the API as it is.')
+    const dispatcherRow = sidebar().locator('[data-session-id="s-plan"]')
+    await expect(dispatcherRow).toHaveAttribute('data-attention', 'true')
+    await expect(dispatcherRow).toContainText('想开 2 个会话')
     // Nothing is created before the answer.
     expect(existsSync(worktreesDir)).toBe(false)
     expect(response(project, 10)).toBeNull()
     await shoot('confirm')
-    await sheet().getByTestId('dispatch-start').click()
-    await expect(sheet()).toBeHidden()
+    // ⌘↵ from the dispatcher's terminal starts them.
+    await page.locator('[data-region="terminal"] .xterm').first().click()
+    await page.keyboard.press('Meta+Enter')
+    await expect(strip()).toBeHidden()
+    await expect(dispatcherRow).not.toContainText('想开')
     await expect.poll(() => response(project, 10), WITHIN).not.toBeNull()
     const text = response(project, 10)!
     expect(text).toContain('Started 2 session(s) off main (the user approved)')
@@ -300,9 +311,32 @@ test.describe('派活与回报', () => {
     expect(await call(project, 13, 'start_sessions', { sessions: [{ agent: 'claude', task: 'Fix the login form\nKeep the API as it is.' }] })).toContain('[duplicate]')
     expect(await call(project, 14, 'read_result', { id: 's-plan' })).toContain('[not_found]')
     step(project, { call: { id: 15, name: 'start_sessions', args: { sessions: [{ agent: 'claude', task: 'Update the docs', title: 'Docs' }] } } })
-    await expect(sheet()).toBeVisible(WITHIN)
-    await sheet().getByRole('button', { name: '拒绝' }).click()
+    // Asked while the user looks elsewhere: only the dispatcher's row says so, and the strip waits under its terminal.
+    await sidebar().locator(`[data-session-id="${childIds[0]}"]`).click()
+    const dispatcherRow = sidebar().locator('[data-session-id="s-plan"]')
+    await expect(dispatcherRow).toContainText('想开 1 个会话', WITHIN)
+    await expect(strip()).toHaveCount(0)
+    await dispatcherRow.click()
+    await expect(strip()).toBeVisible(WITHIN)
+    // ⌘↵ in the overview, where the strip is out of sight, starts nothing.
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(page.locator('[data-region="main"]').getByRole('region', { name: '派出的会话' })).toBeVisible(WITHIN)
+    await page.keyboard.press('Meta+Enter')
+    await page.waitForTimeout(300)
+    expect(response(project, 15)).toBeNull()
+    await page.keyboard.press('Meta+Shift+A')
+    await expect(strip()).toBeVisible(WITHIN)
+    await strip().getByRole('button', { name: '拒绝' }).click()
     await expect.poll(() => response(project, 15), WITHIN).toContain('[declined]')
+    // Esc in the dispatcher while a batch waits: the strip and its 等你处理 go, and the cancelled call gets no answer.
+    step(project, { call: { id: 16, name: 'start_sessions', args: { sessions: [{ agent: 'claude', task: 'Rename the login route', title: 'Rename' }] } } })
+    await expect(strip()).toBeVisible(WITHIN)
+    await expect(dispatcherRow).toContainText('想开 1 个会话')
+    step(project, { cancel: 16 })
+    await expect(strip()).toBeHidden(WITHIN)
+    await expect(dispatcherRow).not.toContainText('想开')
+    await page.waitForTimeout(500)
+    expect(response(project, 16)).toBeNull()
     expect(readdirSync(worktreesDir)).toHaveLength(2)
   })
 

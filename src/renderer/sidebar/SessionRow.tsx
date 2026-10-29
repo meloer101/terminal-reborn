@@ -58,6 +58,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
       data-shown={shown}
       data-attention={attention}
       data-depth={row.depth}
+      data-tree={row.tree}
       data-session-id={session.id}
       aria-current={selected ? 'true' : undefined}
       tabIndex={tabStop ? 0 : -1}
