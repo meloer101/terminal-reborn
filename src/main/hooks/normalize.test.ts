@@ -327,3 +327,24 @@ describe('normalizeHook · Bash results for the turn checks (PRD F9 / F4)', () =
     expect(claude('UserPromptSubmit', { ...fx.UserPromptSubmit, source: 'user' }).newTurn).toBe(true)
   })
 })
+
+describe('normalizeHook · large payloads are clipped (PRD §6.8)', () => {
+  const MB = 1024 * 1024
+
+  it('a Write tool-start / permission-request carries the path, not the file', () => {
+    const payload = { tool_name: 'Write', tool_input: { file_path: '/repo/big.json', content: 'x'.repeat(4 * MB) } }
+    const start = claude('PreToolUse', payload).events[0]
+    const request = claude('PermissionRequest', payload)
+    expect(start).toMatchObject({ type: 'tool-start', tool: 'Write', input: { file_path: '/repo/big.json' } })
+    expect(JSON.stringify(start).length).toBeLessThan(30_000)
+    expect(JSON.stringify(request.permission).length).toBeLessThan(30_000)
+    expect(request.permission?.summary).toBe('写入 repo/big.json')
+  })
+
+  it('a huge Bash output gives the same check output as the untrimmed tail', () => {
+    const stdout = `${'line\n'.repeat(MB)}Tests  3 passed\n`
+    const stderr = 'warn: deprecated'
+    const call = claude('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: { stdout, stderr } })
+    expect(call.bashCall?.result.output).toBe(`${stdout}\n${stderr}`.slice(-16_000))
+  })
+})

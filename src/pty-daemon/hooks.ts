@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { trimHookPayload } from '@shared/hook-payload'
 import { probeSocket, startHookServer, UnknownSessionError, type HookRequest, type HookServer } from '../main/hooks/server'
 import type { HookJournalEntry } from '../pty-host/protocol'
 
@@ -129,8 +130,10 @@ export class DaemonHooks {
     })
   }
 
-  private async handle(request: HookRequest): Promise<string> {
-    if (!this.options.known(request.sessionId)) throw new UnknownSessionError(request.sessionId)
+  private async handle(raw: HookRequest): Promise<string> {
+    if (!this.options.known(raw.sessionId)) throw new UnknownSessionError(raw.sessionId)
+    // Clipped before it reaches the socket every terminal's output shares (a Read's file, a Write's contents).
+    const request: HookRequest = { ...raw, payload: trimHookPayload(raw.payload) }
     const relayed = this.options.relay(request)
     if (!relayed) {
       // Dispatch tool calls (PRD F21) need an app to answer now; journaling one would replay it much later.

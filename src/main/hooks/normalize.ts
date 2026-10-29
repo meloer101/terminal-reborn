@@ -7,6 +7,7 @@ import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
 import { autoCompactRuleFromEnv, parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
 import type { BashResult } from '@shared/check-commands'
+import { trimHookPayload } from '@shared/hook-payload'
 import { isTodoTool } from '@shared/todo-progress'
 import { normalizeAdapter, normalizeGemini, normalizeQwen } from './cli-normalize'
 
@@ -427,8 +428,12 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
   }
 }
 
-/** Unknown events and non-object payloads normalize to nothing; they are never an error. */
-export function normalizeHook(agent: HookAgent, event: string, payload: unknown, at = Date.now()): NormalizedHook {
+/**
+ * Unknown events and non-object payloads normalize to nothing; they are never an error. The payload is clipped first
+ * (the daemon already did for relayed hooks), so no event, prompt or todo call carries a whole file to the renderer.
+ */
+export function normalizeHook(agent: HookAgent, event: string, raw: unknown, at = Date.now()): NormalizedHook {
+  const payload = trimHookPayload(raw)
   if (!isRec(payload)) return NONE
   switch (agent) {
     case 'claude':
