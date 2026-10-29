@@ -1,14 +1,17 @@
 /*
- * Figma SessionRow 11:51 — 248×52, padding 8/12/8/28, gap 8; selected = --bg-selected; attention recolors the activity line only.
- * The 28px left inset puts the glyph under the project name: a session is a child of its project.
+ * Figma 34P SessionRow — lines of 18 (title) and 16, 2 apart, padding 6/8. The status glyph hangs in a 16px column,
+ * so every line's text starts on the sidebar's text line (--indent-tree: 8 + 16 + 8), where the nav labels and project
+ * names start too. selected = --bg-selected; attention recolors the activity line only.
  */
 .row {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-8);
+  flex-direction: column;
+  gap: var(--space-2);
   width: 100%;
-  padding: var(--space-8) var(--space-12) var(--space-8) var(--indent-tree);
+  /* Where the text starts in this row; the todo line (SessionMeta.module.css) starts there too. */
+  --row-text-inset: var(--indent-tree);
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--row-text-inset);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -23,7 +26,7 @@
 
 /* Started by the session above it (PRD F21): one step in, so the dispatcher reads as its parent. */
 .row[data-depth='1'] {
-  padding-left: calc(var(--indent-tree) + var(--space-16));
+  --row-text-inset: calc(var(--indent-tree) + var(--space-16));
 }
 
 .row[data-selected='true'] {
@@ -45,24 +48,37 @@
   outline-offset: -2px;
 }
 
-/* 2px top inset aligns the 14px glyph to the 18px title line. */
-.glyph {
-  flex: none;
+/* One thing per line, each line a fixed box with its content centred; whatever sits on the right belongs to that line. */
+.line {
+  position: relative;
   display: flex;
-  padding-top: var(--space-2);
-}
-
-.main {
-  flex: 1;
+  align-items: center;
+  gap: var(--space-4);
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  height: 16px;
 }
 
+.line:first-child {
+  height: 18px;
+}
+
+/* Hangs left of the text line, centred in the 16px column under the nav icons and project chevrons. */
+.glyph {
+  position: absolute;
+  left: calc(-1 * (var(--space-8) + 16px));
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 18px;
+}
+
+/* Text takes what it needs; tags follow it, and the time or mark is pushed to the right edge. */
 .title,
-.activity {
-  display: block;
+.activity,
+.branch {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -74,64 +90,44 @@
   color: var(--text-primary);
 }
 
-.activityLine {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 0;
-  /* A row with nothing to say yet keeps its height. */
-  min-height: 16px;
-}
-
 .activity {
-  flex: 1;
   font: var(--text-caption);
   color: var(--text-secondary);
-}
-
-/* Which agent runs here and on which branch (Figma 27A). */
-.whereLine {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 0;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.branchIcon {
-  flex: none;
-}
-
-.branch {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .row[data-attention='true'] .activity {
   color: var(--status-attention);
 }
 
-.meta {
+.branch {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.time {
   flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2);
+  margin-left: auto;
+  padding-left: var(--space-4);
   font: var(--text-mono-s);
   color: var(--text-tertiary);
   white-space: nowrap;
 }
 
-/* Fixed line box so rows without time/stat keep the same height and column. */
-.metaLine {
-  display: block;
-  min-height: 16px;
+/* A long wait is heavier, not louder (PRD F10). */
+.time[data-emphasis='true'] {
+  font: var(--text-mono-s-medium);
 }
 
-/* A long wait is heavier, not louder (PRD F10). */
-.metaLine[data-emphasis='true'] {
-  font: var(--text-mono-s-medium);
+/* Which agent runs here (Figma 34K · K1): the CLI's mark in one colour, black or white, closing the last line. */
+.mark {
+  flex: none;
+  display: flex;
+  margin-left: auto;
+  padding-left: var(--space-4);
+  color: var(--text-primary);
+}
+
+/* On a title line with nothing under it, the mark follows the time instead of sharing the free space with it. */
+.time + .mark {
+  margin-left: 0;
 }

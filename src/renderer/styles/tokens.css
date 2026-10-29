@@ -33,8 +33,9 @@
   /* Chrome dimensions (Screens 01–08) */
   --sidebar-width: 264px;
   --titlebar-height: 44px;
-  /* Sidebar tree: a session's glyph sits under its project's name (8 inset + 16 chevron + 4 gap). */
-  --indent-tree: 28px;
+  /* Sidebar text line (Figma 34P): 8 row inset + a 16px column for icons, chevrons and status glyphs + 8 gap. Nav labels,
+     project names and every line of a session row start here. */
+  --indent-tree: 32px;
   /* Main never gets narrower; the right panel floats over it instead (B13). */
   --main-min-width: 560px;
   /* Glass shell (PRD §5 玻璃外壳, Figma 28): cards (terminal panes, right panel, overview) sit this far from the

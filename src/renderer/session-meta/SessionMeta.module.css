@@ -305,11 +305,11 @@ button.chip:hover {
   white-space: nowrap;
 }
 
-/* Sidebar row: a 1px line under the activity, from the title column to the meta column's edge. */
+/* Sidebar row: a 1px line at the row's foot, from the text line to the row's right inset (Figma 34P). */
 .todoLine {
   position: absolute;
-  left: calc(var(--indent-tree) + 14px + var(--space-8));
-  right: var(--space-12);
+  left: var(--row-text-inset, var(--indent-tree));
+  right: var(--space-8);
   bottom: var(--space-2);
   height: 1px;
   overflow: hidden;

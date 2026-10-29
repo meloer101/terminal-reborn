@@ -65,7 +65,7 @@ describe('buildSidebarGroups', () => {
     expect(groups[1]).toMatchObject({ collapsed: false, attention: null })
   })
 
-  it('derives secondary line, attention flag and diff stat', () => {
+  it('derives secondary line, attention flag and branch', () => {
     const [group] = buildSidebarGroups({
       projects,
       worktrees,
@@ -76,9 +76,11 @@ describe('buildSidebarGroups', () => {
       ]
     })
     const [a, b, c] = group?.rows ?? []
-    expect(a).toMatchObject({ secondary: '编辑 a.ts', attention: false, stat: { added: 3, removed: 1 }, branch: 'x/one' })
-    expect(b).toMatchObject({ secondary: '', stat: null, branch: 'x/two' })
-    expect(c).toMatchObject({ secondary: '/a', stat: null })
+    expect(a).toMatchObject({ secondary: '编辑 a.ts', attention: false, branch: 'x/one' })
+    expect(b).toMatchObject({ secondary: '', branch: 'x/two' })
+    // The main checkout no longer spells out its folder: the project header names it (Figma 34P).
+    expect(c).toMatchObject({ secondary: '', branch: 'main' })
+    expect(a).not.toHaveProperty('stat')
   })
 
   it('a finished turn shows its last reply, marked while unread', () => {
@@ -199,10 +201,10 @@ describe('sameRow', () => {
     expect(sameRow(before[0]!, after[0]!)).toBe(false)
   })
 
-  it('notices a changed diff stat from the worktree', () => {
+  it('notices a changed branch from the worktree', () => {
     const s1 = session('s1', 'wa1', 'running')
     const before = rows([s1])
-    const after = rows([s1], worktrees.map((w) => (w.id === 'wa1' ? { ...w, added: 4 } : w)))
+    const after = rows([s1], worktrees.map((w) => (w.id === 'wa1' ? { ...w, branch: 'x/renamed' } : w)))
     expect(sameRow(before[0]!, after[0]!)).toBe(false)
   })
 })

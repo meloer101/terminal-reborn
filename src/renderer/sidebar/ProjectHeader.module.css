@@ -1,13 +1,14 @@
 /*
- * Figma ProjectHeader 50:1473 — 28px: padding 6/12/6/8, gap 4; chevron 16 · name (Body/Heading, primary) · count.
- * Hover: bg-hover, padding 4/4/4/8, actions replace the count. Session rows indent to the name (28px).
+ * Figma ProjectHeader 50:1473 / 34P — 28px: padding 6/8/6/8; chevron 16 · 8 · name (Body/Heading, primary), so the name
+ * starts on the sidebar's text line (--indent-tree) like the nav labels and the session rows. Collapsed: status · count.
+ * Hover: bg-hover, padding 4/4/4/8, actions replace the count.
  */
 .header {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   height: 28px;
-  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-8);
+  padding: var(--space-6) var(--space-8);
   border-radius: var(--radius-md);
 }
 
@@ -16,7 +17,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-8);
   padding: 0;
   border: 0;
   background: transparent;

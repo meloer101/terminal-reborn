@@ -11,8 +11,8 @@ interface Props {
 }
 
 /**
- * The mark of the agent that runs in a session (Figma 27D): the CLI's own logo, the terminal glyph for a plain shell,
- * a letter for the few CLIs that have no logo to bundle. Decorative: the name sits in the row's tooltip.
+ * The mark of the agent that runs in a session (Figma 27D, one colour since 34K): the CLI's own logo, the terminal glyph
+ * for a plain shell, a letter for the few CLIs that have no logo to bundle. Decorative: the name sits in the row's tooltip.
  */
 export function AgentIcon({ kind, size = 14 }: Props) {
   const label = agentName(kind)

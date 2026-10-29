@@ -55,14 +55,14 @@
   color: var(--text-tertiary);
 }
 
-/* Figma NewSessionRow 50:1474 — under a project with no sessions. */
+/* Figma NewSessionRow 50:1474 — under a project with no sessions; ＋ in the glyph column, the label on the text line. */
 .newSession {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-8);
   width: 100%;
   height: 30px;
-  padding: 0 var(--space-12) 0 var(--indent-tree);
+  padding: 0 var(--space-12) 0 var(--space-8);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;

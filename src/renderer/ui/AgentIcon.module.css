@@ -1,4 +1,4 @@
-/* One-colour marks use currentColor; the others keep their brand colours. */
+/* Every mark draws in currentColor: black or white, never a brand colour or a grey (Figma 34K · K1). */
 .mark {
   flex: none;
   display: inline-flex;
@@ -12,7 +12,7 @@
 
 .shell {
   flex: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* CLIs with no logo to bundle: the first letter in a small rounded square. */
@@ -23,7 +23,7 @@
   justify-content: center;
   border-radius: var(--radius-sm);
   background: var(--bg-hover);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-weight: 600;
   line-height: 1;
 }
