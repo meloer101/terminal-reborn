@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-10-29：**启动画面和欢迎页入场**（PRD v1.98，Figma 39G–39J）：点开应用不再先黑一下，第一帧就有卡片，细点聚成标志；欢迎页的标志转正、向左滑并带出问候语。首次可交互在测量噪声内（新旧交替测三轮，中位数 307 / 305 / 254 → 299 / 331 / 271 ms），首帧 328–384 → 140–176 ms。还没在作者的机器和打包后的 app 上看过。
 - 2026-10-29：全屏时外壳自带光场（配色取自作者的配图底托，10 种 + 自动），设置 · 外观 加「全屏背景」（PRD v1.97，Figma 38）。副窗口全屏还没接。
 - 2026-10-29：修复启动后液态玻璃不透、切一次主题才透出来：等窗口显示后再挂玻璃（PRD §5）。还没在作者的机器上确认。
 - 2026-10-29：分屏时每一格的会话下面各有一块水滴，新开一格滴下来、关掉收缩消失、换会话流过去（PRD v1.96，Figma 37B）；只在别的窗口显示的会话仍是 1px 描边。
@@ -296,6 +297,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 文件预览：长行自动换行、Markdown 渲染（2026-10-21，PRD F17 v1.59）：react-markdown + remark-gfm，HTML 经 rehype-raw + rehype-sanitize（GitHub 白名单）；链接打开内置浏览器 / 文件预览 / 标题锚点，标题行切换源码。顺带修了切换文件时短暂显示上一个文件内容的问题。纯逻辑 `markdown-model.ts`（链接解析、不越出 worktree、标题锚点），e2e `right-panel.spec.ts`（截图 `13f-markdown`、`13f-wrap`，两种主题）。Figma 13F 待补渲染态；`npm run dev` 下 worktree 图片因页面不是 file:// 加载不出、显示替代文字，安装版正常（未在真机看过）
 - [x] 终端底色可改 + 导入 Ghostty / iTerm 主题（2026-10-25，PRD F7 v1.71，Figma 07b）：设置 · 外观 · 窗口的「终端底色」（跟随主题 / 自定义）和「底色值」，主题色块下的「导入主题…」；底色 + 前景 / 光标 / 选区 / 16 色原样用于终端，没有导入时前景和 16 色按底色明暗选深色或浅色一套（`shared/terminal-tokens.ts`，测试对照 tokens.css）；解析在 `shared/theme-import.ts`，读文件在 `main/theme-file.ts`；读不了的文件用原生对话框说明（这个对话框没在 Figma 里画）。测试：`color` / `theme-import` / `settings-terminal` / `terminal-tokens` / `theme-file` / `custom-theme` / `map-custom`，e2e `settings.spec.ts` 和 `appearance.spec.ts` 各一条。以后：导入后在主题色块里加一个色块、Alacritty / Kitty / WezTerm 格式
 - [x] 玻璃外壳 + 侧栏 / 右侧栏开合动效（2026-10-26，PRD v1.73 §5，Figma 第 28 节 A–F）：外壳只有深色 / 浅色两套（原生毛玻璃 + `--glass-shell`），导入主题只改终端卡片；会话头、侧栏、右侧栏标题行在玻璃上，终端、右侧栏内容、总览、欢迎页是卡片（圆角 10、间距 6）；分屏的细线换成 6 宽的玻璃缝（`SPLIT_GAP` = 6）；去掉「侧栏毛玻璃」设置。开合：`app-shell/drawer-motion.ts`（宽度弹簧 460 ms、内容滑入 + 模糊，动画中终端不重排、结束时重排一次），侧栏抽成 `SidebarDrawer.tsx`（副窗口共用）。右侧栏放不下时先变窄到 400 再浮起（`panelWidthFor`，作者拖宽右侧栏后它盖住了终端）。右侧栏打开时会话工具在它上方、窗口最右（Figma 28G / 28H，PRD v1.74：`SessionHeader` 的 `part` = full / title / tools，两种窄宽规则分开），菜单和会话头弹出层换成玻璃外壳的浮层（实色 `--float-bg` + 细边 + 高光，不用 `backdrop-filter`：在透明窗口里它会把周围一块玻璃压暗，作者发现的），弹出层画进 body。测试：`drawer-motion.test.ts`、`split-layout.test.ts`、`layout.test.ts`，e2e `appearance` / `right-panel` / `split` / `no-dead-ends` 更新了几何断言（`right-panel.spec.ts` 跑了 13 次有 2 次各挂在不同用例上，改动前 4 次全过，还没查清是不是动效的时序）；用 Playwright 逐帧量过宽度（右侧栏 0 → 508 回弹 → 486，侧栏 → 276 → 264，终端卡片每帧跟随）。没在真实桌面上看过毛玻璃的实际观感（e2e 截图里玻璃后面没有壁纸）
+- [x] 启动画面 + 欢迎页入场（2026-10-29，PRD v1.98 F18 / §5，Figma 39G–39J；作者看过样稿后选 B1「聚」和 L4）：`src/renderer/public/boot.js`（不进打包，主题镜像、卡片位置镜像 `tr.boot.layout`、`window.__waviBoot.claim` 交接）+ `boot-worker.js`（OffscreenCanvas 上画约 330 个细点，主线程不参与）；欢迎页入场 `app-shell/mark-entrance.ts`（Web Animations 关键帧，纯函数）、`boot.ts`、`mark-segments.ts`，`EmptyMain` 的标志改成四段 SVG；玻璃改为显示前挂上（`main/appearance.ts`）。测试：`mark-entrance.test.ts`，e2e `smoke.spec.ts` 加交接用例。测量（Playwright，新档案，新旧交替 8 / 8 / 12 次）：首次可交互中位数 307 / 305 / 254 → 299 / 331 / 271 ms（噪声约 ±40），首帧 328–384 → 140–176 ms；录屏逐帧：改动前约 67 ms 黑框 + 33 ms 空玻璃，改动后第一帧就有玻璃和卡片。先试过用 DOM 画细点，首次可交互晚 15–75 ms，所以改成 Worker
 - [ ] 孤儿 worktree 自动回收
 - [x] 总览批量操作（多选后停止、关闭、发送同一条消息）（2026-10-21，随多 agent 第二批的“一题多解 + 广播”提前做完，PRD F9 v1.60）
 - [ ] PRD §4 “P2 储备”中的各项
@@ -331,6 +333,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 
 2026-10-20 能自动化的已写成 e2e；剩下的整理成人工清单 A–E，一次走完约 9 分钟，清单在作者的「Wavi 待办清单与优先级」文档里。
 
+- [ ] 启动画面和欢迎页入场在作者的机器、真实档案和打包后的 app 上的观感（PRD v1.98）：细点能不能看清、聚拢的节奏、黑框是否真的没了
 - [x] 在应用里运行 `vim`、`htop`、`less`（2026-10-20，`tui-apps.spec.ts`：vim、less、top 通过；本机没装 htop，那个用例自动跳过）
 - [ ] 真实桌面：关闭按钮隐藏窗口、Dock 恢复；⌘Q 后 agent 继续运行；⌥⌘Q 弹出确认。逻辑已由 `lifecycle`、`quit-keeps-agents`、`menu-keys` 覆盖，剩清单 B：全屏下关闭、原生确认框的样子
 - [ ] 系统通知、点击通知跳转、Dock 角标。主进程的真实链路已由 `notifications.spec.ts` 覆盖，剩清单 D：横幅的样子和通知权限

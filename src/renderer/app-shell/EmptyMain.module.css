@@ -42,13 +42,23 @@
   color: var(--text-primary);
 }
 
-/* The interlocking-loop mark (build/icon.svg, Figma Logo/交织) as a mask, so it takes the theme's text colour. */
+/* The interlocking-loop mark (build/icon.svg, Figma Logo/交织) in its four pieces (mark-segments.ts), in the theme's text
+   colour. Each piece turns about its own centre while it weaves in. */
 .mark {
   flex: none;
   width: 36px;
   height: 36px;
-  background: var(--text-primary);
-  mask: url('../assets/logo-mark.svg') center / contain no-repeat;
+  fill: var(--text-primary);
+}
+
+.mark path {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* The entrance (mark-entrance.ts) keeps these hidden until it starts; each animation then holds its own first frame. */
+.welcome[data-entrance='hold'] :is(.mark, [data-entrance-part], [data-entrance-rest]) {
+  opacity: 0;
 }
 
 .quote {
