@@ -73,11 +73,11 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
     ),
   setChecks: (sessionId, checks) => set((s) => patchSession(s, sessionId, (current) => ({ ...current, checks }))),
   setAgent: (sessionId, agent) =>
-    set((s) => (s.bySession[sessionId]?.agent === agent ? {} : patchSession(s, sessionId, (current) => ({ ...current, agent })))),
+    set((s) => (s.bySession[sessionId]?.agent === agent ? s : patchSession(s, sessionId, (current) => ({ ...current, agent })))),
   setPlan: (sessionId, plan) =>
     set((s) =>
       (s.bySession[sessionId]?.plan ?? true) === plan
-        ? {}
+        ? s
         : patchSession(s, sessionId, (current) => {
             const next: SessionMetrics = { ...current }
             if (plan) delete next.plan
@@ -87,7 +87,7 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
     ),
   clearSession: (sessionId) =>
     set((s) => {
-      if (!(sessionId in s.bySession)) return {}
+      if (!(sessionId in s.bySession)) return s
       const bySession = { ...s.bySession }
       delete bySession[sessionId]
       return { bySession }
@@ -95,17 +95,17 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
   setUsage: (usage) =>
     set((s) => {
       const held = s.usage[usage.vendor]
-      return held && held.at > usage.at ? {} : { usage: { ...s.usage, [usage.vendor]: usage } }
+      return held && held.at > usage.at ? s : { usage: { ...s.usage, [usage.vendor]: usage } }
     }),
   setAccount: (account) =>
     set((s) => {
       const held = s.accounts[account.vendor]
-      return held && held.at > account.at ? {} : { accounts: { ...s.accounts, [account.vendor]: account } }
+      return held && held.at > account.at ? s : { accounts: { ...s.accounts, [account.vendor]: account } }
     }),
   retain: (live) =>
     set((s) => {
       const ids = Object.keys(s.bySession)
-      if (ids.every((id) => live.has(id))) return {}
+      if (ids.every((id) => live.has(id))) return s
       return { bySession: Object.fromEntries(Object.entries(s.bySession).filter(([id]) => live.has(id))) }
     })
 }))
