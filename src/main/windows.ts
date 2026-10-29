@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
 import { viewMenuItems } from '@shared/lifecycle'
 import { SHORTCUTS, stepFontSize, type FontSizeStep, type MenuCommand } from '@shared/shortcuts'
+import { nativeGlass } from './appearance'
 import { clearActivity } from './activity'
 import { appWindows, isAppWindow, isSecondaryWindow, rendererOf } from './app-windows'
 import { releaseSessionsOf } from './pty'
@@ -21,6 +22,8 @@ function baseOptions(): BrowserWindowConstructorOptions {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#0a0a0a',
+    // SPIKE: Liquid Glass needs a transparent window (appearance.ts).
+    transparent: nativeGlass,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
