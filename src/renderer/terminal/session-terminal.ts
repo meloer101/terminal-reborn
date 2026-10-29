@@ -2,6 +2,7 @@
 import { AGENT_SPECS, type CliAgent } from '@shared/agents'
 import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import { parseScriptMarker, SCRIPT_MARKER_OSC } from '@shared/script-launch'
+import { QuietTimer } from '@shared/quiet-timer'
 import type { AgentKind, SessionId } from '@shared/types'
 import { handleTerminalLink, resolveSessionPaths } from '../state/link-actions'
 import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
@@ -38,7 +39,9 @@ export class SessionTerminal {
   private readonly cleanups: Array<() => void> = []
   /** Output arrived since the last snapshot. */
   private dirty = false
-  private snapshotTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly snapshotQuiet = new QuietTimer(SNAPSHOT_QUIET_MS, () =>
+    requestIdleCallback(() => this.saveSnapshot(), { timeout: 2000 })
+  )
 
   constructor(
     readonly sessionId: SessionId,
@@ -79,7 +82,8 @@ export class SessionTerminal {
     if (this.disposed) return
 
     // Paint the last screen right away; the process below takes a few seconds to draw anything.
-    const snapshot = window.tr.terminalSnapshots.loadSync(id)
+    const snapshot = await window.tr.terminalSnapshots.load(id).catch(() => null)
+    if (this.disposed) return
     if (snapshot) await this.surface.restore(snapshot)
     if (this.disposed) return
 
@@ -248,11 +252,7 @@ export class SessionTerminal {
 
   private markDirty(): void {
     this.dirty = true
-    if (this.snapshotTimer !== null) clearTimeout(this.snapshotTimer)
-    this.snapshotTimer = setTimeout(() => {
-      this.snapshotTimer = null
-      requestIdleCallback(() => this.saveSnapshot(), { timeout: 2000 })
-    }, SNAPSHOT_QUIET_MS)
+    this.snapshotQuiet.touch()
   }
 
   /** Saves what the terminal shows, if it changed since the last save. */
@@ -286,7 +286,7 @@ export class SessionTerminal {
     else this.saveSnapshot()
     this.disposed = true
     if (this.ackTimer !== null) clearTimeout(this.ackTimer)
-    if (this.snapshotTimer !== null) clearTimeout(this.snapshotTimer)
+    this.snapshotQuiet.cancel()
     for (const cleanup of this.cleanups) cleanup()
     if (this.started && !this.exited) window.tr.pty.kill(this.sessionId)
     this.surface.dispose()

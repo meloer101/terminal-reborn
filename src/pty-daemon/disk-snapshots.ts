@@ -3,19 +3,20 @@
 // its latest screen (PRD §6.8). One writer at a time: the renderer saves while a client is
 // attached to the session, this writes only for detached sessions, after their output has been quiet a while.
 import type { TerminalSnapshot } from '@shared/ipc'
+import { QuietTimer } from '@shared/quiet-timer'
 
 export interface DiskSnapshotDeps {
   /** The session's screen in the disk format (no modes); null when the host no longer has it. */
   capture(id: string): Promise<TerminalSnapshot | null>
   /** A client streams the session: its renderer is the writer. */
   isAttached(id: string): boolean
-  save(id: string, snapshot: TerminalSnapshot): void
+  save(id: string, snapshot: TerminalSnapshot): Promise<void> | void
   log?(...args: unknown[]): void
 }
 
 export class DiskSnapshots {
   /** Detached sessions whose screen changed since it was last written, with their quiet timer. */
-  private readonly dirty = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly dirty = new Map<string, QuietTimer>()
 
   constructor(
     private readonly quietMs: number,
@@ -24,18 +25,17 @@ export class DiskSnapshots {
 
   /** Output (or an exit) of a detached session: write its screen once it has been quiet for `quietMs`. */
   touch(id: string): void {
-    const timer = this.dirty.get(id)
-    if (timer !== undefined) clearTimeout(timer)
-    this.dirty.set(
-      id,
-      setTimeout(() => void this.write(id), this.quietMs)
-    )
+    let timer = this.dirty.get(id)
+    if (!timer) {
+      timer = new QuietTimer(this.quietMs, () => void this.write(id))
+      this.dirty.set(id, timer)
+    }
+    timer.touch()
   }
 
   /** A client attached: from now on the renderer saves this session. */
   cancel(id: string): void {
-    const timer = this.dirty.get(id)
-    if (timer !== undefined) clearTimeout(timer)
+    this.dirty.get(id)?.cancel()
     this.dirty.delete(id)
   }
 
@@ -65,7 +65,7 @@ export class DiskSnapshots {
     // Attached while the screen was being captured: the renderer owns the file now.
     if (!snapshot || this.deps.isAttached(id) || snapshot.data.length === 0) return
     try {
-      this.deps.save(id, snapshot)
+      await this.deps.save(id, snapshot)
     } catch (error) {
       this.deps.log?.('snapshot save failed', id, error)
     }

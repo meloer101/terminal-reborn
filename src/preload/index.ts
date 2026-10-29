@@ -138,7 +138,7 @@ const api: TrApi = {
     save: (data) => ipcRenderer.send(IPC.workspaceSave, data)
   },
   terminalSnapshots: {
-    loadSync: (sessionId) => ipcRenderer.sendSync(IPC.terminalSnapshotLoad, sessionId) as TerminalSnapshot | null,
+    load: (sessionId) => ipcRenderer.invoke(IPC.terminalSnapshotLoad, sessionId) as Promise<TerminalSnapshot | null>,
     save: (sessionId, snapshot) => ipcRenderer.send(IPC.terminalSnapshotSave, sessionId, snapshot),
     remove: (sessionId) => ipcRenderer.send(IPC.terminalSnapshotRemove, sessionId)
   },

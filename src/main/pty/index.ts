@@ -68,6 +68,8 @@ let daemonUnavailable = process.env.TR_PTY_DAEMON === '0'
 /** Quit ends every session (the "退出并结束所有会话" menu item; e2e runs). Otherwise the daemon keeps them. */
 let endSessionsOnQuit = process.env.TR_KILL_SESSIONS_ON_QUIT === '1'
 let quitHandled = false
+/** The daemon is ending every session before the quit goes on. */
+let shuttingDown = false
 
 const sessions = new Map<string, LiveSession>()
 const sessionRootListeners = new Set<() => void>()
@@ -576,12 +578,16 @@ export function registerPtyHandlers(): void {
   app.on('will-quit', (event) => {
     if (restartTimer) clearTimeout(restartTimer)
     const current = link
+    // Another will-quit holder (terminal snapshot writes) may quit again before the daemon is done: hold that too.
+    if (shuttingDown) event.preventDefault()
     if (!current || quitHandled) return
     if (current.kind === 'daemon' && endSessionsOnQuit && current.shutdown) {
       // Wait (briefly) for the daemon to end the sessions, so none outlives an explicit "end everything".
       event.preventDefault()
       quitHandled = true
+      shuttingDown = true
       void current.shutdown().finally(() => {
+        shuttingDown = false
         link = null
         sessions.clear()
         app.quit()
