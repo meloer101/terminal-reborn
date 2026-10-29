@@ -3,24 +3,18 @@ import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } 
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { phaseLine } from '../lifecycle/present'
 
-export interface DiffStat {
-  added: number
-  removed: number
-}
-
 export interface SessionRowModel {
   session: Session
   /** The title drawn: a nested session named `<its parent's title> · Codex` (同任务多解) shows only `Codex`. */
   title: string
   /**
-   * Secondary line: the agent's lifecycle or current action; once a turn is over, its last reply
-   * (prefixed "已完成" while unread, so the state is never color-only); else the main checkout's folder.
+   * Second line: the agent's lifecycle or current action; once a turn is over, its last reply
+   * (prefixed "已完成" while unread, so the state is never color-only). Empty before the first turn.
    */
   secondary: string
   /** Only `needs_you` recolors the secondary line (Figma SessionRow `attention`). */
   attention: boolean
-  stat: DiffStat | null
-  /** The worktree's branch, drawn on the row's last line next to the agent's mark. */
+  /** The worktree's branch: the row's third line, which ends in the agent's mark (Figma 34P). Empty outside git. */
   branch: string
   /** 1: started by the session right above it through Wavi's dispatch tools (PRD F21), drawn one step in. */
   depth: 0 | 1
@@ -59,16 +53,12 @@ export function nestedTitle(title: string, parentTitle: string | undefined): str
 }
 
 function toRow(session: Session, worktree: Worktree | undefined, depth: 0 | 1 = 0, parentTitle?: string): SessionRowModel {
-  // The branch has its own line now (SessionRow); only the main checkout's folder still says where it lives.
-  const location = worktree?.isMain ? worktree.path : ''
-  const added = worktree?.added ?? 0
-  const removed = worktree?.removed ?? 0
+  // The project header already says which folder this is; the branch has its own line (Figma 34P).
   return {
     session,
     title: depth === 1 ? nestedTitle(session.title, parentTitle) : session.title,
-    secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? location,
+    secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
-    stat: added + removed > 0 ? { added, removed } : null,
     branch: worktree?.branch ?? '',
     depth
   }
@@ -85,9 +75,7 @@ export function sameRow(a: SessionRowModel, b: SessionRowModel): boolean {
     a.secondary === b.secondary &&
     a.attention === b.attention &&
     a.branch === b.branch &&
-    a.depth === b.depth &&
-    a.stat?.added === b.stat?.added &&
-    a.stat?.removed === b.stat?.removed
+    a.depth === b.depth
   )
 }
 

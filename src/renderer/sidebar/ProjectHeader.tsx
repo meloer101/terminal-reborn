@@ -8,7 +8,7 @@ const ICON = { size: 16, strokeWidth: 1.75 } as const
 
 interface Props {
   name: string
-  /** Sessions in the project; an empty project shows no count (Figma 09: docs-site). */
+  /** Sessions in the project — written only while it is collapsed, when its rows can't be counted (Figma 34P). */
   count: number
   collapsed: boolean
   /** Shown on a collapsed header so a folded project can't hide a session that needs you. */
@@ -21,9 +21,10 @@ interface Props {
 }
 
 /**
- * Figma component `ProjectHeader` (State=Default / Hover / Collapsed, 50:1473). The project is the parent of
- * its sessions, so it carries the strongest type in the list (Body/Heading, primary) and a disclosure chevron;
- * session rows are indented under the name. Hover / keyboard focus swaps the count for ＋ and ….
+ * Figma component `ProjectHeader` (50:1473; Figma 34P). The project is the parent of its sessions, so it carries the
+ * strongest type in the list (Body/Heading, primary). Its chevron hangs in the same column as the rows' status glyphs
+ * and the name starts on the sidebar's text line. Collapsed, it shows the most urgent status and the session count;
+ * hover / keyboard focus swaps the count for ＋ and … (the status stays).
  */
 export function ProjectHeader({ name, count, collapsed, attention, onToggle, onNewSession, onMenu }: Props) {
   return (
@@ -49,7 +50,7 @@ export function ProjectHeader({ name, count, collapsed, attention, onToggle, onN
           <StatusGlyph status={attention} />
         </span>
       )}
-      {count > 0 && <span className={styles.count}>{count}</span>}
+      {collapsed && count > 0 && <span className={styles.count}>{count}</span>}
       <span className={styles.actions}>
         <button type="button" className={styles.action} aria-label={`在 ${name} 新建会话`} title="新建会话 · ⌘N" aria-haspopup="dialog" onClick={() => onNewSession()}>
           <Plus {...ICON} />

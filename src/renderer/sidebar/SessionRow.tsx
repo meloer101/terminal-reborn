@@ -1,8 +1,8 @@
-import { GitBranch } from 'lucide-react'
 import { memo, useEffect, useRef, type PointerEvent } from 'react'
 import { agentName } from '@shared/agents'
 import { glyphStatus } from '../lifecycle/present'
 import { PortTags } from '../panels/browser/PortTags'
+import { useBrowser } from '../panels/browser/store'
 import { SessionPrTag } from '../pull-requests/PrTag'
 import { TodoLine } from '../session-meta/MetaChips'
 import { AgentIcon } from '../ui/AgentIcon'
@@ -26,11 +26,23 @@ interface Props {
   onContextMenu?(id: string, anchor: MenuAnchor): void
 }
 
-/** Figma component `SessionRow` (11:51, 27A): glyph · title / activity (+ ports, PR) / agent mark · branch · time / diff. */
+/**
+ * Figma 34P (SessionRow, third round): status glyph · title · time / activity (+ ports) / branch (+ PR) · agent mark.
+ * The glyph hangs in a 16px column so every line starts on the nav labels' text line. A line with nothing to say is not
+ * drawn (no activity yet, no branch outside git), and the agent mark always closes the last line.
+ */
 export const SessionRow = memo(function SessionRow({ row, selected, shown = false, onPress, tabStop, onSelect, onContextMenu }: Props) {
-  const { session, secondary, attention, stat } = row
+  const { session, secondary, attention, branch } = row
   const ref = useRef<HTMLDivElement>(null)
   const status = glyphStatus(session)
+  const hasPorts = useBrowser((s) => (s.ports[session.id]?.length ?? 0) > 0)
+  const activity = secondary !== '' || hasPorts
+
+  const mark = (
+    <span className={styles.mark} title={branch ? `${agentName(session.kind)} · ${branch}` : agentName(session.kind)}>
+      <AgentIcon kind={session.kind} size={12} />
+    </span>
+  )
 
   // Keep the selection visible when it changes from elsewhere (⌘1–9, ⌘J).
   useEffect(() => {
@@ -66,34 +78,28 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
         })
       }
     >
-      <span className={styles.glyph}>
-        <StatusGlyph status={status} />
-      </span>
-      <span className={styles.main}>
+      <span className={styles.line}>
+        <span className={styles.glyph}>
+          <StatusGlyph status={status} />
+        </span>
         <span className={styles.title}>{row.title}</span>
-        <span className={styles.activityLine}>
-          <span className={styles.activity}>{secondary}</span>
+        {showsTime(session, status) && <SessionTimeLabel session={session} status={status} className={styles.time} />}
+        {!activity && !branch && mark}
+      </span>
+      {activity && (
+        <span className={styles.line}>
+          {secondary && <span className={styles.activity}>{secondary}</span>}
           <PortTags sessionId={session.id} />
+          {!branch && mark}
+        </span>
+      )}
+      {branch && (
+        <span className={styles.line}>
+          <span className={styles.branch}>{branch}</span>
           <SessionPrTag sessionId={session.id} />
+          {mark}
         </span>
-        <span className={styles.whereLine} title={row.branch ? `${agentName(session.kind)} · ${row.branch}` : agentName(session.kind)}>
-          <AgentIcon kind={session.kind} size={12} />
-          {row.branch && (
-            <>
-              <GitBranch className={styles.branchIcon} size={12} strokeWidth={1.75} aria-hidden />
-              <span className={styles.branch}>{row.branch}</span>
-            </>
-          )}
-        </span>
-      </span>
-      <span className={styles.meta}>
-        {showsTime(session, status) ? (
-          <SessionTimeLabel session={session} status={status} className={styles.metaLine} />
-        ) : (
-          <span className={styles.metaLine} />
-        )}
-        <span className={styles.metaLine}>{stat && `+${stat.added} −${stat.removed}`}</span>
-      </span>
+      )}
       <TodoLine sessionId={session.id} />
     </div>
   )
