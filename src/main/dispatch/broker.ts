@@ -16,7 +16,7 @@ import {
 } from '@shared/dispatch'
 
 /** Events the MCP server posts to the hook socket (resources never send these). */
-export const DISPATCH_EVENTS = ['WaviHello', 'WaviCall', 'WaviPoll'] as const
+export const DISPATCH_EVENTS = ['WaviHello', 'WaviCall', 'WaviPoll', 'WaviCancel'] as const
 export const isDispatchEvent = (event: string): boolean => (DISPATCH_EVENTS as readonly string[]).includes(event)
 
 /** How long one hook request may hold before answering "not yet" (under the daemon's 10 s relay timeout). */
@@ -72,6 +72,7 @@ export class DispatchBroker<O> {
     if (event === 'WaviHello') return this.hello(sessionId, agent, body)
     if (event === 'WaviCall') return this.call(sessionId, agent, body)
     if (event === 'WaviPoll') return this.poll(sessionId, body)
+    if (event === 'WaviCancel') return this.cancel(sessionId, agent, body)
     return ''
   }
 
@@ -133,6 +134,17 @@ export class DispatchBroker<O> {
     // Only the session that made the call may collect it.
     if (!call || call.sessionId !== sessionId) return reply({ done: true, result: toolFail('failed', 'Wavi lost this call (it may have restarted). Try again.') })
     return this.settle(callId, call)
+  }
+
+  /** The agent gave the call up (Esc): forget it and tell its window, which drops what still waits on the user. */
+  private cancel(sessionId: string, agent: DispatchAgent, body: Record<string, unknown>): string {
+    const callId = typeof body.callId === 'string' ? body.callId : ''
+    const call = this.calls.get(callId)
+    // Only the session that made the call may cancel it; an answered one is past cancelling.
+    if (!call || call.sessionId !== sessionId || call.result) return ''
+    this.calls.delete(callId)
+    this.options.send(call.owner, { callId, sessionId, agent, tool: 'cancel', args: {} })
+    return ''
   }
 
   private async settle(callId: string, call: Call<O>): Promise<string> {

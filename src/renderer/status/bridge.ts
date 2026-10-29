@@ -1,5 +1,6 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
+import { confirmLabels } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
 import type { SessionId } from '@shared/types'
 import { applySessionHooksSignal, resetHooksHealth, setHooksSilent, startHooksHealthTracking } from '../lifecycle/hooks-health'
@@ -11,6 +12,7 @@ import { anyWindowFocused, everyWindow } from '../app-shell/windows-runtime'
 import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
+import { settleConfirm, useDispatch, type PendingStart } from '../dispatch/store'
 
 const FAST_TICK_MS = 1_000
 const SLOW_TICK_MS = 15_000
@@ -60,7 +62,14 @@ export function startStatusBridge(): () => void {
       else ui.notify(notification)
     }
   }
-  const controller = new StatusController({ ...deps, needsFastTicks: () => hurry() })
+  const controller = new StatusController({
+    ...deps,
+    needsFastTicks: () => hurry(),
+    // PRD F21: the dispatcher's agent is gone, so its requests to start sessions are answered no.
+    onWaviAskAbandoned: (id) => {
+      for (const c of useDispatch.getState().confirms) if (c.parentId === id) settleConfirm(c.callId, false)
+    }
+  })
 
   const exitSubscriptions = new Map<SessionId, () => void>()
   const titleSubscriptions = new Map<SessionId, { surface: TerminalSurface; dispose(): void }>()
@@ -207,6 +216,16 @@ export function startStatusBridge(): () => void {
   const unsubscribeMarkers = onAgentMarker((id, marker) => controller.handleMarker(id, marker))
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
+  // PRD F21: while an agent's request to start sessions waits for 开始, its session is the user's to answer.
+  const applyConfirms = (confirms: readonly PendingStart[], prev: readonly PendingStart[]): void => {
+    const labels = confirmLabels(confirms.map((c) => ({ parentId: c.parentId, count: c.plans.length })))
+    for (const id of new Set([...prev.map((c) => c.parentId), ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
+  }
+  applyConfirms(useDispatch.getState().confirms, [])
+  const unsubscribeConfirms = useDispatch.subscribe((state, prev) => {
+    if (state.confirms !== prev.confirms) applyConfirms(state.confirms, prev.confirms)
+  })
+
   const onViewChange = (): void => controller.refreshViewing()
   const stopViewWatch = everyWindow((win) => {
     win.addEventListener('focus', onViewChange)
@@ -233,6 +252,7 @@ export function startStatusBridge(): () => void {
     stopHooksHealth()
     unsubscribeIssues()
     unsubscribeMarkers()
+    unsubscribeConfirms()
     clearTimeout(timer)
     unsubscribeStore()
     unsubscribeEvents()

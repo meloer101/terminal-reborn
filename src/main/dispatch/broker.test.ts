@@ -28,6 +28,18 @@ describe('DispatchBroker', () => {
     expect(JSON.parse(await broker.handle('WaviPoll', 's1', 'codex', { callId: first.callId }))).toMatchObject({ done: true, result: { failure: 'failed' } })
   })
 
+  it('passes the calling session’s cancel to the window and forgets the call; nobody else can cancel it', async () => {
+    const { broker, sent } = setup()
+    const first = JSON.parse(await broker.handle('WaviCall', 's1', 'claude', { tool: 'start_sessions', args: {} })) as { callId: string }
+    expect(await broker.handle('WaviCancel', 's2', 'claude', { callId: first.callId })).toBe('')
+    expect(sent).toHaveLength(1)
+    expect(await broker.handle('WaviCancel', 's1', 'claude', { callId: first.callId })).toBe('')
+    expect(sent[1]).toEqual({ callId: first.callId, sessionId: 's1', agent: 'claude', tool: 'cancel', args: {} })
+    // The window's late answer lands nowhere; the call is gone.
+    broker.answer('win', first.callId, { ok: false, failure: 'declined', text: 'no' })
+    expect(JSON.parse(await broker.handle('WaviPoll', 's1', 'claude', { callId: first.callId }))).toMatchObject({ result: { failure: 'failed' } })
+  })
+
   it('lets only the asked window answer and only the calling session collect', async () => {
     const { broker, sent } = setup()
     const first = JSON.parse(await broker.handle('WaviCall', 's1', 'claude', { tool: 'start_sessions' })) as { callId: string }

@@ -7,6 +7,7 @@ import { useWorkspace } from '../state/workspace'
 import { useIsKeyWindow, usePaneView, useSecondaryWindow, useSidebarCollapsed, useWindowScope } from '../state/window-scope'
 import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
 import { SetupStrip } from '../scripts/SetupStrip'
+import { DispatchStrip } from '../dispatch/DispatchStrip'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
@@ -51,6 +52,7 @@ export function SecondaryShell() {
           </section>
           <SessionErrorBar />
           <SetupStrip />
+          <DispatchStrip />
           <PlanStrip />
         </main>
       </div>

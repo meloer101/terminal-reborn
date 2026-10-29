@@ -1,0 +1,189 @@
+/*
+ * Figma 40B DispatchStrip: the floating strip under the terminal (like SetupStrip and the session error bar), holding
+ * rows of 28. One grid for every row — a 16 icon column, then name 176 · branch 200 · task — so 基于 main sits in the
+ * branch column and the columns line up down the strip. The primary button's block ends on the chevrons' ink.
+ */
+
+.strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  margin: 0 var(--space-12) var(--space-8);
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
+  overflow-y: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-window);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  -webkit-app-region: no-drag;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 16px 176px 200px minmax(0, 1fr) 16px;
+  column-gap: var(--space-8);
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+/* A session's row is a button (it shows the whole task): its hover block hangs 6 out, the text stays on the line. */
+button.row {
+  width: calc(100% + 2 * var(--space-6));
+  margin: 0 calc(-1 * var(--space-6));
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-md);
+}
+
+button.row:hover {
+  background: var(--bg-hover);
+}
+
+button.row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.gutter,
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+.title,
+.name,
+.base,
+.branch,
+.reason,
+.task,
+.note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  font: var(--text-body-heading);
+  color: var(--text-primary);
+}
+
+.name {
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.base {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.branch {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.reason {
+  grid-column: 4 / 6;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.task {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.note {
+  grid-column: 2 / -1;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.chevron {
+  transition: transform 120ms ease-out;
+}
+
+.row[data-expanded='true'] .chevron {
+  transform: rotate(90deg);
+}
+
+/* The whole task, under its row and on the name's line. */
+.taskBody {
+  max-height: 160px;
+  margin: 0 0 var(--space-8) calc(16px + var(--space-8));
+  padding: var(--space-8) var(--space-12);
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-section);
+  font: var(--text-caption);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  height: 28px;
+  padding-right: var(--space-6);
+}
+
+.ghost,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--text-body-strong);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ghost {
+  padding: 0 var(--space-8);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.primary {
+  gap: var(--space-6);
+  padding: 0 calc(var(--space-8) + var(--space-2));
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.shortcut {
+  font: var(--text-mono-s);
+  opacity: 0.6;
+}
+
+.ghost:focus-visible,
+.primary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

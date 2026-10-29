@@ -22,7 +22,7 @@ import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startDispatchBridge } from '../dispatch/bridge'
-import { DispatchSheet } from '../dispatch/DispatchSheet'
+import { DispatchStrip } from '../dispatch/DispatchStrip'
 import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
 import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
 import { PlanStrip } from '../attempts/PlanStrip'
@@ -122,6 +122,7 @@ export function AppShell() {
             <EngineRestartedCard />
             <SessionErrorBar />
             <SetupStrip />
+            <DispatchStrip />
             <HeldReportsStrip />
             <HeldAttemptReportStrip />
             <PlanStrip />
@@ -153,7 +154,6 @@ export function AppShell() {
       {isKey && <SameTaskSheet />}
       <MergeSheet />
       <ArchiveSheet />
-      <DispatchSheet />
       <MenuHost />
       <SessionDragGhost />
     </div>

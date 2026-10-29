@@ -1,7 +1,7 @@
 // Dispatch in a window (PRD F21): answers agents' tool calls and reports back to dispatchers, 同任务多解's sessions too
 // (F4 v1.68). Started once by the shell.
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import { handleDispatchRequest, setDispatchSettings } from './handler'
+import { cancelDispatchCall, handleDispatchRequest, setDispatchSettings } from './handler'
 import { startAttemptReports } from '../attempts/report'
 import { startReports } from './reports'
 
@@ -14,6 +14,8 @@ export function startDispatchBridge(): () => void {
   void window.tr.settings.get().then((s) => setDispatchSettings(s.dispatch))
   const offSettings = window.tr.settings.onChange((s) => setDispatchSettings(s.dispatch))
   const offRequests = window.tr.dispatch.onRequest((request) => {
+    // A cancel needs no answer: the call it names is already gone in main.
+    if (request.tool === 'cancel') return cancelDispatchCall(request.callId)
     void handleDispatchRequest(request).then((result) => window.tr.dispatch.reply(request.callId, result))
   })
   const offReports = startReports()

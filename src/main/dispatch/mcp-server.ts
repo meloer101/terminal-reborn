@@ -106,11 +106,20 @@ function asReply(value: unknown): DispatchCallReply | null {
   return typeof (v as { callId?: unknown }).callId === 'string' ? (v as DispatchCallReply) : null
 }
 
-async function callTool(name: string, args: unknown, progressToken: unknown): Promise<DispatchToolResult> {
+/** Ids of `tools/call` requests the client gave up (MCP `notifications/cancelled`: Esc in Claude, §6.14). */
+const cancelled = new Set<unknown>()
+
+/** The tool's result, or null when the client cancelled the call (it then gets no response, as MCP asks). */
+async function callTool(name: string, args: unknown, progressToken: unknown, requestId: unknown): Promise<DispatchToolResult | null> {
   let reply = asReply(await relay('WaviCall', { tool: name, args: args ?? {} }))
   const started = Date.now()
   let progress = 0
   while (reply && !reply.done) {
+    if (cancelled.has(requestId)) {
+      cancelled.delete(requestId)
+      await relay('WaviCancel', { callId: reply.callId })
+      return null
+    }
     if (Date.now() - started > CALL_DEADLINE_MS) return { ok: false, failure: 'timeout', text: 'Gave up waiting for Wavi.' }
     if (progressToken !== undefined) {
       send({ method: 'notifications/progress', params: { progressToken, progress: ++progress, message: 'Waiting for the user in Wavi…' } })
@@ -149,9 +158,14 @@ async function handle(message: Json): Promise<void> {
       const name = params.name
       const meta = (params._meta ?? {}) as Json
       if (!isDispatchToolName(name)) return void (id !== undefined && send({ id, error: { code: -32602, message: `Unknown tool: ${String(name)}` } }))
-      respond(toolContent(await callTool(name, params.arguments, meta.progressToken)))
+      const result = await callTool(name, params.arguments, meta.progressToken, id)
+      cancelled.delete(id)
+      if (result) respond(toolContent(result))
       return
     }
+    case 'notifications/cancelled':
+      if (params.requestId !== undefined) cancelled.add(params.requestId)
+      return
     default:
       if (id !== undefined && typeof method === 'string' && !method.startsWith('notifications/')) {
         send({ id, error: { code: -32601, message: `Method not found: ${method}` } })

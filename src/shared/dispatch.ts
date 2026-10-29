@@ -48,7 +48,7 @@ export const DISPATCH_LIMITS = {
   title: 80,
   reason: 500,
   message: 20_000,
-  /** What the confirmation panel waits for before the call returns `timeout`. */
+  /** What the confirmation strip waits for before the call returns `timeout`. */
   confirmMs: 10 * 60_000,
   /** Settles within this window go out as one report. */
   debounceMs: 3_000,
@@ -493,9 +493,14 @@ export function messagePage(message: string, offset = 0): { text: string; nextOf
   return { text: message.slice(start, end), nextOffset: end < message.length ? end : null }
 }
 
-/** What the confirmation panel and its tooltip say will happen (PRD §2). */
-export function startNote(count: number, parentTitle: string): string {
-  return `新建 ${count} 个 worktree，各启动一个 agent 并把任务发给它；做完后把结果报告给「${parentTitle || '未命名'}」。每个会话各用一次你自己的额度。`
+/**
+ * What a dispatcher's row says while its requests wait for 开始 (PRD F21, Figma 40B): the session is the user's to
+ * answer, like a permission dialog. Several waiting batches of one dispatcher add up.
+ */
+export function confirmLabels(confirms: ReadonlyArray<{ parentId: string; count: number }>): Map<string, string> {
+  const counts = new Map<string, number>()
+  for (const c of confirms) counts.set(c.parentId, (counts.get(c.parentId) ?? 0) + c.count)
+  return new Map([...counts].map(([id, n]) => [id, `想开 ${n} 个会话`]))
 }
 
 // --- IPC (main ↔ the window that owns the dispatcher) ---------------------------------------------------------------
@@ -514,7 +519,8 @@ export interface DispatchRequest {
   /** The calling session (from its hook environment; main checked the token). */
   sessionId: SessionId
   agent: DispatchAgent
-  tool: DispatchToolName | 'hello'
+  /** `cancel`: the agent gave up the call `callId` (Esc in Claude sends MCP `notifications/cancelled`, §6.14). */
+  tool: DispatchToolName | 'hello' | 'cancel'
   args: unknown
 }
 

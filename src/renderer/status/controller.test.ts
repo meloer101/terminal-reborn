@@ -308,3 +308,64 @@ describe('StatusController', () => {
     })
   })
 })
+
+describe('Wavi’s own asks (PRD F21)', () => {
+  it('shows needs_you with its label over whatever the agent does, without a second notification, until it closes', () => {
+    const h = harness([session('a'), session('b')], 'a')
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    h.clock.now += 5_000
+    h.controller.setWaviAsk('b', '想开 3 个会话')
+    let b = h.sessions.find((s) => s.id === 'b')
+    expect(b?.status).toBe('needs_you')
+    expect(b?.currentAction).toBe('想开 3 个会话')
+    expect(b?.statusSince).toBe(h.clock.now)
+    expect(h.badges.at(-1)).toBe(1)
+    // The agent keeps working underneath (it is blocked in the tool call): the ask stays.
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/b.ts' } })
+    expect(status(h, 'b')).toBe('needs_you')
+    expect(h.notifications).toHaveLength(0)
+    h.controller.setWaviAsk('b', null)
+    b = h.sessions.find((s) => s.id === 'b')
+    expect(b?.status).toBe('running')
+    expect(b?.currentAction).toBe('读取 b.ts')
+    expect(h.badges.at(-1)).toBe(0)
+  })
+
+  it('reports the ask abandoned when the agent behind it is gone, but not when its turn merely ends', () => {
+    const abandoned: string[] = []
+    const h = harness([session('a')], null)
+    const controller = new StatusController({
+      now: () => h.clock.now,
+      sessions: () => h.sessions,
+      activeSessionId: () => null,
+      windowFocused: () => true,
+      patch: (id, patch) => {
+        h.sessions = h.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s))
+      },
+      setActive: () => {},
+      setBadge: () => {},
+      notify: () => {},
+      onWaviAskAbandoned: (id) => abandoned.push(id)
+    })
+    controller.sync()
+    controller.handleEvent('a', { type: 'tool-start', tool: 'mcp__wavi__start_sessions', input: {} })
+    controller.setWaviAsk('a', '想开 2 个会话')
+    // Claude moves an MCP call that runs over 2 minutes to the background and ends the turn: still waiting.
+    controller.handleEvent('a', { type: 'stop' })
+    expect(abandoned).toEqual([])
+    expect(h.sessions[0]?.status).toBe('needs_you')
+    controller.handlePtyExit('a', 0)
+    expect(abandoned).toEqual(['a'])
+  })
+
+  it('forgets the ask of a session that is gone', () => {
+    const h = harness([session('a')], null)
+    h.controller.setWaviAsk('a', '想开 1 个会话')
+    h.sessions = []
+    h.controller.sync()
+    h.sessions = [session('a')]
+    h.controller.sync()
+    h.controller.handleEvent('a', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    expect(status(h, 'a')).toBe('running')
+  })
+})
