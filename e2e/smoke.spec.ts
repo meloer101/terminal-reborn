@@ -21,6 +21,19 @@ test('app window opens with the shell regions', async () => {
   await app.close()
 })
 
+test('the boot screen hands its mark to the welcome page and remembers where the card is (PRD F18 · Figma 39I)', async () => {
+  const app = await launchApp()
+  const page = await app.firstWindow()
+  const welcome = page.getByTestId('empty-main').locator('> div')
+  // The dots form, the welcome page takes the mark over, turns it upright and slides it home; then everything is still.
+  await expect(welcome).toHaveAttribute('data-entrance', 'done', { timeout: 10_000 })
+  await expect(page.locator('#wavi-boot')).toHaveCount(0)
+  await expect(page.locator('[data-entrance-part="greeting"]')).toBeVisible()
+  const layout = await page.evaluate(() => JSON.parse(localStorage.getItem('tr.boot.layout') ?? 'null') as Record<string, number> | null)
+  expect(layout).toMatchObject({ left: expect.any(Number), top: expect.any(Number), anchorY: expect.any(Number) })
+  await app.close()
+})
+
 test('the sidebar resizes from its right edge (200–480) and main follows', async () => {
   const app = await launchApp()
   const page = await app.firstWindow()
