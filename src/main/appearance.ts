@@ -1,5 +1,6 @@
 // Main-side appearance effects (PRD §4 F7): native theme, and the window's glass for every window. The shell is
-// fixed: native vibrancy behind a transparent window, tinted per theme by the renderer (--glass-shell).
+// fixed: on macOS 26 Liquid Glass (NSGlassEffectView) under a transparent window, untinted (PRD §5 v1.95); before
+// that, native vibrancy tinted per theme by the renderer (--glass-shell).
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import liquidGlass from 'electron-liquid-glass'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
@@ -8,11 +9,15 @@ import { allAppWindows, isAppWindow } from './app-windows'
 import { getSettings, onSettingsChange } from './settings'
 
 /**
- * SPIKE (jacoy/native-glass): macOS 26's Liquid Glass (NSGlassEffectView, through electron-liquid-glass) under the
- * whole window instead of vibrancy, with no tint over it. The window has to be transparent (windows.ts).
+ * macOS 26's Liquid Glass under the whole window (electron-liquid-glass puts one NSGlassEffectView behind the web
+ * contents). It needs a transparent window (windows.ts) and no vibrancy, and it must not be tinted over: the tint is
+ * what made the old shell read as grey frosted glass.
  */
-export const nativeGlass = process.platform === 'darwin' && process.env.WAVI_GLASS !== 'vibrancy' && liquidGlass.isGlassSupported()
+export const nativeGlass = process.platform === 'darwin' && liquidGlass.isGlassSupported()
+/** The glass's corner, the same as the window's on macOS 26. */
+const GLASS_RADIUS = 16
 const glassed = new WeakSet<BrowserWindow>()
+// The renderer tints the vibrancy shell with --glass-shell; on Liquid Glass that tint goes (every load, reloads too).
 const NO_TINT = ':root, :root[data-theme] { --glass-shell: transparent !important; }'
 
 function attachGlass(win: BrowserWindow): void {
@@ -25,7 +30,7 @@ function attachGlass(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', apply)
   win.webContents.once('did-finish-load', () => {
     if (win.isDestroyed()) return
-    liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: Number(process.env.WAVI_GLASS_RADIUS ?? 16) })
+    liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: GLASS_RADIUS })
   })
 }
 

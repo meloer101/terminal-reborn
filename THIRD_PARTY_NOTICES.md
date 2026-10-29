@@ -15,4 +15,5 @@ Bundled assets:
 - JetBrains Mono — SIL Open Font License 1.1, via `@fontsource-variable/jetbrains-mono`.
 - Website fonts (`site/src/assets/fonts/`, subsets downloaded from Google Fonts): Archivo, Noto Sans SC, Noto Serif SC — SIL Open Font License 1.1.
 - Website scripts (bundled by Astro from npm): GSAP 3.15 — GSAP Standard “No Charge” License; Lenis 1.3 — MIT.
+- Liquid Glass shell: `electron-liquid-glass` 1.1.1 (npm, with its prebuilt N-API binaries) — MIT, Copyright (c) Meridius Labs.
 - Agent logos (`src/renderer/ui/agent-icon-svg.ts`): generated from the one-colour (mono) files of `@lobehub/icons-static-svg` 1.99.0 — MIT, Copyright (c) LobeHub. The logos themselves are trademarks of Anthropic, OpenAI, Google, xAI, Alibaba, Moonshot AI, Amp, Kiro, Cline, Block, Cursor, GitHub, Tencent and the other owners of the CLIs they stand for; Wavi shows them only to say which CLI runs in a session.

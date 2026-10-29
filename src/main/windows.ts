@@ -22,7 +22,7 @@ function baseOptions(): BrowserWindowConstructorOptions {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#0a0a0a',
-    // SPIKE: Liquid Glass needs a transparent window (appearance.ts).
+    // Liquid Glass (macOS 26) needs a transparent window (appearance.ts).
     transparent: nativeGlass,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

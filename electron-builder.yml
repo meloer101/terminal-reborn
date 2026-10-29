@@ -21,6 +21,8 @@ npmRebuild: false
 afterPack: build/after-pack.cjs
 asarUnpack:
   - node_modules/node-pty/**
+  # electron-liquid-glass's N-API prebuilds (Liquid Glass shell, PRD §5 v1.95): a .node cannot load from inside the asar.
+  - node_modules/electron-liquid-glass/**
 mac:
   icon: build/icon.icns
   # Chromium ships ~55 locale packs the app never uses (its UI copy is Chinese/English).
