@@ -145,7 +145,7 @@ function tokenMatches(given: unknown): boolean {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-const REQUEST_TYPES: ReadonlySet<string> = new Set<HostRequest['type']>(['spawn', 'write', 'resize', 'kill', 'ack', 'attach', 'detach', 'list', 'killAll'])
+const REQUEST_TYPES: ReadonlySet<string> = new Set<HostRequest['type']>(['spawn', 'write', 'resize', 'kill', 'ack', 'visible', 'attach', 'detach', 'list', 'killAll'])
 
 function isHostRequest(message: Record<string, unknown>): message is HostRequest & Record<string, unknown> {
   if (typeof message.type !== 'string' || !REQUEST_TYPES.has(message.type)) return false

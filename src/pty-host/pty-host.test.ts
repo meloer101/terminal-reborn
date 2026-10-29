@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OutputBatcher } from './batcher'
 import { buildPtyEnv, resolveCwd, resolveShell } from './env'
-import { FlowControl, HIGH_WATERMARK, LOW_WATERMARK } from './flow-control'
+import { FlowControl, HIDDEN_HIGH_WATERMARK, HIDDEN_LOW_WATERMARK, HIGH_WATERMARK, LOW_WATERMARK } from './flow-control'
 
 describe('OutputBatcher', () => {
   beforeEach(() => vi.useFakeTimers())
@@ -71,6 +71,34 @@ describe('FlowControl', () => {
     const flow = new FlowControl()
     flow.onAck(500)
     expect(flow.onOutput(HIGH_WATERMARK)).toBe(false)
+  })
+
+  it('gives a hidden session far less room, and pauses at once when hiding leaves it over', () => {
+    const flow = new FlowControl()
+    expect(flow.onOutput(HIDDEN_HIGH_WATERMARK + 1)).toBe(false)
+    expect(flow.setVisible(false)).toBe('pause')
+    expect(flow.onOutput(10)).toBe(false)
+    expect(flow.onAck(HIDDEN_HIGH_WATERMARK + 11 - HIDDEN_LOW_WATERMARK)).toBe(false)
+    expect(flow.onAck(1)).toBe(true)
+
+    const hidden = new FlowControl()
+    expect(hidden.setVisible(false)).toBeNull()
+    expect(hidden.onOutput(HIDDEN_HIGH_WATERMARK)).toBe(false)
+    expect(hidden.onOutput(1)).toBe(true)
+  })
+
+  it('resumes a paused hidden session as soon as it is shown again, when it is under the shown low watermark', () => {
+    const flow = new FlowControl()
+    flow.setVisible(false)
+    expect(flow.onOutput(HIDDEN_HIGH_WATERMARK + 1)).toBe(true)
+    expect(flow.setVisible(true)).toBe('resume')
+    expect(flow.setVisible(true)).toBeNull()
+    // Shown with more than the shown low watermark in flight: it stays paused until acks bring it down.
+    const busy = new FlowControl()
+    expect(busy.onOutput(HIGH_WATERMARK + 1)).toBe(true)
+    expect(busy.setVisible(false)).toBeNull()
+    expect(busy.setVisible(true)).toBeNull()
+    expect(busy.onAck(HIGH_WATERMARK + 1 - LOW_WATERMARK + 1)).toBe(true)
   })
 })
 

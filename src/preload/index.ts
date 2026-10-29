@@ -64,6 +64,7 @@ const api: TrApi = {
     resize: (sessionId, cols, rows) => ipcRenderer.send(IPC.ptyResize, sessionId, cols, rows),
     kill: (sessionId) => ipcRenderer.send(IPC.ptyKill, sessionId),
     ack: (sessionId, count) => ipcRenderer.send(IPC.ptyAck, sessionId, count),
+    setVisible: (sessionId, visible) => ipcRenderer.send(IPC.ptyVisible, sessionId, visible),
     onData: (sessionId, listener) => dataListeners.add(sessionId, ({ data, seq }) => listener(data, seq)),
     onExit: (sessionId, listener) => exitListeners.add(sessionId, listener),
     onHostRestarted: (listener) => listen<HostRestartedEvent>(IPC.ptyHostRestarted, (event) => listener(event.sessionIds))

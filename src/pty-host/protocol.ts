@@ -63,6 +63,11 @@ export type HostRequest =
   | { type: 'kill'; id: string }
   /** The renderer finished parsing `count` UTF-16 units of output (flow control). */
   | { type: 'ack'; id: string; count: number }
+  /**
+   * Whether a pane shows the session (flow-control.ts: a hidden one gets far less output in flight). New, attached and
+   * reattached sessions count as shown until told otherwise; an older daemon ignores this request.
+   */
+  | { type: 'visible'; id: string; visible: boolean }
   /** Stream this session to the client again, starting with a snapshot of its screen. */
   | { type: 'attach'; id: string }
   /** Stop streaming this session; it keeps running. */
