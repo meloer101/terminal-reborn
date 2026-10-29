@@ -1,4 +1,4 @@
-/* Settings · 智能体 (Figma 25B): rows of text with right-aligned meta, no lines (PRD §5 v1.68). */
+/* Settings · 智能体 (Figma 25B / 35A): rows of text with right-aligned meta, no lines (PRD §5 v1.68). */
 
 .page {
   composes: page from './WorktreePane.module.css';
@@ -34,10 +34,20 @@
 }
 
 .agentText {
+  /* The mark (14) + 8: names, notes and install commands all start here (Figma 35A). */
+  --agent-indent: calc(14px + var(--space-8));
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   flex: 1;
+  min-width: 0;
+}
+
+/* The mark sits on the section title's left edge, the name follows it. */
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
   min-width: 0;
 }
 
@@ -47,11 +57,13 @@
 }
 
 .agentNote {
+  padding-left: var(--agent-indent);
   font: var(--text-caption);
   color: var(--text-tertiary);
 }
 
 .command {
+  padding-left: var(--agent-indent);
   overflow: hidden;
   font: var(--text-mono-s);
   color: var(--text-tertiary);
@@ -70,6 +82,8 @@
 .copy {
   flex-shrink: 0;
   height: 28px;
+  /* A ghost button lines up by its text: the label ends on the meta column's right edge, the hover block hangs out. */
+  margin-right: calc(-1 * var(--space-12));
   padding: 0 var(--space-12);
   border: 0;
   border-radius: var(--radius-md);
