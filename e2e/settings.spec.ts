@@ -9,7 +9,7 @@ interface TrWindow {
     ui: { openSettings(): void }
     settings: {
       get(): Promise<{
-        appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean }
+        appearance: { fontSize: number; cjkFont: string; theme: string; lineHeight: number; ligatures: boolean; fullscreenBackdrop: string }
         ports: { base: number }
         review: { beforeMerge: boolean; beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; reviewer: string; model: string; codexModel: string }
       }>
