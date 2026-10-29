@@ -396,9 +396,9 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       set((s) => {
         const index = s.sessions.findIndex((x) => x.id === id)
         const current = s.sessions[index]
-        if (!current) return {}
+        if (!current) return s
         const keys = Object.keys(patch) as (keyof SessionPatch)[]
-        if (keys.every((k) => current[k] === patch[k])) return {}
+        if (keys.every((k) => current[k] === patch[k])) return s
         const sessions = s.sessions.slice()
         sessions[index] = { ...current, ...patch }
         return { sessions }

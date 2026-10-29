@@ -11,9 +11,10 @@ import { getSettings, onSettingsChange } from './settings'
 /**
  * macOS 26's Liquid Glass under the whole window (electron-liquid-glass puts one NSGlassEffectView behind the web
  * contents). It needs a transparent window (windows.ts) and no vibrancy, and it must not be tinted over: the tint is
- * what made the old shell read as grey frosted glass.
+ * what made the old shell read as grey frosted glass. The version comes from Electron: the library's own
+ * `isGlassSupported()` runs `sw_vers` synchronously, on the startup path.
  */
-export const nativeGlass = process.platform === 'darwin' && liquidGlass.isGlassSupported()
+export const nativeGlass = process.platform === 'darwin' && Number(process.getSystemVersion().split('.')[0]) >= 26
 /** The glass's corner, the same as the window's on macOS 26. */
 const GLASS_RADIUS = 16
 const glassed = new WeakSet<BrowserWindow>()
@@ -23,16 +24,21 @@ const NO_TINT = ':root, :root[data-theme] { --glass-shell: transparent !importan
 function attachGlass(win: BrowserWindow): void {
   if (glassed.has(win)) return
   glassed.add(win)
+  // The glass goes on before the window is first shown, so its first frame already has it: the boot screen (PRD F18)
+  // shows the window before the page has finished loading, and until the glass is there the transparent window is black.
+  // A glass view added while the window is hidden is not drawn until something redraws the window (the author saw the
+  // shell stay opaque until switching the theme), so the transparent fill is set again once it is on screen.
+  // -1: the native addon did not load (it logs why). The window is transparent already, so it gets the vibrancy shell,
+  // tint included, rather than no glass at all.
+  if (liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: GLASS_RADIUS }) < 0) {
+    win.setVibrancy('sidebar')
+    return
+  }
   const apply = (): void => {
     if (win.isDestroyed()) return
     void win.webContents.insertCSS(NO_TINT)
   }
   win.webContents.on('did-finish-load', apply)
-  // The glass goes on before the window is first shown, so its first frame already has it: the boot screen (PRD F18)
-  // shows the window before the page has finished loading, and until the glass is there the transparent window is black.
-  // A glass view added while the window is hidden is not drawn until something redraws the window (the author saw the
-  // shell stay opaque until switching the theme), so the transparent fill is set again once it is on screen.
-  liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: GLASS_RADIUS })
   const redraw = (): void => {
     if (!win.isDestroyed()) win.setBackgroundColor('#00000000')
   }
