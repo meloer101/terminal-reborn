@@ -1,114 +1,159 @@
-// Figma 37: the glass block under the selected session row. It travels between rows on two springs
-// (selection-drop.ts); style is written straight to the element each frame, React only says which row is selected.
-// Snaps instead of travelling on first show, on layout changes and with 减少动态效果. No backdrop filter: the window is
-// transparent, so a backdrop filter reads empty pixels and darkens the block (PRD §5 v1.74; measured again here).
+// Figma 37: one glass block under each session the window shows (37B), drawn on a layer inside the scrolling session
+// list. A pane that shows another session moves its block there on two springs (37A); a new pane's block drips onto
+// its row; a closed pane's evaporates (selection-drop.ts). Style is written straight to the blocks each frame — React
+// only says which sessions are shown. First show, coming back from the overview and 减少动态效果 place the blocks
+// without motion. No backdrop filter: the window is transparent, so a backdrop filter reads empty pixels and darkens
+// the block (PRD §5 v1.74).
 import { useEffect, useLayoutEffect, useRef } from 'react'
-import { aim, settled, shape, spring, step, type Spring } from './selection-drop'
+import { advance, changes, dripOnto, evaporate, flowTo, follow, frameOf, moving, restAt, type DropState, type RowBox } from './selection-drop'
 import styles from './SelectionDrop.module.css'
 
-/** Lives inside the sidebar's scrolling session list (its parent element), which it measures rows against. */
-export function SelectionDrop({ selectedId }: { selectedId: string | null }) {
-  const ref = useRef<HTMLDivElement>(null)
-  // Vertical edges ride springs; left and width are the target row's (the list's own 8px padding stays clear).
-  const motion = useRef<{ upper: Spring; lower: Spring; left: number; width: number; raf: number; last: number; shownId: string | null } | null>(null)
+interface Block {
+  el: HTMLDivElement
+  /** null while the session's row is not drawn (its project folded). */
+  state: DropState | null
+}
+
+const boxOf = (row: HTMLElement): RowBox => ({ top: row.offsetTop, height: row.offsetHeight, left: row.offsetLeft, width: row.offsetWidth })
+
+function draw(block: Block): void {
+  const f = block.state && frameOf(block.state)
+  if (!f) {
+    block.el.style.display = 'none'
+    return
+  }
+  const s = block.el.style
+  s.display = ''
+  s.transform = `translate(${f.left}px, ${f.top}px)`
+  s.width = `${f.width}px`
+  s.height = `${f.height}px`
+  s.borderRadius = `${f.radius}px`
+  s.opacity = String(f.opacity)
+}
+
+/** `ids`: the sessions this window's panes show, in pane order; empty while the overview covers them. */
+export function SelectionDrops({ ids }: { ids: readonly string[] }) {
+  const layer = useRef<HTMLDivElement>(null)
+  const blocks = useRef(new Map<string, Block>())
+  const leaving = useRef<Block[]>([])
+  // What the blocks showed at the last render; null when nothing was shown, so the next show places them still.
+  const before = useRef<string[] | null>(null)
+  const frame = useRef({ raf: 0, last: 0 })
 
   useLayoutEffect(() => {
-    const el = ref.current
-    const container = el?.parentElement
-    if (!el || !container) return
-    const row = selectedId === null ? null : container.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(selectedId)}"]`)
-    if (!row) {
-      el.dataset.visible = 'false'
-      if (motion.current) motion.current.shownId = null
+    const root = layer.current
+    const list = root?.parentElement
+    if (!root || !list) return
+    const live = blocks.current
+    const boxFor = (id: string): RowBox | null => {
+      const row = list.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`)
+      return row ? boxOf(row) : null
+    }
+    const make = (id: string, state: DropState | null): Block => {
+      const el = document.createElement('div')
+      el.className = styles.drop ?? ''
+      el.dataset.testid = 'selection-drop'
+      el.dataset.dropFor = id
+      root.appendChild(el)
+      const block = { el, state }
+      live.set(id, block)
+      return block
+    }
+    const drop = (block: Block): void => block.el.remove()
+
+    if (ids.length === 0) {
+      for (const block of [...live.values(), ...leaving.current]) drop(block)
+      live.clear()
+      leaving.current = []
+      before.current = null
       return
     }
-    const top = row.offsetTop
-    const bottom = top + row.offsetHeight
-    const left = row.offsetLeft
-    const width = row.offsetWidth
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const m = motion.current
-    const draw = (): void => {
-      const s = motion.current
-      if (!s) return
-      const f = shape(s.upper, s.lower)
-      el.style.transform = `translateY(${f.top}px)`
-      el.style.height = `${f.height}px`
-      el.style.left = `${s.left + f.inset}px`
-      el.style.width = `${s.width - 2 * f.inset}px`
-      el.style.borderRadius = `${f.radius}px`
-    }
-    el.dataset.visible = 'true'
-    // First show, after nothing was selected, or with 减少动态效果: no travel.
-    if (m === null || m.shownId === null || reduce) {
-      if (m) cancelAnimationFrame(m.raf)
-      motion.current = { upper: spring(top), lower: spring(bottom), left, width, raf: 0, last: 0, shownId: selectedId }
-      draw()
-      return
-    }
-    m.left = left
-    m.width = width
-    if (m.shownId === selectedId) {
-      // The sidebar redraws on every agent event: mid-flight, only follow the row; at rest, snap if it moved.
-      if (m.raf) aim(m.upper, m.lower, top, bottom)
-      else if (m.upper.target !== top || m.lower.target !== bottom) {
-        m.upper = spring(top)
-        m.lower = spring(bottom)
-        draw()
+
+    const still = before.current === null || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (still) {
+      for (const block of leaving.current) drop(block)
+      leaving.current = []
+      for (const [id, block] of live) {
+        if (ids.includes(id)) continue
+        drop(block)
+        live.delete(id)
       }
-      return
+    } else {
+      const change = changes(before.current ?? [], ids)
+      for (const { from, to } of change.flow) {
+        const block = live.get(from)
+        live.delete(from)
+        const box = boxFor(to)
+        if (!block) continue
+        live.set(to, block)
+        block.el.dataset.dropFor = to
+        block.state = box ? (block.state ? flowTo(block.state, box) : restAt(box)) : null
+      }
+      for (const id of change.drip) {
+        const box = boxFor(id)
+        make(id, box ? dripOnto(box) : null)
+      }
+      for (const id of change.evaporate) {
+        const block = live.get(id)
+        live.delete(id)
+        if (!block) continue
+        if (block.state) {
+          block.state = evaporate(block.state)
+          leaving.current.push(block)
+        } else drop(block)
+      }
     }
-    m.shownId = selectedId
-    aim(m.upper, m.lower, top, bottom)
-    if (m.raf) return
-    m.last = performance.now()
+    // Every shown session has a block that follows its row (the layout may have moved it).
+    for (const id of ids) {
+      const box = boxFor(id)
+      const block = live.get(id) ?? make(id, null)
+      if (!box) block.state = null
+      else block.state = block.state ? follow(block.state, box) : restAt(box)
+    }
+    before.current = [...ids]
+    for (const block of [...live.values(), ...leaving.current]) draw(block)
+
+    const anyMoving = (): boolean => [...live.values(), ...leaving.current].some((b) => b.state !== null && moving(b.state))
+    const f = frame.current
+    if (f.raf || !anyMoving()) return
+    f.last = performance.now()
     const tick = (now: number): void => {
-      const s = motion.current
-      if (!s) return
-      const dt = Math.min(0.032, (now - s.last) / 1000)
-      s.last = now
-      for (let i = 0; i < 4; i++) {
-        step(s.upper, dt / 4)
-        step(s.lower, dt / 4)
+      const dt = Math.min(0.032, (now - f.last) / 1000)
+      f.last = now
+      for (const block of [...live.values(), ...leaving.current]) {
+        if (!block.state) continue
+        for (let i = 0; i < 4; i++) block.state = advance(block.state, dt / 4)
+        draw(block)
       }
-      if (settled(s.upper, s.lower)) {
-        s.upper = spring(s.upper.target)
-        s.lower = spring(s.lower.target)
-        s.raf = 0
-        draw()
-        return
-      }
-      draw()
-      s.raf = requestAnimationFrame(tick)
+      leaving.current = leaving.current.filter((b) => (b.state?.phase === 'gone' ? (drop(b), false) : true))
+      f.raf = anyMoving() ? requestAnimationFrame(tick) : 0
     }
-    m.raf = requestAnimationFrame(tick)
+    f.raf = requestAnimationFrame(tick)
   })
 
-  // The list reflows when the sidebar is resized: keep the block on its row.
+  // The list reflows when the sidebar is resized: keep resting blocks on their rows.
   useEffect(() => {
-    const el = ref.current
-    const container = el?.parentElement
-    if (!container || !el) return
+    const root = layer.current
+    const list = root?.parentElement
+    if (!root || !list) return
     const observer = new ResizeObserver(() => {
-      const m = motion.current
-      if (!m || m.raf || m.shownId === null) return
-      const row = container.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(m.shownId)}"]`)
-      if (!row) return
-      m.upper = spring(row.offsetTop)
-      m.lower = spring(row.offsetTop + row.offsetHeight)
-      m.left = row.offsetLeft
-      m.width = row.offsetWidth
-      el.style.transform = `translateY(${row.offsetTop}px)`
-      el.style.height = `${row.offsetHeight}px`
-      el.style.left = `${row.offsetLeft}px`
-      el.style.width = `${row.offsetWidth}px`
+      for (const [id, block] of blocks.current) {
+        if (block.state?.phase !== 'rest') continue
+        const row = list.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`)
+        if (row) {
+          block.state = restAt(boxOf(row))
+          draw(block)
+        }
+      }
     })
-    observer.observe(container)
+    observer.observe(list)
+    const f = frame.current
     return () => {
       observer.disconnect()
-      if (motion.current) cancelAnimationFrame(motion.current.raf)
+      cancelAnimationFrame(f.raf)
+      f.raf = 0
     }
   }, [])
 
-  return <div ref={ref} className={styles.drop} data-visible="false" data-testid="selection-drop" aria-hidden />
+  return <div ref={layer} className={styles.layer} aria-hidden />
 }

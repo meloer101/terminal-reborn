@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { Folder, Gauge, LayoutList, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { MAIN_WINDOW } from '@shared/window-layout'
+import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
 import { shownEverywhere, useWorkspace, windowEffects } from '../state/workspace'
 import { usePaneView, useSecondaryWindow, useWindowKey } from '../state/window-scope'
 import { pressSession } from '../split/drag'
@@ -16,7 +16,7 @@ import { toggleOverview } from '../overview/store'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { openSettings } from '../settings/SettingsDialog'
 import { ProjectHeader } from './ProjectHeader'
-import { SelectionDrop } from './SelectionDrop'
+import { SelectionDrops } from './SelectionDrop'
 import { SessionRow } from './SessionRow'
 import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
 import './shortcuts-runtime'
@@ -47,9 +47,12 @@ export function Sidebar() {
       }))
     )
   const overview = windowKey === MAIN_WINDOW && mainOverview
-  const activeSessionId = usePaneView().activeSessionId
+  const paneView = usePaneView()
+  const activeSessionId = paneView.activeSessionId
+  // The sessions this window's panes show: each has a glass block under its row (Figma 37B).
+  const inPanes = useMemo(() => (overview ? [] : shownIn(paneView)), [overview, paneView])
   const projects = useMemo(() => (scope === null ? allProjects : allProjects.filter((p) => p.id === scope)), [allProjects, scope])
-  // Sessions shown in this window's other panes (PRD F20) or in another window; the active one is `selected`.
+  // Sessions shown anywhere (PRD F20); those in another window only get the 1px outline, this window's have blocks.
   const shown = useWorkspace((s) => shownEverywhere(s).join('\n'))
   // The overview belongs to the main window: from another window, that one comes forward.
   const onOverview = useCallback(() => {
@@ -116,7 +119,7 @@ export function Sidebar() {
         />
       </nav>
       <div className={styles.sessions} ref={listRef} onKeyDown={onListKeyDown}>
-        <SelectionDrop selectedId={overview ? null : activeSessionId} />
+        <SelectionDrops ids={inPanes} />
         {groups.map((group) => (
           <section key={group.id} className={styles.group} aria-label={group.title}>
             <ProjectHeader
@@ -133,7 +136,7 @@ export function Sidebar() {
                 key={row.session.id}
                 row={row}
                 selected={!overview && row.session.id === activeSessionId}
-                shown={!overview && row.session.id !== activeSessionId && shown.split('\n').includes(row.session.id)}
+                shown={!overview && !inPanes.includes(row.session.id) && shown.split('\n').includes(row.session.id)}
                 onPress={onRowPress}
                 tabStop={row.session.id === tabStopId}
                 onSelect={setActiveSession}
