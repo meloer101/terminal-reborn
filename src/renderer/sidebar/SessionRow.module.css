@@ -29,8 +29,14 @@
   --row-text-inset: calc(var(--indent-tree) + var(--space-16));
 }
 
-.row[data-selected='true'] {
-  background: var(--bg-selected);
+/* The selected row draws no block of its own: the selection drop (Figma 37) sits under it, and the row's content above. */
+.row {
+  z-index: 1;
+}
+
+.row[data-selected='true'],
+.row[data-selected='true']:hover {
+  background: transparent;
 }
 
 /* Being dragged into the terminal area (PRD F20 · Figma 21D): the row steps back. */

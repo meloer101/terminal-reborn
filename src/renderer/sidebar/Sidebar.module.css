@@ -23,6 +23,8 @@
 }
 
 .sessions {
+  /* The selection drop is positioned against this scrolling box, so it scrolls with the rows. */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
