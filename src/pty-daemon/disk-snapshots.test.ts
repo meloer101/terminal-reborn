@@ -14,7 +14,9 @@ function setup(attached = new Set<string>()): { snapshots: DiskSnapshots; saved:
   const deps: DiskSnapshotDeps = {
     capture: vi.fn((id: string) => Promise.resolve({ cols: 80, rows: 24, data: `screen of ${id}` })),
     isAttached: (id) => attached.has(id),
-    save: (id, snapshot) => saved.push([id, snapshot])
+    save: (id, snapshot) => {
+      saved.push([id, snapshot])
+    }
   }
   return { snapshots: new DiskSnapshots(QUIET, deps), saved, deps }
 }
@@ -33,6 +35,17 @@ describe('DiskSnapshots', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(saved).toEqual([['a', { cols: 80, rows: 24, data: 'screen of a' }]])
     expect(snapshots.pending).toBe(0)
+  })
+
+  it('writes a burst of output once, after it ends', async () => {
+    const { snapshots, saved } = setup()
+    for (let i = 0; i < 1000; i++) {
+      snapshots.touch('a')
+      await vi.advanceTimersByTimeAsync(50)
+    }
+    expect(saved).toEqual([])
+    await vi.advanceTimersByTimeAsync(QUIET)
+    expect(saved).toHaveLength(1)
   })
 
   it('leaves the file to the renderer once a client attaches', async () => {
@@ -113,7 +126,7 @@ describe('daemon snapshot on disk', () => {
     })
     snapshots.touch('s1')
     await snapshots.flush()
-    const loaded = files.load('s1')
+    const loaded = await files.load('s1')
     expect(loaded).not.toBeNull()
     expect(loaded).toMatchObject({ cols: 40, rows: 6 })
     const data = loaded?.data ?? ''

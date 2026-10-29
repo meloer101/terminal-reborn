@@ -295,8 +295,8 @@ export interface TerminalSnapshot {
 
 /** Main-owned terminal snapshots: `<userData>/terminal-snapshots/`. */
 export interface TerminalSnapshotApi {
-  /** Synchronous so the snapshot can be painted in the same frame the terminal opens (null when none). */
-  loadSync(sessionId: string): TerminalSnapshot | null
+  /** Null when none. Read asynchronously in main: neither process blocks while it loads. */
+  load(sessionId: string): Promise<TerminalSnapshot | null>
   save(sessionId: string, snapshot: TerminalSnapshot): void
   remove(sessionId: string): void
 }
