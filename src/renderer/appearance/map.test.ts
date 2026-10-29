@@ -57,4 +57,9 @@ describe('toAppearanceDom', () => {
     expect(toAppearanceDom(base).vars['--tr-term-surface']).toBe('var(--term-bg)')
     expect(toAppearanceDom({ ...base, terminalOpacity: 0.8 }).vars['--tr-term-surface']).toBe('transparent')
   })
+
+  it('names the full-screen palette on <html> (auto picks by theme in CSS)', () => {
+    expect(toAppearanceDom(base).attrs).toEqual({ 'data-fs-backdrop': 'auto' })
+    expect(toAppearanceDom({ ...base, fullscreenBackdrop: 'dune' }).attrs['data-fs-backdrop']).toBe('dune')
+  })
 })

@@ -153,6 +153,8 @@ export interface UiApi {
   onWindowCloseRequest(listener: (key: WindowKey) => void): Unsubscribe
   /** A secondary window moved, resized or entered / left full screen. */
   onWindowState(listener: (state: WindowStateEvent) => void): Unsubscribe
+  /** The main window entered or left full screen (and its state on every load): the shell draws 全屏背景 then. */
+  onFullScreen(listener: (fullScreen: boolean) => void): Unsubscribe
   /** Reveals a file or folder in Finder. Absolute paths only. */
   revealInFinder(path: string): void
   /** Native confirmation sheet; resolves to true when the user picked the confirm button. */
@@ -485,6 +487,8 @@ export const IPC = {
   uiWindowCloseRequest: 'ui:window-close-request',
   /** main → renderer, payload WindowStateEvent */
   uiWindowState: 'ui:window-state',
+  /** main → renderer, payload boolean: the main window is full screen */
+  uiFullScreen: 'ui:full-screen',
   uiRevealInFinder: 'ui:reveal-in-finder',
   uiConfirm: 'ui:confirm',
   settingsGet: 'settings:get',

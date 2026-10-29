@@ -183,6 +183,29 @@ test('the sidebar\'s 更新 shows the version and checks for updates; settings h
   await app.close()
 })
 
+test('全屏背景: 自动 and ten palettes; in full screen the shell draws the chosen field (Figma 38, PRD v1.97)', async () => {
+  const app = await launchApp()
+  const settings = await openSettings(app)
+  const group = settings.getByRole('radiogroup', { name: '全屏背景' })
+  await expect(group.getByRole('radio')).toHaveText(['自动', '晴空', '青原', '湖岸', '沙丘', '松林', '暮紫', '珊瑚', '晚霞', '夜火', '霞紫'])
+  await expect(group.getByRole('radio', { name: '自动' })).toHaveAttribute('aria-checked', 'true')
+  await expect(settings.locator('html')).toHaveAttribute('data-fs-backdrop', 'auto')
+  await group.getByRole('radio', { name: '沙丘' }).click()
+  await expect(settings.locator('html')).toHaveAttribute('data-fs-backdrop', 'dune')
+  await expect.poll(async () => (await readSettings(settings)).appearance.fullscreenBackdrop).toBe('dune')
+  await settings.keyboard.press('Escape')
+  // Full screen as main reports it (without taking a real Space): the shell switches to the field.
+  const shell = settings.locator('[data-fullscreen]').first()
+  await expect(shell).toHaveAttribute('data-fullscreen', 'false')
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.send('ui:full-screen', true))
+  await expect(shell).toHaveAttribute('data-fullscreen', 'true')
+  const image = await shell.evaluate((el) => getComputedStyle(el).backgroundImage)
+  expect(image).toContain('radial-gradient')
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.send('ui:full-screen', false))
+  await expect(shell).toHaveAttribute('data-fullscreen', 'false')
+  await app.close()
+})
+
 test('settings is a dialog in the main window: sidebar, Esc, close button, and the scrim close it', async () => {
   const app = await launchApp()
   const page = await openSettings(app)

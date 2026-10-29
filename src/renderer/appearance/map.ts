@@ -51,6 +51,8 @@ export function ringCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): string 
 export interface AppearanceDom {
   /** Custom properties on <html>; null removes the property (the stylesheet's value applies again). */
   vars: Record<string, string | null>
+  /** Attributes on <html>. */
+  attrs: Record<string, string>
 }
 
 export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
@@ -63,6 +65,8 @@ export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
       // Layers that sit above the backdrop must not repaint it with an opaque fill.
       '--tr-term-surface': transparent ? 'transparent' : 'var(--term-bg)',
       '--tr-term-ring': ringCss(a)
-    }
+    },
+    // The full-screen field (AppShell.module.css picks the palette, `auto` by theme).
+    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop }
   }
 }

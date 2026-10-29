@@ -86,6 +86,13 @@ export function createMainWindow(): BrowserWindow {
     closeSecondaryWindowsOf(win.webContents)
     if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.webContents.reload()
   })
+  // 全屏背景 (PRD v1.97): the page draws its own field behind the glass while the window is full screen.
+  const sendFullScreen = (): void => {
+    if (!win.isDestroyed()) win.webContents.send(IPC.uiFullScreen, win.isFullScreen())
+  }
+  win.on('enter-full-screen', sendFullScreen)
+  win.on('leave-full-screen', sendFullScreen)
+  win.webContents.on('did-finish-load', sendFullScreen)
   load(win)
   return win
 }
