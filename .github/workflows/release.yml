@@ -24,7 +24,8 @@ concurrency:
 
 jobs:
   release:
-    runs-on: macos-14
+    # arm64, so the packaged-app test below launches the arm64 build natively. macos-14 is retired on 2026-11-02.
+    runs-on: macos-15
     # Notarization usually takes minutes per upload (2 apps + 2 dmgs) but Apple's queue is sometimes slow.
     timeout-minutes: 120
     steps:
