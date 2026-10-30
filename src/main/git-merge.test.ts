@@ -204,11 +204,74 @@ describe('mergeWorktree', () => {
     expect(await mergeWorktree(stale)).toMatchObject({ ok: false, reason: 'stale' })
   })
 
-  it('refuses a rebase with uncommitted changes in the worktree', async () => {
+  it('refuses a rebase with uncommitted changes to tracked files in the worktree', async () => {
     const { root, wt } = setup()
     commit(wt, 'b.txt', 'b\n', 'add b')
-    writeFileSync(join(wt, 'scratch.txt'), 'x')
+    writeFileSync(join(wt, 'a.txt'), 'edited\n')
     expect(await mergeWorktree(await request(root, wt, 'rebase'))).toMatchObject({ ok: false, reason: 'blocked', blocker: { kind: 'worktree-dirty' } })
+  })
+
+  it('rebase: untracked files left in the worktree do not block it and stay', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    commit(root, 'd.txt', 'd\n', 'add d on main')
+    writeFileSync(join(wt, 'scratch.txt'), 'x')
+    const result = await mergeWorktree(await request(root, wt, 'rebase'))
+    expect(result.ok).toBe(true)
+    expect(sha(root, 'main')).toBe(sha(root, 'feat'))
+    expect(readFileSync(join(wt, 'scratch.txt'), 'utf8')).toBe('x')
+  })
+
+  it('squash: the branch moves onto the squash commit, so it is merged by ancestry and the worktree stays clean', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    commit(wt, 'c.txt', 'c\n', 'add c')
+    const result = await mergeWorktree(await request(root, wt, 'squash'))
+    expect(result).toMatchObject({ ok: true })
+    expect(sha(root, 'feat')).toBe(sha(root, 'main'))
+    expect(git(root, 'branch', '--merged', 'main', '--format=%(refname:short)').split('\n')).toContain('feat')
+    expect(git(wt, 'status', '--porcelain')).toBe('')
+    expect((await mergePrecheck(root, wt)).blocker).toEqual({ kind: 'nothing', merged: true })
+  })
+
+  it('squash onto a base that moved on: the worktree gets the files the base gained and keeps its untracked ones', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    commit(root, 'd.txt', 'd\n', 'add d on main')
+    writeFileSync(join(wt, 'scratch.txt'), 'x')
+    const result = await mergeWorktree(await request(root, wt, 'squash'))
+    expect(result).toMatchObject({ ok: true })
+    expect(sha(root, 'feat')).toBe(sha(root, 'main'))
+    expect(readFileSync(join(wt, 'd.txt'), 'utf8')).toBe('d\n')
+    expect(readFileSync(join(wt, 'scratch.txt'), 'utf8')).toBe('x')
+    expect(git(wt, 'status', '--porcelain')).toBe('?? scratch.txt\n')
+  })
+
+  it('squash: leaves the branch where it is when moving it would touch a file changed in the worktree', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
+    writeFileSync(join(wt, 'a.txt'), 'agent is editing\n')
+    const head = sha(root, 'feat')
+    const result = await mergeWorktree(await request(root, wt, 'squash'))
+    expect(result).toMatchObject({ ok: true })
+    expect(git(root, 'show', 'main:b.txt')).toBe('b\n')
+    expect(sha(root, 'feat')).toBe(head)
+    expect(readFileSync(join(wt, 'a.txt'), 'utf8')).toBe('agent is editing\n')
+  })
+
+  it('squash: leaves the branch where it is when it moved during the merge', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    // The base checkout's fast-forward runs post-merge: an agent committing in the worktree right then.
+    const hooks = join(base, `hooks-${counter}`)
+    mkdirSync(hooks)
+    writeFileSync(join(hooks, 'post-merge'), `#!/bin/sh\nunset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE\ngit -C '${wt}' commit -q --allow-empty -m 'agent meanwhile'\n`, { mode: 0o755 })
+    git(root, 'config', 'core.hooksPath', hooks)
+    const result = await mergeWorktree(await request(root, wt, 'squash'))
+    expect(result).toMatchObject({ ok: true })
+    expect(git(root, 'log', '-1', '--format=%s', 'feat').trim()).toBe('agent meanwhile')
+    expect(git(root, 'show', 'main:b.txt')).toBe('b\n')
   })
 
   it('rebase stopped by a conflict in an earlier commit is aborted', async () => {

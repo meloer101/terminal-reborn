@@ -15,10 +15,13 @@ import {
   isRateLimited,
   isSignedOut,
   parsePrTarget,
+  parseRepoMergeMethods,
+  REPO_MERGE_QUERY,
   repoFromRemoteUrl,
   summarizeChecks,
   type ChecksSummary,
-  type GitHubRepo
+  type GitHubRepo,
+  type RepoMergeMethods
 } from '@shared/pull-requests'
 import { riskMarkers, type RiskMarker } from '@shared/risk-markers'
 import { SHIP_IPC, type BaseCi, type BaseCiFailure, type DiffSinceRequest, type HandoffSlot, type ShipMainResult, type ShipPreflight } from '@shared/ship'
@@ -48,7 +51,7 @@ import { isProjectRoot } from './workspace-store'
 const FETCH_TIMEOUT_MS = 60_000
 /** A fast-forward checks files out. */
 const CHECKOUT_TIMEOUT_MS = 5 * 60_000
-/** How long a branch-protection answer is trusted. */
+/** How long a branch-protection or merge-settings answer is trusted. */
 const PROTECTION_TTL_MS = 10 * 60_000
 const HANDOFF_READ_CAP = 64 * 1024
 const DIFF_SINCE_CAP = 2 * 1024 * 1024
@@ -131,6 +134,40 @@ async function baseProtection(cwd: string, remote: string | null, base: string):
   return value
 }
 
+// ── merge settings ──────────────────────────────────────────────────────────────────────────────────────────────
+
+const mergeSettings = new Map<string, { value: RepoMergeMethods; at: number }>()
+
+/**
+ * The repository's allowed merge methods and the gh user's default there (GraphQL `repository{…MergeAllowed
+ * viewerDefaultMergeMethod}`), or null when there is nothing on GitHub to go by. Cached 10 minutes, as protection.
+ */
+async function repoMergeSettings(cwd: string, remote: string | null): Promise<RepoMergeMethods | null> {
+  if (!remote) return null
+  if ((await detectGh()) !== 'ready' || Date.now() < ghPausedUntil()) return null
+  const where = await prRepoFor(cwd, remote)
+  if (!where) return null
+  const { repo } = where
+  const key = `${repo.host}/${repo.owner}/${repo.name}`
+  const known = mergeSettings.get(key)
+  if (known && Date.now() - known.at < PROTECTION_TTL_MS) return known.value
+  const ran = await gh(['api', 'graphql', `--hostname=${repo.host}`, '-f', `query=${REPO_MERGE_QUERY}`, '-f', `owner=${repo.owner}`, '-f', `name=${repo.name}`], {
+    timeout: 20_000
+  })
+  if (ran.code !== 0) {
+    if (isRateLimited(`${ran.stderr}\n${ran.stdout}`)) pauseGhForRateLimit()
+    return null
+  }
+  let value: RepoMergeMethods | null
+  try {
+    value = parseRepoMergeMethods(JSON.parse(ran.stdout) as unknown)
+  } catch {
+    return null
+  }
+  if (value) mergeSettings.set(key, { value, at: Date.now() })
+  return value
+}
+
 // ── preflight ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 const failure = (message: string): { ok: false; message: string } => ({ ok: false, message })
@@ -161,7 +198,7 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
       baseAheadOfUpstream = Number(own) || 0
     }
   }
-  const baseProtected = await baseProtection(cwd, remote, base)
+  const [baseProtected, mergeMethods] = await Promise.all([baseProtection(cwd, remote, base), repoMergeSettings(cwd, remote)])
   return {
     ok: true,
     branch,
@@ -174,7 +211,8 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
     merged,
     baseAheadOfUpstream,
     baseBehindUpstream,
-    openPr: openPrNumber(target.worktree)
+    openPr: openPrNumber(target.worktree),
+    mergeMethods
   }
 }
 
@@ -603,6 +641,7 @@ export function resetShip(): void {
   for (const watch of watches.values()) if (watch.timer) clearTimeout(watch.timer)
   watches.clear()
   protection.clear()
+  mergeSettings.clear()
 }
 
 // ── diffs ───────────────────────────────────────────────────────────────────────────────────────────────────────

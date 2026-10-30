@@ -2,7 +2,7 @@
 // (合并到 main 并推送 / 创建 PR). The agent in the session writes every piece of text and fixes code; Wavi runs the
 // mechanical steps (commit, merge, push, gh) and the brakes. These are the IPC payloads of window.tr.ship.
 import type { MergeMethod } from './git-merge'
-import type { ChecksSummary, PrTarget } from './pull-requests'
+import type { ChecksSummary, PrTarget, RepoMergeMethods } from './pull-requests'
 import type { RiskMarker } from './risk-markers'
 import type { HandoffKind } from './ship-handoff'
 
@@ -32,6 +32,9 @@ export type ShipPreflight =
       baseBehindUpstream: number
       /** The branch's open PR, if any (then 创建 PR becomes 推送到 PR #N). */
       openPr: number | null
+      /** The merge methods the repository allows on GitHub and its default (PRD F16 v1.102); null when there are no
+       *  GitHub settings to go by (no GitHub remote, no gh, or gh could not tell): the user picks, Wavi remembers. */
+      mergeMethods: RepoMergeMethods | null
     }
   | { ok: false; message: string }
 

@@ -83,6 +83,12 @@ export interface PrNote {
   reviewState?: string
 }
 
+/** The merge methods a GitHub repository allows, and the one the gh user merged with last there. */
+export interface RepoMergeMethods {
+  methods: MergeMethod[]
+  defaultMethod: MergeMethod
+}
+
 export interface PrDetails {
   /** GraphQL node id of the PR (addPullRequestReview). */
   id: string
@@ -96,11 +102,9 @@ export interface PrDetails {
   required: { total: number; failing: string[]; pending: number }
   threads: PrThread[]
   notes: PrNote[]
-  repo: {
+  repo: RepoMergeMethods & {
     autoMergeAllowed: boolean
     deleteBranchOnMerge: boolean
-    methods: MergeMethod[]
-    defaultMethod: MergeMethod
   }
   /** The gh user: whose name Wavi's writes on GitHub go out under. */
   viewer: string
@@ -795,15 +799,11 @@ function notesOf(pr: Record<string, unknown>): PrNote[] {
     .slice(-PR_DETAIL_LIMITS.notes)
 }
 
-/** `gh api graphql` output for PR_DETAILS_QUERY → PrDetails; null when it is not that shape (or errors only). */
-export function parsePrDetails(raw: unknown): PrDetails | null {
-  if (!isRecord(raw) || !isRecord(raw.data)) return null
-  const repo = raw.data.repository
-  if (!isRecord(repo) || !isRecord(repo.pullRequest)) return null
-  const pr = repo.pullRequest
-  const id = asString(pr.id, 200)
-  const headOid = typeof pr.headRefOid === 'string' && /^[0-9a-f]{40,64}$/.test(pr.headRefOid) ? pr.headRefOid : ''
-  if (!id || !headOid) return null
+/**
+ * A repository's `squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed viewerDefaultMergeMethod` → the methods it
+ * allows (squash, merge, rebase order) and the default: the viewer's, when the repository allows it, else the first.
+ */
+export function repoMergeMethods(repo: Record<string, unknown>): RepoMergeMethods {
   const methods = (
     [
       ['squash', repo.squashMergeAllowed],
@@ -814,6 +814,30 @@ export function parsePrDetails(raw: unknown): PrDetails | null {
     .filter(([, allowed]) => allowed === true)
     .map(([method]) => method)
   const preferred = METHOD[String(repo.viewerDefaultMergeMethod ?? '')]
+  return { methods, defaultMethod: preferred && methods.includes(preferred) ? preferred : (methods[0] ?? 'merge') }
+}
+
+/** The repository's merge options alone (exit A's 合并方式, PRD F16 v1.102). Variables: owner, name. */
+export const REPO_MERGE_QUERY = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) { squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed viewerDefaultMergeMethod }
+}`
+
+/** `gh api graphql` output for REPO_MERGE_QUERY → the methods; null when it is not that shape or allows none. */
+export function parseRepoMergeMethods(raw: unknown): RepoMergeMethods | null {
+  if (!isRecord(raw) || !isRecord(raw.data) || !isRecord(raw.data.repository)) return null
+  const found = repoMergeMethods(raw.data.repository)
+  return found.methods.length > 0 ? found : null
+}
+
+/** `gh api graphql` output for PR_DETAILS_QUERY → PrDetails; null when it is not that shape (or errors only). */
+export function parsePrDetails(raw: unknown): PrDetails | null {
+  if (!isRecord(raw) || !isRecord(raw.data)) return null
+  const repo = raw.data.repository
+  if (!isRecord(repo) || !isRecord(repo.pullRequest)) return null
+  const pr = repo.pullRequest
+  const id = asString(pr.id, 200)
+  const headOid = typeof pr.headRefOid === 'string' && /^[0-9a-f]{40,64}$/.test(pr.headRefOid) ? pr.headRefOid : ''
+  if (!id || !headOid) return null
   const mergeState = String(pr.mergeStateStatus ?? '').toLowerCase().replace(/_/g, '-') as MergeStateStatus
   const autoMethod = isRecord(pr.autoMergeRequest) ? METHOD[String(pr.autoMergeRequest.mergeMethod ?? '')] : undefined
   return {
@@ -831,8 +855,7 @@ export function parsePrDetails(raw: unknown): PrDetails | null {
     repo: {
       autoMergeAllowed: repo.autoMergeAllowed === true,
       deleteBranchOnMerge: repo.deleteBranchOnMerge === true,
-      methods,
-      defaultMethod: preferred && methods.includes(preferred) ? preferred : (methods[0] ?? 'merge')
+      ...repoMergeMethods(repo)
     },
     viewer: isRecord(raw.data.viewer) ? asString(raw.data.viewer.login, 100) : ''
   }
