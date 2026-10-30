@@ -12,6 +12,7 @@ function ok(patch: Partial<Extract<ShipPreflight, { ok: true }>> = {}): ShipPref
     suggested: 'main',
     uncommitted: 0,
     ahead: 2,
+    merged: false,
     baseAheadOfUpstream: 0,
     baseBehindUpstream: 0,
     openPr: null,
@@ -112,6 +113,13 @@ describe('shipExits', () => {
 
     it('does not block when only commits exist', () => {
       expect(shipExits(state(ok({ ahead: 1, uncommitted: 0 }))).primary.blocker).toBeNull()
+    })
+
+    it('blocks both exits once the commits are squash-merged, until there is new work', () => {
+      const { primary, secondary } = shipExits(state(ok({ ahead: 1, merged: true, uncommitted: 0 })))
+      expect(primary.blocker).toBe('没有要合并的改动')
+      expect(secondary?.blocker).toBe('没有比 main 新的提交')
+      expect(shipExits(state(ok({ ahead: 1, merged: true, uncommitted: 1 }))).primary.blocker).toBeNull()
     })
   })
 

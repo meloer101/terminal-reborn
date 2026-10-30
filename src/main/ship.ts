@@ -24,7 +24,7 @@ import { riskMarkers, type RiskMarker } from '@shared/risk-markers'
 import { SHIP_IPC, type BaseCi, type BaseCiFailure, type DiffSinceRequest, type HandoffSlot, type ShipMainResult, type ShipPreflight } from '@shared/ship'
 import { HANDOFF_FILES } from '@shared/ship-handoff'
 import { parseDiffSinceRequest, parseHandoffRequest, parseShipMainRequest } from '@shared/ship-requests'
-import { mergePrecheck, mergeWorktree } from './git-merge'
+import { mergePrecheck, mergeWorktree, workInBase } from './git-merge'
 import {
   branchInfo,
   commitWorktree,
@@ -147,6 +147,8 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
   if (!(await refExists(cwd, `refs/heads/${base}`))) return failure(`找不到基线分支 ${base}`)
   const ahead = await countCommits(cwd, `refs/heads/${base}..refs/heads/${branch}`)
   if (ahead === null) return failure(`没能数出分支比 ${base} 新的提交`)
+  // An old git (no merge-tree --write-tree) only loses this check; the merge's own precheck says why.
+  const merged = ahead > 0 && (await workInBase(cwd, `refs/heads/${base}`, `refs/heads/${branch}`).catch(() => false))
 
   const [remote, files, upstream] = await Promise.all([remoteFor(cwd, branch), uncommittedFiles(cwd), baseUpstream(cwd, base)])
   let baseAheadOfUpstream = 0
@@ -169,6 +171,7 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
     suggested: baseProtected === true ? 'pr' : 'main',
     uncommitted: files.length,
     ahead,
+    merged,
     baseAheadOfUpstream,
     baseBehindUpstream,
     openPr: openPrNumber(target.worktree)
@@ -236,7 +239,7 @@ export function blockerMessage(blocker: MergeBlocker, base: string): string {
     case 'busy':
       return `${blocker.where === 'worktree' ? '这个 worktree' : `${base} 的工作区`}里有进行中的${operationNames[blocker.operation]}：先完成或放弃它`
     case 'nothing':
-      return `分支没有比 ${base} 新的提交`
+      return blocker.merged ? `分支已经全部合并到 ${base}` : `分支没有比 ${base} 新的提交`
     case 'old-git':
       return 'git 版本低于 2.38，没法预检合并'
     case 'base-dirty':

@@ -228,6 +228,8 @@ test.describe('F13 review block · F16 exit A', () => {
     await expect(panel().getByTestId('pr-status')).toContainText(/已合并到 main · [0-9a-f]{7}/)
     expect(repo.git(repo.project, 'log', '-1', '--format=%B', 'main').trim()).toBe('导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试')
     expect(existsSync(join(repo.project, 'nav.ts'))).toBe(true)
+    // Squash-merged: the branch is still ahead by its commits, but nothing is left to ship again (B25).
+    await expect(panel().getByRole('button', { name: /^合并到 main( |$)/ })).toHaveCount(0, WITHIN)
     // The branch and its worktree stay: archiving them is the user's call.
     expect(existsSync(repo.clean)).toBe(true)
     expect(repo.git(repo.project, 'branch', '--list', 'jacob/clean').trim()).toContain('jacob/clean')
