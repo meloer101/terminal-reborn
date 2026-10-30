@@ -136,11 +136,15 @@ async function baseProtection(cwd: string, remote: string | null, base: string):
 
 // ── merge settings ──────────────────────────────────────────────────────────────────────────────────────────────
 
-const mergeSettings = new Map<string, { value: RepoMergeMethods; at: number }>()
+/** How long a merge-settings miss (gh failed, or GitHub answered nothing usable) is trusted; preflight runs on every git change. */
+const MERGE_SETTINGS_MISS_TTL_MS = 60_000
+
+const mergeSettings = new Map<string, { value: RepoMergeMethods | null; at: number }>()
 
 /**
  * The repository's allowed merge methods and the gh user's default there (GraphQL `repository{…MergeAllowed
- * viewerDefaultMergeMethod}`), or null when there is nothing on GitHub to go by. Cached 10 minutes, as protection.
+ * viewerDefaultMergeMethod}`), or null when there is nothing on GitHub to go by. Cached 10 minutes, as protection; a
+ * miss for a minute, so a failing query is not run again on every git change. A rate limit pauses gh instead.
  */
 async function repoMergeSettings(cwd: string, remote: string | null): Promise<RepoMergeMethods | null> {
   if (!remote) return null
@@ -150,21 +154,23 @@ async function repoMergeSettings(cwd: string, remote: string | null): Promise<Re
   const { repo } = where
   const key = `${repo.host}/${repo.owner}/${repo.name}`
   const known = mergeSettings.get(key)
-  if (known && Date.now() - known.at < PROTECTION_TTL_MS) return known.value
+  if (known && Date.now() - known.at < (known.value ? PROTECTION_TTL_MS : MERGE_SETTINGS_MISS_TTL_MS)) return known.value
   const ran = await gh(['api', 'graphql', `--hostname=${repo.host}`, '-f', `query=${REPO_MERGE_QUERY}`, '-f', `owner=${repo.owner}`, '-f', `name=${repo.name}`], {
     timeout: 20_000
   })
-  if (ran.code !== 0) {
-    if (isRateLimited(`${ran.stderr}\n${ran.stdout}`)) pauseGhForRateLimit()
+  if (ran.code !== 0 && isRateLimited(`${ran.stderr}\n${ran.stdout}`)) {
+    pauseGhForRateLimit()
     return null
   }
-  let value: RepoMergeMethods | null
-  try {
-    value = parseRepoMergeMethods(JSON.parse(ran.stdout) as unknown)
-  } catch {
-    return null
+  let value: RepoMergeMethods | null = null
+  if (ran.code === 0) {
+    try {
+      value = parseRepoMergeMethods(JSON.parse(ran.stdout) as unknown)
+    } catch {
+      value = null
+    }
   }
-  if (value) mergeSettings.set(key, { value, at: Date.now() })
+  mergeSettings.set(key, { value, at: Date.now() })
   return value
 }
 
@@ -184,10 +190,13 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
   if (!(await refExists(cwd, `refs/heads/${base}`))) return failure(`找不到基线分支 ${base}`)
   const ahead = await countCommits(cwd, `refs/heads/${base}..refs/heads/${branch}`)
   if (ahead === null) return failure(`没能数出分支比 ${base} 新的提交`)
-  // An old git (no merge-tree --write-tree) only loses this check; the merge's own precheck says why.
-  const merged = ahead > 0 && (await workInBase(cwd, `refs/heads/${base}`, `refs/heads/${branch}`).catch(() => false))
-
-  const [remote, files, upstream] = await Promise.all([remoteFor(cwd, branch), uncommittedFiles(cwd), baseUpstream(cwd, base)])
+  const [merged, remote, files, upstream] = await Promise.all([
+    // An old git (no merge-tree --write-tree) only loses this check; the merge's own precheck says why.
+    ahead > 0 ? workInBase(cwd, `refs/heads/${base}`, `refs/heads/${branch}`).catch(() => false) : false,
+    remoteFor(cwd, branch),
+    uncommittedFiles(cwd),
+    baseUpstream(cwd, base)
+  ])
   let baseAheadOfUpstream = 0
   let baseBehindUpstream = 0
   if (upstream) {

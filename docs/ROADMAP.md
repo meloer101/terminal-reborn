@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-10-30：出口预检少跑 gh 和 git（代码审核）：合并方式查询失败或没有可用结果时也缓存 1 分钟，不再每次 git 变化都调 `gh api graphql`；`workInBase` 和其余预检并行（`src/main/ship.ts`，`ship.test.ts`）。PRD §6 记下按内容判断已合并的冲突边界。
 - 2026-10-30：修代码审核的两处问题（PRD v1.106）：squash 后分支已推送过（有 upstream 或远程同名分支）时不移到 squash 提交上，免得和远程分叉（`moveBranchTo`，`git-merge.test.ts`）；分支同步遇到分离 HEAD 不再把短提交号写进 worktree 记录（`branchesOf`，`model.test.ts`），归档恢复不会新建以短提交号命名的分支。
 - 2026-10-30：B27「合并到 main 并推送」的合并方式跟随仓库（PRD v1.105）进行中：已完成主进程和共享层——出口预检带回 GitHub 仓库允许的合并方式和默认方式（`repoMergeMethods` / `REPO_MERGE_QUERY`，`src/main/ship.ts` 的 `repoMergeSettings()`），squash 后分支移到 squash 提交上（`reset --keep`），rebase 不再被未跟踪文件挡住；`git-merge.test.ts`、`ship.test.ts`（三种方式各合并并推送一次、squash 后不能再合并）、`pull-requests.test.ts`。Figma 第 43 节（`688:32000`）画了「合并方式」一行的状态，等作者定稿后再做渲染层（出口区「合并方式」、记住的方式、自动修复和合并面板用同一个解析结果、步骤标签）。
 - 2026-10-30：F21 重做的实测做完 5 项（PRD v1.104）：`wavi` 改为用文件和 Wavi 通信（Codex 默认沙箱拦 unix socket），Pi 能走原生通道；OpenCode 没装、未测。

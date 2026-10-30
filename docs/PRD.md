@@ -746,7 +746,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 ### 6.13 实测结论 · 冲突雷达（git 2.50.1 Apple Git-155，2026-10-21）
 - `git merge-tree --write-tree --name-only A B`（git ≥ 2.38）只往对象库写树，不碰任何工作区、index 或 ref，冲突时退出 1；两个快照提交（父提交 = 各自 HEAD）之间也照常找合并基点。
 - 有未提交改动时在复制出来的临时 index 上 `add -u` 再 `write-tree`：worktree 的真实 index 内容和修改时间都不变（主进程测试里比对）；`git status` 本身会刷新真实 index，所以雷达里的 git 都带 `GIT_OPTIONAL_LOCKS=0`。
-- squash 合并之后，被合并分支对基线的 merge-tree 结果就是基线的树，用这一点判断“工作已经在基线里了”，否则它会被标成落后、还和别人配对。
+- squash 合并之后，被合并分支对基线的 merge-tree 结果就是基线的树，用这一点判断“工作已经在基线里了”，否则它会被标成落后、还和别人配对。边界：这个判断只在 merge-tree 没有冲突时成立。分支没被移到 squash 提交上（推送过、或 agent 正在改，v1.106），之后基线又改了同一批文件，分支和基线就会在这些文件上报 add/add 或内容冲突，判断变回“没合并、有冲突”，Git · 变更底部的出口会重新出现。
 - 规模：20 个 worktree 各一个提交、小仓库，第一次全算（20 次对基线 + 190 对）约 1.1 s（同时 2 个 git 进程）；之后一个 worktree 提交只重跑 20 次。
 
 ### 6.14 实测结论 · 派活与回报的接口（Claude Code 2.1.306 / Codex 0.163.0，2026-10-22）
