@@ -260,6 +260,28 @@ describe('mergeWorktree', () => {
     expect(readFileSync(join(wt, 'a.txt'), 'utf8')).toBe('agent is editing\n')
   })
 
+  it('squash: leaves a published branch where it is, so it does not part from its remote', async () => {
+    for (const publish of ['upstream', 'remote-ref'] as const) {
+      const { root, wt } = setup()
+      commit(wt, 'b.txt', 'b\n', 'add b')
+      const head = sha(root, 'feat')
+      if (publish === 'upstream') {
+        const bare = join(base, `bare-${counter}.git`)
+        git(base, 'init', '-q', '--bare', bare)
+        git(root, 'remote', 'add', 'origin', bare)
+        git(wt, 'push', '-q', '-u', 'origin', 'feat')
+      } else {
+        // Pushed without -u: a remote branch of the same name, no upstream.
+        git(root, 'update-ref', 'refs/remotes/fork/feat', head)
+      }
+      const result = await mergeWorktree(await request(root, wt, 'squash'))
+      expect(result).toMatchObject({ ok: true })
+      expect(git(root, 'show', 'main:b.txt')).toBe('b\n')
+      expect(sha(root, 'feat')).toBe(head)
+      expect((await mergePrecheck(root, wt)).blocker).toEqual({ kind: 'nothing', merged: true })
+    }
+  })
+
   it('squash: leaves the branch where it is when it moved during the merge', async () => {
     const { root, wt } = setup()
     commit(wt, 'b.txt', 'b\n', 'add b')

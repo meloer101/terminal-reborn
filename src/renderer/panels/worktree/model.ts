@@ -117,20 +117,22 @@ export function mergeListing(previous: GitWorktreeListing | null | undefined, ne
   }
 }
 
-/** A worktree's name: its branch, the branch it is rebasing, else its short commit. */
-export function worktreeName(info: Pick<GitWorktreeInfo, 'branch' | 'rebasing' | 'head'>): string {
-  return info.branch ?? info.rebasing ?? shortSha(info.head)
-}
-
 /** The workspace worktree records that are git's `info` (by resolved path). */
 function recordsOf(listing: GitWorktreeListing, info: GitWorktreeInfo, worktrees: readonly Worktree[]): Worktree[] {
   return worktrees.filter((w) => (listing.realPaths[w.path] ?? w.path) === info.realPath || w.path === info.path)
 }
 
-/** What each workspace worktree record git lists is named now — the branch the sidebar, header and overview show. */
+/**
+ * The branch each workspace worktree record git lists is on now (or is rebasing) — what the sidebar, header and
+ * overview show. A detached checkout is left out and its record keeps its last branch: the record's branch is a git
+ * ref too (archive restore recreates the worktree on it), so a short commit must never land there.
+ */
 export function branchesOf(listing: GitWorktreeListing, worktrees: readonly Worktree[]): Map<WorktreeId, string> {
   const branches = new Map<WorktreeId, string>()
-  for (const info of listing.worktrees) for (const w of recordsOf(listing, info, worktrees)) branches.set(w.id, worktreeName(info))
+  for (const info of listing.worktrees) {
+    const branch = info.branch ?? info.rebasing
+    if (branch) for (const w of recordsOf(listing, info, worktrees)) branches.set(w.id, branch)
+  }
   return branches
 }
 
@@ -145,7 +147,7 @@ export function buildRows(listing: GitWorktreeListing, worktrees: readonly Workt
     groups[groupOf(info, inside.length)].push({
       key: info.realPath,
       info,
-      name: worktreeName(info),
+      name: info.branch ?? info.rebasing ?? shortSha(info.head),
       sessions: inside,
       status: inside[0]?.status ?? null,
       worktreeIds: matched.map((w) => w.id),

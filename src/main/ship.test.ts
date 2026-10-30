@@ -219,6 +219,19 @@ describe('preflight', () => {
     resetShip()
     writeGh('graphql.json', JSON.stringify({ data: null }))
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, mergeMethods: null })
+    // A miss is trusted for a minute: the next git change does not ask again.
+    const asked = graphql().length
+    writeGh('graphql.json', JSON.stringify({ data: { repository } }))
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, mergeMethods: null })
+    expect(graphql()).toHaveLength(asked)
+    const later = Date.now() + 61_000
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(later)
+    try {
+      expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ mergeMethods: { methods: ['squash', 'merge'] } })
+      expect(graphql()).toHaveLength(asked + 1)
+    } finally {
+      clock.mockRestore()
+    }
     resetShip()
     writeGh('graphql.json', JSON.stringify({ data: { repository } }))
     writeGh('signed-out', '')

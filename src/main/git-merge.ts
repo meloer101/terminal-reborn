@@ -358,12 +358,21 @@ async function trackedClean(path: string): Promise<boolean> {
 /**
  * After a squash: moves the worktree's branch onto the squash commit, so it is merged by ancestry too (the graph,
  * 「领先 N」 and worktree clean-up read it that way). Only while the worktree is still on the branch at `head`, and
- * with `reset --keep`, which refuses rather than touch a file the agent changed meanwhile. A refusal leaves the
- * branch where it was: the merge stands, and the precheck still tells by content that its work is in the base.
+ * with `reset --keep`, which refuses rather than touch a file the agent changed meanwhile. A published branch (an
+ * upstream, or a remote branch of that name) stays too: moved, it would part from the remote and only push by force.
+ * Either way the branch stays where it was: the merge stands, and the precheck still tells by content that its work
+ * is in the base.
  */
 async function moveBranchTo(path: string, branch: string, head: string, squash: string): Promise<void> {
-  const [ref, current] = await Promise.all([orEmpty(git(path, ['symbolic-ref', '--quiet', 'HEAD'])), commitOf(path, 'HEAD')])
-  if (ref.trim() !== `refs/heads/${branch}` || current !== head) return
+  const [ref, current, published] = await Promise.all([
+    orEmpty(git(path, ['symbolic-ref', '--quiet', 'HEAD'])),
+    commitOf(path, 'HEAD'),
+    git(path, ['for-each-ref', '--format=%(refname)', `refs/remotes/*/${branch}`]).then(
+      async (remote) => remote.trim() !== '' || (await git(path, ['for-each-ref', '--format=%(upstream)', `refs/heads/${branch}`])).trim() !== '',
+      () => true
+    )
+  ])
+  if (ref.trim() !== `refs/heads/${branch}` || current !== head || published) return
   await orEmpty(git(path, ['reset', '--keep', '--quiet', squash], { timeout: CHECKOUT_TIMEOUT_MS }))
 }
 

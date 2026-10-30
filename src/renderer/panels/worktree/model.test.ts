@@ -121,7 +121,7 @@ describe('branchesOf', () => {
     expect(branchesOf(listing, records)).toEqual(new Map([['w-main', 'main'], ['w-feature', 'jacob/feature']]))
   })
 
-  it('names a detached checkout by the branch it is rebasing, else its short commit', () => {
+  it('names a checkout by the branch it is rebasing, and leaves a detached one out (no short commit as a branch)', () => {
     const detached: GitWorktreeListing = {
       mainBranch: 'main',
       worktrees: [info({ path: '/a', head: 'abcdef123456' }), info({ path: '/b', rebasing: 'jacob/fix' })],
@@ -131,7 +131,7 @@ describe('branchesOf', () => {
       { id: 'a', projectId: 'p', branch: '', path: '/a', isMain: true },
       { id: 'b', projectId: 'p', branch: '', path: '/b', isMain: false }
     ]
-    expect(branchesOf(detached, records)).toEqual(new Map([['a', 'abcdef1'], ['b', 'jacob/fix']]))
+    expect(branchesOf(detached, records)).toEqual(new Map([['b', 'jacob/fix']]))
   })
 })
 
