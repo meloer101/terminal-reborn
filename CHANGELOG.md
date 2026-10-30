@@ -4,12 +4,12 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
-## [0.12.2] - 2026-10-30
+## [0.12.3] - 2026-10-30
 
 Fixes after v0.12.0: the main checkout's branch in the sidebar, no second merge after a squash, and terminals without a coloured ring.
 v0.12.0 之后的修复：侧栏显示主目录的分支，squash 合并后不再提供第二次合并，终端四周不再有一圈别的颜色。
-v0.12.1 was tagged but never built (the macOS 14 runner was in a scheduled brownout); its changes ship in this release.
-v0.12.1 打了 tag 但没有构建（macOS 14 runner 处于计划停机），它的改动都在这个版本里。
+v0.12.1 and v0.12.2 were tagged but never built (a macOS 14 runner brownout, then stapling failing on the macOS 15 runner); their changes ship in this release.
+v0.12.1 和 v0.12.2 打了 tag 但没有构建出来（先是 macOS 14 runner 计划停机，然后 macOS 15 runner 上 staple 失败），它们的改动都在这个版本里。
 
 ### Sidebar / 侧栏
 - Sessions in the main checkout show their branch again, in the sidebar and in the session header, and follow `git switch`.
@@ -458,8 +458,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.12.2...HEAD
-[0.12.2]: https://github.com/meloer101/terminal-reborn/compare/v0.12.0...v0.12.2
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.12.3...HEAD
+[0.12.3]: https://github.com/meloer101/terminal-reborn/compare/v0.12.0...v0.12.3
 [0.12.0]: https://github.com/meloer101/terminal-reborn/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/meloer101/terminal-reborn/compare/v0.9.0...v0.10.0
