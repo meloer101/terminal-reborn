@@ -36,7 +36,7 @@ export type MergeBlocker =
   | { kind: 'base-dirty'; path: string; files: string[] }
   /** the worktree is the main checkout (it is on the base, or merging into itself) */
   | { kind: 'main' }
-  /** rebase only: the worktree has uncommitted changes (git would refuse) */
+  /** rebase only: the worktree has uncommitted changes to tracked files (git would refuse) */
   | { kind: 'worktree-dirty' }
   /** git failed while checking */
   | { kind: 'unverified'; message: string }

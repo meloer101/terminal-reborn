@@ -32,6 +32,8 @@ import {
   mergeBlockers,
   parsePrDetails,
   parsePrMergeRequest,
+  parseRepoMergeMethods,
+  repoMergeMethods,
   prReviewSummary,
   type PrDetails,
   type PullRequestInfo
@@ -356,6 +358,30 @@ describe('PR details (PRD F16 v1.63)', () => {
     const details = parsePrDetails(raw({ mergeStateStatus: 'DIRTY' }))!
     expect(prReviewSummary(details)).toBe('1 条评论没解决 · 要求修改 · 和基线冲突')
     expect(prReviewSummary({ ...details, threads: [], reviewDecision: 'approved', mergeState: 'clean', autoMerge: null })).toBe('')
+  })
+})
+
+describe('repository merge methods (PRD F16 v1.105)', () => {
+  it('lists the allowed methods in squash, merge, rebase order, defaulting to the viewer one when allowed', () => {
+    expect(repoMergeMethods({ squashMergeAllowed: true, mergeCommitAllowed: true, rebaseMergeAllowed: true, viewerDefaultMergeMethod: 'REBASE' })).toEqual({
+      methods: ['squash', 'merge', 'rebase'],
+      defaultMethod: 'rebase'
+    })
+    // The viewer's last method is no longer allowed: the first allowed one.
+    expect(repoMergeMethods({ squashMergeAllowed: false, mergeCommitAllowed: true, rebaseMergeAllowed: true, viewerDefaultMergeMethod: 'SQUASH' })).toEqual({
+      methods: ['merge', 'rebase'],
+      defaultMethod: 'merge'
+    })
+    expect(repoMergeMethods({ squashMergeAllowed: 'yes', viewerDefaultMergeMethod: 'OCTOPUS' })).toEqual({ methods: [], defaultMethod: 'merge' })
+  })
+
+  it('reads the gh answer, null when it is not that shape or allows nothing', () => {
+    const repository = { squashMergeAllowed: true, mergeCommitAllowed: false, rebaseMergeAllowed: false, viewerDefaultMergeMethod: 'MERGE' }
+    expect(parseRepoMergeMethods({ data: { repository } })).toEqual({ methods: ['squash'], defaultMethod: 'squash' })
+    expect(parseRepoMergeMethods({ data: { repository: { ...repository, squashMergeAllowed: false } } })).toBeNull()
+    expect(parseRepoMergeMethods({ data: { repository: null } })).toBeNull()
+    expect(parseRepoMergeMethods({ errors: [{ message: 'Could not resolve to a Repository' }] })).toBeNull()
+    expect(parseRepoMergeMethods('nope')).toBeNull()
   })
 })
 

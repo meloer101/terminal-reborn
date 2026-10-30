@@ -5,6 +5,7 @@
 // with `commit-tree`, then move the base forward: `merge --ff-only` in the checkout that has the base out (so its files
 // follow), or a compare-and-swap `update-ref` when no checkout has it. A failure at any step leaves the base where it
 // was. Rebase replays the branch in its own worktree (aborted on a conflict) and then fast-forwards the base the same way.
+// After a squash the branch moves onto the squash commit (`reset --keep`), so it reads as merged by ancestry.
 //
 // Only the workspace's project roots and their own worktrees are accepted; nothing from the renderer reaches git as
 // an option. Both commits the precheck saw are checked again before anything moves.
@@ -345,6 +346,27 @@ async function pushBase(realRoot: string, base: string): Promise<string> {
   }
 }
 
+/** Whether the worktree has no uncommitted changes to tracked files (untracked files do not count). */
+async function trackedClean(path: string): Promise<boolean> {
+  try {
+    return trackedDirtyPaths(await git(path, ['status', '--porcelain=v1', '-z', '--untracked-files=no'])).length === 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * After a squash: moves the worktree's branch onto the squash commit, so it is merged by ancestry too (the graph,
+ * 「领先 N」 and worktree clean-up read it that way). Only while the worktree is still on the branch at `head`, and
+ * with `reset --keep`, which refuses rather than touch a file the agent changed meanwhile. A refusal leaves the
+ * branch where it was: the merge stands, and the precheck still tells by content that its work is in the base.
+ */
+async function moveBranchTo(path: string, branch: string, head: string, squash: string): Promise<void> {
+  const [ref, current] = await Promise.all([orEmpty(git(path, ['symbolic-ref', '--quiet', 'HEAD'])), commitOf(path, 'HEAD')])
+  if (ref.trim() !== `refs/heads/${branch}` || current !== head) return
+  await orEmpty(git(path, ['reset', '--keep', '--quiet', squash], { timeout: CHECKOUT_TIMEOUT_MS }))
+}
+
 /** One merge per repository at a time. */
 const merging = new Set<string>()
 
@@ -362,7 +384,8 @@ export async function mergeWorktree(raw: unknown): Promise<MergeResult> {
   if (check.head !== request.head || check.baseHead !== request.baseHead) return { ok: false, reason: 'stale' }
   if (check.blocker) return { ok: false, reason: 'blocked', blocker: check.blocker }
   if (check.conflicts.length > 0) return { ok: false, reason: 'conflict', conflicts: check.conflicts }
-  if (request.method === 'rebase' && check.uncommitted !== 0) return { ok: false, reason: 'blocked', blocker: { kind: 'worktree-dirty' } }
+  // Untracked files stay (exit A leaves the unticked ones behind); git itself refuses to overwrite one.
+  if (request.method === 'rebase' && !(await trackedClean(worktreePath))) return { ok: false, reason: 'blocked', blocker: { kind: 'worktree-dirty' } }
   if (merging.has(realRoot)) return { ok: false, reason: 'git', message: 'another merge is running in this repository' }
   merging.add(realRoot)
 
@@ -397,6 +420,7 @@ export async function mergeWorktree(raw: unknown): Promise<MergeResult> {
       if (error instanceof StaleError) return { ok: false, reason: 'stale', rebased }
       throw error
     }
+    if (request.method === 'squash') await moveBranchTo(worktreePath, check.branch, check.head, commit)
     const push = request.push && check.hasOrigin ? await pushBase(realRoot, check.base) : null
     return { ok: true, commit, push }
   } catch (error) {

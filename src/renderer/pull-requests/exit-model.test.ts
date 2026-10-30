@@ -16,6 +16,7 @@ function ok(patch: Partial<Extract<ShipPreflight, { ok: true }>> = {}): ShipPref
     baseAheadOfUpstream: 0,
     baseBehindUpstream: 0,
     openPr: null,
+    mergeMethods: null,
     ...patch
   }
 }

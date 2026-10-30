@@ -196,8 +196,34 @@ describe('preflight', () => {
       merged: false,
       baseAheadOfUpstream: 0,
       baseBehindUpstream: 0,
-      openPr: null
+      openPr: null,
+      mergeMethods: null
     })
+  })
+
+  it('reads the merge methods the GitHub repository allows and its default, cached for a while', async () => {
+    const { root, wt } = setup()
+    const repository = { squashMergeAllowed: true, mergeCommitAllowed: true, rebaseMergeAllowed: false, viewerDefaultMergeMethod: 'MERGE' }
+    writeGh('graphql.json', JSON.stringify({ data: { repository } }))
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, mergeMethods: { methods: ['squash', 'merge'], defaultMethod: 'merge' } })
+    const graphql = () => calls().filter((call) => call[0] === 'api' && call[1] === 'graphql')
+    expect(graphql()).toHaveLength(1)
+    expect(graphql()[0]).toEqual(expect.arrayContaining(['--hostname=github.com', 'owner=acme', 'name=widget']))
+    writeGh('graphql.json', JSON.stringify({ data: { repository: { ...repository, viewerDefaultMergeMethod: 'SQUASH' } } }))
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ mergeMethods: { defaultMethod: 'merge' } })
+    expect(graphql()).toHaveLength(1)
+
+    resetShip()
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ mergeMethods: { methods: ['squash', 'merge'], defaultMethod: 'squash' } })
+    // Nothing to go by: GitHub answers nothing usable, or gh is signed out.
+    resetShip()
+    writeGh('graphql.json', JSON.stringify({ data: null }))
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, mergeMethods: null })
+    resetShip()
+    writeGh('graphql.json', JSON.stringify({ data: { repository } }))
+    writeGh('signed-out', '')
+    await detectGh(true)
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, mergeMethods: null })
   })
 
   it('counts the base against its upstream both ways, and has no remote without one', async () => {
@@ -304,7 +330,33 @@ describe('shipToMain', () => {
     expect(git(root, 'status', '--porcelain')).toBe('')
     // The unticked file stayed in the worktree, uncommitted.
     expect(git(wt, 'status', '--porcelain').trim()).toBe('?? other.txt')
+    // The branch sits on the squash commit: merged by ancestry.
+    expect(sha(root, 'feat')).toBe(result.commit)
     expect(baseCi({ root, worktree: wt })).toBeNull()
+  })
+
+  it('merge: a merge commit with the message git would write, pushed; the agent message only commits the ticked files', async () => {
+    const { root, wt, bare } = setup()
+    writeFileSync(join(wt, 'new.txt'), 'n\n')
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'merge', paths: ['new.txt'] })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(git(bare, 'log', '-1', '--format=%s', 'main').trim()).toBe("Merge branch 'feat'")
+    expect(git(bare, 'log', '-1', '--format=%P', 'main').trim().split(' ')).toHaveLength(2)
+    expect(git(bare, 'log', '-1', '--format=%s', 'main^2').trim()).toBe('feat: new file')
+    expect(git(root, 'branch', '--merged', 'main', '--format=%(refname:short)').split('\n')).toContain('feat')
+  })
+
+  it('rebase: the branch commits land on the base as they are, pushed, with the unticked files left in the worktree', async () => {
+    const { root, wt, bare } = setup()
+    commit(root, 'd.txt', 'd\n', 'main moved on')
+    git(root, 'push', '-q', 'origin', 'main')
+    writeFileSync(join(wt, 'new.txt'), 'n\n')
+    writeFileSync(join(wt, 'other.txt'), 'o\n')
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new file', method: 'rebase', paths: ['new.txt'] })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: new file', 'Make nav sticky', 'main moved on', 'init'])
+    expect(sha(root, 'feat')).toBe(sha(bare, 'main'))
+    expect(git(wt, 'status', '--porcelain').trim()).toBe('?? other.txt')
   })
 
   it('without paths and without a message keeps the branch own commit message', async () => {
@@ -316,12 +368,18 @@ describe('shipToMain', () => {
 
   it('does not ship a squash-merged branch again: no empty commit on the base', async () => {
     const { root, wt, bare } = setup()
+    const head = sha(root, 'feat')
     const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
     expect(first).toMatchObject({ ok: true, pushed: true })
-    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 1, merged: true })
+    // The branch moved onto the squash commit: nothing ahead.
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 0, merged: false })
     const pushed = sha(bare, 'main')
     const again = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
     expect(again).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
+    // A branch that could not be moved (an agent was editing) is told by content (v1.101).
+    git(wt, 'reset', '-q', '--keep', head)
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 1, merged: true })
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })).toEqual(again)
     expect(sha(root, 'main')).toBe(pushed)
     expect(sha(bare, 'main')).toBe(pushed)
     commit(wt, 'more.txt', 'm\n', 'More')
