@@ -8,6 +8,8 @@
 
 ## 当前位置
 
+- 2026-10-30：F21 重做的实测做完 5 项（PRD v1.104）：`wavi` 改为用文件和 Wavi 通信（Codex 默认沙箱拦 unix socket），Pi 能走原生通道；OpenCode 没装、未测。
+- 2026-10-30：F21 派活与回报定下重做方案（PRD v1.103）：调研了 17 个同类产品、13 家 CLI 的原生能力和用户 issue；还没实测、没出 Figma、没写代码，见第三批「F21 重做」。
 - 2026-10-30：修 B26：Git · 图谱一个提交上有多个 ref 胶囊、右侧栏变窄时，胶囊不再一起缩成只剩图标的小框；放不下的整个隐藏，留下的保持完整，提交说明紧跟其后。静态页用真实 CSS 在 330–1800 宽来回切实测；还没在 app 里看过。
 - 2026-10-30：修 B25（PRD v1.101）：squash 合并到 main 之后，Git · 变更底部不再出「合并到 main 并推送」「创建 PR」，再合并一次也被主进程挡住，不会让 agent 重写提交说明、不会往 main 写空提交。`workInBase`（`src/main/git-merge.ts`）+ 预检的 `merged`；`ship.test.ts`（合并两次，第二次被挡、main 和 origin 不动）、`exit-model.test.ts`。
 - 2026-10-30：全屏时侧栏和会话头的字不再分灰度（PRD v1.102，Figma 42C）：全部主色、次要的字小一号（作者看过后去掉了稿里的暗晕），会话头和侧栏顶栏从 44 收到 36（窗口和全屏一致，红绿灯下移到 y=11），卡片下沿和侧栏「设置」一行的下沿对齐（离底边 12），修「全屏 + 深色 + 湖岸背景时文字看不清」。构建版全屏截图核对过深色湖岸、浅色夜火；额度条没有数据，没截到。
@@ -144,6 +146,12 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] Figma 补 F21 的画面（2026-10-29，Figma 第 40 节；总览一节和待送报告条照旧，没有另画）
   - [x] 确认挂在派活会话下（2026-10-29，PRD v1.99，Figma 40B–40F）：派活会话变“等你处理”、写 `想开 N 个会话`；终端下方的确认条代替全窗面板；侧栏状态图形列画细线连到每个子会话
   - [x] Esc 打断等待中的 `start_sessions` 时收掉确认条（2026-10-29，PRD F21 v1.99 / §6.14 实测：Claude 发 MCP `notifications/cancelled`，Wavi 的 server 转成 `WaviCancel`）；agent 退出时自动当作拒绝。Codex 按 Esc 时发什么没实测。修（2026-10-29）：开着「自动开始」时，Wavi 还在准备这批会话就按 Esc，会话照样开出来；取消过的 callId 也一直留在内存里（`handler.test.ts`）
+- [ ] F21 重做（PRD v1.103，2026-10-30 定）：`wavi` 命令代替按厂商注入的 MCP server，任何能跑 shell 的 agent 都能派活；19 家都能派和被派，回报分三档（原生通道 / 复用 §6.9 发消息链路加两道检查 / 「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` 主动报 + Wavi 兜底；`--base snapshot` 给审阅用；报告送进去时子会话一轮结束不提醒用户；侧栏写 agent 和模型
+  - [x] 实测 5 项（2026-10-30，PRD v1.104 / §6.14）：Claude 能跑 `wavi`；Codex 能跑但默认沙箱拦 unix socket → `wavi` 改用文件通信，Codex 配置一项不动；Pi 扩展 `sendUserMessage` 送进 TUI、草稿保留；Claude / Codex / Pi / Grok 能按次追加系统提示；快照带未提交和未跟踪文件；PATH 改写进 `-c` 脚本
+  - [ ] 实测 OpenCode `prompt_async`（本机没装 OpenCode，未测）
+  - [ ] Figma 第 41 节：侧栏子会话的 agent 和模型、第二层缩进和连线，作者看过再实现
+  - [ ] 实现：`wavi` 入口和命令、能力表扩到 19 家、三档送达和两道检查、两层与上限、快照 worktree、不提醒用户；删掉 `mcp-server.ts` / `mcp-config.ts`
+  - [ ] 测试：e2e `dispatch.spec.ts` 重写（PRD F21 验收），单元测试
 - [ ] agent teams 的队友和子 agent 只显示、不接管（PRD F21 v1.66 改）：在派活会话下列出 Claude 自己开的队友 / 子 agent 的名字和状态（来自 hook 的 `agent_id`、`TeammateIdle`），不变成 Wavi 会话。~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
 - [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
 - [ ] 读 `claude agents --json`，把 Claude 自己在后台开的会话（会自己建 worktree、开 draft PR）也显示到总览
