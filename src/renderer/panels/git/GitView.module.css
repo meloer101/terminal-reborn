@@ -164,14 +164,28 @@
   white-space: nowrap;
 }
 
+/* The pills share half the row. They wrap onto a clipped second line instead of shrinking, so a pill that does not
+   fit drops out whole rather than every pill squeezing down to its icon; only a pill alone on the line truncates.
+   GraphView's Pills narrows the box to the pills left on the first line. */
+.pills {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  min-width: 0;
+  max-width: 50%;
+  height: 20px;
+  overflow: hidden;
+}
+
 /* GraphRef (153:210): 20 high, radius-sm, 5 / 7 padding, icon 14 + 4; stroke and icon in the lane colour. */
 .pill {
-  flex: 0 1 auto;
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
-  max-width: 50%;
+  max-width: 100%;
   height: 20px;
   padding: 0 calc(var(--space-8) - 1px) 0 calc(var(--space-6) - 1px);
   border: 1px solid var(--pill-color);

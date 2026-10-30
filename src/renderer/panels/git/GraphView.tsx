@@ -159,9 +159,7 @@ const CommitRow = memo(function CommitRow({ index, commit, row, head, pills, age
       <Lanes row={row} head={head} width={graphWidth} />
       <div className={styles.commitText} style={{ left: textLeft }}>
         {head && <Check size={16} strokeWidth={1.75} className={styles.headCheck} aria-label="当前 worktree 的 HEAD" />}
-        {pills?.map((pill) => (
-          <RefPill key={`${pill.kind}:${pill.name}`} pill={pill} color={color} onOpen={setActiveSession} />
-        ))}
+        {pills && <Pills pills={pills} color={color} onOpen={setActiveSession} />}
         <span className={styles.subject} data-head={head || undefined}>
           {commit.subject}
         </span>
@@ -191,6 +189,40 @@ function Lanes({ row, head, width }: { row: GraphRow; head: boolean; width: numb
       </g>
       <circle data-node cx={x} cy={ROW_HEIGHT / 2} r={radius} fill={laneColor(row.color)} />
     </svg>
+  )
+}
+
+/**
+ * A row's pills. Pills that do not fit wrap onto the clipped second line; the box is then narrowed to the pills left on
+ * the first line, which CSS cannot do for a wrapped box, so the subject starts right after them instead of at the
+ * box's full width.
+ */
+function Pills({ pills, color, onOpen }: { pills: GraphPill[]; color: string; onOpen(sessionId: string): void }) {
+  const box = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const element = box.current
+    const row = element?.parentElement
+    if (!element || !row) return
+    const fit = () => {
+      element.style.width = ''
+      const items = [...element.children] as HTMLElement[]
+      const first = items[0]
+      const shown = items.filter((item) => item.offsetTop === first?.offsetTop)
+      const last = shown[shown.length - 1]
+      // Rounded up: pills have fractional widths, and a box a fraction too narrow wraps its last pill as well.
+      if (first && last && shown.length < items.length)
+        element.style.width = `${Math.ceil(last.getBoundingClientRect().right - first.getBoundingClientRect().left)}px`
+    }
+    const observer = new ResizeObserver(fit)
+    observer.observe(row)
+    return () => observer.disconnect()
+  }, [pills])
+  return (
+    <span ref={box} className={styles.pills}>
+      {pills.map((pill) => (
+        <RefPill key={`${pill.kind}:${pill.name}`} pill={pill} color={color} onOpen={onOpen} />
+      ))}
+    </span>
   )
 }
 
