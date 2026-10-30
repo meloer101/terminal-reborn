@@ -3,6 +3,7 @@ import { listenForBrowser } from '../panels/browser/store'
 import { listenForBackgroundReview } from '../review/background'
 import { startPullRequestBridge } from '../pull-requests/store'
 import { startConflictRadarBridge } from '../conflict-radar/store'
+import { startBranchSync } from '../state/branch-sync'
 import { startSessionMetaBridge } from '../session-meta/store'
 import { startLimitResumeBridge } from '../limit-resume/bridge'
 import { useWorkspace, type PanelView } from '../state/workspace'
@@ -95,6 +96,7 @@ export function AppShell() {
   useEffect(() => startDispatchBridge(), [])
   useEffect(() => startTaskSources(), [])
   useEffect(() => startConflictRadarBridge(), [])
+  useEffect(() => startBranchSync(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
   useEffect(() => {

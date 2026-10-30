@@ -117,19 +117,35 @@ export function mergeListing(previous: GitWorktreeListing | null | undefined, ne
   }
 }
 
+/** A worktree's name: its branch, the branch it is rebasing, else its short commit. */
+export function worktreeName(info: Pick<GitWorktreeInfo, 'branch' | 'rebasing' | 'head'>): string {
+  return info.branch ?? info.rebasing ?? shortSha(info.head)
+}
+
+/** The workspace worktree records that are git's `info` (by resolved path). */
+function recordsOf(listing: GitWorktreeListing, info: GitWorktreeInfo, worktrees: readonly Worktree[]): Worktree[] {
+  return worktrees.filter((w) => (listing.realPaths[w.path] ?? w.path) === info.realPath || w.path === info.path)
+}
+
+/** What each workspace worktree record git lists is named now — the branch the sidebar, header and overview show. */
+export function branchesOf(listing: GitWorktreeListing, worktrees: readonly Worktree[]): Map<WorktreeId, string> {
+  const branches = new Map<WorktreeId, string>()
+  for (const info of listing.worktrees) for (const w of recordsOf(listing, info, worktrees)) branches.set(w.id, worktreeName(info))
+  return branches
+}
+
 /** Joins git's worktrees with the project's workspace worktrees (by resolved path) and their sessions, then groups them. */
 export function buildRows(listing: GitWorktreeListing, worktrees: readonly Worktree[], sessions: readonly Session[]): WorktreeGroups {
-  const resolved = (w: Worktree) => listing.realPaths[w.path] ?? w.path
   const groups: WorktreeGroups = { working: [], cleanable: [], idle: [] }
   for (const info of listing.worktrees) {
-    const matched = worktrees.filter((w) => resolved(w) === info.realPath || w.path === info.path)
+    const matched = recordsOf(listing, info, worktrees)
     const ids = new Set(matched.map((w) => w.id))
     const inside = sessions.filter((s) => ids.has(s.worktreeId)).sort(compareByUrgency)
     const line = sessionLine(inside, info)
     groups[groupOf(info, inside.length)].push({
       key: info.realPath,
       info,
-      name: info.branch ?? info.rebasing ?? shortSha(info.head),
+      name: worktreeName(info),
       sessions: inside,
       status: inside[0]?.status ?? null,
       worktreeIds: matched.map((w) => w.id),

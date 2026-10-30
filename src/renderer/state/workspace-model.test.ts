@@ -19,6 +19,7 @@ import {
   removeProject,
   restoreWorkspace,
   serializeWorkspace,
+  syncWorktreeBranches,
   titleFromAgent,
   titleFromFirstPrompt,
   type MakeId,
@@ -116,6 +117,18 @@ describe('forgetWorktrees', () => {
     expect(next.worktrees.map((w) => w.id)).toEqual(['w-2'])
     expect(next.sessions.map((s) => s.worktreeId)).toEqual(['w-2'])
     expect(forgetWorktrees(withMain, ['nope'])).toBe(withMain)
+  })
+})
+
+describe('syncWorktreeBranches', () => {
+  it('writes the branch git read, the main checkout included, and keeps records git did not report', () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/repo', makeId)
+    const linked = addSessionInWorktree(data, projectId, { path: '/wt/fix', branch: 'fix' }, 'claude', 0, makeId)!.data
+    const next = syncWorktreeBranches(linked, new Map([['w-2', 'main']]))
+    expect(next.worktrees.map((w) => w.branch)).toEqual(['main', 'fix'])
+    expect(next.worktrees[1]).toBe(linked.worktrees[1])
+    expect(syncWorktreeBranches(next, new Map([['w-2', 'main'], ['w-3', 'fix'], ['nope', 'x']]))).toBe(next)
   })
 })
 

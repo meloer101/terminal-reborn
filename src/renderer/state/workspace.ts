@@ -41,6 +41,7 @@ import {
   forgetWorktrees,
   archiveWorktrees,
   unarchiveWorktrees,
+  syncWorktreeBranches,
   persistedStateChanged,
   projectOfSession,
   reconcileSplit,
@@ -155,6 +156,8 @@ interface WorkspaceState extends WorkspaceData {
   archiveWorktrees(ids: WorktreeId[], archive: WorktreeArchive): void
   /** Brings them back; agents resume on first view. */
   unarchiveWorktrees(ids: WorktreeId[]): void
+  /** The branch git reads for each worktree record (branch-sync); a no-op when none changed. */
+  syncWorktreeBranches(branches: ReadonlyMap<WorktreeId, string>): void
   /** Live, non-persisted fields driven by agent signals (status track, M2). */
   patchSession(id: SessionId, patch: SessionPatch): void
 
@@ -392,6 +395,11 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     forgetWorktrees: (ids) => commit(forgetWorktrees(pick(get()), ids)),
     archiveWorktrees: (ids, archive) => commit(archiveWorktrees(pick(get()), ids, archive)),
     unarchiveWorktrees: (ids) => commit(unarchiveWorktrees(pick(get()), ids), { mainView: 'session', focusRequest: get().focusRequest + 1 }),
+    syncWorktreeBranches: (branches) => {
+      const data = pick(get())
+      const next = syncWorktreeBranches(data, branches)
+      if (next !== data) set({ worktrees: next.worktrees })
+    },
     patchSession: (id, patch) =>
       set((s) => {
         const index = s.sessions.findIndex((x) => x.id === id)
