@@ -20,7 +20,8 @@ function baseOptions(): BrowserWindowConstructorOptions {
   return {
     show: false,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
+    // Centred on the 36px title strip (--titlebar-height).
+    trafficLightPosition: { x: 16, y: 11 },
     backgroundColor: '#0a0a0a',
     // Liquid Glass (macOS 26) needs a transparent window (appearance.ts).
     transparent: nativeGlass,

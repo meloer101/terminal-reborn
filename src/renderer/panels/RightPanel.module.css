@@ -29,7 +29,7 @@
 .resize {
   position: absolute;
   top: var(--titlebar-height);
-  bottom: var(--card-gap);
+  bottom: var(--card-gap-bottom);
   left: calc(-0.5 * var(--space-6));
   z-index: 1;
   width: var(--space-6);

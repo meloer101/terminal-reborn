@@ -1,4 +1,4 @@
-/* Figma Sidebar 14:3 — titlebar 44 · nav · sessions (flex) · footer. Width/background/border come from AppShell. */
+/* Figma Sidebar 14:3 — titlebar (--titlebar-height) · nav · sessions (flex) · footer. Width/background/border come from AppShell. */
 .titlebar {
   flex: none;
   height: var(--titlebar-height);
@@ -46,7 +46,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-8) var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--space-8) var(--card-gap-bottom);
 }
 
 /* Figma 14 · no projects yet: one quiet line; "打开项目…" is already in the nav above and on the welcome page. */

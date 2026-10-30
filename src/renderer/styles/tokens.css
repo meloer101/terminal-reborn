@@ -32,15 +32,19 @@
 
   /* Chrome dimensions (Screens 01–08) */
   --sidebar-width: 264px;
-  --titlebar-height: 44px;
+  /* Keep SplitArea's HEADER and the traffic lights (main/windows.ts) in step. */
+  --titlebar-height: 36px;
   /* Sidebar text line (Figma 34P): 8 row inset + a 16px column for icons, chevrons and status glyphs + 8 gap. Nav labels,
      project names and every line of a session row start here. */
   --indent-tree: 32px;
   /* Main never gets narrower; the right panel floats over it instead (B13). */
   --main-min-width: 560px;
   /* Glass shell (PRD §5 玻璃外壳, Figma 28): cards (terminal panes, right panel, overview) sit this far from the
-     window's right and bottom edges and from each other; their corner is --radius-window. */
+     window's right edge and from each other; their corner is --radius-window. */
   --card-gap: 6px;
+  /* The cards' bottom edge lines up with the bottom of the sidebar footer's last row (设置), so it is the footer's
+     bottom padding rather than --card-gap. */
+  --card-gap-bottom: var(--space-12);
 
   /* Type */
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', sans-serif;
@@ -83,6 +87,11 @@
   --fsb-plum: radial-gradient(70% 34% at 50% 47%, #9c4f60, transparent 70%), radial-gradient(55% 45% at 0% 0%, #ecac83, transparent 70%), radial-gradient(55% 45% at 100% 0%, #cb7655, transparent 70%), radial-gradient(55% 45% at 0% 100%, #432e53, transparent 70%), radial-gradient(55% 45% at 100% 100%, #5a345f, transparent 70%), linear-gradient(180deg, #e49c74 0%, #bc7368 30%, #9c4f60 46%, #804260 62%, #3f2b4e 100%);
   /* Film grain over the field (the 配图底托 are grainy). */
   --fs-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  /* Full screen, text on the field (Figma 42C): no grey levels, so the quiet text steps down a size instead. Same line
+     height as --text-caption / --text-mono-s, so the rows keep their pitch. */
+  --fs-text-caption: 400 11px/16px var(--font-ui);
+  --fs-text-mono-s: 400 11px/16px var(--font-mono);
+  --fs-text-mono-s-medium: 500 11px/16px var(--font-mono);
 }
 
 /* Dark — the default baseline */

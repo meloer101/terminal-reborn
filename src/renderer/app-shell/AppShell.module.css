@@ -49,6 +49,17 @@
   background-blend-mode: normal, normal, overlay, normal;
 }
 
+/* Text straight on the field — the sidebar and the session headers (PRD v1.102, Figma 42C): the field's brightness
+   changes from top to bottom and from palette to palette, so a grey level always meets a stretch it matches. On the
+   field everything is the primary colour and the quiet text is a size smaller. */
+.shell[data-fullscreen='true'] :global(:is([data-region='sidebar'], [data-region='session-header'])) {
+  --text-secondary: var(--text-primary);
+  --text-tertiary: var(--text-primary);
+  --text-caption: var(--fs-text-caption);
+  --text-mono-s: var(--fs-text-mono-s);
+  --text-mono-s-medium: var(--fs-text-mono-s-medium);
+}
+
 .sidebar {
   position: relative;
   flex: none;
@@ -126,7 +137,7 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--card-gap) var(--card-gap) 0;
+  padding: 0 var(--card-gap) var(--card-gap-bottom) 0;
 }
 
 /* Too narrow to dock (layout.ts): float over main's right edge on the floating surface (no backdrop blur, which would

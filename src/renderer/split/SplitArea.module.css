@@ -2,9 +2,9 @@
    measureSplit: a header strip here, the terminal below it by TerminalArea. */
 .area {
   position: absolute;
-  /* The cards keep --card-gap from the window's right and bottom edges, and from its left one when the sidebar is
-     closed (--lead-gap, AppShell). The headers sit on the glass above them. */
-  inset: 0 var(--card-gap) var(--card-gap) var(--lead-gap, 0);
+  /* The cards keep --card-gap from the window's right edge (--card-gap-bottom from its bottom one), and from its left
+     one when the sidebar is closed (--lead-gap, AppShell). The headers sit on the glass above them. */
+  inset: 0 var(--card-gap) var(--card-gap-bottom) var(--lead-gap, 0);
 }
 
 /* A pane's header (Figma 28E): on the window's glass, its terminal card right below. */

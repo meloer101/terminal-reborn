@@ -92,7 +92,7 @@ export function Sidebar() {
   return (
     <>
       <div className={styles.titlebar}>
-        {/* Native traffic lights (hiddenInset, x=16 y=16) sit over this gap. */}
+        {/* Native traffic lights (hiddenInset, x=16 y=11) sit over this gap. */}
         <div className={styles.trafficLights} aria-hidden />
         <IconButton label="隐藏侧栏" title={`隐藏侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft {...ICON} />
