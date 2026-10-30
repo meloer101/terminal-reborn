@@ -11,8 +11,3 @@
   width: 100%;
   overflow: hidden;
 }
-
-/* The sample is sized to fit; never show a scrollbar over it. */
-.host :global(.xterm-viewport) {
-  scrollbar-width: none;
-}

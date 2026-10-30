@@ -29,6 +29,13 @@ select {
   color: inherit;
 }
 
+/* xterm's stylesheet keeps `overflow-y: scroll` on its viewport, which spans the whole terminal; xterm 6 draws its own
+   scrollbar, so with macOS "Show scroll bars: Always" (a mouse attached) this left a second, native track in the
+   theme's scrollbar color along every terminal's right edge. */
+.xterm .xterm-viewport {
+  scrollbar-width: none;
+}
+
 :focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;

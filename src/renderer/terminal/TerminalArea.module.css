@@ -64,6 +64,14 @@
   overflow: visible !important;
 }
 
+/* A full-screen program that paints every edge cell one color (Grok) gets that color in the padding and the fit
+   remainder too, instead of a ring of the theme's (edge-fill.ts). Opaque like the cells it extends, translucent or not:
+   xterm's own background on this element and the ring above are replaced, not layered. */
+.host :global(.xterm[data-cli-bg]) :global(.xterm-scrollable-element) {
+  background-color: var(--term-cli-bg) !important;
+  box-shadow: 0 0 0 100vmax var(--term-cli-bg);
+}
+
 /* The DOM renderer (translucent terminals) sizes each glyph by measuring it repeated 32 times, then pads it to its
    cells with letter-spacing. Chromium's default `text-spacing-trim` halves fullwidth punctuation next to more of it
    (，，… measures 6.7px, not 13px), so every lone ，；。 rendered ~0.8 cell too wide and CJK rows ran past the grid

@@ -8,6 +8,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { whenAppearanceKnown } from './appearance-ready'
 import { atlasAction } from './atlas-guard'
+import { bufferEdgeFill } from './edge-fill'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { defersToTextInput, macKeyToBytes } from './keymap'
 import { isAutoPeriod, placePreedit } from './ime'
@@ -108,6 +109,8 @@ export class XtermSurface implements TerminalSurface {
   private readonly searchAddon = new SearchAddon({ highlightLimit: 1000 })
   private findCaseSensitive = false
   private visible = true
+  /** The padding color a full-screen program asked for by painting every edge cell (edge-fill.ts); null = the theme's. */
+  private edgeColor: string | null = null
   private disposed = false
   private appearance: TerminalAppearance = { ...DEFAULT_APPEARANCE }
   private readonly themeObserver: MutationObserver
@@ -185,6 +188,7 @@ export class XtermSurface implements TerminalSurface {
     this.term.onData((data) => {
       this.lastInput = { data, at: performance.now() }
     })
+    this.term.onRender(() => this.syncEdgeFill())
 
     // Re-theme when <html data-theme> flips (theme.ts also follows the system setting).
     this.themeObserver = new MutationObserver(() => this.applyTheme())
@@ -476,6 +480,22 @@ export class XtermSurface implements TerminalSurface {
     // The redraw is the next frame's render; this flag outlives it by one frame.
     atlasJustReset = true
     requestAnimationFrame(() => requestAnimationFrame(() => (atlasJustReset = false)))
+  }
+
+  /** Hands the edge color to TerminalArea's padding rules (`.xterm[data-cli-bg]`, `--term-cli-bg`) when it changes. */
+  private syncEdgeFill(): void {
+    const element = this.term.element
+    if (!element) return
+    const color = bufferEdgeFill(this.term.buffer.active, this.term.cols, this.term.rows, this.term.options.theme ?? {})
+    if (color === this.edgeColor) return
+    this.edgeColor = color
+    if (color) {
+      element.style.setProperty('--term-cli-bg', color)
+      element.dataset.cliBg = ''
+    } else {
+      element.style.removeProperty('--term-cli-bg')
+      delete element.dataset.cliBg
+    }
   }
 
   private applyTheme(): void {
