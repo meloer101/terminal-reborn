@@ -4,6 +4,35 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-30
+
+Fixes after v0.12.0: the main checkout's branch in the sidebar, no second merge after a squash, and terminals without a coloured ring.
+v0.12.0 之后的修复：侧栏显示主目录的分支，squash 合并后不再提供第二次合并，终端四周不再有一圈别的颜色。
+
+### Sidebar / 侧栏
+- Sessions in the main checkout show their branch again, in the sidebar and in the session header, and follow `git switch`.
+  主目录里的会话重新显示分支（侧栏和会话头），`git switch` 后跟着变。
+
+### Git / 合并
+- After 合并到 main 并推送 with a squash, the branch counts as merged: the footer offers no exits and main refuses a second merge, instead of pushing an empty commit.
+  squash 方式「合并到 main 并推送」之后，分支算作已合并：底部不再给出口，main 拒绝第二次合并，不会再推一个空提交。
+- After a squash the worktree's branch moves onto the squash commit, so the graph and clean-up see it as merged; a branch already pushed stays where it is.
+  squash 之后 worktree 的分支移到 squash 提交上，图谱和清理按已合并处理；已经推送过的分支不动。
+- Wavi reads which merge methods the repository allows; a rebase is no longer blocked by untracked files.
+  Wavi 读取仓库允许的合并方式；rebase 不再被未跟踪文件挡住。
+- Ref pills on a narrow graph drop out whole instead of all shrinking to their icons.
+  图谱变窄时，ref 标签整个隐藏，不再全部缩成半个图标。
+
+### Look / 外观
+- A CLI that paints its own background (Grok) no longer sits in a ring of the theme's colour, and the native scrollbar strip is gone with "Show scroll bars: Always".
+  自己画背景的 CLI（Grok）四周不再有一圈主题色；系统设成「始终显示滚动条」时也不再有原生滚动条那一条。
+- Full screen: all text on the light field is readable; the title strip is 36 px and cards line up with 设置.
+  全屏时光场上的文字都看得清；标题栏改为 36 px，卡片底边和「设置」对齐。
+
+### Performance / 性能
+- The exit preflight runs fewer `gh` and `git` calls.
+  出口预检少跑 `gh` 和 `git`。
+
 ## [0.12.0] - 2026-10-29
 
 Liquid Glass on macOS 26, a sidebar that reads on one line, and dispatch that asks under its own terminal.
@@ -427,7 +456,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/meloer101/terminal-reborn/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/meloer101/terminal-reborn/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/meloer101/terminal-reborn/compare/v0.9.0...v0.10.0
