@@ -156,7 +156,7 @@ test.describe('F17 right panel · 文件', () => {
     const b = await box()
     // --card-gap from the window's right edge; the session's tools are on the glass above it (Figma 28G).
     expect(Math.round(width - (b.x + b.width))).toBe(6)
-    expect(Math.round(b.y)).toBe(44)
+    expect(Math.round(b.y)).toBe(36)
 
     const handle = panel().getByRole('separator', { name: '调整右侧栏宽度' })
     const h = (await handle.boundingBox())!

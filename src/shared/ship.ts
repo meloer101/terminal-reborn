@@ -32,7 +32,7 @@ export type ShipPreflight =
       baseBehindUpstream: number
       /** The branch's open PR, if any (then 创建 PR becomes 推送到 PR #N). */
       openPr: number | null
-      /** The merge methods the repository allows on GitHub and its default (PRD F16 v1.102); null when there are no
+      /** The merge methods the repository allows on GitHub and its default (PRD F16 v1.105); null when there are no
        *  GitHub settings to go by (no GitHub remote, no gh, or gh could not tell): the user picks, Wavi remembers. */
       mergeMethods: RepoMergeMethods | null
     }

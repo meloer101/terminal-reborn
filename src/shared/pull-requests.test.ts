@@ -361,7 +361,7 @@ describe('PR details (PRD F16 v1.63)', () => {
   })
 })
 
-describe('repository merge methods (PRD F16 v1.102)', () => {
+describe('repository merge methods (PRD F16 v1.105)', () => {
   it('lists the allowed methods in squash, merge, rebase order, defaulting to the viewer one when allowed', () => {
     expect(repoMergeMethods({ squashMergeAllowed: true, mergeCommitAllowed: true, rebaseMergeAllowed: true, viewerDefaultMergeMethod: 'REBASE' })).toEqual({
       methods: ['squash', 'merge', 'rebase'],

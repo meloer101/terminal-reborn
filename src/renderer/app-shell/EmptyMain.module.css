@@ -2,7 +2,7 @@
 .empty {
   position: absolute;
   /* A card on the window's glass, where the terminal would be (Figma 28). */
-  inset: 0 var(--card-gap) var(--card-gap) var(--lead-gap, 0);
+  inset: 0 var(--card-gap) var(--card-gap-bottom) var(--lead-gap, 0);
   border-radius: var(--radius-window);
   box-shadow: var(--card-edge), var(--card-shadow);
   display: flex;

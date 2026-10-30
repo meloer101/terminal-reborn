@@ -26,7 +26,7 @@ import { setSplitGeometry, useSessionDrag, type SessionDrag } from './store'
 import styles from './SplitArea.module.css'
 
 /** A pane's header (= --titlebar-height); its terminal fills the rest of the pane. */
-const HEADER = 44
+const HEADER = 36
 /** The drop target sits this far inside the part of the pane it will take (Figma 21D). */
 const DROP_INSET = 8
 

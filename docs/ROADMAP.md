@@ -8,9 +8,10 @@
 
 ## 当前位置
 
-- 2026-10-30：B27「合并到 main 并推送」的合并方式跟随仓库（PRD v1.102）进行中：已完成主进程和共享层——出口预检带回 GitHub 仓库允许的合并方式和默认方式（`repoMergeMethods` / `REPO_MERGE_QUERY`，`src/main/ship.ts` 的 `repoMergeSettings()`），squash 后分支移到 squash 提交上（`reset --keep`），rebase 不再被未跟踪文件挡住；`git-merge.test.ts`、`ship.test.ts`（三种方式各合并并推送一次、squash 后不能再合并）、`pull-requests.test.ts`。Figma 第 43 节（`688:32000`）画了「合并方式」一行的状态，等作者定稿后再做渲染层（出口区「合并方式」、记住的方式、自动修复和合并面板用同一个解析结果、步骤标签）。
+- 2026-10-30：B27「合并到 main 并推送」的合并方式跟随仓库（PRD v1.105）进行中：已完成主进程和共享层——出口预检带回 GitHub 仓库允许的合并方式和默认方式（`repoMergeMethods` / `REPO_MERGE_QUERY`，`src/main/ship.ts` 的 `repoMergeSettings()`），squash 后分支移到 squash 提交上（`reset --keep`），rebase 不再被未跟踪文件挡住；`git-merge.test.ts`、`ship.test.ts`（三种方式各合并并推送一次、squash 后不能再合并）、`pull-requests.test.ts`。Figma 第 43 节（`688:32000`）画了「合并方式」一行的状态，等作者定稿后再做渲染层（出口区「合并方式」、记住的方式、自动修复和合并面板用同一个解析结果、步骤标签）。
 - 2026-10-30：修 B26：Git · 图谱一个提交上有多个 ref 胶囊、右侧栏变窄时，胶囊不再一起缩成只剩图标的小框；放不下的整个隐藏，留下的保持完整，提交说明紧跟其后。静态页用真实 CSS 在 330–1800 宽来回切实测；还没在 app 里看过。
 - 2026-10-30：修 B25（PRD v1.101）：squash 合并到 main 之后，Git · 变更底部不再出「合并到 main 并推送」「创建 PR」，再合并一次也被主进程挡住，不会让 agent 重写提交说明、不会往 main 写空提交。`workInBase`（`src/main/git-merge.ts`）+ 预检的 `merged`；`ship.test.ts`（合并两次，第二次被挡、main 和 origin 不动）、`exit-model.test.ts`。
+- 2026-10-30：全屏时侧栏和会话头的字不再分灰度（PRD v1.102，Figma 42C）：全部主色、次要的字小一号（作者看过后去掉了稿里的暗晕），会话头和侧栏顶栏从 44 收到 36（窗口和全屏一致，红绿灯下移到 y=11），卡片下沿和侧栏「设置」一行的下沿对齐（离底边 12），修「全屏 + 深色 + 湖岸背景时文字看不清」。构建版全屏截图核对过深色湖岸、浅色夜火；额度条没有数据，没截到。
 - 2026-10-30：全屏程序自己铺的底色延伸到终端内边距（PRD v1.100）：Grok 这类给每个格子填色的 TUI 不再被一圈主题底色围着；四条边颜色不一致、或有默认背景时保持主题色。`edge-fill.ts` + 单测；app 内实测深色 / 半透明 / 浅色和真实 grok，内边距、右侧余量与格子同色，退出后恢复。顺带修 B24（常驻滚动条时终端右边的原生轨道）。
 - 2026-10-30：修复 v0.12.0 侧栏主目录会话没有第三行（分支）：主目录的 worktree 记录从 M1 起分支一直是空的。现在启动、加项目 / worktree、窗口获得焦点、git 的 worktree / 分支文件变化时读一次 `git worktree list`，把分支写回记录，会话头也显示主目录的分支；总览主目录仍只写项目名。仓库 watch 改成窗口内计数，Worktree 视图关掉不再停掉侧栏的同步。e2e `branch-sync.spec.ts`（启动显示 main、`git switch` 后跟着变、开关 Worktree 视图后仍跟着变）。
 - 2026-10-29：hook 的 `tool_input` / `tool_response` 在守护进程转发前裁掉（Read 的整份文件、Bash 的整段输出、Write / Edit 的文件内容不再和终端输出挤同一条 socket），守护进程 socket 的分行改成线性（见 D1）。
@@ -258,7 +259,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] B24 接了鼠标的 Mac（系统设置「显示滚动条：始终」）上每个终端右边多一条滚动条颜色的竖带（2026-10-30）：xterm 6 自己画滚动条，但它的 `.xterm-viewport` 仍是 `overflow-y: scroll` 且铺满整个终端，原生轨道（10px）贴在终端右边缘。全局去掉这个原生滚动条（`src/renderer/styles/base.css`），设置预览里同样的规则合并进来。用 `::-webkit-scrollbar` 强制常驻滚动条实测：修复前 viewport 占 10px、右边缘是轨道色，修复后 0px、和终端底色一致，滚轮翻 scrollback 不受影响
 - [x] B25 squash 合并到 main 之后底部仍出「合并到 main 并推送」，再点会让 agent 重写提交说明、往 main 写空提交（2026-10-30，PRD v1.101）：按提交数分支仍领先；改为按内容判断（合进基线后的树等于基线的树），出口预检和合并预检都用它
 - [x] B26 Git · 图谱一个提交上有多个 ref 胶囊、右侧栏变窄时，每个胶囊都缩成只剩边框和半个图标，提交说明也被挤没（2026-10-30）：胶囊各自 `flex-shrink`、提交说明 `flex-basis: 0`。胶囊合进最多占半行的 `.pills`，放不下的换到被裁掉的第二行、整个隐藏；`Pills`（`GraphView.tsx`）在宽度变化时把组宽收到第一行最后一个胶囊（向上取整，否则小数宽度会把它也挤下去）
-- [ ] B27 「合并到 main 并推送」写死 squash，squash 后分支不是基线的祖先、提交图和「领先 N」把它当成没合并（2026-10-30，PRD v1.102）：方式跟随仓库（GitHub 设置或第一次选后记住），squash 后分支移到 squash 提交上。主进程和共享层已完成；渲染层等 Figma 第 43 节定稿
+- [ ] B27 「合并到 main 并推送」写死 squash，squash 后分支不是基线的祖先、提交图和「领先 N」把它当成没合并（2026-10-30，PRD v1.105）：方式跟随仓库（GitHub 设置或第一次选后记住），squash 后分支移到 squash 提交上。主进程和共享层已完成；渲染层等 Figma 第 43 节定稿
 - ~~B12 选项条文案和焦点~~：PromptBar 已在 v1.2 取消
 - ~~B14 浅色主题配渐变背景时文字看不清~~：渐变 / 图片背景已取消
 

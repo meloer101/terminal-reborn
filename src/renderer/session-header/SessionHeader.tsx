@@ -100,7 +100,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
   // The status is in the sidebar row already (F17 dropped the copy here); only a hooks problem is worth repeating.
 
   return (
-    <header className={styles.header} data-part={part} data-sidebar-collapsed={sidebarCollapsed && showTitle} data-focused={focused} data-drag-region={pane?.top ?? true}>
+    <header className={styles.header} data-region="session-header" data-part={part} data-sidebar-collapsed={sidebarCollapsed && showTitle} data-focused={focused} data-drag-region={pane?.top ?? true}>
       {showTitle && sidebarCollapsed && (
         <IconButton label="显示侧栏" title={`显示侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft size={16} strokeWidth={1.75} />

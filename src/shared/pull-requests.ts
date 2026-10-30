@@ -817,7 +817,7 @@ export function repoMergeMethods(repo: Record<string, unknown>): RepoMergeMethod
   return { methods, defaultMethod: preferred && methods.includes(preferred) ? preferred : (methods[0] ?? 'merge') }
 }
 
-/** The repository's merge options alone (exit A's 合并方式, PRD F16 v1.102). Variables: owner, name. */
+/** The repository's merge options alone (exit A's 合并方式, PRD F16 v1.105). Variables: owner, name. */
 export const REPO_MERGE_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) { squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed viewerDefaultMergeMethod }
 }`
