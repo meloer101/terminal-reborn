@@ -131,7 +131,9 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   // Nothing to propose or merge (merged already, or no work yet): no exits — the PR line says what happened.
   // The main checkout with a feature branch out ships like a worktree; on its base it has nothing of its own.
   const onBase = onOwnBase(worktree.isMain, changes)
-  const nothingToShip = !onBase && !prLive && changes.ahead === 0 && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
+  // A squash merge leaves the branch ahead by its commits; the preflight sees their work is in the base.
+  const noNewCommits = changes.ahead === 0 || (preflight?.ok === true && preflight.merged)
+  const nothingToShip = !onBase && !prLive && noNewCommits && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {

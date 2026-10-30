@@ -130,6 +130,27 @@ export async function mergeTreeConflicts(cwd: string, ours: string, theirs: stri
   return parseMergeTree(merged.stdout, merged.code === 1)
 }
 
+const treeOf = async (cwd: string, commit: string): Promise<string> =>
+  (await git(cwd, ['rev-parse', '--verify', '--end-of-options', `${commit}^{tree}`])).trim()
+
+/**
+ * `tree` (the clean merge of `head` into `base`) is the base's own tree and the branch did change something: its work
+ * is in the base already. A squash merge leaves the branch's commits ahead by ancestry; this is what tells it (PRD §6,
+ * as the conflict radar does). A branch whose edits cancel out (edit, then revert) changes nothing but merged nothing.
+ */
+async function alreadyInBase(cwd: string, base: string, head: string, tree: string): Promise<boolean> {
+  if (tree !== (await treeOf(cwd, base))) return false
+  const fork = (await git(cwd, ['merge-base', base, head])).trim()
+  const [headTree, forkTree] = await Promise.all([treeOf(cwd, head), treeOf(cwd, fork)])
+  return headTree !== forkTree
+}
+
+/** Whether the branch's work is already in its base (see `alreadyInBase()`). Rejects as `mergeTreeConflicts()` does. */
+export async function workInBase(cwd: string, base: string, head: string): Promise<boolean> {
+  const merged = await mergeTreeConflicts(cwd, base, head)
+  return merged.conflicts.length === 0 && (await alreadyInBase(cwd, base, head, merged.tree))
+}
+
 /** Whether a merge-tree error means git is too old for `--write-tree`. */
 export const isOldGit = (message: string): boolean => /write-tree|usage: git merge-tree/i.test(message)
 
@@ -251,6 +272,12 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
   const { tree, conflicts } = merged
   check.conflicts = conflicts
   if (conflicts.length > 0) return done(null)
+  // Squash-merged already: merging again would only write an empty commit onto the base.
+  try {
+    if (await alreadyInBase(realRoot, baseHead, head, tree)) return done({ kind: 'nothing', merged: true })
+  } catch (error) {
+    return done({ kind: 'unverified', message: errorText(error) })
+  }
 
   // The base's checkout gets fast-forwarded: its uncommitted changes must not touch what the merge changes.
   if (check.baseCheckout) {

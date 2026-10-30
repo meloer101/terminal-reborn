@@ -24,6 +24,8 @@ export type ShipPreflight =
       uncommitted: number
       /** Commits on the branch the base lacks. */
       ahead: number
+      /** Those commits' work is already in the base (a squash merge leaves them ahead): nothing of them to ship. */
+      merged: boolean
       /** Local base commits not on its upstream: a PR or a push would carry them too (Figma 29 note). */
       baseAheadOfUpstream: number
       /** Upstream base commits the local base lacks: 合并到 main pulls first. */

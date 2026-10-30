@@ -193,6 +193,7 @@ describe('preflight', () => {
       suggested: 'main',
       uncommitted: 2,
       ahead: 2,
+      merged: false,
       baseAheadOfUpstream: 0,
       baseBehindUpstream: 0,
       openPr: null
@@ -313,6 +314,20 @@ describe('shipToMain', () => {
     expect(git(bare, 'log', '-1', '--format=%B', 'main').trim()).toBe('Make nav sticky')
   })
 
+  it('does not ship a squash-merged branch again: no empty commit on the base', async () => {
+    const { root, wt, bare } = setup()
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    expect(first).toMatchObject({ ok: true, pushed: true })
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 1, merged: true })
+    const pushed = sha(bare, 'main')
+    const again = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    expect(again).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
+    expect(sha(root, 'main')).toBe(pushed)
+    expect(sha(bare, 'main')).toBe(pushed)
+    commit(wt, 'more.txt', 'm\n', 'More')
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, ahead: 2, merged: false })
+  })
+
   it('merges without pushing when there is no remote', async () => {
     const { root, wt } = setup({ remote: false })
     const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
@@ -344,7 +359,8 @@ describe('shipToMain', () => {
     const { root, wt } = setup({ github: false })
     git(wt, 'reset', '-q', '--hard', 'main')
     const result = await shipToMain({ root, worktree: wt, message: '', method: 'squash', paths: null })
-    expect(result).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支没有比 main 新的提交' })
+    // Its reflog has a commit of its own, now all in main: the merge sheet says the same.
+    expect(result).toEqual({ ok: false, step: 'merge', reason: 'blocked', message: '分支已经全部合并到 main' })
   })
 
   it('answers conflicts with the files to hand to the agent, and changes nothing', async () => {

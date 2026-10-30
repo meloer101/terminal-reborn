@@ -26,7 +26,7 @@ export function shipExits(state: ExitState): { primary: ShipExit; secondary: Shi
   if (preflight === null) return both(remembered ?? 'main', '合并到 main 并推送', '创建 PR', CHECKING, CHECKING)
   if (!preflight.ok) return both('main', '合并到 main 并推送', '创建 PR', preflight.message, preflight.message)
 
-  const { base, openPr, uncommitted, ahead } = preflight
+  const { base, openPr, uncommitted, ahead, merged } = preflight
   if (openPr !== null) {
     if (uncommitted > 0 || unpushed) {
       const label = uncommitted > 0 ? `提交并推送到 PR #${openPr}` : `推送到 PR #${openPr}`
@@ -35,7 +35,7 @@ export function shipExits(state: ExitState): { primary: ShipExit; secondary: Shi
     return { primary: { kind: 'open-pr', number: openPr, label: `打开 PR #${openPr}`, blocker: null }, secondary: null }
   }
 
-  const nothing = ahead === 0 && uncommitted === 0
+  const nothing = (ahead === 0 || merged) && uncommitted === 0
   const mainBlocker = nothing ? '没有要合并的改动' : null
   const prBlocker = nothing ? `没有比 ${base} 新的提交` : null
 
