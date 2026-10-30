@@ -44,7 +44,7 @@ export function addProject(
   const existing = data.projects.find((p) => p.rootPath === rootPath)
   if (existing) return { data, projectId: existing.id }
   const project: Project = { id: makeId('p'), name: basename(rootPath), rootPath }
-  // Branch stays empty until git integration (M4) can read it.
+  // Branch stays empty until git is read (syncWorktreeBranches); it stays so outside git.
   const worktree: Worktree = { id: makeId('w'), projectId: project.id, branch: '', path: rootPath, isMain: true }
   return {
     data: { ...data, projects: [...data.projects, project], worktrees: [...data.worktrees, worktree] },
@@ -180,6 +180,19 @@ export function unarchiveWorktrees(data: WorkspaceData, worktreeIds: readonly st
   })
   const first = sessions.find((s) => ids.has(s.worktreeId))
   return { ...data, worktrees, sessions, activeSessionId: first?.id ?? data.activeSessionId }
+}
+
+/**
+ * Writes the branch git reads for each worktree record (the main checkout's starts empty, and any checkout can switch
+ * branch). Records git did not report keep theirs. Returns `data` itself when nothing changed.
+ */
+export function syncWorktreeBranches(data: WorkspaceData, branches: ReadonlyMap<WorktreeId, string>): WorkspaceData {
+  const stale = (w: Worktree): boolean => {
+    const branch = branches.get(w.id)
+    return branch !== undefined && branch !== w.branch
+  }
+  if (!data.worktrees.some(stale)) return data
+  return { ...data, worktrees: data.worktrees.map((w) => (stale(w) ? { ...w, branch: branches.get(w.id)! } : w)) }
 }
 
 /** Forgets linked worktree records (their folder was deleted) and closes their sessions. Main checkouts stay. */

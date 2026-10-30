@@ -24,7 +24,7 @@ import { useRepoScripts } from '../../scripts/run-script'
 import { PaneHeader } from '../PaneHeader'
 import { cleanUpInteractive, openRowMenu, selectRow } from './actions'
 import { buildRows, detailLines, selectedRow, tildePath, type WorktreeGroups, type WorktreeRow } from './model'
-import { patchRoot, refreshWorktrees, useWorktrees, worktreesOf } from './store'
+import { patchRoot, refreshWorktrees, useWorktrees, watchRepo, worktreesOf } from './store'
 import styles from './WorktreeView.module.css'
 
 /** Session changes (new, closed, status) come in bursts; list once they settle. */
@@ -93,14 +93,14 @@ export function WorktreeView({ projectId, root, projectName, activeWorktreeId }:
     const offChanged = window.tr.gitWorktrees.onChanged((changedRoot) => {
       if (changedRoot === root) void refreshAll()
     })
-    window.tr.gitWorktrees.watch(root)
+    const unwatch = watchRepo(root)
     const poll = setInterval(() => {
       if (document.visibilityState === 'visible') void refreshAll()
     }, POLL_MS)
     return () => {
       window.removeEventListener('focus', refreshAll)
       offChanged()
-      window.tr.gitWorktrees.unwatch(root)
+      unwatch()
       clearInterval(poll)
     }
   }, [root, refreshAll])

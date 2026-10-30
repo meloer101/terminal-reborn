@@ -69,3 +69,24 @@ export function refreshWorktrees(root: string, knownPaths: string[], only?: read
   })()
   return q.running
 }
+
+const watchers = new Map<string, number>()
+
+/**
+ * Watches the repository at `root` until the returned function is called. Main keeps one watch per root and window,
+ * so the Worktree view and the branch sync share it: the last one to let go stops it.
+ */
+export function watchRepo(root: string): () => void {
+  const count = watchers.get(root) ?? 0
+  watchers.set(root, count + 1)
+  if (count === 0) window.tr.gitWorktrees.watch(root)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const left = (watchers.get(root) ?? 1) - 1
+    if (left > 0) return void watchers.set(root, left)
+    watchers.delete(root)
+    window.tr.gitWorktrees.unwatch(root)
+  }
+}

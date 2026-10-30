@@ -118,7 +118,8 @@ function cardOf(status: SessionStatus): CardTone {
 function toRow(session: Session, worktree: Worktree | undefined, project: Project | undefined, now: number): OverviewRow {
   const status = glyphStatus(session)
   const projectName = project?.name ?? ''
-  const branch = worktree?.branch ?? ''
+  // The main checkout reads as the project alone, whatever branch it is on.
+  const branch = worktree && !worktree.isMain ? worktree.branch : ''
   const added = worktree?.added ?? 0
   const removed = worktree?.removed ?? 0
   return {

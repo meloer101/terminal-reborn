@@ -11,7 +11,7 @@ const projects: Project[] = [
 ]
 const worktrees: Worktree[] = [
   { id: 'wa', projectId: 'pa', branch: 'jacob/cookie', path: '/wt/cookie', isMain: false, added: 42, removed: 18 },
-  { id: 'wam', projectId: 'pa', branch: '', path: '/a', isMain: true },
+  { id: 'wam', projectId: 'pa', branch: 'main', path: '/a', isMain: true },
   { id: 'wb', projectId: 'pb', branch: 'jacob/graph', path: '/wt/graph', isMain: false }
 ]
 

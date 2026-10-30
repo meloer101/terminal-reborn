@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitWorktreeInfo, GitWorktreeListing } from '@shared/git-worktrees'
 import type { Session, Worktree } from '@shared/types'
 import {
+  branchesOf,
   buildRows,
   cleanupPlan,
   deleteBlocker,
@@ -107,6 +108,30 @@ describe('buildRows', () => {
   it('names a detached worktree by its short commit, a rebasing one by its branch', () => {
     const odd = buildRows({ ...listing, worktrees: [info({ path: '/a', head: '0123456789ab' }), info({ path: '/b', rebasing: 'jacob/x' })] }, [], [])
     expect(odd.idle.map((r) => r.name)).toEqual(['0123456', 'jacob/x'])
+  })
+})
+
+describe('branchesOf', () => {
+  it('names each record git lists by its branch, matching by resolved path, and skips records git does not list', () => {
+    const records: Worktree[] = [
+      { id: 'w-main', projectId: 'p', branch: '', path: '/repo', isMain: true },
+      { id: 'w-feature', projectId: 'p', branch: 'old', path: '/wt/feature', isMain: false },
+      { id: 'w-elsewhere', projectId: 'p', branch: 'x', path: '/wt/elsewhere', isMain: false }
+    ]
+    expect(branchesOf(listing, records)).toEqual(new Map([['w-main', 'main'], ['w-feature', 'jacob/feature']]))
+  })
+
+  it('names a detached checkout by the branch it is rebasing, else its short commit', () => {
+    const detached: GitWorktreeListing = {
+      mainBranch: 'main',
+      worktrees: [info({ path: '/a', head: 'abcdef123456' }), info({ path: '/b', rebasing: 'jacob/fix' })],
+      realPaths: {}
+    }
+    const records: Worktree[] = [
+      { id: 'a', projectId: 'p', branch: '', path: '/a', isMain: true },
+      { id: 'b', projectId: 'p', branch: '', path: '/b', isMain: false }
+    ]
+    expect(branchesOf(detached, records)).toEqual(new Map([['a', 'abcdef1'], ['b', 'jacob/fix']]))
   })
 })
 
