@@ -10,9 +10,13 @@ import type { HookAgent, SubagentInfo } from '@shared/agent-events'
 import { claudeTranscriptPath, cleanTitle, defaultAgentDataDirs, type AgentDataDirs } from './agent-title'
 import { readHead } from './codex-usage'
 
-/** The meta file is a few hundred bytes; the model sits in the transcript's first assistant line. */
+/**
+ * The meta file is a few hundred bytes. The model is in the subagent transcript's `model` attachment, which sits after
+ * the tool and skill listings: ~87 KB in, the first assistant line at ~255 KB (2.1.316, PRD §6.14 v1.108). Read once
+ * per subagent, off any hot path.
+ */
 const META_BYTES = 64 * 1024
-const HEAD_BYTES = 64 * 1024
+const HEAD_BYTES = 1024 * 1024
 /** A subagent whose meta or model was not there yet is read again on a later hook, at most this often. */
 const RETRY_MS = 2_000
 /** And on its own this many times, RETRY_MS apart: a subagent in one long tool call sends no hook to retry on. */
@@ -60,13 +64,22 @@ export function parseSubagentMeta(text: string): SubagentMeta | null {
   return { ...(title ? { title } : {}), ...(model ? { model } : {}), foreground: value.requestShape === 'foreground' }
 }
 
-/** The model of the first assistant message in a subagent's transcript head. */
-export function firstAssistantModel(text: string): string | undefined {
+/**
+ * The model in a subagent's transcript head: its `model` attachment's display name (`identity.marketingName`, as the
+ * CLI shows it), else the model of the first assistant line. The listings before them are skipped unparsed.
+ */
+export function transcriptModel(text: string): string | undefined {
   for (const line of text.split('\n')) {
-    if (!line.includes('"assistant"')) continue
+    const named = line.includes('"marketingName"')
+    if (!named && !line.includes('"type":"assistant"')) continue
     try {
       const entry: unknown = JSON.parse(line)
-      if (isRec(entry) && entry.type === 'assistant' && isRec(entry.message)) {
+      if (!isRec(entry)) continue
+      if (named && isRec(entry.attachment) && entry.attachment.type === 'model' && isRec(entry.attachment.identity)) {
+        const name = cleanTitle(entry.attachment.identity.marketingName) ?? claudeModelLabel(entry.attachment.identity.modelId)
+        if (name) return name
+      }
+      if (entry.type === 'assistant' && isRec(entry.message)) {
         const model = claudeModelLabel(entry.message.model)
         if (model) return model
       }
@@ -180,7 +193,7 @@ export class SubagentWatcher {
         sub.title = meta.title ?? sub.title
         sub.model = meta.model ?? sub.model
       }
-      if (!sub.model) sub.model = firstAssistantModel(await this.read(join(dir, `agent-${sub.id}.jsonl`), HEAD_BYTES))
+      if (!sub.model) sub.model = transcriptModel(await this.read(join(dir, `agent-${sub.id}.jsonl`), HEAD_BYTES))
     } finally {
       sub.reading = false
     }

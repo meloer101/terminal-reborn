@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { SubagentInfo } from '@shared/agent-events'
-import { claudeModelLabel, firstAssistantModel, parseSubagentMeta, SubagentWatcher, subagentIdOf } from './subagents'
+import { claudeModelLabel, parseSubagentMeta, transcriptModel, SubagentWatcher, subagentIdOf } from './subagents'
 
 // Shapes measured on Claude Code 2.1.316 (PRD §6.14 v1.107).
 const META = {
@@ -41,10 +41,14 @@ describe('subagent files', () => {
     expect(claudeModelLabel(42)).toBeUndefined()
   })
 
-  it('takes the model of the first assistant line, skipping a line cut short', () => {
+  it('takes the model attachment’s display name, else the first assistant line’s model, skipping a line cut short', () => {
     const user = JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } })
-    expect(firstAssistantModel([user, ASSISTANT, '{"type":"assistant","mess'].join('\n'))).toBe('Fable 5.1')
-    expect(firstAssistantModel([user, '{"type":"assistant","mess'].join('\n'))).toBeUndefined()
+    // 2.1.316: listings first, then `model`, then the first request and reply.
+    const listing = JSON.stringify({ type: 'attachment', attachment: { type: 'skill_listing', content: 'x'.repeat(2000) } })
+    const model = JSON.stringify({ type: 'attachment', attachment: { type: 'model', identity: { modelId: 'claude-haiku-5-5', marketingName: 'Haiku 5.5' } } })
+    expect(transcriptModel([user, listing, model, ASSISTANT].join('\n'))).toBe('Haiku 5.5')
+    expect(transcriptModel([user, listing, ASSISTANT, '{"type":"assistant","mess'].join('\n'))).toBe('Fable 5.1')
+    expect(transcriptModel([user, '{"type":"assistant","mess'].join('\n'))).toBeUndefined()
   })
 
   it('only takes agent ids that are safe in a file name, and not a compaction’s', () => {
