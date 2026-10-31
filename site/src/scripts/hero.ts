@@ -165,7 +165,10 @@ export function initHero(): Hero | null {
     const all = $$('.pg-row', paneBox)
     all.slice(GIT_ROWS.length).forEach((x) => x.remove())
     drawLanes()
-    gsap.fromTo(el, { height: 0, opacity: 0 }, { height: ROW_H, opacity: 1, duration: 0.6, ease: 'expo.out', clearProps: 'height' })
+    // The stack (rows and lanes, already in their new places) slides down one row from where it was, so the new
+    // commit comes in from above: transform only, no layout under the blurred pane.
+    gsap.fromTo([lanesSvg, ...$$('.pg-row', paneBox)], { y: -ROW_H }, { y: 0, duration: 0.6, ease: 'expo.out', clearProps: 'transform' })
+    gsap.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: 'expo.out' })
     gsap.fromTo(el, { backgroundColor: 'rgba(94,161,255,0.22)' }, { backgroundColor: 'rgba(94,161,255,0)', duration: 1.6, delay: 0.2 })
   }
   const scheduleCommits = (): void => {
@@ -346,7 +349,7 @@ export function initHero(): Hero | null {
     const off = { immediateRender: false }
     tl.fromTo(sky, { yPercent: 0, opacity: 1, filter: 'blur(0px)' }, { yPercent: -45, opacity: 0, filter: 'blur(16px)', duration: 0.5, ...off }, 0)
       .fromTo([title, sub, cta], { y: 0, opacity: 1 }, { y: -70, opacity: 0, stagger: 0.04, duration: 0.45, ...off }, 0.08)
-      .fromTo(app, { '--sf': 0 }, { '--sf': 1, duration: 0.6, ...off }, 0.2)
+      .fromTo($$('.app-side, .app-pane-slot', app), { '--sf': 0 }, { '--sf': 1, duration: 0.6, ...off }, 0.2)
       .fromTo(fade, { opacity: 1 }, { opacity: 0, duration: 0.5, ...off }, 0.3)
       .fromTo(app, { scale: 1, borderRadius: 0 }, { scale: 0.88, borderRadius: 18, duration: 1, ...off }, 0)
     // The tube switches off between 12% and 57% of the pin (read from the scrubbed timeline, so it eases too).
