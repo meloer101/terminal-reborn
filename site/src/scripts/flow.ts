@@ -30,18 +30,21 @@ export function initFlow(): void {
   let visible = false
   watch(sec, (on) => { visible = on })
 
-  /* pointer: the two song layers drift apart (CSS reads --mx / --my) */
+  /* pointer: the two song layers drift apart (CSS reads --mx / --my on each layer) */
   if (fineMq.matches && !reduced()) {
     let tx = 0
     let ty = 0
     let cx = 0
     let cy = 0
     let raf = 0
+    const layers = $$('.ovp .s, .ovp .k', sec)
     const step = (): void => {
       cx += (tx - cx) * 0.07
       cy += (ty - cy) * 0.07
-      sec.style.setProperty('--mx', cx.toFixed(3))
-      sec.style.setProperty('--my', cy.toFixed(3))
+      for (const el of layers) {
+        el.style.setProperty('--mx', cx.toFixed(3))
+        el.style.setProperty('--my', cy.toFixed(3))
+      }
       raf = Math.abs(tx - cx) + Math.abs(ty - cy) > 0.001 ? requestAnimationFrame(step) : 0
     }
     sec.addEventListener('pointermove', (e) => {
@@ -69,7 +72,7 @@ export function initFlow(): void {
     const at = i * 0.2
     if (a) tl.fromTo(a, { y: -90, opacity: 0, filter: 'blur(18px)' }, { y: 0, opacity: 1, filter: 'blur(0px)', duration: 1.5, ease: 'expo.out', clearProps: 'filter' }, at)
     if (b) tl.fromTo(b, { y: 90, opacity: 0, filter: 'blur(18px)' }, { y: 0, opacity: 1, filter: 'blur(0px)', duration: 1.5, ease: 'expo.out', clearProps: 'filter' }, at)
-    if (k) tl.fromTo(k, { scale: 1.4, opacity: 0, filter: 'blur(26px)' }, { scale: 1, opacity: 1, filter: 'blur(0px)', duration: 1.25, ease: 'expo.out', clearProps: 'filter' }, at + 0.28)
+    if (k) tl.fromTo(k, { scale: 1.4, opacity: 0, filter: 'blur(20px)' }, { scale: 1, opacity: 1, filter: 'blur(0px)', duration: 1.25, ease: 'expo.out', clearProps: 'filter' }, at + 0.28)
   })
   if (advisory) {
     gsap.set(advisory, { opacity: 0, rotation: -2 })

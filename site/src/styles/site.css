@@ -46,9 +46,9 @@
 }
 
 /* Registered so the sidebars' focus can transition (hover) and be scrubbed (scroll). */
-@property --fcl { syntax: '<number>'; inherits: true; initial-value: 0; }
-@property --fcr { syntax: '<number>'; inherits: true; initial-value: 0; }
-@property --sf { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --fcl { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --fcr { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sf { syntax: '<number>'; inherits: false; initial-value: 0; }
 
 /* ───────── Tokens ───────── */
 :root {
@@ -212,8 +212,9 @@ em { font-style: normal; }
   font: 500 15px/1 var(--font-ui);
   white-space: nowrap;
   will-change: transform;
-  transition: background-color 0.25s, color 0.25s, border-color 0.25s;
+  transition: background-color 0.25s, color 0.25s, border-color 0.25s, scale 160ms var(--ease-out);
 }
+.btn:active { scale: 0.97; }
 .btn-solid { background: var(--ink); color: #000; }
 .btn-solid::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
@@ -222,7 +223,9 @@ em { font-style: normal; }
   transition: transform 0.7s var(--ease-out);
 }
 .btn-solid:hover { background: #fff; }
-.btn-solid:hover::before { transform: translateX(110%); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-solid:hover::before { transform: translateX(110%); }
+}
 .btn-line { border: 1px solid var(--ink-4); color: var(--ink); }
 .btn-line:hover { border-color: var(--ink); background: #ffffff0d; }
 
@@ -237,11 +240,13 @@ em { font-style: normal; }
   color: var(--ink);
   transform-origin: 50% 46%;
   will-change: transform;
-  --fcl: 0; --fcr: 0; --sf: 0;
-  transition: --fcl 0.6s var(--ease-ui), --fcr 0.6s var(--ease-ui);
 }
-.app.focus-left { --fcl: 1; }
-.app.focus-right { --fcr: 1; }
+/* --fcl / --fcr / --sf are set on the layers that read them (not inherited), so a hover or a scroll frame restyles
+   those two layers rather than the whole replica. hero.ts scrubs --sf on them. */
+.app-side { transition: --fcl 0.6s var(--ease-ui); }
+.app-pane-slot { transition: --fcr 0.6s var(--ease-ui); }
+.app.focus-left .app-side { --fcl: 1; }
+.app.focus-right .app-pane-slot { --fcr: 1; }
 .app-side { opacity: calc(0.45 + 0.5 * max(var(--fcl), var(--sf))); filter: blur(calc(3px * (1 - max(var(--fcl), var(--sf))))); will-change: filter, opacity; }
 .app-pane-slot { opacity: calc(0.45 + 0.5 * max(var(--fcr), var(--sf))); filter: blur(calc(3px * (1 - max(var(--fcr), var(--sf))))); will-change: filter, opacity; }
 .app-side { display: flex; flex-direction: column; min-width: 0; background: #070707; }
@@ -573,8 +578,9 @@ em { font-style: normal; }
 .pane-out .d { color: var(--ink-3); }
 .pane-out .acc { color: var(--term-accent); }
 .pane-actions { display: flex; gap: 8px; }
-.pbtn { height: 32px; padding: 0 14px; border-radius: 6px; font-size: 14px; border: 1px solid var(--ink-4); color: var(--ink); transition: background-color 0.2s, border-color 0.2s, box-shadow 0.3s; }
+.pbtn { height: 32px; padding: 0 14px; border-radius: 6px; font-size: 14px; border: 1px solid var(--ink-4); color: var(--ink); transition: background-color 0.2s, border-color 0.2s, box-shadow 0.3s, scale 160ms var(--ease-out); }
 .pbtn:hover { border-color: var(--ink); }
+.pbtn:active { scale: 0.97; }
 .pbtn-solid { background: var(--ink); color: #000; border-color: var(--ink); }
 .pbtn-solid:hover { background: #fff; }
 .pane.is-pick .pbtn-solid { box-shadow: 0 0 0 0 #ffffff80; animation: pick 1.8s var(--ease-out) infinite; }
@@ -595,8 +601,8 @@ em { font-style: normal; }
   position: absolute; inset: 64px 22px 70px; z-index: 3;
   padding: 10px 12px; border-radius: 6px; background: #0b0b0b; border: 1px solid var(--rule);
   font: 400 12px/19px var(--font-mono); white-space: pre; overflow: hidden;
-  opacity: 0; transform: translateY(8px) scale(0.98); pointer-events: none;
-  transition: opacity 0.35s var(--ease-ui), transform 0.45s var(--ease-out);
+  opacity: 0; transform: translateY(8px) scale(0.98); transform-origin: 0 100%; pointer-events: none;
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
 }
 .pane.show-diff .pane-diff { opacity: 1; transform: none; pointer-events: auto; }
 .pane-diff .add { color: var(--done); background: #3dd68c14; display: block; }
@@ -641,8 +647,8 @@ em { font-style: normal; }
 .graph [data-lane].is-dim { opacity: 0.18; }
 .graph [data-lane].is-hot .lane { stroke-width: 4; }
 .graph .hit { fill: none; stroke: transparent; stroke-width: 22; pointer-events: stroke; cursor: pointer; }
-.graph .pop { transform-box: fill-box; transform-origin: center; transform: scale(0); transition: transform 0.5s var(--ease-out); }
-.graph .pop.on { transform: scale(1); }
+.graph .pop { transform-box: fill-box; transform-origin: center; opacity: 0; transform: scale(0.9); transition: opacity 0.3s var(--ease-out), transform 0.5s var(--ease-out); }
+.graph .pop.on { opacity: 1; transform: scale(1); }
 .graph .pop-chip { opacity: 0; transform: translateY(6px); transition: opacity 0.45s var(--ease-ui), transform 0.6s var(--ease-out); }
 .graph .pop-chip.on { opacity: 1; transform: none; }
 .graph .pop-fade { opacity: 0; }
@@ -706,7 +712,9 @@ em { font-style: normal; }
 .advisory .a1 { font-weight: 800; font-size: 13px; letter-spacing: 0.34em; padding: 0.45em 0 0.1em 0.34em; }
 .advisory .a2 { font-weight: 900; font-stretch: 62.5%; font-size: 30px; letter-spacing: -0.01em; padding-bottom: 0.04em; }
 .advisory .a3 { background: #000; color: #fff; font-weight: 800; font-size: 11px; letter-spacing: 0.1em; padding: 0.5em 0 0.45em; }
-.advisory:hover { animation: wiggle 0.5s var(--ease-ui); }
+@media (hover: hover) and (pointer: fine) {
+  .advisory:hover { animation: wiggle 0.5s var(--ease-ui); }
+}
 @keyframes wiggle { 25% { transform: rotate(3deg) scale(1.04); } 60% { transform: rotate(-5deg); } 100% { transform: rotate(-2deg); } }
 
 .six {
@@ -754,7 +762,7 @@ em { font-style: normal; }
   background: #ff9fd0; box-shadow: 0 0 10px var(--accent), 0 0 24px var(--accent);
   opacity: 0; animation: laser 3.2s var(--ease-ui) infinite 1s;
 }
-@keyframes laser { 0% { top: 0; opacity: 0; } 8% { opacity: 1; } 42% { top: 50px; opacity: 1; } 50%, 100% { top: 50px; opacity: 0; } }
+@keyframes laser { 0% { transform: translateY(0); opacity: 0; } 8% { opacity: 1; } 42% { transform: translateY(calc(min(52px, 5.6vh) - 2px)); opacity: 1; } 50%, 100% { transform: translateY(calc(min(52px, 5.6vh) - 2px)); opacity: 0; } }
 .poster-foot { position: relative; z-index: 2; align-self: end; display: flex; align-items: flex-end; gap: clamp(32px, 6vw, 96px); margin-top: 24px; min-height: 0; }
 .mirror {
   writing-mode: vertical-rl;
@@ -876,6 +884,11 @@ html.is-storm main { animation: storm 0.9s steps(8) both; }
 
 @media (prefers-reduced-motion: reduce) {
   .grain, .sky-fill, .sky-fringe, .spin, .nav-download .arrow, .hero-sub em, .barcode::after, .graph .flow, .graph .ring, .pane.is-pick .pbtn-solid { animation: none !important; }
-  .app, .pane, .btn, .wt-steps li, .steps-index li, .graph .pop, .graph .pop-chip { transition: none !important; }
+  .app-side, .app-pane-slot { transition: none !important; }
+  .pane, .pane-diff, .btn, .btn-solid::before, .pbtn, .nav, .wt-steps li, .wt-steps li::before, .steps-index li, .graph .pop, .graph .pop-chip {
+    transition-property: opacity, color, background-color, border-color, box-shadow !important;
+  }
+  .advisory:hover { animation: none; }
+  .btn:active, .pbtn:active { scale: none; }
   html.is-storm main { animation: none; }
 }

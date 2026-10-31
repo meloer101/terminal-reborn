@@ -111,7 +111,7 @@ button.row:focus-visible {
 }
 
 .chevron {
-  transition: transform 120ms ease-out;
+  transition: transform var(--duration-fast) var(--ease-in-out);
 }
 
 .row[data-expanded='true'] .chevron {
@@ -119,7 +119,9 @@ button.row:focus-visible {
 }
 
 /* The whole task, under its row and on the name's line. */
+/* Opening a row fades its task in (opacity only: its height is the content's, not animated). */
 .taskBody {
+  animation: body-in var(--duration-pop) var(--ease-out);
   max-height: 160px;
   margin: 0 0 var(--space-8) calc(16px + var(--space-8));
   padding: var(--space-8) var(--space-12);
@@ -180,6 +182,12 @@ button.row:focus-visible {
 .primary:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+@keyframes body-in {
+  from {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

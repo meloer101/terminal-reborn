@@ -6,6 +6,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useWindowScope } from '../state/window-scope'
+import { originToward } from '../ui/menu-model'
 import styles from './SessionMeta.module.css'
 
 const EDGE = 8
@@ -32,7 +33,7 @@ export function Popover({
   const ref = useRef<HTMLDivElement>(null)
   // The window the chip is in (F20 · 多窗口).
   const { win } = useWindowScope()
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const [position, setPosition] = useState<{ left: number; top: number; origin: string } | null>(null)
 
   useLayoutEffect(() => {
     const panel = ref.current
@@ -42,7 +43,7 @@ export function Popover({
     const wanted = placement === 'above' ? box.left : box.right - width
     const left = Math.max(EDGE, Math.min(wanted, win.innerWidth - EDGE - width))
     const top = placement === 'above' ? Math.max(EDGE, box.top - GAP - panel.offsetHeight) : box.bottom + GAP
-    setPosition({ left, top })
+    setPosition({ left, top, origin: originToward(box, { left, top }, { width, height: panel.offsetHeight }) })
   }, [anchor, win, placement])
 
   useEffect(() => {
@@ -78,7 +79,7 @@ export function Popover({
       aria-label={label}
       data-covers-page
       data-testid={testId}
-      style={position ? { left: position.left, top: position.top } : { visibility: 'hidden' }}
+      style={position ? { left: position.left, top: position.top, transformOrigin: position.origin } : { visibility: 'hidden' }}
     >
       {children}
     </div>,

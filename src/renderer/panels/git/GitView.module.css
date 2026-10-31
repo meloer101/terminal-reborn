@@ -1,7 +1,7 @@
 /* Git view — Figma 13B 图谱 (154:6938) / 13H light (155:8584) / 13B2 变更 (147:7240). No dividers inside the card. */
 
 .spinning {
-  animation: spin 0.9s linear infinite;
+  animation: spin var(--duration-spin) linear infinite;
 }
 
 @keyframes spin {
@@ -848,4 +848,10 @@ button.pill:hover {
 
 .shipZone:empty {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
 }

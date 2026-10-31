@@ -41,7 +41,7 @@ export function initOutro(): void {
     W = box?.clientWidth ?? 0
     H = box?.clientHeight ?? 0
     if (!W || !H) return
-    const k = dpr(2)
+    const k = dpr(1.5)
     canvas.width = Math.round(W * k)
     canvas.height = Math.round(H * k)
     ctx.setTransform(k, 0, 0, k, 0, 0)
@@ -158,8 +158,12 @@ export function initOutro(): void {
     ctx.globalAlpha = 1
   }
 
-  const run = loop(() => {
+  let acc = 0
+  const run = loop((_now, dt) => {
     if (!visible) return false
+    acc += dt
+    if (acc < 15) return
+    acc = Math.max(0, Math.min(acc - 16.7, 16.7))
     frame(false)
   })
 

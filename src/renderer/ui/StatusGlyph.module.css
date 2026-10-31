@@ -5,11 +5,17 @@
 
 .spin {
   transform-origin: 7px 7px;
-  animation: spin 1.1s linear infinite;
+  animation: spin var(--duration-spin) linear infinite;
 }
 
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
   }
 }

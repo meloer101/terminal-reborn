@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { ChevronRight } from 'lucide-react'
-import { formatAccelerator, isActionable, placeMenu, stepIndex, type MenuEntry, type Placement } from './menu-model'
+import { anchorOf, formatAccelerator, isActionable, originToward, placeMenu, stepIndex, type MenuEntry, type Placement } from './menu-model'
 import { closeMenu, useMenu } from './menu'
 import { useWindowScope } from '../state/window-scope'
 import styles from './MenuHost.module.css'
@@ -64,7 +64,7 @@ interface Submenu {
 function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, onBack }: PanelProps) {
   const id = useId()
   const panel = useRef<HTMLDivElement>(null)
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const [position, setPosition] = useState<{ left: number; top: number; origin: string } | null>(null)
   const [active, setActive] = useState(() => (firstActive ? stepIndex(entries, -1, 1) : -1))
   const [submenu, setSubmenu] = useState<Submenu | null>(null)
 
@@ -73,7 +73,8 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     if (!el) return
     const size = { width: el.offsetWidth, height: el.offsetHeight }
     const view = el.ownerDocument.defaultView ?? window
-    setPosition(placeMenu(size, placement, { width: view.innerWidth, height: view.innerHeight }))
+    const at = placeMenu(size, placement, { width: view.innerWidth, height: view.innerHeight })
+    setPosition({ ...at, origin: originToward(anchorOf(placement), at, size) })
   }, [placement])
 
   // Only once placed: a visibility:hidden panel cannot take focus.
@@ -133,7 +134,9 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     } else if (submenu) setSubmenu(null)
   }
 
-  const style: CSSProperties = position ? { left: position.left, top: position.top } : { left: 0, top: 0, visibility: 'hidden' }
+  const style: CSSProperties = position
+    ? { left: position.left, top: position.top, transformOrigin: position.origin }
+    : { left: 0, top: 0, visibility: 'hidden' }
   const sub = submenu ? entries[submenu.index] : undefined
 
   return (
@@ -147,6 +150,7 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
         aria-activedescendant={active >= 0 ? `${id}-${active}` : undefined}
         tabIndex={-1}
         data-menu-panel=""
+        data-placement={placement.kind}
         onKeyDown={onKeyDown}
         onPointerLeave={() => {
           if (!submenu) setActive(-1)

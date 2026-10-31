@@ -211,10 +211,18 @@ button.chip:hover {
   color: var(--text-primary);
   user-select: none;
   -webkit-app-region: no-drag;
-  animation: pop-in var(--duration-fast) var(--ease-out);
+  /* Grows out of the chip that opened it (transform-origin from Popover.tsx). */
+  animation: pop-in var(--duration-pop) var(--ease-out);
 }
 
 @keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes pop-fade {
   from {
     opacity: 0;
   }
@@ -222,7 +230,7 @@ button.chip:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .popover {
-    animation: none;
+    animation-name: pop-fade;
   }
 }
 
