@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-30
+> 最后更新：2026-10-31
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.107，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；待 Figma 第 41 节一起出稿。
 - 2026-10-30：出口预检少跑 gh 和 git（代码审核）：合并方式查询失败或没有可用结果时也缓存 1 分钟，不再每次 git 变化都调 `gh api graphql`；`workInBase` 和其余预检并行（`src/main/ship.ts`，`ship.test.ts`）。PRD §6 记下按内容判断已合并的冲突边界。
 - 2026-10-30：修代码审核的两处问题（PRD v1.106）：squash 后分支已推送过（有 upstream 或远程同名分支）时不移到 squash 提交上，免得和远程分叉（`moveBranchTo`，`git-merge.test.ts`）；分支同步遇到分离 HEAD 不再把短提交号写进 worktree 记录（`branchesOf`，`model.test.ts`），归档恢复不会新建以短提交号命名的分支。
 - 2026-10-30：B27「合并到 main 并推送」的合并方式跟随仓库（PRD v1.105）进行中：已完成主进程和共享层——出口预检带回 GitHub 仓库允许的合并方式和默认方式（`repoMergeMethods` / `REPO_MERGE_QUERY`，`src/main/ship.ts` 的 `repoMergeSettings()`），squash 后分支移到 squash 提交上（`reset --keep`），rebase 不再被未跟踪文件挡住；`git-merge.test.ts`、`ship.test.ts`（三种方式各合并并推送一次、squash 后不能再合并）、`pull-requests.test.ts`。Figma 第 43 节（`688:32000`）画了「合并方式」一行的状态，等作者定稿后再做渲染层（出口区「合并方式」、记住的方式、自动修复和合并面板用同一个解析结果、步骤标签）。
@@ -152,10 +153,15 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [ ] F21 重做（PRD v1.103，2026-10-30 定）：`wavi` 命令代替按厂商注入的 MCP server，任何能跑 shell 的 agent 都能派活；19 家都能派和被派，回报分三档（原生通道 / 复用 §6.9 发消息链路加两道检查 / 「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` 主动报 + Wavi 兜底；`--base snapshot` 给审阅用；报告送进去时子会话一轮结束不提醒用户；侧栏写 agent 和模型
   - [x] 实测 5 项（2026-10-30，PRD v1.104 / §6.14）：Claude 能跑 `wavi`；Codex 能跑但默认沙箱拦 unix socket → `wavi` 改用文件通信，Codex 配置一项不动；Pi 扩展 `sendUserMessage` 送进 TUI、草稿保留；Claude / Codex / Pi / Grok 能按次追加系统提示；快照带未提交和未跟踪文件；PATH 改写进 `-c` 脚本
   - [ ] 实测 OpenCode `prompt_async`（本机没装 OpenCode，未测）
-  - [ ] Figma 第 41 节：侧栏子会话的 agent 和模型、第二层缩进和连线，作者看过再实现
+  - [ ] Figma 第 41 节：侧栏子会话的 agent 和模型、第二层缩进和连线、agent 自己的子 agent（v1.107），作者看过再实现
   - [ ] 实现：`wavi` 入口和命令、能力表扩到 19 家、三档送达和两道检查、两层与上限、快照 worktree、不提醒用户；删掉 `mcp-server.ts` / `mcp-config.ts`
   - [ ] 测试：e2e `dispatch.spec.ts` 重写（PRD F21 验收），单元测试
-- [ ] agent teams 的队友和子 agent 只显示、不接管（PRD F21 v1.66 改）：在派活会话下列出 Claude 自己开的队友 / 子 agent 的名字和状态（来自 hook 的 `agent_id`、`TeammateIdle`），不变成 Wavi 会话。~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
+- [ ] agent 自己开的子 agent 只显示、不接管（PRD F21 v1.66 改，v1.107 改为读文件）：在所在会话下列出子 agent 的名字、类型、模型和状态，不变成 Wavi 会话；状态来自 hook 的 `agent_id` / `SubagentStop`，名字、类型、模型、上一级读 agent 自己的 `subagents/agent-<id>.meta.json`（做法参照 yetone/magpie @ d714c42 `internal/sessions/subagents.go`）
+  - [x] 实测 Claude 2.1.316 的子 agent 文件（2026-10-31，PRD §6.14 v1.107）
+  - [ ] 实测 Codex 0.165 `spawn_agent` 的 rollout（`thread_spawn.parent_thread_id`）：2026-10-31 服务商对 `gpt-6-sol` 返回 503，阻塞
+  - [ ] Figma 第 41 节出稿（同 F21 重做），作者看过
+  - [ ] 实现 Claude：读 meta 和模型、和 Wavi 子会话共用一棵树；单元测试用 meta 样本
+  - 原计划：~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
 - [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
 - [ ] 读 `claude agents --json`，把 Claude 自己在后台开的会话（会自己建 worktree、开 draft PR）也显示到总览
 
