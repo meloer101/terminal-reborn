@@ -1,0 +1,110 @@
+/*
+ * Figma 44B SubagentRow — one line of 18, padding 6/8: 30 high. Its text starts where the sessions of the same level
+ * start their titles (depth 1: --indent-tree + 16 = 48, depth 2: + 32 = 64), the status glyph hangs in the 16px column
+ * left of it, and the tree line of its session runs through the glyph column one level up (SessionRow.module.css).
+ */
+.row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  --row-text-inset: calc(var(--indent-tree) + var(--space-16));
+  /* Centre of the glyph column of the session this row hangs from: where its line and tick are drawn. */
+  --row-line-x: var(--space-16);
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--row-text-inset);
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+
+.row[data-depth='2'] {
+  --row-text-inset: calc(var(--indent-tree) + var(--space-32));
+  --row-line-x: var(--space-32);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  height: 18px;
+}
+
+.glyph {
+  position: absolute;
+  left: calc(-1 * (var(--space-8) + 16px));
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 18px;
+}
+
+.title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.model {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* The session's line comes down through the gap above, ticks to this row's glyph (3 short of it), and goes on or ends. */
+.row::before,
+.row::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--row-line-x) - 0.5px);
+  pointer-events: none;
+}
+
+.row::before {
+  top: calc(var(--space-6) + 9px);
+  width: calc(var(--space-6) + 1px);
+  border-top: 1px solid var(--border-default);
+}
+
+.row[data-tree='child']::after {
+  top: 0;
+  bottom: calc(-1 * var(--space-2));
+  border-left: 1px solid var(--border-default);
+}
+
+.row[data-tree='last']::before {
+  border-top: 0;
+}
+
+.row[data-tree='last']::after {
+  top: 0;
+  width: calc(var(--space-6) + 1px);
+  height: calc(var(--space-6) + 9px + 1px);
+  border-bottom: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* Depth 2 under a dispatched session that is not its dispatcher's last: the dispatcher's line runs on past this row. */
+.pass {
+  position: absolute;
+  left: calc(var(--space-16) - 0.5px);
+  top: 0;
+  bottom: calc(-1 * var(--space-2));
+  border-left: 1px solid var(--border-default);
+  pointer-events: none;
+}

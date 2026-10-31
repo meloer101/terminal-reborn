@@ -253,6 +253,49 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(popover).toHaveCount(0)
   })
 
+  test('subagents Claude starts hang under the session, one line each, and go when they stop (PRD F21 v1.109, Figma 44B)', async () => {
+    // Laid out the way Claude 2.1.316 writes them (PRD §6.14 v1.109): meta file + the subagent's own transcript.
+    const conversation = join(repo.env.CLAUDE_CONFIG_DIR, 'projects', 'acme')
+    const transcript_path = join(conversation, 'fake-conversation.jsonl')
+    const dir = join(conversation, 'fake-conversation', 'subagents')
+    mkdirSync(dir, { recursive: true })
+    const meta = (description: string, extra: Record<string, unknown> = {}) =>
+      JSON.stringify({ agentType: 'Explore', description, spawnDepth: 1, requestShape: 'background', ...extra })
+    writeFileSync(join(dir, 'agent-a11.meta.json'), meta('梳理 auth 中间件的调用点'))
+    writeFileSync(join(dir, 'agent-a11.jsonl'), `${JSON.stringify({ type: 'assistant', message: { model: 'claude-fable-5-1' } })}\n`)
+    writeFileSync(join(dir, 'agent-a22.meta.json'), meta('查 SameSite 在 Safari 的行为', { model: 'claude-opus-5-5' }))
+    repo.step({ hook: 'PreToolUse', payload: { transcript_path, agent_id: 'a11', agent_type: 'Explore', tool_name: 'Grep', tool_input: { pattern: 'auth' } } })
+    repo.step({ hook: 'PreToolUse', payload: { transcript_path, agent_id: 'a22', agent_type: 'Explore', tool_name: 'Read', tool_input: { file_path: '/x/a.ts' } } })
+
+    const rows = page.locator('[data-region="sidebar"] [data-testid="subagent-row"]')
+    await expect(rows).toHaveCount(2, WITHIN)
+    await expect(rows.nth(0)).toHaveText('梳理 auth 中间件的调用点Fable 5.1')
+    await expect(rows.nth(1)).toHaveText('查 SameSite 在 Safari 的行为Opus 5.5')
+    // Right after its session, before the next one; not a keyboard stop.
+    const order = await page.locator('[data-region="sidebar"] [data-session-id], [data-region="sidebar"] [data-testid="subagent-row"]').evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).dataset.sessionId ?? (el as HTMLElement).dataset.agentId)
+    )
+    expect(order.slice(order.indexOf('s-cookie'), order.indexOf('s-cookie') + 3)).toEqual(['s-cookie', 'a11', 'a22'])
+    expect(await rows.nth(0).getAttribute('tabindex')).toBeNull()
+    // Figma 44B: 30 high, its text one level in from the session's title (+16), its glyph in the column under the line.
+    const title = await sidebarRow('s-cookie').locator('span').nth(2).boundingBox()
+    const subText = await rows.nth(0).locator('span').nth(2).boundingBox()
+    expect((await rows.nth(0).boundingBox())?.height).toBe(30)
+    expect(Math.round((subText?.x ?? 0) - (title?.x ?? 0))).toBe(16)
+
+    // Its ask shows on its own row, shape and colour (the session's line says what is asked).
+    repo.step({ hook: 'PermissionRequest', payload: { transcript_path, agent_id: 'a22', tool_name: 'Bash', tool_input: { command: 'pnpm lint' } } })
+    await expect(rows.nth(1).getByRole('img', { name: '等你处理' })).toBeVisible(WITHIN)
+    await expect(rows.nth(0).getByRole('img', { name: '运行中' })).toBeVisible()
+    await shoot('44B-subagents')
+
+    repo.step({ hook: 'PostToolUse', payload: { transcript_path, agent_id: 'a22', tool_name: 'Bash', tool_input: { command: 'pnpm lint' }, tool_response: {} } })
+    repo.step({ hook: 'SubagentStop', payload: { transcript_path, agent_id: 'a22', agent_type: 'Explore' } })
+    await expect(rows).toHaveCount(1, WITHIN)
+    repo.step({ hook: 'SubagentStop', payload: { transcript_path, agent_id: 'a11', agent_type: 'Explore' } })
+    await expect(rows).toHaveCount(0, WITHIN)
+  })
+
   test('context ≥ 80%: heavier number, /compact only fills the input line', async () => {
     repo.step(statusLine(86, { five: 13, seven: 26 }))
     const chip = header().getByTestId('context-chip')

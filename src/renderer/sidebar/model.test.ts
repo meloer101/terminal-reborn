@@ -6,6 +6,7 @@ import {
   nestedTitle,
   nextAttentionSessionId,
   sameRow,
+  sameSubagent,
   sessionForShortcut,
   visibleSessionIds
 } from './model'
@@ -186,6 +187,74 @@ describe('dispatched sessions (PRD F21)', () => {
     expect(groups[0]?.rows.map((r) => r.title)).toEqual(['Cookie 会话迁移', 'Codex'])
     expect(nestedTitle('别的名字', 'Cookie 会话迁移')).toBe('别的名字')
     expect(nestedTitle('Cookie 会话迁移 · ', 'Cookie 会话迁移')).toBe('Cookie 会话迁移 · ')
+  })
+})
+
+describe('subagents under their session (PRD F21 v1.109, Figma 44B)', () => {
+  const sub = (id: string, title = id, model?: string) => ({ id, title, ...(model ? { model } : {}) })
+  const draw = (rows: ReturnType<typeof buildSidebarGroups>[number]['rows']) =>
+    rows.flatMap((r) => [
+      `${r.session.id}:${r.depth}:${r.tree ?? '-'}${r.opens ? ':opens' : ''}`,
+      ...(r.after ?? []).map((a) => `  ${a.id}:${a.depth}:${a.tree}${a.pass ? ':pass' : ''}${a.attention ? ':asks' : ''}`)
+    ])
+
+  it('hangs a top-level session’s subagents under it on its line, and keeps them out of the keyboard order', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [session('s1', 'wa1', 'running', 0, { askingAgents: ['a2'] }), session('s2', 'wa2', 'idle')],
+      subagents: { s1: [sub('a1', '梳理 auth', 'Fable 5.1'), sub('a2')] }
+    })
+    expect(draw(groups[0]!.rows)).toEqual(['s1:0:parent', '  a1:1:child', '  a2:1:last:asks', 's2:0:-'])
+    expect(groups[0]!.rows[0]!.after?.[0]).toMatchObject({ sessionId: 's1', title: '梳理 auth', model: 'Fable 5.1' })
+    expect(visibleSessionIds(groups)).toEqual(['s1', 's2'])
+  })
+
+  it('puts a dispatcher’s own subagents after its children, and a child’s one level in', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [
+        session('parent', 'wam', 'running'),
+        session('c1', 'wa1', 'running', 0, { dispatchedBy: 'parent' }),
+        session('c2', 'wa2', 'needs_you', 0, { dispatchedBy: 'parent', askingAgents: ['x'] })
+      ],
+      subagents: { parent: [sub('p1'), sub('p2')], c1: [sub('k')], c2: [sub('x')] }
+    })
+    expect(draw(groups[0]!.rows)).toEqual([
+      'parent:0:parent',
+      'c1:1:child:opens',
+      '  k:2:last:pass',
+      'c2:1:child:opens',
+      // The dispatcher's line goes on past c2's subagent to its own two.
+      '  x:2:last:pass:asks',
+      '  p1:1:child',
+      '  p2:1:last'
+    ])
+  })
+
+  it('ends the dispatcher’s line at its last child when it has no subagents of its own', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [session('parent', 'wam', 'idle'), session('c1', 'wa1', 'running', 0, { dispatchedBy: 'parent' })],
+      subagents: { c1: [sub('k')] }
+    })
+    expect(draw(groups[0]!.rows)).toEqual(['parent:0:parent', 'c1:1:last:opens', '  k:2:last'])
+  })
+
+  it('does not redraw the session row when only its subagents change, but does when its line starts', () => {
+    const parent = session('parent', 'wam', 'running')
+    const child = session('c1', 'wa1', 'running', 0, { dispatchedBy: 'parent' })
+    const rows = (subagents: Record<string, ReturnType<typeof sub>[]>) =>
+      buildSidebarGroups({ projects, worktrees, sessions: [parent, child], subagents })[0]!.rows
+    const one = rows({ c1: [sub('a', 'one')] })
+    const named = rows({ c1: [sub('a', 'one', 'Opus 5.5')] })
+    const none = rows({})
+    // SubagentRow compares its own row; the session row draws only where its line starts.
+    expect(sameRow(one[1]!, named[1]!)).toBe(true)
+    expect(sameRow(one[1]!, none[1]!)).toBe(false)
+    expect(sameSubagent(one[1]!.after![0]!, named[1]!.after![0]!)).toBe(false)
   })
 })
 

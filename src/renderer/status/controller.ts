@@ -17,6 +17,18 @@ export interface StatusPatch {
   finishedAt?: number
   statusSince?: number
   turnStartedAt?: number
+  /** Subagents with a pending ask; absent when none. */
+  askingAgents?: string[]
+}
+
+/**
+ * The subagents whose asks are pending (the main thread's are `''`); undefined when none. `held` is the list sent last
+ * time: an unchanged list is returned as that same array, so the store's identity check sees no change.
+ */
+export function askingAgentsOf(state: SessionState, held?: string[]): string[] | undefined {
+  const ids = [...new Set(state.asks.map((a) => a.agent).filter((a) => a !== ''))]
+  if (ids.length === 0) return undefined
+  return held && held.length === ids.length && held.every((id, i) => id === ids[i]) ? held : ids
 }
 
 export interface StatusDeps {
@@ -66,6 +78,8 @@ const NOTIFY_BODY: Partial<Record<SessionStatus, string>> = {
 
 export class StatusController {
   private readonly states = new Map<SessionId, SessionState>()
+  /** The askingAgents last patched per session (see askingAgentsOf). */
+  private readonly asking = new Map<SessionId, string[]>()
   private lastBadge = -1
   /** Finished turns waiting to be announced together. */
   private pendingDone: SessionId[] = []
@@ -128,7 +142,11 @@ export class StatusController {
         this.apply(session.id, { type: 'reattached', exited: session.phase === 'exited' })
       }
     }
-    for (const id of [...this.states.keys()]) if (!live.has(id)) this.states.delete(id)
+    for (const id of [...this.states.keys()]) {
+      if (live.has(id)) continue
+      this.states.delete(id)
+      this.asking.delete(id)
+    }
     for (const id of [...this.waviAsks.keys()]) if (!live.has(id)) this.waviAsks.delete(id)
     this.refreshViewing()
     this.updateBadge()
@@ -153,7 +171,8 @@ export class StatusController {
     }
     const now = this.deps.now()
     this.states.set(sessionId, initialState(session.kind, now, { status: 'idle', viewing: false }))
-    this.deps.patch(sessionId, { status: 'idle', currentAction: undefined, lastActivityAt: now })
+    this.asking.delete(sessionId)
+    this.deps.patch(sessionId, { status: 'idle', currentAction: undefined, lastActivityAt: now, askingAgents: undefined })
     this.refreshViewing()
     this.updateBadge()
   }
@@ -285,6 +304,13 @@ export class StatusController {
     if (this.waviAsks.has(id) && gone(next) && !gone(prev)) this.deps.onWaviAskAbandoned?.(id)
   }
 
+  private askingOf(id: SessionId, state: SessionState): string[] | undefined {
+    const ids = askingAgentsOf(state, this.asking.get(id))
+    if (ids) this.asking.set(id, ids)
+    else this.asking.delete(id)
+    return ids
+  }
+
   /** The store's view of a session: its agent's state, unless Wavi has a question of its own open about it. */
   private patchOf(id: SessionId, state: SessionState): StatusPatch {
     const ask = this.waviAsks.get(id)
@@ -296,7 +322,8 @@ export class StatusController {
       lastReply: state.lastReply,
       finishedAt: state.finishedAt,
       statusSince: ask ? ask.since : state.statusSince,
-      turnStartedAt: state.turnStartedAt
+      turnStartedAt: state.turnStartedAt,
+      askingAgents: this.askingOf(id, state)
     }
   }
 

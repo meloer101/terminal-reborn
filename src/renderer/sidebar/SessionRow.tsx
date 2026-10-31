@@ -59,6 +59,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
       data-attention={attention}
       data-depth={row.depth}
       data-tree={row.tree}
+      data-opens={row.opens}
       data-session-id={session.id}
       aria-current={selected ? 'true' : undefined}
       tabIndex={tabStop ? 0 : -1}
@@ -102,6 +103,7 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
         </span>
       )}
       <TodoLine sessionId={session.id} />
+      {row.opens && <span className={styles.opens} aria-hidden />}
     </div>
   )
 }, sameProps)

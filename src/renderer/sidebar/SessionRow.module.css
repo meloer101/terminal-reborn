@@ -69,6 +69,16 @@
   border-bottom-left-radius: var(--radius-sm);
 }
 
+/* A dispatched session whose agent runs subagents (Figma 44B): their line starts under its glyph, one column in. */
+.opens {
+  position: absolute;
+  left: calc(var(--space-32) - 0.5px);
+  top: calc(var(--space-6) + 18px + var(--space-2));
+  bottom: calc(-1 * var(--space-2));
+  border-left: 1px solid var(--border-default);
+  pointer-events: none;
+}
+
 /* The selected row draws no block of its own: the selection drop (Figma 37) sits under it, and the row's content above. */
 .row {
   z-index: 1;
