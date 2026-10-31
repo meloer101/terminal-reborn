@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
+import { Fragment, useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { Folder, Gauge, LayoutList, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
@@ -18,6 +18,9 @@ import { openSettings } from '../settings/SettingsDialog'
 import { ProjectHeader } from './ProjectHeader'
 import { SelectionDrops } from './SelectionDrop'
 import { SessionRow } from './SessionRow'
+import { SubagentRow } from './SubagentRow'
+import { useSessionMeta } from '../session-meta/store'
+import type { SubagentInfo } from '@shared/agent-events'
 import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
 import './shortcuts-runtime'
 import styles from './Sidebar.module.css'
@@ -66,9 +69,17 @@ export function Sidebar() {
   const onRowContextMenu = useCallback((id: string, anchor: MenuAnchor) => void openSessionContextMenu(id, anchor), [])
   const onRowPress = useCallback((e: PointerEvent<HTMLElement>, id: string) => pressSession(e, id, 'sidebar'), [])
 
+  // Only the subagent lists: the context readings that change every second elsewhere in session-meta do not rebuild rows.
+  const subagents = useSessionMeta(
+    useShallow((s) => {
+      const out: Record<string, SubagentInfo[]> = {}
+      for (const [id, metrics] of Object.entries(s.bySession)) if (metrics.subagents) out[id] = metrics.subagents
+      return out
+    })
+  )
   const groups = useMemo(
-    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds }),
-    [projects, worktrees, sessions, collapsedProjectIds]
+    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents }),
+    [projects, worktrees, sessions, collapsedProjectIds, subagents]
   )
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
   const waiting = useMemo(() => sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency), [sessions])
@@ -132,16 +143,18 @@ export function Sidebar() {
               onMenu={(anchor) => void openProjectMenu(group.id, anchor)}
             />
             {group.rows.map((row) => (
-              <SessionRow
-                key={row.session.id}
-                row={row}
-                selected={!overview && row.session.id === activeSessionId}
-                shown={!overview && !inPanes.includes(row.session.id) && shown.split('\n').includes(row.session.id)}
-                onPress={onRowPress}
-                tabStop={row.session.id === tabStopId}
-                onSelect={setActiveSession}
-                onContextMenu={onRowContextMenu}
-              />
+              <Fragment key={row.session.id}>
+                <SessionRow
+                  row={row}
+                  selected={!overview && row.session.id === activeSessionId}
+                  shown={!overview && !inPanes.includes(row.session.id) && shown.split('\n').includes(row.session.id)}
+                  onPress={onRowPress}
+                  tabStop={row.session.id === tabStopId}
+                  onSelect={setActiveSession}
+                  onContextMenu={onRowContextMenu}
+                />
+                {row.after?.map((sub) => <SubagentRow key={sub.id} row={sub} onSelect={setActiveSession} />)}
+              </Fragment>
             ))}
             {!group.collapsed && group.sessionCount === 0 && (
               <button type="button" className={styles.newSession} aria-haspopup="dialog" onClick={() => newSessionInProject(group.id)}>

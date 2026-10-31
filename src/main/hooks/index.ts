@@ -13,6 +13,7 @@ import type { HookJournalEntry } from '../../pty-host/protocol'
 import { cliAdapterLaunch } from './cli-adapters'
 import { CodexAccountClient, readClaudeAccountUsage } from './account-usage'
 import { AgentTitleWatcher } from './agent-title'
+import { SubagentWatcher } from './subagents'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
 import { CodexUsageWatcher } from './codex-usage'
@@ -222,6 +223,11 @@ const titles = new AgentTitleWatcher((sessionId, agent, title) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'agent-title', title } })
 )
 
+/** The subagents running inside each Claude session, read from its own files after hooks (PRD F21 v1.107). */
+const subagents = new SubagentWatcher((sessionId, agent, items) =>
+  emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'subagents', items } })
+)
+
 /** Context history and token spend per session, read from the agents' transcripts (Figma 18). */
 const transcripts = new TranscriptMeter()
 
@@ -257,7 +263,7 @@ async function start(): Promise<Runtime | null> {
   ])
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, scripts })
+      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, subagents, scripts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -281,7 +287,7 @@ async function start(): Promise<Runtime | null> {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
     // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
-    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, scripts })
+    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, subagents, scripts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => route(bridge, request),

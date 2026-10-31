@@ -105,6 +105,18 @@ describe('StatusController', () => {
     expect(h.notifications).toEqual([])
   })
 
+  it('names the subagents whose asks are pending, and keeps the same list while they do (PRD F21 v1.107)', () => {
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
+    h.controller.handleEvent('b', { type: 'permission-request', tool: 'Bash', input: { command: 'pnpm lint' }, agentId: 'ab1' })
+    const asking = h.sessions.find((s) => s.id === 'b')?.askingAgents
+    expect(asking).toEqual(['ab1'])
+    // The main turn goes on: the patch carries the same array, so the store sees no change in it.
+    h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/b.ts' } })
+    expect(h.sessions.find((s) => s.id === 'b')?.askingAgents).toBe(asking)
+    h.controller.handleEvent('b', { type: 'subagent-stop', agentId: 'ab1' })
+    expect(h.sessions.find((s) => s.id === 'b')?.askingAgents).toBeUndefined()
+  })
+
   it('does not patch when nothing changed', () => {
     const before = h.sessions
     h.controller.tick()

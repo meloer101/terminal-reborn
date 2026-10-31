@@ -56,6 +56,21 @@ export type AgentEvent =
    * plan, the account's plan usage says nothing about this session (PRD F11). Not activity.
    */
   | { type: 'billing'; plan: boolean }
+  /**
+   * The subagents running inside the session (Claude's Agent tool), read by main from the agent's own files after
+   * hooks; the whole list each time it changes, [] when none (PRD F21 v1.107, Figma 44B). Display only. Not activity.
+   */
+  | { type: 'subagents'; items: SubagentInfo[] }
+
+/** A subagent the agent started inside its session: never a Wavi session (PRD F21 v1.107). */
+export interface SubagentInfo {
+  /** Claude's `agent_id`: the same id its hooks carry, so its asks can be matched. */
+  id: string
+  /** What it was asked to do (meta `description`). */
+  title: string
+  /** Display name of its model (`Opus 5.5`); absent until known. */
+  model?: string
+}
 
 export interface AgentEventEnvelope {
   sessionId: SessionId
