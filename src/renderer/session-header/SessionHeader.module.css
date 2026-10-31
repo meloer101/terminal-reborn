@@ -23,6 +23,12 @@
   transition: padding-left var(--motion-duration-drawer) var(--motion-spring);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .header {
+    transition: none;
+  }
+}
+
 .title {
   margin: 0;
   font: var(--text-title-m);

@@ -174,7 +174,8 @@ test('the sidebar\'s 更新 shows the version and checks for updates; settings h
   const panel = settings.getByTestId('update-popover')
   await expect(panel.getByTestId('app-version')).not.toBeEmpty()
   await expect(panel.getByRole('button', { name: '检查更新' })).toBeVisible()
-  // It opens above its row, inside the sidebar's width.
+  // It opens above its row, inside the sidebar's width (measured once its entrance has settled: it grows from 0.97).
+  await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
   const [row, box] = await Promise.all([entry.boundingBox(), panel.boundingBox()])
   expect(box!.y + box!.height).toBeLessThanOrEqual(row!.y)
   expect(Math.round(box!.x)).toBe(Math.round(row!.x))

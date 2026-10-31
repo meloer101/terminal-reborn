@@ -156,6 +156,12 @@
   transition: padding-left var(--motion-duration-drawer) var(--motion-spring);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .pickerBar {
+    transition: none;
+  }
+}
+
 .pickerBar button {
   -webkit-app-region: no-drag;
 }

@@ -67,7 +67,18 @@
   --tracking-title-m: -0.1px;
 
   --duration-fast: 120ms;
-  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  /* Menus and popovers coming in from their trigger. */
+  --duration-pop: 150ms;
+  /* A modal sheet (设置) coming up over the window. */
+  --duration-sheet: 200ms;
+  /* A pressed control giving way (scale on :active). */
+  --duration-press: 160ms;
+  /* One turn of every in-progress spinner. */
+  --duration-spin: 1s;
+  /* Strong ease-out: leaves at speed, so a change starts the moment it is asked for. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* On-screen movement between two resting places (a chevron turning). */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   /* Slide (segmented thumb): a damped spring (ζ 0.7) — pulled off fast, ~4.5% overshoot, settled by the end. */
   --motion-duration-slide: 380ms;
   --motion-spring: linear(0, 0.06, 0.2, 0.37, 0.54, 0.691, 0.813, 0.906, 0.971, 1.012, 1.035, 1.045, 1.045, 1.041, 1.034, 1.026, 1.018, 1.012, 1.007, 1.003, 1);

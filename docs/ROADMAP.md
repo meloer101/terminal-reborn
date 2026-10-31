@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-30
+> 最后更新：2026-10-31
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-10-31：应用和官网的动效按 emilkowalski/skills（`improve-animations` 审计）打磨（PRD v1.108）：应用改 `--ease-out` 曲线、菜单和弹出层从触发处长出（`originToward`，`menu-model.test.ts`）、子菜单不重放、设置弹窗入场、图标按钮按压、转圈统一、减少动态效果只去位移且抽屉不再挡终端重排；官网改通知离场缓动、去掉 `scale(0)`、按钮按压、hero 新提交行和激光线只用 transform、宋体跟随和侧栏聚焦的变量不再整树继承、结尾画布 DPR 和帧步长、去掉导航 hover 乱码、减少动态效果保留颜色反馈。侧栏水滴未动。
 - 2026-10-30：出口预检少跑 gh 和 git（代码审核）：合并方式查询失败或没有可用结果时也缓存 1 分钟，不再每次 git 变化都调 `gh api graphql`；`workInBase` 和其余预检并行（`src/main/ship.ts`，`ship.test.ts`）。PRD §6 记下按内容判断已合并的冲突边界。
 - 2026-10-30：修代码审核的两处问题（PRD v1.106）：squash 后分支已推送过（有 upstream 或远程同名分支）时不移到 squash 提交上，免得和远程分叉（`moveBranchTo`，`git-merge.test.ts`）；分支同步遇到分离 HEAD 不再把短提交号写进 worktree 记录（`branchesOf`，`model.test.ts`），归档恢复不会新建以短提交号命名的分支。
 - 2026-10-30：B27「合并到 main 并推送」的合并方式跟随仓库（PRD v1.105）进行中：已完成主进程和共享层——出口预检带回 GitHub 仓库允许的合并方式和默认方式（`repoMergeMethods` / `REPO_MERGE_QUERY`，`src/main/ship.ts` 的 `repoMergeSettings()`），squash 后分支移到 squash 提交上（`reset --keep`），rebase 不再被未跟踪文件挡住；`git-merge.test.ts`、`ship.test.ts`（三种方式各合并并推送一次、squash 后不能再合并）、`pull-requests.test.ts`。Figma 第 43 节（`688:32000`）画了「合并方式」一行的状态，等作者定稿后再做渲染层（出口区「合并方式」、记住的方式、自动修复和合并面板用同一个解析结果、步骤标签）。

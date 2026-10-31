@@ -27,8 +27,14 @@ let held = false
 let release = 0
 const released = new Set<() => void>()
 
+/** 减少动态效果: the drawer jumps to its width (AppShell.module.css), so there is nothing to wait for. */
+function drawerMs(): number {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : DRAWER_MS
+}
+
 /** Terminals skip resizes until DRAWER_MS from now, then refit once. */
 function holdTerminalFit(): void {
+  if (drawerMs() === 0) return
   held = true
   window.clearTimeout(release)
   release = window.setTimeout(() => {
@@ -74,7 +80,7 @@ export function useDrawer<T>(value: T | null, ref: RefObject<HTMLElement | null>
     if (state.phase !== 'opening' && state.phase !== 'closing') return
     const timer = window.setTimeout(
       () => setState((s) => (s.phase === 'opening' ? { ...s, phase: 'open' } : s.phase === 'closing' ? { shown: null, phase: 'closed' } : s)),
-      DRAWER_MS
+      drawerMs()
     )
     return () => window.clearTimeout(timer)
   }, [state.phase, ref])

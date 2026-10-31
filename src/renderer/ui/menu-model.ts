@@ -71,6 +71,21 @@ export function placeMenu(size: Size, placement: Placement, viewport: Size): { l
   return { left: clamp(left, MENU_MARGIN, maxLeft), top: clamp(top, MENU_MARGIN, maxTop) }
 }
 
+/**
+ * The `transform-origin` (px, inside the panel) a floating panel at `at` grows from: the side facing what opened it,
+ * across from the anchor's middle — so a menu under a button grows out of the button, one above it out of its top.
+ */
+export function originToward(anchor: Box, at: { left: number; top: number }, size: Size): string {
+  const x = clamp((anchor.left + anchor.right) / 2 - at.left, 0, size.width)
+  const y = at.top >= anchor.bottom ? 0 : at.top + size.height <= anchor.top ? size.height : clamp((anchor.top + anchor.bottom) / 2 - at.top, 0, size.height)
+  return `${Math.round(x)}px ${Math.round(y)}px`
+}
+
+/** The box a placement hangs from (a pointer is a box of no size). */
+export function anchorOf(placement: Placement): Box {
+  return placement.kind === 'point' ? { left: placement.x, right: placement.x, top: placement.y, bottom: placement.y } : placement.box
+}
+
 const MODIFIERS: Record<string, { symbol: string; order: number }> = {
   ctrl: { symbol: '⌃', order: 0 },
   control: { symbol: '⌃', order: 0 },
