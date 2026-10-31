@@ -7,6 +7,7 @@
   background: var(--scrim);
   /* The titlebar drag regions underneath must not swallow clicks on the scrim. */
   -webkit-app-region: no-drag;
+  animation: scrim-in var(--duration-sheet) var(--ease-out);
 }
 
 .sheet {
@@ -19,4 +20,25 @@
   background: var(--bg-app);
   box-shadow: var(--shadow-overlay);
   outline: none;
+  /* A modal: it grows from its own centre. */
+  animation: sheet-in var(--duration-sheet) var(--ease-out);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation-name: scrim-in;
+  }
 }

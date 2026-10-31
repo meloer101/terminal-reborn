@@ -9,6 +9,22 @@
   background: transparent;
   color: var(--text-secondary);
   -webkit-app-region: no-drag;
+  transition: transform var(--duration-press) var(--ease-out);
+}
+
+/* Pressed: the button gives way a little, so the click is felt before its result arrives. */
+.button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+
+  .button:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 .button:hover {

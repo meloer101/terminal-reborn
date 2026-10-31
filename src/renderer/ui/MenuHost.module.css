@@ -17,10 +17,23 @@
   outline: none;
   user-select: none;
   -webkit-app-region: no-drag;
-  animation: menu-in var(--duration-fast) var(--ease-out);
+  /* Grows out of what opened it (transform-origin from MenuHost.tsx). */
+  animation: menu-in var(--duration-pop) var(--ease-out);
+}
+
+/* A submenu follows the pointer or the arrow keys row by row: it appears at once. */
+.panel[data-placement='beside'] {
+  animation: none;
 }
 
 @keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes menu-fade {
   from {
     opacity: 0;
   }
@@ -28,7 +41,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .panel {
-    animation: none;
+    animation-name: menu-fade;
   }
 }
 

@@ -53,7 +53,7 @@ export function initStatus(): void {
       gsap.to(dock, { yPercent: 0, opacity: 1, duration: 0.8, ease: 'expo.out', overwrite: true })
       const wavi = dock ? $('.dock-wavi', dock) : null
       if (wavi) gsap.fromTo(wavi, { y: 0 }, { y: -26, duration: 0.32, ease: 'power2.out', yoyo: true, repeat: 5, delay: 0.3 })
-      if (badge) gsap.fromTo(badge, { scale: 0 }, { scale: 1, duration: 0.6, ease: 'back.out(3)', delay: 0.25 })
+      if (badge) gsap.fromTo(badge, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6, ease: 'back.out(3)', delay: 0.25 })
       let s = 60
       const tm = rows.cookie ? $('[data-tm]', rows.cookie) : null
       waitTick = window.setInterval(() => {
@@ -61,8 +61,8 @@ export function initStatus(): void {
         if (tm) tm.textContent = waited(s)
       }, 1000)
     } else {
-      gsap.to(notif, { x: '120%', opacity: 0, duration: 0.5, ease: 'expo.in', overwrite: true })
-      gsap.to(dock, { yPercent: 140, opacity: 0, duration: 0.5, ease: 'expo.in', overwrite: true })
+      gsap.to(notif, { x: '120%', opacity: 0, duration: 0.3, ease: 'expo.out', overwrite: true })
+      gsap.to(dock, { yPercent: 140, opacity: 0, duration: 0.3, ease: 'expo.out', overwrite: true })
     }
   }
 

@@ -474,3 +474,9 @@
   font: var(--text-mono-s);
   color: var(--text-secondary);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .toggleKnob {
+    transition: none;
+  }
+}

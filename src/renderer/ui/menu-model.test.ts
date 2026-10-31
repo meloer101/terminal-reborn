@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAccelerator, MENU_GAP, MENU_INSET, MENU_MARGIN, placeMenu, stepIndex, type MenuEntry } from './menu-model'
+import { anchorOf, formatAccelerator, MENU_GAP, MENU_INSET, MENU_MARGIN, originToward, placeMenu, stepIndex, type MenuEntry } from './menu-model'
 
 const viewport = { width: 1000, height: 800 }
 const size = { width: 200, height: 120 }
@@ -27,6 +27,23 @@ describe('placeMenu', () => {
   it('never leaves the window margin, even when the window is too small', () => {
     expect(placeMenu(size, { kind: 'point', x: 2, y: 2 }, viewport)).toEqual({ left: MENU_MARGIN, top: MENU_MARGIN })
     expect(placeMenu(size, { kind: 'point', x: 50, y: 50 }, { width: 100, height: 100 })).toEqual({ left: MENU_MARGIN, top: MENU_MARGIN })
+  })
+})
+
+describe('originToward', () => {
+  it('grows a menu under a button out of the button, and one flipped above it out of its top', () => {
+    const box = { left: 40, top: 10, right: 64, bottom: 34 }
+    const below = placeMenu(size, { kind: 'below', box }, viewport)
+    expect(originToward(box, below, size)).toBe('12px 0px')
+    const corner = { left: 960, top: 760, right: 984, bottom: 784 }
+    const above = placeMenu(size, { kind: 'below', box: corner }, viewport)
+    expect(originToward(corner, above, size)).toBe('188px 120px')
+  })
+
+  it('grows a context menu out of the pointer, wherever the menu flipped to', () => {
+    const at = placeMenu(size, { kind: 'point', x: 900, y: 750 }, viewport)
+    expect(originToward(anchorOf({ kind: 'point', x: 900, y: 750 }), at, size)).toBe('200px 120px')
+    expect(originToward(anchorOf({ kind: 'point', x: 100, y: 100 }), { left: 100, top: 100 }, size)).toBe('0px 0px')
   })
 })
 
