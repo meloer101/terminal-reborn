@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.106 · 2026-10-30 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.107 · 2026-10-31 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.107 | 2026-10-31 | **三级字提亮、标题降到 Medium、导航行 32 高**（§5，Figma page「unslop · 主要界面打磨（2026-10-31）」，作者 2026-10-31 看过后定：「实施这些改动然后改动代码」）：用 unslop skill 审计 5 个主界面（34Q / 11v2-A / 13B2 / 15A / 36E），只改审计出的工艺问题，不换方向。深色三级字 `text/tertiary` 从 gray/500 #6b6b6b（在 #0a0a0a 上 3.7:1，低于 4.5:1）改为 gray/400 #808080（5.0:1），浅色不变；标题样式 Title/M、Title/L 从 600 改为 500，Title/M 字距从 −0.1 改为 0（16px 以下不用负字距）；`NavItem`（侧栏和设置导航）从 30 高改为 32 高，落在 4px 网格上；设置 · 智能体的「复制安装命令」从主色改为二级字，七个按钮不再和名字抢。代价是二级字和三级字的差距从 7.7 : 3.7 缩小到 7.7 : 5.0。 |
 | v1.106 | 2026-10-30 | **squash 后不移动已推送的分支；分离 HEAD 不写进 worktree 记录的分支**（F4 / F16 / §3.3，v0.12.0 之后的代码审核）：v1.105 squash 后把分支移到 squash 提交上，分支推送过时（有 upstream 或远程有同名分支）会和远程分叉，agent 之后只能强推，所以这时不移，由 v1.101 按内容判断已合并。侧栏的分支同步遇到分离 HEAD 时不再把短提交号写进记录，记录保留上一次的分支：记录的分支也是 git 分支名（归档恢复按它重建 worktree），短提交号写进去会新建一个以它命名的分支。Worktree 视图的名称仍按 v1.9 用短提交号。 |
 | v1.105 | 2026-10-30 | **「合并到 main 并推送」的合并方式跟随用户的仓库**（F16 出口 A / F4，B27，作者 2026-10-30 定）：出口 A 原来写死 squash，标签也写死 `合并到 main · Squash`。用户在「一个任务一个提交」和「保留完整历史」之间分两派，没有数据说明哪派多，也有人要求工具尊重仓库自己的设置（Paradev#6185）；squash 之后分支又不是基线的祖先，提交图、「领先 N」、worktree 清理都把它当成没合并（claude-code#92061）。定下：① 方式由仓库决定——有 GitHub 设置时用仓库允许的方式和 `viewerDefaultMergeMethod`（出口预检多一个 `mergeMethods`，`gh api graphql` 查 `repository{squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed viewerDefaultMergeMethod}`，缓存 10 分钟，限流时暂停）；没有设置时第一次合并让用户选，之后这个仓库记住。② squash 之后把分支移到 squash 提交上（Vibe Kanban 的做法）：基线前移成功后，worktree 仍在这个分支、HEAD 仍是合并前的提交时执行 `git reset --keep <squash>`；`--keep` 拒绝（agent 正在改的文件会被碰到）或 HEAD 已变时不动，靠 v1.101 的按内容判断兜底。合并面板选 squash 时同样移动。③ rebase 只在已跟踪文件有未提交改动时挡住：出口 A 提交后没勾的未跟踪文件留在 worktree 里，原来的判断会让 rebase 一直被挡；git 自己拒绝覆盖未跟踪文件，失败时照常 `--abort`。④ 合并提交的说明沿用 git 的默认格式（`Merge branch 'x'`）；agent 写的说明用于提交未提交的改动，squash 时照旧是 squash 提交的说明。本次只做主进程和共享层；出口区的「合并方式」一行、记住的方式（`wavi.merge-method:<root>`）、自动修复和合并面板用同一个解析结果等 Figma 第 43 节（`688:32000`）定稿后再做，「合并方式」放在 agent 写说明之前还是扫一眼那一步也等作者在 Figma 上定。 |
 | v1.104 | 2026-10-30 | **F21 重做的实测结论**（§6.14 v1.104，作者 2026-10-30「测吧」）：`wavi` 改为**用文件和 main 通信**（每个会话一个 `WAVI_DIR`，请求 / 回应各一个 json 文件），不走 hook socket——Codex 0.165 的默认沙箱拦 unix socket，只放行一个 socket 要替换用户的权限配置，而写临时目录是允许的，这样 Codex 的配置一项都不用动；PATH 改为写进登录 shell 的 `-c` 脚本（放在环境变量里会被 `.zshrc` 挤到后面）；Pi 进“原生通道”一档（按次 `-e` 加载扩展、`sendUserMessage`，草稿保留）；按次追加系统提示用 Claude / Pi `--append-system-prompt`、Codex `-c developer_instructions`、Grok `--rules`；快照不带被忽略的文件，照 F4 复制。OpenCode 本机没装，未测。另记：Codex 0.165 的工具改成 `additional_tools` 输入项和 JavaScript `exec`，假 Codex 要改。 |

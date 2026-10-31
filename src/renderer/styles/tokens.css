@@ -50,8 +50,8 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Noto Sans SC', sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'PingFang SC', 'Noto Sans SC', monospace;
   --text-display: 500 28px/36px var(--font-ui);
-  --text-title-l: 600 20px/28px var(--font-ui);
-  --text-title-m: 600 15px/20px var(--font-ui);
+  --text-title-l: 500 20px/28px var(--font-ui);
+  --text-title-m: 500 15px/20px var(--font-ui);
   --text-body-heading: 600 13px/18px var(--font-ui);
   --text-body-strong: 500 13px/18px var(--font-ui);
   --text-body: 400 13px/18px var(--font-ui);
@@ -64,7 +64,7 @@
   --text-mono-code: 400 12px/20px var(--font-mono);
   --tracking-display: -0.28px;
   --tracking-title-l: -0.2px;
-  --tracking-title-m: -0.1px;
+  --tracking-title-m: 0;
 
   --duration-fast: 120ms;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
@@ -114,7 +114,7 @@
   --border-strong: #ffffff2e;
   --text-primary: #ededed;
   --text-secondary: #a1a1a1;
-  --text-tertiary: #6b6b6b;
+  --text-tertiary: #808080;
   --text-disabled: #474747;
   --text-inverse: #0a0a0a;
   --scrim: #00000066;
