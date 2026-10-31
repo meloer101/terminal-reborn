@@ -105,7 +105,7 @@ describe('StatusController', () => {
     expect(h.notifications).toEqual([])
   })
 
-  it('names the subagents whose asks are pending, and keeps the same list while they do (PRD F21 v1.107)', () => {
+  it('names the subagents whose asks are pending, and keeps the same list while they do (PRD F21 v1.109)', () => {
     h.controller.handleEvent('b', { type: 'tool-start', tool: 'Read', input: { file_path: '/x/a.ts' } })
     h.controller.handleEvent('b', { type: 'permission-request', tool: 'Bash', input: { command: 'pnpm lint' }, agentId: 'ab1' })
     const asking = h.sessions.find((s) => s.id === 'b')?.askingAgents

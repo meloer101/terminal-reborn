@@ -18,7 +18,7 @@ export interface SessionMetrics {
   agent?: UsageVendor
   /** False while the agent is off its vendor's plan (a third-party endpoint): the account's usage is not shown for it. */
   plan?: false
-  /** Subagents running inside the session (PRD F21 v1.107, Figma 44B); absent when none. */
+  /** Subagents running inside the session (PRD F21 v1.109, Figma 44B); absent when none. */
   subagents?: SubagentInfo[]
 }
 

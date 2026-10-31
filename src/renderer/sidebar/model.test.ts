@@ -190,7 +190,7 @@ describe('dispatched sessions (PRD F21)', () => {
   })
 })
 
-describe('subagents under their session (PRD F21 v1.107, Figma 44B)', () => {
+describe('subagents under their session (PRD F21 v1.109, Figma 44B)', () => {
   const sub = (id: string, title = id, model?: string) => ({ id, title, ...(model ? { model } : {}) })
   const draw = (rows: ReturnType<typeof buildSidebarGroups>[number]['rows']) =>
     rows.flatMap((r) => [

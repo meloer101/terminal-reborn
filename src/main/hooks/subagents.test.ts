@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SubagentInfo } from '@shared/agent-events'
 import { claudeModelLabel, parseSubagentMeta, transcriptModel, SubagentWatcher, subagentIdOf } from './subagents'
 
-// Shapes measured on Claude Code 2.1.316 (PRD §6.14 v1.107).
+// Shapes measured on Claude Code 2.1.316 (PRD §6.14 v1.109).
 const META = {
   agentType: 'Explore',
   isBuiltIn: true,

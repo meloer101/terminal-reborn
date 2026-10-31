@@ -1,7 +1,7 @@
-// The subagents an agent starts inside its own session (PRD F21 v1.107, Figma 44B): shown under the session, never
+// The subagents an agent starts inside its own session (PRD F21 v1.109, Figma 44B): shown under the session, never
 // taken over. Claude Code writes `<transcript without .jsonl>/subagents/agent-<agent_id>.meta.json` as it starts one
 // (`description`, `agentType`, `requestShape`, sometimes `model`) and the subagent's own transcript beside it (PRD
-// §6.14 v1.107, measured on 2.1.316). We read them after the first hook that names an `agent_id` and drop the subagent
+// §6.14 v1.109, measured on 2.1.316). We read them after the first hook that names an `agent_id` and drop the subagent
 // at its SubagentStop. Reading the agent's own files instead of asking it follows yetone/magpie
 // (internal/sessions/subagents.go, MIT); no code is taken from it.
 // Files are only read, and only under Claude's projects directory (the hook payload's transcript path is checked).
@@ -12,7 +12,7 @@ import { readHead } from './codex-usage'
 
 /**
  * The meta file is a few hundred bytes. The model is in the subagent transcript's `model` attachment, which sits after
- * the tool and skill listings: ~87 KB in, the first assistant line at ~255 KB (2.1.316, PRD §6.14 v1.108). Read once
+ * the tool and skill listings: ~87 KB in, the first assistant line at ~255 KB (2.1.316, PRD §6.14 v1.110). Read once
  * per subagent, off any hot path.
  */
 const META_BYTES = 64 * 1024

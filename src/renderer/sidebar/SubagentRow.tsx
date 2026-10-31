@@ -12,7 +12,7 @@ interface Props {
 
 /**
  * Figma 44B SubagentRow: a subagent the agent started inside its session — one line (status · task · model), hung
- * under the session on the tree line. Display only: no branch, no agent mark, no keyboard stop (PRD F21 v1.107).
+ * under the session on the tree line. Display only: no branch, no agent mark, no keyboard stop (PRD F21 v1.109).
  */
 export const SubagentRow = memo(
   function SubagentRow({ row, onSelect }: Props) {

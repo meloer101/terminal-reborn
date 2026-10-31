@@ -253,8 +253,8 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('subagents Claude starts hang under the session, one line each, and go when they stop (PRD F21 v1.107, Figma 44B)', async () => {
-    // Laid out the way Claude 2.1.316 writes them (PRD §6.14 v1.107): meta file + the subagent's own transcript.
+  test('subagents Claude starts hang under the session, one line each, and go when they stop (PRD F21 v1.109, Figma 44B)', async () => {
+    // Laid out the way Claude 2.1.316 writes them (PRD §6.14 v1.109): meta file + the subagent's own transcript.
     const conversation = join(repo.env.CLAUDE_CONFIG_DIR, 'projects', 'acme')
     const transcript_path = join(conversation, 'fake-conversation.jsonl')
     const dir = join(conversation, 'fake-conversation', 'subagents')

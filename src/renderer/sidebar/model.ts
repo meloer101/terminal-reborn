@@ -31,7 +31,7 @@ export interface SessionRowModel {
 }
 
 /**
- * A subagent the session's agent started itself (Claude's Agent tool; PRD F21 v1.107, Figma 44B): one line, under its
+ * A subagent the session's agent started itself (Claude's Agent tool; PRD F21 v1.109, Figma 44B): one line, under its
  * session and after the sessions it dispatched. Display only — it is not a session and no keyboard target.
  */
 export interface SubagentRowModel {

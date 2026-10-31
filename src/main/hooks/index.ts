@@ -223,7 +223,7 @@ const titles = new AgentTitleWatcher((sessionId, agent, title) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'agent-title', title } })
 )
 
-/** The subagents running inside each Claude session, read from its own files after hooks (PRD F21 v1.107). */
+/** The subagents running inside each Claude session, read from its own files after hooks (PRD F21 v1.109). */
 const subagents = new SubagentWatcher((sessionId, agent, items) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'subagents', items } })
 )

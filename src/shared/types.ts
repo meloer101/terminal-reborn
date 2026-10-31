@@ -75,7 +75,7 @@ export interface Session {
   statusSince?: number
   /** Epoch ms the current turn began (running time). Transient. */
   turnStartedAt?: number
-  /** The subagents (Claude `agent_id`) whose ask is pending: their sidebar rows show “等你处理” (PRD F21 v1.107). Transient. */
+  /** The subagents (Claude `agent_id`) whose ask is pending: their sidebar rows show “等你处理” (PRD F21 v1.109). Transient. */
   askingAgents?: string[]
   /** A shell session made by the Run button for the worktree's `run` script (PRD F4). Persisted. */
   script?: 'run'

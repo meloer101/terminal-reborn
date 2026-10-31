@@ -8,8 +8,8 @@
 
 ## 当前位置
 
-- 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.108，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
-- 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.107，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
+- 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
+- 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.109，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
 - 2026-10-31：应用和官网的动效按 emilkowalski/skills（`improve-animations` 审计）打磨（PRD v1.108）：应用改 `--ease-out` 曲线、菜单和弹出层从触发处长出（`originToward`，`menu-model.test.ts`）、子菜单不重放、设置弹窗入场、图标按钮按压、转圈统一、减少动态效果只去位移且抽屉不再挡终端重排；官网改通知离场缓动、去掉 `scale(0)`、按钮按压、hero 新提交行和激光线只用 transform、宋体跟随和侧栏聚焦的变量不再整树继承、结尾画布 DPR 和帧步长、去掉导航 hover 乱码、减少动态效果保留颜色反馈。侧栏水滴未动。
 - 2026-10-31：三级字提亮、标题降到 Medium、导航行 32 高（PRD v1.107，用 unslop skill 审计主界面后的轻度打磨）：深色 `--text-tertiary` #6b6b6b → #808080，`--text-title-m` / `--text-title-l` 600 → 500，`--tracking-title-m` −0.1 → 0，`NavItem` 和设置导航 30 → 32，「复制安装命令」改二级字。Figma 的 variable、Title 样式、NavItem 组件和 34Q / 34R / 11v2-A / 13B2 / 15A / 15G / 36E / 36F 同步改了。浅色三级字 #808080 在白底上 3.9:1，没动。
 - 2026-10-30：出口预检少跑 gh 和 git（代码审核）：合并方式查询失败或没有可用结果时也缓存 1 分钟，不再每次 git 变化都调 `gh api graphql`；`workInBase` 和其余预检并行（`src/main/ship.ts`，`ship.test.ts`）。PRD §6 记下按内容判断已合并的冲突边界。
@@ -156,11 +156,11 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [ ] F21 重做（PRD v1.103，2026-10-30 定）：`wavi` 命令代替按厂商注入的 MCP server，任何能跑 shell 的 agent 都能派活；19 家都能派和被派，回报分三档（原生通道 / 复用 §6.9 发消息链路加两道检查 / 「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` 主动报 + Wavi 兜底；`--base snapshot` 给审阅用；报告送进去时子会话一轮结束不提醒用户；侧栏写 agent 和模型
   - [x] 实测 5 项（2026-10-30，PRD v1.104 / §6.14）：Claude 能跑 `wavi`；Codex 能跑但默认沙箱拦 unix socket → `wavi` 改用文件通信，Codex 配置一项不动；Pi 扩展 `sendUserMessage` 送进 TUI、草稿保留；Claude / Codex / Pi / Grok 能按次追加系统提示；快照带未提交和未跟踪文件；PATH 改写进 `-c` 脚本
   - [ ] 实测 OpenCode `prompt_async`（本机没装 OpenCode，未测）
-  - [x] Figma 第 44 节（Section `708:32044`，2026-10-31，作者选定 44B，浅色 44E）：侧栏子会话的 agent 和模型、第二层缩进和连线、agent 自带的 subagent（v1.107），作者看过再实现
+  - [x] Figma 第 44 节（Section `708:32044`，2026-10-31，作者选定 44B，浅色 44E）：侧栏子会话的 agent 和模型、第二层缩进和连线、agent 自带的 subagent（v1.109），作者看过再实现
   - [ ] 实现：`wavi` 入口和命令、能力表扩到 19 家、三档送达和两道检查、两层与上限、快照 worktree、不提醒用户；删掉 `mcp-server.ts` / `mcp-config.ts`
   - [ ] 测试：e2e `dispatch.spec.ts` 重写（PRD F21 验收），单元测试
-- [ ] agent 自带的 subagent 只显示、不接管（PRD F21 v1.66 改，v1.107 改为读文件）：在所在会话下列出 subagent 的任务、模型和状态，不变成 Wavi 会话；状态来自 hook 的 `agent_id` / `SubagentStop`，名字、类型、模型、上一级读 agent 自己的 `subagents/agent-<id>.meta.json`（做法参照 yetone/magpie @ d714c42 `internal/sessions/subagents.go`）
-  - [x] 实测 Claude 2.1.316 的 subagent 文件（2026-10-31，PRD §6.14 v1.107）
+- [ ] agent 自带的 subagent 只显示、不接管（PRD F21 v1.66 改，v1.109 改为读文件）：在所在会话下列出 subagent 的任务、模型和状态，不变成 Wavi 会话；状态来自 hook 的 `agent_id` / `SubagentStop`，名字、类型、模型、上一级读 agent 自己的 `subagents/agent-<id>.meta.json`（做法参照 yetone/magpie @ d714c42 `internal/sessions/subagents.go`）
+  - [x] 实测 Claude 2.1.316 的 subagent 文件（2026-10-31，PRD §6.14 v1.109）
   - [ ] 实测 Codex 0.165 `spawn_agent` 的 rollout（`thread_spawn.parent_thread_id`）：2026-10-31 服务商对 `gpt-6-sol` 返回 503，阻塞
   - [x] Figma 第 44 节出稿（同 F21 重做），作者 2026-10-31 选定 44B
   - [x] 实现 Claude（2026-10-31）：读 meta 和模型、和 Wavi 子会话共用一棵树（`src/main/hooks/subagents.ts`、`src/renderer/sidebar/SubagentRow.tsx`）；单元测试用 2.1.316 的 meta 样本，e2e 走真实 hook 链路
