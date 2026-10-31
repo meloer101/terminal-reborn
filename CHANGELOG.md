@@ -4,6 +4,27 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-31
+
+Quieter type and motion that starts the moment you ask: menus grow out of what opened them, and reduced motion keeps its fades.
+文字更安静，动效一按就动：菜单从打开它的地方长出来，「减少动态效果」时保留淡入。
+
+### Look / 外观
+- Tertiary text on dark is brighter (#808080, 5.0:1); titles are Medium; sidebar and settings navigation rows are 32 px.
+  深色下的三级字提亮（#808080，对比度 5.0:1）；标题改为 Medium；侧栏和设置的导航行 32 px 高。
+- In 设置 · 智能体, 复制安装命令 is secondary text and no longer competes with the agent names.
+  设置 · 智能体 里的「复制安装命令」改为二级字，不再和 agent 名字抢。
+
+### Motion / 动效
+- Menus and the session header's popovers grow out of the button that opened them (150 ms); a submenu appears at once instead of replaying as you move across rows.
+  菜单和会话头的弹出层从打开它的按钮长出来（150 ms）；子菜单直接出现，不再每换一行重放。
+- A stronger ease-out everywhere: menus, toggles and closing drawers start moving immediately.
+  缓出曲线更利落：菜单、开关、侧栏关闭一开始就动。
+- 设置 comes up in 200 ms; icon buttons give way slightly when pressed; all spinners turn at one speed.
+  设置弹窗 200 ms 入场；图标按钮按下时微微缩小；所有转圈同一速度。
+- With 减少动态效果, fades and colour changes stay and only movement goes; opening or closing a drawer refits terminals at once.
+  开启「减少动态效果」时只去掉位移，淡入和颜色变化保留；开关侧栏时终端立即重排。
+
 ## [0.12.3] - 2026-10-30
 
 Fixes after v0.12.0: the main checkout's branch in the sidebar, no second merge after a squash, and terminals without a coloured ring.
