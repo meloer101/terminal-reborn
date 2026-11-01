@@ -338,6 +338,7 @@ async function apply(): Promise<void> {
     identity,
     devices,
     name: () => macName,
+    urls: () => (running ? addresses(running.port).map((a) => a.url) : []),
     version: app.getVersion(),
     handle,
     onClose: (connection) => feed.drop(connection.id),

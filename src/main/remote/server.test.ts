@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
+import { ristretto255_hasher } from '@noble/curves/ed25519.js'
 import { REMOTE_LIMITS, type PhoneRequest, type RemoteResult } from '@shared/remote'
-import { newIdentity } from './crypto'
+import { b64u, newIdentity } from './crypto'
 import { DeviceStore, type StoredDevice } from './devices'
 import { RemoteServer, type RemoteConnection } from './server'
 import { pairPhone, TestPhone } from './test-phone'
@@ -65,6 +66,22 @@ describe('pairing', () => {
     })))
     expect(outcomes.filter((o) => o === 'open')).toHaveLength(4)
     for (const s of sockets) s.terminate()
+  })
+
+  it('answers a typed-code PAKE and counts every attempt as a try', async () => {
+    const { url, server } = await setup()
+    server.pairing()
+    const a = b64u(ristretto255_hasher.hashToCurve(Buffer.from('ZZZZZZ'), { DST: 'wavi pake v1' }).multiply(7n).toBytes())
+    for (let i = 0; i < REMOTE_LIMITS.codeTries; i++) {
+      const socket = new WebSocket(url)
+      await new Promise((r) => socket.once('open', r))
+      const reply = new Promise<Record<string, unknown>>((resolve) => socket.once('message', (d) => resolve(JSON.parse(d.toString()) as Record<string, unknown>)))
+      socket.send(JSON.stringify({ t: 'pake', a }))
+      expect(await reply).toMatchObject({ t: 'pake', b: expect.any(String), box: expect.any(String) })
+      socket.close()
+    }
+    // The last try's socket could still have paired; it closed, so the code goes.
+    await vi.waitFor(() => expect(server.pairingLocked).toBe(true))
   })
 
   it('refuses to pair when no code is shown', async () => {

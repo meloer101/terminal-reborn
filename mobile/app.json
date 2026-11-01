@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Wavi",
+    "slug": "wavi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.wavi.remote",
+      "infoPlist": {
+        "NSCameraUsageDescription": "扫描 Mac 上的配对二维码，拍照发给智能体。",
+        "NSPhotoLibraryUsageDescription": "选照片发给智能体。",
+        "NSLocalNetworkUsageDescription": "连接同一个 Wi-Fi 里的 Mac 上的 Wavi。",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "scheme": "wavi",
+    "platforms": [
+      "ios"
+    ]
+  }
+}

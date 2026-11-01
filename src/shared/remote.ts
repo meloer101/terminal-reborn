@@ -308,7 +308,8 @@ export type PhoneResponse = { re: number } & RemoteResult
 export type RemotePrompt = PendingPrompt & { answerable: boolean }
 
 export type PhoneEvent =
-  | { event: 'hello'; data: { name: string; version: string } }
+  /** `urls`: where this Mac can be reached now (its LAN address may have changed since pairing). */
+  | { event: 'hello'; data: { name: string; version: string; urls?: string[] } }
   | { event: 'sessions'; data: RemoteSessionList }
   | { event: 'prompts'; data: RemotePrompt[] }
   /** New or changed items at the end of a watched session's feed; `reset` replaces what the phone has. */

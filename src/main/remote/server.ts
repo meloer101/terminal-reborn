@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import { PAIRING_ALPHABET, PAIRING_CODE_LENGTH, parsePhoneRequest, REMOTE_LIMITS, type PhoneEvent, type PhoneRequest, type PhoneResponse, type RemoteResult } from '@shared/remote'
-import { authProof, b64u, FrameCipher, fromB64u, open, pairingKey, proofMatches, seal, sessionKeys, type Identity } from './crypto'
+import { authProof, b64u, FrameCipher, fromB64u, open, pairingKey, pakeReply, proofMatches, seal, sessionKeys, type Identity } from './crypto'
 import type { DeviceStore } from './devices'
 
 export interface RemoteConnection {
@@ -21,6 +21,8 @@ export interface RemoteServerOptions {
   devices: DeviceStore
   /** The Mac's name the phone shows. */
   name: () => string
+  /** Where the phone can reach this Mac now: `hello` brings it, so a phone keeps up with a changed LAN address. */
+  urls?: () => string[]
   version: string
   handle: (connection: RemoteConnection, request: PhoneRequest) => Promise<RemoteResult>
   onOpen?: (connection: RemoteConnection) => void
@@ -87,6 +89,11 @@ export class RemoteServer {
   private code: (PairingCode & { tries: number }) | null = null
   /** Too many wrong codes: no new one until the user asks for it (换一个). */
   private locked = false
+  /**
+   * The socket whose PAKE used the code's last try: it may still pair with it (its code may have been right); the code
+   * goes once it has, or tried something else, or closed. Nobody else may use the code meanwhile.
+   */
+  private lastTryBy: WebSocket | null = null
   private readonly sockets = new Map<string, { socket: WebSocket; connection: RemoteConnection; end: (code: number, reason: string) => void }>()
   private unauthenticated = 0
   private readonly pendingByAddress = new Map<string, number>()
@@ -146,6 +153,7 @@ export class RemoteServer {
   renewCode(): PairingCode | null {
     this.code = null
     this.locked = false
+    this.lastTryBy = null
     const code = this.pairing()
     this.options.onChange?.()
     return code
@@ -154,6 +162,7 @@ export class RemoteServer {
   /** 设置 · 手机 closed: nothing can pair until it is opened again. */
   clearCode(): void {
     this.code = null
+    this.lastTryBy = null
   }
 
   hasCode(): boolean {
@@ -253,6 +262,7 @@ export class RemoteServer {
     socket.on('close', () => {
       clearTimeout(timer)
       uncount()
+      if (this.lastTryBy === socket) this.lock()
       if (stage.kind === 'open') {
         this.sockets.delete(stage.connection.id)
         this.options.onClose?.(stage.connection)
@@ -286,7 +296,9 @@ export class RemoteServer {
       const message = json(data, isBinary)
       if (!message) return refuse(4002, 'bad message')
 
-      if (stage.kind === 'new' && message.t === 'pair') return this.pair(message, plain, refuse)
+      if (this.lastTryBy === socket && message.t !== 'pair') this.lock()
+      if (stage.kind === 'new' && message.t === 'pake') return this.pake(socket, message, plain, refuse)
+      if (stage.kind === 'new' && message.t === 'pair') return this.pair(socket, message, plain, refuse)
       if (stage.kind === 'new' && message.t === 'hello') {
         const device = this.options.devices.get(message.device)
         if (!device) return refuse(4001, 'unknown device')
@@ -313,7 +325,7 @@ export class RemoteServer {
         stage = { kind: 'open', cipher, connection }
         this.sockets.set(connection.id, { socket, connection, end })
         this.options.devices.touch(device.id)
-        connection.send({ event: 'hello', data: { name: this.options.name(), version: this.options.version } })
+        connection.send({ event: 'hello', data: { name: this.options.name(), version: this.options.version, ...(this.options.urls ? { urls: this.options.urls() } : {}) } })
         this.options.onOpen?.(connection)
         this.options.onChange?.()
         return
@@ -322,26 +334,58 @@ export class RemoteServer {
     })
   }
 
-  private pair(message: Record<string, unknown>, plain: (value: unknown) => void, refuse: (code: number, reason: string) => void): void {
+  private lock(): void {
+    this.code = null
+    this.locked = true
+    this.lastTryBy = null
+    this.options.onChange?.()
+  }
+
+  /** One more try of the current code; the code goes after too many. */
+  private spendTry(current: PairingCode & { tries: number }): void {
+    current.tries++
+    if (current.tries >= REMOTE_LIMITS.codeTries) this.lock()
+  }
+
+  /** The code, unless it expired or its tries are used up (except, for its last try's socket, to pair). */
+  private usableCode(socket: WebSocket): (PairingCode & { tries: number }) | null {
     const current = this.code
-    if (!current || current.expiresAt <= this.now()) return refuse(4004, 'no pairing code')
+    if (!current || current.expiresAt <= this.now()) return null
+    return current.tries < REMOTE_LIMITS.codeTries || this.lastTryBy === socket ? current : null
+  }
+
+  /** A typed code (./crypto.ts): every attempt tests one code, so it costs a try whether or not it was right. */
+  private pake(socket: WebSocket, message: Record<string, unknown>, plain: (value: unknown) => void, refuse: (code: number, reason: string) => void): void {
+    const current = this.usableCode(socket)
+    if (!current || current.tries >= REMOTE_LIMITS.codeTries) return refuse(4004, 'no pairing code')
+    const reply = pakeReply(current.code, message.a, this.options.identity.publicKey)
+    current.tries++
+    if (current.tries >= REMOTE_LIMITS.codeTries) {
+      if (!reply) return (this.lock(), refuse(4002, 'bad message'))
+      // The last try: this socket may still pair; the code goes after that (or when it does anything else).
+      this.lastTryBy = socket
+      this.options.onChange?.()
+    }
+    if (!reply) return refuse(4002, 'bad message')
+    plain({ t: 'pake', ...reply })
+  }
+
+  private pair(socket: WebSocket, message: Record<string, unknown>, plain: (value: unknown) => void, refuse: (code: number, reason: string) => void): void {
+    const current = this.usableCode(socket)
+    if (!current) return refuse(4004, 'no pairing code')
     const key = typeof message.key === 'string' ? pairingKey(this.options.identity.privateKey, message.key, current.code) : null
     const box = fromB64u(message.box)
     const opened = key && box ? open(key, 0, box) : null
     const name = opened ? nameIn(opened) : null
     if (!key || name === null) {
-      current.tries++
-      if (current.tries >= REMOTE_LIMITS.codeTries) {
-        this.code = null
-        this.locked = true
-        this.options.onChange?.()
-      }
+      this.spendTry(current)
       return refuse(4005, 'wrong code')
     }
     const { device, evicted } = this.options.devices.add(name)
     for (const id of evicted) this.disconnect(id)
     // One phone per code.
     this.code = null
+    this.lastTryBy = null
     plain({ t: 'paired', box: b64u(seal(key, 1, Buffer.from(JSON.stringify({ device: device.id, secret: device.secret, name: this.options.name() }), 'utf8'))) })
     this.options.onChange?.()
   }

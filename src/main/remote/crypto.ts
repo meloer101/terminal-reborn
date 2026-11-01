@@ -11,9 +11,18 @@
 //            phone → { t: 'auth', nonce: c, proof }   proof = HMAC(secret, 'wavi auth v1' ‖ s ‖ c)
 //            keys = HKDF(secret, salt = s ‖ c, info = 'wavi session v1', 64): phone→Wavi, then Wavi→phone
 //   frames:  8-byte big-endian counter ‖ seal(key, 4 zero bytes ‖ counter, json); counters only go up
+//
+// A typed code has no QR code to bring the Mac's public key along, and fetching it in plaintext would let a man in the
+// middle swap it and try every code offline. So the phone first runs a PAKE (CPace-style, ristretto255) on the code:
+//   pake:    phone → { t: 'pake', a: x·G }       G = hashToCurve(code, DST = 'wavi pake v1')
+//            Wavi → { t: 'pake', b: y·G, box }   k = HKDF(y·A, salt = A ‖ B, info = 'wavi pake v1'), box = seal(k, 0, { key })
+// Only someone who knows the code opens the box, and each attempt tests one code (Wavi counts it as a try). With the
+// key from the box the phone then pairs exactly as after a scan.
 import { createCipheriv, createDecipheriv, createHmac, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, timingSafeEqual, type KeyObject } from 'node:crypto'
+import { ristretto255, ristretto255_hasher } from '@noble/curves/ed25519.js'
 
 export const PAIR_INFO = 'wavi pair v1'
+export const PAKE_INFO = 'wavi pake v1'
 export const AUTH_INFO = 'wavi auth v1'
 export const SESSION_INFO = 'wavi session v1'
 const TAG = 16
@@ -91,6 +100,25 @@ export function open(key: Uint8Array, counter: number, sealed: Uint8Array): Buff
 export function pairingKey(own: KeyObject, phonePublic: string, code: string): Buffer | null {
   const shared = sharedSecret(own, phonePublic)
   return shared ? hkdf(shared, Buffer.from(code, 'utf8'), PAIR_INFO) : null
+}
+
+const pakeBase = (code: string) => ristretto255_hasher.hashToCurve(Buffer.from(code, 'utf8'), { DST: PAKE_INFO })
+
+/** Wavi's half of a typed-code PAKE: null when `a` is not a usable group element. */
+export function pakeReply(code: string, a: unknown, macPublic: string): { b: string; box: string } | null {
+  const bytesA = fromB64u(a, 32)
+  if (!bytesA) return null
+  let pointA: InstanceType<typeof ristretto255.Point>
+  try {
+    pointA = ristretto255.Point.fromBytes(bytesA)
+  } catch {
+    return null
+  }
+  if (pointA.is0()) return null
+  const y = ristretto255_hasher.hashToScalar(randomBytes(64))
+  const bytesB = pakeBase(code).multiply(y).toBytes()
+  const key = hkdf(pointA.multiply(y).toBytes(), Buffer.concat([bytesA, bytesB]), PAKE_INFO)
+  return { b: b64u(bytesB), box: b64u(seal(key, 0, Buffer.from(JSON.stringify({ key: macPublic }), 'utf8'))) }
 }
 
 export function authProof(secret: Uint8Array, serverNonce: Uint8Array, clientNonce: Uint8Array): Buffer {
