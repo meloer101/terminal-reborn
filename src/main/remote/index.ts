@@ -171,8 +171,11 @@ function broadcastStatus(): void {
 
 const calls = new Map<string, { owner: WebContents; resolve: (result: RemoteResult) => void }>()
 
-/** 归档 runs the repository's archive script and records the worktree; an exit's preflight may ask GitHub. */
-const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { archive: 120_000, exits: 30_000, ship: 30_000 }
+/**
+ * 归档 runs the repository's archive script and records the worktree; an exit's preflight may ask GitHub; a send to a
+ * session that has not started waits for its agent to come up.
+ */
+const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { archive: 120_000, exits: 30_000, ship: 30_000, send: 30_000 }
 
 function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Promise<RemoteResult> {
   if (!owner || owner.isDestroyed()) return Promise.resolve(remoteFail('Mac 上没有窗口打开这个会话'))
@@ -251,7 +254,8 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       } catch (error) {
         return remoteFail(error instanceof PhotoError ? error.message : '照片没能保存')
       }
-      return askWindow(ownerOf(request.session), { type: 'send', session: request.session, text: request.text, paths })
+      // A session restored after a restart has no PTY (so no owner) until it is first shown; the window that lists it starts it.
+      return askWindow(ownerOf(request.session) ?? mainWindow(), { type: 'send', session: request.session, text: request.text, paths })
     }
     case 'interrupt':
       return knownSession(request.session) ? askWindow(ownerOf(request.session), { type: 'interrupt', session: request.session }) : notFound
@@ -426,6 +430,8 @@ export function registerRemoteHandlers(owner: (sessionId: string) => WebContents
     }
     windowSessions = list
     broadcastSessions()
+    // A session that just started now names its transcript.
+    feed.retry()
   })
   ipcMain.on(REMOTE_IPC.reply, (event, callId: unknown, result: unknown) => {
     if (typeof callId !== 'string' || callId.length > 64) return

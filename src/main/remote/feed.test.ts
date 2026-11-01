@@ -120,4 +120,28 @@ describe('FeedHub', () => {
     expect(pushed).toContainEqual({ to: 'c1', event: { event: 'feed', data: { session: 's1', items: [], start: 0, reset: true } } })
     hub.drop('c1')
   })
+
+  it('serves a phone that opened the session before its agent started, once the transcript is known', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'feed-'))
+    const path = join(dir, 'late.jsonl')
+    const sources: Record<string, FeedSource | null> = { s1: null }
+    const { hub, pushed, triggers } = setup(sources)
+    hub.watch('c1', 's1')
+    expect(await hub.page('s1')).toBeNull()
+    writeFileSync(path, user('你好') + reply('在'))
+    sources.s1 = { agent: 'claude', path }
+    vi.useFakeTimers()
+    hub.retry()
+    await vi.advanceTimersByTimeAsync(200)
+    vi.useRealTimers()
+    await vi.waitFor(() => expect(pushed.some((p) => p.event.event === 'feed' && p.event.data.items.length === 2)).toBe(true))
+    const last = pushed.findLast((p) => p.event.event === 'feed')!
+    expect(last).toMatchObject({ to: 'c1', event: { data: { session: 's1', start: 0, reset: true } } })
+    // Later writes reach it like any other watcher.
+    appendFileSync(path, user('再来'))
+    triggers.get(path)!()
+    await vi.waitFor(() => expect(pushed.at(-1)).toMatchObject({ event: { data: { start: 2 } } }))
+    hub.drop('c1')
+    expect(hub.retry()).toBeUndefined()
+  })
 })

@@ -44,6 +44,8 @@ export class FeedHub {
   private readonly readers = new Map<string, Reader>()
   /** Which session each connection watches. */
   private readonly watching = new Map<string, string>()
+  /** Connections watching a session whose transcript is not known yet (its agent has not started): served once it is. */
+  private readonly pending = new Map<string, Set<string>>()
 
   constructor(private readonly options: FeedHubOptions) {}
 
@@ -70,12 +72,17 @@ export class FeedHub {
     if (previous) {
       this.watching.delete(connectionId)
       this.readers.get(previous)?.watchers.delete(connectionId)
+      this.pending.get(previous)?.delete(connectionId)
+      if (this.pending.get(previous)?.size === 0) this.pending.delete(previous)
       this.release(previous)
     }
     if (!sessionId) return
-    const reader = this.readerFor(sessionId)
-    if (!reader) return
     this.watching.set(connectionId, sessionId)
+    const reader = this.readerFor(sessionId)
+    if (!reader) {
+      this.pending.set(sessionId, (this.pending.get(sessionId) ?? new Set()).add(connectionId))
+      return
+    }
     reader.watchers.add(connectionId)
     if (!reader.watcher) {
       const onChange = () => this.schedule(sessionId)
@@ -90,14 +97,20 @@ export class FeedHub {
 
   /** A hook of the session fired: something may have been appended (and fs.watch can miss writes), or it moved to another file. */
   nudge(sessionId: string): void {
-    if (!this.readers.get(sessionId)?.watchers.size) return
+    if (!this.readers.get(sessionId)?.watchers.size && !this.pending.has(sessionId)) return
     this.readerFor(sessionId)
     this.schedule(sessionId)
+  }
+
+  /** Where sessions' transcripts are may have changed (the window's list): serve the phones still waiting for one. */
+  retry(): void {
+    for (const sessionId of [...this.pending.keys()]) this.nudge(sessionId)
   }
 
   stop(): void {
     for (const id of [...this.readers.keys()]) this.dispose(id)
     this.watching.clear()
+    this.pending.clear()
   }
 
   private readerFor(sessionId: string): Reader | null {
@@ -105,10 +118,12 @@ export class FeedHub {
     const existing = this.readers.get(sessionId)
     if (existing && source && existing.source.path === source.path) return existing
     if (!source) return existing ?? null
-    // A new file (the conversation was cleared or resumed into another one): start over and tell the watchers.
-    const watchers = existing?.watchers ?? new Set<string>()
+    // A new file (the conversation was cleared or resumed into another one, or the agent started for phones that were
+    // waiting): start over and tell the watchers; their next push is the newest page.
+    const watchers = existing?.watchers ?? this.pending.get(sessionId) ?? new Set<string>()
+    this.pending.delete(sessionId)
     if (existing) this.dispose(sessionId)
-    const reader: Reader = { source, parser: createChatParser(source.agent), offset: -1, carry: '', decoder: new StringDecoder('utf8'), reset: false, watchers, watcher: null, timer: null, reading: null }
+    const reader: Reader = { source, parser: createChatParser(source.agent), offset: -1, carry: '', decoder: new StringDecoder('utf8'), reset: watchers.size > 0, watchers, watcher: null, timer: null, reading: null }
     this.readers.set(sessionId, reader)
     if (watchers.size > 0) {
       reader.watcher = (this.options.watchFile ?? defaultWatch)(source.path, () => this.schedule(sessionId))
