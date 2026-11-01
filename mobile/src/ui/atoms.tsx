@@ -159,7 +159,13 @@ export function GroupHeader({ title, count }: { title: string; count: number }) 
   )
 }
 
-/** 45E / 45F / 45H / 45J as 46′ draws them: a glass sheet inset from the edges, over a scrim; taps on the scrim close it. */
+/**
+ * The sheet's bottom corners follow the display's (Figma 46″): an iPhone 17 Pro's corner is about 62 pt, measured from
+ * the simulator's screen mask, and the sheet sits 8 inside it. Phones with smaller corners get a slightly rounder sheet.
+ */
+const SHEET_BOTTOM_RADIUS = 62 - 8
+
+/** 45E / 45F / 45H / 45J as 46′ / 46″ draw them: a glass sheet inset from the edges, over a scrim; taps on the scrim close it. */
 export function Sheet({ visible, onClose, children, padded = true }: { visible: boolean; onClose: () => void; children: ReactNode; padded?: boolean }) {
   const c = useColors()
   return (
@@ -197,7 +203,7 @@ const s = StyleSheet.create({
   navRight: { minWidth: NAV_HEIGHT, alignItems: 'flex-end' },
   group: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 6 },
   sheetRoot: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { marginHorizontal: 8, marginBottom: 8, maxHeight: '92%', borderRadius: 34, paddingTop: 8, paddingBottom: 24, gap: 16 },
+  sheet: { marginHorizontal: 8, marginBottom: 8, maxHeight: '92%', borderTopLeftRadius: 34, borderTopRightRadius: 34, borderBottomLeftRadius: SHEET_BOTTOM_RADIUS, borderBottomRightRadius: SHEET_BOTTOM_RADIUS, paddingTop: 8, paddingBottom: 24, gap: 16 },
   sheetPadded: { paddingHorizontal: 20 },
   grabber: { alignItems: 'center' },
   grabberBar: { width: 36, height: 5, borderRadius: 3 }

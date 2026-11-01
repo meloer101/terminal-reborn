@@ -69,9 +69,7 @@ function Permission({ prompt, onDone }: { prompt: Extract<RemotePrompt, { kind: 
             <Button primary label="允许" busy={busy === 'allow-once'} disabled={busy !== null} onPress={() => void answer('allow-once')} style={{ flex: 1 }} />
           </View>
           {prompt.canAllowAlways ? (
-            <Pressable disabled={busy !== null} onPress={() => void answer('allow-always')} style={s.always}>
-              <Text style={[font(15), { color: c.textSecondary }]}>{allowAlwaysLabel(prompt.allowAlways?.rules)}</Text>
-            </Pressable>
+            <Button label={allowAlwaysLabel(prompt.allowAlways?.rules)} busy={busy === 'allow-always'} disabled={busy !== null} onPress={() => void answer('allow-always')} />
           ) : null}
         </>
       ) : (
@@ -182,8 +180,7 @@ const s = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   chip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   command: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 6 },
-  actions: { flexDirection: 'row', gap: 10 },
-  always: { alignItems: 'center', paddingVertical: 4 },
+  actions: { flexDirection: 'row', gap: 8 },
   option: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 12, borderRadius: 10 },
   aside: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth }
 })
