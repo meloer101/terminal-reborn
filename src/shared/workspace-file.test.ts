@@ -134,27 +134,29 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.sessions.map((s) => s.script)).toEqual(['run', undefined, undefined])
   })
 
-  it('keeps who dispatched a session (PRD F21): one level, and only while the dispatcher is in the file', () => {
+  it('keeps who dispatched a session (PRD F21): two levels, and only while the dispatcher is in the file', () => {
     const file = sanitizeWorkspaceFile(
       {
         ...valid,
         sessions: [
           { id: 'p', worktreeId: 'w1', kind: 'claude', title: 'plan' },
-          { id: 'c1', worktreeId: 'w1', kind: 'codex', title: 'impl', dispatchedBy: 'p', dispatchTask: 'Do X' },
+          { id: 'c1', worktreeId: 'w1', kind: 'codex', title: 'impl', dispatchedBy: 'p', dispatchTask: 'Do X', dispatchModel: 'gpt-6-sol' },
           { id: 'c2', worktreeId: 'w1', kind: 'claude', title: 'orphan', dispatchedBy: 'gone', dispatchTask: 'Do Y' },
-          { id: 'c3', worktreeId: 'w1', kind: 'claude', title: 'grandchild', dispatchedBy: 'c1' },
-          { id: 'c4', worktreeId: 'w1', kind: 'shell', title: 'shell', dispatchedBy: 'p' }
+          { id: 'c3', worktreeId: 'w1', kind: 'grok', title: 'grandchild', dispatchedBy: 'c1', dispatchBase: 'snapshot', dispatchModel: '$(x)' },
+          { id: 'c4', worktreeId: 'w1', kind: 'shell', title: 'shell', dispatchedBy: 'p' },
+          { id: 'c5', worktreeId: 'w1', kind: 'claude', title: 'third level', dispatchedBy: 'c3' }
         ],
         drafts: {}
       },
       0
     ) as WorkspaceFile
-    expect(file.sessions.map((s) => [s.id, s.dispatchedBy, s.dispatchTask])).toEqual([
-      ['p', undefined, undefined],
-      ['c1', 'p', 'Do X'],
-      ['c2', undefined, undefined],
-      ['c3', undefined, undefined],
-      ['c4', undefined, undefined]
+    expect(file.sessions.map((s) => [s.id, s.dispatchedBy, s.dispatchTask, s.dispatchBase, s.dispatchModel])).toEqual([
+      ['p', undefined, undefined, undefined, undefined],
+      ['c1', 'p', 'Do X', undefined, 'gpt-6-sol'],
+      ['c2', undefined, undefined, undefined, undefined],
+      ['c3', 'c1', undefined, 'snapshot', undefined],
+      ['c4', undefined, undefined, undefined, undefined],
+      ['c5', undefined, undefined, undefined, undefined]
     ])
   })
 

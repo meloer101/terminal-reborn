@@ -41,7 +41,7 @@ export interface NewSessionInfo {
 export interface WorktreeCreateRequest {
   /** One of the workspace's project roots. */
   root: string
-  /** New local branch. */
+  /** New local branch; '' with `snapshotOf`. */
   branch: string
   /** Branch it starts from: a local branch or a remote one (`origin/x`). */
   base: string
@@ -49,6 +49,11 @@ export interface WorktreeCreateRequest {
   folder: string
   /** Copy the files `.worktreeinclude` lists (and, in the renderer, run the setup script). */
   prepare: boolean
+  /**
+   * A checkout of this repository whose working tree, uncommitted and untracked files included, becomes the new
+   * worktree's detached HEAD instead of a branch (PRD F21 `--base snapshot`). Additive: 新建会话 never sets it.
+   */
+  snapshotOf?: string
 }
 
 export type WorktreeCreateRefusal =
@@ -211,8 +216,10 @@ const isAbsolutePath = (v: unknown): v is string => typeof v === 'string' && v.s
 /** The create request as main accepts it, or null. (Whether root is a project, the branch is new, … is checked against git.) */
 export function parseCreateRequest(raw: unknown): WorktreeCreateRequest | null {
   if (!isRecord(raw)) return null
-  const { root, branch, base, folder, prepare } = raw
-  if (!isAbsolutePath(root) || !isValidRefName(branch) || branch.startsWith('refs/') || branch === 'HEAD') return null
-  if (!isValidRefName(base) || !isSafeFolderName(folder) || typeof prepare !== 'boolean') return null
+  const { root, branch, base, folder, prepare, snapshotOf } = raw
+  if (!isAbsolutePath(root) || !isValidRefName(base) || !isSafeFolderName(folder) || typeof prepare !== 'boolean') return null
+  // A snapshot gets no branch (detached HEAD); whether `snapshotOf` belongs to this repository is checked against git.
+  if (snapshotOf !== undefined) return isAbsolutePath(snapshotOf) && branch === '' ? { root, branch: '', base, folder, prepare, snapshotOf } : null
+  if (!isValidRefName(branch) || branch.startsWith('refs/') || branch === 'HEAD') return null
   return { root, branch, base, folder, prepare }
 }

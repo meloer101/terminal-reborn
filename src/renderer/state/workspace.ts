@@ -44,12 +44,14 @@ import {
   syncWorktreeBranches,
   persistedStateChanged,
   projectOfSession,
+  randomId,
   reconcileSplit,
   rememberRecentProject,
   removedSessionIds,
   removeProject,
   restoreWorkspace,
   serializeWorkspace,
+  type MakeId,
   type WorkspaceData
 } from './workspace-model'
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
@@ -142,7 +144,7 @@ interface WorkspaceState extends WorkspaceData {
    * 一题多解: starts a session in a new worktree folder without selecting it (the overview shows the group). The
    * selection stays where it was; with none, the new session takes it.
    */
-  addBackgroundSession(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind): SessionId | null
+  addBackgroundSession(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, sessionId?: SessionId): SessionId | null
   /** Adds the Run button's terminal for a worktree (PRD F4) and selects it. */
   addRunSession(worktreeId: WorktreeId): SessionId | null
   /** Remembers the new-session sheet's 工作目录 for a git project. */
@@ -191,6 +193,8 @@ export type SessionPatch = Partial<
     | 'askingAgents'
     | 'dispatchedBy'
     | 'dispatchTask'
+    | 'dispatchBase'
+    | 'dispatchModel'
   >
 >
 
@@ -375,8 +379,10 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       commit(result.data, { mainView: 'session', focusRequest: get().focusRequest + 1 })
       return result.sessionId
     },
-    addBackgroundSession(projectId, target, kind) {
-      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now())
+    addBackgroundSession(projectId, target, kind, sessionId) {
+      // A `wavi run` names the session before it exists (PRD F21): its answer already gave the agent this id.
+      const makeId: MakeId | undefined = sessionId ? (prefix) => (prefix === 's' && !get().sessions.some((s) => s.id === sessionId) ? sessionId : randomId(prefix)) : undefined
+      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now(), makeId)
       if (!result) return null
       commit({ ...result.data, activeSessionId: get().activeSessionId ?? result.sessionId })
       return result.sessionId

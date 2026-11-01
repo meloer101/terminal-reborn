@@ -1,20 +1,26 @@
 // What dispatch (PRD F21) keeps in a window, none of it saved (who dispatched whom is on the sessions themselves):
-// batches waiting for the user's 开始, the first message a child starts with, each child's last message, and the
-// reports on their way to each dispatcher — or held for 送进去 when there is no channel or the hourly budget is used.
+// `wavi run` requests waiting for the user's 开始, the first message a child starts with, each child's last message,
+// the reports on their way to each dispatcher, and messages held for 送进去 — when the session has no channel, nobody
+// should be typed over, delivery failed, or the hourly budget is used.
 import { create } from 'zustand'
 import { emptyQueue, type ChildPlan, type ChildReport, type ReportQueue } from '@shared/dispatch'
 import type { SessionId } from '@shared/types'
 
+/** One `wavi run` waiting for 开始 under its dispatcher's terminal; several of one dispatcher show as one strip. */
 export interface PendingStart {
   callId: string
   parentId: SessionId
-  plans: ChildPlan[]
+  /** The session it becomes (named in `wavi run`'s answer already). */
+  childId: SessionId
+  plan: ChildPlan
+  /** The dispatcher's branch, which a `head` child starts from. */
   base: string
-  reason?: string
-  /** The dispatcher's checkout has uncommitted changes, which the new worktrees will not have. */
+  /** The dispatcher's checkout has uncommitted changes, which a `head` child will not have. */
   uncommitted: boolean
-  decide: (start: boolean) => void
 }
+
+/** A message that waits under a session's terminal for the user's 送进去. */
+export type HeldItem = { kind: 'report'; report: ChildReport } | { kind: 'message'; key: string; title: string; text: string }
 
 interface State {
   confirms: PendingStart[]
@@ -23,20 +29,22 @@ interface State {
   /** A child's last message, whole (the Stop hook's `last_assistant_message`, tail-clipped by main). */
   messages: Record<SessionId, string | undefined>
   queues: Record<SessionId, ReportQueue | undefined>
-  held: Record<SessionId, ChildReport[] | undefined>
+  held: Record<SessionId, HeldItem[] | undefined>
+  /** Children that ran `wavi report` in their current turn: its end needs no report of Wavi's own. */
+  reported: Record<SessionId, true | undefined>
 }
 
-export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {} }))
+export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {}, reported: {} }))
 
 export function addConfirm(pending: PendingStart): void {
   useDispatch.setState((s) => ({ confirms: [...s.confirms, pending] }))
 }
 
-export function settleConfirm(callId: string, start: boolean): void {
-  const pending = useDispatch.getState().confirms.find((c) => c.callId === callId)
-  if (!pending) return
-  useDispatch.setState((s) => ({ confirms: s.confirms.filter((c) => c.callId !== callId) }))
-  pending.decide(start)
+/** Takes these requests out of the waiting list; the ones still there (not answered by someone else meanwhile). */
+export function takeConfirms(callIds: readonly string[]): PendingStart[] {
+  const taken = useDispatch.getState().confirms.filter((c) => callIds.includes(c.callId))
+  if (taken.length > 0) useDispatch.setState((s) => ({ confirms: s.confirms.filter((c) => !callIds.includes(c.callId)) }))
+  return taken
 }
 
 export function setLaunch(id: SessionId, launch: { initialPrompt: string; model?: string }): void {
@@ -62,15 +70,26 @@ export function setQueue(parentId: SessionId, queue: ReportQueue): void {
   useDispatch.setState((s) => ({ queues: { ...s.queues, [parentId]: queue } }))
 }
 
-export function addHeld(parentId: SessionId, reports: readonly ChildReport[]): void {
+const sameItem = (a: HeldItem, b: HeldItem): boolean =>
+  a.kind === 'report' && b.kind === 'report' ? a.report.childId === b.report.childId : a.kind === 'message' && b.kind === 'message' && a.key === b.key
+
+export function addHeld(sessionId: SessionId, items: readonly HeldItem[]): void {
+  if (items.length === 0) return
   useDispatch.setState((s) => {
-    const kept = (s.held[parentId] ?? []).filter((r) => !reports.some((n) => n.childId === r.childId))
-    return { held: { ...s.held, [parentId]: [...kept, ...reports] } }
+    const kept = (s.held[sessionId] ?? []).filter((old) => !items.some((n) => sameItem(old, n)))
+    return { held: { ...s.held, [sessionId]: [...kept, ...items] } }
   })
 }
 
-export function takeHeld(parentId: SessionId): ChildReport[] {
-  const held = useDispatch.getState().held[parentId] ?? []
-  if (held.length > 0) useDispatch.setState((s) => ({ held: { ...s.held, [parentId]: undefined } }))
+export const heldReports = (reports: readonly ChildReport[]): HeldItem[] => reports.map((report) => ({ kind: 'report', report }))
+
+export function takeHeld(sessionId: SessionId): HeldItem[] {
+  const held = useDispatch.getState().held[sessionId] ?? []
+  if (held.length > 0) useDispatch.setState((s) => ({ held: { ...s.held, [sessionId]: undefined } }))
   return held
+}
+
+export function setReported(childId: SessionId, reported: boolean): void {
+  if (Boolean(useDispatch.getState().reported[childId]) === reported) return
+  useDispatch.setState((s) => ({ reported: { ...s.reported, [childId]: reported ? true : undefined } }))
 }

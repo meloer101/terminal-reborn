@@ -5,8 +5,8 @@
 // payload is validated here; nothing from the renderer reaches git as an option.
 import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
-import { cp, mkdir, readdir, realpath, stat } from 'node:fs/promises'
-import { homedir, userInfo } from 'node:os'
+import { cp, mkdir, mkdtemp, readdir, realpath, rm, stat } from 'node:fs/promises'
+import { homedir, tmpdir, userInfo } from 'node:os'
 import { basename, delimiter, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
@@ -221,11 +221,55 @@ async function copyIncluded(top: string, target: string): Promise<number> {
   return failures
 }
 
+/** The repository's shared git dir, as an absolute path (the same for every worktree of one repository). */
+const commonDir = (cwd: string): Promise<string> => orEmpty(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).then((s) => s.trim())
+
+/**
+ * A commit of `from`'s working tree as it is now — staged, unstaged and untracked files, not the ignored ones — on top
+ * of its HEAD (PRD F21 `--base snapshot`, §6.14 v1.104). A throwaway index read from HEAD, so `from`'s own index and working tree are
+ * untouched; `commit-tree` runs no hooks and needs no identity of the user's.
+ */
+async function snapshotCommit(from: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'wavi-snapshot-'))
+  const index = { GIT_INDEX_FILE: join(dir, 'index') }
+  try {
+    const head = (await orEmpty(git(from, ['rev-parse', '--verify', '--quiet', 'HEAD']))).trim()
+    // From HEAD's tree, so tracked files an ignore pattern matches (force-added) stay in the snapshot.
+    if (head) await git(from, ['read-tree', head], { env: index, timeout: ADD_TIMEOUT_MS })
+    await git(from, ['add', '-A'], { env: index, timeout: ADD_TIMEOUT_MS })
+    const tree = (await git(from, ['write-tree'], { env: index })).trim()
+    const ident = { GIT_AUTHOR_NAME: 'Wavi', GIT_AUTHOR_EMAIL: 'wavi@localhost', GIT_COMMITTER_NAME: 'Wavi', GIT_COMMITTER_EMAIL: 'wavi@localhost' }
+    return (await git(from, ['commit-tree', tree, ...(head ? ['-p', head] : []), '-m', 'Wavi snapshot'], { env: ident })).trim()
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+async function createSnapshotWorktree(top: string, from: string, path: string, prepare: boolean): Promise<WorktreeCreateResult> {
+  const real = await realpath(from).catch(() => null)
+  // Only a checkout of this same repository.
+  if (!real || !(await commonDir(real)) || (await commonDir(real)) !== (await commonDir(top))) return { ok: false, reason: 'invalid' }
+  try {
+    const commit = await snapshotCommit(real)
+    await mkdir(join(path, '..'), { recursive: true })
+    await git(top, ['worktree', 'add', '--detach', path, commit], { timeout: ADD_TIMEOUT_MS })
+  } catch (error) {
+    return { ok: false, reason: 'git', message: error instanceof Error ? error.message : String(error) }
+  }
+  const copyFailures = prepare ? await copyIncluded(top, path) : 0
+  return { ok: true, path, copyFailures }
+}
+
 export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult> {
   const request = parseCreateRequest(raw)
   if (!request) return { ok: false, reason: 'invalid' }
   const top = await repoTop(request.root)
   if (!top) return { ok: false, reason: 'not-a-repo' }
+  if (request.snapshotOf !== undefined) {
+    const path = join(worktreesDirFor(top), request.folder)
+    if (await exists(path)) return { ok: false, reason: 'folder-exists' }
+    return createSnapshotWorktree(top, request.snapshotOf, path, request.prepare)
+  }
   if (await refExists(top, `refs/heads/${request.branch}`)) return { ok: false, reason: 'branch-exists' }
   const dir = worktreesDirFor(top)
   const path = join(dir, request.folder)

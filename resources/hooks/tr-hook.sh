@@ -36,6 +36,17 @@ if [ "$event" = SessionStart ] && [ "$agent" = claude ]; then
     -H 'Content-Type: application/json' \
     --data-binary @- \
     "http://tr/hook/AgentBilling?session=$TR_SESSION_ID&agent=claude" >/dev/null 2>&1
+  # Its cross-session inbox (PRD F21, §6.14): how Wavi's reports and `wavi send` reach it without typing.
+  sock="${CLAUDE_CODE_MESSAGING_SOCKET-}"
+  tok="${CLAUDE_CODE_MESSAGING_TOKEN-}"
+  case "$sock$tok" in *'"'* | *'\'* | '') ;; *)
+    printf '{"socket":"%s","token":"%s"}' "$sock" "$tok" | curl --silent --fail --connect-timeout 1 --max-time 5 \
+      --unix-socket "$TR_HOOK_SOCK" \
+      -H "X-TR-Token: $TR_HOOK_TOKEN" \
+      -H 'Content-Type: application/json' \
+      --data-binary @- \
+      "http://tr/hook/WaviInbox?session=$TR_SESSION_ID&agent=claude" >/dev/null 2>&1
+  esac
 fi
 
 curl --silent --fail --connect-timeout 1 --max-time "$max_time" \

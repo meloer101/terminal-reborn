@@ -1,9 +1,10 @@
 // Wavi's extension for Pi (loaded per launch with `pi -e <this file>`, never installed into ~/.pi; ROADMAP 7 ②).
 // Forwards Pi's agent events to Wavi's hook socket as Claude-shaped hook payloads (resources/hooks/tr-hook.sh does the
 // same for Claude), so Wavi's status code reads Pi like the others. Pi has no approval dialogs, so nothing here waits
-// on Wavi: every post is fire-and-forget with a short timeout, and an absent Wavi costs nothing.
+// on Wavi: every post is fire-and-forget with a short timeout, and an absent Wavi costs nothing. It also asks Wavi for
+// the dispatch messages waiting for this session (PRD F21).
 // Event shapes: @earendil-works/pi-coding-agent core/extensions/types (0.84.1 and 1.x).
-/* global process, Buffer */
+/* global process, Buffer, setInterval */
 import { request } from 'node:http'
 
 const { TR_HOOK_SOCK: sock, TR_HOOK_TOKEN: token, TR_SESSION_ID: session } = process.env
@@ -21,8 +22,9 @@ function post(event, body, timeoutMs = 5000) {
         headers: { 'X-TR-Token': token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
       },
       (res) => {
-        res.resume()
-        res.on('end', () => done(''))
+        const chunks = []
+        res.on('data', (chunk) => chunks.push(chunk))
+        res.on('end', () => done(res.statusCode === 200 ? Buffer.concat(chunks).toString('utf8') : ''))
       }
     )
     req.on('error', () => done(''))
@@ -64,8 +66,34 @@ function assistantText(message) {
     .join('\n')
 }
 
+/**
+ * Messages Wavi has for this session (PRD F21: a report from a session it dispatched, or a follow-up from the one that
+ * dispatched it), asked for over the hook socket about once a second; each starts a turn as a follow-up, the user's
+ * draft kept (§6.14 v1.104). The socket, not a file, so an agent in another session's sandbox cannot send one.
+ */
+function watchMessages(pi) {
+  let busy = false
+  const timer = setInterval(async () => {
+    if (busy) return
+    busy = true
+    try {
+      let messages = []
+      try {
+        messages = JSON.parse((await post('WaviMessages', {}, 2000)) || '{}').messages || []
+      } catch {
+        messages = []
+      }
+      for (const text of messages) if (typeof text === 'string' && text.trim() !== '') pi.sendUserMessage(text, { deliverAs: 'followUp' })
+    } finally {
+      busy = false
+    }
+  }, 1000)
+  timer.unref?.()
+}
+
 export default function wavi(pi) {
   if (!sock || !token || !session) return
+  watchMessages(pi)
   const calls = new Map()
   let lastText = ''
   let lastError

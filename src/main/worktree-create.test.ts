@@ -128,3 +128,47 @@ describe('createWorktree', () => {
     if (result.ok) expect(existsSync(join(result.path, 'new.txt'))).toBe(true)
   })
 })
+
+describe('createWorktree · snapshot (PRD F21 --base snapshot)', () => {
+  it('copies the working tree as it is, uncommitted and untracked files included, without touching it', async () => {
+    const root = repo('snapshot-repo')
+    writeFileSync(join(root, 'README.md'), '# changed, not staged\n')
+    writeFileSync(join(root, 'staged.txt'), 'staged\n')
+    git(root, 'add', 'staged.txt')
+    writeFileSync(join(root, 'untracked.txt'), 'new\n')
+    mkdirSync(join(root, 'node_modules'))
+    writeFileSync(join(root, 'node_modules', 'ignored.js'), 'x\n')
+    const statusBefore = git(root, 'status', '--porcelain')
+    const result = await createWorktree({ root, branch: '', base: 'main', folder: 'snapshot-review', prepare: false, snapshotOf: root })
+    const path = join(home, '.tr', 'worktrees', 'snapshot-repo', 'snapshot-review')
+    expect(result).toEqual({ ok: true, path, copyFailures: 0 })
+    expect(readFileSync(join(path, 'README.md'), 'utf8')).toBe('# changed, not staged\n')
+    expect(readFileSync(join(path, 'staged.txt'), 'utf8')).toBe('staged\n')
+    expect(readFileSync(join(path, 'untracked.txt'), 'utf8')).toBe('new\n')
+    expect(existsSync(join(path, 'node_modules', 'ignored.js'))).toBe(false)
+    expect(git(path, 'branch', '--show-current').trim()).toBe('')
+    expect(git(path, 'status', '--porcelain')).toBe('')
+    // The dispatcher's own checkout and index are as they were.
+    expect(git(root, 'status', '--porcelain')).toBe(statusBefore)
+  })
+
+  it('keeps tracked files an ignore pattern matches (force-added)', async () => {
+    const root = repo('snapshot-forced')
+    mkdirSync(join(root, 'build'))
+    writeFileSync(join(root, 'build', 'fixture.json'), '{}\n')
+    git(root, 'add', '-f', 'build/fixture.json')
+    git(root, 'commit', '-q', '-m', 'fixture')
+    const result = await createWorktree({ root, branch: '', base: 'main', folder: 'snap', prepare: false, snapshotOf: root })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(readFileSync(join(result.path, 'build', 'fixture.json'), 'utf8')).toBe('{}\n')
+    expect(git(result.path, 'status', '--porcelain')).toBe('')
+  })
+
+  it('refuses a checkout of another repository and a snapshot with a branch name', async () => {
+    const root = repo('snapshot-a')
+    const other = repo('snapshot-b')
+    expect(await createWorktree({ root, branch: '', base: 'main', folder: 'x', prepare: false, snapshotOf: other })).toEqual({ ok: false, reason: 'invalid' })
+    expect(await createWorktree({ root, branch: 'jacob/x', base: 'main', folder: 'x', prepare: false, snapshotOf: root })).toEqual({ ok: false, reason: 'invalid' })
+  })
+})

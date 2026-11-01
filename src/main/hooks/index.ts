@@ -84,7 +84,7 @@ export const sessionOwner = (sessionId: string): WebContents | null => ownerOf(s
 
 let dispatchHandler: ((request: HookRequest) => Promise<string>) | null = null
 
-/** src/main/dispatch answers the MCP server's requests on the hook socket (WaviHello / WaviCall / WaviPoll / WaviCancel). */
+/** src/main/dispatch takes what Claude's SessionStart hook reports about its inbox (WaviInbox, PRD F21). */
 export function setDispatchHookHandler(handler: (request: HookRequest) => Promise<string>): void {
   dispatchHandler = handler
 }

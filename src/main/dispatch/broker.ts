@@ -1,172 +1,78 @@
-// Between an agent's dispatch tool call (arriving on the hook socket, PRD F21) and the window that owns its session:
-// each call gets an id, goes to that window, and its answer is held until the MCP server collects it. A hook request
-// must be answered within the daemon's relay timeout (10 s), so a call that waits for the user is answered "not yet"
-// and polled. No Electron here (index.ts wires it), so the timing is testable.
+// Between a `wavi` request (requests.ts) and the window that owns the calling session (PRD F21): each call gets an id,
+// goes to that window, and its answer comes back within `wavi`'s wait. Nothing here waits for the user — `wavi run`
+// answers at once and the user's 开始 / 拒绝 reaches the agent later as a message. Also remembers each Claude session's
+// cross-session inbox, which `wavi` and the SessionStart hook report. No Electron here (index.ts wires it).
 import { randomBytes } from 'node:crypto'
-import {
-  isDispatchToolName,
-  parseHello,
-  parseToolResult,
-  toolFail,
-  type DispatchAgent,
-  type DispatchCallReply,
-  type DispatchHello,
-  type DispatchRequest,
-  type DispatchToolResult
-} from '@shared/dispatch'
+import { DISPATCH_LIMITS, parseWaviResult, waviFail, type DispatchRequest, type WaviResult } from '@shared/dispatch'
+import type { Inbox, WaviCall } from './requests'
 
-/** Events the MCP server posts to the hook socket (resources never send these). */
-export const DISPATCH_EVENTS = ['WaviHello', 'WaviCall', 'WaviPoll', 'WaviCancel'] as const
+/**
+ * Hook-socket events src/main/dispatch answers: Claude's SessionStart hook reports its inbox (resources/hooks/tr-hook.sh);
+ * Wavi's Pi extension asks for the messages waiting for its session (resources/hooks/wavi-pi.js).
+ */
+export const DISPATCH_EVENTS = ['WaviInbox', 'WaviMessages'] as const
 export const isDispatchEvent = (event: string): boolean => (DISPATCH_EVENTS as readonly string[]).includes(event)
 
-/** How long one hook request may hold before answering "not yet" (under the daemon's 10 s relay timeout). */
-export const HOLD_MS = 7_000
-const HELLO_MS = 5_000
-/** An answer nobody collected is dropped after this. */
-const KEEP_MS = 20 * 60_000
+/** Under `wavi`'s own 5 s, so its answer is ours, not its timeout. */
+export const ANSWER_MS = DISPATCH_LIMITS.responseMs - 700
+const DEADLINE_MARGIN_MS = 300
 
-export interface Inbox {
-  socket: string
-  token: string
+export interface BrokerOptions<O> {
+  /** The window that shows the session; null when none does (the call then says Wavi is unavailable). */
+  ownerOf: (sessionId: string) => O | null
+  send: (owner: O, request: DispatchRequest) => void
+  answerMs?: number
 }
 
 interface Call<O> {
   owner: O
-  sessionId: string
-  result: DispatchToolResult | null
-  waiters: Array<() => void>
-  at: number
+  resolve: (result: WaviResult) => void
 }
-
-export interface BrokerOptions<O> {
-  /** The window that owns the session; null when no window shows it (the call then reports Wavi unavailable). */
-  ownerOf: (sessionId: string) => O | null
-  send: (owner: O, request: DispatchRequest) => void
-  now?: () => number
-  holdMs?: number
-}
-
-const INBOX_TOKEN = /^[A-Za-z0-9._~+/=-]{1,512}$/
 
 export class DispatchBroker<O> {
   private readonly calls = new Map<string, Call<O>>()
-  private readonly hellos = new Map<string, { owner: O; resolve: (hello: DispatchHello | null) => void }>()
   private readonly inboxes = new Map<string, Inbox>()
-  private readonly now: () => number
-  private readonly holdMs: number
 
-  constructor(private readonly options: BrokerOptions<O>) {
-    this.now = options.now ?? Date.now
-    this.holdMs = options.holdMs ?? HOLD_MS
-  }
+  constructor(private readonly options: BrokerOptions<O>) {}
 
-  /** Claude's cross-session inbox of this session, as its MCP server reported it. */
+  /** Claude's cross-session inbox of this session, as `wavi` or its SessionStart hook reported it. */
   inboxOf(sessionId: string): Inbox | undefined {
     return this.inboxes.get(sessionId)
   }
 
-  /** One hook-socket request; resolves to the response body ('' = nobody to answer). */
-  async handle(event: string, sessionId: string, agent: DispatchAgent, payload: unknown): Promise<string> {
-    this.prune()
-    const body = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {}
-    if (event === 'WaviHello') return this.hello(sessionId, agent, body)
-    if (event === 'WaviCall') return this.call(sessionId, agent, body)
-    if (event === 'WaviPoll') return this.poll(sessionId, body)
-    if (event === 'WaviCancel') return this.cancel(sessionId, agent, body)
-    return ''
+  setInbox(sessionId: string, inbox: Inbox): void {
+    this.inboxes.set(sessionId, inbox)
+  }
+
+  call({ sessionId, command, inbox }: WaviCall): Promise<WaviResult> {
+    if (inbox) this.setInbox(sessionId, inbox)
+    const owner = this.options.ownerOf(sessionId)
+    if (owner === null) return Promise.resolve(waviFail('wavi_unavailable', 'No Wavi window has this session open right now. Try again later, or ask the user.'))
+    const callId = randomBytes(12).toString('hex')
+    const answerMs = this.options.answerMs ?? ANSWER_MS
+    // A little before our own timeout, so the window stops before we tell `wavi` it did not answer.
+    const deadline = Date.now() + answerMs - DEADLINE_MARGIN_MS
+    return new Promise<WaviResult>((resolve) => {
+      const timer = setTimeout(() => {
+        this.calls.delete(callId)
+        resolve(waviFail('wavi_unavailable', 'Wavi did not answer in time; nothing was done. Try again in a moment.'))
+      }, answerMs)
+      this.calls.set(callId, {
+        owner,
+        resolve: (result) => {
+          clearTimeout(timer)
+          resolve(result)
+        }
+      })
+      this.options.send(owner, { callId, sessionId, command, deadline })
+    })
   }
 
   /** The window's answer to a request it was sent; ignored unless it comes from the window that was asked. */
   answer(owner: O, callId: string, raw: unknown): void {
-    const hello = this.hellos.get(callId)
-    if (hello) {
-      if (hello.owner !== owner) return
-      this.hellos.delete(callId)
-      hello.resolve(parseHello(raw))
-      return
-    }
     const call = this.calls.get(callId)
-    if (!call || call.owner !== owner || call.result) return
-    call.result = parseToolResult(raw) ?? toolFail('failed', 'Wavi gave an answer it could not read.')
-    for (const wake of call.waiters.splice(0)) wake()
-  }
-
-  private async hello(sessionId: string, agent: DispatchAgent, body: Record<string, unknown>): Promise<string> {
-    const inbox = body.inbox as Partial<Inbox> | undefined
-    if (inbox && typeof inbox.socket === 'string' && inbox.socket.startsWith('/') && inbox.socket.length < 1024 && typeof inbox.token === 'string' && INBOX_TOKEN.test(inbox.token)) {
-      this.inboxes.set(sessionId, { socket: inbox.socket, token: inbox.token })
-    }
-    const owner = this.options.ownerOf(sessionId)
-    if (owner === null) return ''
-    const callId = newId()
-    const hello = await new Promise<DispatchHello | null>((resolve) => {
-      const timer = setTimeout(() => {
-        this.hellos.delete(callId)
-        resolve(null)
-      }, HELLO_MS)
-      this.hellos.set(callId, {
-        owner,
-        resolve: (value) => {
-          clearTimeout(timer)
-          resolve(value)
-        }
-      })
-      this.options.send(owner, { callId, sessionId, agent, tool: 'hello', args: {} })
-    })
-    return hello ? JSON.stringify(hello) : ''
-  }
-
-  private async call(sessionId: string, agent: DispatchAgent, body: Record<string, unknown>): Promise<string> {
-    const tool = body.tool
-    if (!isDispatchToolName(tool)) return reply({ done: true, result: toolFail('invalid_request', `Unknown tool: ${String(tool)}`) })
-    const owner = this.options.ownerOf(sessionId)
-    if (owner === null) return ''
-    const callId = newId()
-    const call: Call<O> = { owner, sessionId, result: null, waiters: [], at: this.now() }
-    this.calls.set(callId, call)
-    this.options.send(owner, { callId, sessionId, agent, tool, args: body.args ?? {} })
-    return this.settle(callId, call)
-  }
-
-  private async poll(sessionId: string, body: Record<string, unknown>): Promise<string> {
-    const callId = typeof body.callId === 'string' ? body.callId : ''
-    const call = this.calls.get(callId)
-    // Only the session that made the call may collect it.
-    if (!call || call.sessionId !== sessionId) return reply({ done: true, result: toolFail('failed', 'Wavi lost this call (it may have restarted). Try again.') })
-    return this.settle(callId, call)
-  }
-
-  /** The agent gave the call up (Esc): forget it and tell its window, which drops what still waits on the user. */
-  private cancel(sessionId: string, agent: DispatchAgent, body: Record<string, unknown>): string {
-    const callId = typeof body.callId === 'string' ? body.callId : ''
-    const call = this.calls.get(callId)
-    // Only the session that made the call may cancel it; an answered one is past cancelling.
-    if (!call || call.sessionId !== sessionId || call.result) return ''
+    if (!call || call.owner !== owner) return
     this.calls.delete(callId)
-    this.options.send(call.owner, { callId, sessionId, agent, tool: 'cancel', args: {} })
-    return ''
-  }
-
-  private async settle(callId: string, call: Call<O>): Promise<string> {
-    if (!call.result) {
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, this.holdMs)
-        call.waiters.push(() => {
-          clearTimeout(timer)
-          resolve()
-        })
-      })
-    }
-    if (!call.result) return reply({ done: false, callId })
-    this.calls.delete(callId)
-    return reply({ done: true, result: call.result })
-  }
-
-  private prune(): void {
-    const now = this.now()
-    for (const [id, call] of this.calls) if (now - call.at > KEEP_MS) this.calls.delete(id)
+    call.resolve(parseWaviResult(raw) ?? waviFail('failed', 'Wavi gave an answer it could not read.'))
   }
 }
-
-const reply = (value: DispatchCallReply): string => JSON.stringify(value)
-const newId = (): string => randomBytes(12).toString('hex')

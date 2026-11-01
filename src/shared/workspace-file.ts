@@ -60,6 +60,10 @@ export interface PersistedSession {
   /** The session that dispatched this one (PRD F21); dropped when that session is not in the file. */
   dispatchedBy?: string
   dispatchTask?: string
+  /** Its worktree is a snapshot of the dispatcher's (`wavi run --base snapshot`); absent = a branch. */
+  dispatchBase?: 'snapshot'
+  /** The model `wavi run --model` asked for. */
+  dispatchModel?: string
 }
 
 /** A saved archive marker (PRD F15), or null when it is not one. */
@@ -137,6 +141,8 @@ export const isSafeAgentSessionId = (value: unknown): value is string => typeof 
 
 const isString = (v: unknown): v is string => typeof v === 'string'
 const MAX_DISPATCH_TASK = 20_000
+/** A CLI model name (`wavi run --model`, PRD F21). */
+const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 const isText = (v: unknown, max = MAX_TEXT): v is string => typeof v === 'string' && v.length <= max && !v.includes('\0')
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -204,19 +210,32 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           ...(isTime(s.finishedAt) ? { finishedAt: s.finishedAt } : {}),
           ...(s.kind === 'shell' && s.script === 'run' ? { script: 'run' as const } : {}),
           ...(s.kind !== 'shell' && isText(s.dispatchedBy) && s.dispatchedBy !== s.id
-            ? { dispatchedBy: s.dispatchedBy, ...(isText(s.dispatchTask, MAX_DISPATCH_TASK) ? { dispatchTask: s.dispatchTask } : {}) }
+            ? {
+                dispatchedBy: s.dispatchedBy,
+                ...(isText(s.dispatchTask, MAX_DISPATCH_TASK) ? { dispatchTask: s.dispatchTask } : {}),
+                ...(s.dispatchBase === 'snapshot' ? { dispatchBase: 'snapshot' as const } : {}),
+                ...(isString(s.dispatchModel) && MODEL_NAME.test(s.dispatchModel) ? { dispatchModel: s.dispatchModel } : {})
+              }
             : {})
         }
       })
   )
   const sessionIds = new Set(sessions.map((s) => s.id))
-  // A dispatcher that is gone leaves its children as ordinary sessions; one level only (PRD F21).
-  for (const s of sessions) {
-    const parent = s.dispatchedBy === undefined ? undefined : sessions.find((p) => p.id === s.dispatchedBy)
-    if (s.dispatchedBy !== undefined && (!parent || parent.dispatchedBy !== undefined)) {
-      delete s.dispatchedBy
-      delete s.dispatchTask
+  // A dispatcher that is gone leaves its children as ordinary sessions; two levels at most (PRD F21).
+  const byId = new Map(sessions.map((s) => [s.id, s]))
+  const orphans = sessions.filter((s) => {
+    let depth = 0
+    for (let at: PersistedSession | undefined = s; at?.dispatchedBy !== undefined; depth++) {
+      at = byId.get(at.dispatchedBy)
+      if (!at || depth >= 2) return true
     }
+    return false
+  })
+  for (const s of orphans) {
+    delete s.dispatchedBy
+    delete s.dispatchTask
+    delete s.dispatchBase
+    delete s.dispatchModel
   }
 
   const drafts: Record<string, string> = {}

@@ -52,6 +52,8 @@ export interface PtySpawnOptions {
   initialPrompt?: string
   /** The model for this launch (PRD F21). */
   model?: string
+  /** The session was started by another session's `wavi run` (PRD F21): its brief, not a system prompt, tells it about `wavi`. */
+  dispatched?: boolean
   cols: number
   rows: number
 }

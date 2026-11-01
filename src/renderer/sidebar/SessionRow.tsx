@@ -99,11 +99,13 @@ export const SessionRow = memo(function SessionRow({ row, selected, shown = fals
         <span className={styles.line}>
           <span className={styles.branch}>{branch}</span>
           <SessionPrTag sessionId={session.id} />
+          {row.model && <span className={styles.model}>{row.model}</span>}
           {mark}
         </span>
       )}
       <TodoLine sessionId={session.id} />
       {row.opens && <span className={styles.opens} aria-hidden />}
+      {row.pass && <span className={styles.pass} aria-hidden />}
     </div>
   )
 }, sameProps)

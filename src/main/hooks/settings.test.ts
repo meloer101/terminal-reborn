@@ -9,7 +9,7 @@ describe('buildClaudeHookSettings', () => {
   it('registers exactly the events the bridge understands, plus the statusLine relay', () => {
     expect(Object.keys(settings)).toEqual(['hooks', 'statusLine', 'crossSessionInbound', 'permissions'])
     expect(settings.crossSessionInbound).toBe('accept')
-    expect(settings.permissions.allow).toEqual(['mcp__wavi'])
+    expect(settings.permissions.allow).toEqual(['Bash(wavi:*)'])
     expect(Object.keys(settings.hooks)).toEqual([...CLAUDE_HOOK_EVENTS])
     for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'Notification', 'Stop', 'StopFailure', 'SessionEnd']) {
       expect(settings.hooks[event]).toBeDefined()
