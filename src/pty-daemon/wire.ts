@@ -39,6 +39,11 @@ export function socketPathFor(dir: string, uid: number, protocol = PROTOCOL_VERS
 export interface HookEndpointInfo {
   socketPath: string
   token: string
+  /**
+   * How long the daemon waits on a relayed PermissionRequest before answering it empty (PRD F22). Absent from daemons
+   * built before F22, which answered every relay after 10 s.
+   */
+  permissionRelayMs?: number
 }
 
 /** `<dir>/hooks` for the hook socket, or a fixed-length /tmp directory when that path is too long. */

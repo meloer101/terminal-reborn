@@ -115,9 +115,11 @@ export class HookBridge {
   /** Only sessions the app spawned may report; this is what makes a foreign hook caller a 404. */
   attach(sessionId: string, options: { adopt?: boolean } = {}): void {
     // A re-spawned id starts clean: whatever the previous process had pending is gone. A window that reattached to
-    // the same process (reload, app restart with the daemon) keeps its metrics and gets them again.
+    // the same process (reload, app restart with the daemon) keeps its metrics and gets them again, and what that
+    // process still waits on stays pending (its TUI dialog is still open; a phone may be answering it).
     const meta = options.adopt ? this.meta.get(sessionId) : undefined
-    this.detach(sessionId)
+    if (!options.adopt) this.withdraw(sessionId)
+    this.forget(sessionId)
     this.sessions.add(sessionId)
     if (!meta) return
     this.meta.set(sessionId, meta)
@@ -136,8 +138,17 @@ export class HookBridge {
 
   /** The session's PTY ended: release every hold and withdraw its prompts. */
   detach(sessionId: string): void {
+    this.withdraw(sessionId)
+    this.forget(sessionId)
+  }
+
+  /** Releases the session's holds and withdraws its prompts. */
+  private withdraw(sessionId: string): void {
     this.registry.resolveSession(sessionId, 'session-ended')
     this.resolveQuestion(sessionId, 'session-ended')
+  }
+
+  private forget(sessionId: string): void {
     this.options.titles?.forget(sessionId)
     this.options.rollouts?.forget(sessionId)
     this.options.transcripts?.forget(sessionId)

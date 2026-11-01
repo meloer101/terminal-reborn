@@ -11,6 +11,17 @@ export interface DaemonHookTarget {
   token: string
   /** Where the settings file goes (`<userData>/daemon`). */
   settingsDir: string
+  /** The daemon's wait on a relayed PermissionRequest (absent: an older daemon, 10 s). */
+  permissionRelayMs?: number
+}
+
+/**
+ * Whether a PermissionRequest may be held for a phone (PRD F22): always on our own hook server, and behind the daemon
+ * only when it waits on the relay longer than the hold lasts. An older daemon answers Claude empty after 10 s while
+ * the hold would still look answerable, and an answer from the phone would never reach the agent.
+ */
+export function relayOutlastsHold(target: DaemonHookTarget | null, holdMs: number): boolean {
+  return target === null || (target.permissionRelayMs ?? 0) > holdMs
 }
 
 export interface DaemonHookEndpointOptions {

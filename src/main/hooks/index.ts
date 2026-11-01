@@ -17,7 +17,8 @@ import { SubagentWatcher } from './subagents'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
 import { CodexUsageWatcher } from './codex-usage'
-import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
+import { DaemonHookEndpoint, relayOutlastsHold, type DaemonHookTarget } from './daemon-endpoint'
+import { PERMISSION_TIMEOUT_MS } from './permission-registry'
 import { createHookDir, sweepStaleHookDirs } from './hook-dir'
 import { UnknownSessionError, type HookRequest } from './server'
 import { isDispatchEvent } from '../dispatch/broker'
@@ -222,8 +223,11 @@ export function setRemoteHooks(listener: RemoteHookListener | null, holds: () =>
 /**
  * Whose permission requests are held while a phone is connected: Claude's only. Its TUI shows the dialog while the hook
  * waits (PRD §6.16); Codex shows nothing until the hook answers (§6.7), which would leave the desk without a dialog.
+ * Never behind a pty daemon that answers the relay before the hold ends (an older daemon the app adopted).
  */
-const holdsFor = (agent: HookAgent): boolean => agent === 'claude' && remoteHolds()
+const holdsFor = (agent: HookAgent): boolean => agent === 'claude' && relayHolds && remoteHolds()
+/** Set once the hook target is known (`relayOutlastsHold`). */
+let relayHolds = true
 
 /** A permission answered on the phone; false when it is no longer pending. */
 export async function respondFromRemote(promptId: string, decision: PermissionDecision): Promise<boolean> {
@@ -315,6 +319,8 @@ async function start(): Promise<Runtime | null> {
     targetDecision,
     new Promise<null>((resolve) => setTimeout(() => resolve(null), TARGET_DECISION_TIMEOUT_MS).unref())
   ])
+  relayHolds = relayOutlastsHold(target, PERMISSION_TIMEOUT_MS)
+  if (!relayHolds) console.warn('[hooks] the pty daemon answers permission relays before a phone could; nothing is held for the phone')
   if (target) {
     try {
       const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, scripts })

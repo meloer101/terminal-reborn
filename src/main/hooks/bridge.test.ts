@@ -349,6 +349,34 @@ describe('HookBridge · reattach', () => {
     bridge.attach('s1', { adopt: true })
     expect(events).toEqual([])
   })
+
+  it('keeps what the same process still waits on when a window adopts it (PRD F22)', async () => {
+    const { bridge, prompts, resolutions, req } = setup(true, () => true)
+    await bridge.handle(req('PreToolUse', fx.PreToolUse_AskUserQuestion))
+    let body: string | undefined
+    void bridge.handle(req('PermissionRequest', fx.PermissionRequest_AskUserQuestion)).then((b) => (body = b))
+    await flush()
+    const question = prompts[0]!
+    bridge.attach('s1', { adopt: true })
+    await flush()
+    expect(resolutions).toEqual([])
+    expect(body).toBeUndefined()
+    expect(bridge.questionHeld(question.id)).toBe(true)
+    expect(bridge.answerQuestion(question.id, { 'Which option do you prefer?': 'B' })).toBe(true)
+    await flush()
+    expect(JSON.parse(body!).hookSpecificOutput.decision.behavior).toBe('allow')
+  })
+
+  it('withdraws them when the id is spawned again', async () => {
+    const { bridge, prompts, resolutions, req } = setup(true, () => true)
+    await bridge.handle(req('PreToolUse', fx.PreToolUse_AskUserQuestion))
+    const held = bridge.handle(req('PermissionRequest', fx.PermissionRequest_Bash))
+    await flush()
+    bridge.attach('s1')
+    expect(await held).toBe('')
+    expect(resolutions.map((r) => r.by)).toEqual(['session-ended', 'session-ended'])
+    expect(bridge.questionHeld(prompts[0]!.id)).toBe(false)
+  })
 })
 
 describe('HookBridge · turn checks (PRD F9 / F4)', () => {

@@ -183,7 +183,7 @@ function onConnection(socket: Socket): void {
             pid: process.pid,
             buildId,
             sessions: host.list(),
-            hooks: hooks.running ? { socketPath: hooks.socketPath, token: hooks.token } : null
+            hooks: hooks.running ? { socketPath: hooks.socketPath, token: hooks.token, permissionRelayMs: PERMISSION_RELAY_TIMEOUT_MS } : null
           })
         )
         return

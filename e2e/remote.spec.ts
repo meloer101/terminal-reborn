@@ -148,6 +148,18 @@ test.describe('手机远程', () => {
     expect(await phone.request({ type: 'permission', prompt: prompt!.id, decision: 'deny' })).toEqual(expect.objectContaining({ ok: false }))
   })
 
+  test('an AskUserQuestion reaches the phone with its options and is answered from it', async () => {
+    const tool_input = { questions: [{ question: '接下来做哪类工作？', header: '下一步', multiSelect: false, options: [{ label: '查看 ROADMAP', description: '读 docs/ROADMAP.md' }, { label: '运行 check' }] }] }
+    folder.step({ hook: 'PreToolUse', payload: { tool_name: 'AskUserQuestion', tool_input } })
+    const listed = await phone.next((e) => e.event === 'prompts' && e.data.some((p) => p.kind === 'question'), 20_000)
+    const prompt = listed.event === 'prompts' ? listed.data.find((p) => p.kind === 'question')! : null
+    expect(prompt).toMatchObject({ sessionId, questions: [{ question: '接下来做哪类工作？', options: [{ label: '查看 ROADMAP' }, { label: '运行 check' }] }] })
+    folder.step({ hook: 'PermissionRequest', payload: { tool_name: 'AskUserQuestion', tool_input } })
+    await phone.next((e) => e.event === 'prompts' && e.data.some((p) => p.id === prompt!.id && p.answerable), 20_000)
+    expect(await phone.request({ type: 'answer', prompt: prompt!.id, answers: { '接下来做哪类工作？': '运行 check' } })).toMatchObject({ ok: true })
+    await phone.next((e) => e.event === 'prompts' && e.data.length === 0)
+  })
+
   test('the phone reads the conversation from the transcript and gets what is appended', async () => {
     const line = (o: object) => `${JSON.stringify({ timestamp: '2026-11-01T10:00:00.000Z', cwd: folder.path, ...o })}\n`
     appendFileSync(transcript, line({ type: 'user', message: { content: 'token 过期前 5 分钟续期' } }))
