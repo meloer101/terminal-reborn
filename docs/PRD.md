@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.120 | 2026-11-01 | **可改用的第三方代码加上 ISC**（§6.5，作者 2026-11-01「接受 ISC」）：ISC 是 BSD 一系的许可，条款同 MIT；`ios/Packages/Ristretto255` 里的 libsodium 源文件按此保留。 |
 | v1.119 | 2026-11-01 | **手机端改成原生 SwiftUI（S1），并定下灵动岛、蓝牙和 APNs 的路线**（F22，作者 2026-11-01：要系统原生的液态玻璃，还要灵动岛来显示状态、回答选项；灵动岛在后台的更新蓝牙和 APNs 推送都做，APNs 先从 Mac 直发、.p8 密钥放作者的 Mac；灵动岛上可以允许 / 拒绝和回答提问；最低 iOS 26）。参考：CodeIsland（MIT，蓝牙后台更新、不建服务器）、Code Light（APNs + 零知识中转、手机上审批）、Agentfy（只看状态）、作者自己的 Marvis iOS（SwiftUI 客户端）。① Expo 的 `mobile/` 删掉，换成 `ios/`：SwiftUI、Swift 6，XcodeGen 从 `project.yml` 生成工程；导航栏、面板、工具栏用系统组件和 `.glassEffect()`，46″ 的同心底角、scroll edge 由系统给出；会话列表的大标题「会话」在 Mac 那一行上面（46B 是反过来的），新建会话用系统 Form。② 加密用 CryptoKit；输入配对码的 PAKE 要 ristretto255，swift-sodium 的预编译 libsodium 是精简版、没有这部分，改为把 libsodium 1.0.20 里这个群的源文件放进 `ios/Packages/Ristretto255`（ISC）。③ 两边不各写一份：`src/main/remote/vectors.test.ts` 用 Mac 的加密函数写出固定测试数据 `src/shared/remote-vectors.json`，Swift 逐字节对照；`phone-assets.test.ts` 从 `src/shared` 和 lucide-react 生成状态文字、智能体名字和图标、分支名词库、14 个 lucide 图标（智能体图标的路径为 iOS 的 SVG 解析器展开写法，否则 codex 会缺块）。④ 真机实测（iPhone 17，iOS 27.0.1）发现并修好的 Mac 端问题：Wavi 重启后还没在 Mac 上打开过的会话没有 PTY，手机发消息被拒（改为交给主窗口启动 agent 再发，等待 30 s）；手机在 agent 启动前打开会话时 Mac 不记这台手机，transcript 出现后也不推（改为先记下，主窗口发来会话列表或 hook 触发时补发最新一页）。⑤ 手机端：网络一变（Wi-Fi ↔ 蜂窝、Tailscale 起来）就重连；点会话列表顶部的 Mac 一行能看到每个地址和上次失败的原因。独立审阅后修了 6 处（被盖住的页面不再退订对话、加密帧按序交给 socket、换配对时旧连接不再写入、归档后回列表、从链接配对时失败有提示、「其他」输入框不再反选）。⑥ 灵动岛（S2，先画 Figma）、蓝牙（S3）、APNs（S4，取代 Expo push）还没做。 |
 | v1.118 | 2026-11-01 | **手机面板的第三轮细节**（F22，Figma Section 46″ `743:2`，作者 2026-11-01 指出后确认）：①「总是允许 …」从一行小字改成和「拒绝」同样的按钮，放在「拒绝 / 允许」下面，左右和这两颗按钮对齐。② 面板的底角和屏幕圆角同心：iPhone 17 Pro 的屏幕圆角按模拟器的屏幕遮罩量得约 62 pt，面板离边 8，所以底角 54，顶角仍是 34；圆角更小的机型上面板会比屏幕略圆。③ Git · 变更 的标题在 App 里本来就居中（返回键对面留了 44 的位置），46′ 的 Figma 漏了这个位置，46″ 补上。 |
 | v1.117 | 2026-11-01 | **手机端换成液态玻璃**（F22 / §5，Figma Section 46′ `737:33097`，作者 2026-11-01 确认「按照改之后的来」；46 是第一版，46′ 是按 unslop 和 Apple HIG 规整后的版本，以 46′ 为准）：① 玻璃只用在浮在内容上的一层：返回圆钮、「变更」胶囊、列表的 +、输入框、Git · 变更 底部的次出口、底部面板和附件菜单；会话列表、对话、diff、文件列表保持实色底。② iOS 26 用系统的 Liquid Glass（expo-glass-effect 的 `GlassView`，按钮是可交互的玻璃）；更早的系统退回 Figma 46 的实色底加细边。③ 会话页和 Git · 变更 的标题栏、输入框、出口浮在内容上，上下用渐隐的 scroll edge 代替分隔条；面板离屏幕两边和底边 8、圆角 34。④ 和 46′ 不一样的两处：设计里 scroll edge 下面还有一层渐进模糊，手机上先只做渐变（不为它加 expo-blur 和遮罩两个依赖），所以顶部渐隐到标题栏底边之前都保持不透明，文字不会压在标题下面；面板和菜单的着色从 78% 加到 90%，iOS 的玻璃比 Figma 的透，78% 时菜单后面的字读得出来。深色不加阴影，浅色只给玻璃一层很浅的投影。 |
@@ -682,7 +683,8 @@ scripts/spikes/  实测脚本（不打包），复测 §6.6–§6.9 的结论
 ```
 `src/shared` 中都是纯逻辑，全部用 Vitest 覆盖。
 
-### 6.5 可借鉴代码（仅限 MIT / Apache 许可）
+### 6.5 可借鉴代码（仅限 MIT / Apache-2.0 / BSD / ISC 许可）
+v1.120 起 ISC 也可以（BSD 一系，条款同 MIT；作者 2026-11-01 同意，第一处是 `ios/Packages/Ristretto255` 的 libsodium）。
 Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`.worktreeinclude`、PTY 守护进程。Nimbalyst：`claudeCliSubmit.ts` 发送规则。Vibe Kanban / Crystal：合并预检和冲突 prompt。借用代码时在文件头注明出处和许可证，并登记在 `THIRD_PARTY_NOTICES.md`。cmux / Warp / Superset / vscode-git-graph 只参考思路，不复制代码。
 
 ### 6.6 实测结论 · Claude Code hooks（2.1.299，2026-10-14）

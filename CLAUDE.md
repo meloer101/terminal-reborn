@@ -56,4 +56,4 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 - UI copy in Chinese; code, comments, commit messages in English. Conventional Commits (`feat(composer): …`).
 - Security: `contextIsolation` + `sandbox` stay on; renderer reaches the system only through `window.tr`. Validate every IPC payload in main.
 - Never write to the user's global agent config (`~/.claude/settings.json`, `~/.codex/*`). Hooks are injected per launch (PRD §6.2).
-- Adapted third-party code: MIT / Apache-2.0 / BSD only, attribute in file header and `THIRD_PARTY_NOTICES.md`.
+- Adapted third-party code: MIT / Apache-2.0 / BSD / ISC only, attribute in file header and `THIRD_PARTY_NOTICES.md`.
