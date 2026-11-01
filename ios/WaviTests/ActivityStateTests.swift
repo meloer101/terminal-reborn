@@ -67,8 +67,22 @@ private func question(_ id: String, at: Double, options: [String], multi: Bool =
     #expect(state?.kind == .error)
     #expect(state?.session == "err")
     #expect(state?.detail == "pnpm test 退出码 1")
-    #expect(activityState(sessions: [session("old", status: .doneUnread, since: 0)], prompts: [], now: now) == nil)
-    #expect(activityState(sessions: [session("i", status: .idle)], prompts: [], now: now) == nil)
+    #expect(activityState(sessions: [session("old", status: .doneUnread, since: 0)], prompts: [], now: now)?.kind == .idle)
+  }
+
+  @Test func quietForHalfAnHourThenNothing() {
+    let min = 60_000.0
+    let sessions = [session("a", status: .idle, activity: 5 * min), session("b", status: .doneUnread, since: 12 * min, activity: 11 * min),
+      session("c", status: .exited, activity: 2 * min)]
+    let state = activityState(sessions: sessions, prompts: [], now: 25 * min, mac: "MacBook Pro")
+    #expect(state?.kind == .idle)
+    #expect(state?.title == "MacBook Pro")
+    #expect(state?.detail == "3 个会话")
+    #expect(state?.since == Date(timeIntervalSince1970: 12 * 60))
+    #expect(state?.session == nil)
+    #expect(activityState(sessions: sessions, prompts: [], now: 42 * min)?.kind == .idle)
+    #expect(activityState(sessions: sessions, prompts: [], now: 42.01 * min) == nil)
+    #expect(activityState(sessions: [], prompts: [], now: 0) == nil)
   }
 
   @Test func longTextIsCutButALongQuestionIsLeftToTheApp() {

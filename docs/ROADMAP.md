@@ -232,7 +232,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [ ] 45G 的「文件」
 - [x] S2 灵动岛和锁屏卡片（2026-11-01，PRD v1.122，Figma 47）：WidgetKit 扩展 `ios/WaviActivity`，App 前台和刚退后台时更新，按钮走 `LiveActivityIntent`（允许 / 拒绝 / 提问选项，「更多」进 App）。测试 `ActivityStateTests`；iOS 26.3 模拟器对替身 Mac 点过提问选项和锁屏上的「允许」。作者手机上没试
 - [x] 手机提问修复（2026-11-01，PRD v1.123）：接管旧守护进程时不为手机挂起（它 10 s 就答空，回答会白发）；窗口重新接上同一进程时保留待回答的提问和权限。测试 `bridge.test.ts`、`daemon-endpoint.test.ts`，`e2e/remote.spec.ts` 新增 AskUserQuestion 端到端
-- [ ] S2 空闲态：没有要显示的会话时不立刻结束，换成「空闲」收尾（Figma 47′，待作者确认留多久）
+- [x] S2 空闲态（2026-11-01，PRD v1.124，Figma 47′）：没有要显示的会话时不立刻结束，换成「空闲」，安静 30 分钟后结束；只接着已有的卡片。测试 `ActivityStateTests`；模拟器对替身 Mac 看过紧凑和展开态，锁屏没截图。App 挂起时到点结束要等 S4
 - [ ] S3 蓝牙后台更新：先实测后台被蓝牙唤醒时能否更新灵动岛；Mac 端 `@stoprocent/bleno`
 - [ ] S4 APNs（取代原 P4 的 Expo push）：Mac 直发，.p8 存 Mac 钥匙串；通知和灵动岛的 start / update / end
 

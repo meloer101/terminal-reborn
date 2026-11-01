@@ -1,4 +1,4 @@
-// The Live Activity as Figma 47 draws it: the Dynamic Island's compact / minimal / expanded presentations (always on
+// The Live Activity as Figma 47 / 47′ draws it: the Dynamic Island's compact / minimal / expanded presentations (always on
 // black, so in the dark tokens) and the Lock Screen card (the phone's appearance). Times count on their own between
 // updates; buttons are the intents in LiveActivity/ActivityIntents.swift.
 import ActivityKit
@@ -51,15 +51,18 @@ extension WaviActivityAttributes.ContentState.Kind {
     case .running: .running
     case .done: .doneUnread
     case .error: .error
+    case .idle: .idle
     }
   }
 
+  /// 空闲 is no status colour: the text colour (black / white), not grey.
   var color: Color {
     switch self {
     case .permission, .question: .statusAttention
     case .running: .statusWorking
     case .done: .statusDone
     case .error: .statusError
+    case .idle: .textPrimary
     }
   }
 }
@@ -73,7 +76,17 @@ private extension View {
 private struct Glyph: View {
   let kind: WaviActivityAttributes.ContentState.Kind
 
-  var body: some View { StatusGlyph(status: kind.status).scaleEffect(16 / 14).frame(width: 16, height: 16) }
+  var body: some View {
+    Group {
+      // The app's idle ring is grey; here it is in the text colour (Figma 47′).
+      if kind == .idle {
+        Circle().stroke(Color.textPrimary, lineWidth: 1.5).frame(width: 6.5, height: 6.5).frame(width: 14, height: 14)
+      } else {
+        StatusGlyph(status: kind.status)
+      }
+    }
+    .scaleEffect(16 / 14).frame(width: 16, height: 16)
+  }
 }
 
 /// `2分钟`, counting on its own; rounded up, so a prompt that just arrived reads 1分钟 rather than 0. A counting text is
@@ -102,6 +115,7 @@ private struct CompactValue: View {
       case .running: Text("\(state.runningCount)").font(.mono(15, 500)).foregroundStyle(Color.textPrimary)
       case .done: Text("完成").font(.ui(13, 600))
       case .error: Text("出错").font(.ui(13, 600))
+      case .idle: Text("空闲").font(.ui(13, 600))
       }
     }
     .foregroundStyle(state.kind.color)
@@ -127,6 +141,7 @@ private struct StatusWord: View {
     case .running: "\(state.runningCount) 个运行中"
     case .done: "完成"
     case .error: "出错"
+    case .idle: "空闲"
     }
   }
 }

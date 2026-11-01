@@ -155,7 +155,7 @@ final class AppModel {
       shown.failure = failure.text
       return activities.show(shown, mac: macName)
     }
-    var state = activityState(sessions: sessions.sessions, prompts: prompts, now: Date().timeIntervalSince1970 * 1000)
+    var state = activityState(sessions: sessions.sessions, prompts: prompts, now: Date().timeIntervalSince1970 * 1000, mac: macName)
     if let failure = activityFailure {
       if state?.prompt == failure.prompt { state?.failure = failure.text } else { activityFailure = nil }
     }

@@ -1,12 +1,13 @@
 // The Live Activity's data (PRD F22 S2, Figma 47), in both the app and the WaviActivity extension: one activity per
 // paired Mac, showing the oldest prompt waiting on the phone, else the running sessions, else a session that just
-// finished or failed. The app builds the state (Model/ActivityState.swift); the extension only draws it.
+// finished or failed, else that the Mac has gone quiet (Figma 47′). The app builds the state (Model/ActivityState.swift);
+// the extension only draws it.
 import ActivityKit
 import Foundation
 
 struct WaviActivityAttributes: ActivityAttributes {
   struct ContentState: Codable, Hashable, Sendable {
-    enum Kind: String, Codable, Sendable { case permission, question, running, done, error }
+    enum Kind: String, Codable, Sendable { case permission, question, running, done, error, idle }
 
     struct Running: Codable, Hashable, Sendable {
       var id: String

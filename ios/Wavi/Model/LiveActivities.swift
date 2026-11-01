@@ -41,13 +41,23 @@ final class LiveActivities {
       activity = nil
       return Task { await ending?.end(nil, dismissalPolicy: .immediate) }
     }
-    // A finished or failed session goes stale once it is no longer recent.
-    let stale = state.kind == .done || state.kind == .error ? state.since.addingTimeInterval(ActivityLimits.recentMs / 1000) : nil
+    // A finished or failed session goes stale once it is no longer recent, 空闲 once its half hour is up (the app may be
+    // suspended then and end it only when it next runs).
+    let stale: Date? = switch state.kind {
+    case .done, .error: state.since.addingTimeInterval(ActivityLimits.recentMs / 1000)
+    case .idle: state.since.addingTimeInterval(ActivityLimits.idleMs / 1000)
+    default: nil
+    }
     let content = ActivityContent(state: state, staleDate: stale)
     if let activity, Self.live(activity) {
       let config = alert && state.prompt != nil && UIApplication.shared.applicationState != .active
         ? AlertConfiguration(title: "\(state.kind == .permission ? "等你确认" : "等你回答")", body: "\(state.title)", sound: .default) : nil
       return Task { await activity.update(content, alertConfiguration: config) }
+    }
+    // 空闲 only lets a card end quietly; it never opens one.
+    guard state.kind != .idle else {
+      shown = nil
+      return nil
     }
     // Starting is allowed only in the foreground; in the background this fails and the next change (or coming back to
     // the foreground) tries again.

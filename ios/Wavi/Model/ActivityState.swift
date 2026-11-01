@@ -1,6 +1,6 @@
 // What the Live Activity shows (PRD F22 S2, Figma 47), from what Wavi last sent: the oldest prompt the phone can see,
-// else the running sessions, else a session that finished or failed in the last few minutes; nil ends the activity.
-// Pure; WaviTests/ActivityStateTests.swift.
+// else the running sessions, else a session that finished or failed in the last few minutes, else 空闲 (Figma 47′) until
+// the Mac has been quiet for half an hour; nil ends the activity. Pure; WaviTests/ActivityStateTests.swift.
 import Foundation
 
 typealias ActivityState = WaviActivityAttributes.ContentState
@@ -8,6 +8,9 @@ typealias ActivityState = WaviActivityAttributes.ContentState
 enum ActivityLimits {
   /// A finished or failed session stays this long when nothing else is going on.
   static let recentMs = 10.0 * 60 * 1000
+  /// After the last session went quiet, the card says 空闲 this long, then ends: a Live Activity is for something with an
+  /// end (Apple's HIG), and the quiet card is how it ends rather than a card that just vanishes.
+  static let idleMs = 30.0 * 60 * 1000
   /// Option buttons on the island and the Lock Screen; a question with more gets a 更多 button in the last place.
   static let options = 3
   /// The whole state must stay under ActivityKit's 4 KB: longer text is cut (a question that long is answered in the app,
@@ -22,7 +25,8 @@ private func cut(_ text: String, _ limit: Int = ActivityLimits.text) -> String {
 
 private func date(_ ms: Double) -> Date { Date(timeIntervalSince1970: ms / 1000) }
 
-func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Double) -> ActivityState? {
+/// `mac`: the paired Mac's name, the 空闲 card's title.
+func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Double, mac: String = "") -> ActivityState? {
   let byId = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
   if let prompt = prompts.min(by: { $0.createdAt < $1.createdAt }) {
     let session = byId[prompt.sessionId]
@@ -59,6 +63,10 @@ func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Doub
   if let finished {
     return ActivityState(kind: finished.status == .error ? .error : .done, session: finished.id, prompt: nil, title: cut(finished.title),
       agent: finished.agent, detail: cut(finished.action ?? finished.status.label), since: date(finished.since ?? finished.activity))
+  }
+  // Quiet since the last thing any session did.
+  if let quiet = sessions.map({ max($0.activity, $0.since ?? 0) }).max(), now - quiet <= ActivityLimits.idleMs {
+    return ActivityState(kind: .idle, session: nil, prompt: nil, title: cut(mac), detail: "\(sessions.count) 个会话", since: date(quiet))
   }
   return nil
 }
