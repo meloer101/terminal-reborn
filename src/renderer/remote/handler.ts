@@ -1,5 +1,5 @@
 // What the phone asks the window to do (PRD F22): type a prompt (photos first, as F19 does with dropped files), press
-// Esc, or start a session. Everything goes through the same code as the desktop's own buttons: the send protocol
+// Esc, start a session, or take Git · 变更's exits and 归档 (exits.ts). Everything goes through the same code as the desktop's own buttons: the send protocol
 // (§6.9), the new-session sheet's plan (F4) and the first-message launch dispatch uses (F21).
 import { generateBranchName } from '@shared/new-session'
 import { remoteFail, type RemoteResult, type RemoteWindowCommand } from '@shared/remote'
@@ -9,6 +9,7 @@ import { branchProblemText, planCreate } from '../new-session/model'
 import { insertPaths, interruptAgent, submitInputLine, submitPrompt, whenAgentReady } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
+import { remoteArchive, remoteExits, remoteShipAction } from './exits'
 
 const failure = (error: unknown): RemoteResult => remoteFail(error instanceof Error ? error.message : String(error))
 
@@ -73,6 +74,12 @@ export async function handleRemoteCommand(command: RemoteWindowCommand): Promise
         return { ok: true }
       case 'new-session':
         return await newSession(command)
+      case 'exits':
+        return await remoteExits(command.session)
+      case 'ship':
+        return await remoteShipAction(command.session, command.action)
+      case 'archive':
+        return await remoteArchive(command.session)
     }
   } catch (error) {
     return failure(error)

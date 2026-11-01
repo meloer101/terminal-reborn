@@ -184,9 +184,9 @@ function enqueue<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
 async function repoInfo(dirRaw: unknown): Promise<RepoScriptsInfo> {
   const dir = await resolveRoot(dirRaw)
-  const { top } = await locateRepo(dir)
+  const { top, key } = await locateRepo(dir)
   const { scripts, problems } = await readRepoSettings(top)
-  return { scripts, problems, port: portFor(dir) }
+  return { scripts, problems, port: portFor(dir), approved: isApproved(key, scripts) }
 }
 
 async function approve(owner: WebContents, dirRaw: unknown, nameRaw: unknown): Promise<ScriptApproval> {

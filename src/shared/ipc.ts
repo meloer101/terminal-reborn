@@ -247,6 +247,8 @@ export interface RepoScriptsInfo {
   problems: string[]
   /** First port of the worktree's block; null when every block is taken. */
   port: number | null
+  /** The scripts as they are now were approved (running one shows no dialog). */
+  approved: boolean
 }
 
 export type ScriptApproval =

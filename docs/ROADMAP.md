@@ -218,13 +218,15 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [x] 出稿（2026-11-01）：第 45 节 `719:32350`，45A–45K（配对、会话列表、聊天视图、工具详情 diff、权限、提问、照片、新建会话、Git · 变更、出口进度、桌面 设置 · 手机），45B / 45C / 45E / 45I / 45H / 45K 有浅色版
   - [x] 作者确认（2026-11-01）
 - [x] P2 Mac 端（2026-11-01，PRD v1.113）：`src/main/remote/`（`server.ts` WebSocket 服务、配对和认证，`crypto.ts`，`devices.ts`，`feed.ts` transcript 增量推送，`photos.ts` HEIC 转 JPEG，`index.ts` 接 hooks / git / 窗口）、`src/renderer/remote/`（会话列表、执行发消息 / Esc / 新建会话）、`src/shared/remote.ts`、`src/shared/transcript-chat.ts`、设置 · 手机（`PhonePane.tsx`，Figma 45K）；hooks 有手机连着时挂起权限请求、AskUserQuestion 用 `updatedInput.answers` 作答；守护进程 PermissionRequest 转发等 125 s；新依赖 `ws`、`uqr`（都是 MIT）。测试：`remote.test.ts`、`transcript-chat.test.ts`、`crypto.test.ts`、`server.test.ts`、`feed.test.ts`、`photos.test.ts`、`bridge.test.ts` 新增 3 条、`model.test.ts`、`phone-model.test.ts`；e2e `remote.spec.ts`（假手机配对 → 会话列表 → 发文字和照片进假 Claude → 挂起的权限从手机允许 → 读 transcript 并收到追加 → 撤销后断开，设置 · 手机 两种主题截图 `test-results/remote/`）
-  - [ ] 手机端的 Git 出口：提交、推送、创建 PR、合并、归档（现在只有 变更 和 diff）
+  - [x] 手机端的 Git 出口（2026-11-01，PRD v1.115）：合并到 main 并推送 / 创建 PR / 推送到 PR #N / 打开 PR #N、归档，走窗口里 Git · 变更 的同一段代码（先抽出 `exitPlan` / `shipContextFor`），进度随会话列表推给手机（45I 底部按钮、45J 进度面板）；e2e `remote-exits.spec.ts`（假手机问出口 → 合并到 main → agent 写说明 → 手机改说明后执行 → main 上是改过的说明 → 归档）
+  - [ ] 「合并 PR #N…」的合并面板放到手机上
   - [ ] 设置 · 手机 的「推送」开关（和 P4 一起）
 - [ ] P3 手机端（PRD v1.114）：`mobile/` Expo 应用，TestFlight
   - [x] 应用（2026-11-01）：扫码 / 输入配对码（PAKE，Mac 端 `pakeReply`）、会话列表、聊天视图（Markdown、思考、工具行和 MiniDiff、当前动作）、工具详情 diff、权限和提问面板、照片（拍照 / 相册，手机上重编 JPEG 去掉位置）、中断、新建会话（项目 / worktree / 基于 / 分支名 / 智能体 / 首条消息）、Git · 变更和文件 diff，深浅两种主题；Keychain 存设备密钥，断线自动重连；Mac 不认识这台手机时保留配对、提示并慢慢重试。测试：`mobile/` 的 `crypto.test.ts`（和 Mac 的加密逐项互通）、`client.test.ts`（对真实 `RemoteServer` 配对、请求、重连、撤销）、`model.test.ts`；Mac 端 `server.test.ts` 新增 PAKE 计次。iOS 模拟器里对替身 Mac 走过以上每一屏
   - [ ] TestFlight：要作者的 Apple 账号，`cd mobile && npx eas-cli build -p ios`，再 `eas submit`；Bundle ID 先写的 `app.wavi.remote`，待作者定
   - [ ] 真机经 Tailscale 和局域网连接、ATS 和本地网络权限（P0 挪过来的那项）
-  - [ ] 45G 的「文件」、45I 的出口按钮和 45J（跟手机端的 Git 出口一起）
+  - [x] 45I 的出口按钮和 45J 进度面板（2026-11-01，随 Git 出口）
+  - [ ] 45G 的「文件」
 - [ ] P4 推送：等你处理 / 做完 / 出错经 Expo push service 到 APNs
 
 ## 已完成

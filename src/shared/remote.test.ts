@@ -97,3 +97,47 @@ describe('window messages', () => {
     expect(parseWindowSessions({ ...good, sessions: 'all' })).toBeNull()
   })
 })
+
+describe('exits from the phone', () => {
+  it('reads exits, ship actions and archive, and refuses what is off', () => {
+    expect(parsePhoneRequest({ id: 1, type: 'exits', session: 's1' })).toEqual({ id: 1, type: 'exits', session: 's1' })
+    expect(parsePhoneRequest({ id: 2, type: 'archive', session: 's1' })).toEqual({ id: 2, type: 'archive', session: 's1' })
+    expect(parsePhoneRequest({ id: 3, type: 'ship', session: 's1', action: { do: 'start', exit: 'pr' } })).toEqual({ id: 3, type: 'ship', session: 's1', action: { do: 'start', exit: 'pr' } })
+    expect(parsePhoneRequest({ id: 4, type: 'ship', session: 's1', action: { do: 'edit', texts: { commit: 'feat: x', draft: true, other: 1 } } })).toEqual({
+      id: 4,
+      type: 'ship',
+      session: 's1',
+      action: { do: 'edit', texts: { commit: 'feat: x', draft: true } }
+    })
+    expect(parsePhoneRequest({ id: 5, type: 'ship', session: 's1', action: { do: 'submit' } })?.type).toBe('ship')
+    expect(parsePhoneRequest({ id: 6, type: 'ship', session: 's1', action: { do: 'start', exit: 'open-pr' } })).toBeNull()
+    expect(parsePhoneRequest({ id: 7, type: 'ship', session: 's1', action: { do: 'edit', texts: {} } })).toBeNull()
+    expect(parsePhoneRequest({ id: 8, type: 'ship', session: 's1', action: { do: 'edit', texts: { title: 'x'.repeat(501) } } })).toBeNull()
+    expect(parsePhoneRequest({ id: 9, type: 'ship', session: 's1', action: { do: 'force-push' } })).toBeNull()
+  })
+
+  it('carries an exit in progress in the session list, and drops a session whose one is malformed', () => {
+    const ship = {
+      kind: 'pr',
+      title: '创建 PR',
+      agent: 'Claude Code',
+      stage: 'glance',
+      steps: [{ id: 'write', label: 'Claude Code 写标题和正文', state: 'done' }, { id: 'push', label: '推送 jacob/x', state: 'pending' }],
+      texts: { commit: '', title: 'feat: refresh', body: '…', draft: false },
+      fields: ['title', 'body', 'draft'],
+      submitLabel: '推送并创建 PR',
+      submitBlocker: null,
+      error: null
+    }
+    const list = {
+      projects: [{ id: 'p1', name: 'acme' }],
+      sessions: [{ id: 's1', projectId: 'p1', title: 't', agent: 'claude', status: 'idle', activity: 1, ship, shipNotice: '已创建 PR #12' }],
+      folders: { s1: { cwd: '/w' } },
+      roots: {}
+    }
+    expect(parseWindowSessions(list)?.sessions[0]).toMatchObject({ ship, shipNotice: '已创建 PR #12' })
+    const bad = { ...list, sessions: [{ ...list.sessions[0], ship: { ...ship, stage: 'done' } }] }
+    expect(parseWindowSessions(bad)?.sessions).toEqual([])
+  })
+})
+

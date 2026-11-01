@@ -171,6 +171,9 @@ function broadcastStatus(): void {
 
 const calls = new Map<string, { owner: WebContents; resolve: (result: RemoteResult) => void }>()
 
+/** 归档 runs the repository's archive script and records the worktree; an exit's preflight may ask GitHub. */
+const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { archive: 120_000, exits: 30_000, ship: 30_000 }
+
 function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Promise<RemoteResult> {
   if (!owner || owner.isDestroyed()) return Promise.resolve(remoteFail('Mac 上没有窗口打开这个会话'))
   const callId = randomBytes(12).toString('hex')
@@ -178,7 +181,7 @@ function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Pro
     const timer = setTimeout(() => {
       calls.delete(callId)
       resolve(remoteFail('Mac 上的 Wavi 没有及时响应'))
-    }, REMOTE_LIMITS.windowAnswerMs)
+    }, SLOW_WINDOW_MS[command.type] ?? REMOTE_LIMITS.windowAnswerMs)
     calls.set(callId, {
       owner,
       resolve: (result) => {
@@ -288,6 +291,14 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       const text = await fileDiff({ root: folder.cwd, path: request.path, oldPath: request.oldPath, scope: request.scope, baseRef, untracked: request.untracked })
       return { ok: true, data: { text } }
     }
+    // Exits and 归档 run in the main window, through Git · 变更's own code (PRD F16 / F15): it is the window whose session
+    // list (with the runs' progress) the phone gets, and none of them needs the session's terminal to be open.
+    case 'exits':
+      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'exits', session: request.session }) : notFound
+    case 'ship':
+      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'ship', session: request.session, action: request.action }) : notFound
+    case 'archive':
+      return knownSession(request.session) ? askWindow(mainWindow(), { type: 'archive', session: request.session }) : notFound
   }
 }
 

@@ -126,6 +126,56 @@ export interface RemoteProject {
   name: string
 }
 
+/** An exit of Git · 变更 as the phone shows it (Figma 45I; PRD F16): the window works out which apply and what blocks them. */
+export interface RemoteExit {
+  /** `open-pr`: the branch's PR is open and there is nothing to send; the phone opens `url`. */
+  kind: 'main' | 'pr' | 'push-pr' | 'open-pr'
+  label: string
+  /** Why it cannot run now (UI copy), or null. */
+  blocker: string | null
+  url?: string
+}
+
+/** What 45I's bottom shows for a session's worktree. */
+export interface RemoteExits {
+  /** Null when there is nothing to ship (merged already, or no work yet). */
+  primary: RemoteExit | null
+  secondary: RemoteExit | null
+  /** The branch's PR, for the PR line. */
+  pr: { number: number; state: string; url: string } | null
+  base: string | null
+  /** The base has branch protection on GitHub; null when unknown. */
+  baseProtected: boolean | null
+  /** 归档 (PRD F15): why it cannot run now, or null. */
+  archive: { blocker: string | null }
+}
+
+export type RemoteStepState = 'pending' | 'working' | 'done' | 'failed'
+export type RemoteShipField = 'commit' | 'title' | 'body' | 'draft'
+
+/** An exit in progress (Figma 45J), from the window's Ship block state (PRD F16 v1.78). */
+export interface RemoteShip {
+  kind: 'main' | 'pr' | 'push-pr'
+  title: string
+  /** Who writes the text (Claude / Codex / …). */
+  agent: string
+  /** writing: the agent writes; glance: the text waits for a last look; running: Wavi's own steps. */
+  stage: 'writing' | 'glance' | 'running'
+  steps: { id: string; label: string; state: RemoteStepState; note?: string }[]
+  texts: { commit: string; title: string; body: string; draft: boolean }
+  /** The glance's editable fields, top to bottom. */
+  fields: RemoteShipField[]
+  submitLabel: string
+  submitBlocker: string | null
+  error: { step: string; message: string; output?: string; conflicts: boolean; pushRefused: boolean } | null
+}
+
+/** What the phone may do to an exit (the Ship block's buttons). */
+export type RemoteShipAction =
+  | { do: 'start'; exit: 'main' | 'pr' | 'push-pr' }
+  | { do: 'edit'; texts: Partial<RemoteShip['texts']> }
+  | { do: 'submit' | 'retry' | 'cancel' | 'conflicts' | 'switch-pr' }
+
 /** One row of the phone's session list (Figma 45B). */
 export interface RemoteSession {
   id: string
@@ -142,6 +192,10 @@ export interface RemoteSession {
   model?: string
   /** One line of the last reply. */
   reply?: string
+  /** An exit of its worktree in progress (45J). */
+  ship?: RemoteShip
+  /** How the last exit ended (`已合并到 main 并推送 · a41c9e2`). */
+  shipNotice?: string
 }
 
 export interface RemoteSessionList {
@@ -189,6 +243,11 @@ export type PhoneCommand =
   | { type: 'changes'; session: string }
   /** One file of `changes`: its unified diff (Git · 变更's own groups, PRD F5). */
   | { type: 'diff'; session: string; path: string; scope: 'uncommitted' | 'committed'; oldPath?: string; untracked?: boolean }
+  /** Git · 变更's exits for the session's worktree (RemoteExits). */
+  | { type: 'exits'; session: string }
+  | { type: 'ship'; session: string; action: RemoteShipAction }
+  /** 归档 the session's worktree (PRD F15). */
+  | { type: 'archive'; session: string }
 
 export type PhoneRequest = PhoneCommand & { id: number }
 
@@ -216,6 +275,41 @@ function photos(raw: unknown): RemotePhoto[] | null {
     out.push({ name, data: p.data })
   }
   return out
+}
+
+const SHIP_TEXT = { commit: 20_000, title: 500, body: 60_000 } as const
+
+function shipAction(raw: unknown): RemoteShipAction | null {
+  const a = record(raw)
+  if (!a) return null
+  switch (a.do) {
+    case 'start':
+      return a.exit === 'main' || a.exit === 'pr' || a.exit === 'push-pr' ? { do: 'start', exit: a.exit } : null
+    case 'edit': {
+      const t = record(a.texts)
+      if (!t) return null
+      const texts: Partial<RemoteShip['texts']> = {}
+      for (const key of ['commit', 'title', 'body'] as const) {
+        if (t[key] === undefined) continue
+        const value = cleanText(t[key], SHIP_TEXT[key])
+        if (value === null) return null
+        texts[key] = value
+      }
+      if (t.draft !== undefined) {
+        if (typeof t.draft !== 'boolean') return null
+        texts.draft = t.draft
+      }
+      return Object.keys(texts).length > 0 ? { do: 'edit', texts } : null
+    }
+    case 'submit':
+    case 'retry':
+    case 'cancel':
+    case 'conflicts':
+    case 'switch-pr':
+      return { do: a.do }
+    default:
+      return null
+  }
 }
 
 function answers(raw: unknown): Record<string, string> | null {
@@ -291,6 +385,14 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
       if (v.untracked !== undefined && typeof v.untracked !== 'boolean') return null
       return { id, type: 'diff', session: v.session, path, scope: v.scope, ...(oldPath ? { oldPath } : {}), ...(v.untracked === true ? { untracked: true } : {}) }
     }
+    case 'exits':
+      return isId(v.session) ? { id, type: 'exits', session: v.session } : null
+    case 'ship': {
+      const action = shipAction(v.action)
+      return isId(v.session) && action ? { id, type: 'ship', session: v.session, action } : null
+    }
+    case 'archive':
+      return isId(v.session) ? { id, type: 'archive', session: v.session } : null
     default:
       return null
   }
@@ -336,6 +438,9 @@ export type RemoteWindowCommand =
   | { type: 'send'; session: string; text: string; paths: string[] }
   | { type: 'interrupt'; session: string }
   | { type: 'new-session'; project: string; workdir: 'worktree' | 'current'; agent: CliAgent; base?: string; branch?: string; prompt?: string }
+  | { type: 'exits'; session: string }
+  | { type: 'ship'; session: string; action: RemoteShipAction }
+  | { type: 'archive'; session: string }
 
 export interface RemoteWindowRequest {
   callId: string
@@ -346,6 +451,43 @@ const STATUSES: ReadonlySet<unknown> = new Set<SessionStatus>(['running', 'needs
 const optText = (v: unknown, max: number): string | undefined | null => (v === undefined ? undefined : cleanText(v, max))
 const optTime = (v: unknown): number | undefined | null => (v === undefined ? undefined : typeof v === 'number' && Number.isFinite(v) ? v : null)
 
+const STEP_STATES: ReadonlySet<unknown> = new Set<RemoteStepState>(['pending', 'working', 'done', 'failed'])
+const SHIP_FIELDS: ReadonlySet<unknown> = new Set<RemoteShipField>(['commit', 'title', 'body', 'draft'])
+
+/** The window's exit in progress; null when it does not validate. */
+function windowShip(raw: unknown): RemoteShip | null {
+  const v = record(raw)
+  const t = record(v?.texts)
+  if (!v || !t || (v.kind !== 'main' && v.kind !== 'pr' && v.kind !== 'push-pr') || (v.stage !== 'writing' && v.stage !== 'glance' && v.stage !== 'running')) return null
+  const title = cleanText(v.title, 300)
+  const agent = cleanText(v.agent, 100)
+  const submitLabel = cleanText(v.submitLabel, 100)
+  const submitBlocker = v.submitBlocker === null ? null : cleanText(v.submitBlocker, 300)
+  if (title === null || agent === null || submitLabel === null || (submitBlocker === null && v.submitBlocker !== null)) return null
+  if (!Array.isArray(v.steps) || v.steps.length > 12 || !Array.isArray(v.fields) || !v.fields.every((f) => SHIP_FIELDS.has(f))) return null
+  const steps: RemoteShip['steps'] = []
+  for (const raw of v.steps) {
+    const step = record(raw)
+    const label = cleanText(step?.label, 300)
+    const note = step?.note === undefined ? undefined : cleanText(step.note, 300)
+    if (!step || typeof step.id !== 'string' || label === null || !STEP_STATES.has(step.state) || note === null) return null
+    steps.push({ id: step.id.slice(0, 20), label, state: step.state as RemoteStepState, ...(note ? { note } : {}) })
+  }
+  const commit = cleanText(t.commit, SHIP_TEXT.commit)
+  const shipTitle = cleanText(t.title, SHIP_TEXT.title)
+  const body = cleanText(t.body, SHIP_TEXT.body)
+  if (commit === null || shipTitle === null || body === null || typeof t.draft !== 'boolean') return null
+  let error: RemoteShip['error'] = null
+  if (v.error !== null) {
+    const e = record(v.error)
+    const message = cleanText(e?.message, 2000)
+    const output = e?.output === undefined ? undefined : cleanText(e.output, 8000)
+    if (!e || typeof e.step !== 'string' || message === null || output === null) return null
+    error = { step: e.step.slice(0, 20), message, ...(output ? { output } : {}), conflicts: e.conflicts === true, pushRefused: e.pushRefused === true }
+  }
+  return { kind: v.kind, title, agent, stage: v.stage, steps, texts: { commit, title: shipTitle, body, draft: t.draft }, fields: v.fields as RemoteShipField[], submitLabel, submitBlocker, error }
+}
+
 function windowSession(raw: unknown): RemoteSession | null {
   const s = record(raw)
   if (!s || !isId(s.id) || !isId(s.projectId) || !STATUSES.has(s.status) || (s.agent !== 'shell' && !isCliAgent(s.agent))) return null
@@ -355,6 +497,14 @@ function windowSession(raw: unknown): RemoteSession | null {
   if (title === null || activity === undefined || activity === null || Object.values(fields).some((f) => f === null)) return null
   const out: RemoteSession = { id: s.id, projectId: s.projectId, title, agent: s.agent as AgentKind, status: s.status as SessionStatus, activity }
   for (const [k, f] of Object.entries(fields)) if (f !== undefined) (out as unknown as Record<string, unknown>)[k] = f
+  if (s.ship !== undefined) {
+    const ship = windowShip(s.ship)
+    if (!ship) return null
+    out.ship = ship
+  }
+  const notice = optText(s.shipNotice, 300)
+  if (notice === null) return null
+  if (notice) out.shipNotice = notice
   return out
 }
 
