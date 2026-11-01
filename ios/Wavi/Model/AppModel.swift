@@ -8,6 +8,9 @@ import UIKit
 @MainActor
 @Observable
 final class AppModel {
+  /// The one the app shows, and the one a Live Activity button reaches when the system wakes the app for it.
+  static let shared = AppModel()
+
   struct Conversation: Sendable {
     var feed: Feed
     var total: Int
@@ -56,6 +59,14 @@ final class AppModel {
   func showList() { backToList += 1 }
 
   @ObservationIgnored private var client: RemoteClient?
+  @ObservationIgnored private let activities = LiveActivities()
+  /// An answer from the island that did not reach the Mac, shown on the card until that prompt goes.
+  @ObservationIgnored private var activityFailure: (prompt: String, text: String)?
+  /// A snapshot came since launch (sessions and prompts together); before that (the system just woke the app for a
+  /// button) the empty lists would end the Live Activity.
+  @ObservationIgnored private var loaded = false
+  /// The prompts Wavi has listed, so only a new one lights the island up.
+  @ObservationIgnored private var knownPrompts: Set<String> = []
 
   @ObservationIgnored private let paths = NWPathMonitor()
   @ObservationIgnored private var lastPath: String?
@@ -102,6 +113,10 @@ final class AppModel {
     prompts = []
     watching = nil
     conversation = nil
+    loaded = false
+    knownPrompts = []
+    activityFailure = nil
+    syncActivity()
   }
 
   /// The Mac's addresses and, while it cannot be reached, why each one failed last time.
@@ -110,11 +125,62 @@ final class AppModel {
     return (client?.pairing.urls ?? pairing?.urls ?? []).map { ($0, failures[$0]) }
   }
 
-  /// The app came back to the foreground.
-  func wake() { client?.wake() }
+  /// The app came back to the foreground: check the link, and start the Live Activity if the background could not.
+  func wake() {
+    client?.wake()
+    syncActivity()
+  }
 
   func call(_ command: PhoneCommand) async -> RemoteResult {
     await client?.request(command) ?? .failed("没有连上 Mac")
+  }
+
+  /// The link is open, or opened within `seconds` (the app was just woken in the background).
+  func whenOpen(seconds: Double = 8) async -> Bool {
+    let deadline = Date().addingTimeInterval(seconds)
+    while !isOpen {
+      guard client != nil, Date() < deadline else { return false }
+      try? await Task.sleep(for: .milliseconds(200))
+    }
+    return true
+  }
+
+  /// The Live Activity follows the sessions and prompts; `alert` when Wavi just listed a prompt it had not before.
+  @discardableResult
+  private func syncActivity(alert: Bool = false) -> Task<Void, Never>? {
+    guard pairing != nil else { return activities.show(nil, mac: macName) }
+    // Nothing heard yet: keep the card as it is, only saying why an answer from it failed.
+    guard loaded else {
+      guard let failure = activityFailure, var shown = activities.current, shown.prompt == failure.prompt else { return nil }
+      shown.failure = failure.text
+      return activities.show(shown, mac: macName)
+    }
+    var state = activityState(sessions: sessions.sessions, prompts: prompts, now: Date().timeIntervalSince1970 * 1000)
+    if let failure = activityFailure {
+      if state?.prompt == failure.prompt { state?.failure = failure.text } else { activityFailure = nil }
+    }
+    return activities.show(state, mac: macName, alert: alert)
+  }
+
+  /// A button on the island or the Lock Screen (in this process, maybe just woken for it): the link is checked (a
+  /// socket from before the app was suspended may be dead without knowing it) and the list fetched, then the answer
+  /// sent; the prompt goes at once (Wavi's list follows), or the card says why it did not.
+  func answerFromActivity(prompt: String, command: PhoneCommand) async {
+    var result = RemoteResult.failed("没有连上 Mac")
+    if await whenOpen() {
+      if !(await refresh(timeout: 4)) {
+        client?.networkChanged()
+        if await whenOpen() { await refresh(timeout: 4) }
+      }
+      if isOpen { result = await client?.request(command, timeout: 10) ?? result }
+    }
+    if let failure = result.error {
+      activityFailure = (prompt, String(failure.prefix(80)))
+    } else {
+      prompts.removeAll { $0.id == prompt }
+      knownPrompts.remove(prompt)
+    }
+    await syncActivity()?.value
   }
 
   /// The session on screen (nil: back at the list): its newest page, then what is appended.
@@ -156,10 +222,15 @@ final class AppModel {
     let prompts: [RemotePrompt]?
   }
 
-  func refresh() async {
-    guard let snapshot = await call(.snapshot).decode(Snapshot.self) else { return }
+  @discardableResult
+  func refresh(timeout: Double = Link.requestSeconds) async -> Bool {
+    guard let snapshot = await client?.request(.snapshot, timeout: timeout).decode(Snapshot.self) else { return false }
     sessions = RemoteSessionList(projects: snapshot.projects, sessions: snapshot.sessions)
     prompts = snapshot.prompts ?? []
+    knownPrompts = Set(prompts.map(\.id))
+    loaded = true
+    syncActivity()
+    return true
   }
 
   @ObservationIgnored private var clientToken = UUID()
@@ -191,8 +262,13 @@ final class AppModel {
       }
     case .sessions(let list):
       sessions = list
+      syncActivity()
     case .prompts(let list):
       prompts = list
+      let ids = Set(list.map(\.id))
+      let fresh = !ids.subtracting(knownPrompts).isEmpty
+      knownPrompts = ids
+      syncActivity(alert: fresh)
     case .feed(let update):
       guard update.session == watching else { return }
       let feed = applyFeed(conversation?.feed, start: update.start, items: update.items, reset: update.reset ?? false)

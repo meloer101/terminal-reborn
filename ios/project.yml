@@ -22,9 +22,11 @@ targets:
     platform: iOS
     sources:
       - path: Wavi
+      - path: LiveActivity
     dependencies:
       - package: Ristretto255
         product: CRistretto255
+      - target: WaviActivity
     info:
       path: Wavi/Info.plist
       properties:
@@ -41,14 +43,44 @@ targets:
           NSAllowsArbitraryLoads: true
         UIAppFonts: [JetBrainsMono_400Regular.ttf, JetBrainsMono_500Medium.ttf]
         UILaunchScreen: {}
+        NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.wavi.remote
         TARGETED_DEVICE_FAMILY: "1"
+        # LiveActivity/ActivityIntents.swift answers only in the app's process.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WAVI_APP
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  # The Live Activity (PRD F22 S2, Figma 47): the Dynamic Island and the Lock Screen. It draws what the app hands it;
+  # its buttons are LiveActivityIntents the system runs in the app's process.
+  WaviActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: WaviActivity
+      - path: LiveActivity
+      - path: Wavi/Views/Theme.swift
+      - path: Wavi/Views/Glyphs.swift
+      - path: Wavi/Model/Shared.swift
+      - path: Wavi/Model/Wire.swift
+      - path: Wavi/Net/JSONValue.swift
+      - path: Wavi/Resources
+        buildPhase: resources
+      - path: Wavi/Assets.xcassets
+    info:
+      path: WaviActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Wavi
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts: [JetBrainsMono_400Regular.ttf, JetBrainsMono_500Medium.ttf]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.wavi.remote.activity
+        TARGETED_DEVICE_FAMILY: "1"
   WaviTests:
     type: bundle.unit-test
     platform: iOS

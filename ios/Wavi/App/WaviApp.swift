@@ -4,7 +4,7 @@ import SwiftUI
 
 @main
 struct WaviApp: App {
-  @State private var model = AppModel()
+  @State private var model = AppModel.shared
   @Environment(\.scenePhase) private var phase
 
   var body: some Scene {
@@ -54,7 +54,14 @@ struct RootView: View {
         .sheet(item: $linked) { _ in PairView(offer: $linked, replacing: model.pairing?.macName) }
       }
     }
-    .onOpenURL { url in linked = Link.parseOffer(url.absoluteString) }
+    .onOpenURL { url in
+      // A tap on the Live Activity: its session, or the list.
+      if let session = ActivityLink.session(in: url) {
+        path = session.map { [.session($0)] } ?? []
+      } else {
+        linked = Link.parseOffer(url.absoluteString)
+      }
+    }
     .onChange(of: model.pairing == nil) { path = [] }
     .onChange(of: model.backToList) { path = [] }
     .onChange(of: path) { _, path in

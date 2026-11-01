@@ -36,6 +36,9 @@ extension Color {
   static let diffDelFg = token(0xff5c5c, 0xd23b3b)
   static let diffDelBg = token(0xff5c5c, 0xff5c5c, alpha: 0.12, 0.12)
   static let termFg = token(0xe5e5e5, 0x121212)
+  /// The Live Activity's Lock Screen card and its quiet buttons (Figma 47D / 47E; the island is always black).
+  static let activityBackground = token(0x141414, 0xffffff, alpha: 0.82, 0.8)
+  static let activityButton = token(0xffffff, 0x000000, alpha: 0.14, 0.06)
 }
 
 extension Font {
