@@ -19,7 +19,7 @@ struct SessionsView: View {
           let now = context.date.timeIntervalSince1970 * 1000
           LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(groups) { group in
-              GroupHeader(title: group.title, count: group.rows.count)
+              GroupHeader(title: group.title, count: group.rows.count, project: true)
               ForEach(group.rows) { row in
                 NavigationLink(value: Route.session(row.session.id)) {
                   SessionRow(session: row.session, projectName: row.projectName, now: now)
@@ -52,7 +52,7 @@ struct SessionsView: View {
 
   private var macLine: some View {
     Button { unpairing = true } label: {
-      HStack(spacing: 6) {
+      HStack(spacing: 8) {
         Icon("smartphone")
         Text(location).font(.ui(13)).lineLimit(1)
       }
@@ -83,17 +83,20 @@ struct SessionsView: View {
   }
 }
 
+/// A group of rows. `project`: a project (or 等你处理) in the session list, which outranks the session rows under it;
+/// otherwise a quiet subsection label (未提交 / 已提交 in Git · 变更).
 struct GroupHeader: View {
   let title: String
   let count: Int
+  var project = false
 
   var body: some View {
-    HStack(spacing: 8) {
-      Text(title).font(.ui(13, 500)).foregroundStyle(Color.textSecondary)
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Text(title).font(project ? .ui(17, 600) : .ui(13, 500)).foregroundStyle(project ? Color.textPrimary : Color.textSecondary)
       Text("\(count)").font(.mono(13)).foregroundStyle(Color.textTertiary)
     }
     .padding(.horizontal, 20)
-    .padding(.top, 20)
+    .padding(.top, 24)
     .padding(.bottom, 8)
   }
 }
@@ -107,11 +110,11 @@ private struct SessionRow: View {
     let waiting = session.status == .needsYou
     HStack(alignment: .top, spacing: 12) {
       StatusGlyph(status: session.status).padding(.top, 3)
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 8) {
           Text(session.title).font(.ui(16)).foregroundStyle(Color.textPrimary).lineLimit(1)
           Spacer(minLength: 0)
-          Text(rowTime(session, now: now)).font(.mono(12)).foregroundStyle(waiting ? Color.statusAttention : Color.textTertiary)
+          Text(rowTime(session, now: now)).font(.mono(12)).foregroundStyle(Color.textTertiary)
         }
         Text(session.action ?? session.status.label).font(.ui(14)).foregroundStyle(waiting ? Color.statusAttention : Color.textSecondary).lineLimit(1)
         HStack(spacing: 8) {
@@ -122,7 +125,7 @@ private struct SessionRow: View {
       }
     }
     .padding(.horizontal, 20)
-    .padding(.vertical, 10)
+    .padding(.vertical, 12)
     .contentShape(Rectangle())
   }
 }

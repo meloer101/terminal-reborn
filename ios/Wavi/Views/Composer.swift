@@ -47,7 +47,7 @@ struct Composer: View {
   private var capsule: some View {
     HStack(alignment: .bottom, spacing: 2) {
       attach
-      TextField("回复…", text: $text, axis: .vertical)
+      TextField("回复", text: $text, axis: .vertical)
         .font(.ui(16))
         .lineLimit(1...6)
         .foregroundStyle(Color.textPrimary)
@@ -99,7 +99,7 @@ struct Composer: View {
           Image(uiImage: p.image).resizable().scaledToFill().frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(alignment: .topTrailing) {
               Button { photos.removeAll { $0.id == p.id } } label: {
-                Icon("x", size: 12).foregroundStyle(Color.textPrimary).padding(3).background(Color.bgApp, in: Circle())
+                Icon("x", size: 12).foregroundStyle(Color.textPrimary).padding(4).background(Color.bgApp, in: Circle())
               }
               .padding(4)
               .accessibilityLabel("移除照片")
@@ -141,15 +141,21 @@ struct Composer: View {
     guard canSend else { return }
     sending = true
     error = nil
+    // On screen and out of the field at once; the Mac may take a while (it starts an agent that has not started).
+    let (sentText, sentPhotos) = (text, photos)
+    let pending = model.willSend(session, text: sentText, photos: sentPhotos.count)
+    text = ""
+    photos = []
     Task {
-      let result = await model.call(.send(session: session, text: text, photos: photos.map(\.photo)))
+      let result = await model.call(.send(session: session, text: sentText, photos: sentPhotos.map(\.photo)))
       sending = false
       if let failure = result.error {
+        model.failedToSend(session, id: pending)
         error = failure
-        return
+        // Back where it was, to send again.
+        if text.isEmpty { text = sentText }
+        if photos.isEmpty { photos = sentPhotos }
       }
-      text = ""
-      photos = []
     }
   }
 

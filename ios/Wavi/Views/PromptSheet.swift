@@ -88,7 +88,7 @@ private struct Head: View {
         }
       }
       if let chip {
-        Text(chip).font(.ui(12)).foregroundStyle(Color.textSecondary).padding(.horizontal, 8).padding(.vertical, 2)
+        Text(chip).font(.ui(13)).foregroundStyle(Color.textSecondary).padding(.horizontal, 8).padding(.vertical, 2)
           .background(Color.bgSelected, in: RoundedRectangle(cornerRadius: 6))
       }
     }

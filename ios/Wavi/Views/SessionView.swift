@@ -48,9 +48,11 @@ struct SessionView: View {
     VStack(spacing: 2) {
       Text(session?.title ?? "会话").font(.ui(16, 500)).foregroundStyle(Color.textPrimary).lineLimit(1)
       if let session {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
           StatusGlyph(status: session.status)
-          if let branch = session.branch { Text(branch).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
+          let project = model.sessions.projects.first { $0.id == session.projectId }?.name
+          let place = [project, session.branch].compactMap { $0 }.joined(separator: " · ")
+          if !place.isEmpty { Text(place).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
           AgentMark(agent: session.agent)
         }
       }
@@ -67,12 +69,20 @@ struct SessionView: View {
           FeedRow(item: item, session: id)
             .onAppear { if index == 0 { Task { await model.loadOlder() } } }
         }
+        ForEach(model.sending[id] ?? []) { item in FeedRow(item: item, session: id).opacity(0.6) }
         if session.status == .running, let action = session.action { Live(action: action, since: session.since) }
       }
       .padding(.horizontal, 20)
       .padding(.vertical, 12)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      // Taps on the conversation put the keyboard away (a short one does not scroll, so dragging cannot).
+      .contentShape(Rectangle())
+      .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
     }
-    .defaultScrollAnchor(.bottom)
+    // A short conversation starts at the top; a long one opens at its end and stays there as it grows.
+    .defaultScrollAnchor(.top, for: .alignment)
+    .defaultScrollAnchor(.bottom, for: .initialOffset)
+    .defaultScrollAnchor(.bottom, for: .sizeChanges)
     // 46′: text never runs under the title; the system's harder edge instead of the soft blur.
     .scrollEdgeEffectStyle(.hard, for: .top)
     .scrollDismissesKeyboard(.interactively)
@@ -124,16 +134,16 @@ struct FeedRow: View {
     case "text":
       MarkdownText(text: item.text ?? "")
     case "thinking":
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: 8) {
         Button { open.toggle() } label: {
-          HStack(spacing: 6) {
-            Icon("chevron-right", size: 14).rotationEffect(.degrees(open ? 90 : 0))
+          HStack(spacing: 8) {
+            Icon("chevron-right", size: 16).rotationEffect(.degrees(open ? 90 : 0))
             Text("思考\(item.ms.map { " \(max(1, Int(($0 / 1000).rounded())))s" } ?? "")").font(.ui(14))
           }
           .foregroundStyle(Color.textTertiary)
         }
         .buttonStyle(.plain)
-        if open, let text = item.text { Text(text).font(.ui(14)).lineSpacing(4).foregroundStyle(Color.textTertiary).padding(.leading, 20) }
+        if open, let text = item.text { Text(text).font(.ui(14)).lineSpacing(4).foregroundStyle(Color.textTertiary).padding(.leading, 24) }
       }
     case "tool":
       NavigationLink(value: Route.tool(session: session, item: item.id)) { ToolLine(item: item) }.buttonStyle(.plain)
@@ -156,7 +166,7 @@ private struct ToolLine: View {
         Text(item.name ?? "").font(.mono(13, 500)).foregroundStyle(Color.textPrimary)
         Text(item.arg ?? "").font(.mono(13)).foregroundStyle(Color.textSecondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
         if let diff = item.diff { Counts(added: diff.added, removed: diff.removed) }
-        Icon("chevron-right", size: 14).foregroundStyle(Color.textTertiary)
+        Icon("chevron-right", size: 16).foregroundStyle(Color.textTertiary)
       }
       if item.diff == nil, let tail = lastLine(item.output) {
         Text(tail).font(.mono(12)).foregroundStyle(item.state == "error" ? Color.statusError : Color.textTertiary).lineLimit(1).padding(.leading, 22)

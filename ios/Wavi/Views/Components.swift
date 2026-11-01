@@ -97,7 +97,7 @@ struct MarkdownText: View {
         case .paragraph(let t): inline(t).font(.ui(16)).lineSpacing(5).foregroundStyle(Color.textPrimary)
         case .heading(let t): inline(t).font(.ui(16, 600)).foregroundStyle(Color.textPrimary)
         case .item(let marker, let t):
-          HStack(alignment: .firstTextBaseline, spacing: 6) {
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(marker).font(.ui(16)).foregroundStyle(Color.textSecondary).frame(minWidth: 14, alignment: .leading)
             inline(t).font(.ui(16)).lineSpacing(5).foregroundStyle(Color.textPrimary)
           }

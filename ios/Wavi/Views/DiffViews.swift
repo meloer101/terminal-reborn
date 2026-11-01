@@ -97,10 +97,10 @@ struct ToolView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 12) {
             Text(tool.arg ?? "").font(.mono(13)).lineSpacing(6).foregroundStyle(Color.textPrimary).textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading).padding(14).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+              .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
             if let output = tool.output, !output.isEmpty {
               Text(output).font(.mono(12)).lineSpacing(5).foregroundStyle(tool.state == "error" ? Color.statusError : Color.termFg).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(14).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+                .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
             }
           }
           .padding(20)

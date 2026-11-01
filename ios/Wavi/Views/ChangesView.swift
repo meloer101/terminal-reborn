@@ -97,16 +97,16 @@ struct ChangesView: View {
     return NavigationLink(value: Route.diff(session: id, path: f.path, scope: scope, oldPath: f.oldPath, untracked: f.untracked == true)) {
       HStack(spacing: 10) {
         Text(status).font(.mono(12, 500)).foregroundStyle(status == "A" ? Color.diffAddFg : status == "D" ? Color.diffDelFg : Color.textTertiary).frame(width: 10)
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 2) {
           Text(name).font(.mono(15)).foregroundStyle(Color.textPrimary).lineLimit(1)
           if !dir.isEmpty { Text(dir).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
         }
         Spacer(minLength: 0)
         Counts(added: f.added, removed: f.removed)
-        if openable { Icon("chevron-right", size: 14).foregroundStyle(Color.textTertiary) }
+        if openable { Icon("chevron-right", size: 16).foregroundStyle(Color.textTertiary) }
       }
       .padding(.horizontal, 20)
-      .padding(.vertical, 11)
+      .padding(.vertical, 12)
       .contentShape(Rectangle())
     }
     .buttonStyle(RowStyle())
@@ -247,7 +247,7 @@ struct ShipSheet: View {
     if let texts, editable(ship) || ship.stage == .running,
       ship.fields.contains(where: { $0 != "draft" && !(value(texts, $0)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
       ForEach(ship.fields.filter { $0 != "draft" }, id: \.self) { field in
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
           if ship.fields.count > 1 { Text(["commit": "提交说明", "title": "标题", "body": "正文"][field] ?? field).font(.ui(13, 500)).foregroundStyle(Color.textSecondary) }
           TextField("", text: binding(field), axis: field == "title" ? .horizontal : .vertical)
             .font(.mono(field == "body" ? 13 : 14))
@@ -274,7 +274,7 @@ struct ShipSheet: View {
     }
     VStack(alignment: .leading, spacing: 12) {
       ForEach(ship.steps) { step in
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
           HStack(spacing: 10) {
             StatusGlyph(status: step.state == .working ? .running : step.state == .done ? .doneUnread : step.state == .failed ? .error : .idle)
             Text(step.label).font(.ui(15)).foregroundStyle(step.state == .pending ? Color.textTertiary : Color.textPrimary).lineLimit(1)
@@ -282,10 +282,10 @@ struct ShipSheet: View {
             if let note = step.note { Text(note).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
           }
           if let failure = ship.error, failure.step == step.id {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
               Text(failure.message).font(.ui(14)).foregroundStyle(Color.statusError)
               if let output = failure.output {
-                Text(output).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(8).padding(10).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 8))
+                Text(output).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(8).padding(12).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 8))
               }
             }
             .padding(.leading, 24)

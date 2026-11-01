@@ -22,6 +22,32 @@ final class AppModel {
   /// The session on screen and its conversation.
   private(set) var watching: String?
   private(set) var conversation: Conversation?
+  /// Messages sent from this phone that the session's transcript has not shown yet (the agent writes a message there
+  /// only once it takes it): drawn at the end of the conversation at once, gone when the transcript has them.
+  private(set) var sending: [String: [ChatItem]] = [:]
+
+  /// Sent from the composer: on screen now, before the Mac answers.
+  func willSend(_ session: String, text: String, photos: Int) -> String {
+    let id = "sending-\(UUID().uuidString)"
+    sending[session, default: []].append(ChatItem(kind: "user", id: id, at: Date().timeIntervalSince1970 * 1000, text: text, images: photos))
+    return id
+  }
+
+  /// The Mac refused it: it was never sent.
+  func failedToSend(_ session: String, id: String) {
+    sending[session]?.removeAll { $0.id == id }
+  }
+
+  /// The transcript caught up: each user message in it takes the oldest of this session's messages still sending.
+  private func arrived(_ session: String, _ items: [ChatItem]) {
+    guard var waiting = sending[session], !waiting.isEmpty else { return }
+    for item in items where item.kind == "user" {
+      guard let first = waiting.first, item.at >= first.at - 5000 else { continue }
+      waiting.removeFirst()
+    }
+    sending[session] = waiting
+  }
+
   /// A session to open as soon as the list has it (one just created from the phone).
   var opening: String?
   /// Bumped to go back to the session list (its worktree was archived).
@@ -101,6 +127,7 @@ final class AppModel {
     guard let session, watching == session else { return }
     if let page = result.decode(Page.self) {
       conversation = Conversation(feed: Feed(start: page.start, items: page.items), total: page.total, loading: false)
+      arrived(session, page.items)
     } else {
       conversation?.loading = false
     }
@@ -170,6 +197,7 @@ final class AppModel {
       guard update.session == watching else { return }
       let feed = applyFeed(conversation?.feed, start: update.start, items: update.items, reset: update.reset ?? false)
       conversation = Conversation(feed: feed, total: feed.start + feed.items.count, loading: false)
+      arrived(update.session, update.items)
     }
   }
 
