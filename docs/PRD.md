@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.111 · 2026-11-01 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.112 · 2026-11-01 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.112 | 2026-11-01 | **新增 F22 手机远程：iPhone 上用 GUI 操作本机的会话**（§1.2 / §1.4 / F22 / §6.16，作者 2026-11-01 定：「功能齐全、适配手机」，手机上是 GUI 不是终端，能发照片，worktree 和分支都要有；选了自建手机端、Expo React Native、Tailscale + 局域网、Mac 上 Wavi 开着）：§1.4 的「远程会话」和「自绘聊天 GUI」两条改窄——桌面上 agent 仍在原生 TUI 里跑，手机是同一个会话的另一个视图，数据读 transcript，输入照旧写 PTY，权限挂起 hook 回答，不换成 SDK / stream-json；SSH 和云端 worker 仍不做。外部来源（2026-11-01 调研）：Claude Code Remote Control（code.claude.com/docs/en/remote-control，官方 app，只有 Claude、没有 worktree，数据经 Anthropic）、Happy（slopus/happy，MIT，读 JSONL 显示，手机一发消息就杀掉终端进程改用 SDK resume，同步 bug 多：#102 #405 #875 #656）、T3 Code（局域网 / Tailscale 直连 + `t3 pair` 一次性配对、按 scope 授权，docs/user/remote-access.md）、Superset Mobile（docs.superset.sh/mobile，diff 行内评论回给 agent、合并 PR，ELv2）。P2 里的「Claude Remote Control 菜单入口」由 F22 取代。实现前的实测写在 §6.16。 |
 | v1.111 | 2026-11-01 | **F21 重做落地：`wavi` 命令代替 MCP，19 家都能派活和被派**（F21 / §6.14，作者 2026-11-01「开始这个功能的升级和搭建」）：按 v1.103 / v1.104 实现，删掉 `mcp-server.ts` / `mcp-config.ts`。实现时定下的细节：`wavi run` 的回答里直接给出这个会话将来的编号（Wavi 先分配好，用户点「开始」后用它建会话）；同一派活方等待中的几次 `wavi run` 在确认条里各占一行，「开始 N 个」一起开，派活方收到一条 `[Wavi 派活]` 消息写明开了哪些或被拒绝 / 超时，走和报告相同的三档；`wavi send` 也走三档，送不进去时留在子会话终端下方的条里；任务或消息写 `-` 时从标准输入读；子会话一样有 `wavi` 和 `WAVI_DIR`（要能 `wavi report`、再派一层），只是不追加系统提示；子会话自己 `wavi report` 之后，这一轮结束不再补一份；状态只能看标题的几家，报告写“一轮结束（估计）”；快照会话在侧栏分支那一行写「快照」（Figma 44B 没画这一种，待作者看）；侧栏的模型只在 `--model` 给了时显示；子会话从“等你处理”回到空闲（启动时的信任对话框过了）不算一轮结束，只有一轮真的结束才报（§6.14 v1.111 真机实测）。独立 code review 后改的：窗口 4.3 秒内答不了时 `wavi` 回答“什么都没做”，窗口也不再接着开会话（请求带截止时间）；几次 `wavi run` 依次处理，上限和判重不会被同时到的请求绕过；`wavi send` 先回答、再在后面送；`wavi stop` 不对“等你处理”的子会话按 Esc（那是在替用户回答权限框）；派活开关关掉后所有 `wavi` 命令都拒绝；快照从 HEAD 的树起步（被忽略规则命中的已跟踪文件不丢）；快照会话关掉时删掉它的 worktree；报告最后留在「送进去」条时，那一轮回到未读并照常提醒；同一子会话连续出错每次都报。已知限制：Codex 的 `-c developer_instructions` 会替换用户自己配置里的同名项；app 重启后 Claude 派活方的收件箱要等它下次 SessionStart 或跑 `wavi` 才重新知道；每个会话的 token 由 userData 里的密钥派生，同一用户的进程（包括 agent）读得到，所以一个 agent 有意为之可以冒充别的会话调 `wavi`（最多能做的是开会话、发派活消息，都在侧栏看得见）；孙会话自己的 subagent 不显示。 |
 | v1.110 | 2026-10-31 | **调用树选定 Figma 44B，Claude 的 subagent 已实现**（F21，作者 2026-10-31 选 44B）：agent 自带的 subagent 单独成一行（30 高，状态图形 · 任务 · 模型），挂在所在会话下、Wavi 子会话之后，只列运行中和等你处理的；不写类型（Explore / general-purpose / Plan）——任务已经说明在做什么，宽度只够两样。子会话第三行在 agent 标志前写模型，放不下先截分支（原写在第二行）。叫法统一用原名 subagent，「子会话」「孙会话」只指派活派出的会话。没选 44C（收进会话第二行：看不到每个 subagent 的状态和模型，需求 ④ 只满足一半）。 |
 | v1.109 | 2026-10-31 | **调用树也显示 agent 自己开的子 agent**（F21 需求 ④ / §6.14 v1.109，作者 2026-10-31 同意；外部来源：yetone/magpie @ d714c42 的 `internal/sessions/subagents.go`、`codex.go`，它读各家 agent 自己的文件列出子 agent 和上下级，覆盖 Claude、Codex、OpenCode、Kimi）：ROADMAP 第三批原来打算只靠 hook 的 `agent_id` 显示 Claude 的队友和子 agent，拿不到任务名和模型。改为状态照旧来自 hook，名字、类型、模型、上一级从 agent 写在 `transcript_path` 旁边的文件里读；第一次看到一个 `agent_id` 和它 `SubagentStop` 时各读一次，不轮询，只读 Wavi 自己启动的会话的文件，不另外征求同意（同 F11 读 Codex rollout）。先做 Claude（2.1.316 实测）；Codex 的 `spawn_agent` 子 agent 本机没测成（服务商 503），实测通过后再做；其余家不做。不采用 magpie 的另外几种做法：在网关上改写子 agent 的模型（要把 Wavi 变成模型代理）、意图分类路由（派给谁由派活方决定、用户确认）、往各家配置里写 MCP server 和 skills（违反 §6.2）。显示规则由 Figma 第 44 节出稿（第 41–43 节已被别的题目占用）。 |
@@ -138,7 +139,9 @@
 
 **多 agent 的方向（v1.48）**：Wavi 不比谁能开更多 agent，而是让**一个人消化更多 agent 的产出**：看得住（谁在等你、做到哪了，几个会话同时摆在眼前）、审得完（diff、这一轮跑过的检查、几份结果并排比较）、合得进（agent 之间的冲突、合并顺序、PR / CI），并且跨 Claude / Codex、在本地、不替用户花 token（§2）。要吸引的是一个人多线程开发的人。依据（2026-10-20 调研）：多数人同时做真活的是 2–3 个、加几个杂活，瓶颈是人的审阅，不是开会话；开会话、看状态正被 Claude Code（agent view、桌面版）、Codex app、Cursor 等做进各自的产品，而审阅、验证、合并和 agent 之间互相踩还没有人做好。具体排期见 ROADMAP。
 
-**保留终端：和 T3 Code 的对照（v1.64）**：最接近的对手是 T3 Code（ping.gg，MIT 开源，2026-10 时 2.4 万星、自称 50 万用户）。它用一个本地服务把 Claude Code、Codex、Cursor、OpenCode 等包起来，用自己画的聊天界面驱动它们，有桌面、网页和手机端，主打性能、远程和跨平台，口号是 “Your agents deserve better than a terminal”。Wavi 押的是反面：agent 留在它原生的 TUI 里，Wavi 只补终端周围的事（§1.4 不做自绘聊天 GUI）。对外讲 Wavi 和它的区别，以这几条为准：CLI 一更新，新功能当天就能用，不用等适配（T3 Code 对每家 CLI 都有最低版本要求）；审阅、验证、合并做得深（行内评论、另一家来审、合并预检、冲突雷达、图谱）；不替用户花 token（§2）；终端排版和 CJK 正确。它的手机端、远程、Windows / Linux 不追；agent 数量 v1.68 起要追：每家都在原生 TUI 里跑，能接的 hooks 和 MCP 都接上（ROADMAP“借鉴 T3 Code”第 7 项）。v1.62 把主要市场改成海外后，Wavi 在海外会和它正面相遇，所以 §1.5 的竞品 issue 和反向对比都把它算进去。
+**保留终端：和 T3 Code 的对照（v1.64）**：最接近的对手是 T3 Code（ping.gg，MIT 开源，2026-10 时 2.4 万星、自称 50 万用户）。它用一个本地服务把 Claude Code、Codex、Cursor、OpenCode 等包起来，用自己画的聊天界面驱动它们，有桌面、网页和手机端，主打性能、远程和跨平台，口号是 “Your agents deserve better than a terminal”。Wavi 押的是反面：agent 留在它原生的 TUI 里，Wavi 只补终端周围的事（§1.4 不做自绘聊天 GUI）。对外讲 Wavi 和它的区别，以这几条为准：CLI 一更新，新功能当天就能用，不用等适配（T3 Code 对每家 CLI 都有最低版本要求）；审阅、验证、合并做得深（行内评论、另一家来审、合并预检、冲突雷达、图谱）；不替用户花 token（§2）；终端排版和 CJK 正确。它的 Windows / Linux 不追（手机端 v1.112 起要做，见下一段）；agent 数量 v1.68 起要追：每家都在原生 TUI 里跑，能接的 hooks 和 MCP 都接上（ROADMAP“借鉴 T3 Code”第 7 项）。v1.62 把主要市场改成海外后，Wavi 在海外会和它正面相遇，所以 §1.5 的竞品 issue 和反向对比都把它算进去。
+
+**手机远程（v1.112）**：离开电脑时在 iPhone 上接着做（F22）。手机上是 GUI，不是终端画面，但不改“保留终端”这条路：agent 仍在 Mac 上的 PTY 里跑原生 TUI，手机读同一个会话的 transcript 来画对话，输入和权限走桌面同一条链路，所以桌面和手机可以随时交替操作，CLI 一更新照样当天能用。不做中转服务器和账号：连接走用户自己的 Tailscale 或同一个 Wi-Fi。
 
 ### 1.3 成功指标
 
@@ -154,11 +157,11 @@
 | 外部用户 | 见 §1.5 |
 
 ### 1.4 非目标（v1.0 之前不做）
-- 用自绘聊天 GUI 替代 agent 的 TUI（headless / stream-json 路线）
+- 用自绘聊天 GUI 替代 agent 的 TUI（headless / stream-json 路线）。v1.112：手机端 F22 的聊天视图不算——它读同一个 TUI 会话的 transcript，不替代 TUI
 - Windows / Linux
 - 账号、云同步、默认开启的遥测
 - 内置代码编辑器或 IDE 功能（diff 只做审阅和评论，不做编辑）
-- 远程 / SSH 会话
+- SSH 会话、云端 worker（v1.112 起，手机远程操作本机会话由 F22 做）
 
 ### 1.5 外部验证（原定 2026-10-19 → 2026-11-16，v1.55 起延后到 M5 / M6 之后）
 
@@ -576,8 +579,27 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **实现前的实测**（2026-10-30，结论在 §6.14 v1.104）：① Claude 的 Bash 工具能跑 `wavi`、连得上 socket；Codex 能跑 `wavi`、`TR_*` 在（默认和 `--no-daemon` 都在），但沙箱拦 unix socket → 改用文件通信；② Codex 在默认沙箱里跑 `wavi` 不询问；③ Pi 通过、OpenCode **未测**（本机没装）；④ Claude、Codex、Pi、Grok 能按次追加系统提示；⑤ 快照带上未暂存、已暂存、未跟踪的文件，不带被忽略的；⑥ PATH 放在环境变量里会被 `.zshrc` 挤到后面，放进 `-c` 脚本里稳定在最前。
 - **验收**：e2e `dispatch.spec.ts` 重写（真实链路，假 agent 在 shell 里调 `wavi`）：命令行上没有 `--mcp-config` / `mcp_servers.wavi`、没写全局配置 → `wavi run` 立即返回，派活会话变“等你处理”、写 `想开 2 个会话`，确认前不建 worktree → 开始后一个 `--base head` 的 worktree 从 main 开出、一个快照 worktree 里有派活方没提交的文件，开始的结果送回派活方 → 子会话 `wavi run` 开出的孙会话不用确认、侧栏缩进两级，孙会话再 `wavi run` 被拒绝并写明“自己做” → `wavi report` 送进 Claude 派活方的收件箱、Codex 派活方的 `codex queue`；hooks 一档的派活方在输入框没有草稿时由 §6.9 链路送进，有草稿时进「送进去」条；标题一档的派活方直接进「送进去」条 → 子会话一轮结束没报时 Wavi 补一份，报告送进去时这个子会话不发系统通知、不算角标 → 重复任务、别人的会话、拒绝的一批都被拒绝 → `wavi ls` / `wavi read` / `wavi send` / `wavi stop`；确认条、两层的侧栏、会话头、总览两种主题截图在 `test-results/dispatch/`。纯逻辑 `src/shared/dispatch.test.ts`、`src/main/dispatch/*.test.ts`（转调用的时序和归属、每家的送达、注入参数、两道检查）。
 
+### F22 手机远程 · P1 · Figma 待出（v1.112；外部来源见 v1.112 变更记录）
+在 iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话：看对话（消息、工具调用、diff），发 prompt 和照片，回答权限和提问，开新会话（项目、worktree、分支、agent），提交、推送、PR、合并、归档。agent 仍在 Mac 的 PTY 里跑原生 TUI，手机是同一个会话的另一个视图，桌面和手机随时可以交替操作。
+
+- **前提**：Mac 上 Wavi 开着（窗口可以隐藏），Mac 不睡眠。手机的请求由 main 转给拥有这个会话的渲染进程执行，和 F21 的 broker 同一种转发方式，所以手机和桌面按钮走同一段代码（§6.9 发送队列、选择框开着时不写、状态机）。Wavi 退出后手机显示「Mac 上的 Wavi 没有运行」。
+- **客户端**：Expo React Native 应用，放在 `mobile/`（自己的 `package.json`，同 `site/`），iOS 用 TestFlight 分发。协议类型和 transcript 解析与 Mac 共用 `src/shared/` 里的文件（metro `watchFolders`），不复制。
+- **连接**：不建中转服务器、不做账号（§1.4）。
+  - 首选 Tailscale：Mac 端用 `tailscale serve` 把 Wavi 的端口以 HTTPS 发布到用户自己的 tailnet（`wss://<机器名>.<tailnet>.ts.net`），iOS 不需要 ATS 例外，传输由 WireGuard 加密。
+  - 同一个 Wi-Fi 时局域网直连 `ws://<局域网地址>:<端口>`：应用声明 `NSAllowsLocalNetworking` 和本地网络权限说明，消息再用配对时的密钥加密（tweetnacl secretbox）。
+  - 配对：设置 · 手机 打开服务后显示 QR 码（地址列表、5 分钟内有效的一次性配对码、Mac 的公钥）；扫码后双方交换得到这台设备的密钥，手机存进 Keychain。设置里列出已配对的设备（名字、最后在线时间），可以撤销，撤销后立即断开。服务默认关，打开后才监听端口。
+- **会话列表**：按项目分组，每行有状态（StatusGlyph 形状 + 文字，§5）、当前动作（§3.2）和等待时长；等你处理的排在最前。
+- **会话页（聊天视图）**：内容来自 transcript（§6.16）。用户消息、agent 的文字（Markdown）、思考（默认折叠）；工具调用一行一个（工具名 + 摘要，点开看输入和输出：Edit / Write 用 `structuredPatch` 画 diff，Bash 显示命令和输出的尾部）；子 agent（`isSidechain`）收进开它的那次工具调用里。不认识的条目显示为「未识别的条目」，不丢掉整段对话。agent 的一段文字写完才进 transcript，写的过程中显示当前动作和已用时间。Codex 读 rollout（`response_item` / `event_msg`）。
+- **输入**：文字、照片（相册或拍照，可以多张）、中断（发 Esc）。照片上传到 Mac；HEIC 用系统的 `sips` 转成 JPEG（Claude 不会把 HEIC 路径当图片，§6.16），存进 F19 的附件目录，路径和文字按 §6.9 一起发出。
+- **权限和提问**：手机底部弹出面板。有手机连着时，Claude 的 PermissionRequest 挂起（`holdPermissions`），手机上「允许」「拒绝」（可以写理由）或回答 AskUserQuestion（`updatedInput.answers`）后回给 hook。桌面 TUI 里先答了的，收到同一工具的 PostToolUse / PostToolUseFailure 或 Stop 时释放挂起的 hook，手机面板跟着收起。「总是允许」过滤掉 `setMode` 和 `destination: userSettings`（§6.6）。没有手机连着时照旧立即空回复。Codex 的批准未确认，接 Codex 时实测后补。
+- **新建会话**：同 F4 的字段（项目、工作目录 新 worktree / 当前目录、基于哪个分支、agent），多一个可选的首条 prompt。
+- **Git**：Git · 变更（文件列表 + diff）、提交、推送、创建 PR、合并（F16 的出口和预检照样跑）、归档（F15）。
+- **推送通知**：等你处理、做完、出错，经 Expo push service 转到 APNs（Mac 只拿手机的 push token 发请求，不放 Apple 的密钥）。通知里只写会话名和状态，不带代码和对话正文。
+- **不做**：在手机上看终端画面；Wavi 退出后仍能用（要把状态机、发送和会话列表搬进守护进程）；Android（Expo 能出，但不测不发）；不经过 Wavi 启动的 agent。
+- **验收**：① 扫码后 60 s 内看到全部会话和状态，撤销设备后手机立即断开；② 手机发一条 prompt，Mac 终端里同一个会话收到并开始执行，工具调用在它完成后 2 s 内出现在手机上，一段文字在它写完后 2 s 内出现；③ 手机拍照（HEIC）发出，agent 的回答说明它看到了图片内容；④ agent 请求权限时手机弹出面板，允许后 agent 继续，Mac 终端里的确认框随之消失；AskUserQuestion 在手机上能选；⑤ 手机上新建一个 worktree 会话（指定分支和 agent），Mac 侧栏同步出现；⑥ 手机上看 diff，提交、推送并创建 PR；⑦ 手机走蜂窝网络经 Tailscale 时 ②–④ 照样通过；⑧ `npm run check` 通过，e2e 用假手机客户端走一遍 WebSocket 链路。
+
 ### P2 储备（已验证，但排在后面）
-代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· ~~best-of-N 竞赛~~（v1.60 起做成 F4 的“一题多解”）· Claude Remote Control 菜单入口（发送 `/remote-control`，需要实测）· 仓库级预设 prompt（`.tr/settings.toml`）· `@` 文件引用 · GitHub PR 创建 / 合并。（“实时终端网格”已由 F20 取代。）
+代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· ~~best-of-N 竞赛~~（v1.60 起做成 F4 的“一题多解”）· ~~Claude Remote Control 菜单入口~~（v1.112 起由 F22 取代）· 仓库级预设 prompt（`.tr/settings.toml`）· `@` 文件引用 · GitHub PR 创建 / 合并。（“实时终端网格”已由 F20 取代。）
 
 ## 5. 设计规范
 
@@ -802,6 +824,15 @@ F21 用。v1.103 起派活改用 `wavi` 命令，下面讲 MCP 的几条（工�
 **启动**：首条消息 Claude / Codex / Grok 放在 `--` 之后；OpenCode `--prompt`；Gemini、Qwen、Antigravity `--prompt-interactive`（Qwen 的位置参数会一次性跑完就退出）；Copilot `--interactive`；Pi、Cursor、Droid、Kiro、Auggie、CodeBuddy 位置参数；Kimi、Amp、Crush、Goose、Cline 不能带。没有 hooks 的 CLI 报不出对话 id，第一次启动后会话记一个标记，之后重开用“续上这个目录里最近的对话”（`--continue` 一类；每个会话有自己的 worktree，所以就是它自己的对话）；Goose 的 `-r` 不分目录、Cline 没有，不续。Kimi 用 `KIMI_CODE_TRUST_WORKSPACE=1` 只信任这一次。Copilot、Cursor、Antigravity 的目录信任没有不写全局配置的办法，每个新 worktree 会在终端里问一次。
 
 **还没做 / 没验证**：Gemini、Qwen、OpenCode 和其余各家没有在真 CLI 上跑过（本机没装；Pi 0.84.1 实测扩展能加载，SessionStart 带上了对话 id，退出时报 SessionEnd）；Kitty 键盘协议仍关着，Gemini、Qwen 的 Shift+Enter 要靠它（Alt+Enter / Ctrl+J 不受影响，Qwen 没绑 Alt+Enter）；派活、额度、后台审阅仍只有 Claude / Codex（同任务多解 v1.69 起所有已安装的都能选，汇报自动送达仍只有 Claude / Codex，其余点「送进去」）。
+
+### 6.16 实测结论 · 手机远程的数据和输入（Claude Code 2.1.316 / Codex 0.166.0，2026-11-01）
+脚本 `scripts/spikes/30-hooks-lab.mjs`（`bash`、`ask-answer`）、`50-attach-lab.mjs`、`51-remote-image-lab.mjs`、`52-transcript-latency-lab.mjs`。
+- **transcript 结构**（本机 151 个 CLI 会话，2.1.286–2.1.316）：一行一个内容块，同一条消息的几块 `message.id` 相同（6479 行 assistant 里没有一行带两块）。画对话要用的：`user`（`message.content` 是字符串，或 text / image / tool_result 块；带 `toolUseResult` 的是工具结果，`permissionDecision` 写了谁批准的）、`assistant`（text / thinking / tool_use）、`system`（`compact_boundary`、`api_error`、`local_command`、`informational`、`away_summary`；`stop_hook_summary`、`turn_duration` 不显示）。`attachment` 是给模型看的上下文（hook 结果、提醒、环境），不显示。其余类型一律跳过：`api-request`、`api-request-blob`、`api-request-shape`、`atis-latch`、`mode`、`permission-mode`、`last-prompt`、`ai-title`、`custom-title`、`agent-name`、`bridge-session`、`queue-operation`、`file-history-snapshot`、`file-history-delta`、`cost-state`、`tools-used`、`worktree-state`、`frame-link`、`relocated`。工具结果的结构：Edit / Write 有 `structuredPatch`（`oldStart` / `newStart` / `lines` 带 ` ` `+` `-` 前缀）和 `originalFile`；Bash 有 `stdout`、`stderr`、`interrupted`；tool_result 的 content 可能是字符串或 text / image 块数组。格式没有官方文档，版本升级时以这份清单为基线对比。
+- **transcript 比屏幕晚多少**：tool_use 在调用参数生成完时写入（和前面的 thinking 同一时刻），tool_result 在工具结束时写入（`ls` 约 0.7 s 后）；**agent 的文字一块写完才写入**——250 词的段落在工具结果之后 24 s、这一轮结束时才和它前面的 thinking 一起写入，屏幕上那 24 s 一直在流式输出。所以手机上文字不能逐字出现，写的过程中显示当前动作。
+- **挂起 PermissionRequest 从外部回答**：挂起时 TUI 照常显示确认框；hook 回 `allow` 后确认框消失、工具执行，TUI 写 `Allowed by PermissionRequest hook`；回 `deny` + `message` 后不执行，写 `Denied by PermissionRequest hook` 和理由，agent 接着做。**AskUserQuestion 也能这样回答**：对它的 PermissionRequest 回 `allow` + `updatedInput: { questions, answers: { <问题原文>: <选项 label> } }`，TUI 写 `User answered Claude's questions: · … → B`，agent 拿到答案；不用往 TUI 里打按键。用户先在 TUI 里作答时，PostToolUse 约 0.7 s 后到达，挂起的 hook 连接一直不关，到 SessionEnd 才断，所以 Wavi 要自己释放。用户默认的 auto 模式下多数调用不触发 PermissionRequest（§6.6），实测用 `--permission-mode default`。
+- **照片**：括号粘贴图片路径后 2.1.316 仍转成 `[Image #N]`（原样、shell 转义、加引号、两张、混着文本文件都行；anthropics/claude-code#48153 在 2.1.108 上的回归这里没有）。PNG 和 JPEG 发出后 transcript 里是 `image/png` / `image/jpeg` 块，答对了颜色；**HEIC 路径不转成图片**，原样留在输入行，Claude 改用 Read 工具读它（答对了，但多一次工具调用，默认模式下还要批准），所以 Mac 先用 `sips -s format jpeg` 转。
+- **Codex rollout**（本机 76 个文件，0.142.5–0.166.0；真实对话少，多是实验和服务商 503）：`response_item` 有 message（user / assistant / developer）、`function_call` / `function_call_output`（`exec_command`）、`custom_tool_call` / `custom_tool_call_output`；`event_msg` 有 `user_message`、`agent_message`、`task_started`、`task_complete`、`turn_aborted`、`token_count`，0.165 起多了带类型的 `item_completed`（`item.type` 如 `UserMessage`）。developer 消息和 `<environment_context>` 不显示。Codex 的批准从外部怎么回答、真实对话的 diff 在哪里没有测（服务商 503）。
+- **没测**：iPhone 经 Tailscale（Mac 上 Tailscale 当时是停止状态）和局域网连 WebSocket、iOS 的 ATS 和本地网络权限，P3 开头在真机上测。
 
 ## 7. 开源与工程规范
 

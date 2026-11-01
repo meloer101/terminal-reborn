@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。下一步出 Figma。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
 - 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.109，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
@@ -167,10 +168,10 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] Figma 第 44 节出稿（同 F21 重做），作者 2026-10-31 选定 44B
   - [x] 实现 Claude（2026-10-31）：读 meta 和模型、和 Wavi 子会话共用一棵树（`src/main/hooks/subagents.ts`、`src/renderer/sidebar/SubagentRow.tsx`）；单元测试用 2.1.316 的 meta 样本，e2e 走真实 hook 链路
   - 原计划：~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
-- [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
+- [ ] 手机提醒：“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭；给不装 F22 手机应用的人用（装了的走 F22 的推送）。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
 - [ ] 读 `claude agents --json`，把 Claude 自己在后台开的会话（会自己建 worktree、开 draft PR）也显示到总览
 
-暂不做（追竞品清单，PRD §1.2 不追；单条需求票数也低）：Linear / Jira 接入、SSH / 云 VM / 手机 App、自动合并。多仓库工作区 2026-10-24 改为要做，见下面“借鉴 T3 Code”。
+暂不做（追竞品清单，PRD §1.2 不追；单条需求票数也低）：Linear / Jira 接入、SSH / 云 VM、自动合并。多仓库工作区 2026-10-24 改为要做，见下面“借鉴 T3 Code”；手机 App 2026-11-01 改为要做，见下面“F22 手机远程”。
 
 ## 进行中：借鉴 T3 Code（2026-10-24 定）
 
@@ -204,7 +205,19 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 8. [x] 设置去掉分隔线（作者 2026-10-24 定，2026-10-24 完成）：行与行之间、导航和内容之间、输入框和按钮的描边、外观页预览框都不画线，分组靠留白和分组标题。Figma 第 25 节 `416:17440`（25A 外观 · 25B 智能体 · 25C Worktree · 25D 自动化 · 25E 关于 · 25F 浅色，作者已确认）。行高 40、分组间距 40，输入框 / 按钮 / 开关 / 预览框 / 字体菜单的分组线都去掉；只留主题色板选中时的一圈和弹窗外沿
 9. [x] 同任务多解（原一题多解）改从对话里发起（作者 2026-10-24 定方向、2026-10-25 定细节，2026-10-25 完成，PRD v1.69）：会话头「…」/ ⌘K / 「会话」菜单、终端右键（新加：复制 · 同任务多解… · 全选）、出计划时终端下方那条，都叫「同任务多解…」，⇧⌘N；弹框任务取选中的文字、计划或说过的话；原会话不算一份，几份都开新 worktree、基于原会话的分支，所有已安装的智能体都能选，侧栏缩进在原会话下；都停下后合成一条汇报送给原会话（Claude 收件箱 / `codex queue`，别家点「送进去」）；去掉新建会话面板的「多个智能体一起做」。Figma 第 26 节 `425:19405`（26A–26J）。还没做：汇报只在 Claude / Codex 会话上自动送达；说过的话不跨重启；真 CLI 上没跑过（e2e 用假 Claude / Codex）
 
-不做：中途换 provider（作者 2026-10-24 定）；消息排队（原生 TUI 本来就能排队，最多补“⌘Q 后排着的消息由 Wavi 补发”）；聊天界面。
+不做：中途换 provider（作者 2026-10-24 定）；消息排队（原生 TUI 本来就能排队，最多补“⌘Q 后排着的消息由 Wavi 补发”）；桌面上的聊天界面（手机上的见 F22）。
+
+## 进行中：F22 手机远程（2026-11-01 定）
+
+iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 2026-11-01 选定：自建手机端、Expo React Native（有 Apple 开发者账号，走 TestFlight）、Tailscale + 局域网、Mac 上 Wavi 开着。
+
+- [x] P0 实测（2026-11-01，PRD §6.16）：transcript 结构和延迟（151 个 CLI 会话、`52-transcript-latency-lab.mjs`）；挂起 PermissionRequest 后从外部允许 / 拒绝 / 回答 AskUserQuestion、TUI 先答时 hook 不关（`30-hooks-lab.mjs bash`、`ask-answer`）；图片路径 PNG / JPEG / HEIC（`50-attach-lab.mjs`、`51-remote-image-lab.mjs`）；Codex rollout 结构
+  - [ ] iPhone 经 Tailscale（`tailscale serve` HTTPS）和局域网（`ws://` + `NSAllowsLocalNetworking`）连 WebSocket：阻塞，Mac 上 Tailscale 是停止状态、手机没装；挪到 P3 开头真机测
+  - [ ] Codex 的批准从外部怎么回答、真实 Codex 对话的 rollout：服务商 503，阻塞
+- [ ] P1 Figma：手机端各屏（配对、会话列表、聊天视图、工具调用和 diff、权限 / 提问面板、输入和照片、新建会话、Git · 变更和出口、PR 合并）+ 桌面 设置 · 手机（QR 码、设备列表），深浅两种主题；作者看过再写界面
+- [ ] P2 Mac 端：`src/main/remote/`（WebSocket 服务、配对和设备、transcript 解析推送、权限挂起、照片上传和 HEIC 转换、转给渲染进程）、`src/renderer/remote/`（执行手机请求）、`src/shared/remote-protocol.ts`、`src/shared/transcript-chat.ts`；新依赖 `ws`、`tweetnacl`、`qrcode`；单元测试 + e2e 假手机客户端
+- [ ] P3 手机端：`mobile/` Expo 应用全部屏幕，TestFlight
+- [ ] P4 推送：等你处理 / 做完 / 出错经 Expo push service 到 APNs
 
 ## 已完成
 
