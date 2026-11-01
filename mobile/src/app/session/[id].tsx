@@ -11,6 +11,7 @@ import { FeedItem } from '../../chat/FeedItem'
 import { PromptSheet } from '../../chat/PromptSheet'
 import { shortAge } from '../../state/model'
 import { call, loadOlder, useApp, watch } from '../../state/store'
+import { AgentIcon } from '../../ui/AgentIcon'
 import { Icon, NavBar, Screen } from '../../ui/atoms'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { font, useColors } from '../../ui/theme'
@@ -57,7 +58,7 @@ export default function SessionScreen() {
 
   const items = useMemo(() => (feed ? [...feed.items].reverse() : []), [feed])
   const running = session?.status === 'running'
-  const subtitle = [session?.branch, session?.model].filter(Boolean).join(' · ')
+  const subtitle = session?.branch ?? ''
 
   return (
     <Screen bottom={false}>
@@ -72,6 +73,7 @@ export default function SessionScreen() {
                   {subtitle}
                 </Text>
               ) : null}
+              <AgentIcon kind={session.agent} size={12} />
             </View>
           ) : null
         }

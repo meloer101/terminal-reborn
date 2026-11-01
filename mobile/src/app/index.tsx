@@ -8,6 +8,7 @@ import { STATUS_LABEL } from '../../../src/shared/session-status'
 import type { RemoteSession } from '../../../src/shared/remote'
 import { groupSessions, rowTime, viaOf } from '../state/model'
 import { call, forget, useApp } from '../state/store'
+import { AgentIcon } from '../ui/AgentIcon'
 import { GroupHeader, Icon, Screen } from '../ui/atoms'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { font, useColors } from '../ui/theme'
@@ -18,7 +19,8 @@ type Row = { kind: 'group'; key: string; title: string; count: number } | { kind
 function SessionRow({ session, projectName, now }: { session: RemoteSession; projectName?: string; now: number }) {
   const c = useColors()
   const waiting = session.status === 'needs_you'
-  const meta = [projectName, session.branch, session.model].filter(Boolean).join(' · ')
+  // Like the desktop sidebar's row (Figma 34P): project and branch, then the agent's mark; no model name.
+  const meta = [projectName, session.branch].filter(Boolean).join(' · ')
   return (
     <Pressable onPress={() => router.push(`/session/${session.id}`)} style={({ pressed }) => [s.row, pressed && { backgroundColor: c.bgHover }]}>
       <View style={s.glyph}>
@@ -34,11 +36,12 @@ function SessionRow({ session, projectName, now }: { session: RemoteSession; pro
         <Text numberOfLines={1} style={[font(14), { color: waiting ? c.statusAttention : c.textSecondary }]}>
           {session.action ?? STATUS_LABEL[session.status]}
         </Text>
-        {meta ? (
-          <Text numberOfLines={1} style={[font(12, 400, true), { color: c.textTertiary }]}>
+        <View style={s.meta}>
+          <Text numberOfLines={1} style={[font(12, 400, true), { flex: 1, color: c.textTertiary }]}>
             {meta}
           </Text>
-        ) : null}
+          <AgentIcon kind={session.agent} />
+        </View>
       </View>
     </Pressable>
   )
@@ -117,5 +120,6 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 10 },
   glyph: { paddingTop: 3 },
   rowBody: { flex: 1, gap: 3, minWidth: 0 },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 }
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 }
 })
