@@ -7,7 +7,7 @@ import { HookBridge, type BridgeEmitter } from './bridge'
 import { claudeFixtures as fx } from './fixtures'
 import { type HookRequest, UnknownSessionError } from './server'
 
-function setup(canDeliver = true, holdPermissions?: boolean, scripts?: ScriptsLookup) {
+function setup(canDeliver = true, holdPermissions?: boolean | ((agent: string) => boolean), scripts?: ScriptsLookup) {
   const events: AgentEventEnvelope[] = []
   const prompts: PendingPrompt[] = []
   const resolutions: PromptResolution[] = []
@@ -125,6 +125,56 @@ describe('HookBridge', () => {
     const { bridge, prompts, req } = setup(false)
     expect(await bridge.handle(req('PermissionRequest', fx.PermissionRequest_Bash))).toBe('')
     expect(prompts).toEqual([])
+  })
+
+  it('asks whether to hold on every request (PRD F22: only while a phone is connected)', async () => {
+    let phone = false
+    const { bridge, prompts, req } = setup(true, () => phone)
+    expect(await bridge.handle(req('PermissionRequest', fx.PermissionRequest_Bash))).toBe('')
+    phone = true
+    let body: string | undefined
+    void bridge.handle(req('PermissionRequest', fx.PermissionRequest_Bash)).then((b) => (body = b))
+    await flush()
+    expect(body).toBeUndefined()
+    expect(bridge.respondPermission(prompts[1]!.id, 'allow-once')).toBe(true)
+    await flush()
+    expect(JSON.parse(body!)).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } })
+  })
+
+  it('holds an AskUserQuestion while a phone can answer and allows it with the answers (PRD §6.16)', async () => {
+    const { bridge, prompts, resolutions, req } = setup(true, () => true)
+    await bridge.handle(req('PreToolUse', fx.PreToolUse_AskUserQuestion))
+    const question = prompts[0]!
+    expect(bridge.questionHeld(question.id)).toBe(false)
+    let body: string | undefined
+    void bridge.handle(req('PermissionRequest', fx.PermissionRequest_AskUserQuestion)).then((b) => (body = b))
+    await flush()
+    expect(body).toBeUndefined()
+    expect(bridge.questionHeld(question.id)).toBe(true)
+    expect(bridge.sessionOfPrompt(question.id)).toBe('s1')
+    expect(bridge.answerQuestion(question.id, { 'Which option do you prefer?': 'B' })).toBe(true)
+    await flush()
+    expect(JSON.parse(body!)).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision: { behavior: 'allow', updatedInput: { ...fx.PermissionRequest_AskUserQuestion.tool_input, answers: { 'Which option do you prefer?': 'B' } } }
+      }
+    })
+    expect(resolutions).toEqual([{ id: question.id, sessionId: 's1', by: 'gui' }])
+    expect(bridge.answerQuestion(question.id, { x: 'y' })).toBe(false)
+  })
+
+  it('lets go of a held AskUserQuestion with no opinion when the TUI answered it first', async () => {
+    const { bridge, prompts, resolutions, req } = setup(true, () => true)
+    await bridge.handle(req('PreToolUse', fx.PreToolUse_AskUserQuestion))
+    let body: string | undefined
+    void bridge.handle(req('PermissionRequest', fx.PermissionRequest_AskUserQuestion)).then((b) => (body = b))
+    await flush()
+    await bridge.handle(req('PostToolUse', fx.PostToolUse_AskUserQuestion))
+    await flush()
+    expect(body).toBe('')
+    expect(resolutions).toEqual([{ id: prompts[0]!.id, sessionId: 's1', by: 'terminal' }])
+    expect(bridge.answerQuestion(prompts[0]!.id, { a: 'b' })).toBe(false)
   })
 
   it('passes AskUserQuestion permission requests straight through to the TUI', async () => {

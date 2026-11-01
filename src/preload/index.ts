@@ -5,6 +5,7 @@ import { PR_IPC } from '@shared/pull-requests'
 import { SHIP_IPC } from '@shared/ship'
 import { RADAR_IPC } from '@shared/conflict-radar'
 import { DISPATCH_IPC } from '@shared/dispatch'
+import { REMOTE_IPC } from '@shared/remote'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -234,6 +235,16 @@ const api: TrApi = {
     onRequest: (listener) => listen(DISPATCH_IPC.request, listener),
     reply: (callId, result) => ipcRenderer.send(DISPATCH_IPC.reply, callId, result),
     deliver: (request) => ipcRenderer.invoke(DISPATCH_IPC.deliver, request)
+  },
+  remote: {
+    status: () => ipcRenderer.invoke(REMOTE_IPC.getStatus),
+    newCode: () => ipcRenderer.invoke(REMOTE_IPC.newCode),
+    closePairing: () => ipcRenderer.send(REMOTE_IPC.closePairing),
+    revoke: (deviceId) => ipcRenderer.invoke(REMOTE_IPC.revoke, deviceId),
+    onStatus: (listener) => listen(REMOTE_IPC.status, listener),
+    publishSessions: (list) => ipcRenderer.send(REMOTE_IPC.sessions, list),
+    onRequest: (listener) => listen(REMOTE_IPC.request, listener),
+    reply: (callId, result) => ipcRenderer.send(REMOTE_IPC.reply, callId, result)
   }
 }
 

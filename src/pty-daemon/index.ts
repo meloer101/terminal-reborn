@@ -37,6 +37,11 @@ const SNAPSHOT_FLUSH_MS = 1_000
 const HELLO_TIMEOUT_MS = 5_000
 /** A relayed hook the app does not answer in time is answered empty (the agent must never hang on us). */
 const HOOK_RELAY_TIMEOUT_MS = 10_000
+/**
+ * A PermissionRequest may be held while a paired phone answers it (PRD F22): the app lets go after 120 s, the hook
+ * script's curl after 130 s, so the relay waits in between.
+ */
+const PERMISSION_RELAY_TIMEOUT_MS = 125_000
 
 function log(...args: unknown[]): void {
   console.log(new Date().toISOString(), '[ptyd]', ...args)
@@ -128,7 +133,8 @@ const hooks = new DaemonHooks({
     if (!client?.compatible || !host.isAttached(request.sessionId)) return null
     const rid = nextRid++
     return new Promise<RelayReply>((resolve) => {
-      const timer = setTimeout(() => settleRelay(rid, { status: 200, body: '' }), HOOK_RELAY_TIMEOUT_MS)
+      const wait = request.event === 'PermissionRequest' ? PERMISSION_RELAY_TIMEOUT_MS : HOOK_RELAY_TIMEOUT_MS
+      const timer = setTimeout(() => settleRelay(rid, { status: 200, body: '' }), wait)
       relays.set(rid, { resolve, timer })
       send(client, { type: 'hook', rid, sessionId: request.sessionId, event: request.event, agent: request.agent, payload: request.payload ?? null })
     })

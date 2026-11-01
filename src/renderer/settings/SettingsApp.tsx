@@ -1,11 +1,12 @@
 // Settings content (Figma 07 · 设置 · 外观), shown inside SettingsDialog over the main window.
 import { useRef, type KeyboardEvent } from 'react'
-import { Bot, Gauge, GitBranch, Type, Workflow, X, type LucideIcon } from 'lucide-react'
+import { Bot, Gauge, GitBranch, Smartphone, Type, Workflow, X, type LucideIcon } from 'lucide-react'
 import { create } from 'zustand'
 import { IconButton } from '../ui/IconButton'
 import { AgentsPane } from './AgentsPane'
 import { AppearancePane } from './AppearancePane'
 import { AutomationPane } from './AutomationPane'
+import { PhonePane } from './PhonePane'
 import { UsagePane } from './UsagePane'
 import { useSettings } from './useSettings'
 import { WorktreePane } from './WorktreePane'
@@ -13,7 +14,7 @@ import styles from './SettingsApp.module.css'
 
 // 通用 / 终端 / Agent / 快捷键 come back with their content; an empty "即将推出" pane is a dead end (B11). The version and
 // 检查更新 moved from 关于 to the sidebar's 更新 (Figma 36G, PRD v1.93).
-export type SettingsPaneId = 'appearance' | 'agents' | 'usage' | 'worktree' | 'automation'
+export type SettingsPaneId = 'appearance' | 'agents' | 'usage' | 'worktree' | 'automation' | 'phone'
 type PaneId = SettingsPaneId
 
 /** The pane on show; openSettings('usage') (the sidebar's 额度, ⇧⌘U) sets it. */
@@ -25,11 +26,12 @@ const NAV: ReadonlyArray<{ id: PaneId; label: string; Icon: LucideIcon }> = [
   { id: 'agents', label: '智能体', Icon: Bot },
   { id: 'usage', label: '额度', Icon: Gauge },
   { id: 'worktree', label: 'Worktree', Icon: GitBranch },
-  { id: 'automation', label: '自动化', Icon: Workflow }
+  { id: 'automation', label: '自动化', Icon: Workflow },
+  { id: 'phone', label: '手机', Icon: Smartphone }
 ]
 
 export function SettingsApp({ onClose }: { onClose(): void }) {
-  const { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch } = useSettings()
+  const { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch, updateRemote } = useSettings()
   const pane = useSettingsPane((s) => s.pane)
   const items = useRef(new Map<PaneId, HTMLButtonElement>())
 
@@ -94,6 +96,7 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
             updateDispatch={updateDispatch}
           />
         )}
+        {pane === 'phone' && loaded && <PhonePane remote={settings.remote} update={updateRemote} />}
         {pane === 'agents' && <AgentsPane />}
         {pane === 'usage' && <UsagePane alerts={loaded ? settings.alerts : null} updateAlerts={updateAlerts} />}
       </main>

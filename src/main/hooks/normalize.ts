@@ -41,6 +41,11 @@ export interface NormalizedHook {
   bashCall?: { command: string; dir?: string; result: BashResult }
   /** The user (not a background task waking the agent) started a turn: the turn's checks start over. */
   newTurn?: true
+  /**
+   * Claude's PermissionRequest for AskUserQuestion: held while a phone can answer it, then allowed with
+   * `updatedInput.answers` (PRD §6.16). `input` is the call's tool_input, sent back with the answers.
+   */
+  questionHold?: { input: Record<string, unknown> }
 }
 
 const MAX_SUMMARY = 160
@@ -273,8 +278,9 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
       }
     }
     case 'PermissionRequest': {
-      // AskUserQuestion already waits from its PreToolUse (which carries the questions).
-      if (tool === 'AskUserQuestion') return NONE
+      // AskUserQuestion already waits from its PreToolUse (which carries the questions); the request itself is only
+      // held when a phone may answer (PRD F22).
+      if (tool === 'AskUserQuestion') return { events: [], clears: 'none', questionHold: { input } }
       const request: AgentEvent = { type: 'permission-request', tool, input, ...agent }
       // Plan approval waits on the user too, but is no allow / deny for a prompt bar.
       if (TUI_ONLY_PERMISSION_TOOLS.has(tool)) return { events: [request], clears: 'none' }

@@ -137,3 +137,13 @@ describe('设置 · 自动化 · PR (PRD F16 v1.63)', () => {
     expect(sanitizeSettings({ pr: { autoFix: true } }).pr).toMatchObject({ autoFix: true, evidence: true })
   })
 })
+
+describe('设置 · 手机 (PRD F22)', () => {
+  it('starts off on port 7429 with push on, and keeps the port a whole unprivileged number', () => {
+    expect(DEFAULT_SETTINGS.remote).toEqual({ enabled: false, port: 7429, push: true })
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { remote: { enabled: true } }).remote).toEqual({ enabled: true, port: 7429, push: true })
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { remote: { port: 80 } }).remote.port).toBe(7429)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { remote: { port: 8123.5 } }).remote.port).toBe(7429)
+    expect(applySettingsPatch(DEFAULT_SETTINGS, { remote: { port: 9000, enabled: 'yes' } }).remote).toEqual({ enabled: false, port: 9000, push: true })
+  })
+})

@@ -20,6 +20,7 @@ import type { DirEntry, FilePreview, GitStatusSnapshot, LineMarkRange, WorktreeC
 import type { GitChanges, GitFileDiffRequest, GitLogPage, GitLogRequest } from './git-graph/log'
 import type { GitWorktreeListing, WorktreeRemoveResult } from './git-worktrees'
 import type { DispatchApi } from './dispatch'
+import type { RemoteApi } from './remote'
 import type { NewSessionInfo, WorktreeCreateRequest, WorktreeCreateResult } from './new-session'
 import type { MergePrecheck, MergeRequest, MergeResult } from './git-merge'
 import type { CapturedScript, RepoScripts, RunnableScript } from './repo-scripts'
@@ -423,6 +424,8 @@ export interface TrApi {
   radar: ConflictRadarApi
   /** Agents starting sessions and Wavi reporting back (PRD F21); channels in DISPATCH_IPC. */
   dispatch: DispatchApi
+  /** 手机远程: 设置 · 手机 and the requests a paired phone makes (PRD F22); channels in REMOTE_IPC. */
+  remote: RemoteApi
 }
 
 export const IPC = {

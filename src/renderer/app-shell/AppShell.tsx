@@ -23,6 +23,7 @@ import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startDispatchBridge } from '../dispatch/bridge'
+import { startRemoteBridge } from '../remote/bridge'
 import { DispatchStrip } from '../dispatch/DispatchStrip'
 import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
 import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
@@ -94,6 +95,7 @@ export function AppShell() {
   useEffect(() => startPullRequestBridge(), [])
   useEffect(() => startPrAutomation(), [])
   useEffect(() => startDispatchBridge(), [])
+  useEffect(() => startRemoteBridge(), [])
   useEffect(() => startTaskSources(), [])
   useEffect(() => startConflictRadarBridge(), [])
   useEffect(() => startBranchSync(), [])

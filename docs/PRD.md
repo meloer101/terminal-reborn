@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.112 · 2026-11-01 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.113 · 2026-11-01 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.113 | 2026-11-01 | **F22 的 Mac 端（P2）实现时定下的细节**（F22 / §6.16，作者 2026-11-01「可以，开始 P2」）：① 加密只用 Node 自带的 crypto：配对 X25519 + HKDF（配对码作 salt，码不对就解不开），认证 HMAC 挑战，帧 AES-256-GCM 带递增计数（重放、乱序都拒收）；原定的 tweetnacl 不用，ChaCha20-Poly1305 也不用——Electron 44 的 BoringSSL 没有这个算法（实测报 `ERR_CRYPTO_UNKNOWN_CIPHER`）；手机端用 @noble 系列（MIT）做同一套。② Tailscale 不用 `tailscale serve`（那要改用户自己的 Tailscale 配置）：手机直接连 Mac 的 tailnet 地址 `ws://100.x:端口`，传输有 WireGuard 加密，外面还有上面那层；iOS 对明文 ws 和 IP 地址的 ATS 行为在 P3 真机上测。MagicDNS 名只读 `tailscale status --json` 拿来显示。③ 服务只在打开「允许手机连接」后监听（默认端口 7429，设置里可改），配对码只在打开 设置 · 手机 时生成，用一次或 5 次输错就作废。④ 有手机连着时才挂起 PermissionRequest；PTY 守护进程转发 PermissionRequest 的等待从 10 s 放宽到 125 s（app 120 s 放手、hook 脚本 130 s），其余 hook 仍 10 s。⑤ 手机打开会话时，回复里直接带最新一页，之后只推追加的条目。⑥ 窗口发给 main 的会话列表逐条校验，不合格的那条丢掉而不是整份拒收。⑦ 设置 · 手机 先不放「推送」开关（P4 做推送时再加）；手机端的 Git 先只有 变更 和 diff，提交 / 推送 / PR / 合并 / 归档 放到下一步。⑧ 独立代码审阅后（9 条全改）：只挂起 Claude 的权限请求（Codex 在 hook 答复前不显示确认框，§6.7，挂起会让桌面看不到）；认证前在 TCP 层只收 64 KB、每个地址最多 4 个未认证连接；撤销立即断开且之后的帧不再处理；配对码输错 5 次后作废，要点「换一个」才有新码，关掉 设置 · 手机 配对码立即作废；只记挂起的提示。 |
 | v1.112 | 2026-11-01 | **新增 F22 手机远程：iPhone 上用 GUI 操作本机的会话**（§1.2 / §1.4 / F22 / §6.16，作者 2026-11-01 定：「功能齐全、适配手机」，手机上是 GUI 不是终端，能发照片，worktree 和分支都要有；选了自建手机端、Expo React Native、Tailscale + 局域网、Mac 上 Wavi 开着）：§1.4 的「远程会话」和「自绘聊天 GUI」两条改窄——桌面上 agent 仍在原生 TUI 里跑，手机是同一个会话的另一个视图，数据读 transcript，输入照旧写 PTY，权限挂起 hook 回答，不换成 SDK / stream-json；SSH 和云端 worker 仍不做。外部来源（2026-11-01 调研）：Claude Code Remote Control（code.claude.com/docs/en/remote-control，官方 app，只有 Claude、没有 worktree，数据经 Anthropic）、Happy（slopus/happy，MIT，读 JSONL 显示，手机一发消息就杀掉终端进程改用 SDK resume，同步 bug 多：#102 #405 #875 #656）、T3 Code（局域网 / Tailscale 直连 + `t3 pair` 一次性配对、按 scope 授权，docs/user/remote-access.md）、Superset Mobile（docs.superset.sh/mobile，diff 行内评论回给 agent、合并 PR，ELv2）。P2 里的「Claude Remote Control 菜单入口」由 F22 取代。实现前的实测写在 §6.16。 |
 | v1.111 | 2026-11-01 | **F21 重做落地：`wavi` 命令代替 MCP，19 家都能派活和被派**（F21 / §6.14，作者 2026-11-01「开始这个功能的升级和搭建」）：按 v1.103 / v1.104 实现，删掉 `mcp-server.ts` / `mcp-config.ts`。实现时定下的细节：`wavi run` 的回答里直接给出这个会话将来的编号（Wavi 先分配好，用户点「开始」后用它建会话）；同一派活方等待中的几次 `wavi run` 在确认条里各占一行，「开始 N 个」一起开，派活方收到一条 `[Wavi 派活]` 消息写明开了哪些或被拒绝 / 超时，走和报告相同的三档；`wavi send` 也走三档，送不进去时留在子会话终端下方的条里；任务或消息写 `-` 时从标准输入读；子会话一样有 `wavi` 和 `WAVI_DIR`（要能 `wavi report`、再派一层），只是不追加系统提示；子会话自己 `wavi report` 之后，这一轮结束不再补一份；状态只能看标题的几家，报告写“一轮结束（估计）”；快照会话在侧栏分支那一行写「快照」（Figma 44B 没画这一种，待作者看）；侧栏的模型只在 `--model` 给了时显示；子会话从“等你处理”回到空闲（启动时的信任对话框过了）不算一轮结束，只有一轮真的结束才报（§6.14 v1.111 真机实测）。独立 code review 后改的：窗口 4.3 秒内答不了时 `wavi` 回答“什么都没做”，窗口也不再接着开会话（请求带截止时间）；几次 `wavi run` 依次处理，上限和判重不会被同时到的请求绕过；`wavi send` 先回答、再在后面送；`wavi stop` 不对“等你处理”的子会话按 Esc（那是在替用户回答权限框）；派活开关关掉后所有 `wavi` 命令都拒绝；快照从 HEAD 的树起步（被忽略规则命中的已跟踪文件不丢）；快照会话关掉时删掉它的 worktree；报告最后留在「送进去」条时，那一轮回到未读并照常提醒；同一子会话连续出错每次都报。已知限制：Codex 的 `-c developer_instructions` 会替换用户自己配置里的同名项；app 重启后 Claude 派活方的收件箱要等它下次 SessionStart 或跑 `wavi` 才重新知道；每个会话的 token 由 userData 里的密钥派生，同一用户的进程（包括 agent）读得到，所以一个 agent 有意为之可以冒充别的会话调 `wavi`（最多能做的是开会话、发派活消息，都在侧栏看得见）；孙会话自己的 subagent 不显示。 |
 | v1.110 | 2026-10-31 | **调用树选定 Figma 44B，Claude 的 subagent 已实现**（F21，作者 2026-10-31 选 44B）：agent 自带的 subagent 单独成一行（30 高，状态图形 · 任务 · 模型），挂在所在会话下、Wavi 子会话之后，只列运行中和等你处理的；不写类型（Explore / general-purpose / Plan）——任务已经说明在做什么，宽度只够两样。子会话第三行在 agent 标志前写模型，放不下先截分支（原写在第二行）。叫法统一用原名 subagent，「子会话」「孙会话」只指派活派出的会话。没选 44C（收进会话第二行：看不到每个 subagent 的状态和模型，需求 ④ 只满足一半）。 |
@@ -585,9 +586,10 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **前提**：Mac 上 Wavi 开着（窗口可以隐藏），Mac 不睡眠。手机的请求由 main 转给拥有这个会话的渲染进程执行，和 F21 的 broker 同一种转发方式，所以手机和桌面按钮走同一段代码（§6.9 发送队列、选择框开着时不写、状态机）。Wavi 退出后手机显示「Mac 上的 Wavi 没有运行」。
 - **客户端**：Expo React Native 应用，放在 `mobile/`（自己的 `package.json`，同 `site/`），iOS 用 TestFlight 分发。协议类型和 transcript 解析与 Mac 共用 `src/shared/` 里的文件（metro `watchFolders`），不复制。
 - **连接**：不建中转服务器、不做账号（§1.4）。
-  - 首选 Tailscale：Mac 端用 `tailscale serve` 把 Wavi 的端口以 HTTPS 发布到用户自己的 tailnet（`wss://<机器名>.<tailnet>.ts.net`），iOS 不需要 ATS 例外，传输由 WireGuard 加密。
-  - 同一个 Wi-Fi 时局域网直连 `ws://<局域网地址>:<端口>`：应用声明 `NSAllowsLocalNetworking` 和本地网络权限说明，消息再用配对时的密钥加密（tweetnacl secretbox）。
-  - 配对：设置 · 手机 打开服务后显示 QR 码（地址列表、5 分钟内有效的一次性配对码、Mac 的公钥）；扫码后双方交换得到这台设备的密钥，手机存进 Keychain。设置里列出已配对的设备（名字、最后在线时间），可以撤销，撤销后立即断开。服务默认关，打开后才监听端口。
+  - 首选 Tailscale：手机连 Mac 的 tailnet 地址（`ws://100.x.y.z:<端口>`，v1.113），传输有 WireGuard 加密；设置里显示 MagicDNS 名（只读 `tailscale status --json`），不改用户的 Tailscale 配置。
+  - 同一个 Wi-Fi 时局域网直连 `ws://<局域网地址>:<端口>`：应用声明 `NSAllowsLocalNetworking` 和本地网络权限说明。
+  - 两条路上的消息都再加一层 Wavi 自己的加密（§6.16 v1.113：X25519 配对、HMAC 认证、AES-256-GCM 帧）。
+  - 配对：设置 · 手机 打开服务后显示 QR 码（地址列表、5 分钟内有效的一次性配对码、Mac 的公钥）；扫码后双方交换得到这台设备的密钥，手机存进 Keychain。设置里列出已配对的设备（名字、最后在线时间），可以撤销，撤销后立即断开。服务默认关，打开后才监听端口。 「输入配对码」（45A）不能从网络上明文取 Mac 的公钥：中间人换掉公钥就能离线穷举配对码，所以手输时要么同时输入公钥指纹，要么改用 PAKE，P3 定。
 - **会话列表**：按项目分组，每行有状态（StatusGlyph 形状 + 文字，§5）、当前动作（§3.2）和等待时长；等你处理的排在最前。
 - **会话页（聊天视图）**：内容来自 transcript（§6.16）。用户消息、agent 的文字（Markdown）、思考（默认折叠）；工具调用一行一个（工具名 + 摘要，点开看输入和输出：Edit / Write 用 `structuredPatch` 画 diff，Bash 显示命令和输出的尾部）；子 agent（`isSidechain`）收进开它的那次工具调用里。不认识的条目显示为「未识别的条目」，不丢掉整段对话。agent 的一段文字写完才进 transcript，写的过程中显示当前动作和已用时间。Codex 读 rollout（`response_item` / `event_msg`）。
 - **输入**：文字、照片（相册或拍照，可以多张）、中断（发 Esc）。照片上传到 Mac；HEIC 用系统的 `sips` 转成 JPEG（Claude 不会把 HEIC 路径当图片，§6.16），存进 F19 的附件目录，路径和文字按 §6.9 一起发出。
@@ -833,6 +835,9 @@ F21 用。v1.103 起派活改用 `wavi` 命令，下面讲 MCP 的几条（工�
 - **照片**：括号粘贴图片路径后 2.1.316 仍转成 `[Image #N]`（原样、shell 转义、加引号、两张、混着文本文件都行；anthropics/claude-code#48153 在 2.1.108 上的回归这里没有）。PNG 和 JPEG 发出后 transcript 里是 `image/png` / `image/jpeg` 块，答对了颜色；**HEIC 路径不转成图片**，原样留在输入行，Claude 改用 Read 工具读它（答对了，但多一次工具调用，默认模式下还要批准），所以 Mac 先用 `sips -s format jpeg` 转。
 - **Codex rollout**（本机 76 个文件，0.142.5–0.166.0；真实对话少，多是实验和服务商 503）：`response_item` 有 message（user / assistant / developer）、`function_call` / `function_call_output`（`exec_command`）、`custom_tool_call` / `custom_tool_call_output`；`event_msg` 有 `user_message`、`agent_message`、`task_started`、`task_complete`、`turn_aborted`、`token_count`，0.165 起多了带类型的 `item_completed`（`item.type` 如 `UserMessage`）。developer 消息和 `<environment_context>` 不显示。Codex 的批准从外部怎么回答、真实对话的 diff 在哪里没有测（服务商 503）。
 - **没测**：iPhone 经 Tailscale（Mac 上 Tailscale 当时是停止状态）和局域网连 WebSocket、iOS 的 ATS 和本地网络权限，P3 开头在真机上测。
+- **Electron 里能用的加密**（Electron 44.7.1，BoringSSL，2026-11-01）：`createCipheriv('chacha20-poly1305')` 报 `ERR_CRYPTO_UNKNOWN_CIPHER`；X25519（`generateKeyPairSync('x25519')`、`diffieHellman`）、HKDF、HMAC、AES-256-GCM 都能用。所以帧用 AES-256-GCM（12 字节 nonce = 4 个 0 + 8 字节计数）。
+- **PTY 守护进程的 hook 转发**：app 连着时守护进程把 hook 转给 main，原先一律 10 s 没回就答空，挂起的 PermissionRequest 会被它截断（TUI 的确认框照旧在，但手机的回答到不了 Claude）；v1.113 起 PermissionRequest 等 125 s。
+- **transcript 实跑**：解析器跑本机 60 个 CLI 会话（38176 行）用 1.3 s，没有「未识别的条目」，工具调用都配上了结果；76 个 Codex rollout 同样。
 
 ## 7. 开源与工程规范
 

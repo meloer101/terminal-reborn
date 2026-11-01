@@ -67,6 +67,20 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
 }
 
 /**
+ * Presses Enter on what is already in the agent's input line once `needle` shows there — the phone's photos sent
+ * without text (PRD F22): their paths became `[Image #N]`. Rejects with a user-facing message while a menu is open.
+ */
+export async function submitInputLine(sessionId: SessionId, needle: string): Promise<void> {
+  refuseOverMenu(sessionId)
+  try {
+    await sendQueued(queue, sessionId, [{ type: 'waitForText', needles: [needle], timeoutMs: 5_000 }, { type: 'delay', ms: 150 }, { type: 'write', data: '\r' }], getSendIo(sessionId))
+  } catch (error) {
+    if (error instanceof SendTimeoutError) throw new Error('终端里没有出现照片，没有按回车', { cause: error })
+    throw error
+  }
+}
+
+/**
  * Puts a slash command (`/compact`, PRD F11) into the agent's input line the way the send protocol types one — the
  * `/` key, then the rest — and stops before Enter: the user presses it after reading. Rejects with a user-facing
  * message while a menu is open (§6.7): the `/` would pick from it.
