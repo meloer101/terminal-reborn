@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。下一步出 Figma。
+- 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节已出稿，待作者确认。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
 - 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.109，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
@@ -214,7 +214,9 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
 - [x] P0 实测（2026-11-01，PRD §6.16）：transcript 结构和延迟（151 个 CLI 会话、`52-transcript-latency-lab.mjs`）；挂起 PermissionRequest 后从外部允许 / 拒绝 / 回答 AskUserQuestion、TUI 先答时 hook 不关（`30-hooks-lab.mjs bash`、`ask-answer`）；图片路径 PNG / JPEG / HEIC（`50-attach-lab.mjs`、`51-remote-image-lab.mjs`）；Codex rollout 结构
   - [ ] iPhone 经 Tailscale（`tailscale serve` HTTPS）和局域网（`ws://` + `NSAllowsLocalNetworking`）连 WebSocket：阻塞，Mac 上 Tailscale 是停止状态、手机没装；挪到 P3 开头真机测
   - [ ] Codex 的批准从外部怎么回答、真实 Codex 对话的 rollout：服务商 503，阻塞
-- [ ] P1 Figma：手机端各屏（配对、会话列表、聊天视图、工具调用和 diff、权限 / 提问面板、输入和照片、新建会话、Git · 变更和出口、PR 合并）+ 桌面 设置 · 手机（QR 码、设备列表），深浅两种主题；作者看过再写界面
+- [ ] P1 Figma：手机端各屏 + 桌面 设置 · 手机，深浅两种主题；作者看过再写界面
+  - [x] 出稿（2026-11-01）：第 45 节 `719:32350`，45A–45K（配对、会话列表、聊天视图、工具详情 diff、权限、提问、照片、新建会话、Git · 变更、出口进度、桌面 设置 · 手机），45B / 45C / 45E / 45I / 45H / 45K 有浅色版
+  - [ ] 作者确认
 - [ ] P2 Mac 端：`src/main/remote/`（WebSocket 服务、配对和设备、transcript 解析推送、权限挂起、照片上传和 HEIC 转换、转给渲染进程）、`src/renderer/remote/`（执行手机请求）、`src/shared/remote-protocol.ts`、`src/shared/transcript-chat.ts`；新依赖 `ws`、`tweetnacl`、`qrcode`；单元测试 + e2e 假手机客户端
 - [ ] P3 手机端：`mobile/` Expo 应用全部屏幕，TestFlight
 - [ ] P4 推送：等你处理 / 做完 / 出错经 Expo push service 到 APNs

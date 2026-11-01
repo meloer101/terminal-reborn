@@ -579,7 +579,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **实现前的实测**（2026-10-30，结论在 §6.14 v1.104）：① Claude 的 Bash 工具能跑 `wavi`、连得上 socket；Codex 能跑 `wavi`、`TR_*` 在（默认和 `--no-daemon` 都在），但沙箱拦 unix socket → 改用文件通信；② Codex 在默认沙箱里跑 `wavi` 不询问；③ Pi 通过、OpenCode **未测**（本机没装）；④ Claude、Codex、Pi、Grok 能按次追加系统提示；⑤ 快照带上未暂存、已暂存、未跟踪的文件，不带被忽略的；⑥ PATH 放在环境变量里会被 `.zshrc` 挤到后面，放进 `-c` 脚本里稳定在最前。
 - **验收**：e2e `dispatch.spec.ts` 重写（真实链路，假 agent 在 shell 里调 `wavi`）：命令行上没有 `--mcp-config` / `mcp_servers.wavi`、没写全局配置 → `wavi run` 立即返回，派活会话变“等你处理”、写 `想开 2 个会话`，确认前不建 worktree → 开始后一个 `--base head` 的 worktree 从 main 开出、一个快照 worktree 里有派活方没提交的文件，开始的结果送回派活方 → 子会话 `wavi run` 开出的孙会话不用确认、侧栏缩进两级，孙会话再 `wavi run` 被拒绝并写明“自己做” → `wavi report` 送进 Claude 派活方的收件箱、Codex 派活方的 `codex queue`；hooks 一档的派活方在输入框没有草稿时由 §6.9 链路送进，有草稿时进「送进去」条；标题一档的派活方直接进「送进去」条 → 子会话一轮结束没报时 Wavi 补一份，报告送进去时这个子会话不发系统通知、不算角标 → 重复任务、别人的会话、拒绝的一批都被拒绝 → `wavi ls` / `wavi read` / `wavi send` / `wavi stop`；确认条、两层的侧栏、会话头、总览两种主题截图在 `test-results/dispatch/`。纯逻辑 `src/shared/dispatch.test.ts`、`src/main/dispatch/*.test.ts`（转调用的时序和归属、每家的送达、注入参数、两道检查）。
 
-### F22 手机远程 · P1 · Figma 待出（v1.112；外部来源见 v1.112 变更记录）
+### F22 手机远程 · P1 · Figma 45（Section `719:32350`：45A 扫码配对 · 45B 会话列表 · 45C 聊天视图 · 45D 工具详情 · 45E 权限 · 45F 提问 · 45G 照片 · 45H 新建会话 · 45I Git · 变更 · 45J 出口进度 · 45K 桌面 设置 · 手机，各有浅色版；2026-11-01 待作者确认）（v1.112；外部来源见 v1.112 变更记录）
 在 iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话：看对话（消息、工具调用、diff），发 prompt 和照片，回答权限和提问，开新会话（项目、worktree、分支、agent），提交、推送、PR、合并、归档。agent 仍在 Mac 的 PTY 里跑原生 TUI，手机是同一个会话的另一个视图，桌面和手机随时可以交替操作。
 
 - **前提**：Mac 上 Wavi 开着（窗口可以隐藏），Mac 不睡眠。手机的请求由 main 转给拥有这个会话的渲染进程执行，和 F21 的 broker 同一种转发方式，所以手机和桌面按钮走同一段代码（§6.9 发送队列、选择框开着时不写、状态机）。Wavi 退出后手机显示「Mac 上的 Wavi 没有运行」。
