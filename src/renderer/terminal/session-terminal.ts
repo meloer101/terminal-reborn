@@ -13,6 +13,8 @@ import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
 import { openTerminalMenu } from '../attempts/terminal-menu'
 import { takeDispatchLaunch } from '../dispatch/store'
+import { useWorkspace } from '../state/workspace'
+import { noteInput } from './typing'
 
 const ACK_BATCH_UNITS = 32 * 1024
 const ACK_FLUSH_MS = 50
@@ -198,6 +200,7 @@ export class SessionTerminal {
     const script = takeSetup(id) ? 'setup' : takeRunStart(id) ? 'run' : undefined
     // A dispatched session's first launch carries its task on the command line (PRD F21); a resume never does.
     const dispatched = resumeAgentSessionId ? undefined : takeDispatchLaunch(id)
+    const child = useWorkspace.getState().sessions.some((s) => s.id === id && s.dispatchedBy !== undefined)
     try {
       await pty.spawn({
         sessionId: id,
@@ -207,6 +210,7 @@ export class SessionTerminal {
         rows,
         ...(resumeAgentSessionId ? { resumeAgentSessionId } : {}),
         ...(script ? { script } : {}),
+        ...(child ? { dispatched: true } : {}),
         ...(dispatched ? { initialPrompt: dispatched.initialPrompt, ...(dispatched.model ? { model: dispatched.model } : {}) } : {})
       })
     } catch (error) {
@@ -250,6 +254,7 @@ export class SessionTerminal {
 
   private sendInput(data: string): void {
     if (this.exited) return
+    noteInput(this.sessionId, data)
     if (!this.ready) {
       this.queuedInput.push(data)
       return

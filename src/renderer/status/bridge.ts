@@ -12,7 +12,9 @@ import { anyWindowFocused, everyWindow } from '../app-shell/windows-runtime'
 import { titleFromAgent, titleFromFirstPrompt } from '../state/workspace-model'
 import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
-import { settleConfirm, useDispatch, type PendingStart } from '../dispatch/store'
+import { dropConfirmsOf } from '../dispatch/handler'
+import { finishGoesToDispatcher } from '../dispatch/reports'
+import { useDispatch, type PendingStart } from '../dispatch/store'
 
 const FAST_TICK_MS = 1_000
 const SLOW_TICK_MS = 15_000
@@ -65,10 +67,10 @@ export function startStatusBridge(): () => void {
   const controller = new StatusController({
     ...deps,
     needsFastTicks: () => hurry(),
-    // PRD F21: the dispatcher's agent is gone, so its requests to start sessions are answered no.
-    onWaviAskAbandoned: (id) => {
-      for (const c of useDispatch.getState().confirms) if (c.parentId === id) settleConfirm(c.callId, false)
-    }
+    // PRD F21: the dispatcher's agent is gone, so its requests to start sessions go too.
+    onWaviAskAbandoned: (id) => dropConfirmsOf(id),
+    // PRD F21 回报: a dispatched session's finished turn that goes to its dispatcher as a report is read already.
+    finishReported: (id) => finishGoesToDispatcher(id)
   })
 
   const exitSubscriptions = new Map<SessionId, () => void>()
@@ -218,12 +220,19 @@ export function startStatusBridge(): () => void {
 
   // PRD F21: while an agent's request to start sessions waits for 开始, its session is the user's to answer.
   const applyConfirms = (confirms: readonly PendingStart[], prev: readonly PendingStart[]): void => {
-    const labels = confirmLabels(confirms.map((c) => ({ parentId: c.parentId, count: c.plans.length })))
+    const labels = confirmLabels(confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
     for (const id of new Set([...prev.map((c) => c.parentId), ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
   }
   applyConfirms(useDispatch.getState().confirms, [])
   const unsubscribeConfirms = useDispatch.subscribe((state, prev) => {
     if (state.confirms !== prev.confirms) applyConfirms(state.confirms, prev.confirms)
+    // A report that could not go in waits for 送进去: the turn it is about is the user's to read after all.
+    if (state.held !== prev.held) {
+      for (const [id, items] of Object.entries(state.held)) {
+        if (items === prev.held[id]) continue
+        for (const item of items ?? []) if (item.kind === 'report') controller.reopenFinish(item.report.childId)
+      }
+    }
   })
 
   const onViewChange = (): void => controller.refreshViewing()

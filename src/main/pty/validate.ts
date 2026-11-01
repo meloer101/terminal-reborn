@@ -85,6 +85,10 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/.test(model)) throw new Error('invalid model')
     result.model = model
   }
+  if (o.dispatched !== undefined) {
+    if (typeof o.dispatched !== 'boolean') throw new Error('invalid dispatched')
+    if (o.dispatched) result.dispatched = true
+  }
   if (o.script !== undefined) {
     if (o.script !== 'setup' && o.script !== 'run') throw new Error('invalid script')
     if (result.command !== undefined) throw new Error('a script cannot be combined with a command')

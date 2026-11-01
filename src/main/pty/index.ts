@@ -22,8 +22,7 @@ import {
   setHookTarget,
   type AgentLaunchHooks
 } from '../hooks'
-import { isDispatchAgent } from '@shared/dispatch'
-import { dispatchLaunchFor } from '../dispatch'
+import { dispatchLaunchFor, type DispatchLaunch } from '../dispatch'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { shouldKillLateSpawn } from './late-spawn'
@@ -316,14 +315,15 @@ function realCwdOf(cwd: string): string | null {
 /**
  * Main builds the login shell's arguments itself for every agent launch and for the repository's approved scripts
  * (PtySpawnOptions.script: `run` alone, or `setup` before the agent / shell), so a pty daemon started by an older
- * version needs nothing new: the agent's hooks, Wavi's dispatch tools, its model and first message (PRD F21).
- * A plain shell without a script is left to the host.
+ * version needs nothing new: the agent's hooks, `wavi` on its PATH and its system prompt, its model and first message
+ * (PRD F21). A plain shell without a script is left to the host.
  */
 async function hostLaunch(
   options: PtySpawnOptions,
   realCwd: string | null,
   env: Record<string, string>,
-  hooks: AgentLaunchHooks | null
+  hooks: AgentLaunchHooks | null,
+  dispatch: DispatchLaunch | null
 ): Promise<{ command: string; args: string[] } | null> {
   const agent = options.agent !== undefined && options.agent !== 'shell' ? options.agent : undefined
   if (options.command !== undefined || (!options.script && !agent)) return null
@@ -331,16 +331,15 @@ async function hostLaunch(
   const script = options.script ? await approvedScript(realCwd, options.script) : null
   const shell = resolveShell(buildPtyEnv(appEnv(), env)).command
   if (options.script === 'run' && script) return { command: shell, args: runShellArgs(script) }
-  const dispatch = isDispatchAgent(agent) ? dispatchLaunchFor(agent) : {}
-  const codexConfig = [...(hooks?.codexConfig ?? []), ...(dispatch.codexOverrides ?? [])]
+  const extraArgs = [...(hooks?.extraArgs ?? []), ...(dispatch?.extraArgs ?? [])]
   const args = agentShellArgs(options.agent ?? 'shell', realCwd, shell, {
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
-    ...(codexConfig.length > 0 ? { codexConfig } : {}),
-    ...(dispatch.mcpConfigPath ? { mcpConfigPath: dispatch.mcpConfigPath } : {}),
+    ...(hooks?.codexConfig && hooks.codexConfig.length > 0 ? { codexConfig: hooks.codexConfig } : {}),
+    ...(dispatch ? { pathPrefix: dispatch.pathPrefix } : {}),
     ...(options.resumeAgentSessionId ? { resumeAgentSessionId: options.resumeAgentSessionId } : {}),
     ...(options.model ? { model: options.model } : {}),
     ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
-    ...(hooks?.extraArgs ? { extraArgs: hooks.extraArgs } : {}),
+    ...(extraArgs.length > 0 ? { extraArgs } : {}),
     ...(script ? { before: setupCommand(script) } : {})
   })
   return { command: shell, args }
@@ -372,10 +371,12 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       : null
   const attached = hooks !== null || shellEnv !== null
   const port = realCwd ? portFor(realCwd) : null
-  const env = { ...options.env, ...(agent ? AGENT_SPECS[agent].env : {}), ...hooks?.env, ...shellEnv, ...(port !== null ? { TR_PORT: String(port) } : {}) }
+  // Every agent CLI can dispatch: `wavi` on its PATH and its session's WAVI_DIR (PRD F21).
+  const dispatch = agent && options.command === undefined ? await dispatchLaunchFor(id, agent, { child: options.dispatched === true }) : null
+  const env = { ...options.env, ...(agent ? AGENT_SPECS[agent].env : {}), ...hooks?.env, ...shellEnv, ...dispatch?.env, ...(port !== null ? { TR_PORT: String(port) } : {}) }
   let launch: { command: string; args: string[] } | null
   try {
-    launch = await hostLaunch(options, realCwd, env, hooks)
+    launch = await hostLaunch(options, realCwd, env, hooks, dispatch)
   } catch (error) {
     sessions.delete(id)
     if (attached) endAgentSession(id)
@@ -404,7 +405,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       reject(new Error('timed out starting the terminal process'))
     }, SPAWN_TIMEOUT_MS)
     pendingSpawns.set(id, { resolve, reject, timer })
-    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, ...rest } = options
+    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, dispatched: _dispatched, ...rest } = options
     send({
       type: 'spawn',
       id,
@@ -474,6 +475,12 @@ function releaseOwner(owner: WebContents): void {
 }
 
 /** A window's renderer is gone (crash): its terminals are detached (daemon) or killed (fallback host). */
+/** The window a session's terminal belongs to, whatever runs in it (PRD F21 routes `wavi` requests there). */
+export function ptySessionOwner(sessionId: string): WebContents | null {
+  const owner = sessions.get(sessionId)?.owner
+  return owner && !owner.isDestroyed() ? owner : null
+}
+
 export function releaseSessionsOf(owner: WebContents): void {
   releaseOwner(owner)
 }

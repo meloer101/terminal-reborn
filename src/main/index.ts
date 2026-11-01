@@ -11,7 +11,7 @@ import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
 import { registerDispatchHandlers } from './dispatch'
 import { selectProfile } from './profile'
-import { registerPtyHandlers } from './pty'
+import { ptySessionOwner, registerPtyHandlers } from './pty'
 import { installQuitGuard } from './quit'
 import { registerSettingsHandlers } from './settings'
 import { registerUiHandlers } from './ui'
@@ -96,7 +96,7 @@ function boot(): void {
   registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()
-  registerDispatchHandlers()
+  registerDispatchHandlers(ptySessionOwner)
   registerPtyHandlers()
   registerUiHandlers()
   registerSecondaryWindowHandlers(showMainWindow, () => getMainWindow()?.webContents ?? null)

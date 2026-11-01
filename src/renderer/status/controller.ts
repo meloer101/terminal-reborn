@@ -62,6 +62,11 @@ export interface StatusDeps {
   needsFastTicks?(): void
   /** The agent behind a session with an open Wavi ask has gone (see `setWaviAsk`): drop what it asked. */
   onWaviAskAbandoned?(id: SessionId): void
+  /**
+   * The session's finished turn goes to the session that dispatched it as a report (PRD F21): it is read already —
+   * no notification, no badge, no ⌘J.
+   */
+  finishReported?(id: SessionId): boolean
 }
 
 /** Tag of a notification that stands for several sessions: clicking it opens the overview. */
@@ -89,6 +94,8 @@ export class StatusController {
    * and its input footer on screen would heal an ask of its own away.
    */
   private readonly waviAsks = new Map<SessionId, { label: string; since: number }>()
+  /** Finished turns read on the dispatcher's behalf (`finishReported`), until their status moves on. */
+  private readonly quieted = new Set<SessionId>()
 
   constructor(private readonly deps: StatusDeps) {}
 
@@ -265,6 +272,20 @@ export class StatusController {
     this.updateBadge()
   }
 
+  /**
+   * The finished turn of `id` was read on its dispatcher's behalf (`finishReported`), but its report could not go in
+   * (PRD F21: it waits for 送进去): it is the user's to read after all, with the usual notification.
+   */
+  reopenFinish(id: SessionId): void {
+    const state = this.states.get(id)
+    if (!this.quieted.delete(id) || !state || state.status !== 'idle') return
+    const next = { ...state, status: 'done_unread' as const }
+    this.states.set(id, next)
+    this.deps.patch(id, this.patchOf(id, next))
+    if (!this.waviAsks.has(id)) this.maybeNotify(id, next)
+    this.updateBadge()
+  }
+
   /** A system notification was clicked: jump to its session, or to the overview for a merged one. */
   handleNotificationClick(tag: string): void {
     if (tag === OVERVIEW_TAG) this.deps.openOverview?.()
@@ -274,8 +295,12 @@ export class StatusController {
   private apply(id: SessionId, signal: Signal): void {
     const prev = this.states.get(id)
     if (!prev) return
-    const next = reduce(prev, signal, this.deps.now())
+    let next = reduce(prev, signal, this.deps.now())
     if (next === prev) return
+    if (next.status === 'done_unread' && prev.status !== 'done_unread' && this.deps.finishReported?.(id)) {
+      next = { ...next, status: 'idle' }
+      this.quieted.add(id)
+    } else if (next.status !== prev.status) this.quieted.delete(id)
     this.states.set(id, next)
     if (ticksFast(next)) this.deps.needsFastTicks?.()
 

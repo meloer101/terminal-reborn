@@ -36,7 +36,7 @@ export interface ClaudeHookSettings {
    * for approval. Such messages still cannot approve prompts or run slash commands.
    */
   crossSessionInbound: 'accept'
-  /** Wavi's own dispatch tools need no extra prompt: starting sessions waits for the user in Wavi already. */
+  /** Wavi's `wavi` command needs no extra prompt: starting a session waits for the user in Wavi already (PRD F21). */
   permissions: { allow: string[] }
 }
 
@@ -76,6 +76,6 @@ export function buildClaudeHookSettings(scriptPath: string): ClaudeHookSettings 
     hooks,
     statusLine: { type: 'command', command: `/bin/sh ${shellQuote(statusLineScriptPath(scriptPath))}` },
     crossSessionInbound: 'accept',
-    permissions: { allow: ['mcp__wavi'] }
+    permissions: { allow: ['Bash(wavi:*)'] }
   }
 }

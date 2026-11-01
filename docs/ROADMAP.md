@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-10-31
+> 最后更新：2026-11-01
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
 - 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.109，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
 - 2026-10-31：应用和官网的动效按 emilkowalski/skills（`improve-animations` 审计）打磨（PRD v1.108）：应用改 `--ease-out` 曲线、菜单和弹出层从触发处长出（`originToward`，`menu-model.test.ts`）、子菜单不重放、设置弹窗入场、图标按钮按压、转圈统一、减少动态效果只去位移且抽屉不再挡终端重排；官网改通知离场缓动、去掉 `scale(0)`、按钮按压、hero 新提交行和激光线只用 transform、宋体跟随和侧栏聚焦的变量不再整树继承、结尾画布 DPR 和帧步长、去掉导航 hover 乱码、减少动态效果保留颜色反馈。侧栏水滴未动。
@@ -157,8 +158,9 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] 实测 5 项（2026-10-30，PRD v1.104 / §6.14）：Claude 能跑 `wavi`；Codex 能跑但默认沙箱拦 unix socket → `wavi` 改用文件通信，Codex 配置一项不动；Pi 扩展 `sendUserMessage` 送进 TUI、草稿保留；Claude / Codex / Pi / Grok 能按次追加系统提示；快照带未提交和未跟踪文件；PATH 改写进 `-c` 脚本
   - [ ] 实测 OpenCode `prompt_async`（本机没装 OpenCode，未测）
   - [x] Figma 第 44 节（Section `708:32044`，2026-10-31，作者选定 44B，浅色 44E）：侧栏子会话的 agent 和模型、第二层缩进和连线、agent 自带的 subagent（v1.109），作者看过再实现
-  - [ ] 实现：`wavi` 入口和命令、能力表扩到 19 家、三档送达和两道检查、两层与上限、快照 worktree、不提醒用户；删掉 `mcp-server.ts` / `mcp-config.ts`
-  - [ ] 测试：e2e `dispatch.spec.ts` 重写（PRD F21 验收），单元测试
+  - [x] 实现（2026-11-01，PRD v1.111）：`wavi` 入口和命令、能力表扩到 19 家、三档送达和两道检查、两层与上限、快照 worktree、不提醒用户、侧栏第二层和模型；删掉 `mcp-server.ts` / `mcp-config.ts`
+  - [x] 测试（2026-11-01）：e2e `dispatch.spec.ts` 重写（9 个，假 agent 在 shell 里跑 `wavi`），单元测试 `src/shared/dispatch.test.ts`、`src/main/dispatch/{requests,broker}.test.ts`、`handler.test.ts`、`typing.test.ts`、快照 worktree
+  - [x] 真 agent 跑一次（2026-11-01，PRD §6.14 v1.111）：Claude（Haiku）派给 Codex 和 Grok（快照），Grok 派给 Claude；Claude 收件箱、第二档打字送达都走通，修了 Grok 信任对话框被当成一轮结束。Codex 服务商 503，Codex 自己做完任务、`wavi report` 没看到
 - [ ] agent 自带的 subagent 只显示、不接管（PRD F21 v1.66 改，v1.109 改为读文件）：在所在会话下列出 subagent 的任务、模型和状态，不变成 Wavi 会话；状态来自 hook 的 `agent_id` / `SubagentStop`，名字、类型、模型、上一级读 agent 自己的 `subagents/agent-<id>.meta.json`（做法参照 yetone/magpie @ d714c42 `internal/sessions/subagents.go`）
   - [x] 实测 Claude 2.1.316 的 subagent 文件（2026-10-31，PRD §6.14 v1.109）
   - [ ] 实测 Codex 0.165 `spawn_agent` 的 rollout（`thread_spawn.parent_thread_id`）：2026-10-31 服务商对 `gpt-6-sol` 返回 503，阻塞

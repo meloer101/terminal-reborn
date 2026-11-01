@@ -83,6 +83,10 @@ export interface Session {
   dispatchedBy?: SessionId
   /** The task that agent gave it (without Wavi's brief). Persisted with dispatchedBy. */
   dispatchTask?: string
+  /** Its worktree is a read-only snapshot of the dispatcher's (`wavi run --base snapshot`). Persisted with dispatchedBy. */
+  dispatchBase?: 'snapshot'
+  /** The model `wavi run --model` asked for (the sidebar shows it, Figma 44B). Persisted with dispatchedBy. */
+  dispatchModel?: string
 }
 
 /**

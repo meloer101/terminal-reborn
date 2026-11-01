@@ -17,8 +17,12 @@ export interface SessionRowModel {
   attention: boolean
   /** The worktree's branch: the row's third line, which ends in the agent's mark (Figma 34P). Empty outside git. */
   branch: string
-  /** 1: started by the session right above it through Wavi's dispatch tools (PRD F21), drawn one step in. */
-  depth: 0 | 1
+  /** 1: started by a session above it through Wavi's `wavi run` (PRD F21), drawn one step in; 2: by one of those. */
+  depth: 0 | 1 | 2
+  /** The model `wavi run --model` asked for, before the agent mark on the branch line (Figma 44B); '' when none. */
+  model: string
+  /** Depth 2 under a child that is not its dispatcher's last: the top line runs on past this row (Figma 44B). */
+  pass?: boolean
   /**
    * The line in the glyph column that ties a dispatcher to its children (Figma 40C): `parent` starts it under the
    * glyph, `child` carries it on with a tick to its glyph, `last` turns into its glyph and ends it.
@@ -85,16 +89,19 @@ export function nestedTitle(title: string, parentTitle: string | undefined): str
   return prefix && title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title
 }
 
-function toRow(session: Session, worktree: Worktree | undefined, { depth, parentTitle, tree, opens, after }: NestedRow): SessionRowModel {
+function toRow(session: Session, worktree: Worktree | undefined, { depth, parentTitle, tree, opens, after, pass }: NestedRow): SessionRowModel {
   // The project header already says which folder this is; the branch has its own line (Figma 34P).
   return {
     session,
-    title: depth === 1 ? nestedTitle(session.title, parentTitle) : session.title,
+    title: depth > 0 ? nestedTitle(session.title, parentTitle) : session.title,
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
-    branch: worktree?.branch ?? '',
+    // A snapshot has no branch (detached): its line says so instead.
+    branch: session.dispatchBase === 'snapshot' ? '快照' : (worktree?.branch ?? ''),
     depth,
+    model: session.dispatchModel ?? '',
     tree,
+    ...(pass ? { pass } : {}),
     ...(opens ? { opens } : {}),
     ...(after ? { after } : {})
   }
@@ -116,13 +123,15 @@ export function sameRow(a: SessionRowModel, b: SessionRowModel): boolean {
     a.branch === b.branch &&
     a.depth === b.depth &&
     a.tree === b.tree &&
-    a.opens === b.opens
+    a.opens === b.opens &&
+    a.pass === b.pass
   )
 }
 
 export interface NestedRow {
   session: Session
-  depth: 0 | 1
+  depth: 0 | 1 | 2
+  pass?: boolean
   parentTitle?: string
   tree?: SessionRowModel['tree']
   opens?: boolean
@@ -147,28 +156,38 @@ function subagentRows(session: Session, items: readonly SubagentInfo[], depth: 1
 
 /**
  * Store order, except that a dispatched session follows the session that started it (PRD F21), after that session's
- * earlier children. A child whose dispatcher is not listed here stays where it is, at the top level.
- * Subagents (Figma 44B) hang under their session: a child's right after it, a top-level session's after its children.
+ * earlier children, and a grandchild follows its own dispatcher the same way, one more step in. A child whose
+ * dispatcher is not listed here stays where it is, at the top level. Subagents (Figma 44B) hang under their session
+ * after the sessions it dispatched: a child's after its grandchildren, a top-level session's after everything below it.
  */
 export function withChildrenNested(sessions: readonly Session[], subagentsOf: SubagentsOf = NO_SUBAGENTS): NestedRow[] {
   const listed = new Set(sessions.map((s) => s.id))
   const nested = (s: Session): boolean => s.dispatchedBy !== undefined && listed.has(s.dispatchedBy)
+  const childrenOf = (id: SessionId): Session[] => sessions.filter((child) => child.dispatchedBy === id && nested(child))
   const out: NestedRow[] = []
   for (const session of sessions) {
     if (nested(session)) continue
-    const children = sessions.filter((child) => child.dispatchedBy === session.id && nested(child))
+    const children = childrenOf(session.id)
     const own = subagentsOf(session.id)
     const top: NestedRow = children.length + own.length > 0 ? { session, depth: 0, tree: 'parent' } : { session, depth: 0 }
     out.push(top)
-    let host = top
+    let last = top
     children.forEach((child, i) => {
       // The dispatcher's line runs on below this child while another child or one of its own subagents follows.
       const more = i < children.length - 1 || own.length > 0
+      const grandchildren = childrenOf(child.id)
       const subs = subagentRows(child, subagentsOf(child.id), 2, more)
-      host = { session: child, depth: 1, parentTitle: session.title, tree: more ? 'child' : 'last', ...(subs.length > 0 ? { opens: true, after: subs } : {}) }
+      const host: NestedRow = { session: child, depth: 1, parentTitle: session.title, tree: more ? 'child' : 'last', ...(grandchildren.length + subs.length > 0 ? { opens: true } : {}) }
       out.push(host)
+      last = host
+      grandchildren.forEach((grandchild, j) => {
+        const row: NestedRow = { session: grandchild, depth: 2, parentTitle: child.title, tree: j < grandchildren.length - 1 || subs.length > 0 ? 'child' : 'last', ...(more ? { pass: true } : {}) }
+        out.push(row)
+        last = row
+      })
+      if (subs.length > 0) last.after = subs
     })
-    if (own.length > 0) host.after = [...(host.after ?? []), ...subagentRows(session, own, 1, false)]
+    if (own.length > 0) last.after = [...(last.after ?? []), ...subagentRows(session, own, 1, false)]
   }
   return out
 }

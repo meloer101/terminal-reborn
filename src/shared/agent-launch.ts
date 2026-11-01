@@ -40,8 +40,11 @@ export interface AgentLaunchOptions {
    * script (script-launch.ts `setupCommand`). The agent starts when it returns, whatever its exit code.
    */
   before?: string
-  /** Claude's `--mcp-config <file>` with Wavi's dispatch server (PRD F21); added to the user's own servers, never strict. */
-  mcpConfigPath?: string
+  /**
+   * A folder put first on PATH by the script itself, after the user's rc files ran (PRD F21: `<userData>/bin` with
+   * `wavi`; set in the environment instead, `.zshrc` pushes it back, §6.14 v1.104).
+   */
+  pathPrefix?: string
   /** A model for this launch (`claude --model` / `codex -m`), e.g. what a dispatching agent asked for (PRD F21). */
   model?: string
   /**
@@ -49,7 +52,10 @@ export interface AgentLaunchOptions {
    * Ignored when resuming.
    */
   initialPrompt?: string
-  /** Arguments an agent's per-launch adapter adds after the binary (e.g. Pi's `-e <extension>`), src/main/hooks. */
+  /**
+   * Arguments added after the binary: an agent's per-launch adapter (Pi's `-e <extension>`, src/main/hooks) and the
+   * dispatch system prompt (`--append-system-prompt …`, Codex `-c developer_instructions=…`, PRD F21).
+   */
   extraArgs?: readonly string[]
 }
 
@@ -71,7 +77,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
       'claude',
       ...(resumeId ? ['--resume', resumeId] : []),
       ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : []),
-      ...(options.mcpConfigPath ? ['--mcp-config', options.mcpConfigPath] : []),
+      ...(options.extraArgs ?? []),
       ...(model ? ['--model', model] : []),
       ...prompt
     ]
@@ -84,6 +90,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
     '-c',
     `projects={${tomlString(realCwd)}={trust_level="trusted"}}`,
     ...(options.codexConfig ?? []).flatMap((override) => ['-c', override]),
+    ...(options.extraArgs ?? []),
     ...(model ? ['-m', model] : []),
     ...prompt
   ]
@@ -147,12 +154,13 @@ export function parseAgentMarker(payload: string): AgentMarker | null {
  * `exit;<code>` once the agent process is gone, so the app knows the shell prompt is back (A3).
  */
 export function agentShellArgs(kind: AgentKind, realCwd: string, shell: string, options: AgentLaunchOptions = {}): string[] {
-  const before = options.before ? `${options.before}; ` : ''
+  const fish = /(?:^|\/)fish$/.test(shell)
+  const path = options.pathPrefix && kind !== 'shell' ? (fish ? `set -gx PATH ${shellQuote(options.pathPrefix)} $PATH; ` : `PATH=${shellQuote(options.pathPrefix)}:"$PATH"; export PATH; `) : ''
+  const before = `${path}${options.before ? `${options.before}; ` : ''}`
   if (kind === 'shell') return before ? ['-l', '-i', '-c', `${before}exec ${shellQuote(shell)} -l`] : ['-l']
   const line = agentArgv(kind, realCwd, options).map(shellQuote).join(' ')
   const marker = (payload: string) => `printf '\\033]${AGENT_MARKER_OSC};${payload}\\007'`
   const check = `command -v ${AGENT_SPECS[kind].binary} >/dev/null 2>&1`
-  const fish = /(?:^|\/)fish$/.test(shell)
   const script = fish
     ? `if ${check}; ${line}; ${marker('exit;%s')} $status; else; ${marker('missing')}; end`
     : `if ${check}; then ${line}; ${marker('exit;%s')} "$?"; else ${marker('missing')}; fi`

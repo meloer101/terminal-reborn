@@ -343,6 +343,40 @@ describe('Wavi’s own asks (PRD F21)', () => {
     expect(h.badges.at(-1)).toBe(0)
   })
 
+  it('reads a dispatched session’s finished turn for its dispatcher, and gives it back when the report is held (PRD F21)', () => {
+    const h = harness([session('a'), session('kid')], 'a')
+    let quiet = true
+    const notified: string[] = []
+    const controller = new StatusController({
+      now: () => h.clock.now,
+      sessions: () => h.sessions,
+      activeSessionId: () => 'a',
+      windowFocused: () => true,
+      patch: (id, patch) => {
+        h.sessions = h.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s))
+      },
+      setActive: () => {},
+      setBadge: () => {},
+      notify: (n) => notified.push(n.tag),
+      later: (fn) => fn(),
+      finishReported: () => quiet
+    })
+    controller.sync()
+    controller.handleEvent('kid', { type: 'prompt-submit', prompt: 'x' })
+    controller.handleEvent('kid', { type: 'stop', message: 'done' })
+    expect(h.sessions.find((s) => s.id === 'kid')?.status).toBe('idle')
+    expect(notified).toEqual([])
+    controller.reopenFinish('kid')
+    expect(h.sessions.find((s) => s.id === 'kid')?.status).toBe('done_unread')
+    expect(notified).toEqual(['kid'])
+    // Only a turn it read itself: a session the user read is left alone.
+    quiet = false
+    controller.handleEvent('a', { type: 'prompt-submit', prompt: 'y' })
+    controller.handleEvent('a', { type: 'stop', message: 'ok' })
+    controller.reopenFinish('a')
+    expect(h.sessions.find((s) => s.id === 'a')?.status).toBe('idle')
+  })
+
   it('reports the ask abandoned when the agent behind it is gone, but not when its turn merely ends', () => {
     const abandoned: string[] = []
     const h = harness([session('a')], null)
@@ -360,9 +394,9 @@ describe('Wavi’s own asks (PRD F21)', () => {
       onWaviAskAbandoned: (id) => abandoned.push(id)
     })
     controller.sync()
-    controller.handleEvent('a', { type: 'tool-start', tool: 'mcp__wavi__start_sessions', input: {} })
+    controller.handleEvent('a', { type: 'tool-start', tool: 'Bash', input: { command: 'wavi run codex "Fix it"' } })
     controller.setWaviAsk('a', '想开 2 个会话')
-    // Claude moves an MCP call that runs over 2 minutes to the background and ends the turn: still waiting.
+    // `wavi run` returns at once and the agent ends its turn as told: the request still waits for the user.
     controller.handleEvent('a', { type: 'stop' })
     expect(abandoned).toEqual([])
     expect(h.sessions[0]?.status).toBe('needs_you')

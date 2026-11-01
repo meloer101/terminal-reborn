@@ -35,19 +35,25 @@ describe('agentArgv', () => {
     ])
   })
 
-  it('adds the dispatch MCP config, a model and the first task after -- (PRD F21)', () => {
-    expect(agentArgv('claude', '/tmp/x', { claudeSettingsPath: '/s.json', mcpConfigPath: '/m.json', model: 'opus', initialPrompt: '-p mcp do it' })).toEqual([
-      'claude',
-      '--settings',
-      '/s.json',
-      '--mcp-config',
-      '/m.json',
-      '--model',
-      'opus',
+  it('adds the dispatch system prompt, a model and the first task after -- (PRD F21)', () => {
+    expect(
+      agentArgv('claude', '/tmp/x', { claudeSettingsPath: '/s.json', extraArgs: ['--append-system-prompt', 'use wavi'], model: 'opus', initialPrompt: '-p mcp do it' })
+    ).toEqual(['claude', '--settings', '/s.json', '--append-system-prompt', 'use wavi', '--model', 'opus', '--', '-p mcp do it'])
+    expect(agentArgv('codex', '/tmp/x', { extraArgs: ['-c', 'developer_instructions="w"'], model: 'gpt-5-codex', initialPrompt: 'do it' }).slice(-6)).toEqual([
+      '-c',
+      'developer_instructions="w"',
+      '-m',
+      'gpt-5-codex',
       '--',
-      '-p mcp do it'
+      'do it'
     ])
-    expect(agentArgv('codex', '/tmp/x', { model: 'gpt-5-codex', initialPrompt: 'do it' }).slice(-4)).toEqual(['-m', 'gpt-5-codex', '--', 'do it'])
+  })
+
+  it('puts the wavi folder first on PATH inside the script, after the rc files ran (PRD F21, §6.14 v1.104)', () => {
+    const zsh = agentShellArgs('grok', '/tmp', '/bin/zsh', { pathPrefix: '/Users/a/Library/Application Support/Wavi/bin' })[3]!
+    expect(zsh.startsWith(`PATH='/Users/a/Library/Application Support/Wavi/bin':"$PATH"; export PATH; if command -v grok`)).toBe(true)
+    expect(agentShellArgs('grok', '/tmp', '/opt/homebrew/bin/fish', { pathPrefix: '/w/bin' })[3]!.startsWith(`set -gx PATH '/w/bin' $PATH; if command -v grok`)).toBe(true)
+    expect(agentShellArgs('shell', '/tmp', '/bin/zsh', { pathPrefix: '/w/bin' })).toEqual(['-l'])
   })
 
   it('never resends the first task when resuming, and drops a model that is not a name', () => {

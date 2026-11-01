@@ -1,114 +1,155 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import type { DispatchToolResult } from '@shared/dispatch'
-import { cancelDispatchCall, handleDispatchRequest, setDispatchSettings } from './handler'
-import { settleConfirm, useDispatch } from './store'
+import type { DispatchRequest, WaviCommand, WaviResult } from '@shared/dispatch'
+import type { Session } from '@shared/types'
+import { decideConfirms, dropConfirmsOf, handleWaviRequest, setDispatchSettings } from './handler'
+import { useDispatch } from './store'
 
-const addBackgroundSession = vi.fn((): string | null => 'child')
+let sessions: Session[] = []
+const addBackgroundSession = vi.fn((_project: string, _target: unknown, _kind: string, id?: string): string | null => id ?? 'child')
+const deliverMessage = vi.fn(async (): Promise<'delivered' | 'held'> => 'delivered')
+const queueReport = vi.fn()
 
 vi.mock('../state/workspace', () => ({
   useWorkspace: {
     getState: () => ({
-      sessions: [{ id: 's1', kind: 'claude', title: 'Plan', worktreeId: 'w1', status: 'running' }],
-      worktrees: [{ id: 'w1', projectId: 'p1', path: '/repo', isMain: false, branch: 'main', archived: false }],
+      sessions,
+      worktrees: [{ id: 'w1', projectId: 'p1', path: '/repo', isMain: false, branch: 'jacob/plan', archived: false }],
       projects: [{ id: 'p1', rootPath: '/repo', name: 'repo' }],
       addBackgroundSession,
       patchSession: () => {}
     })
   }
 }))
-vi.mock('../new-session/creation', () => ({ createWorktreeFor: async () => {}, holdForWorktree: () => {}, startEagerly: () => {} }))
+let ids = 0
+vi.mock('../state/workspace-model', () => ({ randomId: (prefix: string) => `${prefix}-new${++ids}` }))
+vi.mock('../new-session/creation', () => ({ createWorktreeFor: async () => true, holdForWorktree: () => {}, startEagerly: () => {} }))
 vi.mock('../session-io', () => ({ interruptAgent: () => {} }))
-vi.mock('../session-meta/store', () => ({ useSessionMeta: { getState: () => ({}) } }))
-vi.mock('../conflict-radar/store', () => ({ markFor: () => null, useRadar: { getState: () => ({}) } }))
-vi.mock('./reports', () => ({ deliverTo: () => {} }))
+vi.mock('../session-meta/store', () => ({ useSessionMeta: { getState: () => ({ bySession: {} }) } }))
+vi.mock('../conflict-radar/store', () => ({ markFor: () => null, useRadar: { getState: () => ({ byRoot: {} }) } }))
+vi.mock('./reports', () => ({ deliverMessage: (...args: unknown[]) => deliverMessage(...(args as [])), queueReport: (...args: unknown[]) => queueReport(...args) }))
 
-/** Resolves newSessionInfo when the test says so: the call is still being planned until then. */
-let releasePlanning: () => void = () => {}
+const session = (id: string, over: Partial<Session> = {}): Session => ({ id, worktreeId: 'w1', kind: 'claude', title: id, status: 'idle', startedAt: 1, lastActivityAt: 1, ...over })
 
-const request = (callId: string) => ({
-  callId,
-  sessionId: 's1',
-  agent: 'claude' as const,
-  tool: 'start_sessions' as const,
-  args: { sessions: [{ agent: 'claude', task: 'Rename the login route', title: 'Rename' }] }
-})
+let n = 0
+const call = (sessionId: string, command: WaviCommand, deadline = Date.now() + 60_000): Promise<WaviResult> =>
+  handleWaviRequest({ callId: `c${++n}`, sessionId, command, deadline } satisfies DispatchRequest)
+const runCmd = (task: string, over: Partial<Extract<WaviCommand, { name: 'run' }>> = {}): WaviCommand => ({ name: 'run', agent: 'grok', task, base: 'head', ...over })
 
-const failure = (result: unknown): string | undefined => {
-  const r = result as DispatchToolResult
-  return r.ok ? undefined : r.failure
-}
-
-describe('start_sessions cancelled by its agent (PRD F21 · §6.14)', () => {
+describe('wavi in a window (PRD F21)', () => {
   beforeEach(() => {
+    sessions = [session('top'), session('child', { dispatchedBy: 'top', kind: 'codex' }), session('grand', { dispatchedBy: 'child', kind: 'gemini' })]
     addBackgroundSession.mockClear()
-    useDispatch.setState({ confirms: [] })
-    const planned = new Promise<void>((resolve) => (releasePlanning = resolve))
+    deliverMessage.mockClear()
+    queueReport.mockClear()
+    useDispatch.setState({ confirms: [], held: {}, reported: {} })
     vi.stubGlobal('document', { hasFocus: () => true })
     vi.stubGlobal('window', {
       setTimeout,
       clearTimeout,
       tr: {
-        app: { detectAgents: async () => ({ claude: true }) },
+        app: { detectAgents: async () => ({ claude: true, codex: true, grok: true, gemini: true }) },
         gitWorktrees: {
-          newSessionInfo: async () => {
-            await planned
-            return { repo: true, currentBranch: 'main', defaultBranch: 'main', branches: [], prefix: '', worktreesDir: '/wt', takenFolders: [], includeCount: 0, hasSetup: false }
-          }
+          newSessionInfo: async () => ({ repo: true, currentBranch: 'jacob/plan', defaultBranch: 'main', branches: [], prefix: 'jacob', worktreesDir: '/wt', takenFolders: [], includeCount: 0, hasSetup: false })
         },
         git: { changes: async () => null },
         ui: { notify: () => {} }
       }
     })
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
     setDispatchSettings(DEFAULT_SETTINGS.dispatch)
   })
+  afterEach(() => vi.unstubAllGlobals())
 
-  it('starts nothing under 自动开始 when cancelled while Wavi plans the batch', async () => {
-    setDispatchSettings({ tools: true, autoApprove: true })
-    const pending = handleDispatchRequest(request('c1'))
-    cancelDispatchCall('c1')
-    releasePlanning()
-    expect(failure(await pending)).toBe('declined')
+  it('answers a run from the user’s session at once, naming the session that waits for 开始', async () => {
+    const result = await call('top', runCmd('Review the auth code', { base: 'snapshot', title: 'Auth review' }))
+    expect(result).toMatchObject({ ok: true, text: expect.stringContaining("waits for the user's 开始") })
+    expect(result.text).toContain('end your turn now')
+    const [pending] = useDispatch.getState().confirms
+    expect(result.text).toContain(`Session ${pending!.childId}`)
+    expect(pending!.plan).toMatchObject({ branch: '', request: { snapshotOf: '/repo' } })
     expect(addBackgroundSession).not.toHaveBeenCalled()
   })
 
-  it('never shows the strip when cancelled while Wavi plans the batch', async () => {
-    setDispatchSettings({ tools: true, autoApprove: false })
-    const pending = handleDispatchRequest(request('c2'))
-    cancelDispatchCall('c2')
-    releasePlanning()
-    expect(failure(await pending)).toBe('declined')
+  it('starts every waiting request of the dispatcher on 开始 and tells it which ones, in one message', async () => {
+    await call('top', runCmd('Fix the login form'))
+    await call('top', runCmd('Write login tests', { agent: 'claude' }))
+    const [a, b] = useDispatch.getState().confirms
+    expect(a!.plan.branch).not.toBe(b!.plan.branch)
+    decideConfirms('top', true)
     expect(useDispatch.getState().confirms).toHaveLength(0)
-    expect(addBackgroundSession).not.toHaveBeenCalled()
+    expect(addBackgroundSession.mock.calls.map((c) => c[3])).toEqual([a!.childId, b!.childId])
+    expect(deliverMessage).toHaveBeenCalledTimes(1)
+    const text = (deliverMessage.mock.calls[0] as unknown[])[1] as string
+    expect(text).toContain('用户同意了')
+    expect(text).toContain(`id ${a!.childId} · grok`)
   })
 
-  it('takes the strip away when cancelled while it waits for 开始', async () => {
-    setDispatchSettings({ tools: true, autoApprove: false })
-    releasePlanning()
-    const pending = handleDispatchRequest(request('c3'))
-    await vi.waitFor(() => expect(useDispatch.getState().confirms).toHaveLength(1))
-    cancelDispatchCall('c3')
-    expect(failure(await pending)).toBe('declined')
+  it('starts nothing on 拒绝 and says so; an agent that went away takes its requests along silently', async () => {
+    await call('top', runCmd('Fix the login form'))
+    decideConfirms('top', false)
+    expect(addBackgroundSession).not.toHaveBeenCalled()
+    expect((deliverMessage.mock.calls[0] as unknown[])[1]).toContain('用户拒绝了')
+    await call('top', runCmd('Another thing'))
+    dropConfirmsOf('top')
     expect(useDispatch.getState().confirms).toHaveLength(0)
-    expect(addBackgroundSession).not.toHaveBeenCalled()
+    expect(deliverMessage).toHaveBeenCalledTimes(1)
   })
 
-  it('forgets a cancel once its call is over, so a later call with the same id still starts', async () => {
-    setDispatchSettings({ tools: true, autoApprove: false })
-    releasePlanning()
-    const first = handleDispatchRequest(request('c4'))
-    await vi.waitFor(() => expect(useDispatch.getState().confirms).toHaveLength(1))
-    cancelDispatchCall('c4')
-    await first
-    // A cancel for a call that is not running (answered already, or another tool) leaves nothing behind.
-    cancelDispatchCall('c4')
-    const second = handleDispatchRequest(request('c4'))
-    await vi.waitFor(() => expect(useDispatch.getState().confirms).toHaveLength(1))
-    settleConfirm('c4', true)
-    expect((await second as DispatchToolResult).ok).toBe(true)
+  it('lets a child start a grandchild at once, and refuses a grandchild that tries again', async () => {
+    const started = await call('child', runCmd('Check the types'))
+    expect(started).toMatchObject({ ok: true, text: expect.stringContaining('Started session') })
     expect(addBackgroundSession).toHaveBeenCalledTimes(1)
+    expect(await call('grand', runCmd('Go deeper'))).toMatchObject({ ok: false, failure: 'not_allowed' })
+  })
+
+  it('refuses an agent that is not installed, a duplicate, and a branch off a detached checkout', async () => {
+    expect(await call('top', runCmd('x', { agent: 'cursor' }))).toMatchObject({ ok: false, failure: 'agent_unavailable' })
+    await call('top', runCmd('Same task'))
+    expect(await call('top', runCmd('Same  task'))).toMatchObject({ ok: false, failure: 'duplicate' })
+  })
+
+  it('keeps a tree to 8 sessions, waiting ones included', async () => {
+    sessions = [session('top'), ...Array.from({ length: 7 }, (_, i) => session(`k${i}`, { dispatchedBy: i < 3 ? 'top' : 'k0' }))]
+    expect(await call('k1', runCmd('one more'))).toMatchObject({ ok: true })
+    sessions.push(session('k7', { dispatchedBy: 'k1' }))
+    expect(await call('k2', runCmd('and another'))).toMatchObject({ ok: false, failure: 'limit' })
+  })
+
+  it('takes a report only from a dispatched session, and hands it to the reports queue', async () => {
+    expect(await call('top', { name: 'report', text: 'done' })).toMatchObject({ ok: false, failure: 'not_allowed' })
+    expect(await call('child', { name: 'report', text: 'Fixed. Tests pass.' })).toMatchObject({ ok: true, text: expect.stringContaining('Reported to 「top」') })
+    expect(queueReport).toHaveBeenCalledWith(expect.objectContaining({ id: 'child' }), 'report', 'Fixed. Tests pass.')
+    expect(useDispatch.getState().reported.child).toBe(true)
+  })
+
+  it('does nothing once wavi has been told Wavi did not answer', async () => {
+    expect(await call('child', runCmd('Too slow'), Date.now() - 1)).toMatchObject({ ok: false, failure: 'wavi_unavailable' })
+    expect(addBackgroundSession).not.toHaveBeenCalled()
+  })
+
+  it('runs two wavi run at once one after the other, so the limits see both', async () => {
+    sessions = [session('top'), ...Array.from({ length: 3 }, (_, i) => session(`k${i}`, { dispatchedBy: 'top' }))]
+    const [a, b] = await Promise.all([call('top', runCmd('fourth')), call('top', runCmd('fifth'))])
+    expect(a).toMatchObject({ ok: true })
+    expect(b).toMatchObject({ ok: false, failure: 'limit' })
+  })
+
+  it('never answers a child’s permission prompt with stop, and refuses everything when dispatch is off', async () => {
+    sessions[1] = { ...sessions[1]!, status: 'needs_you' }
+    expect(await call('top', { name: 'stop', id: 'child' })).toMatchObject({ ok: false, failure: 'not_allowed' })
+    setDispatchSettings({ tools: false, autoApprove: false })
+    expect(await call('top', { name: 'ls' })).toMatchObject({ ok: false, failure: 'not_allowed' })
+    expect(await call('child', { name: 'report', text: 'x' })).toMatchObject({ ok: false, failure: 'not_allowed' })
+  })
+
+  it('answers send at once and delivers behind it', async () => {
+    expect(await call('top', { name: 'send', id: 'child', text: 'one more thing' })).toMatchObject({ ok: true, text: expect.stringContaining('putting it in') })
+    expect((deliverMessage.mock.calls[0] as unknown[])[1]).toContain('one more thing')
+  })
+
+  it('acts only on the caller’s own sessions', async () => {
+    expect(await call('child', { name: 'read', id: 'top', offset: 0 })).toMatchObject({ ok: false, failure: 'not_found' })
+    expect(await call('top', { name: 'stop', id: 'grand' })).toMatchObject({ ok: false, failure: 'not_found' })
+    expect(await call('top', { name: 'ls' })).toMatchObject({ ok: true, text: expect.stringContaining('id child · codex') })
   })
 })

@@ -2,65 +2,42 @@ import { describe, expect, it } from 'vitest'
 import type { DispatchRequest } from '@shared/dispatch'
 import { DispatchBroker } from './broker'
 
-function setup(owner: string | null = 'win') {
-  const sent: DispatchRequest[] = []
-  const broker = new DispatchBroker<string>({ ownerOf: () => owner, send: (_o, r) => sent.push(r), holdMs: 30 })
+function setup(owners: Record<string, string>, answerMs = 200) {
+  const sent: Array<{ owner: string; request: DispatchRequest }> = []
+  const broker = new DispatchBroker<string>({ ownerOf: (id) => owners[id] ?? null, send: (owner, request) => sent.push({ owner, request }), answerMs })
   return { broker, sent }
 }
 
 describe('DispatchBroker', () => {
-  it('answers a quick call within the same request', async () => {
-    const { broker, sent } = setup()
-    const pending = broker.handle('WaviCall', 's1', 'claude', { tool: 'list_sessions', args: {} })
-    await Promise.resolve()
-    expect(sent[0]).toMatchObject({ sessionId: 's1', agent: 'claude', tool: 'list_sessions' })
-    broker.answer('win', sent[0]!.callId, { ok: true, text: 'none' })
-    expect(JSON.parse(await pending)).toEqual({ done: true, result: { ok: true, text: 'none' } })
-  })
-
-  it('says "not yet" for a call that waits for the user, and hands the answer to the poll', async () => {
-    const { broker, sent } = setup()
-    const first = JSON.parse(await broker.handle('WaviCall', 's1', 'codex', { tool: 'start_sessions', args: {} })) as { done: boolean; callId: string }
-    expect(first).toEqual({ done: false, callId: sent[0]!.callId })
-    broker.answer('win', first.callId, { ok: false, failure: 'declined', text: 'no' })
-    expect(JSON.parse(await broker.handle('WaviPoll', 's1', 'codex', { callId: first.callId }))).toEqual({ done: true, result: { ok: false, failure: 'declined', text: 'no' } })
-    // Collected once.
-    expect(JSON.parse(await broker.handle('WaviPoll', 's1', 'codex', { callId: first.callId }))).toMatchObject({ done: true, result: { failure: 'failed' } })
-  })
-
-  it('passes the calling session’s cancel to the window and forgets the call; nobody else can cancel it', async () => {
-    const { broker, sent } = setup()
-    const first = JSON.parse(await broker.handle('WaviCall', 's1', 'claude', { tool: 'start_sessions', args: {} })) as { callId: string }
-    expect(await broker.handle('WaviCancel', 's2', 'claude', { callId: first.callId })).toBe('')
+  it('relays a call to the window that owns the session and returns its answer', async () => {
+    const { broker, sent } = setup({ s1: 'win-a' })
+    const result = broker.call({ sessionId: 's1', command: { name: 'ls' } })
     expect(sent).toHaveLength(1)
-    expect(await broker.handle('WaviCancel', 's1', 'claude', { callId: first.callId })).toBe('')
-    expect(sent[1]).toEqual({ callId: first.callId, sessionId: 's1', agent: 'claude', tool: 'cancel', args: {} })
-    // The window's late answer lands nowhere; the call is gone.
-    broker.answer('win', first.callId, { ok: false, failure: 'declined', text: 'no' })
-    expect(JSON.parse(await broker.handle('WaviPoll', 's1', 'claude', { callId: first.callId }))).toMatchObject({ result: { failure: 'failed' } })
+    expect(sent[0]).toMatchObject({ owner: 'win-a', request: { sessionId: 's1', command: { name: 'ls' } } })
+    broker.answer('win-a', sent[0]!.request.callId, { ok: true, text: 'none' })
+    expect(await result).toEqual({ ok: true, text: 'none' })
   })
 
-  it('lets only the asked window answer and only the calling session collect', async () => {
-    const { broker, sent } = setup()
-    const first = JSON.parse(await broker.handle('WaviCall', 's1', 'claude', { tool: 'start_sessions' })) as { callId: string }
-    broker.answer('other-window', sent[0]!.callId, { ok: true, text: 'forged' })
-    expect(JSON.parse(await broker.handle('WaviPoll', 's2', 'claude', { callId: first.callId }))).toMatchObject({ result: { failure: 'failed' } })
-    expect(JSON.parse(await broker.handle('WaviPoll', 's1', 'claude', { callId: first.callId }))).toEqual({ done: false, callId: first.callId })
+  it('ignores an answer from another window and times out instead of hanging', async () => {
+    const { broker, sent } = setup({ s1: 'win-a' }, 50)
+    const result = broker.call({ sessionId: 's1', command: { name: 'ls' } })
+    broker.answer('win-b', sent[0]!.request.callId, { ok: true, text: 'not mine' })
+    expect(await result).toMatchObject({ ok: false, failure: 'wavi_unavailable' })
   })
 
-  it('answers nothing when no window owns the session, and refuses unknown tools', async () => {
-    expect(await setup(null).broker.handle('WaviCall', 's1', 'claude', { tool: 'list_sessions' })).toBe('')
-    expect(JSON.parse(await setup().broker.handle('WaviCall', 's1', 'claude', { tool: 'rm_rf' }))).toMatchObject({ result: { failure: 'invalid_request' } })
+  it('says Wavi is unavailable when no window has the session, and reads a broken answer as a failure', async () => {
+    const { broker, sent } = setup({ s1: 'win-a' })
+    expect(await broker.call({ sessionId: 'nobody', command: { name: 'ls' } })).toMatchObject({ ok: false, failure: 'wavi_unavailable' })
+    const result = broker.call({ sessionId: 's1', command: { name: 'ls' } })
+    broker.answer('win-a', sent[0]!.request.callId, { ok: 'yes' })
+    expect(await result).toMatchObject({ ok: false, failure: 'failed' })
   })
 
-  it('records the Claude inbox from hello and returns the window\'s answer', async () => {
-    const { broker, sent } = setup()
-    const pending = broker.handle('WaviHello', 's1', 'claude', { inbox: { socket: '/tmp/cc-socks/1.sock', token: 'abc' } })
-    await Promise.resolve()
-    broker.answer('win', sent[0]!.callId, { tools: true, agents: ['claude', 'codex', 'nope'] })
-    expect(JSON.parse(await pending)).toEqual({ tools: true, agents: ['claude', 'codex'] })
-    expect(broker.inboxOf('s1')).toEqual({ socket: '/tmp/cc-socks/1.sock', token: 'abc' })
-    void broker.handle('WaviHello', 's2', 'claude', { inbox: { socket: 'relative.sock', token: 'abc' } })
-    expect(broker.inboxOf('s2')).toBeUndefined()
+  it('keeps the Claude inbox a call or the SessionStart hook reported', () => {
+    const { broker } = setup({ s1: 'win-a' })
+    void broker.call({ sessionId: 's1', command: { name: 'ls' }, inbox: { socket: '/tmp/cc-socks/1.sock', token: 't' } })
+    expect(broker.inboxOf('s1')).toEqual({ socket: '/tmp/cc-socks/1.sock', token: 't' })
+    broker.setInbox('s2', { socket: '/tmp/cc-socks/2.sock', token: 'u' })
+    expect(broker.inboxOf('s2')?.socket).toBe('/tmp/cc-socks/2.sock')
   })
 })

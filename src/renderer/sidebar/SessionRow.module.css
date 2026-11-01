@@ -11,6 +11,8 @@
   width: 100%;
   /* Where the text starts in this row; the todo line (SessionMeta.module.css) starts there too. */
   --row-text-inset: var(--indent-tree);
+  /* Centre of the glyph column its dispatcher's line runs down (Figma 40C / 44B). */
+  --row-line-x: var(--space-16);
   padding: var(--space-6) var(--space-8) var(--space-6) var(--row-text-inset);
   border: 0;
   border-radius: var(--radius-md);
@@ -29,6 +31,12 @@
   --row-text-inset: calc(var(--indent-tree) + var(--space-16));
 }
 
+/* Started by one of those (Figma 44B): one more step in, its line down the glyph column of the child above. */
+.row[data-depth='2'] {
+  --row-text-inset: calc(var(--indent-tree) + var(--space-32));
+  --row-line-x: var(--space-32);
+}
+
 /*
  * Figma 40C: a hairline down the glyph column (centre 16, under the dispatcher's glyph) ties a dispatcher to its
  * children. It starts 4 below the dispatcher's glyph and runs through the 2 gap between rows; each child gets a tick
@@ -38,7 +46,7 @@
 .row[data-tree='child']::before {
   content: '';
   position: absolute;
-  left: calc(var(--space-16) - 0.5px);
+  left: calc(var(--row-line-x) - 0.5px);
   pointer-events: none;
 }
 
@@ -74,6 +82,16 @@
   position: absolute;
   left: calc(var(--space-32) - 0.5px);
   top: calc(var(--space-6) + 18px + var(--space-2));
+  bottom: calc(-1 * var(--space-2));
+  border-left: 1px solid var(--border-default);
+  pointer-events: none;
+}
+
+/* Depth 2 under a child that is not its dispatcher's last (Figma 44B): the dispatcher's line runs on past this row. */
+.pass {
+  position: absolute;
+  left: calc(var(--space-16) - 0.5px);
+  top: 0;
   bottom: calc(-1 * var(--space-2));
   border-left: 1px solid var(--border-default);
   pointer-events: none;
@@ -172,6 +190,15 @@
 /* A long wait is heavier, not louder (PRD F10). */
 .time[data-emphasis='true'] {
   font: var(--text-mono-s-medium);
+}
+
+/* The model `wavi run --model` asked for (Figma 44B): mono, like `#123 ✓`, after the branch, which gives way first. */
+.model {
+  flex: none;
+  margin-left: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 /* Which agent runs here (Figma 34K · K1): the CLI's mark in one colour, black or white, closing the last line. */

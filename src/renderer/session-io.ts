@@ -8,6 +8,7 @@ import { useSessionMeta } from './session-meta/store'
 import { useWorkspace } from './state/workspace'
 import { attachmentInput } from './terminal/attachments'
 import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
+import { noteInserted } from './terminal/typing'
 
 // One serial queue per session: two sends to the same PTY must never interleave.
 const queue = createSendQueue()
@@ -50,6 +51,7 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
   refuseOverMenu(sessionId)
   const data = inputLineText(body, acceptsBracketedPaste(sessionId))
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
+  noteInserted(sessionId)
 }
 
 /**
@@ -61,6 +63,7 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
   const data = attachmentInput(paths, claudeOrCodex(agentIn(sessionId)), acceptsBracketedPaste(sessionId))
   if (!data) return
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
+  noteInserted(sessionId)
 }
 
 /**
@@ -75,6 +78,7 @@ export async function insertSlashCommand(sessionId: SessionId, command: string):
   const steps = planSend(command, kind)
   const submit = steps.findIndex((step) => step.type === 'waitForText')
   await sendQueued(queue, sessionId, submit >= 0 ? steps.slice(0, submit) : steps, getSendIo(sessionId))
+  noteInserted(sessionId)
 }
 
 /**

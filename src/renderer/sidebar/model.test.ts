@@ -233,6 +233,32 @@ describe('subagents under their session (PRD F21 v1.109, Figma 44B)', () => {
     ])
   })
 
+  it('nests a grandchild under its own dispatcher one more step in, before that child’s subagents (Figma 44B)', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions: [
+        session('parent', 'wam', 'running'),
+        session('c1', 'wa1', 'running', 0, { dispatchedBy: 'parent', dispatchModel: 'gpt-6-sol' }),
+        session('g1', 'wa2', 'running', 0, { dispatchedBy: 'c1', title: 'c1 · review', dispatchBase: 'snapshot' }),
+        session('c2', 'wa2', 'idle', 0, { dispatchedBy: 'parent' })
+      ],
+      subagents: { c1: [sub('k')] }
+    })
+    const rows = groups[0]!.rows
+    expect(rows.map((r) => `${r.session.id}:${r.depth}:${r.tree ?? '-'}${r.opens ? ':opens' : ''}${r.pass ? ':pass' : ''}`)).toEqual([
+      'parent:0:parent',
+      'c1:1:child:opens',
+      'g1:2:child:pass',
+      'c2:1:last'
+    ])
+    expect(rows[2]!.after?.map((a) => `${a.id}:${a.depth}:${a.tree}${a.pass ? ':pass' : ''}`)).toEqual(['k:2:last:pass'])
+    expect(rows[1]!.model).toBe('gpt-6-sol')
+    expect(rows[2]!.title).toBe('review')
+    expect(rows[2]!.branch).toBe('快照')
+    expect(visibleSessionIds(groups)).toEqual(['parent', 'c1', 'g1', 'c2'])
+  })
+
   it('ends the dispatcher’s line at its last child when it has no subagents of its own', () => {
     const groups = buildSidebarGroups({
       projects,

@@ -12,6 +12,7 @@ import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../
 import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
 import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive/store'
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
+import { removeWorktreeWithSessions } from '../panels/worktree/actions'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { everyWindow, windowOf } from '../app-shell/windows-runtime'
 import { moveSessionToNewWindow } from '../split/commands'
@@ -105,6 +106,14 @@ export async function closeSessionInteractive(sessionId: SessionId): Promise<boo
   if (!session) return false
   const prompt = closeSessionConfirmation(session.title, session.status)
   if (prompt && !(await window.tr.ui.confirm(prompt))) return false
+  const state = useWorkspace.getState()
+  const worktree = state.worktrees.find((w) => w.id === session.worktreeId)
+  const project = worktree && state.projects.find((p) => p.id === worktree.projectId)
+  // A read-only snapshot of a dispatcher's working tree (PRD F21 --base snapshot) goes with its last session.
+  if (session.dispatchBase === 'snapshot' && worktree && project && !worktree.isMain && !state.sessions.some((s) => s.id !== sessionId && s.worktreeId === worktree.id)) {
+    const removed = await removeWorktreeWithSessions(project.rootPath, worktree.path, [worktree.id], true)
+    if (removed.ok) return true
+  }
   useWorkspace.getState().closeSession(sessionId)
   return true
 }
