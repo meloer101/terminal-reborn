@@ -1,6 +1,7 @@
 // Git · 变更 (Figma 45I): what the session's worktree changed — 未提交 against HEAD, 已提交 against the branch it left —
 // each file with its line counts; a file opens its diff. At the bottom the exits Git · 变更 on the Mac offers (PRD F16:
-// 合并到 main 并推送 / 创建 PR / 推送到 PR #N / 打开 PR #N) and 归档 (F15); an exit's progress is a sheet (45J).
+// 合并到 main 并推送 / 创建 PR / 推送到 PR #N / 打开 PR #N) and 归档 (F15); an exit's progress is a sheet (45J). Nav bar and
+// exits float over the list as glass (46′).
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { ChevronRight, GitPullRequest } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -12,7 +13,7 @@ import { Counts } from '../../chat/FeedItem'
 import { ShipSheet } from '../../git/ShipSheet'
 import { splitPath } from '../../state/model'
 import { call, useApp } from '../../state/store'
-import { Button, GroupHeader, Icon, NavBar, Screen } from '../../ui/atoms'
+import { Button, Glass, GroupHeader, Icon, LIQUID, NavBar, Screen, ScrollEdge, useNavInset } from '../../ui/atoms'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { font, useColors, type Colors } from '../../ui/theme'
 
@@ -40,6 +41,8 @@ export default function Changes() {
   const [exitsError, setExitsError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [sheet, setSheet] = useState(false)
+  const navInset = useNavInset()
+  const [exitsHeight, setExitsHeight] = useState(0)
   const session = useApp((st) => st.sessions.sessions.find((x) => x.id === id))
   const ship = session?.ship
   const notice = session?.shipNotice
@@ -110,23 +113,25 @@ export default function Changes() {
 
   const pr = exits ? prLine(exits) : null
   const footer = ship ? (
-    <Pressable onPress={() => setSheet(true)} style={[s.shipRow, { backgroundColor: c.bgSelected }]}>
-      <StatusGlyph status={ship.error ? 'error' : ship.stage === 'glance' ? 'needs_you' : 'running'} />
-      <Text numberOfLines={1} style={[font(15), { flex: 1, color: c.textPrimary }]}>
-        {ship.title}
-      </Text>
-      <Text numberOfLines={1} style={[font(13), { color: ship.error ? c.statusError : c.textSecondary }]}>
-        {ship.error ? '没有完成' : ship.stage === 'glance' ? '等你看一眼' : (ship.steps.find((st) => st.state === 'working')?.label ?? '')}
-      </Text>
+    <Pressable onPress={() => setSheet(true)} style={({ pressed }) => ({ opacity: pressed && !LIQUID ? 0.7 : 1 })}>
+      <Glass interactive style={s.shipRow}>
+        <StatusGlyph status={ship.error ? 'error' : ship.stage === 'glance' ? 'needs_you' : 'running'} />
+        <Text numberOfLines={1} style={[font(15), { flex: 1, color: c.textPrimary }]}>
+          {ship.title}
+        </Text>
+        <Text numberOfLines={1} style={[font(13), { color: ship.error ? c.statusError : c.textSecondary }]}>
+          {ship.error ? '没有完成' : ship.stage === 'glance' ? '等你看一眼' : (ship.steps.find((st) => st.state === 'working')?.label ?? '')}
+        </Text>
+      </Glass>
     </Pressable>
   ) : exits ? (
     <>
-      {exits.primary ? <Button primary label={exits.primary.label} busy={busy === exits.primary.kind} onPress={() => void go(exits.primary!)} style={exits.primary.blocker ? { opacity: 0.4 } : undefined} /> : null}
+      {exits.primary ? <Button primary floating label={exits.primary.label} busy={busy === exits.primary.kind} onPress={() => void go(exits.primary!)} style={exits.primary.blocker ? { opacity: 0.4 } : undefined} /> : null}
       <View style={s.exitRow}>
         {exits.secondary ? (
-          <Button label={exits.secondary.label} busy={busy === exits.secondary.kind} onPress={() => void go(exits.secondary!)} style={[{ flex: 1 }, exits.secondary.blocker ? { opacity: 0.4 } : undefined]} />
+          <Button floating label={exits.secondary.label} busy={busy === exits.secondary.kind} onPress={() => void go(exits.secondary!)} style={[{ flex: 1 }, exits.secondary.blocker ? { opacity: 0.4 } : undefined]} />
         ) : null}
-        <Button label="归档" busy={busy === 'archive'} onPress={archive} style={[exits.secondary ? undefined : { flex: 1 }, exits.archive.blocker ? { opacity: 0.4 } : undefined]} />
+        <Button floating label="归档" busy={busy === 'archive'} onPress={archive} style={[exits.secondary ? undefined : { flex: 1 }, exits.archive.blocker ? { opacity: 0.4 } : undefined]} />
       </View>
     </>
   ) : exitsError ? (
@@ -134,8 +139,9 @@ export default function Changes() {
   ) : null
 
   return (
-    <Screen bottom={false}>
+    <Screen top={false} bottom={false}>
       <NavBar
+        floating
         title="变更"
         subtitle={
           sub ? (
@@ -147,9 +153,9 @@ export default function Changes() {
       />
       {!data ? (
         error ? (
-          <Text style={[font(15), s.pad, { color: c.textTertiary }]}>{error}</Text>
+          <Text style={[font(15), s.pad, { color: c.textTertiary, paddingTop: navInset }]}>{error}</Text>
         ) : (
-          <ActivityIndicator style={s.pad} color={c.textTertiary} />
+          <ActivityIndicator style={[s.pad, { paddingTop: navInset }]} color={c.textTertiary} />
         )
       ) : (
         <FlatList
@@ -173,7 +179,7 @@ export default function Changes() {
               </View>
             ) : undefined
           }
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingTop: navInset, paddingBottom: exitsHeight + 24 }}
           renderItem={({ item }) => {
             if (item.kind === 'group') return <GroupHeader title={item.title} count={item.count} />
             const { name, dir } = splitPath(item.file.path)
@@ -207,7 +213,14 @@ export default function Changes() {
           }}
         />
       )}
-      {footer ? <View style={[s.exits, { paddingBottom: Math.max(insets.bottom, 8) }]}>{footer}</View> : <View style={{ height: insets.bottom }} />}
+      {footer ? (
+        <>
+          <ScrollEdge edge="bottom" height={exitsHeight + 60} />
+          <View onLayout={(e) => setExitsHeight(e.nativeEvent.layout.height)} style={[s.exits, { paddingBottom: Math.max(insets.bottom - 12, 8) }]}>
+            {footer}
+          </View>
+        </>
+      ) : null}
       <ShipSheet session={id} ship={ship} notice={notice} visible={sheet} onClose={() => setSheet(false)} />
     </Screen>
   )
@@ -218,7 +231,7 @@ const s = StyleSheet.create({
   summary: { flexDirection: 'row', alignItems: 'baseline', gap: 10, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
   file: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 11 },
   prRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  exits: { paddingHorizontal: 20, paddingTop: 8, gap: 8 },
+  exits: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, gap: 8 },
   exitRow: { flexDirection: 'row', gap: 8 },
-  shipRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12 }
+  shipRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, minHeight: 52, borderRadius: 24 }
 })

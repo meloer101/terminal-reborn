@@ -1,5 +1,6 @@
 // The input under a conversation (Figma 45C, 45G): photos from the camera or the library (up to six), the text field,
-// and one round button — send when there is something to send, stop (Esc) while the agent runs. Photos are drawn again
+// and one round button — send when there is something to send, stop (Esc) while the agent runs. In 46′ it is one glass
+// capsule floating over the feed; the photos sit above it. Photos are drawn again
 // as JPEG on the phone before they go: that drops their EXIF, location included, which the agent would otherwise read.
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
@@ -9,7 +10,7 @@ import { Dimensions, Image, Modal, Pressable, StyleSheet, Text, TextInput, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { REMOTE_LIMITS, type RemotePhoto } from '../../../src/shared/remote'
 import { call } from '../state/store'
-import { Icon } from '../ui/atoms'
+import { Glass, Icon } from '../ui/atoms'
 import { font, useColors } from '../ui/theme'
 
 interface Picked extends RemotePhoto {
@@ -34,7 +35,7 @@ async function picked(result: ImagePicker.ImagePickerResult): Promise<Picked[]> 
   ).then((list) => list.filter((p) => p.data))
 }
 
-export function Composer({ session, running }: { session: string; running: boolean }) {
+export function Composer({ session, running, onHeight }: { session: string; running: boolean; onHeight: (height: number) => void }) {
   const c = useColors()
   const insets = useSafeAreaInsets()
   const [text, setText] = useState('')
@@ -106,10 +107,10 @@ export function Composer({ session, running }: { session: string; running: boole
 
   const action = canSend || !running ? 'send' : 'stop'
   return (
-    <View ref={root} style={[s.root, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+    <View ref={root} onLayout={(e) => onHeight(e.nativeEvent.layout.height)} style={[s.root, { paddingBottom: insets.bottom + 4 }]}>
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} onDismiss={menuClosed}>
         <Pressable accessibilityLabel="关闭" style={StyleSheet.absoluteFill} onPress={() => setMenu(false)} />
-        <View style={[s.menu, { backgroundColor: c.bgFloat, bottom: menuBottom }]}>
+        <Glass kind="surface" style={[s.menu, { bottom: menuBottom }]}>
           <Pressable style={s.menuItem} onPress={() => choose(fromCamera)}>
             <Icon icon={Camera} size={20} color={c.textPrimary} />
             <Text style={[font(16), { color: c.textPrimary }]}>拍照</Text>
@@ -118,7 +119,7 @@ export function Composer({ session, running }: { session: string; running: boole
             <Icon icon={ImageIcon} size={20} color={c.textPrimary} />
             <Text style={[font(16), { color: c.textPrimary }]}>照片</Text>
           </Pressable>
-        </View>
+        </Glass>
       </Modal>
       {error ? <Text style={[font(13), s.error, { color: c.statusError }]}>{error}</Text> : null}
       {photos.length ? (
@@ -133,7 +134,7 @@ export function Composer({ session, running }: { session: string; running: boole
           ))}
         </View>
       ) : null}
-      <View style={s.bar}>
+      <Glass style={s.bar}>
         <Pressable
           accessibilityLabel="加照片"
           disabled={photos.length >= REMOTE_LIMITS.photos}
@@ -142,7 +143,7 @@ export function Composer({ session, running }: { session: string; running: boole
         >
           <Icon icon={ImageIcon} size={22} color={c.textSecondary} />
         </Pressable>
-        <View style={[s.field, { backgroundColor: c.bgRaised }]}>
+        <View style={s.field}>
           <TextInput
             value={text}
             onChangeText={setText}
@@ -160,22 +161,22 @@ export function Composer({ session, running }: { session: string; running: boole
         >
           <Icon icon={action === 'send' ? ArrowUp : Square} size={22} color={c.textInverse} />
         </Pressable>
-      </View>
+      </Glass>
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  root: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
-  bar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  attach: { padding: 8, borderRadius: 20 },
-  field: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, minHeight: 42, justifyContent: 'center' },
+  root: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, gap: 8 },
+  bar: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 28 },
+  attach: { padding: 8, marginBottom: 5, borderRadius: 18 },
+  field: { flex: 1, paddingLeft: 8, paddingRight: 16, paddingVertical: 12, minHeight: 46, justifyContent: 'center' },
   input: { maxHeight: 132, paddingTop: 0, paddingBottom: 0 },
-  round: { padding: 9, borderRadius: 20 },
-  photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingLeft: 48 },
+  round: { padding: 9, marginBottom: 3, borderRadius: 20 },
+  photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   photo: { width: 72, height: 72, borderRadius: 10, overflow: 'hidden' },
   remove: { position: 'absolute', top: 4, right: 4, padding: 3, borderRadius: 10 },
-  menu: { position: 'absolute', left: 12, width: 208, borderRadius: 14, paddingVertical: 6, shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 12 } },
+  menu: { position: 'absolute', left: 12, width: 208, borderRadius: 22, paddingVertical: 8 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
-  error: { paddingLeft: 48 }
+  error: { paddingLeft: 16 }
 })

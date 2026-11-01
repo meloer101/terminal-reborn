@@ -9,7 +9,7 @@ import type { RemoteSession } from '../../../src/shared/remote'
 import { groupSessions, rowTime, viaOf } from '../state/model'
 import { call, forget, useApp } from '../state/store'
 import { AgentIcon } from '../ui/AgentIcon'
-import { GroupHeader, Icon, Screen } from '../ui/atoms'
+import { GlassButton, GroupHeader, Icon, Screen } from '../ui/atoms'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { font, useColors } from '../ui/theme'
 import { useNow } from '../ui/useNow'
@@ -94,9 +94,9 @@ export default function Sessions() {
             {where}
           </Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="新建会话" disabled={link.kind !== 'open'} onPress={() => router.push('/new')} style={[s.plus, link.kind !== 'open' && { opacity: 0.4 }]}>
+        <GlassButton label="新建会话" disabled={link.kind !== 'open'} onPress={() => router.push('/new')}>
           <Icon icon={Plus} size={22} color={c.textPrimary} />
-        </Pressable>
+        </GlassButton>
       </View>
       <FlatList
         data={rows}
@@ -114,7 +114,6 @@ export default function Sessions() {
 const s = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 16, paddingTop: 8, paddingBottom: 4 },
   mac: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  plus: { padding: 8 },
   title: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 },
   empty: { paddingHorizontal: 20, paddingTop: 24 },
   row: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 10 },

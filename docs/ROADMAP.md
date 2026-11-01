@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节作者已确认；P2 Mac 端已完成（PRD v1.113）；P3 手机端应用已完成，TestFlight 和真机连接还没做（PRD v1.114）。
+- 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节作者已确认；P2 Mac 端已完成（PRD v1.113）；P3 手机端应用已完成，TestFlight 和真机连接还没做（PRD v1.114）；手机端换成液态玻璃（PRD v1.117，Figma 46′）。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
 - 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.109，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
@@ -226,6 +226,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [ ] TestFlight：要作者的 Apple 账号，`cd mobile && npx eas-cli build -p ios`，再 `eas submit`；Bundle ID 先写的 `app.wavi.remote`，待作者定
   - [ ] 真机经 Tailscale 和局域网连接、ATS 和本地网络权限（P0 挪过来的那项）
   - [x] 45I 的出口按钮和 45J 进度面板（2026-11-01，随 Git 出口）
+  - [x] 液态玻璃（2026-11-01，PRD v1.117，Figma 46′）：`mobile/src/ui/atoms.tsx` 的 `Glass`（iOS 26 `GlassView`，更早退回实色）和 `ScrollEdge`，标题栏、输入框、Git · 变更 的出口浮在内容上，面板和附件菜单是着色更重的玻璃。iOS 26.3 模拟器里对替身 Mac 深浅两种主题看过会话列表、会话页、附件菜单、出口面板、Git · 变更；iOS 26 以下的退回样式没在模拟器里看过
   - [ ] 45G 的「文件」
 - [ ] P4 推送：等你处理 / 做完 / 出错经 Expo push service 到 APNs
 

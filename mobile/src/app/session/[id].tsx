@@ -1,10 +1,10 @@
 // 会话页 · 聊天视图 (Figma 45C): the session's conversation from its transcript, newest at the bottom; what the agent
 // is doing right now (its text reaches the transcript only once a block is written, PRD §6.16); the composer; and the
-// sheet for what it waits for. The branch button opens Git · 变更.
+// sheet for what it waits for. The branch button opens Git · 变更. Nav bar and composer are glass over the feed (46′).
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { GitBranch } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, StyleSheet, Text, View } from 'react-native'
 import type { GitChanges } from '../../../../src/shared/git-graph/log'
 import { Composer } from '../../chat/Composer'
 import { FeedItem } from '../../chat/FeedItem'
@@ -12,7 +12,7 @@ import { PromptSheet } from '../../chat/PromptSheet'
 import { shortAge } from '../../state/model'
 import { call, loadOlder, useApp, watch } from '../../state/store'
 import { AgentIcon } from '../../ui/AgentIcon'
-import { Icon, NavBar, Screen } from '../../ui/atoms'
+import { GlassButton, Icon, NavBar, Screen, ScrollEdge, useNavInset } from '../../ui/atoms'
 import { StatusGlyph } from '../../ui/StatusGlyph'
 import { font, useColors } from '../../ui/theme'
 import { useNow } from '../../ui/useNow'
@@ -40,6 +40,9 @@ export default function SessionScreen() {
   const linkOpen = useApp((st) => st.link.kind === 'open')
   const prompts = useMemo(() => allPrompts.filter((p) => p.sessionId === id).sort((a, b) => a.createdAt - b.createdAt), [allPrompts, id])
   const [changed, setChanged] = useState<number | null>(null)
+  const navInset = useNavInset()
+  /** The composer floats over the feed (46′); the feed's newest item stays clear of it. */
+  const [composerHeight, setComposerHeight] = useState(0)
 
   useEffect(() => {
     void watch(id)
@@ -61,8 +64,9 @@ export default function SessionScreen() {
   const subtitle = session?.branch ?? ''
 
   return (
-    <Screen bottom={false}>
+    <Screen top={false} bottom={false}>
       <NavBar
+        floating
         title={session?.title ?? '会话'}
         subtitle={
           session ? (
@@ -79,23 +83,26 @@ export default function SessionScreen() {
         }
         right={
           changed !== null ? (
-            <Pressable accessibilityLabel="变更" onPress={() => router.push(`/changes/${id}`)} style={[s.changes, { backgroundColor: c.bgSelected }]}>
-              <Icon icon={GitBranch} color={c.textSecondary} />
-              <Text style={[font(13, 400, true), { color: c.textSecondary }]}>{changed}</Text>
-            </Pressable>
+            <GlassButton label="变更" onPress={() => router.push(`/changes/${id}`)}>
+              <View style={s.changes}>
+                <Icon icon={GitBranch} color={c.textSecondary} />
+                <Text style={[font(13, 400, true), { color: c.textSecondary }]}>{changed}</Text>
+              </View>
+            </GlassButton>
           ) : null
         }
       />
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         {!session ? (
-          <Text style={[font(15), s.gone, { color: c.textTertiary }]}>{linkOpen ? '这个会话已经不在 Mac 上了' : 'Mac 上的 Wavi 没有运行'}</Text>
+          <Text style={[font(15), s.gone, { color: c.textTertiary, paddingTop: navInset }]}>{linkOpen ? '这个会话已经不在 Mac 上了' : 'Mac 上的 Wavi 没有运行'}</Text>
         ) : (
           <FlatList
             inverted
             data={items}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => <FeedItem item={item} session={id} />}
-            contentContainerStyle={s.feed}
+            // Inverted: paddingTop is the bottom of the screen, paddingBottom the top.
+            contentContainerStyle={[s.feed, { paddingTop: composerHeight + 16, paddingBottom: navInset + 8 }]}
             ListHeaderComponent={running && session.action ? <Live action={session.action} since={session.since} /> : undefined}
             ListFooterComponent={feed?.loading ? <ActivityIndicator style={{ paddingVertical: 12 }} color={c.textTertiary} /> : undefined}
             onEndReached={() => void loadOlder()}
@@ -104,8 +111,9 @@ export default function SessionScreen() {
             keyboardShouldPersistTaps="handled"
           />
         )}
+        {session ? <ScrollEdge edge="bottom" height={composerHeight + 60} /> : null}
         <PromptSheet prompts={prompts} />
-        {session ? <Composer session={id} running={running} /> : null}
+        {session ? <Composer session={id} running={running} onHeight={setComposerHeight} /> : null}
       </KeyboardAvoidingView>
     </Screen>
   )
@@ -113,8 +121,8 @@ export default function SessionScreen() {
 
 const s = StyleSheet.create({
   sub: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
-  changes: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  feed: { paddingHorizontal: 20, paddingVertical: 12, gap: 16 },
+  changes: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  feed: { paddingHorizontal: 20, gap: 16 },
   live: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   gone: { padding: 20 }
 })
