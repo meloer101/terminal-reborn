@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.119 | 2026-11-01 | **手机端改成原生 SwiftUI（S1），并定下灵动岛、蓝牙和 APNs 的路线**（F22，作者 2026-11-01：要系统原生的液态玻璃，还要灵动岛来显示状态、回答选项；灵动岛在后台的更新蓝牙和 APNs 推送都做，APNs 先从 Mac 直发、.p8 密钥放作者的 Mac；灵动岛上可以允许 / 拒绝和回答提问；最低 iOS 26）。参考：CodeIsland（MIT，蓝牙后台更新、不建服务器）、Code Light（APNs + 零知识中转、手机上审批）、Agentfy（只看状态）、作者自己的 Marvis iOS（SwiftUI 客户端）。① Expo 的 `mobile/` 删掉，换成 `ios/`：SwiftUI、Swift 6，XcodeGen 从 `project.yml` 生成工程；导航栏、面板、工具栏用系统组件和 `.glassEffect()`，46″ 的同心底角、scroll edge 由系统给出；会话列表的大标题「会话」在 Mac 那一行上面（46B 是反过来的），新建会话用系统 Form。② 加密用 CryptoKit；输入配对码的 PAKE 要 ristretto255，swift-sodium 的预编译 libsodium 是精简版、没有这部分，改为把 libsodium 1.0.20 里这个群的源文件放进 `ios/Packages/Ristretto255`（ISC）。③ 两边不各写一份：`src/main/remote/vectors.test.ts` 用 Mac 的加密函数写出固定测试数据 `src/shared/remote-vectors.json`，Swift 逐字节对照；`phone-assets.test.ts` 从 `src/shared` 和 lucide-react 生成状态文字、智能体名字和图标、分支名词库、14 个 lucide 图标（智能体图标的路径为 iOS 的 SVG 解析器展开写法，否则 codex 会缺块）。④ 真机实测（iPhone 17，iOS 27.0.1）发现并修好的 Mac 端问题：Wavi 重启后还没在 Mac 上打开过的会话没有 PTY，手机发消息被拒（改为交给主窗口启动 agent 再发，等待 30 s）；手机在 agent 启动前打开会话时 Mac 不记这台手机，transcript 出现后也不推（改为先记下，主窗口发来会话列表或 hook 触发时补发最新一页）。⑤ 手机端：网络一变（Wi-Fi ↔ 蜂窝、Tailscale 起来）就重连；点会话列表顶部的 Mac 一行能看到每个地址和上次失败的原因。独立审阅后修了 6 处（被盖住的页面不再退订对话、加密帧按序交给 socket、换配对时旧连接不再写入、归档后回列表、从链接配对时失败有提示、「其他」输入框不再反选）。⑥ 灵动岛（S2，先画 Figma）、蓝牙（S3）、APNs（S4，取代 Expo push）还没做。 |
 | v1.118 | 2026-11-01 | **手机面板的第三轮细节**（F22，Figma Section 46″ `743:2`，作者 2026-11-01 指出后确认）：①「总是允许 …」从一行小字改成和「拒绝」同样的按钮，放在「拒绝 / 允许」下面，左右和这两颗按钮对齐。② 面板的底角和屏幕圆角同心：iPhone 17 Pro 的屏幕圆角按模拟器的屏幕遮罩量得约 62 pt，面板离边 8，所以底角 54，顶角仍是 34；圆角更小的机型上面板会比屏幕略圆。③ Git · 变更 的标题在 App 里本来就居中（返回键对面留了 44 的位置），46′ 的 Figma 漏了这个位置，46″ 补上。 |
 | v1.117 | 2026-11-01 | **手机端换成液态玻璃**（F22 / §5，Figma Section 46′ `737:33097`，作者 2026-11-01 确认「按照改之后的来」；46 是第一版，46′ 是按 unslop 和 Apple HIG 规整后的版本，以 46′ 为准）：① 玻璃只用在浮在内容上的一层：返回圆钮、「变更」胶囊、列表的 +、输入框、Git · 变更 底部的次出口、底部面板和附件菜单；会话列表、对话、diff、文件列表保持实色底。② iOS 26 用系统的 Liquid Glass（expo-glass-effect 的 `GlassView`，按钮是可交互的玻璃）；更早的系统退回 Figma 46 的实色底加细边。③ 会话页和 Git · 变更 的标题栏、输入框、出口浮在内容上，上下用渐隐的 scroll edge 代替分隔条；面板离屏幕两边和底边 8、圆角 34。④ 和 46′ 不一样的两处：设计里 scroll edge 下面还有一层渐进模糊，手机上先只做渐变（不为它加 expo-blur 和遮罩两个依赖），所以顶部渐隐到标题栏底边之前都保持不透明，文字不会压在标题下面；面板和菜单的着色从 78% 加到 90%，iOS 的玻璃比 Figma 的透，78% 时菜单后面的字读得出来。深色不加阴影，浅色只给玻璃一层很浅的投影。 |
 | v1.116 | 2026-11-01 | **手机会话行不写模型名，和桌面侧栏一样用智能体图标**（F22，作者 2026-11-01）：会话列表每行第三行是「项目 · 分支」，行尾是智能体的单色图标（同桌面侧栏 Figma 34P，图标数据挪到 `src/shared/agent-icon-svg.ts` 两边共用）；会话页标题下面同样是状态、分支、图标。Figma 45B / 45C 里第三行的模型名以此为准不再显示。 |
@@ -589,7 +590,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 在 iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话：看对话（消息、工具调用、diff），发 prompt 和照片，回答权限和提问，开新会话（项目、worktree、分支、agent），提交、推送、PR、合并、归档。agent 仍在 Mac 的 PTY 里跑原生 TUI，手机是同一个会话的另一个视图，桌面和手机随时可以交替操作。
 
 - **前提**：Mac 上 Wavi 开着（窗口可以隐藏），Mac 不睡眠。手机的请求由 main 转给拥有这个会话的渲染进程执行，和 F21 的 broker 同一种转发方式，所以手机和桌面按钮走同一段代码（§6.9 发送队列、选择框开着时不写、状态机）。Wavi 退出后手机显示「Mac 上的 Wavi 没有运行」。
-- **客户端**：Expo React Native 应用，放在 `mobile/`（自己的 `package.json`，同 `site/`），iOS 用 TestFlight 分发。协议类型和 transcript 解析与 Mac 共用 `src/shared/` 里的文件（metro `watchFolders`），不复制。
+- **客户端**（v1.119）：原生 SwiftUI 应用，放在 `ios/`，最低 iOS 26，iOS 用 TestFlight 分发。协议在 Swift 里另写一份，靠 `src/shared/remote-vectors.json`（加密逐字节）和 `phone-assets.test.ts` 生成的资源（状态文字、智能体、图标、分支名词库）和 Mac 保持一致。
 - **连接**：不建中转服务器、不做账号（§1.4）。
   - 首选 Tailscale：手机连 Mac 的 tailnet 地址（`ws://100.x.y.z:<端口>`，v1.113），传输有 WireGuard 加密；设置里显示 MagicDNS 名（只读 `tailscale status --json`），不改用户的 Tailscale 配置。
   - 同一个 Wi-Fi 时局域网直连 `ws://<局域网地址>:<端口>`：应用声明 `NSAllowsLocalNetworking` 和本地网络权限说明。
@@ -601,8 +602,8 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **权限和提问**：手机底部弹出面板。有手机连着时，Claude 的 PermissionRequest 挂起（`holdPermissions`），手机上「允许」「拒绝」（可以写理由）或回答 AskUserQuestion（`updatedInput.answers`）后回给 hook。桌面 TUI 里先答了的，收到同一工具的 PostToolUse / PostToolUseFailure 或 Stop 时释放挂起的 hook，手机面板跟着收起。「总是允许」过滤掉 `setMode` 和 `destination: userSettings`（§6.6）。没有手机连着时照旧立即空回复。Codex 的批准未确认，接 Codex 时实测后补。
 - **新建会话**：同 F4 的字段（项目、工作目录 新 worktree / 当前目录、基于哪个分支、agent），多一个可选的首条 prompt。
 - **Git**：Git · 变更（文件列表 + diff）、提交、推送、创建 PR、合并（F16 的出口和预检照样跑）、归档（F15）。出口在拥有会话的窗口里用 Git · 变更 同一段代码跑，进度推给手机（v1.115）；「合并 PR #N…」的合并面板手机上没有；归档要求 archive 脚本已在 Mac 上批准过。
-- **推送通知**：等你处理、做完、出错，经 Expo push service 转到 APNs（Mac 只拿手机的 push token 发请求，不放 Apple 的密钥）。通知里只写会话名和状态，不带代码和对话正文。
-- **不做**：在手机上看终端画面；Wavi 退出后仍能用（要把状态机、发送和会话列表搬进守护进程）；Android（Expo 能出，但不测不发）；不经过 Wavi 启动的 agent。
+- **推送通知和灵动岛**（v1.119 改）：等你处理、做完、出错发通知；灵动岛和锁屏卡片显示等你处理的那条或运行数，上面能允许 / 拒绝、回答提问（`LiveActivityIntent`）。App 在前台时自己更新；后台时 Mac 在旁边走蓝牙摘要（加密，只有配对过的手机能解），不在旁边走 APNs。APNs 先从 Mac 直发，.p8 密钥在设置 · 手机里选文件、存进 Mac 钥匙串；以后公开发布再加中转。通知里只写会话名和状态，不带代码和对话正文。
+- **不做**：在手机上看终端画面；Wavi 退出后仍能用（要把状态机、发送和会话列表搬进守护进程）；Android；不经过 Wavi 启动的 agent。
 - **验收**：① 扫码后 60 s 内看到全部会话和状态，撤销设备后手机立即断开；② 手机发一条 prompt，Mac 终端里同一个会话收到并开始执行，工具调用在它完成后 2 s 内出现在手机上，一段文字在它写完后 2 s 内出现；③ 手机拍照（HEIC）发出，agent 的回答说明它看到了图片内容；④ agent 请求权限时手机弹出面板，允许后 agent 继续，Mac 终端里的确认框随之消失；AskUserQuestion 在手机上能选；⑤ 手机上新建一个 worktree 会话（指定分支和 agent），Mac 侧栏同步出现；⑥ 手机上看 diff，提交、推送并创建 PR；⑦ 手机走蜂窝网络经 Tailscale 时 ②–④ 照样通过；⑧ `npm run check` 通过，e2e 用假手机客户端走一遍 WebSocket 链路。
 
 ### P2 储备（已验证，但排在后面）
@@ -844,6 +845,7 @@ F21 用。v1.103 起派活改用 `wavi` 命令，下面讲 MCP 的几条（工�
 - **Electron 里能用的加密**（Electron 44.7.1，BoringSSL，2026-11-01）：`createCipheriv('chacha20-poly1305')` 报 `ERR_CRYPTO_UNKNOWN_CIPHER`；X25519（`generateKeyPairSync('x25519')`、`diffieHellman`）、HKDF、HMAC、AES-256-GCM 都能用。所以帧用 AES-256-GCM（12 字节 nonce = 4 个 0 + 8 字节计数）。
 - **PTY 守护进程的 hook 转发**：app 连着时守护进程把 hook 转给 main，原先一律 10 s 没回就答空，挂起的 PermissionRequest 会被它截断（TUI 的确认框照旧在，但手机的回答到不了 Claude）；v1.113 起 PermissionRequest 等 125 s。
 - **transcript 实跑**：解析器跑本机 60 个 CLI 会话（38176 行）用 1.3 s，没有「未识别的条目」，工具调用都配上了结果；76 个 Codex rollout 同样。
+- **iPhone 真机连接**（v1.119，iPhone 17 / iOS 27.0.1，SwiftUI 版，2026-11-01）：同一个 Wi-Fi 下 `ws://10.x:7429` 直接连上；只开蜂窝时经 Tailscale `ws://100.123.18.119:7429` 连上（走 DERP 中继，`tailscale ping` 330–720 ms）。iOS 的 ATS 会拦明文 `ws://` 到 Tailscale 的 100.64.0.0/10：Info.plist 里同时有 `NSAllowsLocalNetworking` 时 `NSAllowsArbitraryLoads` 被忽略，只放行局域网地址；只留 `NSAllowsArbitraryLoads` 后两条路都通（帧本身有 AES-256-GCM）。断开 Wi-Fi 后旧连接不会马上报错，要等超时，所以手机监听网络变化主动重连。
 
 ## 7. 开源与工程规范
 

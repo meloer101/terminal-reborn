@@ -1,0 +1,72 @@
+# The iPhone app of F22 (PRD v1.119): SwiftUI, iOS 26. `xcodegen` in this folder writes Wavi.xcodeproj (git-ignored).
+name: Wavi
+options:
+  bundleIdPrefix: app.wavi
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: U9XR52C9HW
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  Ristretto255:
+    path: Packages/Ristretto255
+targets:
+  Wavi:
+    type: application
+    platform: iOS
+    sources:
+      - path: Wavi
+    dependencies:
+      - package: Ristretto255
+        product: CRistretto255
+    info:
+      path: Wavi/Info.plist
+      properties:
+        CFBundleDisplayName: Wavi
+        CFBundleURLTypes:
+          - CFBundleURLName: app.wavi.remote
+            CFBundleURLSchemes: [wavi]
+        NSCameraUsageDescription: 扫描 Mac 上的配对二维码，拍照发给智能体。
+        NSLocalNetworkUsageDescription: 连接同一个 Wi-Fi 里的 Mac 上的 Wavi。
+        # Frames carry their own AES-256-GCM (PRD §6.16); ws:// to a Tailscale or LAN address is not what ATS protects.
+        # NSAllowsArbitraryLoads alone: with NSAllowsLocalNetworking next to it iOS ignores it, and ws:// to Tailscale's
+        # 100.64.0.0/10 (not a local network to iOS) is refused (measured on an iPhone 17, iOS 27.0.1, 2026-11-01).
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UIAppFonts: [JetBrainsMono_400Regular.ttf, JetBrainsMono_500Medium.ttf]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.wavi.remote
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  WaviTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: WaviTests
+      - path: ../src/shared/remote-vectors.json
+        buildPhase: resources
+    dependencies:
+      - target: Wavi
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.wavi.remote.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Wavi:
+    build:
+      targets:
+        Wavi: all
+        WaviTests: [test]
+    test:
+      targets: [WaviTests]

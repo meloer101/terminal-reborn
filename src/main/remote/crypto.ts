@@ -102,10 +102,10 @@ export function pairingKey(own: KeyObject, phonePublic: string, code: string): B
   return shared ? hkdf(shared, Buffer.from(code, 'utf8'), PAIR_INFO) : null
 }
 
-const pakeBase = (code: string) => ristretto255_hasher.hashToCurve(Buffer.from(code, 'utf8'), { DST: PAKE_INFO })
+export const pakeBase = (code: string): InstanceType<typeof ristretto255.Point> => ristretto255_hasher.hashToCurve(Buffer.from(code, 'utf8'), { DST: PAKE_INFO })
 
-/** Wavi's half of a typed-code PAKE: null when `a` is not a usable group element. */
-export function pakeReply(code: string, a: unknown, macPublic: string): { b: string; box: string } | null {
+/** Wavi's half of a typed-code PAKE: null when `a` is not a usable group element. `y` is fixed only by the test vectors. */
+export function pakeReply(code: string, a: unknown, macPublic: string, y = ristretto255_hasher.hashToScalar(randomBytes(64))): { b: string; box: string } | null {
   const bytesA = fromB64u(a, 32)
   if (!bytesA) return null
   let pointA: InstanceType<typeof ristretto255.Point>
@@ -115,7 +115,6 @@ export function pakeReply(code: string, a: unknown, macPublic: string): { b: str
     return null
   }
   if (pointA.is0()) return null
-  const y = ristretto255_hasher.hashToScalar(randomBytes(64))
   const bytesB = pakeBase(code).multiply(y).toBytes()
   const key = hkdf(pointA.multiply(y).toBytes(), Buffer.concat([bytesA, bytesB]), PAKE_INFO)
   return { b: b64u(bytesB), box: b64u(seal(key, 0, Buffer.from(JSON.stringify({ key: macPublic }), 'utf8'))) }

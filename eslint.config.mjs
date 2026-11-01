@@ -8,8 +8,8 @@ export default tseslint.config(
     ignores: ['.claude/', 'out/', 'dist/', 'release/', 'node_modules/', 'coverage/', 'test-results/', 'site/dist/', 'site/.astro/',
       // Launch films: HyperFrames compositions rendered to video (browser scripts, vendored libraries), not app code.
       'launch-videos/',
-      // Phone app (PRD F22): its own package, checked by `npm run check` inside mobile/.
-      'mobile/']
+      // iPhone app (PRD F22): Swift, tested with `xcodebuild test` inside ios/ (its build folder holds package sources).
+      'ios/']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
