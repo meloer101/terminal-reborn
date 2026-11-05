@@ -38,6 +38,31 @@ export const TERMINAL_ANSI_COUNT = 16
 export const FULLSCREEN_BACKDROPS = ['sky', 'meadow', 'lake', 'dune', 'pine', 'dusk', 'coral', 'sunset', 'ember', 'plum'] as const
 export type FullscreenBackdrop = 'auto' | (typeof FULLSCREEN_BACKDROPS)[number]
 
+/** 对话宽度 (PRD F23 v1.127, Figma 51): the chat column's width; `full` fills the card. */
+export const CHAT_WIDTHS = ['narrow', 'medium', 'wide', 'full'] as const
+export type ChatWidth = (typeof CHAT_WIDTHS)[number]
+export const CHAT_WEIGHTS = [300, 400, 500] as const
+export type ChatWeight = (typeof CHAT_WEIGHTS)[number]
+
+/** 设置 · 外观 · 对话 (PRD F23 v1.127, Figma 51D): how GUI sessions read. The terminal's own fonts stay apart. */
+export interface ChatAppearance {
+  width: ChatWidth
+  /** Latin family first in the stack; '' is the system UI font. */
+  latinFont: string
+  /** CJK family after it. */
+  cjkFont: string
+  fontWeight: ChatWeight
+  /** px */
+  fontSize: number
+  /** Opacity of the chat card over the window's glass, 0.5–1 (as terminalOpacity). */
+  opacity: number
+  /** The user's picture beside their messages: a 256² data URL (webp / png / jpeg), or '' for none. */
+  avatar: string
+}
+
+/** 窗口 · 材质 (PRD §5 v1.127, Figma 51E / 51F): macOS 26's Liquid Glass, or the older frosted vibrancy. */
+export type WindowMaterial = 'liquid' | 'frosted'
+
 export interface AppearanceSettings {
   theme: ThemePreference
   fullscreenBackdrop: FullscreenBackdrop
@@ -59,6 +84,15 @@ export interface AppearanceSettings {
   terminalOpacity: number
   /** Terminal screen reader mode (VoiceOver reads the output). */
   screenReader: boolean
+  /** GUI sessions (Figma 51D). */
+  chat: ChatAppearance
+  /** The window's base layer. Before macOS 26 it is always frosted. */
+  windowMaterial: WindowMaterial
+  /**
+   * 窗口底层不透明度: the theme's color over the base layer (the sidebar's), 0 (none) – 1, one value per material so
+   * switching keeps each one's look.
+   */
+  shellOpacity: Record<WindowMaterial, number>
 }
 
 /** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
@@ -157,8 +191,14 @@ export interface AppSettings {
   remote: RemoteSettings
 }
 
+/** An appearance patch; its nested objects (chat, shellOpacity) merge one level deeper. */
+export type AppearancePatch = Partial<Omit<AppearanceSettings, 'chat' | 'shellOpacity'>> & {
+  chat?: Partial<ChatAppearance>
+  shellOpacity?: Partial<Record<WindowMaterial, number>>
+}
+
 export interface SettingsPatch {
-  appearance?: Partial<AppearanceSettings>
+  appearance?: AppearancePatch
   ports?: Partial<PortSettings>
   review?: Partial<ReviewSettings>
   archive?: Partial<ArchiveSettings>
@@ -183,7 +223,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     terminalBackground: { mode: 'theme', color: '#0a0a0a' },
     terminalColors: null,
     terminalOpacity: 1,
-    screenReader: false
+    screenReader: false,
+    chat: { width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' },
+    windowMaterial: 'liquid',
+    // Liquid Glass shows untinted (PRD §5 v1.95); the frosted shell keeps a theme tint about as strong as before.
+    shellOpacity: { liquid: 0, frosted: 0.6 }
   },
   ports: { base: DEFAULT_PORT_BASE },
   review: {
@@ -221,8 +265,38 @@ export const LIMITS = {
   fontSize: { min: 9, max: 28 },
   lineHeight: { min: 1, max: 2.2 },
   terminalOpacity: { min: 0.5, max: 1 },
-  fontName: 120
+  fontName: 120,
+  chatFontSize: { min: 12, max: 18 },
+  chatOpacity: { min: 0.5, max: 1 },
+  shellOpacity: { min: 0, max: 1 },
+  /** A 256² webp is ~10–40 KB; the cap keeps a stray big image out of settings.json. */
+  avatar: 400_000
 } as const
+
+const AVATAR = /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/
+
+const percent = (value: number): number => Math.round(value * 100) / 100
+
+function chat(value: unknown): ChatAppearance {
+  const d = DEFAULT_SETTINGS.appearance.chat
+  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const latin = typeof v.latinFont === 'string' && v.latinFont.trim().length <= LIMITS.fontName ? v.latinFont.trim() : d.latinFont
+  return {
+    width: (CHAT_WIDTHS as readonly unknown[]).includes(v.width) ? (v.width as ChatWidth) : d.width,
+    latinFont: latin,
+    cjkFont: str(v.cjkFont, d.cjkFont, LIMITS.fontName),
+    fontWeight: (CHAT_WEIGHTS as readonly unknown[]).includes(v.fontWeight) ? (v.fontWeight as ChatWeight) : d.fontWeight,
+    fontSize: Math.round(num(v.fontSize, d.fontSize, LIMITS.chatFontSize)),
+    opacity: percent(num(v.opacity, d.opacity, LIMITS.chatOpacity)),
+    avatar: typeof v.avatar === 'string' && v.avatar.length <= LIMITS.avatar && (v.avatar === '' || AVATAR.test(v.avatar)) ? v.avatar : d.avatar
+  }
+}
+
+function shellOpacity(value: unknown): Record<WindowMaterial, number> {
+  const d = DEFAULT_SETTINGS.appearance.shellOpacity
+  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return { liquid: percent(num(v.liquid, d.liquid, LIMITS.shellOpacity)), frosted: percent(num(v.frosted, d.frosted, LIMITS.shellOpacity)) }
+}
 
 function num(value: unknown, fallback: number, range: { min: number; max: number }): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
@@ -271,7 +345,10 @@ function appearance(value: unknown): AppearanceSettings {
     terminalBackground: terminalBackground(v.terminalBackground),
     terminalColors: terminalColors(v.terminalColors),
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
-    screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader
+    screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader,
+    chat: chat(v.chat),
+    windowMaterial: v.windowMaterial === 'frosted' ? 'frosted' : d.windowMaterial,
+    shellOpacity: shellOpacity(v.shellOpacity)
   }
 }
 
@@ -350,11 +427,21 @@ function prSettings(value: unknown): PrSettings {
   }
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+function mergeAppearance(current: AppearanceSettings, patch: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...current,
+    ...patch,
+    chat: isRecord(patch.chat) ? { ...current.chat, ...patch.chat } : current.chat,
+    shellOpacity: isRecord(patch.shellOpacity) ? { ...current.shellOpacity, ...patch.shellOpacity } : current.shellOpacity
+  }
+}
+
 /** Applies a (possibly untrusted) patch and re-sanitizes the result. */
 export function applySettingsPatch(current: AppSettings, patch: unknown): AppSettings {
   const p = typeof patch === 'object' && patch !== null ? (patch as Record<string, unknown>) : {}
-  const nextAppearance =
-    typeof p.appearance === 'object' && p.appearance !== null ? { ...current.appearance, ...(p.appearance as object) } : current.appearance
+  const nextAppearance = typeof p.appearance === 'object' && p.appearance !== null ? mergeAppearance(current.appearance, p.appearance as Record<string, unknown>) : current.appearance
   const nextPorts = typeof p.ports === 'object' && p.ports !== null ? { ...current.ports, ...(p.ports as object) } : current.ports
   const nextReview = typeof p.review === 'object' && p.review !== null ? { ...current.review, ...(p.review as object) } : current.review
   const nextArchive = typeof p.archive === 'object' && p.archive !== null ? { ...current.archive, ...(p.archive as object) } : current.archive

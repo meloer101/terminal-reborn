@@ -2,7 +2,7 @@
 // for the terminal layers and <html> data attributes. No DOM access, so it is unit tested.
 // The terminal color comes from the theme (--term-bg: white in light mode, near-black in dark) unless the user chose
 // or imported one (PRD F7 v1.71): then --term-bg is set on <html> to it and xterm gets the matching customTheme.
-import type { AppearanceSettings } from '@shared/settings'
+import type { AppearanceSettings, ChatAppearance, ChatWidth, WindowMaterial } from '@shared/settings'
 import { buildCustomTheme } from '../terminal/appearance'
 import type { TerminalAppearance } from '../terminal/surface'
 
@@ -55,10 +55,42 @@ export interface AppearanceDom {
   attrs: Record<string, string>
 }
 
-export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
+/** 对话宽度 (Figma 51): the chat column; `full` fills the card. Claude desktop's Narrow / Medium / Wide plus a full one. */
+export const CHAT_COLUMN: Record<ChatWidth, string> = { narrow: '720px', medium: '960px', wide: '1280px', full: '100%' }
+
+const quote = (family: string): string => `"${family.replace(/["\\]/g, '')}"`
+
+/** The chat's font stack: the chosen Latin family (or the system UI font), the CJK one, then the UI stack. */
+export function chatFontStack(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont'>): string {
+  const latin = c.latinFont ? quote(c.latinFont) : '-apple-system, BlinkMacSystemFont'
+  return `${latin}, ${quote(c.cjkFont)}, var(--font-ui)`
+}
+
+/** The window material actually shown: Liquid Glass needs macOS 26 (main/appearance.ts). */
+export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liquidGlass: boolean): WindowMaterial =>
+  liquidGlass && a.windowMaterial === 'liquid' ? 'liquid' : 'frosted'
+
+/** A theme color at `opacity` over what is behind it; fully opaque is the color itself, none is transparent. */
+const over = (color: string, opacity: number): string =>
+  opacity >= 1 ? color : opacity <= 0 ? 'transparent' : `color-mix(in srgb, ${color} ${+(opacity * 100).toFixed(2)}%, transparent)`
+
+export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): AppearanceDom {
   const transparent = needsTransparency(a)
+  const chat = a.chat
   return {
     vars: {
+      // 窗口底层不透明度 (PRD §5 v1.127): the theme's shell color over the base layer, per material.
+      '--glass-shell': over('var(--glass-shell-color)', a.shellOpacity[shownMaterial(a, liquidGlass)]),
+      // 对话 (Figma 51D): GUI sessions read these (gui/Chat.module.css).
+      '--chat-column': CHAT_COLUMN[chat.width],
+      '--chat-font': chatFontStack(chat),
+      '--chat-weight': String(chat.fontWeight),
+      '--chat-size': `${chat.fontSize}px`,
+      // 14 / 22 today: the same leading at every size.
+      '--chat-leading': `${Math.round(chat.fontSize * (22 / 14))}px`,
+      '--tr-chat-bg': over('var(--bg-app)', chat.opacity),
+      // The user's picture beside their messages (Figma 51A); none hides it (data-chat-avatar).
+      '--chat-avatar': chat.avatar ? `url("${chat.avatar}")` : null,
       // Only the terminal layers read --term-bg; --term-fg stays the theme's (the diff view uses it on app surfaces).
       '--term-bg': hasCustomBackground(a) ? a.terminalBackground.color : null,
       '--tr-terminal-backdrop': backdropCss(a),
@@ -67,6 +99,6 @@ export function toAppearanceDom(a: AppearanceSettings): AppearanceDom {
       '--tr-term-ring': ringCss(a)
     },
     // The full-screen field (AppShell.module.css picks the palette, `auto` by theme).
-    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop }
+    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop, 'data-chat-avatar': chat.avatar ? 'on' : 'off' }
   }
 }

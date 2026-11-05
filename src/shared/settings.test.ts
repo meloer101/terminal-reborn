@@ -147,3 +147,33 @@ describe('设置 · 手机 (PRD F22)', () => {
     expect(applySettingsPatch(DEFAULT_SETTINGS, { remote: { port: 9000, enabled: 'yes' } }).remote).toEqual({ enabled: false, port: 9000, push: true })
   })
 })
+
+describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 51)', () => {
+  it('starts as GUI sessions look today: narrow column, system UI font, 14 px, opaque, no avatar; Liquid Glass untinted', () => {
+    expect(DEFAULT_SETTINGS.appearance.chat).toEqual({ width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' })
+    expect(DEFAULT_SETTINGS.appearance.windowMaterial).toBe('liquid')
+    expect(DEFAULT_SETTINGS.appearance.shellOpacity).toEqual({ liquid: 0, frosted: 0.6 })
+  })
+
+  it('clamps and rejects field by field', () => {
+    const { chat, windowMaterial, shellOpacity } = sanitizeSettings({
+      appearance: { chat: { width: 'huge', latinFont: '  Inter ', fontWeight: 900, fontSize: 40, opacity: 0.1, avatar: 'javascript:alert(1)' }, windowMaterial: 'stone', shellOpacity: { liquid: 2, frosted: -1 } }
+    }).appearance
+    expect(chat).toEqual({ width: 'narrow', latinFont: 'Inter', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 18, opacity: 0.5, avatar: '' })
+    expect(windowMaterial).toBe('liquid')
+    expect(shellOpacity).toEqual({ liquid: 1, frosted: 0 })
+  })
+
+  it('takes a picture only as an image data URL under the cap', () => {
+    const webp = 'data:image/webp;base64,UklGRg=='
+    expect(sanitizeSettings({ appearance: { chat: { avatar: webp } } }).appearance.chat.avatar).toBe(webp)
+    expect(sanitizeSettings({ appearance: { chat: { avatar: 'data:image/svg+xml;base64,PHN2Zz4=' } } }).appearance.chat.avatar).toBe('')
+    expect(sanitizeSettings({ appearance: { chat: { avatar: `data:image/png;base64,${'A'.repeat(400_001)}` } } }).appearance.chat.avatar).toBe('')
+  })
+
+  it('merges a patch of one chat field or one material’s opacity into the rest', () => {
+    const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { chat: { width: 'wide' }, shellOpacity: { frosted: 0.8 } } })
+    expect(next.appearance.chat).toEqual({ ...DEFAULT_SETTINGS.appearance.chat, width: 'wide' })
+    expect(next.appearance.shellOpacity).toEqual({ liquid: 0, frosted: 0.8 })
+  })
+})

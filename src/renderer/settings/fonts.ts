@@ -1,5 +1,5 @@
 // Font catalog helpers for the settings window: turn the raw list of installed faces into the
-// two menus (Latin monospace, CJK-capable). Pure; the DOM-dependent bits live in local-fonts.ts.
+// menus (Latin monospace and CJK-capable for the terminal; Latin proportional for 对话, PRD v1.127). Pure; the DOM-dependent bits live in local-fonts.ts.
 
 /** Always offered, even when the Local Font Access API is denied or the family is not installed. */
 export const BUNDLED_LATIN_FONT = 'JetBrains Mono Variable'
@@ -11,6 +11,8 @@ export const CJK_SAMPLE = '中文字体'
 export interface FontCatalog {
   latin: string[]
   cjk: string[]
+  /** Proportional Latin families: 设置 · 外观 · 对话 · 英文字体 (the terminal's menu keeps monospace ones). */
+  ui: string[]
 }
 
 const MONO_NAME =
@@ -49,14 +51,17 @@ export function uniqueFamilies(families: readonly string[]): string[] {
 export function classifyFonts(families: readonly string[], isMonospace?: (family: string) => boolean): FontCatalog {
   const cjk: string[] = []
   const latin: string[] = []
+  const ui: string[] = []
   const monospace = isMonospace ?? looksMonospace
   for (const family of uniqueFamilies(families)) {
     if (looksCjk(family)) cjk.push(family)
     else if (monospace(family)) latin.push(family)
+    else ui.push(family)
   }
   return {
     latin: pinFirst(latin, BUNDLED_LATIN_FONT),
-    cjk: pinFirst(cjk, DEFAULT_CJK_FONT)
+    cjk: pinFirst(cjk, DEFAULT_CJK_FONT),
+    ui
   }
 }
 

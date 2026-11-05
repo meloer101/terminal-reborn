@@ -38,11 +38,13 @@ describe('classifyFonts', () => {
   })
   it('lets the measured check decide when there is one: a code-sounding proportional face stays out', () => {
     const measured = (family: string) => ['Menlo', 'Zapfino'].includes(family)
-    const { latin } = classifyFonts([...installed, 'Fira Sans', 'American Typewriter'], measured)
+    const { latin, ui } = classifyFonts([...installed, 'Fira Sans', 'American Typewriter'], measured)
+    // Proportional faces go to 对话's menu (PRD v1.127).
+    expect(ui).toEqual(expect.arrayContaining(['Fira Sans', 'American Typewriter']))
     expect(latin).toEqual([BUNDLED_LATIN_FONT, 'Menlo', 'Zapfino'])
   })
   it('still offers the defaults with an empty list', () => {
-    expect(classifyFonts([])).toEqual({ latin: [BUNDLED_LATIN_FONT], cjk: [DEFAULT_CJK_FONT] })
+    expect(classifyFonts([])).toEqual({ latin: [BUNDLED_LATIN_FONT], cjk: [DEFAULT_CJK_FONT], ui: [] })
   })
 })
 

@@ -57,6 +57,8 @@ function listen<T>(channel: string, listener: (payload: T) => void): () => void 
 
 const api: TrApi = {
   platform: process.platform,
+  // The same test as main/appearance.ts `nativeGlass` (getSystemVersion works in a sandboxed preload).
+  liquidGlass: process.platform === 'darwin' && Number(process.getSystemVersion().split('.')[0]) >= 26,
   homeDir: process.env.HOME ?? '/',
   pty: {
     spawn: (options) => ipcRenderer.invoke(IPC.ptySpawn, options),

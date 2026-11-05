@@ -4,7 +4,7 @@ import {
   DEFAULT_SETTINGS,
   type AlertSettings,
   type AppSettings,
-  type AppearanceSettings,
+  type AppearancePatch,
   type ArchiveSettings,
   type DispatchSettings,
   type PortSettings,
@@ -17,7 +17,7 @@ export interface SettingsHandle {
   settings: AppSettings
   /** True once the persisted settings have been read (before that, defaults are shown). */
   loaded: boolean
-  updateAppearance(patch: Partial<AppearanceSettings>): void
+  updateAppearance(patch: AppearancePatch): void
   updatePorts(patch: Partial<PortSettings>): void
   updateReview(patch: Partial<ReviewSettings>): void
   updateArchive(patch: Partial<ArchiveSettings>): void
@@ -53,7 +53,7 @@ export function useSettings(): SettingsHandle {
     }
   }, [])
 
-  const updateAppearance = useCallback((patch: Partial<AppearanceSettings>) => {
+  const updateAppearance = useCallback((patch: AppearancePatch) => {
     setSettings((current) => applySettingsPatch(current, { appearance: patch }))
     void window.tr.settings.update({ appearance: patch })
   }, [])

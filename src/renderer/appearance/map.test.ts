@@ -6,6 +6,8 @@ import {
   ringCss,
   terminalBackgroundAlpha,
   toAppearanceDom,
+  chatFontStack,
+  shownMaterial,
   toTerminalAppearance
 } from './map'
 
@@ -54,12 +56,54 @@ describe('ringCss', () => {
 
 describe('toAppearanceDom', () => {
   it('lets the surface layers go transparent only when the terminal is', () => {
-    expect(toAppearanceDom(base).vars['--tr-term-surface']).toBe('var(--term-bg)')
-    expect(toAppearanceDom({ ...base, terminalOpacity: 0.8 }).vars['--tr-term-surface']).toBe('transparent')
+    expect(toAppearanceDom(base, false).vars['--tr-term-surface']).toBe('var(--term-bg)')
+    expect(toAppearanceDom({ ...base, terminalOpacity: 0.8 }, false).vars['--tr-term-surface']).toBe('transparent')
   })
 
   it('names the full-screen palette on <html> (auto picks by theme in CSS)', () => {
-    expect(toAppearanceDom(base).attrs).toEqual({ 'data-fs-backdrop': 'auto' })
-    expect(toAppearanceDom({ ...base, fullscreenBackdrop: 'dune' }).attrs['data-fs-backdrop']).toBe('dune')
+    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off' })
+    expect(toAppearanceDom({ ...base, fullscreenBackdrop: 'dune' }, false).attrs['data-fs-backdrop']).toBe('dune')
+  })
+})
+
+describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
+  it('sets the chat column, font stack, weight, size, leading and card opacity', () => {
+    const vars = toAppearanceDom({ ...base, chat: { ...base.chat, width: 'medium', latinFont: 'Inter', cjkFont: 'Source Han Sans SC', fontWeight: 500, fontSize: 16, opacity: 0.85 } }, true).vars
+    expect(vars['--chat-column']).toBe('960px')
+    expect(vars['--chat-font']).toBe('"Inter", "Source Han Sans SC", var(--font-ui)')
+    expect(vars['--chat-weight']).toBe('500')
+    expect(vars['--chat-size']).toBe('16px')
+    expect(vars['--chat-leading']).toBe('25px')
+    expect(vars['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 85%, transparent)')
+  })
+
+  it('reads as today by default: 720 column, system UI font first, 14 / 22, opaque card, untinted Liquid Glass', () => {
+    const vars = toAppearanceDom(base, true).vars
+    expect(vars['--chat-column']).toBe('720px')
+    expect(vars['--chat-font']).toBe('-apple-system, BlinkMacSystemFont, "PingFang SC", var(--font-ui)')
+    expect(vars['--chat-leading']).toBe('22px')
+    expect(vars['--tr-chat-bg']).toBe('var(--bg-app)')
+    expect(vars['--glass-shell']).toBe('transparent')
+  })
+
+  it('tints the base layer by the material shown: frosted before macOS 26 whatever was chosen', () => {
+    const a = { ...base, windowMaterial: 'liquid' as const, shellOpacity: { liquid: 0.2, frosted: 0.6 } }
+    expect(shownMaterial(a, true)).toBe('liquid')
+    expect(toAppearanceDom(a, true).vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 20%, transparent)')
+    expect(shownMaterial(a, false)).toBe('frosted')
+    expect(toAppearanceDom(a, false).vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 60%, transparent)')
+    expect(toAppearanceDom({ ...a, windowMaterial: 'frosted', shellOpacity: { liquid: 0, frosted: 1 } }, true).vars['--glass-shell']).toBe('var(--glass-shell-color)')
+  })
+
+  it('shows the user’s picture only when there is one', () => {
+    const avatar = 'data:image/webp;base64,UklGRg=='
+    const dom = toAppearanceDom({ ...base, chat: { ...base.chat, avatar } }, true)
+    expect(dom.vars['--chat-avatar']).toBe(`url("${avatar}")`)
+    expect(dom.attrs['data-chat-avatar']).toBe('on')
+    expect(toAppearanceDom(base, true).vars['--chat-avatar']).toBeNull()
+  })
+
+  it('quotes font names safely', () => {
+    expect(chatFontStack({ latinFont: 'Bad"Name\\', cjkFont: 'PingFang SC' })).toBe('"BadName", "PingFang SC", var(--font-ui)')
   })
 })

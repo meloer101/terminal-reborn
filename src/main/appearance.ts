@@ -1,6 +1,8 @@
-// Main-side appearance effects (PRD §4 F7): native theme, and the window's glass for every window. The shell is
-// fixed: on macOS 26 Liquid Glass (NSGlassEffectView) under a transparent window, untinted (PRD §5 v1.95); before
-// that, native vibrancy tinted per theme by the renderer (--glass-shell).
+// Main-side appearance effects (PRD §4 F7): native theme, and the window's glass for every window. On macOS 26 the
+// window is transparent over Liquid Glass (NSGlassEffectView); 窗口 · 材质 「磨砂玻璃」 lays native vibrancy over it
+// (PRD §5 v1.127: `setVibrancy('sidebar')` covers the glass, `setVibrancy(null)` shows it again — measured, no window
+// to recreate). Before macOS 26 the shell is always vibrancy. The renderer tints either with --glass-shell at the
+// user's 窗口底层不透明度 (appearance/map.ts).
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import liquidGlass from 'electron-liquid-glass'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
@@ -18,8 +20,10 @@ export const nativeGlass = process.platform === 'darwin' && Number(process.getSy
 /** The glass's corner, the same as the window's on macOS 26. */
 const GLASS_RADIUS = 16
 const glassed = new WeakSet<BrowserWindow>()
-// The renderer tints the vibrancy shell with --glass-shell; on Liquid Glass that tint goes (every load, reloads too).
-const NO_TINT = ':root, :root[data-theme] { --glass-shell: transparent !important; }'
+/** Windows whose glass did not load: they keep the vibrancy shell whatever the material. */
+const unglassed = new WeakSet<BrowserWindow>()
+/** The vibrancy each window has, so a settings change elsewhere does not touch its native views. */
+const vibrancy = new WeakMap<BrowserWindow, 'sidebar' | null>()
 
 function attachGlass(win: BrowserWindow): void {
   if (glassed.has(win)) return
@@ -31,14 +35,9 @@ function attachGlass(win: BrowserWindow): void {
   // -1: the native addon did not load (it logs why). The window is transparent already, so it gets the vibrancy shell,
   // tint included, rather than no glass at all.
   if (liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: GLASS_RADIUS }) < 0) {
-    win.setVibrancy('sidebar')
+    unglassed.add(win)
     return
   }
-  const apply = (): void => {
-    if (win.isDestroyed()) return
-    void win.webContents.insertCSS(NO_TINT)
-  }
-  win.webContents.on('did-finish-load', apply)
   const redraw = (): void => {
     if (!win.isDestroyed()) win.setBackgroundColor('#00000000')
   }
@@ -51,8 +50,13 @@ function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
   const glass = process.platform === 'darwin'
   const resolved = resolveTheme(settings.appearance.theme, nativeTheme.shouldUseDarkColors)
   win.setBackgroundColor(windowBackgroundColor(resolved, glass))
+  if (!glass) return
   if (nativeGlass) attachGlass(win)
-  else if (glass) win.setVibrancy('sidebar')
+  const liquid = nativeGlass && !unglassed.has(win) && settings.appearance.windowMaterial === 'liquid'
+  const next = liquid ? null : 'sidebar'
+  if (vibrancy.has(win) && vibrancy.get(win) === next) return
+  vibrancy.set(win, next)
+  win.setVibrancy(next)
 }
 
 function applyToAll(settings: AppSettings): void {

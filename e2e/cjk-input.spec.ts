@@ -476,9 +476,9 @@ test('Enter / Esc that end a composition in a settings search field do not pick 
   const cjkFont = async () => (await page.evaluate(() => (globalThis as unknown as TrWindow).tr.settings.get())).appearance.cjkFont
   await openSettings()
   const before = await cjkFont()
-  const combobox = dialog.getByRole('combobox', { name: '中文字体' })
+  const combobox = dialog.getByRole('combobox', { name: '中文字体', exact: true })
   const search = dialog.getByPlaceholder('搜索或输入字体名')
-  const list = dialog.getByRole('listbox', { name: '中文字体' })
+  const list = dialog.getByRole('listbox', { name: '中文字体', exact: true })
   const seen = await ownCompositions(
     async () => {
       await combobox.click()

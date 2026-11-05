@@ -1,5 +1,5 @@
 // Pure form ↔ settings mapping for the 外观 page.
-import { LIMITS, type AppearanceSettings, type ThemePreference } from '@shared/settings'
+import { CHAT_WEIGHTS, LIMITS, type AppearanceSettings, type ChatAppearance, type ChatWeight, type ChatWidth, type ThemePreference, type WindowMaterial } from '@shared/settings'
 
 export const THEME_OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = [
   { value: 'system', label: '跟随系统' },
@@ -41,4 +41,36 @@ export function formatLineHeight(value: number): string {
 
 export function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`
+}
+
+// --- 对话 and 窗口 · 材质 (PRD F23 v1.127, Figma 51D) ------------------------------------------------------------------
+
+export const CHAT_WIDTH_OPTIONS: ReadonlyArray<{ value: ChatWidth; label: string }> = [
+  { value: 'narrow', label: '窄' },
+  { value: 'medium', label: '中' },
+  { value: 'wide', label: '宽' },
+  { value: 'full', label: '铺满' }
+]
+
+const WEIGHT_NAMES: Record<ChatWeight, string> = { 300: '细', 400: '常规', 500: '中等' }
+export const CHAT_WEIGHT_OPTIONS: ReadonlyArray<{ value: `${ChatWeight}`; label: string }> = CHAT_WEIGHTS.map((weight) => ({
+  value: `${weight}` as const,
+  label: WEIGHT_NAMES[weight]
+}))
+
+export const CHAT_SIZE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = Array.from(
+  { length: LIMITS.chatFontSize.max - LIMITS.chatFontSize.min + 1 },
+  (_, i) => String(LIMITS.chatFontSize.min + i)
+).map((size) => ({ value: size, label: size }))
+
+export const MATERIAL_OPTIONS: ReadonlyArray<{ value: WindowMaterial; label: string }> = [
+  { value: 'liquid', label: '液态玻璃' },
+  { value: 'frosted', label: '磨砂玻璃' }
+]
+
+/** 对话's English font menu: the system UI font first ('' in settings), then the proportional families. */
+export const SYSTEM_UI_FONT = '跟随系统'
+
+export function chatPreviewCaption(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont' | 'fontSize' | 'fontWeight'>): string {
+  return `${c.latinFont ? displayFamily(c.latinFont) : SYSTEM_UI_FONT} ${c.fontSize} · ${displayFamily(c.cjkFont)} · ${WEIGHT_NAMES[c.fontWeight]}`
 }

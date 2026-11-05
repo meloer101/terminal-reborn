@@ -1,10 +1,27 @@
-import { useMemo, type ReactNode } from 'react'
-import { DEFAULT_SETTINGS, FULLSCREEN_BACKDROPS, LIMITS, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
+import { useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { DEFAULT_SETTINGS, FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type ChatAppearance, type ChatWeight, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
-import { hasCustomBackground } from '../appearance/map'
+import { hasCustomBackground, shownMaterial } from '../appearance/map'
 import { buildCustomTheme } from '../terminal/appearance'
 import { HexField, Row, Section, Select, Slider, ThemeSwatches, Toggle, type SelectOption } from './controls'
-import { BACKGROUND_OPTIONS, THEME_OPTIONS, displayFamily, fontSizeOptions, formatLineHeight, formatPercent, previewCaption, sameAppearanceValue } from './appearance-form'
+import {
+  BACKGROUND_OPTIONS,
+  CHAT_SIZE_OPTIONS,
+  CHAT_WEIGHT_OPTIONS,
+  CHAT_WIDTH_OPTIONS,
+  MATERIAL_OPTIONS,
+  SYSTEM_UI_FONT,
+  THEME_OPTIONS,
+  chatPreviewCaption,
+  displayFamily,
+  fontSizeOptions,
+  formatLineHeight,
+  formatPercent,
+  previewCaption,
+  sameAppearanceValue
+} from './appearance-form'
+import { avatarFromFile } from './avatar'
+import { ChatPreview } from './ChatPreview'
 import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, groupCjkFamilies, withCurrent } from './fonts'
 import { useFontCatalog } from './local-fonts'
 import { PreviewTerminal } from './PreviewTerminal'
@@ -46,7 +63,7 @@ const BACKDROP_OPTIONS: ReadonlyArray<{ value: FullscreenBackdrop; label: string
   ...FULLSCREEN_BACKDROPS.map((id) => ({ value: id, label: BACKDROP_NAMES[id], preview: field(id) }))
 ]
 
-function appearanceDefaults(): Partial<AppearanceSettings> {
+function appearanceDefaults(): AppearancePatch {
   return Object.fromEntries(APPEARANCE_RESET_KEYS.map((key) => [key, DEFAULT_SETTINGS.appearance[key]]))
 }
 
@@ -54,6 +71,16 @@ function latinOption(family: string): SelectOption {
   const face = { fontFamily: cssFamily(family, 'monospace') }
   return { value: family, label: displayFamily(family), labelStyle: face, sample: LATIN_SAMPLE, sampleStyle: face }
 }
+
+function uiOption(family: string): SelectOption {
+  if (family === '') return { value: '', label: SYSTEM_UI_FONT, labelStyle: { fontFamily: 'var(--font-ui)' }, sample: LATIN_SAMPLE, sampleStyle: { fontFamily: 'var(--font-ui)' } }
+  const face = { fontFamily: cssFamily(family, 'sans-serif') }
+  return { value: family, label: displayFamily(family), labelStyle: face, sample: LATIN_SAMPLE, sampleStyle: face }
+}
+
+/** The preview shows the chat once 对话 is clicked or tabbed into, the terminal once another section is (Figma 51D). */
+const previewOf = (event: SyntheticEvent): 'chat' | 'terminal' =>
+  (event.target as HTMLElement).closest('section')?.getAttribute('aria-label') === '对话' ? 'chat' : 'terminal'
 
 function cjkOption(family: string): SelectOption {
   // PingFang SC stays in the stack so a missing glyph never falls back to a Japanese face.
@@ -66,9 +93,19 @@ export function AppearancePane({
   update
 }: {
   appearance: AppearanceSettings
-  update: (patch: Partial<AppearanceSettings>) => void
+  update: (patch: AppearancePatch) => void
 }) {
   const { catalog, access } = useFontCatalog()
+  const chat = appearance.chat
+  const updateChat = (patch: Partial<ChatAppearance>): void => update({ chat: patch })
+  const uiOptions = useMemo(() => ['', ...withCurrent(catalog.ui, chat.latinFont).filter((f) => f !== '')].map(uiOption), [catalog.ui, chat.latinFont])
+  const chatCjkOptions = useMemo(
+    () => groupCjkFamilies(withCurrent(catalog.cjk, chat.cjkFont)).map(({ family, group }) => ({ ...cjkOption(family), group })),
+    [catalog.cjk, chat.cjkFont]
+  )
+  const [preview, setPreview] = useState<'chat' | 'terminal'>('terminal')
+  const picker = useRef<HTMLInputElement>(null)
+  const material = shownMaterial(appearance, window.tr.liquidGlass)
   const latinOptions = useMemo(() => withCurrent(catalog.latin, appearance.latinFont).map(latinOption), [catalog.latin, appearance.latinFont])
   const cjkOptions = useMemo(
     () => groupCjkFamilies(withCurrent(catalog.cjk, appearance.cjkFont)).map(({ family, group }) => ({ ...cjkOption(family), group })),
@@ -90,7 +127,7 @@ export function AppearancePane({
 
   return (
     <div className={styles.page}>
-      <div className={styles.form}>
+      <div className={styles.form} onPointerDown={(e) => setPreview(previewOf(e))} onFocus={(e) => setPreview(previewOf(e))}>
         <h1 className={styles.title}>外观</h1>
 
         <Section title="主题">
@@ -162,7 +199,83 @@ export function AppearancePane({
           )}
         </Section>
 
+        <Section title="对话">
+          <Row label="我的头像" id="chatAvatar">
+            {chat.avatar && <img className={styles.avatar} src={chat.avatar} alt="我的头像" />}
+            <button type="button" className={styles.importButton} onClick={() => picker.current?.click()}>
+              {chat.avatar ? '更换…' : '选择图片…'}
+            </button>
+            {chat.avatar && (
+              <button type="button" className={styles.importButton} onClick={() => updateChat({ avatar: '' })}>
+                移除
+              </button>
+            )}
+            <input
+              ref={picker}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              hidden
+              data-testid="avatar-file"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0]
+                e.currentTarget.value = ''
+                if (file) void avatarFromFile(file).then((avatar) => updateChat({ avatar }), (error: unknown) => console.warn('[settings] could not read the picture:', error))
+              }}
+            />
+          </Row>
+          <Row label="对话宽度" id="chatWidth">
+            <Segmented label="对话宽度" value={chat.width} options={CHAT_WIDTH_OPTIONS} onChange={(width) => updateChat({ width })} />
+          </Row>
+          <Row label="英文字体" id="chatLatinFont">
+            <Select
+              label="对话英文字体"
+              value={chat.latinFont}
+              options={uiOptions}
+              allowCustom
+              placeholder="搜索或输入字体名"
+              onChange={(latinFont) => updateChat({ latinFont })}
+            />
+          </Row>
+          <Row label="中文字体" id="chatCjkFont">
+            <Select
+              label="对话中文字体"
+              value={chat.cjkFont}
+              options={chatCjkOptions}
+              allowCustom
+              placeholder="搜索或输入字体名"
+              onChange={(cjkFont) => updateChat({ cjkFont })}
+            />
+          </Row>
+          <Row label="字重" id="chatWeight">
+            <Segmented
+              label="字重"
+              value={`${chat.fontWeight}`}
+              options={CHAT_WEIGHT_OPTIONS}
+              onChange={(weight) => updateChat({ fontWeight: Number(weight) as ChatWeight })}
+            />
+          </Row>
+          <Row label="字号" id="chatFontSize">
+            <Select label="对话字号" value={String(chat.fontSize)} options={CHAT_SIZE_OPTIONS} onChange={(size) => updateChat({ fontSize: Number(size) })} />
+          </Row>
+        </Section>
+
         <Section title="窗口">
+          {window.tr.liquidGlass && (
+            <Row label="材质" id="windowMaterial">
+              <Segmented label="材质" value={appearance.windowMaterial} options={MATERIAL_OPTIONS} onChange={(windowMaterial) => update({ windowMaterial })} />
+            </Row>
+          )}
+          <Row label="窗口底层不透明度" id="shellOpacity">
+            <Slider
+              label="窗口底层不透明度"
+              value={appearance.shellOpacity[material]}
+              min={LIMITS.shellOpacity.min}
+              max={LIMITS.shellOpacity.max}
+              step={0.01}
+              format={formatPercent}
+              onCommit={(value) => update({ shellOpacity: { [material]: value } })}
+            />
+          </Row>
           <Row label="终端底色" id="terminalBackground">
             <Segmented
               label="终端底色"
@@ -190,6 +303,17 @@ export function AppearancePane({
               onCommit={(terminalOpacity) => update({ terminalOpacity })}
             />
           </Row>
+          <Row label="对话不透明度" id="chatOpacity">
+            <Slider
+              label="对话不透明度"
+              value={chat.opacity}
+              min={LIMITS.chatOpacity.min}
+              max={LIMITS.chatOpacity.max}
+              step={0.01}
+              format={formatPercent}
+              onCommit={(opacity) => updateChat({ opacity })}
+            />
+          </Row>
         </Section>
 
         <Section title="辅助功能">
@@ -203,15 +327,15 @@ export function AppearancePane({
           <button type="button" className={styles.reset} disabled={isDefault} onClick={() => update(appearanceDefaults())}>
             恢复默认
           </button>
-          <span className={styles.footerHint}>字体、字号、行高、连字、窗口和辅助功能回到默认值；主题不变。</span>
+          <span className={styles.footerHint}>字体、字号、行高、连字、对话、窗口和辅助功能回到默认值；主题不变。</span>
         </div>
       </div>
 
       <div className={styles.previewColumn}>
         <h2 className={styles.previewTitle}>预览</h2>
-        <PreviewTerminal appearance={{ ...appearance, customTheme }} />
+        {preview === 'chat' ? <ChatPreview /> : <PreviewTerminal appearance={{ ...appearance, customTheme }} />}
         <p className={styles.caption} data-testid="preview-caption">
-          {previewCaption(appearance)}
+          {preview === 'chat' ? chatPreviewCaption(chat) : previewCaption(appearance)}
         </p>
       </div>
     </div>

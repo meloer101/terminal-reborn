@@ -166,3 +166,65 @@
 .backdropHalf .backdropField {
   left: -100%;
 }
+
+/* 对话 (Figma 51D): my picture beside its buttons, and the chat preview, drawn with the app's --chat-* variables. */
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.chatPreview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-20);
+  border-radius: var(--radius-window);
+  background: var(--tr-chat-bg, var(--bg-app));
+  font: var(--chat-weight, 400) var(--chat-size, 14px) / var(--chat-leading, 22px) var(--chat-font, var(--font-ui));
+  color: var(--text-primary);
+}
+
+.chatUser {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+.chatBubble {
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-window);
+  background: var(--bg-selected);
+}
+
+.chatUserAvatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--chat-avatar) center / cover no-repeat;
+}
+
+:global(:root[data-chat-avatar='off']) .chatUserAvatar {
+  display: none;
+}
+
+.chatAgent {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+}
+
+.chatAgentAvatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--bg-section);
+  color: var(--text-primary);
+}

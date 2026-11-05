@@ -38,7 +38,7 @@ test('settings window edits appearance live and the preview follows', async () =
   await expect(settings.getByTestId('preview-caption')).toHaveText('JetBrains Mono 13 · PingFang SC · 行高 1.00')
 
   // 字号: pick 15 from the menu.
-  await settings.getByRole('combobox', { name: '字号' }).click()
+  await settings.getByRole('combobox', { name: '字号', exact: true }).click()
   await settings.getByRole('option', { name: '15', exact: true }).click()
   await expect.poll(async () => (await readSettings(settings)).appearance.fontSize).toBe(15)
   await expect(preview).toHaveAttribute('data-font-size', '15')
@@ -46,7 +46,7 @@ test('settings window edits appearance live and the preview follows', async () =
 
   // 中文字体: type a family into the menu's search field and confirm with Enter.
   const before = await preview.getAttribute('data-font-stack')
-  await settings.getByRole('combobox', { name: '中文字体' }).click()
+  await settings.getByRole('combobox', { name: '中文字体', exact: true }).click()
   await settings.getByPlaceholder('搜索或输入字体名').fill('Songti SC')
   await settings.keyboard.press('Enter')
   await expect.poll(async () => (await readSettings(settings)).appearance.cjkFont).toBe('Songti SC')
@@ -82,7 +82,7 @@ test('settings screenshots', async () => {
   await expect(settings.locator('html')).toHaveAttribute('data-theme', 'dark')
   await settings.waitForTimeout(600)
   await settings.screenshot({ path: `${shot}/settings-dark.png` })
-  await settings.getByRole('combobox', { name: '中文字体' }).click()
+  await settings.getByRole('combobox', { name: '中文字体', exact: true }).click()
   await settings.waitForTimeout(300)
   await settings.screenshot({ path: `${shot}/settings-dark-cjk-menu.png` })
   await settings.keyboard.press('Escape')
@@ -228,7 +228,7 @@ test('settings is a dialog in the main window: sidebar, Esc, close button, and t
 
   // An open font menu takes Esc first; the dialog stays.
   await page.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
-  await dialog.getByRole('combobox', { name: '字号' }).click()
+  await dialog.getByRole('combobox', { name: '字号', exact: true }).click()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeVisible()
   await app.close()
@@ -238,12 +238,12 @@ test('Chinese fonts are grouped by language; 恢复默认 resets everything but 
   const app = await launchApp()
   const settings = await openSettings(app)
   await settings.getByRole('radio', { name: '浅色' }).click()
-  await settings.getByRole('combobox', { name: '字号' }).click()
+  await settings.getByRole('combobox', { name: '字号', exact: true }).click()
   await settings.getByRole('option', { name: '16', exact: true }).click()
   await expect.poll(async () => (await readSettings(settings)).appearance.fontSize).toBe(16)
 
-  await settings.getByRole('combobox', { name: '中文字体' }).click()
-  const listbox = settings.getByRole('listbox', { name: '中文字体' })
+  await settings.getByRole('combobox', { name: '中文字体', exact: true }).click()
+  const listbox = settings.getByRole('listbox', { name: '中文字体', exact: true })
   // The default family's group always exists; others depend on the fonts installed on this machine.
   await expect(listbox.getByText('简体中文', { exact: true })).toBeVisible()
   await settings.screenshot({ path: 'test-results/settings-cjk-groups.png' })
@@ -362,4 +362,46 @@ test('终端底色: 自定义 and an imported Ghostty theme set exactly the colo
   expect((await terminalColors(settings)).terminalBackground.mode).toBe('theme')
   await app.close()
   rmSync(dir, { recursive: true, force: true })
+})
+
+test('设置 · 外观 · 对话 and 窗口 (PRD v1.127, Figma 51D)', async () => {
+  const app = await launchApp()
+  const settings = await openSettings(app)
+  type Chat = { width: string; fontWeight: number; fontSize: number; opacity: number; avatar: string }
+  type Look = { chat: Chat; windowMaterial: string; shellOpacity: { liquid: number; frosted: number } }
+  const look = async (): Promise<Look> => ((await readSettings(settings)).appearance as unknown as Look)
+  const section = settings.getByRole('region', { name: '对话' })
+
+  // Clicking into 对话 shows the chat preview; another section brings the terminal back.
+  await section.getByRole('radio', { name: '中', exact: true }).click()
+  await expect(settings.getByTestId('chat-preview')).toBeVisible()
+  await expect.poll(async () => (await look()).chat.width).toBe('medium')
+  await section.getByRole('radio', { name: '中等' }).click()
+  await settings.getByRole('combobox', { name: '对话字号' }).click()
+  await settings.getByRole('option', { name: '16', exact: true }).click()
+  await expect.poll(async () => (await look()).chat).toMatchObject({ fontWeight: 500, fontSize: 16 })
+  await expect(settings.getByTestId('preview-caption')).toHaveText('跟随系统 16 · PingFang SC · 中等')
+  // The preview is drawn with what GUI sessions get.
+  expect(await settings.getByTestId('chat-preview').evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight])).toEqual(['16px', '500'])
+
+  // 我的头像: a picked picture is kept as its centred 256² square.
+  const png = join(mkdtempSync(join(tmpdir(), 'tr-e2e-avatar-')), 'me.png')
+  writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
+  await settings.getByTestId('avatar-file').setInputFiles(png)
+  await expect.poll(async () => (await look()).chat.avatar.slice(0, 23)).toBe('data:image/webp;base64,')
+  await expect(section.getByRole('img', { name: '我的头像' })).toBeVisible()
+  expect(await settings.getByTestId('chat-preview').evaluate((el) => getComputedStyle(el.querySelector('[aria-hidden]')!).backgroundImage.slice(0, 15))).toBe('url("data:image')
+  await section.getByRole('button', { name: '移除' }).click()
+  await expect.poll(async () => (await look()).chat.avatar).toBe('')
+
+  // 窗口: the material (macOS 26) and each material's own base-layer opacity.
+  const windowSection = settings.getByRole('region', { name: '窗口' })
+  await windowSection.getByRole('radio', { name: '磨砂玻璃' }).click()
+  await expect(settings.getByTestId('preview-terminal')).toBeVisible()
+  await expect.poll(async () => (await look()).windowMaterial).toBe('frosted')
+  expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('color-mix(in srgb, var(--glass-shell-color) 60%, transparent)')
+  await windowSection.getByRole('radio', { name: '液态玻璃' }).click()
+  await expect.poll(() => settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('transparent')
+  await expect.poll(async () => (await look()).shellOpacity).toEqual({ liquid: 0, frosted: 0.6 })
+  await app.close()
 })

@@ -198,6 +198,8 @@
   --shadow-glass-button: 0 2px 8px #00000059;
   /* Glass shell (Figma 28): the fixed tint over the window's native blur, and the edge of the cards on it. */
   --glass-shell: #1e1e209e;
+  /* The shell's color; appearance/map.ts lays it over the base layer at 窗口底层不透明度 (PRD §5 v1.127). */
+  --glass-shell-color: #1e1e20;
   /* Menus and popovers over the shell: solid (a backdrop blur there darkens the window's glass around it), the shell's
      hue a step lighter, with the glass's top light and an edge. */
   --float-bg: #252527;
@@ -299,6 +301,7 @@
   --shadow-glass-button: 0 2px 8px #0000002e;
   /* Light: macOS's light material is already pale, so a thin tint is enough to keep it light on any wallpaper. */
   --glass-shell: #f4f4f580;
+  --glass-shell-color: #f4f4f5;
   --float-bg: #fcfcfc;
   --float-edge: inset 0 0 0 1px #00000014, inset 0 1px 0 #ffffffb3;
   --card-edge: inset 0 0 0 1px #00000012;

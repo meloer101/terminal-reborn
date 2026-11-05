@@ -11,7 +11,7 @@ let lastTerminal = ''
 /** Idempotent: unchanged parts are skipped, so slider drags only touch what moved. */
 export function applyAppearance(appearance: AppearanceSettings): void {
   const root = document.documentElement
-  const dom = toAppearanceDom(appearance)
+  const dom = toAppearanceDom(appearance, window.tr.liquidGlass)
   for (const [name, value] of Object.entries(dom.vars)) {
     if (value === null) {
       if (root.style.getPropertyValue(name) !== '') root.style.removeProperty(name)
