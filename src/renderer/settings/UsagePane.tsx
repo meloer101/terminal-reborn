@@ -1,27 +1,15 @@
 // 设置 · 额度 (PRD F11 · 额度页, Figma 33E / 33H): every installed agent's plan usage in one place, the fullest vendor
-// first. Claude and Codex list their windows (name · PaceMeter · used % · reset); a vendor without figures says why in
+// first. Claude and Codex list their windows (session-meta/UsageRows); a vendor without figures says why in
 // one word; the other agents say 暂不支持. Opening the page asks every account once (main keeps its own limits). The
 // sidebar's 额度 and ⇧⌘U open settings here. 额度提醒 lives here too.
 import { useEffect, useState } from 'react'
-import { CLI_AGENTS, agentName, type CliAgent } from '@shared/agents'
+import { CLI_AGENTS, agentName } from '@shared/agents'
 import type { AgentAvailability } from '@shared/ipc'
-import {
-  formatClock,
-  formatReset,
-  isHigh,
-  orderByTightest,
-  paceBar,
-  vendorStatus,
-  VENDOR_LABEL,
-  windowKey,
-  windowLabel,
-  type UsageVendor,
-  type UsageWindow
-} from '@shared/session-meta'
+import { orderByTightest, vendorStatus, VENDOR_LABEL, windowKey, type UsageVendor } from '@shared/session-meta'
 import type { AlertSettings } from '@shared/settings'
-import { PaceMeter, useMetaNow } from '../session-meta/MetaChips'
+import { useMetaNow } from '../session-meta/MetaChips'
 import { useSessionMeta } from '../session-meta/store'
-import { AgentIcon } from '../ui/AgentIcon'
+import { UsageAgentRow, UsageWindowRow } from '../session-meta/UsageRows'
 import { Row, Section, Toggle } from './controls'
 import styles from './UsagePane.module.css'
 
@@ -63,16 +51,16 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
             const { text, windows } = vendorStatus(usage[vendor], accounts[vendor], now)
             return (
               <section key={vendor} className={styles.group} aria-label={VENDOR_LABEL[vendor]} data-testid={`usage-page-${vendor}`}>
-                <AgentRow agent={vendor} name={VENDOR_LABEL[vendor]} status={text} />
+                <UsageAgentRow agent={vendor} name={VENDOR_LABEL[vendor]} status={text} />
                 {windows.map((w) => (
-                  <WindowRow key={windowKey(w)} vendor={vendor} w={w} now={now} />
+                  <UsageWindowRow key={windowKey(w)} vendor={vendor} w={w} now={now} testIdPrefix="usage-page-window" />
                 ))}
               </section>
             )
           })}
           {others.map((id) => (
             <section key={id} className={styles.group} aria-label={agentName(id)}>
-              <AgentRow agent={id} name={agentName(id)} status="暂不支持" />
+              <UsageAgentRow agent={id} name={agentName(id)} status="暂不支持" />
             </section>
           ))}
         </div>
@@ -84,34 +72,6 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
           </Section>
         )}
       </div>
-    </div>
-  )
-}
-
-/** The agent's mark sits on the column's left edge with the title; the name follows it (Figma 33I). */
-function AgentRow({ agent, name, status }: { agent: CliAgent; name: string; status: string }) {
-  return (
-    <div className={styles.agentRow}>
-      <span className={styles.lead}>
-        <span className={styles.icon}>
-          <AgentIcon kind={agent} />
-        </span>
-        <span className={styles.name}>{name}</span>
-      </span>
-      <span className={styles.status}>{status}</span>
-    </div>
-  )
-}
-
-function WindowRow({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; now: number }) {
-  const bar = paceBar(w, now)
-  const level = bar.exhausted ? 'exhausted' : bar.ahead || isHigh(w.percent) ? 'ahead' : 'normal'
-  return (
-    <div className={styles.windowRow} data-level={level} data-testid={`usage-page-window-${vendor}-${windowKey(w).replace(':', '-')}`}>
-      <span className={styles.windowLabel}>{windowLabel(vendor, w.minutes, w.scope)}</span>
-      <PaceMeter w={w} now={now} />
-      <span className={styles.value}>{w.percent}%</span>
-      <span className={styles.reset}>{w.resetsAt === undefined ? '' : bar.exhausted ? `${formatClock(w.resetsAt, now)} 恢复` : formatReset(w.resetsAt, now)}</span>
     </div>
   )
 }

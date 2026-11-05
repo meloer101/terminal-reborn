@@ -1,7 +1,5 @@
-/* 设置 · 额度 (Figma 33E): a 640 column like the other panes' forms; every row is 32 high on one set of column lines —
-   name 120 · bar 280 · value 48 · reset 144, 16 apart. The agent's mark sits on the column's left edge with the
-   title and 提醒 (Figma 33I); the name and the window labels start after it. Groups are set apart by 16 of space, no
-   lines (PRD §5 v1.68). */
+/* 设置 · 额度 (Figma 33E): a 640 column like the other panes' forms; the rows are session-meta/UsageRows (Figma 33I).
+   Groups are set apart by 16 of space, no lines (PRD §5 v1.68). */
 .page {
   display: flex;
   /* Centred in the area right of the nav, like every pane (Figma 36E). */
@@ -32,71 +30,4 @@
 .group {
   display: flex;
   flex-direction: column;
-}
-
-.agentRow,
-.windowRow {
-  --usage-indent: calc(14px + var(--space-8));
-  display: grid;
-  grid-template-columns: 120px minmax(80px, 280px) 48px minmax(0, 144px);
-  column-gap: var(--space-16);
-  align-items: center;
-  height: 32px;
-}
-
-/* Mark (14) + 8, so the name lands where the window labels start. */
-.lead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  min-width: 0;
-}
-
-.icon {
-  display: flex;
-  flex: none;
-}
-
-.name {
-  overflow: hidden;
-  font: var(--text-body-strong);
-  color: var(--text-primary);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.status {
-  grid-column: 2 / -1;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-}
-
-.windowLabel {
-  padding-left: var(--usage-indent);
-  overflow: hidden;
-  font: var(--text-body);
-  color: var(--text-secondary);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.value {
-  font: var(--text-mono-s-medium);
-  color: var(--text-secondary);
-  text-align: right;
-}
-
-.reset {
-  overflow: hidden;
-  font: var(--text-caption);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* Used past the window's time, high, or used up: the figure in text/primary (the bar does the same). */
-.windowRow[data-level='ahead'] .value,
-.windowRow[data-level='exhausted'] .value,
-.windowRow[data-level='exhausted'] .reset {
-  color: var(--text-primary);
 }

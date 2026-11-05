@@ -1,0 +1,68 @@
+/* Usage rows (Figma 33I): every row is 32 high on one set of column lines — by default name 120 · bar 280 · value 48 ·
+   reset 144, 16 apart (设置 · 额度). A narrower host sets --usage-columns and --usage-gap. */
+.agentRow,
+.windowRow {
+  --usage-indent: calc(14px + var(--space-8));
+  display: grid;
+  grid-template-columns: var(--usage-columns, 120px minmax(80px, 280px) 48px minmax(0, 144px));
+  column-gap: var(--usage-gap, var(--space-16));
+  align-items: center;
+  height: 32px;
+}
+
+/* Mark (14) + 8, so the name lands where the window labels start. */
+.lead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.icon {
+  display: flex;
+  flex: none;
+}
+
+.name {
+  overflow: hidden;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status {
+  grid-column: 2 / -1;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.windowLabel {
+  padding-left: var(--usage-indent);
+  overflow: hidden;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.value {
+  font: var(--text-mono-s-medium);
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.reset {
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Used past the window's time, high, or used up: the figure in text/primary (the bar does the same). */
+.windowRow[data-level='ahead'] .value,
+.windowRow[data-level='exhausted'] .value,
+.windowRow[data-level='exhausted'] .reset {
+  color: var(--text-primary);
+}
