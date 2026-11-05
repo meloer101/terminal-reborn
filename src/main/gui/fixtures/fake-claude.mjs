@@ -70,7 +70,7 @@ function control(message) {
       ],
       current_permission_mode: 'default'
     })
-  } else if (r.subtype === 'get_settings') reply({ effortLevel: 'max' })
+  } else if (r.subtype === 'get_settings') reply({ effective: { effortLevel: 'max' }, sources: [], applied: {} })
   else if (r.subtype === 'set_model') {
     model = r.model
     reply({})

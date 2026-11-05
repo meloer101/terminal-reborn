@@ -52,7 +52,8 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
   }
 
   const settingsEffort = (response: Rec): string | undefined => {
-    const settings = isRec(response.settings) ? response.settings : response
+    // Claude 2.1.317 answers `{ effective, sources, applied }`; `effective` is what the session runs with (§6.17).
+    const settings = isRec(response.effective) ? response.effective : isRec(response.settings) ? response.settings : response
     return str(settings.effortLevel) ?? str(settings.effort)
   }
 
