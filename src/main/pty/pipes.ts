@@ -48,7 +48,10 @@ export class LocalPipeLink implements PipeLink {
   private readonly handlers = new Map<string, PipeHandlers>()
   private readonly host = new PipeHost({
     line: (id, line, seq) => this.handlers.get(id)?.line(line, seq),
-    exit: (id, exit) => this.handlers.get(id)?.exit(exit)
+    // A killed (or replaced) process ending late is not the session now held under this id (as in pipe-sessions.ts).
+    exit: (id, exit) => {
+      if (this.host.exitOf(id) === exit) this.handlers.get(id)?.exit(exit)
+    }
   })
 
   spawn(request: PipeSpawn, handlers: PipeHandlers): Promise<{ ok: true; pid: number } | { ok: false; message: string }> {
