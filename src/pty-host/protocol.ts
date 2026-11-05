@@ -26,6 +26,19 @@ export interface HostSpawnRequest {
   rows: number
 }
 
+/** Starts an agent with piped stdio (a GUI session, PRD F23); its stdout is read as lines. */
+export interface HostPipeSpawnRequest {
+  type: 'pipe-spawn'
+  id: string
+  cwd: string
+  agent?: AgentKind
+  command: string
+  args: string[]
+  env?: Record<string, string>
+  /** As for `spawn`: the app's environment, not the host's own. */
+  baseEnv?: Record<string, string>
+}
+
 /** A live session's screen as the host's headless mirror sees it (see headless-mirror.ts). */
 export interface HostScreen {
   /** SerializeAddon output: scrollback + screen; an active alternate screen comes after `\x1b[?1049h\x1b[H`. */
@@ -54,6 +67,8 @@ export interface HostSessionInfo {
   agent?: AgentKind
   /** Set when the process exited while no client was attached (the session is kept to show its last screen). */
   exit?: { exitCode: number; signal?: number }
+  /** A pipe session (GUI, PRD F23) rather than a PTY. */
+  pipe?: boolean
 }
 
 export type HostRequest =
@@ -75,6 +90,16 @@ export type HostRequest =
   /** Answered with `sessions`. */
   | { type: 'list' }
   | { type: 'killAll' }
+  /**
+   * GUI sessions (PRD F23): an agent with piped stdio instead of a PTY, speaking newline-delimited JSON. Only hosts
+   * that announce `pipes` in `welcome` (and the utilityProcess fallback) understand these; `kill` and `detach` apply to
+   * pipe sessions too.
+   */
+  | HostPipeSpawnRequest
+  /** One line to the agent's stdin (the host adds the newline). */
+  | { type: 'pipe-write'; id: string; line: string }
+  /** Stream this pipe session to the client again, starting with the lines it kept (`pipe-attached`). */
+  | { type: 'pipe-attach'; id: string }
 
 export type HostEvent =
   | { type: 'spawned'; id: string; pid: number }
@@ -96,3 +121,13 @@ export type HostEvent =
     }
   | { type: 'attach-miss'; id: string }
   | { type: 'sessions'; sessions: HostSessionInfo[] }
+  | { type: 'pipe-spawned'; id: string; pid: number }
+  /** One stdout line; `seq` counts lines since spawn. Stderr is kept for `pipe-exit`, not streamed. */
+  | { type: 'pipe-line'; id: string; line: string; seq: number }
+  /** `stderr`: its last few KB, to say why a process ended. */
+  | { type: 'pipe-exit'; id: string; exitCode: number; signal?: number; stderr: string }
+  /**
+   * Answer to `pipe-attach`: the lines the host kept (the newest, up to its cap; `truncated` when older ones were
+   * dropped), then `pipe-line` events continue after `seq`.
+   */
+  | { type: 'pipe-attached'; id: string; pid: number; agent?: AgentKind; seq: number; lines: string[]; truncated: boolean; exit?: { exitCode: number; signal?: number; stderr: string } }

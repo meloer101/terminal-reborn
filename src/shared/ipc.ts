@@ -2,6 +2,7 @@
 // The preload implements TrApi; main registers handlers for IPC channels.
 // Changing a signature here is a cross-track change — note it in the PR.
 
+import type { GuiApi } from './gui-chat'
 import type { CliAgent } from './agents'
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
@@ -428,6 +429,8 @@ export interface TrApi {
   dispatch: DispatchApi
   /** 手机远程: 设置 · 手机 and the requests a paired phone makes (PRD F22); channels in REMOTE_IPC. */
   remote: RemoteApi
+  /** GUI sessions: headless agents drawn as a chat (PRD F23); channels in GUI_IPC. */
+  gui: GuiApi
 }
 
 export const IPC = {

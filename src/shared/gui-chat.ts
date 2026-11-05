@@ -4,6 +4,7 @@
 // the phone's `ChatItem` (@shared/transcript-chat), so history read back from a transcript and a live session look
 // the same. Pure: no Electron, no Node.
 
+import type { CliAgent } from './agents'
 import type { ChatItem } from './transcript-chat'
 
 export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'acp'
@@ -90,6 +91,53 @@ export type GuiEvent =
   | { type: 'commands'; commands: GuiCommand[] }
   | { type: 'queued'; queued: GuiState['queued'] }
   | { type: 'failure'; failure: string | null }
+
+/** What the renderer asks main to start or reattach (like `pty.spawn`, without a terminal size). */
+export interface GuiLaunch {
+  sessionId: string
+  cwd: string
+  agent: CliAgent
+  /** Continue this earlier conversation (`agentSessionId`): Claude `--resume`, Codex `thread/resume`, ACP `session/load`. */
+  resumeAgentSessionId?: string
+  model?: string
+  /** Sent as the first message once the agent is up (new session panel, F21 dispatch). */
+  initialPrompt?: string
+  /** Launched by F21 dispatch: `wavi` on PATH like a dispatched TUI. */
+  dispatched?: boolean
+}
+
+export type GuiOpenResult = { ok: true; state: GuiState } | { ok: false; reason: string }
+
+export type GuiSendResult = { ok: true; queued: boolean } | { ok: false; reason: string }
+
+/** `window.tr.gui` (preload). Every call is checked in main: payload shape and that this window owns the session. */
+export interface GuiApi {
+  /** Starts the agent if it is not running (or reattaches to it) and returns the state to draw. */
+  open(launch: GuiLaunch): Promise<GuiOpenResult>
+  /** Text and attachment paths; queued while a turn runs (Figma 49″C). */
+  send(sessionId: string, message: { text: string; attachments: string[] }): Promise<GuiSendResult>
+  answer(sessionId: string, answer: GuiAnswer): Promise<boolean>
+  interrupt(sessionId: string): Promise<boolean>
+  setConfig(sessionId: string, optionId: string, value: string): Promise<boolean>
+  /** Edits a queued message; an empty text removes it. */
+  editQueued(sessionId: string, queuedId: string, text: string): Promise<boolean>
+  /** Ends the agent process (closing the session). */
+  stop(sessionId: string): Promise<void>
+  /** Events for sessions this window owns, batched per session. */
+  onEvents(listener: (sessionId: string, events: GuiEvent[]) => void): () => void
+}
+
+export const GUI_IPC = {
+  open: 'gui:open',
+  send: 'gui:send',
+  answer: 'gui:answer',
+  interrupt: 'gui:interrupt',
+  setConfig: 'gui:set-config',
+  editQueued: 'gui:edit-queued',
+  stop: 'gui:stop',
+  /** main → renderer */
+  events: 'gui:events'
+} as const
 
 export function emptyGuiState(): GuiState {
   return { items: [], live: null, prompts: [], busy: false, config: [], commands: [], queued: [], failure: null }

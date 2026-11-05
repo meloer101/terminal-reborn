@@ -6,6 +6,7 @@ import { SHIP_IPC } from '@shared/ship'
 import { RADAR_IPC } from '@shared/conflict-radar'
 import { DISPATCH_IPC } from '@shared/dispatch'
 import { REMOTE_IPC } from '@shared/remote'
+import { GUI_IPC, type GuiEvent } from '@shared/gui-chat'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -235,6 +236,16 @@ const api: TrApi = {
     onRequest: (listener) => listen(DISPATCH_IPC.request, listener),
     reply: (callId, result) => ipcRenderer.send(DISPATCH_IPC.reply, callId, result),
     deliver: (request) => ipcRenderer.invoke(DISPATCH_IPC.deliver, request)
+  },
+  gui: {
+    open: (launch) => ipcRenderer.invoke(GUI_IPC.open, launch),
+    send: (sessionId, message) => ipcRenderer.invoke(GUI_IPC.send, sessionId, message),
+    answer: (sessionId, answer) => ipcRenderer.invoke(GUI_IPC.answer, sessionId, answer),
+    interrupt: (sessionId) => ipcRenderer.invoke(GUI_IPC.interrupt, sessionId),
+    setConfig: (sessionId, optionId, value) => ipcRenderer.invoke(GUI_IPC.setConfig, sessionId, optionId, value),
+    editQueued: (sessionId, queuedId, text) => ipcRenderer.invoke(GUI_IPC.editQueued, sessionId, queuedId, text),
+    stop: (sessionId) => ipcRenderer.invoke(GUI_IPC.stop, sessionId),
+    onEvents: (listener) => listen<{ sessionId: SessionId; events: GuiEvent[] }>(GUI_IPC.events, (m) => listener(m.sessionId, m.events))
   },
   remote: {
     status: () => ipcRenderer.invoke(REMOTE_IPC.getStatus),

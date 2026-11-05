@@ -64,7 +64,16 @@ export type ClientMessage =
   | HostRequest
 
 export type DaemonMessage =
-  | { type: 'welcome'; protocol: number; pid: number; buildId: string; sessions: HostSessionInfo[]; hooks: HookEndpointInfo | null }
+  | {
+      type: 'welcome'
+      protocol: number
+      pid: number
+      buildId: string
+      sessions: HostSessionInfo[]
+      hooks: HookEndpointInfo | null
+      /** The daemon hosts pipe sessions (`pipe-*` requests, PRD F23). Absent from older daemons of the same protocol. */
+      pipes?: boolean
+    }
   | { type: 'refused'; reason: string }
   /** A hook from an agent whose session this app has attached; answer with `hook-reply`. */
   | { type: 'hook'; rid: number; sessionId: string; event: string; agent: HookAgent; payload: unknown }
