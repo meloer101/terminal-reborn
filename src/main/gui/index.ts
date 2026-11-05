@@ -12,7 +12,7 @@ import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
 import { GUI_IPC, type GuiLaunch, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
-import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, prepareAgentLaunch, setGuiSession } from '../hooks'
+import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
 import { defaultAgentDataDirs } from '../hooks/agent-title'
 import { pipeLink } from '../pty/pipes'
 import { sniffPhoto } from '../remote/photos'
@@ -77,7 +77,11 @@ async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | u
     ...(claude ? { CLAUDE_CODE_ENTRYPOINT: 'wavi' } : {})
   }
   const { command, args } = guiCommand(argv, dispatch?.pathPrefix)
-  return { command, args, env, baseEnv: appEnv(), binary: argv[0]! }
+  // Claude's hooks carry its status only when they reach this app: without a hook server there are none, and the pty
+  // daemon's hook socket answers 404 for a process it does not host (an older daemon: the process runs in main). Then
+  // the host derives the status from the stream instead, so it is never reported twice.
+  const synthStatus = claude && (hooks === null || ((await hooksViaDaemon()) && !pipeLink().durable))
+  return { command, args, env, baseEnv: appEnv(), binary: argv[0]!, ...(synthStatus ? { synthStatus } : {}) }
 }
 
 async function history(agent: CliAgent, cwd: string, agentSessionId: string) {

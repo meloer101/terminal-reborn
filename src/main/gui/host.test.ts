@@ -39,7 +39,7 @@ afterEach(() => {
   for (const link of links.splice(0)) link.killAll()
 })
 
-function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, batchMs = 5): Harness {
+function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, batchMs = 5, synthStatus = false): Harness {
   links.push(link)
   const owner = new FakeOwner()
   const status: AgentEvent[] = []
@@ -54,7 +54,8 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, 
         args: [join(FIXTURES, FAKES[launch.agent]!)],
         env: {},
         baseEnv: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
-        binary: FAKES[launch.agent]!
+        binary: FAKES[launch.agent]!,
+        ...(synthStatus ? { synthStatus } : {})
       }),
     history: () => Promise.resolve(history),
     status: (_id, _agent, events) => status.push(...events),
@@ -164,6 +165,17 @@ describe('GuiHost · Claude stream-json', () => {
     expect(h.status.at(-1)).toEqual({ type: 'session-end', reason: 'exit' })
     expect(h.ended).toEqual(['c3'])
     expect(await h.host.send('c3', { text: 'more', attachments: [] })).toMatchObject({ ok: false })
+  }, 30_000)
+
+  it('derives Claude’s status itself when its hooks cannot reach the app (an older daemon, no hook server)', async () => {
+    const h = harness(new LocalPipeLink(), null, 5, true)
+    await h.host.open(launchOf('claude', 'c6'), h.owner)
+    await ready(h, 'c6')
+    await h.host.send('c6', { text: 'please write', attachments: [] })
+    await until(() => stateOf(h, 'c6').prompts.length === 1)
+    expect(h.status.map((e) => e.type).filter((t) => t !== 'session-start')).toEqual(['prompt-submit', 'tool-start', 'permission-request'])
+    h.host.answer('c6', { kind: 'permission', id: stateOf(h, 'c6').prompts[0]!.id, optionId: 'allow_once' })
+    await until(() => h.status.at(-1)?.type === 'stop')
   }, 30_000)
 
   it('sends a batch only the newest of its streamed texts (each one is the whole text so far)', async () => {

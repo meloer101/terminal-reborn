@@ -336,6 +336,12 @@ export function setHookTarget(target: DaemonHookTarget | null): void {
   decideTarget(target)
 }
 
+/** Whether agents' hooks go to the pty daemon's hook socket, which answers only for the processes the daemon hosts. */
+export async function hooksViaDaemon(): Promise<boolean> {
+  const rt = await runtime
+  return rt?.supervisor instanceof DaemonHookEndpoint
+}
+
 async function start(): Promise<Runtime | null> {
   const target = await Promise.race([
     targetDecision,

@@ -30,6 +30,11 @@ export interface PreparedLaunch {
   baseEnv?: Record<string, string>
   /** The binary, named in failure reasons. */
   binary: string
+  /**
+   * Claude's hooks will not reach this app (none could be prepared, or they go to a pty daemon that does not host
+   * this process): its status is derived from the stream, as for the agents without hooks.
+   */
+  synthStatus?: boolean
 }
 
 export interface GuiHostDeps<O extends GuiOwner> {
@@ -38,7 +43,10 @@ export interface GuiHostDeps<O extends GuiOwner> {
   prepare(launch: GuiLaunch, owner: O, resume: string | undefined): Promise<PreparedLaunch>
   /** The earlier conversation `agentSessionId` names, from the agent's transcript; null when there is none. */
   history(agent: CliAgent, cwd: string, agentSessionId: string): Promise<ChatItem[] | null>
-  /** Status for the session's owner: everything for the agents without hooks, start and exit for Claude (PRD §3.1). */
+  /**
+   * Status for the session's owner: everything for the agents without hooks (and a Claude whose hooks do not reach the
+   * app, PreparedLaunch.synthStatus), start and exit for Claude (PRD §3.1).
+   */
   status(sessionId: string, agent: CliAgent, events: AgentEvent[], owner: O | null): void
   /**
    * Reattached to a process that kept running: its hooks reach this owner again. `hooks`: what the pty daemon
@@ -83,6 +91,8 @@ class GuiSession<O extends GuiOwner> {
   private muted = false
   private statusSessionId: string | undefined
   private binary: string
+  /** A Claude process whose hooks do not reach the app (PreparedLaunch.synthStatus). */
+  private hookless = false
 
   constructor(
     readonly launch: GuiLaunch,
@@ -100,7 +110,7 @@ class GuiSession<O extends GuiOwner> {
   }
 
   private get synthStatus(): boolean {
-    return this.protocol !== 'claude-stream'
+    return this.protocol !== 'claude-stream' || this.hookless
   }
 
   private createDriver(resume: string | undefined, answered?: readonly string[]): GuiDriver {
@@ -184,6 +194,7 @@ class GuiSession<O extends GuiOwner> {
       return { ok: false, reason: error instanceof Error ? error.message : String(error) }
     }
     this.binary = prepared.binary
+    this.hookless = prepared.synthStatus === true
     if (this.stopped) return { ok: false, reason: '会话已关闭' }
     const started = await this.deps
       .link()
