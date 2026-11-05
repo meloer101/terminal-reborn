@@ -327,6 +327,6 @@ test('closing a shown session closes its pane and the rest fill the area', async
   await expect.poll(activeId).toBe('s-nav')
   const full = await area().boundingBox()
   const nav = await terminalOf('s-nav').boundingBox()
-  // The one card keeps --card-gap (6) from the window's right edge; beside the sidebar it starts at the area's left.
-  expect(Math.round(nav?.width ?? 0)).toBe(Math.round(full?.width ?? -1) - 6)
+  // The one card fills the area: against the window's right edge, beside the sidebar at the area's left (Figma 55).
+  expect(Math.round(nav?.width ?? 0)).toBe(Math.round(full?.width ?? -1))
 })

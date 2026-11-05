@@ -1,9 +1,15 @@
 /* Figma 11 v2 — overview header 44 · grouped list (40 rows, terminal expands in place) or board of status cards. */
+/* A card like the terminals it lists (Figma 28 / 55): up to the window's top, right and bottom edges, the header its top
+   row. */
 .overview {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lead) var(--radius-trail) var(--radius-trail) var(--radius-lead);
+  background: var(--bg-app);
+  box-shadow: var(--card-edge), var(--card-shadow);
 }
 
 .header {
@@ -89,11 +95,6 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  /* A card on the window's glass, like the terminals it lists (Figma 28). */
-  margin: 0 var(--card-gap) var(--card-gap-bottom) var(--lead-gap, 0);
-  border-radius: var(--radius-window);
-  background: var(--bg-app);
-  box-shadow: var(--card-edge), var(--card-shadow);
   container-type: inline-size;
   display: flex;
   flex-direction: column;

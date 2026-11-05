@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { measureSplit, pane, sessionsIn, splitPane } from '@shared/split-layout'
 import { mockProjects, mockSessions, mockWorktrees } from '../state/mock-data'
-import { dropLabel, pickerRows, stackHandles } from './model'
+import { dropLabel, paneCorners, pickerRows, stackHandles } from './model'
 
 const input = { projects: mockProjects, worktrees: mockWorktrees, sessions: mockSessions, now: Date.now(), filter: '' }
 
@@ -41,5 +41,26 @@ describe('stackHandles', () => {
     const order = stackHandles(measureSplit(split, 1200, 900).handles)
     expect(order.map((h) => h.dir)).toEqual(['column', 'column', 'row'])
     expect(order.at(-1)?.path).toEqual([])
+  })
+})
+
+describe('paneCorners', () => {
+  const area = { width: 1000, height: 800 }
+  const W = 'var(--radius-window)'
+  const L = 'var(--radius-lead)'
+  const T = 'var(--radius-trail)'
+
+  it('gives a lone pane every window corner', () => {
+    expect(paneCorners({ x: 0, y: 0, width: 1000, height: 800 }, area)).toBe(`${L} ${T} ${T} ${L}`)
+  })
+
+  it('gives side-by-side panes only the corners on the window edge', () => {
+    expect(paneCorners({ x: 0, y: 0, width: 497, height: 800 }, area)).toBe(`${L} ${W} ${W} ${L}`)
+    expect(paneCorners({ x: 503, y: 0, width: 497, height: 800 }, area)).toBe(`${W} ${T} ${T} ${W}`)
+  })
+
+  it('gives stacked panes only their outer corners, with sub-pixel sizes', () => {
+    expect(paneCorners({ x: 0, y: 0, width: 999.6, height: 396.5 }, area)).toBe(`${L} ${T} ${W} ${W}`)
+    expect(paneCorners({ x: 0, y: 402.5, width: 999.6, height: 397.4 }, area)).toBe(`${W} ${W} ${T} ${L}`)
   })
 })

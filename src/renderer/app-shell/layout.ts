@@ -4,8 +4,10 @@
 import { PANEL_WIDTH_MIN, SIDEBAR_WIDTH_MIN } from '@shared/workspace-file'
 
 export const MAIN_MIN_WIDTH = 560
-/** The glass between the right panel's card and main, and the window's right edge (= --card-gap). */
+/** The glass between the right panel's card and main (= --card-gap). */
 export const PANEL_INSET = 6
+/** A pane's header, its card's top row (= --titlebar-height). */
+export const HEADER_HEIGHT = 36
 
 /** docked = a column beside main; overlay = floats over main's right edge, so main never drops below its minimum. */
 export type PanelMode = 'docked' | 'overlay'

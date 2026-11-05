@@ -21,8 +21,9 @@
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-window: 10px;
-  /* Main's left corners where it meets the sidebar. */
-  --radius-main: 16px;
+  /* A card's corner that sits in one of the window's own corners (PRD §5 主区贴边, Figma 55): the window's radius
+     (main/appearance.ts GLASS_RADIUS). Full screen has square corners (AppShell). */
+  --radius-edge: 16px;
   /* Glass overlays (PRD §5, Figma 15): sheet 16 · its menus 12 · their primary button 8. */
   --radius-sheet: 16px;
   --radius-popover: 12px;
@@ -32,18 +33,18 @@
 
   /* Chrome dimensions (Screens 01–08) */
   --sidebar-width: 264px;
-  /* Keep SplitArea's HEADER and the traffic lights (main/windows.ts) in step. */
+  /* Keep app-shell/layout.ts HEADER_HEIGHT and the traffic lights (main/windows.ts) in step. */
   --titlebar-height: 36px;
   /* Sidebar text line (Figma 34P): 8 row inset + a 16px column for icons, chevrons and status glyphs + 8 gap. Nav labels,
      project names and every line of a session row start here. */
   --indent-tree: 32px;
   /* Main never gets narrower; the right panel floats over it instead (B13). */
   --main-min-width: 560px;
-  /* Glass shell (PRD §5 玻璃外壳, Figma 28): cards (terminal panes, right panel, overview) sit this far from the
-     window's right edge and from each other; their corner is --radius-window. */
+  /* Glass shell (PRD §5 玻璃外壳, Figma 28 / 55): cards (terminal panes, right panel, overview) reach the window's top,
+     right and bottom edges; this much glass stays between two of them. Their corner is --radius-window, or
+     --radius-edge in a corner of the window. */
   --card-gap: 6px;
-  /* The cards' bottom edge lines up with the bottom of the sidebar footer's last row (设置), so it is the footer's
-     bottom padding rather than --card-gap. */
+  /* The sidebar footer's bottom padding (its last row, 设置). */
   --card-gap-bottom: var(--space-12);
 
   /* Type */

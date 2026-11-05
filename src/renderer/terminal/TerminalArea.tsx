@@ -13,6 +13,7 @@ import { useSessionStartup, useStartRequests } from '../state/session-start'
 import { launchKind, useWorkspace } from '../state/workspace'
 import { windowOf } from '../app-shell/windows-runtime'
 import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-motion'
+import { HEADER_HEIGHT } from '../app-shell/layout'
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
 import { borrowTerminal, useBorrowedTerminal } from './borrow'
 import { useLiveSessions } from './live-sessions'
@@ -22,6 +23,11 @@ import { closeTerminalSearch } from './search-store'
 import { TerminalSearch } from './TerminalSearch'
 import styles from './TerminalArea.module.css'
 
+/** Where a shown terminal's card goes: its pane, header row included (Figma 55), and the card's corners as CSS. */
+export interface PanePlacement extends Rect {
+  radius: string
+}
+
 interface PaneProps {
   sessionId: SessionId
   cwd: string
@@ -29,7 +35,7 @@ interface PaneProps {
   /** The keyboard's pane. */
   active: boolean
   /** Where it is shown in the terminal area; undefined = not shown. */
-  rect: Rect | undefined
+  rect: PanePlacement | undefined
   /** Restored from disk and not started yet: no terminal until startSession() (state/session-start.ts). */
   held: boolean
   /** Its process kept running in the pty daemon: attach now, viewed or not (status and notifications need it). */
@@ -39,8 +45,16 @@ interface PaneProps {
   generation: number
 }
 
-const place = (rect: Rect | undefined): CSSProperties | undefined =>
-  rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
+const place = (rect: PanePlacement | undefined): CSSProperties | undefined =>
+  rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height, borderRadius: rect.radius }
+
+/** The find bar floats over the terminal below the pane's header. */
+const belowHeader = (rect: Rect): CSSProperties => ({
+  left: rect.x,
+  top: rect.y + HEADER_HEIGHT,
+  width: rect.width,
+  height: Math.max(0, rect.height - HEADER_HEIGHT)
+})
 
 const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -138,9 +152,26 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
       onFocus={() => useWorkspace.getState().focusPane(sessionId)}
     >
       <div ref={hostRef} className={styles.host} />
+      <HeaderBlur />
     </div>
   )
 }, samePaneProps)
+
+/**
+ * Under the pane's header, once the terminal runs under it (xterm-surface's headroom): the text there blurs more
+ * the higher it is (Figma 55). Stacked layers, each blurring more over a shorter stretch from the top.
+ */
+function HeaderBlur() {
+  return (
+    <div className={styles.headerBlur} aria-hidden>
+      <i />
+      <i />
+      <i />
+      <i />
+      <i />
+    </div>
+  )
+}
 
 /**
  * Every pane re-renders with TerminalArea, which reads the whole session list (any session's hook event changes it);
@@ -159,7 +190,8 @@ function samePaneProps(a: PaneProps, b: PaneProps): boolean {
     a.rect?.x === b.rect?.x &&
     a.rect?.y === b.rect?.y &&
     a.rect?.width === b.rect?.width &&
-    a.rect?.height === b.rect?.height
+    a.rect?.height === b.rect?.height &&
+    a.rect?.radius === b.rect?.radius
   )
 }
 
@@ -253,8 +285,8 @@ function useResyncOnWake(shown: string, win: Window = window): void {
   }, [shown, win])
 }
 
-/** `placements`: where each shown session's terminal goes (below its pane's header). */
-export function TerminalArea({ placements }: { placements: Readonly<Record<SessionId, Rect>> }) {
+/** `placements`: where each shown session's terminal card goes (its pane, under the pane's header). */
+export function TerminalArea({ placements }: { placements: Readonly<Record<SessionId, PanePlacement>> }) {
   const { sessions, worktrees, activeSessionId } = useWorkspace(
     useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees, activeSessionId: s.activeSessionId }))
   )
@@ -302,7 +334,7 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
         />
       ))}
       {activeSessionId && placements[activeSessionId] && (
-        <div className={styles.searchSlot} style={place(placements[activeSessionId])}>
+        <div className={styles.searchSlot} style={belowHeader(placements[activeSessionId])}>
           <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
         </div>
       )}
@@ -314,7 +346,7 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
  * A secondary window's panes (F20 · 多窗口): each borrows its session's terminal from the main window's TerminalArea,
  * which keeps owning it (spawn, attach, restart). Clicking or focusing a pane gives it the keyboard as in the main window.
  */
-export function PaneHosts({ placements }: { placements: Readonly<Record<SessionId, Rect>> }) {
+export function PaneHosts({ placements }: { placements: Readonly<Record<SessionId, PanePlacement>> }) {
   const { win } = useWindowScope()
   const isKey = useIsKeyWindow()
   const activeSessionId = useWorkspace((s) => s.activeSessionId)
@@ -325,7 +357,7 @@ export function PaneHosts({ placements }: { placements: Readonly<Record<SessionI
         <PaneHost key={sessionId} sessionId={sessionId} rect={rect} active={isKey && sessionId === activeSessionId} />
       ))}
       {isKey && activeSessionId && placements[activeSessionId] && (
-        <div className={styles.searchSlot} style={place(placements[activeSessionId])}>
+        <div className={styles.searchSlot} style={belowHeader(placements[activeSessionId])}>
           <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
         </div>
       )}
@@ -333,7 +365,7 @@ export function PaneHosts({ placements }: { placements: Readonly<Record<SessionI
   )
 }
 
-function PaneHost({ sessionId, rect, active }: { sessionId: SessionId; rect: Rect; active: boolean }) {
+function PaneHost({ sessionId, rect, active }: { sessionId: SessionId; rect: PanePlacement; active: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const host = hostRef.current
@@ -351,6 +383,7 @@ function PaneHost({ sessionId, rect, active }: { sessionId: SessionId; rect: Rec
       onFocus={() => useWorkspace.getState().focusPane(sessionId)}
     >
       <div ref={hostRef} className={styles.host} />
+      <HeaderBlur />
     </div>
   )
 }

@@ -1,5 +1,6 @@
-/* Right panel card (Figma 28G): at the same level as the terminal's, below the session tools on the glass. The view's
-   own first row (PaneHeader, the browser's address bar) is the card's top row. No dividers inside. */
+/* Right panel card (Figma 28G / 55C): at the same level as the terminal's, against the window's top, right and bottom
+   edges. The active session's tools are its top row, the view's own first row (PaneHeader, the browser's address bar)
+   the next. No dividers inside. */
 .card {
   position: relative;
   isolation: isolate;
@@ -8,7 +9,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-window);
+  border-radius: var(--radius-window) var(--radius-edge) var(--radius-edge) var(--radius-window);
   background: var(--bg-app);
   box-shadow: var(--card-shadow);
   color: var(--text-primary);
@@ -25,12 +26,12 @@
   pointer-events: none;
 }
 
-/* Left edge of the card: a 6px grab strip centred on it. */
+/* Left edge of the card: a 6px grab strip centred on it (the card sits --card-gap in, AppShell .panelInner). */
 .resize {
   position: absolute;
-  top: var(--titlebar-height);
-  bottom: var(--card-gap-bottom);
-  left: calc(-0.5 * var(--space-6));
+  top: 0;
+  bottom: 0;
+  left: calc(var(--card-gap) - 0.5 * var(--space-6));
   z-index: 1;
   width: var(--space-6);
   cursor: col-resize;

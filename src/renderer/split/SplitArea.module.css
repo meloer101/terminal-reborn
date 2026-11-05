@@ -2,12 +2,11 @@
    measureSplit: a header strip here, the terminal below it by TerminalArea. */
 .area {
   position: absolute;
-  /* The cards keep --card-gap from the window's right edge (--card-gap-bottom from its bottom one), and from its left
-     one when the sidebar is closed (--lead-gap, AppShell). The headers sit on the glass above them. */
-  inset: 0 var(--card-gap) var(--card-gap-bottom) var(--lead-gap, 0);
+  /* The cards reach the window's top, right and bottom edges (Figma 55); each pane's header is its card's top row. */
+  inset: 0;
 }
 
-/* A pane's header (Figma 28E): on the window's glass, its terminal card right below. */
+/* A pane's header (Figma 55): over its terminal card's top row, which the terminal scrolls under (TerminalArea). */
 .header {
   position: absolute;
   z-index: 2;
@@ -125,12 +124,15 @@
   user-select: none !important;
 }
 
-/* ⌘D / ⇧⌘D's new pane (Figma 21G): its bar on the glass like a header, the list in a card below. */
+/* ⌘D / ⇧⌘D's new pane (Figma 21G / 55): a card, its bar on top like a pane's header, the list below. */
 .picker {
   position: absolute;
   z-index: 2;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-app);
+  box-shadow: var(--card-edge), var(--card-shadow);
 }
 
 /* The same strip as a session header (title, then the buttons on the right). */
@@ -192,10 +194,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-  padding: var(--space-8) var(--space-8) 0;
-  border-radius: var(--radius-window);
-  background: var(--bg-app);
-  box-shadow: var(--card-edge), var(--card-shadow);
+  padding: 0 var(--space-8);
 }
 
 /* A borderless field: colour only (PRD §5). */

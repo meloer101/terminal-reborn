@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-01
+> 最后更新：2026-11-05
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-05：主区贴边（PRD v1.125，Figma 55）：卡片贴住窗口的上、右、下边，会话头进卡片，终端超过一屏后滚到会话头下面并渐进模糊。
 - 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节作者已确认；P2 Mac 端已完成（PRD v1.113）；手机端换成原生 SwiftUI（`ios/`，PRD v1.119），真机经局域网和 Tailscale 都连上了；灵动岛和锁屏卡片做完（App 前台时更新），蓝牙、APNs 还没做。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。

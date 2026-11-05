@@ -1,6 +1,6 @@
-// Right panel (PRD F17, Figma 13 / 28G): a card beside the terminal, at the same level. Above it, on the window's glass,
-// the active session's tools stay where they are when the panel is closed (the session header's tools part); their
-// icons pick the view. The content always follows the active session's worktree.
+// Right panel (PRD F17, Figma 13 / 28G / 55C): a card beside the terminal, at the same level. Its top row is the active
+// session's tools (the session header's tools part), where they are when the panel is closed: the window's top right;
+// their icons pick the view. The content always follows the active session's worktree.
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
@@ -23,8 +23,8 @@ export function RightPanel({ view }: { view: PanelView }) {
   return (
     <>
       <ResizeHandle />
-      <SessionHeader part="tools" />
       <div className={styles.card} data-view={view} data-testid="right-panel">
+        <SessionHeader part="tools" />
         {view === 'files' && worktree && active ? (
           <FilesView key={worktree.path} root={worktree.path} sessionId={active.session.id} />
         ) : view === 'git' && worktree ? (

@@ -34,8 +34,8 @@
     layout = null
   }
   const valid = layout && ['left', 'top', 'right', 'bottom', 'anchorY'].every((k) => Number.isFinite(layout[k]))
-  // Without a mirror: the default sidebar (264), the header (44) and the card gap (6).
-  const inset = valid ? layout : { left: 264, top: 44, right: 6, bottom: 6 }
+  // Without a mirror: the default sidebar (264); the card reaches the window's other edges (Figma 55).
+  const inset = valid ? layout : { left: 264, top: 0, right: 0, bottom: 0 }
   const card = { left: inset.left, top: inset.top, right: innerWidth - inset.right, bottom: innerHeight - inset.bottom }
   let ax = (card.left + card.right) / 2
   let ay = valid ? card.top + layout.anchorY : (card.top + card.bottom) / 2 - 60
@@ -43,7 +43,7 @@
   const style = document.createElement('style')
   style.textContent = `
 #wavi-boot { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
-#wavi-boot .card { position: absolute; border-radius: var(--radius-window); background: var(--bg-app); box-shadow: var(--card-edge), var(--card-shadow); }
+#wavi-boot .card { position: absolute; background: var(--bg-app); box-shadow: var(--card-edge), var(--card-shadow); }
 #wavi-boot canvas { position: absolute; inset: 0; width: 100%; height: 100%; }`
   document.head.appendChild(style)
 
@@ -53,7 +53,11 @@
   const cardEl = document.createElement('div')
   cardEl.className = 'card'
   // Insets, not a size: the window can still change size while this is up (restored to full screen, fitted to the screen).
-  cardEl.style.cssText = `left:${inset.left}px;top:${inset.top}px;right:${inset.right}px;bottom:${inset.bottom}px`
+  // A corner in one of the window's corners takes the window's radius, as in AppShell (--radius-lead / --radius-trail).
+  const corner = (inWindowCorner) => (inWindowCorner ? 'var(--radius-edge)' : 'var(--radius-window)')
+  const lead = corner(inset.left < 1)
+  const trail = corner(inset.right < 1)
+  cardEl.style.cssText = `left:${inset.left}px;top:${inset.top}px;right:${inset.right}px;bottom:${inset.bottom}px;border-radius:${lead} ${trail} ${trail} ${lead}`
   el.appendChild(cardEl)
 
   let worker = null
