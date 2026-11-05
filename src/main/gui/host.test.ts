@@ -39,7 +39,7 @@ afterEach(() => {
   for (const link of links.splice(0)) link.killAll()
 })
 
-function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null): Harness {
+function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, batchMs = 5): Harness {
   links.push(link)
   const owner = new FakeOwner()
   const status: AgentEvent[] = []
@@ -62,7 +62,7 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null):
     ended: (id) => ended.push(id),
     image: () => Promise.resolve({ mediaType: 'image/png', data: 'iVBORw0KGgo=' }),
     clientVersion: '0.0.0-test',
-    batchMs: 5
+    batchMs
   })
   const open = host.open.bind(host)
   host.open = async (launch, who) => {
@@ -164,6 +164,21 @@ describe('GuiHost · Claude stream-json', () => {
     expect(h.status.at(-1)).toEqual({ type: 'session-end', reason: 'exit' })
     expect(h.ended).toEqual(['c3'])
     expect(await h.host.send('c3', { text: 'more', attachments: [] })).toMatchObject({ ok: false })
+  }, 30_000)
+
+  it('sends a batch only the newest of its streamed texts (each one is the whole text so far)', async () => {
+    const h = harness(new LocalPipeLink(), null, 300)
+    await h.host.open(launchOf('claude', 'c5'), h.owner)
+    await ready(h, 'c5')
+    await h.host.send('c5', { text: 'slow', attachments: [] })
+    await until(() => (stateOf(h, 'c5').live?.text.length ?? 0) > 20)
+    h.host.interrupt('c5')
+    await until(() => !stateOf(h, 'c5').busy)
+    await new Promise((r) => setTimeout(r, 350))
+    const batches = h.owner.batches.filter((b) => b.sessionId === 'c5')
+    expect(batches.some((b) => b.events.some((e) => e.type === 'live' && e.live !== null))).toBe(true)
+    for (const b of batches) expect(b.events.filter((e) => e.type === 'live').length).toBeLessThanOrEqual(1)
+    expect(h.view('c5')).toEqual(stateOf(h, 'c5'))
   }, 30_000)
 
   it('reattaches to a process the pipe host kept running and replays its lines', async () => {

@@ -315,7 +315,7 @@ class GuiSession<O extends GuiOwner> {
   flush(): void {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    const events = this.pending
+    const events = newestLive(this.pending)
     this.pending = []
     const owner = this.liveOwner()
     if (events.length > 0 && owner) owner.send(GUI_IPC.events, { sessionId: this.id, events })
@@ -425,6 +425,16 @@ class GuiSession<O extends GuiOwner> {
       this.deps.ended(this.id, this.launch.agent)
     }
   }
+}
+
+/**
+ * A batch with only its last `live` event: each one is the whole streamed text so far and nothing else reads it, so the
+ * folded state is the same, and a long answer no longer crosses IPC once per delta.
+ */
+function newestLive(events: GuiEvent[]): GuiEvent[] {
+  let last = -1
+  for (let i = events.length - 1; i >= 0 && last < 0; i--) if (events[i]!.type === 'live') last = i
+  return last < 0 ? events : events.filter((event, i) => event.type !== 'live' || i === last)
 }
 
 function parseLine(line: string): Record<string, unknown> | null {
