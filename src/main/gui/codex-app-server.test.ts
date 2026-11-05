@@ -84,13 +84,13 @@ describe('codexConfig / codexTurnParams', () => {
       input: [{ type: 'text', text: 'hi', text_elements: [] }, { type: 'localImage', path: '/a.png' }],
       model: 'gpt-6.1-sol',
       effort: 'high',
-      approvalPolicy: 'on-request',
-      approvalsReviewer: 'user'
+      approvalPolicy: 'on-request'
     })
     // 自动 is Codex's own reviewer; 询问 asks before anything it is not sure is safe.
     const at = (permission: 'ask' | 'auto') => codexTurnParams('th', 'hi', codexConfig(models, { permission }))
     expect(at('auto')).toMatchObject({ approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' })
-    expect(at('ask')).toMatchObject({ approvalPolicy: 'untrusted', approvalsReviewer: 'user' })
+    expect(at('ask')).toEqual(expect.objectContaining({ approvalPolicy: 'untrusted' }))
+    expect(at('ask')).not.toHaveProperty('approvalsReviewer')
   })
 })
 

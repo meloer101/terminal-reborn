@@ -20,6 +20,8 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
   const current: { model?: string; effort?: string; permission?: GuiPermission } = { ...(options.model ? { model: options.model } : {}), permission: 'accept-edits' }
   let config: GuiConfigOption[] = []
   let threadId: string | undefined
+  /** 自动 sent `approvalsReviewer: auto_review` on this thread: later turns at another level send `user`. */
+  let reviewerSet = false
   let turnId: string | undefined
   let interruptWanted = false
   let isReady = false
@@ -147,7 +149,11 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
       const images = attachments.filter(isImagePath)
       const body = withPaths(text, attachments.filter((p) => !isImagePath(p)))
       const id = threadId
-      void rpc.request('turn/start', codexTurnParams(id, body, config, images)).then((outcome) => {
+      const params = codexTurnParams(id, body, config, images)
+      // The reviewer holds for later turns: once 自动 was used, the other levels put the user back.
+      if (params.approvalsReviewer === 'auto_review') reviewerSet = true
+      else if (reviewerSet) params.approvalsReviewer = 'user'
+      void rpc.request('turn/start', params).then((outcome) => {
         if (outcome.ok) return
         // Refused before it began: there is no turn/completed to end it.
         io.emit([{ type: 'busy', busy: false }])

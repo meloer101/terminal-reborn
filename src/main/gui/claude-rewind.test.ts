@@ -52,4 +52,9 @@ describe('resumePointOf', () => {
     expect(resumePointOf(rows, 'r1')).toBeUndefined()
     expect(resumePointOf(rows, 'nope')).toBeUndefined()
   })
+
+  it('is undefined, not a new conversation, when the chain runs into lines that were not read', () => {
+    // The newest part of a long transcript: u3's parent r1 is in the part not read.
+    expect(resumePointOf([user('u3', 'r1'), assistant('r3', 'u3')], 'u3')).toBeUndefined()
+  })
 })

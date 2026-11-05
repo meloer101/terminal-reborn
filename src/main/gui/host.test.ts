@@ -282,7 +282,7 @@ describe('GuiHost · Codex app-server', () => {
     h.host.answer('x1', { kind: 'permission', id: prompt.id, optionId: 'accept' })
     await until(() => !stateOf(h, 'x1').busy)
     const done = texts(stateOf(h, 'x1')).find((t) => t.startsWith('text:Done'))
-    expect(done).toBe('text:Done ({"turnId":"turn-1","model":"gpt-a","effort":"low","approvalPolicy":"on-request","approvalsReviewer":"user"})')
+    expect(done).toBe('text:Done ({"turnId":"turn-1","model":"gpt-a","effort":"low","approvalPolicy":"on-request","approvalsReviewer":null})')
     expect(h.status.at(-1)).toMatchObject({ type: 'stop', message: done!.slice(5) })
     expect(h.status.filter((e) => e.type === 'tool-end').length).toBeGreaterThan(0)
 

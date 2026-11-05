@@ -73,10 +73,15 @@ export function proxyEnv(proxy: Pick<SystemProxy, 'https' | 'http' | 'socks'> & 
   return env
 }
 
-/** Puts `next` in `env`, taking out what an earlier call put there and is gone now. */
-export function applyProxyEnv(env: NodeJS.ProcessEnv, next: Record<string, string>): void {
+/**
+ * Puts `next` in `env`, taking out what an earlier call put there and is gone now. `ownNoProxy` is a bypass list the
+ * user set themselves: kept, and merged with the system's.
+ */
+export function applyProxyEnv(env: NodeJS.ProcessEnv, next: Record<string, string>, ownNoProxy?: string): void {
   for (const key of MANAGED_VARS) {
-    if (next[key] !== undefined) env[key] = next[key]
+    let value = next[key]
+    if (key === 'NO_PROXY' || key === 'no_proxy') value = [ownNoProxy, value].filter(Boolean).join(',') || undefined
+    if (value !== undefined) env[key] = value
     else delete env[key]
   }
 }
@@ -98,18 +103,20 @@ const PAC_PROBE = 'https://api.anthropic.com'
  */
 export function followSystemProxy(env: NodeJS.ProcessEnv, deps: SystemProxyDeps, everyMs = 60_000): () => void {
   if (hasProxyEnv(env)) return () => undefined
+  const ownNoProxy = env.NO_PROXY || env.no_proxy || undefined
+  const apply = (next: Record<string, string>) => applyProxyEnv(env, next, ownNoProxy)
   const take = async (text: string | null): Promise<void> => {
     if (text === null) return
     const proxy = parseScutilProxy(text)
     if (proxy.pacOnly && deps.resolvePac) {
       const answer = await deps.resolvePac(PAC_PROBE).catch(() => '')
-      applyProxyEnv(env, proxyEnv({ ...proxyOfPac(answer), exceptions: proxy.exceptions }))
+      apply(proxyEnv({ ...proxyOfPac(answer), exceptions: proxy.exceptions }))
       return
     }
-    applyProxyEnv(env, proxyEnv(proxy))
+    apply(proxyEnv(proxy))
   }
   const first = parseScutilProxy(deps.readSync() ?? '')
-  if (!first.pacOnly) applyProxyEnv(env, proxyEnv(first))
+  if (!first.pacOnly) apply(proxyEnv(first))
   void deps.read().then(take)
   const timer = setInterval(() => void deps.read().then(take), everyMs)
   timer.unref?.()

@@ -74,6 +74,17 @@ describe('followSystemProxy', () => {
     expect(env.HTTPS_PROXY).toBe('http://10.0.0.1:3128')
   })
 
+  it('keeps a bypass list the user set, merged with the system’s', async () => {
+    const env: NodeJS.ProcessEnv = { NO_PROXY: 'corp.internal' }
+    const off = '<dictionary> {\n  HTTPSEnable : 0\n}'
+    const stop = followSystemProxy(env, deps([SCUTIL, SCUTIL, off]), 5)
+    expect(env.NO_PROXY).toBe('corp.internal,localhost,127.0.0.1,::1,192.168.0.0/16,.local')
+    await new Promise((r) => setTimeout(r, 30))
+    expect(env).toMatchObject({ NO_PROXY: 'corp.internal', no_proxy: 'corp.internal' })
+    expect(hasProxyEnv(env)).toBe(false)
+    stop()
+  })
+
   it('applyProxyEnv takes out only the proxy variables', () => {
     const env: NodeJS.ProcessEnv = { PATH: '/bin', HTTPS_PROXY: 'http://a', no_proxy: 'x' }
     applyProxyEnv(env, {})

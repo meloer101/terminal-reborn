@@ -51,7 +51,9 @@ export function currentBranch(rows: readonly Row[]): boolean[] {
 
 /**
  * Where to resume to edit the prompt `messageId`: the last message before it on its branch (`--resume-session-at`),
- * null when it is the conversation's first message (a new conversation), undefined when it is not a prompt here.
+ * null when it is the conversation's first message (a new conversation), undefined when it is not a prompt here or
+ * its chain runs into lines that were not read (a transcript longer than history reads): never a new conversation by
+ * mistake.
  */
 export function resumePointOf(rows: readonly Row[], messageId: string): string | null | undefined {
   const keep = currentBranch(rows)
@@ -64,7 +66,7 @@ export function resumePointOf(rows: readonly Row[], messageId: string): string |
   if (!target || !isPrompt(target)) return undefined
   for (let at = str(target.parentUuid); at !== undefined; ) {
     const row = byId.get(at)
-    if (!row) return null
+    if (!row) return undefined
     if (row.type === 'user' || row.type === 'assistant') return at
     at = str(row.parentUuid)
   }

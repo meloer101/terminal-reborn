@@ -484,6 +484,12 @@ function parseLine(line: string): Record<string, unknown> | null {
   }
 }
 
+/** The model chosen in the session now (it may differ from the one it was launched with): a restart keeps it. */
+function currentModel(state: GuiState): { model?: string } {
+  const model = state.config.find((o) => o.category === 'model')?.current
+  return model ? { model } : {}
+}
+
 export class GuiHost<O extends GuiOwner> {
   private readonly sessions = new Map<string, GuiSession<O>>()
 
@@ -551,7 +557,7 @@ export class GuiHost<O extends GuiOwner> {
     const at = agentSessionId ? await this.deps.resumePoint(launch.agent, launch.cwd, agentSessionId, messageId).catch(() => undefined) : null
     if (at === undefined) return { ok: false, reason: '对话记录里找不到这条消息' }
     if (this.sessions.get(sessionId) !== session || session.state.busy) return { ok: false, reason: '先停止这一轮再改' }
-    const next: GuiLaunch = { ...launch, initialPrompt: text }
+    const next: GuiLaunch = { ...launch, ...currentModel(state), initialPrompt: text }
     delete next.resumeAgentSessionId
     delete next.resumeAt
     if (at && agentSessionId) Object.assign(next, { resumeAgentSessionId: agentSessionId, resumeAt: at })
@@ -580,7 +586,7 @@ export class GuiHost<O extends GuiOwner> {
     if (!session || session.exited || !owner || !agentSessionId) return false
     const { state, launch } = session
     if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return false
-    const next: GuiLaunch = { ...launch, permission: change.permission, plan: change.plan, resumeAgentSessionId: agentSessionId }
+    const next: GuiLaunch = { ...launch, ...currentModel(state), permission: change.permission, plan: change.plan, resumeAgentSessionId: agentSessionId }
     delete next.initialPrompt
     delete next.resumeAt
     this.sessions.delete(sessionId)
@@ -588,7 +594,11 @@ export class GuiHost<O extends GuiOwner> {
     const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), [])
     this.sessions.set(sessionId, replacement)
     const result = await replacement.begin(agentSessionId)
-    if (!result.ok && this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
+    if (!result.ok) {
+      if (this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
+      // The chat was cleared for the replay: say why it stays empty.
+      if (!owner.isDestroyed()) owner.send(GUI_IPC.events, { sessionId, events: [{ type: 'failure', failure: result.reason }] })
+    }
     return result.ok
   }
 

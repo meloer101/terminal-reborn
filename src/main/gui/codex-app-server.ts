@@ -16,9 +16,10 @@ const tail = (text: string, max: number): string => (text.length > max ? `…${t
  * on purpose). 询问 asks before anything it is not sure is safe; 接受编辑 works in the workspace without asking; 自动
  * routes what it would ask to Codex's own reviewer (`auto_review`, codex 0.166). The sandbox stays workspace-write.
  */
-export const CODEX_APPROVAL: Readonly<Record<GuiPermission, { approvalPolicy: string; approvalsReviewer: string }>> = {
-  ask: { approvalPolicy: 'untrusted', approvalsReviewer: 'user' },
-  'accept-edits': { approvalPolicy: 'on-request', approvalsReviewer: 'user' },
+export const CODEX_APPROVAL: Readonly<Record<GuiPermission, { approvalPolicy: string; approvalsReviewer?: string }>> = {
+  ask: { approvalPolicy: 'untrusted' },
+  'accept-edits': { approvalPolicy: 'on-request' },
+  // Sent only for 自动 (an older app-server may not know the field); the driver sets `user` back after it.
   auto: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' }
 }
 const CODEX_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits', 'auto']
