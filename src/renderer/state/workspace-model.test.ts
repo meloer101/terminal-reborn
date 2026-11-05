@@ -269,6 +269,25 @@ describe('persistence', () => {
     expect(sanitizeWorkspaceFile(tampered, 0)?.sessions[0]).not.toHaveProperty('titleSource')
   })
 
+  it('keeps a GUI session GUI across a restart, and the 界面 remembered per project (PRD F23)', () => {
+    const makeId = ids()
+    const { data, projectId } = addProject(EMPTY_WORKSPACE, '/code/acme', makeId)
+    const gui = addSession(data, projectId, 'claude', 1000, makeId, 'gui')!.data
+    const both = addSession(gui, projectId, 'shell', 1000, makeId, 'gui')!.data
+    // A shell is always a terminal.
+    expect(both.sessions.map((s) => s.ui)).toEqual(['gui', undefined])
+    const file = serializeWorkspace(both, { ...ui, newSessionUi: { [projectId]: 'cli', gone: 'gui' } }, {})
+    expect(file.sessions.map((s) => s.ui)).toEqual(['gui', undefined])
+    expect(file.newSessionUi).toEqual({ [projectId]: 'cli' })
+    const reread = sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0)
+    expect(reread?.newSessionUi).toEqual({ [projectId]: 'cli' })
+    const restored = restoreWorkspace(reread)
+    expect(restored.sessions[0]).toMatchObject({ kind: 'claude', ui: 'gui', phase: 'not-started' })
+    expect(restored.sessions[1]).not.toHaveProperty('ui')
+    // Files written before F23 have neither.
+    expect(serializeWorkspace(withSessions('claude'), ui, {})).not.toHaveProperty('newSessionUi')
+  })
+
   it('a conversation id replaced later (after /clear) is what gets saved', () => {
     const data = withSessions('codex')
     const replaced = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'second' })) }
@@ -300,6 +319,8 @@ describe('persistedStateChanged', () => {
     expect(persistedStateChanged({ ...base, collapsedProjectIds: ['p-1'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, recentProjects: ['/x'] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, newSessionWorkdir: { 'p-1': 'current' } }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, newSessionUi: { 'p-1': 'cli' } }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, sessions: [{ ...first, ui: 'gui' }] }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, projects: [...base.projects] }, base)).toBe(true)
   })
 })

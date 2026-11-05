@@ -35,6 +35,25 @@ describe('sanitizeWorkspaceFile', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 0)).not.toHaveProperty('attemptGroups')
   })
 
+  it('keeps a GUI session and the remembered 界面; drops them where they cannot be (PRD F23)', () => {
+    const file = sanitizeWorkspaceFile(
+      {
+        ...structuredClone(valid),
+        sessions: [
+          { ...valid.sessions[0], ui: 'gui' },
+          { ...valid.sessions[1], ui: 'gui' }
+        ],
+        newSessionUi: { p1: 'gui', gone: 'cli' }
+      },
+      0
+    )
+    expect(file?.sessions.map((s) => s.ui)).toEqual(['gui', undefined])
+    expect(file?.newSessionUi).toEqual({ p1: 'gui' })
+    const odd = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions: [{ ...valid.sessions[0], ui: 'web' }], newSessionUi: { p1: 'web' } }, 0)
+    expect(odd?.sessions[0]).not.toHaveProperty('ui')
+    expect(odd).not.toHaveProperty('newSessionUi')
+  })
+
   it('rejects anything that is not a version-2 object', () => {
     expect(sanitizeWorkspaceFile(null, 0)).toBeNull()
     expect(sanitizeWorkspaceFile([], 0)).toBeNull()

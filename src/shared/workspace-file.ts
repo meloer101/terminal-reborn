@@ -7,7 +7,7 @@ import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
-import type { AgentKind, Project, TitleSource, Worktree } from './types'
+import type { AgentKind, Project, SessionUi, TitleSource, Worktree } from './types'
 import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
 
 export const WORKSPACE_FILE_VERSION = 2
@@ -44,6 +44,8 @@ export interface PersistedSession {
   id: string
   worktreeId: string
   kind: AgentKind
+  /** A GUI session (PRD F23); absent = CLI. */
+  ui?: 'gui'
   title: string
   /** Where the title came from (PRD F2); absent in files written before it existed. */
   titleSource?: TitleSource
@@ -109,6 +111,8 @@ export interface WorkspaceFile {
   newSessionWorkdir?: Record<string, Workdir>
   /** 智能体 last chosen in the new-session sheet, by project id (PRD F4 v1.68). Absent when empty. */
   newSessionAgent?: Record<string, AgentKind>
+  /** 界面 last chosen in the new-session sheet, by project id (PRD F23). Absent when empty. */
+  newSessionUi?: Record<string, SessionUi>
   /** Unsent inline review comments (PRD F5) by worktree path; only worktrees that exist. Absent when empty. */
   reviewComments?: Record<string, ReviewComment[]>
   /** The main area's split (PRD F20): two to four sessions, `activeSessionId` among them. Absent = one session. */
@@ -200,6 +204,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           id: s.id as string,
           worktreeId: s.worktreeId as string,
           kind: s.kind as AgentKind,
+          // A shell is always a terminal.
+          ...(s.kind !== 'shell' && s.ui === 'gui' ? { ui: 'gui' as const } : {}),
           title: s.title as string,
           ...(TITLE_SOURCES.has(s.titleSource) ? { titleSource: s.titleSource as TitleSource } : {}),
           // A shell has no conversation to resume.
@@ -258,6 +264,11 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     for (const [id, choice] of Object.entries(value.newSessionAgent)) if (projectIds.has(id) && KINDS.has(choice)) newSessionAgent[id] = choice as AgentKind
   }
 
+  const newSessionUi: Record<string, SessionUi> = {}
+  if (isRecord(value.newSessionUi)) {
+    for (const [id, choice] of Object.entries(value.newSessionUi)) if (projectIds.has(id) && (choice === 'gui' || choice === 'cli')) newSessionUi[id] = choice
+  }
+
   const reviewComments = sanitizeReviewComments(value.reviewComments, new Set(worktrees.map((w) => w.path)))
   const attemptGroups = sanitizeAttemptGroups(value.attemptGroups, sessionIds)
 
@@ -304,6 +315,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(recentProjects.length > 0 ? { recentProjects } : {}),
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
     ...(Object.keys(newSessionAgent).length > 0 ? { newSessionAgent } : {}),
+    ...(Object.keys(newSessionUi).length > 0 ? { newSessionUi } : {}),
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
     ...(split ? { split } : {}),
     ...(windows.length > 0 ? { windows } : {}),

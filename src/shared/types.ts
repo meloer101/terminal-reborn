@@ -43,6 +43,9 @@ export interface Worktree {
   archived?: WorktreeArchive
 }
 
+/** 界面 of a session (PRD F23): the agent's own TUI in a terminal, or Wavi's chat view over its headless protocol. Chosen at creation, never switched. */
+export type SessionUi = 'cli' | 'gui'
+
 /** prompt = cut from the first prompt · agent = the agent's own title · user = renamed in Wavi. Precedence user > agent > prompt. */
 export type TitleSource = 'prompt' | 'agent' | 'user'
 
@@ -50,6 +53,8 @@ export interface Session {
   id: SessionId
   worktreeId: WorktreeId
   kind: AgentKind
+  /** 'gui': a chat view over the agent's headless protocol, no PTY (PRD F23). Absent = CLI. Persisted. */
+  ui?: 'gui'
   /** Task title: the agent's own name for the conversation, else the first prompt (PRD F2). */
   title: string
   /** Where `title` came from; a user rename is never replaced. Absent = the default name or a title saved before this existed. */

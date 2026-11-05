@@ -6,7 +6,9 @@ import {
   folderNameFor,
   generateBranchName,
   groupBranches,
+  initialUi,
   initialWorkdir,
+  rememberUi,
   isSafeFolderName,
   parseCreateRequest,
   rememberWorkdir,
@@ -136,5 +138,20 @@ describe('parseCreateRequest', () => {
   it('rejects non-objects', () => {
     expect(parseCreateRequest(null)).toBeNull()
     expect(parseCreateRequest([ok])).toBeNull()
+  })
+})
+
+describe('the remembered 界面 (PRD F23)', () => {
+  it('is GUI the first time, then what the project used last', () => {
+    expect(initialUi({}, 'p1')).toBe('gui')
+    const after = rememberUi({}, 'p1', 'cli', false)
+    expect(initialUi(after, 'p1')).toBe('cli')
+    expect(initialUi(after, 'p2')).toBe('gui')
+  })
+
+  it('does not remember a CLI the agent forced, and keeps the same object when nothing changes', () => {
+    const remembered = { p1: 'gui' as const }
+    expect(rememberUi(remembered, 'p1', 'cli', true)).toBe(remembered)
+    expect(rememberUi(remembered, 'p1', 'gui', false)).toBe(remembered)
   })
 })
