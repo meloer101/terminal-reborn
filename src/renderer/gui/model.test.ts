@@ -1,0 +1,220 @@
+import { describe, expect, it } from 'vitest'
+import { matchCommands, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
+import type { ChatItem } from '@shared/transcript-chat'
+import {
+  appendToDraft,
+  cardKey,
+  composerKey,
+  feedBlocks,
+  mention,
+  permissionButtons,
+  permissionPrimary,
+  permissionTitle,
+  shortAgentName,
+  pickChoice,
+  pickCommand,
+  pickerButtons,
+  planParts,
+  questionAnswers,
+  slashQuery,
+  stepIndex,
+  thinkingLabel,
+  toolView,
+  userBubble,
+  waitingToolId
+} from './model'
+
+const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
+const text = (id: string): ChatItem => ({ kind: 'text', id, at: 0, text: 'ok' })
+const thinking = (id: string, ms?: number): ChatItem => ({ kind: 'thinking', id, at: 0, text: '…', ...(ms !== undefined ? { ms } : {}) })
+const tool = (id: string, patch: Partial<Extract<ChatItem, { kind: 'tool' }>> = {}): Extract<ChatItem, { kind: 'tool' }> => ({
+  kind: 'tool',
+  id,
+  at: 0,
+  name: 'Read',
+  arg: 'src/a.ts',
+  state: 'ok',
+  ...patch
+})
+
+describe('feedBlocks (Figma 49″C)', () => {
+  it('groups runs of tool and thinking rows; every other item is its own block', () => {
+    const blocks = feedBlocks([user('u1'), thinking('t1'), tool('a'), tool('b'), text('x1'), tool('c'), { kind: 'unknown', id: 'z', at: 0, type: 'odd' }, user('u2')])
+    expect(blocks.map((b) => (b.kind === 'steps' ? b.items.map((i) => i.id) : b.item.id))).toEqual(['u1', ['t1', 'a', 'b'], 'x1', ['c'], 'u2'])
+  })
+
+  it('keys a run by its first item, so a growing run keeps its rows', () => {
+    expect(feedBlocks([tool('a')])[0]?.key).toBe(feedBlocks([tool('a'), tool('b')])[0]?.key)
+  })
+})
+
+describe('rows', () => {
+  it('shows Wavi’s own messages with their header (F21 dispatch report)', () => {
+    expect(userBubble('[Wavi 派活报告] 「登录接口测试」一轮结束')).toEqual({ header: 'Wavi 派活报告', body: '「登录接口测试」一轮结束' })
+    expect(userBubble('把登录态迁移到 cookie')).toEqual({ header: null, body: '把登录态迁移到 cookie' })
+  })
+
+  it('says how long the agent thought', () => {
+    expect(thinkingLabel(8_200)).toBe('思考了 8s')
+    expect(thinkingLabel(200)).toBe('思考了 1s')
+    expect(thinkingLabel(75_000)).toBe('思考了 1m 15s')
+    expect(thinkingLabel(undefined)).toBe('思考了')
+  })
+
+  it('draws a tool row: status, +N −M for edits, a summary for output, 等你确认 while asked', () => {
+    const edit = tool('e', { name: 'Write', arg: 'docs/a.md', diff: { path: 'docs/a.md', hunks: [], added: 18, removed: 0, truncated: false } })
+    expect(toolView(edit, false)).toMatchObject({ status: 'done_unread', name: 'Write', added: 18, expandable: true })
+    expect(toolView(edit, false)).not.toHaveProperty('removed')
+    expect(toolView(edit, false)).not.toHaveProperty('summary')
+    const grep = tool('g', { name: 'Grep', arg: '"localStorage" in src', output: '\n14 处 · 6 个文件\nmore' })
+    expect(toolView(grep, false).summary).toBe('14 处 · 6 个文件')
+    expect(toolView(tool('r', { state: 'running', name: 'Bash', output: 'partial' }), false)).toMatchObject({ status: 'running', expandable: true })
+    expect(toolView(tool('r', { state: 'running', name: 'Bash' }), false)).not.toHaveProperty('summary')
+    expect(toolView(tool('f', { state: 'error' }), false).status).toBe('error')
+    expect(toolView(tool('w', { state: 'running', name: 'Bash' }), true)).toMatchObject({ status: 'needs_you', waiting: true })
+  })
+
+  it('marks the running tool a permission is about', () => {
+    const items = [tool('a'), tool('b', { state: 'running' }), text('x')]
+    const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }
+    expect(waitingToolId(items, [permission])).toBe('b')
+    expect(waitingToolId(items, [])).toBeNull()
+    expect(waitingToolId([tool('a')], [permission])).toBeNull()
+  })
+})
+
+describe('permission card (49″E)', () => {
+  const option = (id: string, kind: GuiPermissionOption['kind']): GuiPermissionOption => ({ id, label: id, kind })
+
+  it('maps whatever options the agent gives onto 拒绝 / 总是允许 / 允许', () => {
+    const buttons = permissionButtons([option('always', 'allow_always'), option('once', 'allow_once'), option('no', 'reject_once'), option('never', 'reject_always')])
+    expect(buttons.reject?.id).toBe('no')
+    expect(buttons.always?.id).toBe('always')
+    expect(buttons.allow?.id).toBe('once')
+    expect(permissionPrimary(buttons)?.id).toBe('once')
+    // Only 总是允许 offered: ↵ answers it.
+    const only = permissionButtons([option('always', 'allow_always'), option('never', 'reject_always')])
+    expect(only.reject?.id).toBe('never')
+    expect(permissionPrimary(only)?.id).toBe('always')
+  })
+
+  it('titles the card by what the tool does', () => {
+    expect(permissionTitle('Claude', 'Bash')).toBe('Claude 要运行一条命令')
+    expect(permissionTitle('Codex', 'fileChange')).toBe('Codex 要修改文件')
+    expect(permissionTitle('Grok', 'mcp__x')).toBe('Grok 要使用 mcp__x')
+    expect(shortAgentName('Claude Code')).toBe('Claude')
+    expect(shortAgentName('Gemini CLI')).toBe('Gemini')
+    expect(shortAgentName('Codex')).toBe('Codex')
+  })
+})
+
+describe('plan card (49″D)', () => {
+  it('takes the title from the first heading, the rest is the body', () => {
+    expect(planParts('# 支付页的 cookie 在 Safari 下的回退\n\n1. 改 token\n2. 签发 cookie')).toEqual({ title: '计划：支付页的 cookie 在 Safari 下的回退', body: '1. 改 token\n2. 签发 cookie' })
+    expect(planParts('## 计划：迁移\nstep')).toEqual({ title: '计划：迁移', body: 'step' })
+    expect(planParts('1. a\n2. b')).toEqual({ title: '计划', body: '1. a\n2. b' })
+    expect(planParts('  ')).toEqual({ title: '计划', body: '' })
+  })
+})
+
+describe('question card (49″F)', () => {
+  const one: GuiQuestion = { question: '刷新失败时怎么处理？', options: [{ label: '退回登录页' }, { label: '静默重试' }], multiSelect: false }
+  const many: GuiQuestion = { question: '要哪些？', options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }], multiSelect: true }
+
+  it('picks one option, toggles several, or opens 其他…', () => {
+    expect(pickChoice(one, undefined, 1)).toEqual({ kind: 'option', indexes: [1] })
+    expect(pickChoice(one, { kind: 'option', indexes: [1] }, 0)).toEqual({ kind: 'option', indexes: [0] })
+    const ab = pickChoice(many, pickChoice(many, undefined, 2), 0)
+    expect(ab).toEqual({ kind: 'option', indexes: [2, 0] })
+    expect(pickChoice(many, ab, 2)).toEqual({ kind: 'option', indexes: [0] })
+    expect(pickChoice(one, undefined, 2)).toEqual({ kind: 'other', text: '' })
+  })
+
+  it('answers every question by its text, or nothing while one is open', () => {
+    expect(questionAnswers([one, many], [{ kind: 'option', indexes: [0] }, { kind: 'option', indexes: [2, 0] }])).toEqual({ '刷新失败时怎么处理？': '退回登录页', '要哪些？': 'A, C' })
+    expect(questionAnswers([one], [{ kind: 'other', text: ' 提示用户 ' }])).toEqual({ '刷新失败时怎么处理？': '提示用户' })
+    expect(questionAnswers([one], [{ kind: 'other', text: '  ' }])).toBeNull()
+    expect(questionAnswers([one, many], [{ kind: 'option', indexes: [0] }])).toBeNull()
+  })
+
+  it('reads ↵ ⎋ 1–9 ↑↓, never while an input method composes or a modifier is held', () => {
+    const key = (k: string, patch = {}) => cardKey({ key: k, metaKey: false, ctrlKey: false, altKey: false, isComposing: false, ...patch }, false)
+    expect(key('Enter')).toEqual({ type: 'primary' })
+    expect(key('Escape')).toEqual({ type: 'dismiss' })
+    expect(key('3')).toEqual({ type: 'pick', index: 2 })
+    expect(key('0')).toBeNull()
+    expect(key('ArrowDown')).toEqual({ type: 'move', delta: 1 })
+    expect(key('Enter', { isComposing: true })).toBeNull()
+    expect(key('Enter', { metaKey: true })).toBeNull()
+    // Typing in 其他…: only ⎋ is the card's.
+    expect(cardKey({ key: 'Enter', metaKey: false, ctrlKey: false, altKey: false, isComposing: false }, true)).toBeNull()
+  })
+})
+
+describe('composer', () => {
+  const key = (k: string, patch: Partial<{ shiftKey: boolean; altKey: boolean; ctrlKey: boolean; isComposing: boolean; keyCode: number }> = {}, state = { menuOpen: false, busy: false }) =>
+    composerKey({ key: k, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, isComposing: false, keyCode: 0, ...patch }, state)
+
+  it('⏎ sends, ⇧⏎ is a newline, ⎋ stops a running turn', () => {
+    expect(key('Enter')).toBe('send')
+    expect(key('Enter', { shiftKey: true })).toBe('newline')
+    expect(key('Escape')).toBeNull()
+    expect(key('Escape', {}, { menuOpen: false, busy: true })).toBe('stop')
+  })
+
+  it('leaves the Enter that commits an input method’s text alone (isComposing, or keyCode 229)', () => {
+    expect(key('Enter', { isComposing: true })).toBeNull()
+    expect(key('Enter', { keyCode: 229 })).toBeNull()
+  })
+
+  it('drives the / menu while it is open', () => {
+    const open = { menuOpen: true, busy: true }
+    expect(key('ArrowDown', {}, open)).toBe('menu-down')
+    expect(key('ArrowUp', {}, open)).toBe('menu-up')
+    expect(key('Enter', {}, open)).toBe('menu-pick')
+    expect(key('Tab', {}, open)).toBe('menu-pick')
+    expect(key('Escape', {}, open)).toBe('menu-close')
+  })
+
+  it('opens the / menu only while a command name is being typed', () => {
+    expect(slashQuery('/re')).toBe('re')
+    expect(slashQuery('/')).toBe('')
+    expect(slashQuery('/review the diff')).toBeNull()
+    expect(slashQuery('see /re')).toBeNull()
+    const commands = [{ name: 'review', description: '审阅' }, { name: 'rewind', description: '回到之前' }, { name: 'compare', description: 'x' }]
+    expect(matchCommands(commands, slashQuery('/re')!).map((c) => c.name)).toEqual(['review', 'rewind', 'compare'])
+    expect(pickCommand(commands[0]!)).toBe('/review ')
+  })
+
+  it('adds inserted text after what is typed, and mentions files relative to the session', () => {
+    expect(appendToDraft('', '@a.ts ')).toBe('@a.ts ')
+    expect(appendToDraft('look at', '@a.ts ')).toBe('look at @a.ts ')
+    expect(appendToDraft('look at ', '@a.ts ')).toBe('look at @a.ts ')
+    expect(mention('/code/acme/src/a.ts', '/code/acme')).toBe('@src/a.ts ')
+    expect(mention('/code/acme/my file.md', '/code/acme/')).toBe('@"my file.md" ')
+    expect(mention('/etc/hosts', '/code/acme')).toBe('@/etc/hosts ')
+  })
+
+  it('puts model and reasoning effort on one picker, other options on their own', () => {
+    const option = (id: string, category: GuiConfigOption['category'], current: string, values: string[]): GuiConfigOption => ({
+      id,
+      category,
+      label: id,
+      current,
+      values: values.map((v) => ({ value: v, label: v === 'high' ? '高' : v }))
+    })
+    const buttons = pickerButtons([option('mode', 'mode', 'acceptEdits', ['default', 'acceptEdits']), option('effort', 'thought_level', 'high', ['low', 'high']), option('model', 'model', 'Sonnet 5', ['Sonnet 5', 'Opus 5.5']), option('only', 'other', 'x', ['x'])])
+    expect(buttons.map((b) => [b.key, b.label])).toEqual([
+      ['model+effort', 'Sonnet 5 · 高'],
+      ['mode', 'acceptEdits']
+    ])
+  })
+
+  it('steps through a list, wrapping', () => {
+    expect(stepIndex(-1, 1, 3)).toBe(0)
+    expect(stepIndex(-1, -1, 3)).toBe(2)
+    expect(stepIndex(2, 1, 3)).toBe(0)
+    expect(stepIndex(0, -1, 3)).toBe(2)
+    expect(stepIndex(0, 1, 0)).toBe(-1)
+  })
+})

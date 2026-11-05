@@ -3,14 +3,16 @@
 // switching sessions. The main area places the shown ones (PRD F20: one per pane of a split); moving between
 // panes only moves the element, never the terminal. A secondary window's panes (F20 · 多窗口) borrow the terminal into
 // that window's document (PaneHosts): the same xterm, the same PTY stream, only its DOM moves.
-import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId, Worktree } from '@shared/types'
 import { useEagerStarts, useWorktreeCreations } from '../new-session/creation'
 import { runSessionWaits, useRunScripts } from '../scripts/run-script'
 import { useSessionStartup, useStartRequests } from '../state/session-start'
-import { launchKind, useWorkspace } from '../state/workspace'
+import { launchKind, shownEverywhere, useWorkspace } from '../state/workspace'
+import { GuiCard, GuiPane } from '../gui/GuiPane'
+import { forgetGuiSessions, requestComposerFocus } from '../gui/store'
 import { windowOf } from '../app-shell/windows-runtime'
 import { onTerminalFitReleased, terminalFitHeld } from '../app-shell/drawer-motion'
 import { useIsKeyWindow, useWindowScope } from '../state/window-scope'
@@ -258,6 +260,9 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
   const { sessions, worktrees, activeSessionId } = useWorkspace(
     useShallow((s) => ({ sessions: s.sessions, worktrees: s.worktrees, activeSessionId: s.activeSessionId }))
   )
+  // GUI sessions shown in any window (PRD F23): their agent is opened here, the main window's area.
+  const shownAnywhere = useWorkspace((s) => shownEverywhere(s).join('\n'))
+  const activeGui = sessions.some((s) => s.id === activeSessionId && s.ui === 'gui')
 
   const requests = useStartRequests((s) => s.requests)
   const live = useLiveSessions((s) => s.live)
@@ -269,12 +274,19 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
   const runStarts = useRunScripts((s) => s.started)
   useSessionStartup()
   const focusRequest = useWorkspace((s) => s.focusRequest)
-  useFocusActiveTerminal(activeSessionId, focusRequest)
+  useFocusActiveTerminal(activeGui ? null : activeSessionId, focusRequest)
+  // A GUI session's keyboard is its composer.
+  useEffect(() => {
+    if (activeGui && activeSessionId) requestComposerFocus(activeSessionId)
+  }, [activeGui, activeSessionId, focusRequest])
   useResyncOnWake(Object.keys(placements).join('\n'))
 
   useEffect(() => {
     // Every record, archived ones included: their saved screens stay for the restore.
-    pruneTerminals(new Set(sessions.map((s) => s.id)))
+    const alive = new Set(sessions.map((s) => s.id))
+    pruneTerminals(alive)
+    // A closed GUI session's agent process ends with it.
+    for (const id of forgetGuiSessions(alive)) void window.tr.gui.stop(id).catch(() => {})
   }, [sessions])
 
   // A find belongs to one terminal's buffer.
@@ -283,7 +295,21 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
   return (
     <div className={styles.area} data-region="terminal">
       {/* An archived worktree's panes unmount (PRD F15); restoring mounts them again, which starts them afresh. */}
-      {sessions.filter((session) => !archivedWorktree(worktrees, session.worktreeId)).map((session) => (
+      {sessions.filter((session) => !archivedWorktree(worktrees, session.worktreeId)).map((session) =>
+        session.ui === 'gui' ? (
+          <GuiPane
+            key={session.id}
+            sessionId={session.id}
+            cwd={worktrees.find((w) => w.id === session.worktreeId)?.path ?? window.tr.homeDir}
+            agent={session.kind}
+            active={session.id === activeSessionId}
+            rect={placements[session.id]}
+            wanted={placements[session.id] !== undefined || shownAnywhere.split('\n').includes(session.id) || live[session.id] !== undefined || eager[session.id] === true}
+            held={session.phase === 'not-started' || waitingForWorktree[session.id] !== undefined}
+            resumeAgentSessionId={requests[session.id]?.resumeAgentSessionId}
+            generation={requests[session.id]?.generation ?? 0}
+          />
+        ) : (
         <TerminalPane
           key={session.id}
           sessionId={session.id}
@@ -300,8 +326,9 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
           resumeAgentSessionId={requests[session.id]?.resumeAgentSessionId}
           generation={requests[session.id]?.generation ?? 0}
         />
-      ))}
-      {activeSessionId && placements[activeSessionId] && (
+        )
+      )}
+      {activeSessionId && placements[activeSessionId] && !activeGui && (
         <div className={styles.searchSlot} style={place(placements[activeSessionId])}>
           <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
         </div>
@@ -318,13 +345,34 @@ export function PaneHosts({ placements }: { placements: Readonly<Record<SessionI
   const { win } = useWindowScope()
   const isKey = useIsKeyWindow()
   const activeSessionId = useWorkspace((s) => s.activeSessionId)
+  // GUI sessions (PRD F23) draw their chat here; the main window's area keeps opening their agents.
+  // As one string (id, kind, folder per line): a selector must return the same value while nothing changed.
+  const guiKey = useWorkspace((s) =>
+    s.sessions
+      .filter((x) => x.ui === 'gui' && placements[x.id] !== undefined)
+      .map((x) => [x.id, x.kind, s.worktrees.find((w) => w.id === x.worktreeId)?.path ?? window.tr.homeDir].join('\t'))
+      .join('\n')
+  )
+  const gui = useMemo(() => {
+    const byId: Record<SessionId, { kind: AgentKind; cwd: string }> = {}
+    for (const line of guiKey ? guiKey.split('\n') : []) {
+      const [id, kind, cwd] = line.split('\t') as [SessionId, AgentKind, string]
+      byId[id] = { kind, cwd }
+    }
+    return byId
+  }, [guiKey])
   useResyncOnWake(Object.keys(placements).join('\n'), win)
   return (
     <div className={styles.area} data-region="terminal">
-      {Object.entries(placements).map(([sessionId, rect]) => (
-        <PaneHost key={sessionId} sessionId={sessionId} rect={rect} active={isKey && sessionId === activeSessionId} />
-      ))}
-      {isKey && activeSessionId && placements[activeSessionId] && (
+      {Object.entries(placements).map(([sessionId, rect]) => {
+        const chat = gui[sessionId]
+        return chat ? (
+          <GuiCard key={sessionId} sessionId={sessionId} cwd={chat.cwd} agent={chat.kind} rect={rect} active={isKey && sessionId === activeSessionId} />
+        ) : (
+          <PaneHost key={sessionId} sessionId={sessionId} rect={rect} active={isKey && sessionId === activeSessionId} />
+        )
+      })}
+      {isKey && activeSessionId && placements[activeSessionId] && !gui[activeSessionId] && (
         <div className={styles.searchSlot} style={place(placements[activeSessionId])}>
           <TerminalSearch key={activeSessionId} sessionId={activeSessionId} />
         </div>

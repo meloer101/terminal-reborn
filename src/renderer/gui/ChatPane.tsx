@@ -1,0 +1,162 @@
+// A GUI session's card in the main area (PRD F23, Figma 49″C `GUI`): the feed, then — each its own block, 8 apart —
+// what the agent waits on, the messages queued behind the running turn, a failure, and the composer. Drawn where a
+// terminal would be (TerminalArea / PaneHosts). Files dropped or pasted on it become attachments (terminal/file-input
+// → session-io → the composer).
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { agentName } from '@shared/agents'
+import { emptyGuiState, type GuiAnswer } from '@shared/gui-chat'
+import type { AgentKind, SessionId } from '@shared/types'
+import { attachFileInput } from '../terminal/file-input'
+import { StatusGlyph } from '../ui/StatusGlyph'
+import { PromptCard, type CardKeys } from './Cards'
+import { Composer } from './Composer'
+import { Feed } from './Feed'
+import { cardKey, shortAgentName, waitingToolId } from './model'
+import { clearComposer, draftOf, useGuiSessions } from './store'
+import styles from './Chat.module.css'
+
+const EMPTY = emptyGuiState()
+
+export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sessionId: SessionId; agent: AgentKind; cwd: string }) {
+  const state = useGuiSessions((s) => s.states[sessionId]) ?? EMPTY
+  const rootRef = useRef<HTMLDivElement>(null)
+  const cardKeys = useRef<CardKeys | null>(null)
+  const bindKeys = useCallback((keys: CardKeys | null) => {
+    cardKeys.current = keys
+  }, [])
+  const [answering, setAnswering] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const prompt = state.prompts[0]
+  const draftEmpty = useGuiSessions((s) => (s.drafts[sessionId] ?? draftOf(sessionId)).trim() === '' && (s.attachments[sessionId]?.length ?? 0) === 0)
+  const label = agent === 'shell' ? '' : shortAgentName(agentName(agent))
+
+  // Files dropped on or pasted into the chat (PRD F19): attachments of the next message.
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    return attachFileInput(root, sessionId)
+  }, [sessionId])
+
+  // An answer on its way disables that card's buttons; the next prompt (another id) starts usable.
+  const answer = useCallback(
+    (value: GuiAnswer) => {
+      setAnswering(value.id)
+      void window.tr.gui
+        .answer(sessionId, value)
+        .then((ok) => {
+          if (!ok) setAnswering(null)
+        })
+        .catch(() => setAnswering(null))
+    },
+    [sessionId]
+  )
+
+  const send = useCallback(
+    (text: string, attachments: readonly string[]) => {
+      setSendError(null)
+      void window.tr.gui
+        .send(sessionId, { text, attachments: [...attachments] })
+        .then((result) => {
+          if (result.ok) clearComposer(sessionId)
+          else setSendError(result.reason)
+        })
+        .catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error)))
+    },
+    [sessionId]
+  )
+  const interrupt = useCallback(() => void window.tr.gui.interrupt(sessionId).catch(() => {}), [sessionId])
+  const setConfig = useCallback((optionId: string, value: string) => void window.tr.gui.setConfig(sessionId, optionId, value).catch(() => {}), [sessionId])
+
+  return (
+    <div
+      ref={rootRef}
+      className={styles.chat}
+      data-testid="gui-chat"
+      onKeyDown={(event) => {
+        // A waiting card answers from the keyboard; the composer keeps keys while it has text (Composer).
+        if (event.defaultPrevented || !cardKeys.current) return
+        const target = event.target as HTMLElement
+        const inComposer = target.tagName === 'TEXTAREA'
+        // Typing elsewhere (其他…, a queued message) or a composer with text keeps its keys.
+        if (target.tagName === 'INPUT' || (inComposer && !draftEmpty)) return
+        const { key, metaKey, ctrlKey, altKey } = event
+        const action = cardKey({ key, metaKey, ctrlKey, altKey, isComposing: event.nativeEvent.isComposing || event.keyCode === 229 }, false)
+        if (!action) return
+        // Digits and arrows typed into an empty composer are the card's only for a question (Claude's TUI does the same).
+        if (inComposer && (action.type === 'pick' || action.type === 'move') && prompt?.kind !== 'question') return
+        if (cardKeys.current(action)) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }}
+    >
+      <Feed sessionId={sessionId} items={state.items} live={state.live} waitingTool={waitingToolId(state.items, state.prompts)} />
+      <div className={styles.dock}>
+        {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
+        {state.queued.map((queued) => (
+          <QueuedBar key={queued.id} sessionId={sessionId} id={queued.id} text={queued.text} />
+        ))}
+        {(state.failure ?? sendError) && (
+          <div className={styles.failure} role="alert">
+            <StatusGlyph status="error" />
+            <span className={styles.failureText}>{state.failure ?? sendError}</span>
+          </div>
+        )}
+        <Composer
+          sessionId={sessionId}
+          cwd={cwd}
+          busy={state.busy}
+          commands={state.commands}
+          config={state.config}
+          cardWaiting={!!prompt}
+          send={send}
+          interrupt={interrupt}
+          setConfig={setConfig}
+        />
+      </div>
+    </div>
+  )
+})
+
+/** 49″C: a message sent while the turn runs. Click to edit (⏎ saves, ⎋ cancels, empty removes); × removes. */
+function QueuedBar({ sessionId, id, text }: { sessionId: SessionId; id: string; text: string }) {
+  const [editing, setEditing] = useState<string | null>(null)
+  const save = (value: string): void => {
+    setEditing(null)
+    if (value !== text) void window.tr.gui.editQueued(sessionId, id, value.trim()).catch(() => {})
+  }
+  return (
+    <div className={styles.queued} data-testid="gui-queued">
+      <span className={styles.queuedLabel}>排队</span>
+      {editing === null ? (
+        <button type="button" className={styles.queuedText} title="编辑" onClick={() => setEditing(text)}>
+          {text}
+        </button>
+      ) : (
+        <input
+          className={styles.queuedInput}
+          aria-label="编辑排队的消息"
+          value={editing}
+          ref={(node) => node?.focus()}
+          onChange={(e) => setEditing(e.currentTarget.value)}
+          onBlur={() => save(editing)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              save(editing)
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              setEditing(null)
+            }
+          }}
+        />
+      )}
+      <button type="button" className={styles.queuedRemove} aria-label="删除排队的消息" onClick={() => void window.tr.gui.editQueued(sessionId, id, '').catch(() => {})}>
+        <X size={16} strokeWidth={1.75} aria-hidden />
+      </button>
+    </div>
+  )
+}

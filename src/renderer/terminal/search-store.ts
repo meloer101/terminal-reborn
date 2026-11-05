@@ -20,8 +20,10 @@ export const useTerminalSearch = create<TerminalSearchState>()(() => ({ open: fa
  * whose 在终端中查找… lands here too, and must not open the bar behind the dialog.
  */
 export function openTerminalSearch(): boolean {
-  const { activeSessionId, keyWindow } = useWorkspace.getState()
+  const { activeSessionId, keyWindow, sessions } = useWorkspace.getState()
   if (!activeSessionId || !showsPanes(keyWindow)) return false
+  // A GUI session has no terminal buffer (PRD F23); ⌘F stays the page's.
+  if (sessions.some((s) => s.id === activeSessionId && s.ui === 'gui')) return false
   if (keyDocument().querySelector('[role="dialog"][aria-modal="true"]')) return false
   useTerminalSearch.setState((s) => ({ open: true, focusToken: s.focusToken + 1 }))
   return true

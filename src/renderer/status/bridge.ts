@@ -28,6 +28,9 @@ function windowFocused(): boolean {
   return anyWindowFocused()
 }
 
+/** A GUI session (PRD F23): no PTY, screen or title; its status comes only from agent events (hooks or main's own). */
+const isGui = (id: SessionId): boolean => useWorkspace.getState().sessions.some((s) => s.id === id && s.ui === 'gui')
+
 /** Starts listening; returns a function that stops everything. */
 export function startStatusBridge(): () => void {
   const hook: E2eHook | null = e2e ? createE2eHook() : null
@@ -41,7 +44,8 @@ export function startStatusBridge(): () => void {
     windowFocused: () => hook?.focused() ?? windowFocused(),
     patch: (id, patch) => useWorkspace.getState().patchSession(id, patch),
     launchesAgent: (session) => launchKind(session) !== 'shell',
-    readScreen: (id) => readViewport(id),
+    // A GUI session has no screen (PRD F23): nothing on it can heal or block it.
+    readScreen: (id) => (isGui(id) ? '' : readViewport(id)),
     setHooksSilent: (id, silent) => setHooksSilent(id, silent),
     onLaunched: (id) => {
       clearLaunchIssue(id)
@@ -83,6 +87,7 @@ export function startStatusBridge(): () => void {
     const sessions = useWorkspace.getState().sessions
     const live = new Set(sessions.map((s) => s.id))
     for (const session of sessions) {
+      if (session.ui === 'gui') continue
       if (!exitSubscriptions.has(session.id)) {
         exitSubscriptions.set(
           session.id,
@@ -123,7 +128,7 @@ export function startStatusBridge(): () => void {
       }
     }
     for (const [id, unsubscribe] of [...exitSubscriptions]) {
-      if (!live.has(id)) {
+      if (!live.has(id) || isGui(id)) {
         unsubscribe()
         exitSubscriptions.delete(id)
       }
@@ -146,7 +151,7 @@ export function startStatusBridge(): () => void {
   /** Fast while a turn is running or a terminal's title is not hooked up yet; otherwise relaxed. */
   function tickInterval(): number {
     if (controller.hasRunning() || controller.watchesScreens()) return FAST_TICK_MS
-    const missingTitle = useWorkspace.getState().sessions.some((s) => s.kind !== 'shell' && !titleSubscriptions.has(s.id))
+    const missingTitle = useWorkspace.getState().sessions.some((s) => s.kind !== 'shell' && s.ui !== 'gui' && !titleSubscriptions.has(s.id))
     return missingTitle ? FAST_TICK_MS : SLOW_TICK_MS
   }
 

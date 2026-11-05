@@ -54,7 +54,13 @@ export async function startSession(sessionId: SessionId, options: StartOptions =
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session || session.kind === 'shell') return
   const plan = planStart(session, options)
-  await stopTerminal(sessionId)
+  // A GUI session (PRD F23) has no terminal: its agent process is ended instead, unless it was never started in this
+  // run — main may still hold it from before a restart, and `gui.open` reattaches to that (gui/launch.ts).
+  if (session.ui === 'gui') {
+    if (session.phase !== 'not-started') await window.tr.gui.stop(sessionId).catch(() => {})
+  } else {
+    await stopTerminal(sessionId)
+  }
   // The session may have been closed while the old terminal was shutting down.
   if (!useWorkspace.getState().sessions.some((s) => s.id === sessionId)) return
   useStartRequests.setState((state) => ({

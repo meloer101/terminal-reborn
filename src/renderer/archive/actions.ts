@@ -62,6 +62,9 @@ export async function archiveWorktree(
   const sessionIds = sessionIdsToStop(useWorkspace.getState().sessions, target.worktreeIds)
   // Kept screens (no `forget`): restoring paints them before the agent resumes.
   for (const id of sessionIds) disposeTerminal(id, false)
+  // A GUI session's agent process (PRD F23); restoring reopens its conversation by id.
+  const gui = new Set(useWorkspace.getState().sessions.filter((s) => s.ui === 'gui').map((s) => s.id))
+  await Promise.all(sessionIds.filter((id) => gui.has(id)).map((id) => window.tr.gui.stop(id).catch(() => {})))
   forgetLiveSessions(sessionIds)
 
   options.onStep?.('script')
