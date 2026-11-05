@@ -308,6 +308,18 @@ describe('GuiHost · Codex app-server', () => {
     expect(h.view('x1')).toEqual(stateOf(h, 'x1'))
   }, 30_000)
 
+  it('starts with the saved 权限 level (Figma 56)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x9', { permission: 'ask' }), h.owner)
+    await ready(h, 'x9')
+    expect(stateOf(h, 'x9').config.find((c) => c.id === 'permission')?.current).toBe('ask')
+    await h.host.send('x9', { text: 'go', attachments: [] })
+    await until(() => stateOf(h, 'x9').prompts.length === 1)
+    h.host.answer('x9', { kind: 'permission', id: stateOf(h, 'x9').prompts[0]!.id, optionId: 'accept' })
+    await until(() => !stateOf(h, 'x9').busy)
+    expect(texts(stateOf(h, 'x9')).at(-1)).toContain('"approvalPolicy":"untrusted"')
+  }, 30_000)
+
   it('resumes a thread with its history from the transcript', async () => {
     const history: ChatItem[] = [
       { kind: 'user', id: 'h0', at: 1, text: 'old question', images: 0 },

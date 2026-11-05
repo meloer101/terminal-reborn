@@ -297,6 +297,10 @@ test.describe('F23 GUI session (Claude)', () => {
     await plan.click()
     await expect(plan).toHaveAttribute('aria-pressed', 'false')
     await expect(composer().getByRole('button', { name: '接受编辑' })).toBeVisible()
+    // Saved with the session: a reattached or restarted agent starts with it.
+    const saved = () => (JSON.parse(readFileSync(join(profile, 'workspace.json'), 'utf8')) as { sessions: { id: string; guiPermission?: string; guiPlan?: boolean }[] }).sessions.find((x) => x.id === 's1')
+    await expect.poll(() => saved()?.guiPermission, WITHIN).toBe('accept-edits')
+    expect(saved()?.guiPlan).toBeUndefined()
   })
 
   test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {
@@ -428,7 +432,8 @@ test.describe('F23 GUI session (Claude)', () => {
 
   test('looks right in both themes', async () => {
     // The empty composer shows its placeholder (Tiptap's class, not a module class).
-    expect(await input().locator('p').first().evaluate((p) => getComputedStyle(p, '::before').content)).toBe('"回复"')
+    // The previous test just emptied it: the placeholder comes with the editor's next render.
+    await expect.poll(() => input().locator('p').first().evaluate((p) => getComputedStyle(p, '::before').content)).toBe('"回复"')
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)

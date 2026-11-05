@@ -31,7 +31,8 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
   let init: Rec | null = null
   let isReady = false
   let sessionId: string | undefined
-  const current: ClaudePickerState = options.model ? { model: options.model } : {}
+  // A saved level started with (launch.ts --permission-mode) is also where 计划 off returns to.
+  const current: ClaudePickerState = { ...(options.model ? { model: options.model } : {}), ...(options.permission ? { level: options.permission } : {}) }
   let config: GuiConfigOption[] = []
 
   const control = (request: Rec, timeoutMs?: number): Promise<ControlOutcome> =>

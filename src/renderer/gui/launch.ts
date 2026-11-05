@@ -18,6 +18,9 @@ export interface GuiLaunchInput {
   dispatched: boolean
   /** Its first launch's task and model (a resume never carries them). */
   dispatch?: { initialPrompt: string; model?: string }
+  /** The 权限 and 计划 last chosen (Figma 56), so the agent starts — or is shown — with them. */
+  permission?: GuiLaunch['permission']
+  plan?: boolean
 }
 
 export function guiLaunch(input: GuiLaunchInput): GuiLaunch {
@@ -28,6 +31,8 @@ export function guiLaunch(input: GuiLaunchInput): GuiLaunch {
     agent: input.agent,
     ...(input.resumeAgentSessionId ? { resumeAgentSessionId: input.resumeAgentSessionId } : {}),
     ...(input.dispatched ? { dispatched: true } : {}),
+    ...(input.permission ? { permission: input.permission } : {}),
+    ...(input.plan ? { plan: true } : {}),
     ...(dispatch ? { initialPrompt: dispatch.initialPrompt, ...(dispatch.model ? { model: dispatch.model } : {}) } : {})
   }
 }
@@ -67,7 +72,9 @@ export async function openGuiSession(sessionId: SessionId, cwd: string, agent: C
     agent,
     resumeAgentSessionId,
     dispatched: session.dispatchedBy !== undefined,
-    dispatch: resumeAgentSessionId ? undefined : takeDispatchLaunch(sessionId)
+    dispatch: resumeAgentSessionId ? undefined : takeDispatchLaunch(sessionId),
+    ...(session.guiPermission ? { permission: session.guiPermission } : {}),
+    ...(session.guiPlan ? { plan: true } : {})
   })
   let reason: string
   try {

@@ -17,7 +17,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
   /** Prompt id → the server request's own id (number or string), to answer with. */
   const requestIds = new Map<string, unknown>()
   let models: unknown[] = []
-  const current: { model?: string; effort?: string; permission?: GuiPermission } = { ...(options.model ? { model: options.model } : {}), permission: 'accept-edits' }
+  const current: { model?: string; effort?: string; permission?: GuiPermission } = { ...(options.model ? { model: options.model } : {}), permission: options.permission ?? 'accept-edits' }
   let config: GuiConfigOption[] = []
   let threadId: string | undefined
   /** 自动 sent `approvalsReviewer: auto_review` on this thread: later turns at another level send `user`. */

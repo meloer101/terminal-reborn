@@ -5,6 +5,7 @@
 import { AGENT_SPECS, type CliAgent } from '@shared/agents'
 import { shellQuote, tomlString } from '@shared/agent-launch'
 import { AGENT_GUI, guiBinary, launchPermissionArgs } from '@shared/gui-agents'
+import { CLAUDE_MODE_OF } from './claude-stream'
 import type { GuiLaunch, GuiProtocol } from '@shared/gui-chat'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { ImageBlock } from './driver'
@@ -48,7 +49,9 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
       ? ['--resume', input.resume, ...(isSafeAgentSessionId(input.launch.resumeAt) ? ['--resume-session-at', input.launch.resumeAt] : [])]
       : []
     const model = input.launch.model && MODEL.test(input.launch.model) ? ['--model', input.launch.model] : []
-    return [binary, ...CLAUDE_STREAM_ARGS, ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
+    // The saved 权限 / 计划 (Figma 56); 询问 is Claude's default (its --permission-mode has no `default` choice).
+    const mode = input.launch.plan ? 'plan' : input.launch.permission && input.launch.permission !== 'ask' ? CLAUDE_MODE_OF[input.launch.permission] : undefined
+    return [binary, ...CLAUDE_STREAM_ARGS, ...(mode ? ['--permission-mode', mode] : []), ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
   }
   if (driver.protocol === 'codex-app-server') {
     // Global `-c` overrides go before the subcommand; trust for this folder only, nothing written to ~/.codex.

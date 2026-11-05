@@ -40,12 +40,17 @@ export function clampSidebarWidth(value: number): number {
   return Math.round(Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, value)))
 }
 
+const GUI_PERMISSIONS: ReadonlySet<unknown> = new Set(['ask', 'accept-edits', 'auto'])
+
 export interface PersistedSession {
   id: string
   worktreeId: string
   kind: AgentKind
   /** A GUI session (PRD F23); absent = CLI. */
   ui?: 'gui'
+  /** Its 权限 and 计划 (Figma 56); absent = the agent's default. */
+  guiPermission?: 'ask' | 'accept-edits' | 'auto'
+  guiPlan?: boolean
   title: string
   /** Where the title came from (PRD F2); absent in files written before it existed. */
   titleSource?: TitleSource
@@ -215,6 +220,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
           kind: s.kind as AgentKind,
           // A shell is always a terminal.
           ...(s.kind !== 'shell' && s.ui === 'gui' ? { ui: 'gui' as const } : {}),
+          ...(s.kind !== 'shell' && s.ui === 'gui' && GUI_PERMISSIONS.has(s.guiPermission) ? { guiPermission: s.guiPermission as PersistedSession['guiPermission'] } : {}),
+          ...(s.kind !== 'shell' && s.ui === 'gui' && s.guiPlan === true ? { guiPlan: true } : {}),
           title: s.title as string,
           ...(TITLE_SOURCES.has(s.titleSource) ? { titleSource: s.titleSource as TitleSource } : {}),
           // A shell has no conversation to resume.

@@ -48,6 +48,14 @@ export function parseGuiLaunch(raw: unknown): GuiLaunch | null {
     if (!text(raw.initialPrompt, GUI_LIMITS.text)) return null
     if (raw.initialPrompt.trim()) launch.initialPrompt = raw.initialPrompt
   }
+  if (raw.permission !== undefined) {
+    if (raw.permission !== 'ask' && raw.permission !== 'accept-edits' && raw.permission !== 'auto') return null
+    launch.permission = raw.permission
+  }
+  if (raw.plan !== undefined) {
+    if (typeof raw.plan !== 'boolean') return null
+    if (raw.plan) launch.plan = true
+  }
   if (raw.dispatched !== undefined) {
     if (typeof raw.dispatched !== 'boolean') return null
     if (raw.dispatched) launch.dispatched = true

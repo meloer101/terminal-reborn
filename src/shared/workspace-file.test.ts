@@ -54,6 +54,25 @@ describe('sanitizeWorkspaceFile', () => {
     expect(odd).not.toHaveProperty('newSessionUi')
   })
 
+  it('keeps a GUI session’s 权限 and 计划 (Figma 56), only on a GUI session and only known levels', () => {
+    const file = sanitizeWorkspaceFile(
+      {
+        ...structuredClone(valid),
+        sessions: [
+          { ...valid.sessions[0], ui: 'gui', guiPermission: 'auto', guiPlan: true },
+          { ...valid.sessions[1], guiPermission: 'auto', guiPlan: true }
+        ]
+      },
+      0
+    )
+    expect(file?.sessions[0]).toMatchObject({ guiPermission: 'auto', guiPlan: true })
+    expect(file?.sessions[1]).not.toHaveProperty('guiPermission')
+    expect(file?.sessions[1]).not.toHaveProperty('guiPlan')
+    const odd = sanitizeWorkspaceFile({ ...structuredClone(valid), sessions: [{ ...valid.sessions[0], ui: 'gui', guiPermission: 'bypass', guiPlan: 'yes' }] }, 0)
+    expect(odd?.sessions[0]).not.toHaveProperty('guiPermission')
+    expect(odd?.sessions[0]).not.toHaveProperty('guiPlan')
+  })
+
   it('rejects anything that is not a version-2 object', () => {
     expect(sanitizeWorkspaceFile(null, 0)).toBeNull()
     expect(sanitizeWorkspaceFile([], 0)).toBeNull()

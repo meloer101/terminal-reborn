@@ -14,6 +14,15 @@ describe('parseGuiLaunch', () => {
     })
   })
 
+  it('takes a saved 权限 level and 计划 (Figma 56), nothing else', () => {
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', permission: 'auto', plan: true })).toMatchObject({ permission: 'auto', plan: true })
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', plan: false })).not.toHaveProperty('plan')
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', permission: 'bypassPermissions' })).toBeNull()
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', plan: 'on' })).toBeNull()
+    // Main-only fields never come from a renderer.
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'claude', resumeAt: 'x' })).not.toHaveProperty('resumeAt')
+  })
+
   it('refuses agents without a GUI, relative folders and bad ids', () => {
     expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'crush' })).toBeNull()
     expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'shell' })).toBeNull()

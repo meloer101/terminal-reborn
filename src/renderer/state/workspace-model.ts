@@ -313,11 +313,13 @@ export function serializeWorkspace(
       ...(baseBranch ? { baseBranch } : {}),
       ...(archived ? { archived } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, ui, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, ui, guiPermission, guiPlan, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel }) => ({
       id,
       worktreeId,
       kind,
       ...(ui ? { ui } : {}),
+      ...(ui && guiPermission ? { guiPermission } : {}),
+      ...(ui && guiPlan ? { guiPlan } : {}),
       title,
       ...(titleSource ? { titleSource } : {}),
       ...(agentSessionId ? { agentSessionId } : {}),
@@ -375,6 +377,8 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       worktreeId: s.worktreeId,
       kind: s.kind,
       ...(s.ui ? { ui: s.ui } : {}),
+      ...(s.guiPermission ? { guiPermission: s.guiPermission } : {}),
+      ...(s.guiPlan ? { guiPlan: s.guiPlan } : {}),
       title: s.title,
       ...(s.titleSource ? { titleSource: s.titleSource } : {}),
       status: 'idle',
@@ -431,6 +435,8 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
       !before ||
       s.id !== before.id ||
       s.ui !== before.ui ||
+      s.guiPermission !== before.guiPermission ||
+      s.guiPlan !== before.guiPlan ||
       s.title !== before.title ||
       s.titleSource !== before.titleSource ||
       s.agentSessionId !== before.agentSessionId ||

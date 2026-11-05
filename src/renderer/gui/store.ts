@@ -3,8 +3,8 @@
 // select their own session's slice, and applyGuiEvent keeps unchanged parts by identity, so a streamed delta re-renders
 // only what it touched.
 import { create } from 'zustand'
-import { applyGuiEvent, emptyGuiState, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import type { SessionId } from '@shared/types'
+import { applyGuiEvent, emptyGuiState, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
+import type { Session, SessionId } from '@shared/types'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
 import { drafts as savedDrafts } from '../state/persistence'
 import { useWorkspace } from '../state/workspace'
@@ -46,6 +46,21 @@ export function applyGuiEvents(sessionId: SessionId, events: readonly GuiEvent[]
   })
 }
 
+/**
+ * Figma 56: the 权限 and 计划 the agent reports are saved on the session, so a reattached or restarted agent starts —
+ * and is shown — with them (gui/launch.ts passes them back).
+ */
+export function rememberPicks(sessionId: SessionId, config: readonly GuiConfigOption[]): void {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (!session || session.ui !== 'gui') return
+  const permission = config.find((o) => o.category === 'permission')?.current
+  const plan = config.find((o) => o.category === 'plan')?.current
+  const patch: Pick<Session, 'guiPermission' | 'guiPlan'> = {}
+  if ((permission === 'ask' || permission === 'accept-edits' || permission === 'auto') && permission !== session.guiPermission) patch.guiPermission = permission
+  if (plan !== undefined && (plan === 'on') !== (session.guiPlan === true)) patch.guiPlan = plan === 'on'
+  if (Object.keys(patch).length > 0) useWorkspace.getState().patchSession(sessionId, patch)
+}
+
 let listening: (() => void) | null = null
 
 /**
@@ -55,6 +70,7 @@ let listening: (() => void) | null = null
 export function listenToGuiEvents(): void {
   listening ??= window.tr.gui.onEvents((sessionId, events) => {
     applyGuiEvents(sessionId, events)
+    for (const event of events) if (event.type === 'config') rememberPicks(sessionId, event.config)
     for (const event of events) if (event.type === 'failure' && event.failure) reportLaunchIssue(sessionId, { kind: 'spawn-failed', message: event.failure })
   })
 }

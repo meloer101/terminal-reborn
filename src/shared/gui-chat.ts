@@ -147,7 +147,10 @@ export interface GuiLaunch {
    * (`--resume-session-at`), dropping what came after it.
    */
   resumeAt?: string
-  /** Main only (a restart for a launch-argument permission, Figma 56): the level and 计划 to start with. */
+  /**
+   * The 权限 level and 计划 to start with (Figma 56): the session's saved ones (Session.guiPermission / guiPlan), or a
+   * restart's for a launch-argument permission. Absent = the agent's default.
+   */
   permission?: GuiPermission
   plan?: boolean
 }

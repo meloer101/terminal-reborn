@@ -11,6 +11,19 @@ describe('guiArgv', () => {
     ])
   })
 
+  it('Claude: a saved 权限 or 计划 as --permission-mode; 询问 is its default and passes none (Figma 56)', () => {
+    const mode = (launch: { permission?: 'ask' | 'accept-edits' | 'auto'; plan?: boolean }) => {
+      const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch })!
+      const at = argv.indexOf('--permission-mode')
+      return at < 0 ? null : argv[at + 1]
+    }
+    expect(mode({})).toBeNull()
+    expect(mode({ permission: 'ask' })).toBeNull()
+    expect(mode({ permission: 'accept-edits' })).toBe('acceptEdits')
+    expect(mode({ permission: 'auto' })).toBe('auto')
+    expect(mode({ permission: 'auto', plan: true })).toBe('plan')
+  })
+
   it('Claude: an unsafe resume id or model is left out', () => {
     const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch: { model: '--danger' }, resume: '../x' })!
     expect(argv).not.toContain('--resume')

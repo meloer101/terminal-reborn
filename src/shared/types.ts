@@ -55,6 +55,12 @@ export interface Session {
   kind: AgentKind
   /** 'gui': a chat view over the agent's headless protocol, no PTY (PRD F23). Absent = CLI. Persisted. */
   ui?: 'gui'
+  /**
+   * A GUI session's 权限 and 计划 as last chosen (Figma 56). Persisted: a reattached or restarted agent starts with them
+   * and the pickers show what it runs with. Absent = the agent's default.
+   */
+  guiPermission?: 'ask' | 'accept-edits' | 'auto'
+  guiPlan?: boolean
   /** Task title: the agent's own name for the conversation, else the first prompt (PRD F2). */
   title: string
   /** Where `title` came from; a user rename is never replaced. Absent = the default name or a title saved before this existed. */

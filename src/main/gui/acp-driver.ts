@@ -63,6 +63,8 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
     // A model asked for at launch (F21 dispatch, 新建会话) is set once the agent says it offers it.
     const model = agentConfig.find((o) => o.category === 'model')
     if (options.model && model && model.current !== options.model && model.values.some((v) => v.value === options.model)) await setOption(model, options.model)
+    // 计划 saved on (Figma 56) for an agent whose plan is its own mode: back into it.
+    if (options.plan && picks.launchPlan === undefined) await setPlan(true)
     isReady = true
     io.ready()
   }
