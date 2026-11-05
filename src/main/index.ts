@@ -10,6 +10,7 @@ import { registerConfirmHandlers } from './confirm'
 import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
 import { registerDispatchHandlers } from './dispatch'
+import { guiSessionOwner, registerGuiHandlers } from './gui'
 import { registerRemoteHandlers } from './remote'
 import { selectProfile } from './profile'
 import { ptySessionOwner, registerPtyHandlers } from './pty'
@@ -71,6 +72,9 @@ function useAppIconInDev(): void {
   app.dock?.setIcon(join(app.getAppPath(), 'build', 'icon.png'))
 }
 
+/** The window a session belongs to, terminal or GUI (PRD F21 dispatch and F22 remote route to it). */
+const sessionOwner = (sessionId: string) => ptySessionOwner(sessionId) ?? guiSessionOwner(sessionId)
+
 function boot(): void {
   useAppIconInDev()
   registerAppHandlers()
@@ -97,9 +101,10 @@ function boot(): void {
   registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()
-  registerDispatchHandlers(ptySessionOwner)
-  registerRemoteHandlers(ptySessionOwner, () => getMainWindow()?.webContents ?? null)
+  registerDispatchHandlers(sessionOwner)
+  registerRemoteHandlers(sessionOwner, () => getMainWindow()?.webContents ?? null)
   registerPtyHandlers()
+  registerGuiHandlers()
   registerUiHandlers()
   registerSecondaryWindowHandlers(showMainWindow, () => getMainWindow()?.webContents ?? null)
   registerUpdateHandlers()

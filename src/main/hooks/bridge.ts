@@ -83,7 +83,7 @@ export class HookBridge {
        * asked per request: since PRD F22 the app holds while a paired phone is connected (the TUI dialog shows anyway,
        * so the desk can still answer there).
        */
-      holdPermissions?: boolean | ((agent: HookAgent) => boolean)
+      holdPermissions?: boolean | ((agent: HookAgent, sessionId: string) => boolean)
       /** Follows hook traffic to report the agent's own session title (./agent-title.ts). */
       titles?: Pick<AgentTitleWatcher, 'observe' | 'forget'>
       /** Follows Codex hooks to read context and plan usage from its rollout (./codex-usage.ts). */
@@ -103,9 +103,9 @@ export class HookBridge {
     return (this.options.now ?? Date.now)()
   }
 
-  private holds(agent: HookAgent): boolean {
+  private holds(agent: HookAgent, sessionId: string): boolean {
     const hold = this.options.holdPermissions
-    return typeof hold === 'function' ? hold(agent) : hold !== false
+    return typeof hold === 'function' ? hold(agent, sessionId) : hold !== false
   }
 
   private get scheduler(): Scheduler {
@@ -342,7 +342,7 @@ export class HookBridge {
       this.emitter.prompt(prompt)
     }
 
-    if (normalized.questionHold && agent === 'claude' && this.holds(agent)) {
+    if (normalized.questionHold && agent === 'claude' && this.holds(agent, sessionId)) {
       const question = this.questions.get(sessionId)
       if (question && !this.questionHolds.has(question.id)) {
         const { input } = normalized.questionHold
@@ -369,7 +369,7 @@ export class HookBridge {
         ...allowAlwaysField(draft.suggestions),
         createdAt: at
       }
-      if (!this.holds(agent)) {
+      if (!this.holds(agent, sessionId)) {
         // Announce only; an empty body leaves the decision to the TUI's own dialog right away.
         this.emitter.prompt(prompt)
         return ''

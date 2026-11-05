@@ -112,9 +112,20 @@ export async function dispatchLaunchFor(sessionId: string, agent: DispatchAgent,
   }
 }
 
+/** A GUI session's own input (PRD F23): null when the session is not one; else whether the message went in. */
+let guiDelivery: (sessionId: string, text: string) => Promise<boolean> | null = () => null
+
+/** src/main/gui: reports go into a GUI session as a user message over its protocol (queued while a turn runs). */
+export function setGuiDelivery(deliverToGui: (sessionId: string, text: string) => Promise<boolean> | null): void {
+  guiDelivery = deliverToGui
+}
+
 async function deliver(raw: unknown, sender: WebContents): Promise<DeliverResult> {
   const request = parseDeliverRequest(raw)
   if (!request || ownerOf(request.sessionId) !== sender) return 'failed'
+  // A GUI session has no inbox, queue command or terminal to type into: its driver takes the message (PRD F21 / F23).
+  const gui = guiDelivery(request.sessionId, request.text)
+  if (gui) return (await gui) ? 'delivered' : 'failed'
   switch (reportChannelOf(request.agent)) {
     case 'claude-inbox': {
       const inbox = broker.inboxOf(request.sessionId)

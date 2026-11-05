@@ -1,0 +1,201 @@
+// Electron glue for GUI sessions (PRD F23): `window.tr.gui` handlers (every payload validated, every call checked
+// against the window that owns the session), the launch each agent gets (Claude's per-launch hooks and
+// CLAUDE_CODE_ENTRYPOINT=wavi, `wavi` on PATH for dispatch, the worktree's TR_PORT), status into the hook bridge's
+// event path, and reports from dispatch delivered over the agent's protocol.
+
+import { app, ipcMain, type WebContents } from 'electron'
+import { realpathSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import type { HookAgent } from '@shared/agent-events'
+import type { CliAgent } from '@shared/agents'
+import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
+import { GUI_IPC, type GuiLaunch, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
+import type { HookJournalEntry } from '../../pty-host/protocol'
+import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
+import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, prepareAgentLaunch, setGuiSession } from '../hooks'
+import { defaultAgentDataDirs } from '../hooks/agent-title'
+import { pipeLink } from '../pty/pipes'
+import { sniffPhoto } from '../remote/photos'
+import { portFor } from '../repo-scripts'
+import type { ImageBlock } from './driver'
+import { claudeTranscriptFor, codexRolloutFor, readTranscript } from './history'
+import { GuiHost, type PreparedLaunch } from './host'
+import { guiArgv, guiCommand, guiEnv, takesSystemPromptArgs } from './launch'
+import { parseGuiAnswer, parseGuiLaunch, parseGuiMessage, parseGuiSessionId, parseGuiText, parseGuiValue } from './validate'
+
+/** Claude's API takes images up to 5 MB; a bigger one goes as its path instead. */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MEDIA_TYPES = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' } as const
+
+const HOOK_AGENTS: ReadonlySet<string> = new Set<HookAgent>(['claude', 'codex', 'gemini', 'qwen', 'opencode', 'pi'])
+
+/**
+ * The envelope's `agent` (a HookAgent) for status from a GUI session. The renderer reads it only to tell Claude and
+ * Codex apart (session meta) and main only to nudge their plan usage; an ACP agent outside that list is reported as
+ * `opencode`, which neither path treats specially.
+ */
+export const hookAgentOf = (agent: CliAgent): HookAgent => (HOOK_AGENTS.has(agent) ? (agent as HookAgent) : 'opencode')
+
+/** Only string values: the app's environment as the base for the agent's (the daemon's own may be days old). */
+function appEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
+  return env
+}
+
+async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | undefined): Promise<PreparedLaunch> {
+  const driver = AGENT_GUI[launch.agent]
+  if (!driver) throw new Error(NO_GUI_REASON[launch.agent] ?? '这个智能体只能用 CLI')
+  let realCwd: string
+  try {
+    realCwd = realpathSync(launch.cwd)
+  } catch {
+    throw new Error(`文件夹 ${launch.cwd} 不存在`)
+  }
+  const claude = driver.protocol === 'claude-stream'
+  // Claude keeps its hooks under -p (PRD §6.17): status, titles and the phone work as for a TUI. Marked first, so its
+  // PermissionRequest hook is never held.
+  if (claude) setGuiSession(launch.sessionId, true)
+  const hooks = claude ? await prepareAgentLaunch(launch.sessionId, owner, 'claude', { deferStartWatchdog: true, cwd: realCwd }) : null
+  const dispatch = await dispatchLaunchFor(launch.sessionId, launch.agent, { child: launch.dispatched === true })
+  const argv = guiArgv({
+    agent: launch.agent,
+    realCwd,
+    launch,
+    ...(resume ? { resume } : {}),
+    ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
+    extraArgs: dispatch && takesSystemPromptArgs(driver.protocol) ? dispatch.extraArgs : []
+  })
+  if (!argv) throw new Error('这个智能体只能用 CLI')
+  const port = portFor(realCwd)
+  const env = {
+    ...guiEnv(launch.agent),
+    ...hooks?.env,
+    ...dispatch?.env,
+    ...(port !== null ? { TR_PORT: String(port) } : {}),
+    // Mandatory (PRD F23 / §6.17): the GUI's own label, not the `sdk-cli` one -p would otherwise report.
+    ...(claude ? { CLAUDE_CODE_ENTRYPOINT: 'wavi' } : {})
+  }
+  const { command, args } = guiCommand(argv, dispatch?.pathPrefix)
+  return { command, args, env, baseEnv: appEnv(), binary: argv[0]! }
+}
+
+async function history(agent: CliAgent, cwd: string, agentSessionId: string) {
+  const dirs = defaultAgentDataDirs()
+  if (agent === 'claude') {
+    const path = claudeTranscriptFor(cwd, agentSessionId, dirs)
+    return path ? readTranscript({ agent: 'claude', path }) : null
+  }
+  if (agent === 'codex') {
+    const path = await codexRolloutFor(agentSessionId, dirs.codexHome)
+    return path ? readTranscript({ agent: 'codex', path }) : null
+  }
+  return null
+}
+
+async function readImage(path: string): Promise<ImageBlock | null> {
+  try {
+    if ((await stat(path)).size > MAX_IMAGE_BYTES) return null
+    const bytes = await readFile(path)
+    const type = sniffPhoto(bytes)
+    if (!type || type === 'heic') return null
+    return { mediaType: MEDIA_TYPES[type], data: bytes.toString('base64') }
+  } catch {
+    return null
+  }
+}
+
+const host = new GuiHost<WebContents>({
+  link: () => pipeLink(),
+  prepare,
+  history,
+  status: (sessionId, agent, events, owner) => {
+    const at = Date.now()
+    for (const event of events) emitGuiAgentEvent({ sessionId, agent: hookAgentOf(agent), at, event }, owner)
+  },
+  adopted: (sessionId, agent, owner, hooks) => {
+    if (agent !== 'claude') return
+    setGuiSession(sessionId, true)
+    adoptAgentSession(sessionId, owner, hooks as readonly HookJournalEntry[])
+  },
+  ended: (sessionId, agent) => {
+    if (agent !== 'claude') return
+    endAgentSession(sessionId)
+    setGuiSession(sessionId, false)
+  },
+  image: readImage,
+  clientVersion: app.getVersion()
+})
+
+/** The window a GUI session belongs to (dispatch and remote route to it, like `ptySessionOwner`). */
+export const guiSessionOwner = (sessionId: string): WebContents | null => host.ownerOf(sessionId)
+
+const watched = new WeakSet<WebContents>()
+
+function watchOwner(owner: WebContents): void {
+  if (watched.has(owner)) return
+  watched.add(owner)
+  // Reload, close, crash: the agent keeps running for the next `open`.
+  owner.once('destroyed', () => host.release(owner))
+}
+
+/** A session id the calling window owns, or null. */
+function owned(sender: WebContents, raw: unknown): string | null {
+  const id = parseGuiSessionId(raw)
+  return id && host.ownerOf(id) === sender ? id : null
+}
+
+export function registerGuiHandlers(): void {
+  setGuiDelivery((sessionId, text) => (host.has(sessionId) ? host.send(sessionId, { text, attachments: [] }).then((r) => r.ok) : null))
+
+  ipcMain.handle(GUI_IPC.open, (event, raw: unknown): Promise<GuiOpenResult> => {
+    const launch = parseGuiLaunch(raw)
+    if (!launch) return Promise.resolve({ ok: false, reason: '会话参数无效' })
+    watchOwner(event.sender)
+    return host.open(launch, event.sender)
+  })
+
+  ipcMain.handle(GUI_IPC.send, (event, rawId: unknown, rawMessage: unknown): Promise<GuiSendResult> => {
+    const id = owned(event.sender, rawId)
+    const message = parseGuiMessage(rawMessage)
+    if (!id || !message) return Promise.resolve({ ok: false, reason: '消息无效' })
+    return host.send(id, message)
+  })
+
+  ipcMain.handle(GUI_IPC.answer, (event, rawId: unknown, rawAnswer: unknown): boolean => {
+    const id = owned(event.sender, rawId)
+    const answer = parseGuiAnswer(rawAnswer)
+    return id !== null && answer !== null && host.answer(id, answer)
+  })
+
+  ipcMain.handle(GUI_IPC.interrupt, (event, rawId: unknown): boolean => {
+    const id = owned(event.sender, rawId)
+    return id !== null && host.interrupt(id)
+  })
+
+  ipcMain.handle(GUI_IPC.setConfig, (event, rawId: unknown, rawOption: unknown, rawValue: unknown): Promise<boolean> => {
+    const id = owned(event.sender, rawId)
+    const option = parseGuiValue(rawOption)
+    const value = parseGuiValue(rawValue)
+    if (!id || !option || !value) return Promise.resolve(false)
+    return host.setConfig(id, option, value)
+  })
+
+  ipcMain.handle(GUI_IPC.editQueued, (event, rawId: unknown, rawQueued: unknown, rawText: unknown): boolean => {
+    const id = owned(event.sender, rawId)
+    const queued = parseGuiValue(rawQueued)
+    const text = parseGuiText(rawText)
+    return id !== null && queued !== null && text !== null && host.editQueued(id, queued, text)
+  })
+
+  ipcMain.handle(GUI_IPC.stop, (event, rawId: unknown): void => {
+    const id = owned(event.sender, rawId)
+    if (id) host.stop(id)
+  })
+
+  // Without the daemon the processes are this app's children: end them with it (the next run resumes by id).
+  app.on('will-quit', () => {
+    if (pipeLink().durable) return
+    for (const id of host.ids()) host.stop(id)
+  })
+}
