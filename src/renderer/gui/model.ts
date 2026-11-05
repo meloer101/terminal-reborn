@@ -34,6 +34,31 @@ export function feedBlocks(items: readonly ChatItem[]): FeedBlock[] {
   return blocks
 }
 
+const lastUserKey = (blocks: readonly FeedBlock[]): string | null => {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i]!
+    if (block.kind === 'item' && block.item.kind === 'user') return block.key
+  }
+  return null
+}
+
+/**
+ * The user message just sent (Figma 50B): the feed's last user message changed (its reply may have come in the same
+ * batch). Null on the first render and when a whole history arrives at once (an empty feed that gains more than one
+ * block), so opening a session stays at the bottom.
+ */
+export function sentMessage(prev: readonly FeedBlock[] | null, next: readonly FeedBlock[]): string | null {
+  if (!prev || (prev.length === 0 && next.length > 1)) return null
+  const key = lastUserKey(next)
+  return key !== null && key !== lastUserKey(prev) ? key : null
+}
+
+/**
+ * The room left under a sent message so it can scroll to the top of the feed (Figma 50B): the viewport less what sits
+ * from `gap` above the message to the end of the feed. 0 once the reply fills the view.
+ */
+export const sentSpace = (viewport: number, messageTop: number, end: number, gap: number): number => Math.max(0, Math.round(viewport - (end - (messageTop - gap))))
+
 /**
  * A user bubble. Wavi's own messages (`[Wavi 派活报告] …`, PRD F21) carry their header as a small first line
  * (Figma 49″C, the dispatch report).

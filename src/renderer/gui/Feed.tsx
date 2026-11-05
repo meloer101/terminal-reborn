@@ -2,14 +2,14 @@
 // Markdown, runs of tool and thinking rows grouped 8 apart, 16 between blocks, and the block being streamed. Each
 // block is memoised on its items (applyGuiEvent keeps unchanged items by identity), so a streamed delta re-renders
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { SessionId } from '@shared/types'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
-import { feedBlocks, thinkingLabel, toolView, userBubble, type FeedBlock, type StepItem } from './model'
+import { feedBlocks, sentMessage, sentSpace, thinkingLabel, toolView, userBubble, type FeedBlock, type StepItem } from './model'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -21,9 +21,32 @@ export function Feed({ sessionId, items, live, waitingTool }: { sessionId: Sessi
   const blocks = useMemo(() => feedBlocks(items), [items])
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const spaceRef = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
+  // The message just sent and the blocks it was compared with (Figma 50B).
+  const sent = useRef<string | null>(null)
+  const seen = useRef<FeedBlock[] | null>(null)
 
-  // Follows the end while the user is there; scrolling up leaves the view where it is.
+  // The feed reads top down (Figma 50A). A message just sent gets room under it, so following the end puts it at the
+  // top while its reply comes in below; once the reply fills the view the room is gone and the end is followed again.
+  // Scrolling up leaves the view where it is.
+  const settle = useCallback(() => {
+    const scroller = scrollerRef.current
+    const content = contentRef.current
+    const space = spaceRef.current
+    if (!scroller || !content || !space) return
+    let room = 0
+    const message = sent.current ? content.querySelector<HTMLElement>(`[data-item="${CSS.escape(sent.current)}"]`) : null
+    if (message) {
+      // The gap between blocks: the block above ends exactly at the top edge, no sliver of it shows.
+      const gap = parseFloat(getComputedStyle(content).rowGap) || 0
+      room = sentSpace(scroller.clientHeight, message.offsetTop, content.offsetHeight, gap)
+    }
+    if (room === 0) sent.current = null
+    space.style.height = `${room}px`
+    if (stuck.current) scroller.scrollTop = scroller.scrollHeight
+  }, [])
+
   useEffect(() => {
     const scroller = scrollerRef.current
     const content = contentRef.current
@@ -31,9 +54,7 @@ export function Feed({ sessionId, items, live, waitingTool }: { sessionId: Sessi
     const onScroll = (): void => {
       stuck.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX
     }
-    const observer = new ResizeObserver(() => {
-      if (stuck.current) scroller.scrollTop = scroller.scrollHeight
-    })
+    const observer = new ResizeObserver(settle)
     observer.observe(content)
     observer.observe(scroller)
     scroller.addEventListener('scroll', onScroll, { passive: true })
@@ -41,12 +62,17 @@ export function Feed({ sessionId, items, live, waitingTool }: { sessionId: Sessi
       observer.disconnect()
       scroller.removeEventListener('scroll', onScroll)
     }
-  }, [])
+  }, [settle])
 
   useLayoutEffect(() => {
-    const scroller = scrollerRef.current
-    if (scroller && stuck.current) scroller.scrollTop = scroller.scrollHeight
-  }, [blocks, live])
+    const message = sentMessage(seen.current, blocks)
+    seen.current = blocks
+    if (message) {
+      sent.current = message
+      stuck.current = true
+    }
+    settle()
+  }, [blocks, live, settle])
 
   return (
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
@@ -56,6 +82,7 @@ export function Feed({ sessionId, items, live, waitingTool }: { sessionId: Sessi
         ))}
         {live && <Live sessionId={sessionId} live={live} />}
       </div>
+      <div ref={spaceRef} aria-hidden />
     </div>
   )
 }
@@ -72,7 +99,7 @@ const Block = memo(
     const { item } = block
     switch (item.kind) {
       case 'user':
-        return <UserBubble text={item.text} />
+        return <UserBubble id={item.id} text={item.text} />
       case 'text':
         return <ChatMarkdown sessionId={sessionId} text={item.text} className={styles.block} />
       case 'system':
@@ -90,10 +117,10 @@ function sameBlock(a: FeedBlock, b: FeedBlock): boolean {
   return a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i])
 }
 
-function UserBubble({ text }: { text: string }) {
+function UserBubble({ id, text }: { id: string; text: string }) {
   const { header, body } = userBubble(text)
   return (
-    <div className={styles.userRow}>
+    <div className={styles.userRow} data-item={id}>
       <div className={styles.bubble}>
         {header && <span className={styles.bubbleHeader}>{header}</span>}
         <p className={styles.bubbleText}>{body}</p>

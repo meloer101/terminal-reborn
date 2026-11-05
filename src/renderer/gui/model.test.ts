@@ -10,6 +10,8 @@ import {
   permissionButtons,
   permissionPrimary,
   permissionTitle,
+  sentMessage,
+  sentSpace,
   shortAgentName,
   pickChoice,
   pickCommand,
@@ -45,6 +47,26 @@ describe('feedBlocks (Figma 49″C)', () => {
 
   it('keys a run by its first item, so a growing run keeps its rows', () => {
     expect(feedBlocks([tool('a')])[0]?.key).toBe(feedBlocks([tool('a'), tool('b')])[0]?.key)
+  })
+})
+
+describe('a sent message scrolls to the top (Figma 50B)', () => {
+  it('is the new last user message, also when its reply came with it; not the first render or a whole history at once', () => {
+    const before = feedBlocks([user('u1'), text('x1')])
+    const after = feedBlocks([user('u1'), text('x1'), user('u2')])
+    expect(sentMessage(before, after)).toBe('u2')
+    expect(sentMessage(null, after)).toBeNull()
+    expect(sentMessage([], after)).toBeNull()
+    expect(sentMessage([], feedBlocks([user('u1')]))).toBe('u1')
+    expect(sentMessage(after, after)).toBeNull()
+    expect(sentMessage(after, feedBlocks([user('u1'), text('x1'), user('u2'), text('x2')]))).toBeNull()
+    expect(sentMessage(before, feedBlocks([user('u1'), text('x1'), user('u2'), text('x2')]))).toBe('u2')
+  })
+
+  it('leaves room under it until the reply fills the view', () => {
+    // viewport 600; message at 400 with a 24 gap above; the feed ends at 500 → 600 − (500 − 376) = 476
+    expect(sentSpace(600, 400, 500, 24)).toBe(476)
+    expect(sentSpace(600, 400, 1100, 24)).toBe(0)
   })
 })
 

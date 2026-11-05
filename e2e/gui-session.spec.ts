@@ -74,10 +74,25 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(launched.args).toEqual(expect.arrayContaining(['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--permission-prompt-tool', 'stdio']))
   })
 
-  test('sends a message and shows the reply', async () => {
+  /** How far below the top of the feed a sent message's bubble sits. */
+  const offsetFromTop = async (text: string): Promise<number> => {
+    const [bubble, region] = await Promise.all([feed().locator('[data-item]').filter({ hasText: text }).last().boundingBox(), feed().boundingBox()])
+    return Math.round((bubble?.y ?? NaN) - (region?.y ?? NaN))
+  }
+
+  test('sends a message and shows the reply, top down (Figma 50A)', async () => {
     await send('你好')
     await expect(feed().getByText('你好', { exact: true })).toBeVisible(WITHIN)
     await expect(feed().getByText('Hello: 你好')).toBeVisible(WITHIN)
+    expect(await offsetFromTop('你好')).toBe(24)
+  })
+
+  test('a message sent later scrolls to the top of the feed (Figma 50B)', async () => {
+    await send('top of the feed')
+    await expect(feed().getByText('Hello: top of the feed')).toBeVisible(WITHIN)
+    // 16 (the gap between blocks): the reply above ends at the feed's top edge.
+    await expect.poll(() => offsetFromTop('top of the feed'), WITHIN).toBe(16)
+    await expect(feed().getByText('Hello: 你好')).not.toBeInViewport()
   })
 
   test('answers a permission card from the GUI and the turn goes on', async () => {
