@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest'
+import { exitReason, guiArgv, guiCommand, guiEnv, isImagePath, withPaths } from './launch'
+
+describe('guiArgv', () => {
+  it('Claude: the stream-json flags, resume, the hooks file, the system prompt and the model', () => {
+    const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch: { model: 'opus' }, resume: 'abc-1', claudeSettingsPath: '/h/settings.json', extraArgs: ['--append-system-prompt', 'x'] })
+    expect(argv).toEqual([
+      'claude', '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
+      '--replay-user-messages', '--permission-prompt-tool', 'stdio', '--resume', 'abc-1', '--settings', '/h/settings.json',
+      '--append-system-prompt', 'x', '--model', 'opus'
+    ])
+  })
+
+  it('Claude: an unsafe resume id or model is left out', () => {
+    const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch: { model: '--danger' }, resume: '../x' })!
+    expect(argv).not.toContain('--resume')
+    expect(argv).not.toContain('--model')
+  })
+
+  it('Codex: global -c overrides (no update check, this folder trusted) before app-server', () => {
+    expect(guiArgv({ agent: 'codex', realCwd: '/r/a"b', launch: {}, extraArgs: ['-c', 'developer_instructions="x"'] })).toEqual([
+      'codex', '-c', 'check_for_update_on_startup=false', '-c', 'projects={"/r/a\\"b"={trust_level="trusted"}}', '-c', 'developer_instructions="x"', 'app-server'
+    ])
+  })
+
+  it('ACP: the agent binary in ACP mode, or its adapter', () => {
+    expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: {} })).toEqual(['grok', 'agent', 'stdio'])
+    expect(guiArgv({ agent: 'pi', realCwd: '/r', launch: {} })).toEqual(['pi-acp'])
+    expect(guiArgv({ agent: 'crush', realCwd: '/r', launch: {} })).toBeNull()
+    expect(guiEnv('droid')).toMatchObject({ DROID_DISABLE_AUTO_UPDATE: 'true' })
+  })
+})
+
+describe('guiCommand', () => {
+  it('runs the binary directly, or through sh with the PATH prefix first', () => {
+    expect(guiCommand(['claude', '-p'])).toEqual({ command: 'claude', args: ['-p'] })
+    expect(guiCommand(['claude', "it's"], '/u/bin')).toEqual({ command: '/bin/sh', args: ['-c', `PATH='/u/bin':"$PATH"; export PATH; exec 'claude' 'it'\\''s'`] })
+  })
+})
+
+describe('attachments and exits', () => {
+  it('tells images from other files and appends paths', () => {
+    expect(isImagePath('/a/b.PNG')).toBe(true)
+    expect(isImagePath('/a/b.heic')).toBe(false)
+    expect(withPaths('look', ['/a.txt', '/b.md'])).toBe('look\n\n/a.txt\n/b.md')
+    expect(withPaths('', ['/a.txt'])).toBe('/a.txt')
+    expect(withPaths('x', [])).toBe('x')
+  })
+
+  it('says why the process ended', () => {
+    expect(exitReason({ exitCode: 127, stderr: 'zsh: command not found: grok' }, 'grok')).toBe('找不到 grok')
+    expect(exitReason({ exitCode: 1, stderr: 'warn\nError: not logged in\n' }, 'codex')).toBe('codex 退出了（退出码 1）：warn Error: not logged in')
+    expect(exitReason({ exitCode: 0, signal: 15, stderr: '' }, 'claude')).toBe('claude 被结束了')
+  })
+})
