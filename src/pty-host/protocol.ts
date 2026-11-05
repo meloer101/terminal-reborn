@@ -130,4 +130,15 @@ export type HostEvent =
    * Answer to `pipe-attach`: the lines the host kept (the newest, up to its cap; `truncated` when older ones were
    * dropped), then `pipe-line` events continue after `seq`.
    */
-  | { type: 'pipe-attached'; id: string; pid: number; agent?: AgentKind; seq: number; lines: string[]; truncated: boolean; exit?: { exitCode: number; signal?: number; stderr: string } }
+  | {
+      type: 'pipe-attached'
+      id: string
+      pid: number
+      agent?: AgentKind
+      seq: number
+      lines: string[]
+      truncated: boolean
+      exit?: { exitCode: number; signal?: number; stderr: string }
+      /** Hook events missed while detached, oldest first (filled in by the daemon), as for `attached`. */
+      hooks?: HookJournalEntry[]
+    }

@@ -105,6 +105,8 @@ export class DaemonConnection {
     readonly buildId: string,
     /** The daemon's hook socket (null when it could not start one). */
     readonly hooks: HookEndpointInfo | null,
+    /** The daemon runs pipe sessions (GUI, PRD F23); false for a daemon of the same protocol built before them. */
+    readonly pipes: boolean,
     handlers: DaemonConnectionHandlers,
     reader: LineReader,
     buffered: DaemonMessage[]
@@ -158,7 +160,7 @@ export class DaemonConnection {
           // Hand over on the next turn so frames that arrived in the same chunk are kept in order.
           queueMicrotask(() => {
             const w = welcome as Extract<DaemonMessage, { type: 'welcome' }>
-            resolve(new DaemonConnection(socket, w.sessions, w.pid, w.buildId, w.hooks ?? null, handlers, reader, early))
+            resolve(new DaemonConnection(socket, w.sessions, w.pid, w.buildId, w.hooks ?? null, w.pipes === true, handlers, reader, early))
           })
         },
         (error) => fail(error)

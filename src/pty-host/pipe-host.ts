@@ -109,7 +109,8 @@ export class PipeHost {
       session.keptChars -= session.lines.shift()!.length
       session.truncated = true
     }
-    this.events.line(session.id, line, session.seq)
+    // A killed session's last lines must not reach a new session spawned under the same id.
+    if (this.sessions.get(session.id) === session) this.events.line(session.id, line, session.seq)
   }
 
   write(id: string, line: string): boolean {
@@ -150,6 +151,11 @@ export class PipeHost {
 
   has(id: string): boolean {
     return this.sessions.has(id)
+  }
+
+  /** The exit of the session now held under `id` (the very object passed to `events.exit`), if it ended. */
+  exitOf(id: string): PipeExit | undefined {
+    return this.sessions.get(id)?.exit
   }
 
   /** Sessions whose process still runs (the daemon's idle exit counts them). */

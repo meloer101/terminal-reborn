@@ -1,6 +1,7 @@
 // The pty daemon (PRD §6.8): a detached plain-Node process (the app binary with
 // ELECTRON_RUN_AS_NODE=1) that owns every PTY, so agents keep running when the app quits and a relaunch
-// reattaches to them. One app connects at a time over a token-checked Unix socket (./wire.ts).
+// reattaches to them. One app connects at a time over a token-checked Unix socket (./wire.ts). It hosts GUI sessions'
+// piped agent processes the same way (PRD F23; SessionHost hands them to its PipeSessions) and says so in `welcome.pipes`.
 //   usage: pty-daemon.js --dir <userData>/daemon --socket <path>   (userData is the parent of --dir)
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -89,8 +90,9 @@ const host = new SessionHost({
   mirror: true,
   emit: (event: HostEvent) => {
     if (event.type === 'attached') snapshots.cancel(event.id)
-    // A reattaching app gets the hook events it missed with the screen.
-    const out: HostEvent = event.type === 'attached' ? { ...event, hooks: hooks.journal.take(event.id) } : event
+    // A reattaching app gets the hook events it missed with the screen (or, for a pipe session, its kept lines).
+    const out: HostEvent =
+      event.type === 'attached' || event.type === 'pipe-attached' ? { ...event, hooks: hooks.journal.take(event.id) } : event
     if (active) send(active, out)
   },
   onSessionsChanged: () => {
@@ -127,7 +129,8 @@ function settleRelay(rid: number, reply: RelayReply): void {
 const hooks = new DaemonHooks({
   socketDir: hookDirFor(dir, process.getuid?.() ?? 0),
   tokenPath: join(dir, HOOK_TOKEN_FILE),
-  known: (sessionId) => host.list().some((s) => s.id === sessionId),
+  // PTY and pipe sessions alike: a Claude GUI session's hooks are relayed or journaled like a TUI one's.
+  known: (sessionId) => host.has(sessionId),
   relay: (request) => {
     const client = active
     if (!client?.compatible || !host.isAttached(request.sessionId)) return null
@@ -151,7 +154,21 @@ function tokenMatches(given: unknown): boolean {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-const REQUEST_TYPES: ReadonlySet<string> = new Set<HostRequest['type']>(['spawn', 'write', 'resize', 'kill', 'ack', 'visible', 'attach', 'detach', 'list', 'killAll'])
+const REQUEST_TYPES: ReadonlySet<string> = new Set<HostRequest['type']>([
+  'spawn',
+  'write',
+  'resize',
+  'kill',
+  'ack',
+  'visible',
+  'attach',
+  'detach',
+  'list',
+  'killAll',
+  'pipe-spawn',
+  'pipe-write',
+  'pipe-attach'
+])
 
 function isHostRequest(message: Record<string, unknown>): message is HostRequest & Record<string, unknown> {
   if (typeof message.type !== 'string' || !REQUEST_TYPES.has(message.type)) return false
@@ -183,7 +200,8 @@ function onConnection(socket: Socket): void {
             pid: process.pid,
             buildId,
             sessions: host.list(),
-            hooks: hooks.running ? { socketPath: hooks.socketPath, token: hooks.token, permissionRelayMs: PERMISSION_RELAY_TIMEOUT_MS } : null
+            hooks: hooks.running ? { socketPath: hooks.socketPath, token: hooks.token, permissionRelayMs: PERMISSION_RELAY_TIMEOUT_MS } : null,
+            pipes: true
           })
         )
         return
@@ -205,7 +223,7 @@ function onConnection(socket: Socket): void {
       host.detachAll()
       // The renderer saved on unload, unless the app crashed: write every screen once more from here (at once when
       // the system is going down: the quiet period would outlast us).
-      for (const session of host.list()) if (!session.exit) snapshots.touch(session.id)
+      for (const session of host.list()) if (!session.exit && !session.pipe) snapshots.touch(session.id)
       if (systemShutdown.inProgress(performance.now())) void snapshots.flush()
       log('app disconnected; sessions keep running:', host.liveCount)
       idle.update()

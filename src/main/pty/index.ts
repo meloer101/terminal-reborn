@@ -26,6 +26,7 @@ import { dispatchLaunchFor, type DispatchLaunch } from '../dispatch'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
 import { shouldKillLateSpawn } from './late-spawn'
+import { HostPipeLink, LocalPipeLink, PipeLinkRouter, pipeHosting, setPipeLink } from './pipes'
 import { assertCwdExists } from './preflight'
 import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
 
@@ -82,6 +83,21 @@ const watchedOwners = new WeakSet<WebContents>()
 let crashTimes: number[] = []
 let restartTimer: ReturnType<typeof setTimeout> | null = null
 
+/**
+ * GUI sessions' piped agents (PRD F23): in the current host when it runs them (`hostPipes`), else in this process.
+ * They never enter `sessions`, which is the terminals' bookkeeping.
+ */
+const localPipes = new LocalPipeLink()
+let hostPipes: HostPipeLink | null = null
+setPipeLink(new PipeLinkRouter({ ready: () => ensureHost(), host: () => hostPipes, local: localPipes }))
+
+/** A new host connection decides where GUI sessions run from now on. */
+function linkPipes(kind: HostLink['kind'], pipes?: boolean): void {
+  const hosting = pipeHosting({ kind, ...(pipes !== undefined ? { pipes } : {}) })
+  hostPipes = hosting === 'main' ? null : new HostPipeLink((message) => send(message), hosting === 'daemon')
+  if (hosting === 'main') console.log('[main] the pty daemon predates GUI sessions; they run in the app this run')
+}
+
 function forkUtility(): HostLink {
   const child = utilityProcess.fork(join(__dirname, 'pty-host.js'), [], { serviceName: 'wavi-pty-host' })
   const self: HostLink = {
@@ -119,6 +135,7 @@ async function connectDaemon(): Promise<HostLink> {
   })
   if (connection.hooks) setHookTarget({ ...connection.hooks, settingsDir: daemonLocation(app.getPath('userData')).dir })
   else setHookTarget(null)
+  linkPipes('daemon', connection.pipes)
   self = {
     kind: 'daemon',
     post: (message) => connection.post(message),
@@ -139,7 +156,9 @@ async function connectHost(): Promise<HostLink> {
     }
   }
   setHookTarget(null)
-  return forkUtility()
+  const utility = forkUtility()
+  linkPipes('utility')
+  return utility
 }
 
 function ensureHost(): Promise<HostLink> {
@@ -167,6 +186,8 @@ function send(message: HostRequest): void {
 /** The host died: every live terminal is gone with it. Tell each owner which sessions, and bring a host back. */
 function handleHostCrash(): void {
   link = null
+  hostPipes?.lost()
+  hostPipes = null
   const lostByOwner = new Map<WebContents, string[]>()
   for (const [id, session] of sessions) {
     endAgentSession(id)
@@ -215,6 +236,7 @@ function settle<T>(map: Map<string, Pending<T>>, id: string): Pending<T> | undef
 }
 
 function handleHostEvent(event: HostEvent): void {
+  if (hostPipes?.handleEvent(event)) return
   switch (event.type) {
     case 'spawned': {
       // Late news of a spawn main already gave up on: kill it rather than leave an invisible live process.
@@ -456,7 +478,8 @@ async function liveSessions(owner: WebContents): Promise<LivePtySession[]> {
     send({ type: 'list' })
   })
   return listed
-    .filter((s) => !sessions.has(s.id))
+    // GUI sessions are not terminals to adopt; src/main/gui lists them through pipeLink().
+    .filter((s) => !s.pipe && !sessions.has(s.id))
     .map((s) => ({ sessionId: s.id, pid: s.pid, ...(s.agent ? { agent: s.agent } : {}), exited: s.exit !== undefined }))
 }
 
@@ -589,6 +612,8 @@ export function registerPtyHandlers(): void {
   // `will-quit` (not `before-quit`): the quit guard may still cancel a quit after before-quit fired.
   app.on('will-quit', (event) => {
     if (restartTimer) clearTimeout(restartTimer)
+    // GUI agents run here only with an older daemon (or none): they end with the app either way.
+    localPipes.killAll()
     const current = link
     // Another will-quit holder (terminal snapshot writes) may quit again before the daemon is done: hold that too.
     if (shuttingDown) event.preventDefault()

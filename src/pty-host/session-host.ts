@@ -1,5 +1,6 @@
 // Owns the node-pty sessions, independent of how requests arrive: the pty daemon (src/pty-daemon, Unix socket)
-// and the fallback utilityProcess (./index.ts) both drive one of these with the messages in ./protocol.
+// and the fallback utilityProcess (./index.ts) both drive one of these with the messages in ./protocol. Pipe sessions
+// (GUI, PRD F23) go to its PipeSessions; `list`, `liveCount`, `isAttached`, `detachAll` and `killAll` cover both kinds.
 import { accessSync, chmodSync, constants, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -11,6 +12,7 @@ import { buildPtyEnv, resolveCwd, resolveShell } from './env'
 import { FlowControl } from './flow-control'
 import { guarded, type Logger } from './guard'
 import { HeadlessMirror } from './headless-mirror'
+import { PipeSessions } from './pipe-sessions'
 import type { HostEvent, HostRequest, HostScreen, HostSessionInfo, HostSpawnRequest } from './protocol'
 
 interface PtySession {
@@ -72,8 +74,11 @@ function realpath(path: string): string {
 
 export class SessionHost {
   private readonly sessions = new Map<string, PtySession>()
+  private readonly pipes: PipeSessions
 
-  constructor(private readonly options: SessionHostOptions) {}
+  constructor(private readonly options: SessionHostOptions) {
+    this.pipes = new PipeSessions({ emit: (event) => options.emit(event), onSessionsChanged: () => options.onSessionsChanged?.() })
+  }
 
   private guard(label: string, fn: () => void): boolean {
     return guarded(label, fn, this.options.log)
@@ -81,6 +86,13 @@ export class SessionHost {
 
   /** Every per-session operation is guarded: a PTY that throws (EBADF, already exited, ...) only costs itself. */
   handle(message: HostRequest): void {
+    if (this.pipes.handles(message)) {
+      const label = `${message.type} ${'id' in message ? message.id : ''}`
+      if (!this.guard(label, () => this.pipes.handle(message)) && message.type === 'pipe-spawn') {
+        this.options.emit({ type: 'spawn-error', id: message.id, message: 'the terminal host failed to start the process' })
+      }
+      return
+    }
     switch (message.type) {
       case 'spawn':
         if (!this.guard(`spawn ${message.id}`, () => this.spawn(message))) {
@@ -141,19 +153,25 @@ export class SessionHost {
     }
   }
 
-  /** Sessions the host holds (live, or exited while detached). */
+  /** Sessions the host holds (live, or exited while detached); pipe sessions are marked `pipe`. */
   list(): HostSessionInfo[] {
-    return [...this.sessions].map(([id, s]) => ({
+    const ptys = [...this.sessions].map(([id, s]) => ({
       id,
       pid: s.proc.pid,
       ...(s.agent ? { agent: s.agent } : {}),
       ...(s.exit ? { exit: s.exit } : {})
     }))
+    return [...ptys, ...this.pipes.list()]
   }
 
-  /** A client is streaming this live session. */
+  /** The host holds this session (PTY or pipe, live or exited while detached). */
+  has(id: string): boolean {
+    return this.sessions.has(id) || this.pipes.has(id)
+  }
+
+  /** A client is streaming this live session (PTY or pipe). */
   isAttached(id: string): boolean {
-    return this.live(id)?.attached === true
+    return this.live(id)?.attached === true || this.pipes.isAttached(id)
   }
 
   /** The session's screen as its mirror has it (scrollback + screen, no modes); null without one. */
@@ -162,9 +180,9 @@ export class SessionHost {
     return mirror ? (await mirror.capture()).screen : null
   }
 
-  /** Running processes. */
+  /** Running processes (PTYs and pipe sessions). */
   get liveCount(): number {
-    let count = 0
+    let count = this.pipes.liveCount
     for (const session of this.sessions.values()) if (!session.exit) count++
     return count
   }
@@ -172,10 +190,12 @@ export class SessionHost {
   /** The client went away: every session keeps running, unseen until a client attaches again. */
   detachAll(): void {
     for (const session of this.sessions.values()) if (!session.exit) this.detach(session)
+    this.pipes.detachAll()
   }
 
   killAll(): void {
     for (const [id, session] of [...this.sessions]) this.destroy(id, session)
+    this.guard('kill pipe sessions', () => this.pipes.killAll())
     this.options.onSessionsChanged?.()
   }
 
