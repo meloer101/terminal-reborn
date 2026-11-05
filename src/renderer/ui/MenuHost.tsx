@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { anchorOf, formatAccelerator, isActionable, originToward, placeMenu, stepIndex, type MenuEntry, type Placement } from './menu-model'
 import { closeMenu, useMenu } from './menu'
 import { useWindowScope } from '../state/window-scope'
@@ -158,11 +158,17 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
         onContextMenu={(event) => event.preventDefault()}
       >
         {entries.map((entry, index) =>
+          entry.type === 'header' ? (
+            <div key={index} className={styles.header} role="presentation">
+              {entry.label}
+            </div>
+          ) : (
           <div
             key={index}
             id={`${id}-${index}`}
             className={styles.item}
-            role="menuitem"
+            role={entry.type === 'item' && entry.checked !== undefined ? 'menuitemradio' : 'menuitem'}
+            aria-checked={entry.type === 'item' && entry.checked !== undefined ? entry.checked : undefined}
             data-index={index}
             data-active={index === active}
             aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
@@ -183,12 +189,18 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
                 {formatAccelerator(entry.accelerator)}
               </span>
             )}
+            {entry.type === 'item' && entry.checked && (
+              <span className={styles.check} aria-hidden>
+                <Check size={16} strokeWidth={1.75} />
+              </span>
+            )}
             {entry.type === 'submenu' && (
               <span className={styles.chevron} aria-hidden>
                 <ChevronRight size={16} strokeWidth={1.75} />
               </span>
             )}
           </div>
+          )
         )}
       </div>
       {submenu && sub?.type === 'submenu' && (

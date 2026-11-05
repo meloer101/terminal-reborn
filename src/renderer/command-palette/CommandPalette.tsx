@@ -78,7 +78,9 @@ function Sheet() {
       activeSessionId: s.activeSessionId,
       rightPanel: s.rightPanel,
       mainView: s.mainView,
-      collapsedProjectIds: s.collapsedProjectIds
+      collapsedProjectIds: s.collapsedProjectIds,
+      groupBy: s.sidebarGroupBy,
+      collapsedStatusGroups: s.collapsedStatusGroups
     }))
   )
   const [query, setQuery] = useState('')

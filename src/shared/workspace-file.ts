@@ -7,7 +7,7 @@ import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
-import type { AgentKind, Project, SessionUi, TitleSource, Worktree } from './types'
+import type { AgentKind, Project, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
 import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
 
 export const WORKSPACE_FILE_VERSION = 2
@@ -82,6 +82,11 @@ export type PersistedWorktree = Pick<Worktree, 'id' | 'projectId' | 'branch' | '
 /** Git · 变更: one column, or base and new side by side (PRD F5; split needs a right panel ≥ SPLIT_MIN_PANEL_WIDTH). */
 export type DiffLayout = 'unified' | 'split'
 
+/** How the sidebar lists sessions (PRD §3.3): under their projects, or in status groups. */
+export type SidebarGroupBy = 'project' | 'status'
+
+const SESSION_STATUSES: readonly SessionStatus[] = ['running', 'needs_you', 'done_unread', 'idle', 'error', 'exited']
+
 /** Narrower than this the 并排 layout is off (the choice is kept and comes back when the panel is widened). */
 export const SPLIT_MIN_PANEL_WIDTH = 720
 
@@ -103,6 +108,10 @@ export interface WorkspaceFile {
   diffLayout?: DiffLayout
   /** Projects folded in the sidebar (only ids of projects that exist). */
   collapsedProjectIds: string[]
+  /** The sidebar lists sessions by status (PRD §3.3). Absent = by project. */
+  sidebarGroupBy?: 'status'
+  /** Status groups folded in the sidebar. Absent when none. */
+  collapsedStatusGroups?: SessionStatus[]
   /** Composer drafts by session id; only non-empty drafts of sessions that exist. */
   drafts: Record<string, string>
   /** Folders opened as projects, most recent first (first-run screen, B10). Absent when empty. */
@@ -269,6 +278,9 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     for (const [id, choice] of Object.entries(value.newSessionUi)) if (projectIds.has(id) && (choice === 'gui' || choice === 'cli')) newSessionUi[id] = choice
   }
 
+  const collapsedStatusGroups = Array.isArray(value.collapsedStatusGroups)
+    ? SESSION_STATUSES.filter((status) => (value.collapsedStatusGroups as unknown[]).includes(status))
+    : []
   const reviewComments = sanitizeReviewComments(value.reviewComments, new Set(worktrees.map((w) => w.path)))
   const attemptGroups = sanitizeAttemptGroups(value.attemptGroups, sessionIds)
 
@@ -311,6 +323,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     collapsedProjectIds: Array.isArray(value.collapsedProjectIds)
       ? [...new Set(value.collapsedProjectIds.filter((id): id is string => isString(id) && projectIds.has(id)))]
       : [],
+    ...(value.sidebarGroupBy === 'status' ? { sidebarGroupBy: 'status' as const } : {}),
+    ...(collapsedStatusGroups.length > 0 ? { collapsedStatusGroups } : {}),
     drafts,
     ...(recentProjects.length > 0 ? { recentProjects } : {}),
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),

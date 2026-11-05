@@ -305,3 +305,78 @@ describe('sameRow', () => {
     expect(sameRow(before[0]!, after[0]!)).toBe(false)
   })
 })
+
+describe('按状态 view (PRD §3.3, Figma 53C)', () => {
+  const sessions = [
+    session('a-run', 'wa1', 'running', 90),
+    session('b-ask', 'wb1', 'needs_you', 10),
+    session('a-done', 'wa2', 'done_unread', 50),
+    session('a-ask', 'wam', 'needs_you', 80),
+    session('b-idle', 'wb1', 'idle'),
+    session('a-child', 'wa2', 'running', 0, { dispatchedBy: 'a-run' })
+  ]
+
+  it('groups by status, most urgent first, and leaves out statuses nobody has', () => {
+    const groups = buildSidebarGroups({ projects, worktrees, sessions, groupBy: 'status' })
+    expect(groups.map((g) => [g.id, g.title])).toEqual([
+      ['status:needs_you', '等你处理'],
+      ['status:done_unread', '已完成'],
+      ['status:running', '运行中'],
+      ['status:idle', '空闲']
+    ])
+    expect(groups.every((g) => g.kind === 'status' && g.attention === null)).toBe(true)
+  })
+
+  it('keeps the 按项目 order inside a group, whatever the activity times', () => {
+    const groups = buildSidebarGroups({ projects, worktrees, sessions, groupBy: 'status' })
+    expect(groups[0]?.rows.map((r) => r.session.id)).toEqual(['a-ask', 'b-ask'])
+    expect(visibleSessionIds(groups)).toEqual(['a-ask', 'b-ask', 'a-done', 'a-run', 'a-child', 'b-idle'])
+  })
+
+  it('draws rows flat and names the project before the branch', () => {
+    const groups = buildSidebarGroups({ projects, worktrees, sessions, groupBy: 'status' })
+    const running = groups.find((g) => g.status === 'running')!
+    expect(running.rows.map((r) => [r.session.id, r.depth, r.tree, r.branch])).toEqual([
+      ['a-run', 0, undefined, 'alpha › x/one'],
+      ['a-child', 0, undefined, 'alpha › x/two']
+    ])
+    const outsideGit = buildSidebarGroups({
+      projects,
+      worktrees: [{ id: 'wb1', projectId: 'pb', branch: '', path: '/b', isMain: true }],
+      sessions: [session('plain', 'wb1', 'idle')],
+      groupBy: 'status'
+    })
+    expect(outsideGit[0]?.rows[0]?.branch).toBe('beta')
+  })
+
+  it('keeps a session’s own subagents under it', () => {
+    const groups = buildSidebarGroups({
+      projects,
+      worktrees,
+      sessions,
+      groupBy: 'status',
+      subagents: { 'a-run': [{ id: 'ag1', title: '扫描', model: 'Opus 5.5' }] }
+    })
+    const row = groups.find((g) => g.status === 'running')!.rows[0]!
+    expect(row).toMatchObject({ tree: 'parent', after: [{ id: 'ag1', depth: 1, tree: 'last' }] })
+  })
+
+  it('folds a collapsed status group: no rows, its count kept, its rows out of ⌘1–9', () => {
+    const groups = buildSidebarGroups({ projects, worktrees, sessions, groupBy: 'status', collapsedStatusGroups: ['needs_you'] })
+    expect(groups[0]).toMatchObject({ status: 'needs_you', collapsed: true, rows: [], sessionCount: 2 })
+    expect(sessionForShortcut(groups, 1)).toBe('a-done')
+  })
+
+  it('lists only sessions of the listed projects and skips archived worktrees', () => {
+    const onlyBeta = buildSidebarGroups({ projects: projects.filter((p) => p.id === 'pb'), worktrees, sessions, groupBy: 'status' })
+    expect(visibleSessionIds(onlyBeta)).toEqual(['b-ask', 'b-idle'])
+    const archive = { id: 'x', at: 0, commit: 'c' } as Worktree['archived']
+    const archived = buildSidebarGroups({
+      projects,
+      worktrees: worktrees.map((w) => (w.id === 'wa1' ? { ...w, archived: archive } : w)),
+      sessions,
+      groupBy: 'status'
+    })
+    expect(visibleSessionIds(archived)).not.toContain('a-run')
+  })
+})

@@ -14,8 +14,12 @@ export type MenuEntry =
       /** Shortcut shown next to the label (display only, e.g. 'CmdOrCtrl+N'); the key itself is handled elsewhere. */
       accelerator?: string
       icon?: MenuIcon
+      /** One of a set of choices: a ✓ after the label when true (Figma 53C). */
+      checked?: boolean
     }
   | { type: 'submenu'; label: string; items: MenuEntry[] }
+  /** A section label above the items it names; not a choice (Figma 53C 「分组」). */
+  | { type: 'header'; label: string }
 
 export interface Size {
   width: number

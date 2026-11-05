@@ -6,8 +6,8 @@ import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
 import { hasPane, paneIds, persistedSplit, PICKER_PANE, removePane, replacePane, sessionsIn, type SplitNode } from '@shared/split-layout'
-import type { AgentKind, Project, ProjectId, Session, SessionId, SessionUi, Worktree, WorktreeId } from '@shared/types'
-import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
+import type { AgentKind, Project, ProjectId, Session, SessionId, SessionStatus, SessionUi, Worktree, WorktreeId } from '@shared/types'
+import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type SidebarGroupBy, type WorkspaceFile } from '@shared/workspace-file'
 import type { PersistedWindow } from '@shared/window-layout'
 
 export interface WorkspaceData {
@@ -274,6 +274,10 @@ export interface WorkspaceUi {
   rightPanelWidth: number
   diffLayout: DiffLayout
   collapsedProjectIds: ProjectId[]
+  /** How the sidebar lists sessions (PRD §3.3); absent = by project. */
+  sidebarGroupBy?: SidebarGroupBy
+  /** Status groups folded in the sidebar's 按状态 view. */
+  collapsedStatusGroups?: readonly SessionStatus[]
   recentProjects: readonly string[]
   /** 工作目录 last used in the new-session sheet, by project. */
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
@@ -334,6 +338,8 @@ export function serializeWorkspace(
     rightPanelWidth: ui.rightPanelWidth,
     ...(ui.diffLayout === 'split' ? { diffLayout: 'split' as const } : {}),
     collapsedProjectIds: ui.collapsedProjectIds.filter((id) => data.projects.some((p) => p.id === id)),
+    ...(ui.sidebarGroupBy === 'status' ? { sidebarGroupBy: 'status' as const } : {}),
+    ...(ui.collapsedStatusGroups && ui.collapsedStatusGroups.length > 0 ? { collapsedStatusGroups: [...ui.collapsedStatusGroups] } : {}),
     ...(ui.recentProjects.length > 0 ? { recentProjects: [...ui.recentProjects] } : {}),
     ...(Object.keys(ui.newSessionWorkdir).length > 0
       ? { newSessionWorkdir: Object.fromEntries(Object.entries(ui.newSessionWorkdir).filter(([id]) => data.projects.some((p) => p.id === id))) }
@@ -409,6 +415,8 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.rightPanelWidth !== prev.rightPanelWidth ||
     next.diffLayout !== prev.diffLayout ||
     next.collapsedProjectIds !== prev.collapsedProjectIds ||
+    next.sidebarGroupBy !== prev.sidebarGroupBy ||
+    next.collapsedStatusGroups !== prev.collapsedStatusGroups ||
     next.recentProjects !== prev.recentProjects ||
     next.newSessionWorkdir !== prev.newSessionWorkdir ||
     next.newSessionAgent !== prev.newSessionAgent ||

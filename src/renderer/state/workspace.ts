@@ -6,7 +6,7 @@ import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { WorktreeArchive } from '@shared/archive'
 import { rememberUi, rememberWorkdir, type Workdir } from '@shared/new-session'
-import type { AgentKind, ProjectId, Session, SessionId, SessionUi, Worktree, WorktreeId } from '@shared/types'
+import type { AgentKind, ProjectId, Session, SessionId, SessionStatus, SessionUi, Worktree, WorktreeId } from '@shared/types'
 import { hasPane, pane, paneIds, PICKER_PANE, placeSession, removePane, replacePane, sessionsIn, splitPane, type DropZone, type Side, type SplitNode } from '@shared/split-layout'
 import {
   closeWindow,
@@ -57,7 +57,7 @@ import {
 import { drafts, initialWorkspaceFile, requestSave, setSnapshotProvider } from './persistence'
 import { reviewCommentsSnapshot } from './review-comments'
 import { attemptGroupsSnapshot, pruneGroups } from './attempt-groups'
-import { clampPanelWidth, clampSidebarWidth, PANEL_WIDTH_DEFAULT, SIDEBAR_WIDTH_DEFAULT, type DiffLayout, type PersistedRightPanel } from '@shared/workspace-file'
+import { clampPanelWidth, clampSidebarWidth, PANEL_WIDTH_DEFAULT, SIDEBAR_WIDTH_DEFAULT, type DiffLayout, type PersistedRightPanel, type SidebarGroupBy } from '@shared/workspace-file'
 
 /** The right panel's views (PRD F17), switched by the icons in the session header. */
 export type PanelView = PersistedRightPanel
@@ -90,6 +90,10 @@ interface WorkspaceState extends WorkspaceData {
   diffLayout: DiffLayout
   /** Projects folded in the sidebar. */
   collapsedProjectIds: ProjectId[]
+  /** How the sidebar lists sessions: under their projects, or in status groups (PRD §3.3, Figma 53C). */
+  sidebarGroupBy: SidebarGroupBy
+  /** Status groups folded in the sidebar's 按状态 view. */
+  collapsedStatusGroups: readonly SessionStatus[]
   mainView: MainView
   /** Folders opened as projects, most recent first (first-run screen). */
   recentProjects: readonly string[]
@@ -135,6 +139,8 @@ interface WorkspaceState extends WorkspaceData {
   setRightPanelWidth(width: number): void
   setDiffLayout(layout: DiffLayout): void
   toggleProjectCollapsed(id: ProjectId): void
+  setSidebarGroupBy(groupBy: SidebarGroupBy): void
+  toggleStatusGroupCollapsed(status: SessionStatus): void
   /** Adds (or finds) the project for a folder. */
   addProject(rootPath: string): ProjectId
   removeProject(id: ProjectId): void
@@ -288,6 +294,8 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     rightPanelWidth: saved?.rightPanelWidth ?? PANEL_WIDTH_DEFAULT,
     diffLayout: saved?.diffLayout ?? 'unified',
     collapsedProjectIds: saved?.collapsedProjectIds ?? [],
+    sidebarGroupBy: saved?.sidebarGroupBy ?? 'project',
+    collapsedStatusGroups: saved?.collapsedStatusGroups ?? [],
     mainView: 'session',
     recentProjects: saved?.recentProjects ?? [],
     newSessionWorkdir: saved?.newSessionWorkdir ?? {},
@@ -364,6 +372,13 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
         collapsedProjectIds: s.collapsedProjectIds.includes(id)
           ? s.collapsedProjectIds.filter((x) => x !== id)
           : [...s.collapsedProjectIds, id]
+      })),
+    setSidebarGroupBy: (groupBy) => set({ sidebarGroupBy: groupBy }),
+    toggleStatusGroupCollapsed: (status) =>
+      set((s) => ({
+        collapsedStatusGroups: s.collapsedStatusGroups.includes(status)
+          ? s.collapsedStatusGroups.filter((x) => x !== status)
+          : [...s.collapsedStatusGroups, status]
       })),
 
     addProject(rootPath) {
@@ -488,6 +503,8 @@ setSnapshotProvider(() => {
       rightPanelWidth: state.rightPanelWidth,
       diffLayout: state.diffLayout,
       collapsedProjectIds: state.collapsedProjectIds,
+      sidebarGroupBy: state.sidebarGroupBy,
+      collapsedStatusGroups: state.collapsedStatusGroups,
       recentProjects: state.recentProjects,
       newSessionWorkdir: state.newSessionWorkdir,
       newSessionAgent: state.newSessionAgent,

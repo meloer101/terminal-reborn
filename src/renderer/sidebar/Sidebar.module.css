@@ -4,6 +4,8 @@
   height: var(--titlebar-height);
   display: flex;
   align-items: center;
+  /* 会话分组 · 隐藏侧栏 sit 4 apart (Figma 53C). */
+  gap: var(--space-4);
   padding: 0 var(--space-8) 0 var(--space-16);
   -webkit-app-region: drag;
 }

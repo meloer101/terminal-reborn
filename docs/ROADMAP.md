@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-05：侧栏可以按状态聚合（PRD v1.131，Figma 53C 选定）：标题栏「会话分组」按钮切换项目 / 状态，按状态时 等你处理 → 出错 → 已完成 → 运行中 → 空闲 → 已退出，组可折叠，选择和折叠都保存；单元测试 `sidebar/model.test.ts`、`workspace-file.test.ts`，e2e `sidebar-projects.spec.ts`（切换、换组、折叠、重启后还在）。深色主题只在 e2e 截图里看过（窗口底是浅色玻璃），还没在作者机器上用。
 - 2026-11-05：新增 F23 GUI 会话（PRD v1.125）：新建时选 CLI 或 GUI、之后不切换；Claude 走 `-p` stream-json + `CLAUDE_CODE_ENTRYPOINT=wavi`，Codex 走 app-server，其余 16 家走 ACP（Crush 只能 CLI），进程归守护进程。调研、Figma 49″、协议实测（§6.17）做完；jacoy/remote-phone 合进 main。代码已在 jacoy/gui-sessions：三块并行实现合并、e2e 通过，待独立 review 和真 agent 冒烟。
 - 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节作者已确认；P2 Mac 端已完成（PRD v1.113）；手机端换成原生 SwiftUI（`ios/`，PRD v1.119），真机经局域网和 Tailscale 都连上了；灵动岛和锁屏卡片做完（App 前台时更新），蓝牙、APNs 还没做。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。

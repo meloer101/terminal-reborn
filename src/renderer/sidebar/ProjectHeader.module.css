@@ -118,3 +118,14 @@
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
+
+/* A status group (Figma 53C): no ＋ / …, so hover only tints the row and the count stays. */
+.header[data-plain]:hover,
+.header[data-plain]:focus-within {
+  padding: var(--space-6) var(--space-8);
+}
+
+.header[data-plain]:hover .count,
+.header[data-plain]:focus-within .count {
+  display: inline;
+}

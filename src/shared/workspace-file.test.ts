@@ -191,6 +191,15 @@ describe('sanitizeWorkspaceFile', () => {
     expect(file.recentProjects).toBeUndefined()
   })
 
+  it('keeps the sidebar grouping and its folded status groups, dropping anything else (PRD §3.3)', () => {
+    const file = sanitizeWorkspaceFile({ ...valid, sidebarGroupBy: 'status', collapsedStatusGroups: ['exited', 'bogus', 'needs_you', 'exited'] }, 0)!
+    expect(file.sidebarGroupBy).toBe('status')
+    expect(file.collapsedStatusGroups).toEqual(['needs_you', 'exited'])
+    const plain = sanitizeWorkspaceFile({ ...valid, sidebarGroupBy: 'agent', collapsedStatusGroups: 'exited' }, 0)!
+    expect(plain).not.toHaveProperty('sidebarGroupBy')
+    expect(plain).not.toHaveProperty('collapsedStatusGroups')
+  })
+
   it('keeps the sidebar width within its limits', () => {
     expect(sanitizeWorkspaceFile({ ...valid, sidebarWidth: 301.6 }, 0)!.sidebarWidth).toBe(302)
     expect(sanitizeWorkspaceFile({ ...valid, sidebarWidth: 40 }, 0)!.sidebarWidth).toBe(200)

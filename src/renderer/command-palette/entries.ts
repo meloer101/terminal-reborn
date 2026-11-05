@@ -4,7 +4,7 @@ import { archivedAgo } from '@shared/archive'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree, WorktreeId } from '@shared/types'
 import { STATUS_LABEL } from '@shared/session-status'
 import { SHORTCUTS } from '@shared/shortcuts'
-import type { PersistedRightPanel as PanelView } from '@shared/workspace-file'
+import type { PersistedRightPanel as PanelView, SidebarGroupBy } from '@shared/workspace-file'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
 import { matchFields, type MatchField, type Range } from './match'
 
@@ -59,6 +59,9 @@ export interface PaletteInput {
   mainView?: 'session' | 'overview'
   /** Folded sidebar projects: their sessions are listed but have no ⌘1–⌘9. */
   collapsedProjectIds?: readonly ProjectId[]
+  /** The sidebar's grouping and folded status groups: ⌘1–⌘9 follow the sidebar as drawn. */
+  groupBy?: SidebarGroupBy
+  collapsedStatusGroups?: readonly SessionStatus[]
   /** For 历史's "3 天前归档". */
   now?: number
 }

@@ -1,7 +1,8 @@
 // Pure sidebar view-model: grouping, ordering and keyboard targets. No React, no store access.
 import type { SubagentInfo } from '@shared/agent-events'
 import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } from '@shared/types'
-import { compareByUrgency, needsAttention } from '@shared/session-status'
+import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
+import type { SidebarGroupBy } from '@shared/workspace-file'
 import { phaseLine } from '../lifecycle/present'
 
 export interface SessionRowModel {
@@ -56,7 +57,12 @@ export interface SubagentRowModel {
 }
 
 export interface SidebarGroup {
-  id: ProjectId
+  /** A project's id, or `status:<status>` in the 按状态 view. */
+  id: string
+  /** `project`: a project and its sessions (default). `status`: every listed session with one status (PRD §3.3, Figma 53C). */
+  kind: 'project' | 'status'
+  /** The status a `status` group holds. */
+  status?: SessionStatus
   title: string
   /** Rows drawn under the header; empty while the project is collapsed. */
   rows: SessionRowModel[]
@@ -74,6 +80,9 @@ export interface SidebarInput {
   collapsedProjectIds?: readonly ProjectId[]
   /** Running subagents per session (session-meta); none when absent. */
   subagents?: Readonly<Record<SessionId, readonly SubagentInfo[] | undefined>>
+  /** Absent = by project. */
+  groupBy?: SidebarGroupBy
+  collapsedStatusGroups?: readonly SessionStatus[]
 }
 
 /** What a finished turn left: "已完成 · <reply>" while unread, the reply once seen. */
@@ -192,33 +201,80 @@ export function withChildrenNested(sessions: readonly Session[], subagentsOf: Su
   return out
 }
 
+/** The listed sessions of a project, in store order. Archived worktrees (PRD F15) are folded away until ⌘K 历史 brings them back. */
+function sessionsOf(project: Project, sessions: readonly Session[], worktreeById: ReadonlyMap<string, Worktree>): Session[] {
+  return sessions.filter((s) => {
+    const worktree = worktreeById.get(s.worktreeId)
+    return worktree?.projectId === project.id && !worktree.archived
+  })
+}
+
 /**
- * Groups sessions for the sidebar: strictly by place (PRD §3.3). A session always stays under its project,
- * whatever its status — the cross-project, by-status view is the overview, not the sidebar.
- * Projects keep store order and sessions keep store order within a project. Every project is listed, even
- * with no sessions, so it always offers "新建会话". A collapsed project draws no rows; its header carries
- * the most urgent attention status instead.
+ * Groups sessions for the sidebar. By default strictly by place (PRD §3.3): a session always stays under its
+ * project, whatever its status. Projects keep store order and sessions keep store order within a project. Every
+ * project is listed, even with no sessions, so it always offers "新建会话". A collapsed project draws no rows; its
+ * header carries the most urgent attention status instead. With `groupBy: 'status'` see buildStatusGroups.
  */
-export function buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds = [], subagents }: SidebarInput): SidebarGroup[] {
+export function buildSidebarGroups(input: SidebarInput): SidebarGroup[] {
+  if (input.groupBy === 'status') return buildStatusGroups(input)
+  const { projects, worktrees, sessions, collapsedProjectIds = [], subagents } = input
   const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
   const subagentsOf: SubagentsOf = subagents ? (id) => subagents[id] ?? [] : NO_SUBAGENTS
   const collapsed = new Set(collapsedProjectIds)
   return projects.map((project) => {
-    // Archived worktrees (PRD F15) are folded away until ⌘K 历史 brings them back.
-    const own = sessions.filter((s) => {
-      const worktree = worktreeById.get(s.worktreeId)
-      return worktree?.projectId === project.id && !worktree.archived
-    })
+    const own = sessionsOf(project, sessions, worktreeById)
     const urgent = own.filter((s) => needsAttention(s.status)).sort(compareByUrgency)[0]
     const isCollapsed = collapsed.has(project.id)
     return {
       id: project.id,
+      kind: 'project',
       title: project.name,
       rows: isCollapsed ? [] : withChildrenNested(own, subagentsOf).map((nested) => toRow(nested.session, worktreeById.get(nested.session.worktreeId), nested)),
       sessionCount: own.length,
       collapsed: isCollapsed,
       attention: urgent?.status ?? null
     }
+  })
+}
+
+/**
+ * The sidebar's 按状态 view (PRD §3.3, Figma 53C): one group per status, most urgent first (等你处理 → 出错 → 已完成 →
+ * 运行中 → 空闲 → 已退出); a status no listed session has is not drawn. Within a group, sessions keep the 按项目 order
+ * (projects, then store order), so a row only moves when its status does. Rows are flat — a dispatched session goes to
+ * its own status's group — and their last line reads `<project> › <branch>`. A session's own subagents stay under it.
+ */
+export function buildStatusGroups({ projects, worktrees, sessions, collapsedStatusGroups = [], subagents }: SidebarInput): SidebarGroup[] {
+  const worktreeById = new Map(worktrees.map((w) => [w.id, w]))
+  const listed = projects.flatMap((project) => sessionsOf(project, sessions, worktreeById).map((session) => ({ session, project })))
+  const collapsed = new Set(collapsedStatusGroups)
+  return STATUS_ORDER.flatMap((status): SidebarGroup[] => {
+    const own = listed.filter(({ session }) => session.status === status)
+    if (own.length === 0) return []
+    const isCollapsed = collapsed.has(status)
+    return [
+      {
+        id: `status:${status}`,
+        kind: 'status',
+        status,
+        title: STATUS_LABEL[status],
+        rows: isCollapsed
+          ? []
+          : own.map(({ session, project }) => {
+              const worktree = worktreeById.get(session.worktreeId)
+              const subs = subagents?.[session.id] ?? []
+              const row = toRow(session, worktree, {
+                session,
+                depth: 0,
+                ...(subs.length > 0 ? { tree: 'parent' as const, after: subagentRows(session, subs, 1, false) } : {})
+              })
+              return { ...row, branch: row.branch ? `${project.name} › ${row.branch}` : project.name }
+            }),
+        sessionCount: own.length,
+        collapsed: isCollapsed,
+        // The header already names the status (Figma 53C): no hint glyph when folded.
+        attention: null
+      }
+    ]
   })
 }
 

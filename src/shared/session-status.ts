@@ -15,6 +15,9 @@ const SORT_ORDER: Record<SessionStatus, number> = {
   exited: 5
 }
 
+/** Every status, most urgent first: the overview's groups and the sidebar's 按状态 groups (PRD §3.3). */
+export const STATUS_ORDER: readonly SessionStatus[] = (Object.keys(SORT_ORDER) as SessionStatus[]).sort((a, b) => SORT_ORDER[a] - SORT_ORDER[b])
+
 export function compareByUrgency(a: Session, b: Session): number {
   return SORT_ORDER[a.status] - SORT_ORDER[b.status] || b.lastActivityAt - a.lastActivityAt
 }

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
-import { Folder, Gauge, LayoutList, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
 import { shownEverywhere, useWorkspace, windowEffects } from '../state/workspace'
@@ -7,7 +7,7 @@ import { usePaneView, useSecondaryWindow, useWindowKey } from '../state/window-s
 import { pressSession } from '../split/drag'
 import { newSessionInProject, openProjectInteractive, openProjectMenu, openSessionContextMenu } from '../state/session-actions'
 import { IconButton } from '../ui/IconButton'
-import type { MenuAnchor } from '../ui/menu'
+import { popupMenu, type MenuAnchor } from '../ui/menu'
 import { NavItem } from './NavItem'
 import { UpdateEntry } from './UpdateEntry'
 import { openCommandPalette } from '../command-palette'
@@ -29,6 +29,20 @@ import { SHORTCUTS } from '@shared/shortcuts'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
+/** The titlebar's 会话分组 button (Figma 53C): 项目 or 状态, kept in the workspace file. */
+async function chooseGroupBy(anchor: Element): Promise<void> {
+  const current = useWorkspace.getState().sidebarGroupBy
+  const choice = await popupMenu(
+    [
+      { type: 'header', label: '分组' },
+      { type: 'item', id: 'project', label: '项目', checked: current === 'project' },
+      { type: 'item', id: 'status', label: '状态', checked: current === 'status' }
+    ],
+    anchor
+  )
+  if (choice === 'project' || choice === 'status') useWorkspace.getState().setSidebarGroupBy(choice)
+}
+
 /**
  * Status sidebar — Figma screens 01 / 02 / 08. Pure view over the workspace store. In a project's own window
  * (F20 · 多窗口) it lists only that project; the row of the session the keyboard is in, in this window, is selected.
@@ -36,13 +50,28 @@ const ICON = { size: 16, strokeWidth: 1.75 } as const
 export function Sidebar() {
   const windowKey = useWindowKey()
   const scope = useSecondaryWindow()?.projectId ?? null
-  const { projects: allProjects, worktrees, sessions, collapsedProjectIds, setActiveSession, toggleSidebar, toggleProjectCollapsed, mainOverview } =
+  const {
+    projects: allProjects,
+    worktrees,
+    sessions,
+    collapsedProjectIds,
+    groupBy,
+    collapsedStatusGroups,
+    setActiveSession,
+    toggleSidebar,
+    toggleProjectCollapsed,
+    toggleStatusGroupCollapsed,
+    mainOverview
+  } =
     useWorkspace(
       useShallow((s) => ({
         projects: s.projects,
         worktrees: s.worktrees,
         sessions: s.sessions,
         collapsedProjectIds: s.collapsedProjectIds,
+        groupBy: s.sidebarGroupBy,
+        collapsedStatusGroups: s.collapsedStatusGroups,
+        toggleStatusGroupCollapsed: s.toggleStatusGroupCollapsed,
         setActiveSession: s.setActiveSession,
         toggleSidebar: s.toggleSidebar,
         toggleProjectCollapsed: s.toggleProjectCollapsed,
@@ -78,8 +107,8 @@ export function Sidebar() {
     })
   )
   const groups = useMemo(
-    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents }),
-    [projects, worktrees, sessions, collapsedProjectIds, subagents]
+    () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
+    [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]
   )
   const ids = useMemo(() => visibleSessionIds(groups), [groups])
   const waiting = useMemo(() => sessions.filter((s) => needsAttention(s.status)).sort(compareByUrgency), [sessions])
@@ -105,6 +134,9 @@ export function Sidebar() {
       <div className={styles.titlebar}>
         {/* Native traffic lights (hiddenInset, x=16 y=11) sit over this gap. */}
         <div className={styles.trafficLights} aria-hidden />
+        <IconButton label="会话分组" aria-haspopup="menu" onClick={(e) => void chooseGroupBy(e.currentTarget)}>
+          <ListTree {...ICON} />
+        </IconButton>
         <IconButton label="隐藏侧栏" title={`隐藏侧栏 · ${formatAccelerator(SHORTCUTS['toggle-sidebar'])}`} onClick={toggleSidebar}>
           <PanelLeft {...ICON} />
         </IconButton>
@@ -133,15 +165,26 @@ export function Sidebar() {
         <SelectionDrops ids={inPanes} />
         {groups.map((group) => (
           <section key={group.id} className={styles.group} aria-label={group.title}>
-            <ProjectHeader
-              name={group.title}
-              count={group.sessionCount}
-              collapsed={group.collapsed}
-              attention={group.attention}
-              onToggle={() => toggleProjectCollapsed(group.id)}
-              onNewSession={() => newSessionInProject(group.id)}
-              onMenu={(anchor) => void openProjectMenu(group.id, anchor)}
-            />
+            {group.kind === 'status' ? (
+              // A status group (Figma 53C): the project header's look, without ＋ and ….
+              <ProjectHeader
+                name={group.title}
+                count={group.sessionCount}
+                collapsed={group.collapsed}
+                attention={group.attention}
+                onToggle={() => group.status && toggleStatusGroupCollapsed(group.status)}
+              />
+            ) : (
+              <ProjectHeader
+                name={group.title}
+                count={group.sessionCount}
+                collapsed={group.collapsed}
+                attention={group.attention}
+                onToggle={() => toggleProjectCollapsed(group.id)}
+                onNewSession={() => newSessionInProject(group.id)}
+                onMenu={(anchor) => void openProjectMenu(group.id, anchor)}
+              />
+            )}
             {group.rows.map((row) => (
               <Fragment key={row.session.id}>
                 <SessionRow
@@ -156,7 +199,7 @@ export function Sidebar() {
                 {row.after?.map((sub) => <SubagentRow key={sub.id} row={sub} onSelect={setActiveSession} />)}
               </Fragment>
             ))}
-            {!group.collapsed && group.sessionCount === 0 && (
+            {group.kind === 'project' && !group.collapsed && group.sessionCount === 0 && (
               <button type="button" className={styles.newSession} aria-haspopup="dialog" onClick={() => newSessionInProject(group.id)}>
                 <Plus {...ICON} />
                 新建会话
@@ -164,8 +207,13 @@ export function Sidebar() {
             )}
           </section>
         ))}
-        {groups.length === 0 && (
-          <p className={styles.empty}>还没有项目</p>
+        {groups.length === 0 && projects.length === 0 && <p className={styles.empty}>还没有项目</p>}
+        {/* 按状态 with no sessions yet: no project header offers ＋, so this row does (the sheet picks the project). */}
+        {groups.length === 0 && projects[0] && (
+          <button type="button" className={styles.newSession} aria-haspopup="dialog" onClick={() => newSessionInProject(projects[0]!.id)}>
+            <Plus {...ICON} />
+            新建会话
+          </button>
         )}
       </div>
       <div className={styles.footer}>
