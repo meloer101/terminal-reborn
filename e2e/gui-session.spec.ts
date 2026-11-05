@@ -56,7 +56,8 @@ test.describe('F23 GUI session (Claude)', () => {
         drafts: {}
       })
     )
-    app = await launchApp({ ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh' }, { userDataDir: profile })
+    // The fake writes its transcript under CLAUDE_CONFIG_DIR (an edit reads it), never the real ~/.claude.
+    app = await launchApp({ ...outerClaudeEnv(), ZDOTDIR: zdot, SHELL: '/bin/zsh', CLAUDE_CONFIG_DIR: join(root, 'claude-config') }, { userDataDir: profile })
     page = await app.firstWindow()
     await setWindowSize(app, page, 1440, 900)
   })
@@ -272,6 +273,77 @@ test.describe('F23 GUI session (Claude)', () => {
     }
     await page.keyboard.press('Escape')
     await expect(popover).toHaveCount(0)
+  })
+
+  test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {
+    await send('copy this one')
+    const reply = feed().getByText('Hello: copy this one')
+    await expect(reply).toBeVisible(WITHIN)
+    await reply.hover()
+    const actions = feed().getByTestId('gui-turn-actions').last()
+    await expect.poll(() => actions.evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
+    const saved = execFileSync('pbpaste', { encoding: 'utf8' })
+    try {
+      await actions.getByRole('button', { name: '复制' }).click()
+      await expect(actions.getByRole('button', { name: '已复制' })).toBeVisible()
+      expect(execFileSync('pbpaste', { encoding: 'utf8' })).toBe('Hello: copy this one')
+    } finally {
+      execFileSync('pbcopy', { input: saved })
+    }
+    // Your message: time · copy · edit, right-aligned under the bubble.
+    const mine = lastSent()
+    await mine.hover()
+    const own = mine.getByTestId('gui-message-actions')
+    await expect(own.getByRole('button', { name: '编辑' })).toBeVisible()
+    await expect(own).toContainText(/^\d\d:\d\d/)
+    await page.screenshot({ path: join(SHOTS, 'message-actions.png') })
+  })
+
+  test('编辑 asks again from an earlier message: the rest is dropped and Claude resumes before it (Figma 54C)', async () => {
+    await send('edit me please')
+    await expect(feed().getByText('Hello: edit me please')).toBeVisible(WITHIN)
+    await send('second one')
+    await expect(feed().getByText('Hello: second one')).toBeVisible(WITHIN)
+    const target = feed()
+      .locator('[data-item]')
+      .filter({ has: page.getByText('edit me please', { exact: true }) })
+    const openEdit = async () => {
+      await target.hover()
+      await target.getByRole('button', { name: '编辑' }).click()
+      // Found on its own: once typed in, the row no longer reads 「edit me please」.
+      const box = feed().getByTestId('gui-edit')
+      const text = box.getByRole('textbox', { name: '编辑消息' })
+      await expect(text).toHaveText('edit me please')
+      // It takes the keyboard, the caret at the end; the text is there, so it can be sent as it is.
+      await expect(text).toBeFocused()
+      await expect(box.getByRole('button', { name: '发送' })).toBeEnabled()
+      return box
+    }
+    // ⎋ leaves it as it was.
+    await openEdit()
+    await expect(feed().locator('[data-faded]').first()).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(target.getByTestId('gui-edit')).toHaveCount(0)
+    await expect(feed().locator('[data-faded]')).toHaveCount(0)
+
+    const box = await openEdit()
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.screenshot({ path: join(SHOTS, `edit-message-${theme}.png`) })
+    }
+    await box.getByRole('textbox', { name: '编辑消息' }).focus()
+    await page.keyboard.press('End')
+    await page.keyboard.type(', edited')
+    await box.getByRole('button', { name: '发送' }).click()
+    await expect(feed().getByText('Hello: edit me please, edited')).toBeVisible(WITHIN)
+    await expect(feed().getByText('Hello: second one')).toHaveCount(0)
+    await expect(feed().getByText('second one', { exact: true })).toHaveCount(0)
+    // Claude came back on the conversation up to the reply before the edited message.
+    const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[] }
+    const at = launched.args.indexOf('--resume-session-at')
+    expect(at).toBeGreaterThan(0)
+    expect(launched.args[at + 1]).toMatch(/^assistant-/)
   })
 
   test('scrolled up, the view stays; sending a message brings it back to the end', async () => {

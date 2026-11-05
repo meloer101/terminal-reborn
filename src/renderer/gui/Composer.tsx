@@ -9,7 +9,7 @@ import { ArrowUp, Check, ChevronDown, Plus, Square, Type, X } from 'lucide-react
 import { matchCommands, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { Segmented } from '../ui/Segmented'
-import { ComposerEditor, type CaretContext } from './ComposerEditor'
+import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { ContextButton } from './ContextButton'
 import { composerKey, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, thumbnailUrl, type PickerButton } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
@@ -71,15 +71,6 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
     requestAnimationFrame(() => editorRef.current?.commands.focus('end'))
   }
 
-  /** ⇧⏎: a new item in a list (an empty one leaves the list), a newline in a code block, else a new line. */
-  const newline = (editor: Editor, caret: CaretContext): void => {
-    if (caret.inCode) editor.view.dispatch(editor.state.tr.insertText('\n'))
-    else if (caret.inList) void (editor.commands.splitListItem('listItem') || editor.commands.liftListItem('listItem'))
-    else if (caret.inQuote && editor.state.selection.$from.parent.content.size === 0) editor.commands.lift('blockquote')
-    // A new line starts plain: inline code or bold at the end of the line above does not carry on.
-    else editor.commands.splitBlock({ keepMarks: false })
-  }
-
   const onKeyDown = (event: KeyboardEvent, caret: CaretContext): boolean => {
     // An empty composer gives the card above it its keys (ChatPane).
     if (cardWaiting && empty && !menuOpen && cardKey(event)) return true
@@ -92,7 +83,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
       case 'newline':
         // ⏎ in a code block is the editor's (three in a row leave it).
         if (!editor || (caret.inCode && !shiftKey)) return false
-        newline(editor, caret)
+        insertNewline(editor, caret)
         return true
       case 'send':
         submit()

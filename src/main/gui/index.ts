@@ -18,7 +18,7 @@ import { pipeLink } from '../pty/pipes'
 import { sniffPhoto } from '../remote/photos'
 import { portFor } from '../repo-scripts'
 import type { ImageBlock } from './driver'
-import { claudeTranscriptFor, codexRolloutFor, readTranscript } from './history'
+import { claudeResumePoint, claudeTranscriptFor, codexRolloutFor, readTranscript } from './history'
 import { GuiHost, type PreparedLaunch } from './host'
 import { guiArgv, guiCommand, guiEnv, takesSystemPromptArgs } from './launch'
 import { parseGuiAnswer, parseGuiLaunch, parseGuiMessage, parseGuiSessionId, parseGuiText, parseGuiValue } from './validate'
@@ -97,6 +97,12 @@ async function history(agent: CliAgent, cwd: string, agentSessionId: string) {
   return null
 }
 
+async function resumePoint(agent: CliAgent, cwd: string, agentSessionId: string, messageId: string) {
+  if (agent !== 'claude') return undefined
+  const path = claudeTranscriptFor(cwd, agentSessionId, defaultAgentDataDirs())
+  return path ? claudeResumePoint(path, messageId) : undefined
+}
+
 async function readImage(path: string): Promise<ImageBlock | null> {
   try {
     if ((await stat(path)).size > MAX_IMAGE_BYTES) return null
@@ -113,6 +119,7 @@ const host = new GuiHost<WebContents>({
   link: () => pipeLink(),
   prepare,
   history,
+  resumePoint,
   status: (sessionId, agent, events, owner) => {
     const at = Date.now()
     for (const event of events) emitGuiAgentEvent({ sessionId, agent: hookAgentOf(agent), at, event }, owner)
@@ -196,6 +203,14 @@ export function registerGuiHandlers(): void {
     const queued = parseGuiValue(rawQueued)
     const text = parseGuiText(rawText)
     return id !== null && queued !== null && text !== null && host.editQueued(id, queued, text)
+  })
+
+  ipcMain.handle(GUI_IPC.edit, (event, rawId: unknown, rawMessage: unknown, rawText: unknown): Promise<GuiOpenResult> => {
+    const id = owned(event.sender, rawId)
+    const messageId = parseGuiValue(rawMessage)
+    const text = parseGuiText(rawText)
+    if (!id || !messageId || text === null || !text.trim()) return Promise.resolve({ ok: false, reason: '消息无效' })
+    return host.edit(id, messageId, text)
   })
 
   ipcMain.handle(GUI_IPC.stop, async (event, rawId: unknown): Promise<void> => {

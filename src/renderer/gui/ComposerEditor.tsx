@@ -31,11 +31,24 @@ interface Props {
   onKeyDown(event: KeyboardEvent, caret: CaretContext): boolean
   editorRef: RefObject<Editor | null>
   toolbarOpen: boolean
+  /** The text box's name and placeholder (default 回复). */
+  label?: string
+  /** Takes the keyboard, the caret at the end, as soon as it is there (an inline edit). */
+  autoFocus?: boolean
 }
 
 const caretOf = (editor: Editor): CaretContext => ({ inCode: editor.isActive('codeBlock'), inList: editor.isActive('listItem'), inQuote: editor.isActive('blockquote') })
 
-export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, toolbarOpen }: Props) {
+/** ⇧⏎: a new item in a list (an empty one leaves the list), a newline in a code block, else a new line. */
+export function insertNewline(editor: Editor, caret: CaretContext): void {
+  if (caret.inCode) editor.view.dispatch(editor.state.tr.insertText('\n'))
+  else if (caret.inList) void (editor.commands.splitListItem('listItem') || editor.commands.liftListItem('listItem'))
+  else if (caret.inQuote && editor.state.selection.$from.parent.content.size === 0) editor.commands.lift('blockquote')
+  // A new line starts plain: inline code or bold at the end of the line above does not carry on.
+  else editor.commands.splitBlock({ keepMarks: false })
+}
+
+export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, toolbarOpen, label = '回复', autoFocus = false }: Props) {
   // The text the editor last reported: a draft equal to it came from the editor itself.
   const reported = useRef(draft)
   // The editor's callbacks are set once; they reach the latest props through this.
@@ -48,15 +61,16 @@ export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, toolbarO
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: false, horizontalRule: false, underline: false, link: false, dropcursor: false, trailingNode: false }),
-      Placeholder.configure({ placeholder: '回复' })
+      Placeholder.configure({ placeholder: label })
     ],
     content: textDoc(draft),
+    autofocus: autoFocus ? 'end' : false,
     // Only the line-start shortcuts (lists, quote, code block); `**x**` and the like stay as typed. No paste rules.
     enableInputRules: ['bulletList', 'orderedList', 'blockquote', 'codeBlock'],
     enablePasteRules: false,
     shouldRerenderOnTransaction: false,
     editorProps: {
-      attributes: { class: styles.input ?? '', role: 'textbox', 'aria-label': '回复', 'aria-multiline': 'true', 'data-gui-input': '', spellcheck: 'false' },
+      attributes: { class: styles.input ?? '', role: 'textbox', 'aria-label': label, 'aria-multiline': 'true', 'data-gui-input': '', spellcheck: 'false' },
       handleKeyDown: (view, event) => {
         const current = editorRef.current
         return current ? handlers.current.onKeyDown(event, caretOf(current)) : false

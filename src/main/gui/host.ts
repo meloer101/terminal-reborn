@@ -7,7 +7,7 @@
 import type { AgentEvent } from '@shared/agent-events'
 import type { CliAgent } from '@shared/agents'
 import { AGENT_GUI } from '@shared/gui-agents'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
@@ -43,6 +43,11 @@ export interface GuiHostDeps<O extends GuiOwner> {
   prepare(launch: GuiLaunch, owner: O, resume: string | undefined): Promise<PreparedLaunch>
   /** The earlier conversation `agentSessionId` names, from the agent's transcript; null when there is none. */
   history(agent: CliAgent, cwd: string, agentSessionId: string): Promise<ChatItem[] | null>
+  /**
+   * An edit of the prompt `messageId` (Claude): the message to resume up to (`--resume-session-at`), null when it is the
+   * conversation's first message, undefined when the transcript has no such prompt.
+   */
+  resumePoint(agent: CliAgent, cwd: string, agentSessionId: string, messageId: string): Promise<string | null | undefined>
   /**
    * Status for the session's owner: everything for the agents without hooks (and a Claude whose hooks do not reach the
    * app, PreparedLaunch.synthStatus), start and exit for Claude (PRD §3.1).
@@ -97,7 +102,9 @@ class GuiSession<O extends GuiOwner> {
   constructor(
     readonly launch: GuiLaunch,
     owner: O,
-    private readonly deps: GuiHostDeps<O>
+    private readonly deps: GuiHostDeps<O>,
+    /** An edit: the conversation kept before the edited message, drawn instead of reading the transcript. */
+    private readonly kept?: readonly ChatItem[]
   ) {
     this.owner = owner
     this.protocol = AGENT_GUI[launch.agent]?.protocol ?? 'acp'
@@ -181,8 +188,11 @@ class GuiSession<O extends GuiOwner> {
 
   private async spawn(resume: string | undefined): Promise<GuiOpenResult> {
     this.driver = this.createDriver(resume)
-    // Claude and Codex do not replay a resumed conversation over the protocol: read it from the transcript.
-    if (resume && this.protocol !== 'acp') {
+    // Claude and Codex do not replay a resumed conversation over the protocol: read it from the transcript. After an
+    // edit the transcript still holds the cut turns until the new message is written: what was kept is drawn instead.
+    if (this.kept) {
+      if (this.kept.length > 0) this.emit([{ type: 'reset', items: [...this.kept] }])
+    } else if (resume && this.protocol !== 'acp') {
       const items = await this.deps.history(this.launch.agent, this.launch.cwd, resume).catch(() => null)
       if (items && items.length > 0) this.emit([{ type: 'reset', items }])
     }
@@ -513,6 +523,37 @@ export class GuiHost<O extends GuiOwner> {
 
   editQueued(sessionId: string, queuedId: string, text: string): boolean {
     return this.sessions.get(sessionId)?.editQueued(queuedId, text) ?? false
+  }
+
+  /**
+   * Asks again from the earlier prompt `messageId` (PRD F23 编辑, Figma 54C): the agent is restarted on the
+   * conversation before it (Claude `--resume-session-at`; a new conversation for the first message) and `text` goes as
+   * its first message. Files the agent changed stay as they are.
+   */
+  async edit(sessionId: string, messageId: string, text: string): Promise<GuiOpenResult> {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.exited || !guiCanEdit(session.launch.agent)) return { ok: false, reason: '这个会话不能改之前的消息' }
+    const { state, launch } = session
+    if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return { ok: false, reason: '先停止这一轮再改' }
+    const index = state.items.findIndex((item) => item.kind === 'user' && item.id === messageId)
+    const owner = session.owner
+    if (index < 0 || !owner) return { ok: false, reason: '找不到这条消息' }
+    const agentSessionId = session.agentSessionId
+    const at = agentSessionId ? await this.deps.resumePoint(launch.agent, launch.cwd, agentSessionId, messageId).catch(() => undefined) : null
+    if (at === undefined) return { ok: false, reason: '对话记录里找不到这条消息' }
+    if (this.sessions.get(sessionId) !== session || session.state.busy) return { ok: false, reason: '先停止这一轮再改' }
+    const next: GuiLaunch = { ...launch, initialPrompt: text }
+    delete next.resumeAgentSessionId
+    delete next.resumeAt
+    if (at && agentSessionId) Object.assign(next, { resumeAgentSessionId: agentSessionId, resumeAt: at })
+    // The pipe host drops a killed session at once (messages are handled in order): `begin` starts a new process.
+    this.sessions.delete(sessionId)
+    session.stop()
+    const replacement = new GuiSession(next, owner, this.deps, state.items.slice(0, index))
+    this.sessions.set(sessionId, replacement)
+    const result = await replacement.begin(next.resumeAgentSessionId)
+    if (!result.ok && this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
+    return result
   }
 
   stop(sessionId: string): void {

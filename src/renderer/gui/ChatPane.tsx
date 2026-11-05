@@ -5,7 +5,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { agentName } from '@shared/agents'
-import { emptyGuiState, type GuiAnswer } from '@shared/gui-chat'
+import { emptyGuiState, guiCanEdit, type GuiAnswer } from '@shared/gui-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { attachFileInput } from '../terminal/file-input'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -13,7 +13,7 @@ import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
 import { Feed } from './Feed'
 import { cardKey, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
-import { addAttachments, clearComposer, setDraft, useGuiSessions } from './store'
+import { addAttachments, clearComposer, setDraft, setGuiState, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const EMPTY = emptyGuiState()
@@ -86,6 +86,23 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
     [sessionId, willQueue, users]
   )
   const interrupt = useCallback(() => void window.tr.gui.interrupt(sessionId).catch(() => {}), [sessionId])
+
+  // Figma 54C: ask again from an earlier message. The agent restarts on the conversation before it; the new text shows
+  // at once, like a sent message, until the agent's own copy comes.
+  const edit = useCallback(
+    async (messageId: string, text: string): Promise<string | null> => {
+      setSendError(null)
+      const result = await window.tr.gui.edit(sessionId, messageId, text).catch((error: unknown) => ({ ok: false as const, reason: error instanceof Error ? error.message : String(error) }))
+      if (!result.ok) {
+        setSendError(result.reason)
+        return result.reason
+      }
+      setGuiState(sessionId, result.state)
+      setPending({ id: `pending-${Date.now()}`, text, users: userCount(result.state.items), at: Date.now() })
+      return null
+    },
+    [sessionId]
+  )
   const setConfig = useCallback((optionId: string, value: string) => void window.tr.gui.setConfig(sessionId, optionId, value).catch(() => {}), [sessionId])
 
   /**
@@ -123,7 +140,16 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         }
       }}
     >
-      <Feed sessionId={sessionId} agent={agent} items={items} live={state.live} waitingTool={waitingToolId(state.items, state.prompts)} />
+      <Feed
+        sessionId={sessionId}
+        agent={agent}
+        items={items}
+        live={state.live}
+        waitingTool={waitingToolId(state.items, state.prompts)}
+        busy={state.busy}
+        canEdit={guiCanEdit(agent) && !prompt && state.queued.length === 0}
+        onEdit={edit}
+      />
       <div className={styles.dock}>
         {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (

@@ -24,6 +24,7 @@ import {
   userBubble,
   userMarkdown,
   withPendingSend,
+  turnEnds,
   turnStarts,
   liveStartsTurn,
   waitingToolId
@@ -269,5 +270,21 @@ describe('composer', () => {
     expect(stepIndex(2, 1, 3)).toBe(0)
     expect(stepIndex(0, -1, 3)).toBe(2)
     expect(stepIndex(0, 1, 0)).toBe(-1)
+  })
+
+  it('puts copy · time after the last block of each finished turn that has words (Figma 54B)', () => {
+    const items: ChatItem[] = [
+      { kind: 'user', id: 'u1', at: 1, text: 'hi', images: 0 },
+      { kind: 'text', id: 't1', at: 2, text: 'Looking.' },
+      { kind: 'tool', id: 'k1', at: 3, name: 'Read', arg: 'a.ts', state: 'ok' },
+      { kind: 'text', id: 't2', at: 4, text: 'Done.' },
+      { kind: 'user', id: 'u2', at: 5, text: 'and?', images: 0 },
+      { kind: 'tool', id: 'k2', at: 6, name: 'Bash', arg: 'ls', state: 'ok' },
+      { kind: 'user', id: 'u3', at: 7, text: 'more', images: 0 },
+      { kind: 'text', id: 't3', at: 8, text: 'Going.' }
+    ]
+    const blocks = feedBlocks(items)
+    expect([...turnEnds(blocks, true)]).toEqual([['t2', { text: 'Looking.\n\nDone.', at: 4 }]])
+    expect([...turnEnds(blocks, false).keys()]).toEqual(['t2', 't3'])
   })
 })

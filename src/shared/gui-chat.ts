@@ -104,6 +104,11 @@ export interface GuiLaunch {
   initialPrompt?: string
   /** Launched by F21 dispatch: `wavi` on PATH like a dispatched TUI. */
   dispatched?: boolean
+  /**
+   * Main only (an edit, never from a renderer): Claude resumes `resumeAgentSessionId` up to this message
+   * (`--resume-session-at`), dropping what came after it.
+   */
+  resumeAt?: string
 }
 
 export type GuiOpenResult =
@@ -131,6 +136,11 @@ export interface GuiApi {
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean>
   /** Edits a queued message; an empty text removes it. */
   editQueued(sessionId: string, queuedId: string, text: string): Promise<boolean>
+  /**
+   * Asks again from an earlier message of yours (Figma 54C): the conversation after it is dropped and `text` is sent
+   * in its place. Claude only (`guiCanEdit`); not while a turn runs. The state to draw comes back.
+   */
+  edit(sessionId: string, messageId: string, text: string): Promise<GuiOpenResult>
   /** Ends the agent process (closing the session), also one this app run never opened. */
   stop(sessionId: string): Promise<void>
   /** Agent processes the pipe host holds that no other window owns (to adopt, or end, at load). */
@@ -146,11 +156,15 @@ export const GUI_IPC = {
   interrupt: 'gui:interrupt',
   setConfig: 'gui:set-config',
   editQueued: 'gui:edit-queued',
+  edit: 'gui:edit',
   stop: 'gui:stop',
   live: 'gui:live',
   /** main → renderer */
   events: 'gui:events'
 } as const
+
+/** An agent whose earlier messages can be edited (PRD F23 编辑): Claude resumes up to a message; Codex and ACP not yet. */
+export const guiCanEdit = (agent: string): boolean => agent === 'claude'
 
 export function emptyGuiState(): GuiState {
   return { items: [], live: null, prompts: [], busy: false, config: [], commands: [], queued: [], failure: null }

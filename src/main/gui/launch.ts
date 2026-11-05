@@ -27,7 +27,7 @@ export interface GuiArgvInput {
   agent: CliAgent
   /** The folder the agent runs in, resolved (Codex's per-launch trust names it). */
   realCwd: string
-  launch: Pick<GuiLaunch, 'model'>
+  launch: Pick<GuiLaunch, 'model' | 'resumeAt'>
   /** Continue this conversation (Claude `--resume`; Codex and ACP resume over their protocol). */
   resume?: string
   /** Claude's per-launch hooks file (src/main/hooks). */
@@ -44,7 +44,9 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
   if (!driver) return null
   const binary = guiBinary(input.agent, AGENT_SPECS[input.agent].binary)
   if (driver.protocol === 'claude-stream') {
-    const resume = isSafeAgentSessionId(input.resume) ? ['--resume', input.resume] : []
+    const resume = isSafeAgentSessionId(input.resume)
+      ? ['--resume', input.resume, ...(isSafeAgentSessionId(input.launch.resumeAt) ? ['--resume-session-at', input.launch.resumeAt] : [])]
+      : []
     const model = input.launch.model && MODEL.test(input.launch.model) ? ['--model', input.launch.model] : []
     return [binary, ...CLAUDE_STREAM_ARGS, ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
   }

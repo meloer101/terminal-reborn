@@ -225,6 +225,8 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Figma 50 和实现（PRD v1.126）：对话流从上往下排、按普通聊天滚动（v1.129 去掉了发出后钉到顶部）；图片附件 64 缩略图；输入框换成 Tiptap，列表 / 引用 / 代码块 / 粗斜删 / 行内代码，「格式」工具栏和选区浮条，发出去的是只在有格式处加标记的 Markdown（`rich-text.ts`）；e2e `gui-session.spec.ts` 加到 13 个
 - [x] Figma 51 和实现（PRD v1.127）：头像（51A）、你的消息按 Markdown 显示、设置 · 外观 ·「对话」（头像、宽度四档、字体、字重、字号）、对话不透明度、窗口材质（液态玻璃 / 磨砂玻璃）和窗口底层不透明度；e2e `gui-session.spec.ts` 15 个、`settings.spec.ts` 加一个
 - [x] Figma 52 和实现（PRD v1.130）：输入框一行（「+」· 文字 · 发送），框下「格式」、选择器和 context 圆环，点圆环看 context 和当前 agent 的额度（行样式同设置 · 额度，共用 `session-meta/UsageRows`）；GUI 会话的会话头去掉 context 和额度；@ 按钮去掉；e2e `gui-session.spec.ts` 17 个
+- [x] Figma 54 和实现（PRD v1.132）：消息悬停出现复制 / 编辑和时间，代码块和工具输出可复制；Claude 会话改之前的消息重新问（`--resume-session-at` 重开，读历史只取 transcript 当前分支）；输入框下一行离底边改为 8；e2e `gui-session.spec.ts` 19 个
+- [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
 - [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；`/` 菜单不分「命令 / Skills」；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
 - [ ] 没做：总览浮层里 GUI 会话不显示聊天；`wavi run` 派出的子会话仍是 CLI；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上；ACP agent 的状态事件 agent 字段暂报 `opencode`

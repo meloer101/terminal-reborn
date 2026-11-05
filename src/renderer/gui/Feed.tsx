@@ -3,15 +3,34 @@
 // rows grouped 8 apart — 16 between blocks, and the block being streamed. Each
 // block is memoised on its items (applyGuiEvent keeps unchanged items by identity), so a streamed delta re-renders
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
+// Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
+// time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import type { Editor } from '@tiptap/react'
+import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
+import { formatClock } from '@shared/session-meta'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
-import { feedBlocks, liveStartsTurn, sentMessage, thinkingLabel, toolView, turnStarts, userBubble, userMarkdown, type FeedBlock, type StepItem } from './model'
+import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
+import { CopyButton } from './CopyButton'
+import {
+  composerKey,
+  feedBlocks,
+  liveStartsTurn,
+  sentMessage,
+  thinkingLabel,
+  toolView,
+  turnEnds,
+  turnStarts,
+  userBubble,
+  userMarkdown,
+  type FeedBlock,
+  type StepItem
+} from './model'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -19,9 +38,30 @@ const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
 
-export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId: SessionId; agent: AgentKind; items: readonly ChatItem[]; live: GuiLive | null; waitingTool: string | null }) {
+interface FeedProps {
+  sessionId: SessionId
+  agent: AgentKind
+  items: readonly ChatItem[]
+  live: GuiLive | null
+  waitingTool: string | null
+  /** A turn runs: its reply has no actions yet, and nothing can be edited. */
+  busy: boolean
+  /** The agent can ask again from an earlier message (guiCanEdit) and nothing waits on the user. */
+  canEdit: boolean
+  /** Asks again from `messageId` with `text`; the reason when it did not. */
+  onEdit(messageId: string, text: string): Promise<string | null>
+}
+
+export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit }: FeedProps) {
   const blocks = useMemo(() => feedBlocks(items), [items])
   const starts = useMemo(() => turnStarts(blocks), [blocks])
+  const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  // The message being edited, while it is still there (an edit sent replaces the conversation after it).
+  const editingAt = editingId === null ? -1 : blocks.findIndex((b) => b.kind === 'item' && b.item.id === editingId)
+  const editing = editingAt >= 0 ? editingId : null
+  const startEdit = useCallback((id: string) => setEditingId(id), [])
+  const cancelEdit = useCallback(() => setEditingId(null), [])
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
@@ -61,17 +101,27 @@ export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId
   return (
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
-        {blocks.map((block) =>
+        {blocks.map((block, i) =>
           block.kind === 'item' && block.item.kind === 'user' ? (
-            <UserBubble key={block.key} sessionId={sessionId} id={block.item.id} text={block.item.text} />
+            <UserMessage
+              key={block.key}
+              sessionId={sessionId}
+              item={block.item}
+              faded={editingAt >= 0 && i > editingAt}
+              editable={canEdit && !busy && !block.item.id.startsWith('pending-')}
+              editing={editing === block.item.id}
+              onStartEdit={startEdit}
+              onCancel={cancelEdit}
+              onSave={onEdit}
+            />
           ) : (
-            <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)}>
+            <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)} faded={editingAt >= 0 && i > editingAt} end={ends.get(block.key)}>
               <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && block.items.some((i) => i.id === waitingTool) ? waitingTool : null} />
             </AgentTurn>
           )
         )}
         {live && (
-          <AgentTurn agent={agent} start={liveStartsTurn(blocks)}>
+          <AgentTurn agent={agent} start={liveStartsTurn(blocks)} faded={editingAt >= 0}>
             <Live sessionId={sessionId} live={live} />
           </AgentTurn>
         )}
@@ -110,34 +160,130 @@ function sameBlock(a: FeedBlock, b: FeedBlock): boolean {
   return a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i])
 }
 
-/** 51A: the agent's part of a turn, after its mark; the mark beside the first block only. */
-function AgentTurn({ agent, start, children }: { agent: AgentKind; start: boolean; children: ReactNode }) {
+/** When a message was sent or a turn ended: `15:04`, with the date on another day. */
+const timeOf = (at: number): string => (at > 0 ? formatClock(at, Date.now()) : '')
+
+/**
+ * 51A: the agent's part of a turn, after its mark; the mark beside the first block only. 54B: after the last block of
+ * a finished turn, copy (the turn's Markdown) · time, shown on hover.
+ */
+function AgentTurn({ agent, start, faded, end, children }: { agent: AgentKind; start: boolean; faded: boolean; end?: { text: string; at: number }; children: ReactNode }) {
   return (
-    <div className={styles.agentTurn} data-start={start || undefined}>
+    <div className={styles.agentTurn} data-start={start || undefined} data-faded={faded || undefined}>
       {start && (
         <span className={styles.agentAvatar} data-agent-mark aria-hidden>
           <AgentIcon kind={agent} size={16} />
         </span>
       )}
       {children}
+      {end && (
+        <div className={styles.messageActions} data-testid="gui-turn-actions">
+          <CopyButton text={end.text} />
+          <span className={styles.messageTime}>{timeOf(end.at)}</span>
+        </div>
+      )}
     </div>
   )
 }
 
-/** 51A: what the user sent, as Markdown, with their picture beside it when they set one (设置 · 外观 · 对话). */
-const UserBubble = memo(function UserBubble({ sessionId, id, text }: { sessionId: SessionId; id: string; text: string }) {
-  const { header, body } = userBubble(text)
+interface UserMessageProps {
+  sessionId: SessionId
+  item: Extract<ChatItem, { kind: 'user' }>
+  faded: boolean
+  editable: boolean
+  editing: boolean
+  onStartEdit(id: string): void
+  onCancel(): void
+  onSave(id: string, text: string): Promise<string | null>
+}
+
+/**
+ * 51A: what the user sent, as Markdown, with their picture beside it when they set one (设置 · 外观 · 对话). 54A: time ·
+ * copy · edit under it on hover; 54C: editing, a text box in its place.
+ */
+const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave }: UserMessageProps) {
+  const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
   return (
-    <div className={styles.userRow} data-item={id}>
-      <div className={styles.bubble}>
-        {header && <span className={styles.bubbleHeader}>{header}</span>}
-        <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
+    <div className={styles.userRow} data-item={item.id} data-faded={faded || undefined}>
+      <div className={styles.userColumn}>
+        {editing ? (
+          <InlineEdit text={item.text} onCancel={onCancel} onSave={(text) => onSave(item.id, text)} />
+        ) : (
+          <>
+            <div className={styles.bubble}>
+              {header && <span className={styles.bubbleHeader}>{header}</span>}
+              <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
+            </div>
+            <div className={styles.messageActions} data-testid="gui-message-actions">
+              <span className={styles.messageTime}>{timeOf(item.at)}</span>
+              <CopyButton text={item.text} />
+              {editable && (
+                <button type="button" className={styles.actionIcon} aria-label="编辑" title="编辑" onClick={() => onStartEdit(item.id)}>
+                  <Pencil {...ICON} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
       <span className={styles.userAvatar} aria-hidden />
     </div>
   )
 })
+
+/** 54C: the message as text to change; ⏎ sends it in the original's place (the rest is dropped), ⎋ cancels. */
+function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void; onSave(text: string): Promise<string | null> }) {
+  const [draft, setDraft] = useState(text)
+  const [sending, setSending] = useState(false)
+  const editorRef = useRef<Editor | null>(null)
+  const submit = (): void => {
+    if (!draft.trim() || sending) return
+    setSending(true)
+    void onSave(draft).then((reason) => {
+      if (reason) setSending(false)
+    })
+  }
+  const onKeyDown = (event: KeyboardEvent, caret: CaretContext): boolean => {
+    if (event.key === 'Escape' && !event.isComposing) {
+      onCancel()
+      return true
+    }
+    const { key, shiftKey, metaKey, ctrlKey, altKey, keyCode, isComposing } = event
+    const action = composerKey({ key, shiftKey, metaKey, ctrlKey, altKey, keyCode, isComposing }, { menuOpen: false, busy: false, inCode: caret.inCode })
+    if (action === 'send') {
+      submit()
+      return true
+    }
+    // ⏎ in a code block is the editor's (three in a row leave it).
+    if (action !== 'newline' || (caret.inCode && !shiftKey) || !editorRef.current) return false
+    insertNewline(editorRef.current, caret)
+    return true
+  }
+  return (
+    <div
+      className={styles.editBox}
+      data-testid="gui-edit"
+      // ⎋ from its buttons too.
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || e.nativeEvent.isComposing) return
+        e.preventDefault()
+        e.stopPropagation()
+        onCancel()
+      }}
+    >
+      <ComposerEditor draft={draft} onChange={setDraft} onKeyDown={onKeyDown} editorRef={editorRef} toolbarOpen={false} label="编辑消息" autoFocus />
+      <div className={styles.editButtons}>
+        <button type="button" className={styles.button} disabled={sending} onClick={onCancel}>
+          取消
+        </button>
+        <button type="button" className={styles.button} data-primary="true" disabled={sending || !draft.trim()} onClick={submit}>
+          发送
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
   const [open, setOpen] = useState(false)
@@ -166,8 +312,12 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
         {view.waiting && <span className={styles.waiting}>等你确认</span>}
       </button>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
-      {open && item.diff && <Diff diff={item.diff} />}
-      {open && !item.diff && item.output && <pre className={styles.output}>{item.output}</pre>}
+      {open && (item.diff || item.output) && (
+        <div className={styles.codeWrap}>
+          {item.diff ? <Diff diff={item.diff} /> : <pre className={styles.output}>{item.output}</pre>}
+          <CopyButton text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : (item.output ?? ''))} label="复制输出" className={styles.cornerCopy} />
+        </div>
+      )}
     </div>
   )
 }

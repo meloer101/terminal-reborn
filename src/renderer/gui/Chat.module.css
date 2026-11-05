@@ -39,7 +39,8 @@
   align-items: center;
   gap: var(--space-8);
   height: 100%;
-  padding-bottom: var(--space-16);
+  /* 8 under the row below the composer: its 16 icons sit 14 from the edge, as + and send do inside the box (52F). */
+  padding-bottom: var(--space-8);
   box-sizing: border-box;
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -128,11 +129,21 @@
   color: inherit;
 }
 
+/* The bubble and, under it, its actions (Figma 54A), right-aligned. */
+.userColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: 83%;
+}
+
 .bubble {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 83%;
+  max-width: 100%;
   padding: var(--space-8) var(--space-12);
   border-radius: var(--radius-window);
   background: var(--bg-selected);
@@ -429,6 +440,12 @@
   border-color: transparent;
   background: var(--fill-primary);
   color: var(--text-inverse);
+}
+
+/* Hover keeps the fill (the plain hover's bg/hover under white text read as disabled). */
+.button[data-primary='true']:hover:not(:disabled) {
+  background: var(--fill-primary);
+  opacity: 0.88;
 }
 
 .button:disabled {
@@ -887,6 +904,100 @@
   flex-direction: column;
 }
 
+/* Figma 54A / 54B: a message's actions, 24 high, shown while the pointer is on the message (or the keyboard in them);
+   their place is kept so nothing moves. */
+.messageActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.agentTurn > .messageActions {
+  margin-top: var(--space-4);
+}
+
+.userRow:hover .messageActions,
+.agentTurn:hover > .messageActions,
+.messageActions:focus-within {
+  opacity: 1;
+}
+
+.messageTime {
+  padding: 0 var(--space-4);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.actionIcon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+}
+
+.actionIcon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.actionIcon:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* A code block or a tool's output with its copy button in the top-right corner, shown on hover (54B). */
+.codeWrap {
+  position: relative;
+}
+
+.cornerCopy {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: var(--bg-hover);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.codeWrap:hover > .cornerCopy,
+.cornerCopy:focus-visible {
+  opacity: 1;
+}
+
+/* 54C: editing an earlier message — a text box in its place (the composer's look, 480 at most); what came after it
+   is faded until the edit is sent or cancelled. */
+.feed > [data-faded] {
+  opacity: 0.4;
+}
+
+.editBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  width: 480px;
+  max-width: 100%;
+  padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+}
+
+.editButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
 /* Stop (a running turn) / send: a 28 circle, filled. */
 .round {
   display: inline-grid;
@@ -1043,6 +1154,11 @@
 @media (prefers-reduced-motion: reduce) {
   .popover {
     animation-name: pop-fade;
+  }
+
+  .messageActions,
+  .cornerCopy {
+    transition: none;
   }
 
   .button,

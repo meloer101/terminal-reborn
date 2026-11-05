@@ -39,7 +39,13 @@ afterEach(() => {
   for (const link of links.splice(0)) link.killAll()
 })
 
-function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, batchMs = 5, synthStatus = false): Harness {
+interface EditDeps {
+  resumePoint?: () => Promise<string | null | undefined>
+  /** Every launch `prepare` was asked for. */
+  prepared?: GuiLaunch[]
+}
+
+function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, batchMs = 5, synthStatus = false, edits: EditDeps = {}): Harness {
   links.push(link)
   const owner = new FakeOwner()
   const status: AgentEvent[] = []
@@ -48,16 +54,19 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, 
   const opened = new Map<string, GuiState>()
   const host = new GuiHost<FakeOwner>({
     link: () => link,
-    prepare: (launch) =>
-      Promise.resolve({
+    prepare: (launch) => {
+      edits.prepared?.push(launch)
+      return Promise.resolve({
         command: process.execPath,
         args: [join(FIXTURES, FAKES[launch.agent]!)],
         env: {},
         baseEnv: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
         binary: FAKES[launch.agent]!,
         ...(synthStatus ? { synthStatus } : {})
-      }),
+      })
+    },
     history: () => Promise.resolve(history),
+    resumePoint: edits.resumePoint ?? (() => Promise.resolve(undefined)),
     status: (_id, _agent, events) => status.push(...events),
     adopted: (id) => adopted.push(id),
     ended: (id) => ended.push(id),
@@ -191,6 +200,49 @@ describe('GuiHost · Claude stream-json', () => {
     expect(batches.some((b) => b.events.some((e) => e.type === 'live' && e.live !== null))).toBe(true)
     for (const b of batches) expect(b.events.filter((e) => e.type === 'live').length).toBeLessThanOrEqual(1)
     expect(h.view('c5')).toEqual(stateOf(h, 'c5'))
+  }, 30_000)
+
+  it('edits an earlier message: restarts at the message before it, keeps what came before, sends the new text', async () => {
+    const prepared: GuiLaunch[] = []
+    const h = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve('reply-1'), prepared })
+    await h.host.open(launchOf('claude', 'c9'), h.owner)
+    await ready(h, 'c9')
+    for (const text of ['first', 'second']) {
+      await h.host.send('c9', { text, attachments: [] })
+      await until(() => !stateOf(h, 'c9').busy && texts(stateOf(h, 'c9')).includes(`text:Hello: ${text}`))
+    }
+    const second = stateOf(h, 'c9').items.find((i) => i.kind === 'user' && i.text === 'second')!
+    const edited = await h.host.edit('c9', second.id, 'second, edited')
+    expect(edited.ok).toBe(true)
+    await until(() => !stateOf(h, 'c9').busy && texts(stateOf(h, 'c9')).includes('text:Hello: second, edited'))
+    expect(texts(stateOf(h, 'c9'))).toEqual(['user:first', 'text:Hello: first', 'user:second, edited', 'text:Hello: second, edited'])
+    expect(prepared.at(-1)).toMatchObject({ resumeAgentSessionId: 'fake-claude-session', resumeAt: 'reply-1', initialPrompt: 'second, edited' })
+    // The first message of the conversation: a new conversation, nothing kept.
+    const h2 = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve(null), prepared })
+    await h2.host.open(launchOf('claude', 'c10', { resumeAgentSessionId: 'old' }), h2.owner)
+    await ready(h2, 'c10')
+    await h2.host.send('c10', { text: 'only', attachments: [] })
+    await until(() => !stateOf(h2, 'c10').busy && texts(stateOf(h2, 'c10')).includes('text:Hello: only'))
+    const only = stateOf(h2, 'c10').items.find((i) => i.kind === 'user')!
+    expect((await h2.host.edit('c10', only.id, 'again')).ok).toBe(true)
+    await until(() => texts(stateOf(h2, 'c10')).includes('text:Hello: again'))
+    expect(texts(stateOf(h2, 'c10'))).toEqual(['user:again', 'text:Hello: again'])
+    expect(prepared.at(-1)?.resumeAgentSessionId).toBeUndefined()
+  }, 30_000)
+
+  it('refuses an edit while a turn runs, of a message it does not have, or one the transcript lacks', async () => {
+    const h = harness(new LocalPipeLink(), null, 5, false, { resumePoint: () => Promise.resolve(undefined) })
+    await h.host.open(launchOf('claude', 'c11'), h.owner)
+    await ready(h, 'c11')
+    await h.host.send('c11', { text: 'slow answer', attachments: [] })
+    await until(() => stateOf(h, 'c11').busy && stateOf(h, 'c11').items.some((i) => i.kind === 'user'))
+    const sent = stateOf(h, 'c11').items.find((i) => i.kind === 'user')!
+    expect(await h.host.edit('c11', sent.id, 'x')).toEqual({ ok: false, reason: '先停止这一轮再改' })
+    h.host.interrupt('c11')
+    await until(() => !stateOf(h, 'c11').busy)
+    expect(await h.host.edit('c11', 'nope', 'x')).toEqual({ ok: false, reason: '找不到这条消息' })
+    expect(await h.host.edit('c11', sent.id, 'x')).toEqual({ ok: false, reason: '对话记录里找不到这条消息' })
+    expect(await h.host.edit('missing', sent.id, 'x')).toMatchObject({ ok: false })
   }, 30_000)
 
   it('reattaches to a process the pipe host kept running and replays its lines', async () => {
@@ -373,6 +425,7 @@ describe('GuiHost · ACP', () => {
       link: () => terminalsOnly,
       prepare: () => Promise.reject(new Error('not in this test')),
       history: () => Promise.resolve(null),
+      resumePoint: () => Promise.resolve(undefined),
       status: () => undefined,
       adopted: () => undefined,
       ended: () => undefined,
@@ -418,6 +471,7 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
       link: () => link,
       prepare: () => Promise.reject(new Error('not in this test')),
       history: () => Promise.resolve(history),
+      resumePoint: () => Promise.resolve(undefined),
       status: () => undefined,
       adopted: (id) => adopted.push(id),
       ended: () => undefined,

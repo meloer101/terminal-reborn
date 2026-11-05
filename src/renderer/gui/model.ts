@@ -86,6 +86,31 @@ export function turnStarts(blocks: readonly FeedBlock[]): Set<string> {
   return starts
 }
 
+/**
+ * Figma 54B: the last block of each finished agent turn that has words, with the turn's Markdown (its text blocks, a
+ * blank line apart) and when its last block came. The turn still going on (`ongoing`) has none yet.
+ */
+export function turnEnds(blocks: readonly FeedBlock[], ongoing: boolean): Map<string, { text: string; at: number }> {
+  const ends = new Map<string, { text: string; at: number }>()
+  let texts: string[] = []
+  let last: { key: string; at: number } | null = null
+  const close = (): void => {
+    if (last && texts.length > 0) ends.set(last.key, { text: texts.join('\n\n'), at: last.at })
+    texts = []
+    last = null
+  }
+  for (const block of blocks) {
+    if (block.kind === 'item' && block.item.kind === 'user') {
+      close()
+      continue
+    }
+    if (block.kind === 'item' && block.item.kind === 'text') texts.push(block.item.text)
+    last = { key: block.key, at: block.kind === 'steps' ? block.items[block.items.length - 1]!.at : block.item.at }
+  }
+  if (!ongoing) close()
+  return ends
+}
+
 /** The streamed block starts the agent's part of the turn when nothing of it is in the feed yet. */
 export function liveStartsTurn(blocks: readonly FeedBlock[]): boolean {
   const last = blocks[blocks.length - 1]

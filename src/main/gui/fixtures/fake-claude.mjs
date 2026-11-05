@@ -1,12 +1,33 @@
 // A stand-in for `claude -p --input-format stream-json --output-format stream-json …` (PRD §6.17, the message shapes
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
 // "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
-// replays the message 1.5 s late.
-import { writeFileSync } from 'node:fs'
+// replays the message 1.5 s late. With CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real
+// CLI (`uuid` / `parentUuid`, a `--resume-session-at` resume hangs the next message under that message).
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 const SESSION = 'fake-claude-session'
-const out = (m) => process.stdout.write(`${JSON.stringify(m)}\n`)
 const args = process.argv.slice(2)
+const argAfter = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined)
+const transcript = process.env.CLAUDE_CONFIG_DIR
+  ? join(process.env.CLAUDE_CONFIG_DIR, 'projects', process.cwd().replace(/[^A-Za-z0-9]/g, '-'), `${SESSION}.jsonl`)
+  : null
+const lastUuid = () => {
+  if (!transcript || !existsSync(transcript)) return null
+  const lines = readFileSync(transcript, 'utf8').trim().split('\n')
+  return lines.length > 0 && lines[0] ? JSON.parse(lines[lines.length - 1]).uuid : null
+}
+let parent = argAfter('--resume-session-at') ?? (args.includes('--resume') ? lastUuid() : null)
+let assistants = 0
+const out = (m) => {
+  if (m.type === 'assistant' && !m.uuid) m = { ...m, uuid: `assistant-${process.pid}-${++assistants}` }
+  if (transcript && (m.type === 'assistant' || m.type === 'user') && m.uuid) {
+    mkdirSync(dirname(transcript), { recursive: true })
+    appendFileSync(transcript, `${JSON.stringify({ type: m.type, uuid: m.uuid, parentUuid: parent, sessionId: SESSION, message: m.message })}\n`)
+    parent = m.uuid
+  }
+  process.stdout.write(`${JSON.stringify(m)}\n`)
+}
 const log = process.env.FAKE_ARGS_FILE
 if (log) writeFileSync(log, JSON.stringify({ args, entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT ?? null }))
 
@@ -50,12 +71,14 @@ function finish(extra) {
   if (next) startTurn(next)
 }
 
+let replayed = 0
+
 function onUser(message) {
   const content = message.message.content
   const text = typeof content === 'string' ? content : content.filter((b) => b.type === 'text').map((b) => b.text).join('') + ` [${content.filter((b) => b.type === 'image').length} image]`
   const take = () => {
-    // --replay-user-messages: the message comes back as the conversation's.
-    out({ ...message, session_id: SESSION })
+    // --replay-user-messages: the message comes back as the conversation's, with its uuid (as the real CLI does).
+    out({ ...message, uuid: message.uuid ?? `user-${process.pid}-${++replayed}`, session_id: SESSION })
     if (turn) queue.push(text)
     else startTurn(text)
   }

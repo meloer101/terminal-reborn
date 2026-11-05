@@ -7,6 +7,7 @@ import { open, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createChatParser, type ChatItem } from '@shared/transcript-chat'
 import { claudeTranscriptPath, type AgentDataDirs } from '../hooks/agent-title'
+import { currentBranch, resumePointOf } from './claude-rewind'
 
 /** Like the phone's first read (remote/feed.ts): the newest part of a long transcript. */
 const READ_BYTES = 32 * 1024 * 1024
@@ -68,24 +69,49 @@ export async function codexRolloutFor(threadId: string, codexHome: string): Prom
   return null
 }
 
-/** Every chat item of a transcript (its newest READ_BYTES). */
-export async function readTranscript(source: TranscriptSource): Promise<ChatItem[] | null> {
+/** A transcript's lines (its newest READ_BYTES); null when it cannot be read. */
+async function readLines(path: string): Promise<string[] | null> {
   let handle: Awaited<ReturnType<typeof open>> | undefined
   try {
-    const size = (await stat(source.path)).size
+    const size = (await stat(path)).size
     const length = Math.min(size, READ_BYTES)
-    handle = await open(source.path, 'r')
+    handle = await open(path, 'r')
     const buffer = Buffer.alloc(length)
     await handle.read(buffer, 0, length, size - length)
     let text = buffer.toString('utf8')
     // Started mid-file: the first line is cut.
     if (length < size) text = text.slice(text.indexOf('\n') + 1)
-    const parser = createChatParser(source.agent)
-    for (const line of text.split('\n')) parser.push(line)
-    return parser.items.slice()
+    return text.split('\n')
   } catch {
     return null
   } finally {
     await handle?.close().catch(() => undefined)
   }
+}
+
+const parseRow = (line: string): Record<string, unknown> | null => {
+  try {
+    const value: unknown = JSON.parse(line)
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** Every chat item of a transcript; for Claude only its current branch (an edit leaves the cut turns in the file). */
+export async function readTranscript(source: TranscriptSource): Promise<ChatItem[] | null> {
+  const lines = await readLines(source.path)
+  if (!lines) return null
+  const keep = source.agent === 'claude' ? currentBranch(lines.map(parseRow)) : null
+  const parser = createChatParser(source.agent)
+  lines.forEach((line, i) => {
+    if (!keep || keep[i]) parser.push(line)
+  })
+  return parser.items.slice()
+}
+
+/** Claude: where `--resume-session-at` resumes to edit the prompt `messageId` (claude-rewind.ts resumePointOf). */
+export async function claudeResumePoint(path: string, messageId: string): Promise<string | null | undefined> {
+  const lines = await readLines(path)
+  return lines ? resumePointOf(lines.map(parseRow), messageId) : undefined
 }
