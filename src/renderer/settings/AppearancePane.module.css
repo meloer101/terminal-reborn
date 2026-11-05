@@ -167,7 +167,7 @@
   left: -100%;
 }
 
-/* 对话 (Figma 51D): my picture beside its buttons, and the chat preview, drawn with the app's --chat-* variables. */
+/* 对话 (Figma 51D): my picture beside its buttons, and the chat preview, drawn with the app's --chat-* font variables. */
 .avatar {
   width: 28px;
   height: 28px;
@@ -181,7 +181,8 @@
   gap: var(--space-16);
   padding: var(--space-20);
   border-radius: var(--radius-window);
-  background: var(--tr-chat-bg, var(--bg-app));
+  /* bg/section, as Figma 51D: the sheet is bg/app, the chat's own card colour would not show on it. */
+  background: var(--bg-section);
   font: var(--chat-weight, 400) var(--chat-size, 14px) / var(--chat-leading, 22px) var(--chat-font, var(--font-ui));
   color: var(--text-primary);
 }
