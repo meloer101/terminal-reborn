@@ -24,7 +24,12 @@ describe('guiArgv', () => {
   })
 
   it('ACP: the agent binary in ACP mode, or its adapter', () => {
-    expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: {} })).toEqual(['grok', 'agent', 'stdio'])
+    // Grok's permission mode is a launch argument (Figma 56): 询问 / 接受编辑 → default, 自动 → auto, 计划 → plan.
+    expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: {} })).toEqual(['grok', '--permission-mode', 'default', 'agent', 'stdio'])
+    expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: { permission: 'accept-edits' } })).toEqual(['grok', '--permission-mode', 'default', 'agent', 'stdio'])
+    expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: { permission: 'auto' } })).toEqual(['grok', '--permission-mode', 'auto', 'agent', 'stdio'])
+    expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: { permission: 'auto', plan: true } })).toEqual(['grok', '--permission-mode', 'plan', 'agent', 'stdio'])
+    expect(guiArgv({ agent: 'gemini', realCwd: '/r', launch: { permission: 'auto' } })).toEqual(['gemini', '--acp'])
     expect(guiArgv({ agent: 'pi', realCwd: '/r', launch: {} })).toEqual(['pi-acp'])
     expect(guiArgv({ agent: 'crush', realCwd: '/r', launch: {} })).toBeNull()
     expect(guiEnv('droid')).toMatchObject({ DROID_DISABLE_AUTO_UPDATE: 'true' })

@@ -4,13 +4,24 @@
 // user installs; Wavi never downloads one. Pure.
 
 import type { CliAgent } from './agents'
-import type { GuiProtocol } from './gui-chat'
+import type { GuiPermission, GuiProtocol } from './gui-chat'
+
+/**
+ * An ACP agent whose own permission mode is a launch argument (Figma 56): the arguments before its ACP ones for 询问
+ * (also 接受编辑, which Wavi answers), for 自动 when it has its own, and for 计划 when it has a plan mode. Changing one
+ * restarts the agent on its conversation.
+ */
+export interface GuiLaunchPermission {
+  ask: readonly string[]
+  auto?: readonly string[]
+  plan?: readonly string[]
+}
 
 export type GuiDriver =
   | { protocol: 'claude-stream' }
   | { protocol: 'codex-app-server' }
   /** The agent's own binary in ACP mode. */
-  | { protocol: 'acp'; args: readonly string[]; env?: Readonly<Record<string, string>> }
+  | { protocol: 'acp'; args: readonly string[]; env?: Readonly<Record<string, string>>; launchPermission?: GuiLaunchPermission }
   /** A separate ACP adapter for the agent. */
   | { protocol: 'acp'; adapter: { binary: string; args: readonly string[]; install: string } }
 
@@ -29,7 +40,12 @@ export const AGENT_GUI: Readonly<Record<CliAgent, GuiDriver | null>> = {
   pi: { protocol: 'acp', adapter: { binary: 'pi-acp', args: [], install: 'npm install -g pi-acp' } },
   copilot: { protocol: 'acp', args: ['--acp'] },
   cursor: { protocol: 'acp', args: ['acp'] },
-  grok: { protocol: 'acp', args: ['agent', 'stdio'] },
+  // `grok --help`: --permission-mode default | acceptEdits | auto | dontAsk | bypassPermissions | plan (2026-11-05).
+  grok: {
+    protocol: 'acp',
+    args: ['agent', 'stdio'],
+    launchPermission: { ask: ['--permission-mode', 'default'], auto: ['--permission-mode', 'auto'], plan: ['--permission-mode', 'plan'] }
+  },
   kimi: { protocol: 'acp', args: ['acp'] },
   droid: { protocol: 'acp', args: ['exec', '--output-format', 'acp-daemon'], env: { DROID_DISABLE_AUTO_UPDATE: 'true' } },
   amp: { protocol: 'acp', adapter: { binary: 'amp-acp', args: [], install: 'npm install -g amp-acp' } },
@@ -40,6 +56,22 @@ export const AGENT_GUI: Readonly<Record<CliAgent, GuiDriver | null>> = {
   antigravity: null,
   auggie: { protocol: 'acp', args: ['--acp'], env: { AUGMENT_DISABLE_AUTO_UPDATE: '1' } },
   codebuddy: { protocol: 'acp', args: ['--acp'] }
+}
+
+/** The launch arguments for a permission level and 计划 (an agent with launchPermission); none otherwise. */
+export function launchPermissionArgs(agent: CliAgent, permission: GuiPermission | undefined, plan: boolean | undefined): readonly string[] {
+  const driver = AGENT_GUI[agent]
+  const spec = driver?.protocol === 'acp' && 'launchPermission' in driver ? driver.launchPermission : undefined
+  if (!spec) return []
+  if (plan && spec.plan) return spec.plan
+  return permission === 'auto' && spec.auto ? spec.auto : spec.ask
+}
+
+/** What an ACP agent's launch arguments allow (the driver offers 自动 / 计划 only then); undefined without any. */
+export function launchPermissionOf(agent: CliAgent): { auto: boolean; plan: boolean } | undefined {
+  const driver = AGENT_GUI[agent]
+  const spec = driver?.protocol === 'acp' && 'launchPermission' in driver ? driver.launchPermission : undefined
+  return spec ? { auto: !!spec.auto, plan: !!spec.plan } : undefined
 }
 
 export function guiProtocolOf(agent: CliAgent): GuiProtocol | null {

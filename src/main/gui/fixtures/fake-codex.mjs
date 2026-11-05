@@ -14,7 +14,7 @@ function startTurn(id, params) {
   out({ id, result: { turn: { id: turnId, status: 'inProgress' } } })
   out({ method: 'turn/started', params: { threadId, turn: { id: turnId } } })
   out({ method: 'item/completed', params: { item: { type: 'userMessage', id: `u${turnN}`, content: params.input } } })
-  current = { turnId, model: params.model ?? null, effort: params.effort ?? null, approvalPolicy: params.approvalPolicy ?? null }
+  current = { turnId, model: params.model ?? null, effort: params.effort ?? null, approvalPolicy: params.approvalPolicy ?? null, approvalsReviewer: params.approvalsReviewer ?? null }
   out({ method: 'item/agentMessage/delta', params: { itemId: `m${turnN}`, delta: 'Work' } })
   out({ method: 'item/agentMessage/delta', params: { itemId: `m${turnN}`, delta: 'ing' } })
   if (text.includes('slow')) return

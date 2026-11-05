@@ -1,16 +1,20 @@
 // A stand-in for an ACP agent (`grok agent stdio`, `cursor-agent acp`; PRD §6.17 and
 // scripts/spikes/55-gui-acp-handshake-lab.mjs) for the GUI host's tests: no model, no tokens. Each prompt streams two
 // chunks, runs a tool after a permission request and ends with `end_turn`; "fs" first asks to read a file (Wavi must
-// refuse); "slow" runs until `session/cancel`.
+// refuse); "slow" runs until `session/cancel`; "edit" asks to change a file (kind `edit`) instead of running `ls`. It
+// offers a model, a reasoning effort marked only by its id, and modes agent / plan / ask.
 const out = (m) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`)
 const update = (sessionId, u) => out({ method: 'session/update', params: { sessionId, update: u } })
 let n = 0
 let sessionId = null
 let prompt = null
+const picked = { model: 'm1', reasoning_effort: 'high', mode: 'agent' }
 let model = 'm1'
 const waiting = new Map()
 const configOptions = () => [
-  { id: 'model', type: 'select', category: 'model', name: 'Model', currentValue: model, options: [{ value: 'm1', name: 'M1' }, { value: 'm2', name: 'M2' }] }
+  { id: 'model', type: 'select', category: 'model', name: 'Model', currentValue: picked.model, options: [{ group: 'fast', name: 'Fast', options: [{ value: 'm1', name: 'M1' }] }, { value: 'm2', name: 'M2' }] },
+  { id: 'reasoning_effort', type: 'select', name: 'Reasoning Effort', currentValue: picked.reasoning_effort, options: [{ value: 'high', name: 'High' }, { value: 'low', name: 'Low' }] },
+  { id: 'mode', type: 'select', category: 'mode', name: 'Mode', currentValue: picked.mode, options: [{ value: 'agent', name: 'Agent' }, { value: 'plan', name: 'Plan' }, { value: 'ask', name: 'Ask' }] }
 ]
 
 function ask(method, params, then) {
@@ -24,12 +28,13 @@ function runPrompt(id, params) {
   prompt = { id }
   const go = () => {
     update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi ' } })
-    update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `there (${model})` } })
+    update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `there (${model}, ${picked.mode})` } })
     if (text.includes('slow')) return
-    update(sessionId, { sessionUpdate: 'tool_call', toolCallId: 'call1', title: 'ls', kind: 'execute', status: 'pending' })
+    const call = text.includes('edit') ? { toolCallId: 'call1', title: 'Edit a.txt', kind: 'edit' } : { toolCallId: 'call1', title: 'ls', kind: 'execute' }
+    update(sessionId, { sessionUpdate: 'tool_call', ...call, status: 'pending' })
     ask('session/request_permission', {
       sessionId,
-      toolCall: { toolCallId: 'call1', title: 'ls', kind: 'execute' },
+      toolCall: call,
       options: [
         { optionId: 'yes', name: 'Allow', kind: 'allow_once' },
         { optionId: 'no', name: 'Reject', kind: 'reject_once' }
@@ -63,7 +68,8 @@ function request(m) {
       update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'earlier answer' } })
       return out({ id: m.id, result: { configOptions: configOptions() } })
     case 'session/set_config_option':
-      model = m.params.value
+      picked[m.params.configId] = m.params.value
+      model = picked.model
       return out({ id: m.id, result: { configOptions: configOptions() } })
     case 'session/prompt':
       return runPrompt(m.id, m.params)

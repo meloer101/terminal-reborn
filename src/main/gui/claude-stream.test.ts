@@ -115,15 +115,24 @@ describe('claudeConfig', () => {
     ]
   }
 
-  it('offers the models, the chosen model’s effort levels and the permission modes', () => {
+  it('offers the models, the chosen model’s effort levels, 权限 and 计划 (Figma 56)', () => {
     const config = claudeConfig(init, { effort: 'medium' })
     expect(config.map((c) => [c.id, c.current])).toEqual([
       ['model', 'default'],
       ['effort', 'medium'],
-      ['mode', 'default']
+      ['permission', 'ask'],
+      ['plan', 'off']
     ])
     expect(config[1]?.values.map((v) => v.label)).toEqual(['低', '中', '高', '更高', '最高'])
-    expect(config[2]?.values.map((v) => v.value)).not.toContain('bypassPermissions')
+    expect(config[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '自动'])
+  })
+
+  it('reads Claude’s permission mode as a level, and plan as 计划 on with the level it returns to', () => {
+    const pick = (state: Parameters<typeof claudeConfig>[1]) => claudeConfig(init, state).flatMap((c) => (c.id === 'permission' || c.id === 'plan' ? [c.current] : []))
+    expect(pick({ mode: 'acceptEdits' })).toEqual(['accept-edits', 'off'])
+    expect(pick({ mode: 'auto' })).toEqual(['auto', 'off'])
+    expect(pick({ mode: 'plan', level: 'accept-edits' })).toEqual(['accept-edits', 'on'])
+    expect(pick({ mode: 'bypassPermissions' })).toEqual(['ask', 'off'])
   })
 
   it('maps the resolved model a turn reports back to its alias (not to Default)', () => {
@@ -138,12 +147,16 @@ describe('claudeConfig', () => {
   })
 
   it('drops the effort picker for a model without effort', () => {
-    expect(claudeConfig(init, { model: 'haiku' }).map((c) => c.id)).toEqual(['model', 'mode'])
+    expect(claudeConfig(init, { model: 'haiku' }).map((c) => c.id)).toEqual(['model', 'permission', 'plan'])
   })
 
   it('maps picker changes to control requests', () => {
     expect(claudeConfigRequest('model', 'opus')).toEqual({ subtype: 'set_model', model: 'opus' })
-    expect(claudeConfigRequest('mode', 'plan')).toEqual({ subtype: 'set_permission_mode', mode: 'plan' })
+    expect(claudeConfigRequest('permission', 'accept-edits')).toEqual({ subtype: 'set_permission_mode', mode: 'acceptEdits' })
+    expect(claudeConfigRequest('permission', 'auto')).toEqual({ subtype: 'set_permission_mode', mode: 'auto' })
+    expect(claudeConfigRequest('permission', 'bypass')).toBeNull()
+    expect(claudeConfigRequest('plan', 'on', 'auto')).toEqual({ subtype: 'set_permission_mode', mode: 'plan' })
+    expect(claudeConfigRequest('plan', 'off', 'accept-edits')).toEqual({ subtype: 'set_permission_mode', mode: 'acceptEdits' })
     expect(claudeConfigRequest('effort', 'low')).toEqual({ subtype: 'apply_flag_settings', settings: { effortLevel: 'low' } })
     expect(claudeConfigRequest('other', 'x')).toBeNull()
   })

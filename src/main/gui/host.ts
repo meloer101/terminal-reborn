@@ -6,8 +6,8 @@
 
 import type { AgentEvent } from '@shared/agent-events'
 import type { CliAgent } from '@shared/agents'
-import { AGENT_GUI } from '@shared/gui-agents'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
@@ -103,7 +103,12 @@ class GuiSession<O extends GuiOwner> {
     readonly launch: GuiLaunch,
     owner: O,
     private readonly deps: GuiHostDeps<O>,
-    /** An edit: the conversation kept before the edited message, drawn instead of reading the transcript. */
+    /** Restarts this session with another launch-argument permission (GuiHost.relaunch). */
+    private readonly onRelaunch: (change: { permission: GuiPermission; plan: boolean }) => Promise<boolean>,
+    /**
+     * An edit or a restart: the conversation to draw first instead of reading the transcript (what was kept before the
+     * edited message; nothing for a restart, whose agent replays it).
+     */
     private readonly kept?: readonly ChatItem[]
   ) {
     this.owner = owner
@@ -133,11 +138,16 @@ class GuiSession<O extends GuiOwner> {
         if (!this.exited && this.synthStatus) this.status(this.tracker.turnEnd(outcome))
       },
       fail: (reason) => this.fail(reason),
-      image: (path) => this.deps.image(path)
+      image: (path) => this.deps.image(path),
+      relaunch: (change) => this.onRelaunch(change)
     }
+    const launchPermission = launchPermissionOf(this.launch.agent)
     const options = {
       cwd: this.launch.cwd,
       clientVersion: this.deps.clientVersion,
+      ...(this.launch.permission ? { permission: this.launch.permission } : {}),
+      ...(this.launch.plan !== undefined ? { plan: this.launch.plan } : {}),
+      ...(launchPermission ? { launchPermission } : {}),
       ...(resume ? { resume } : {}),
       ...(this.launch.model ? { model: this.launch.model } : {}),
       ...(answered && answered.length > 0 ? { answered: new Set(answered) } : {})
@@ -190,9 +200,8 @@ class GuiSession<O extends GuiOwner> {
     this.driver = this.createDriver(resume)
     // Claude and Codex do not replay a resumed conversation over the protocol: read it from the transcript. After an
     // edit the transcript still holds the cut turns until the new message is written: what was kept is drawn instead.
-    if (this.kept) {
-      if (this.kept.length > 0) this.emit([{ type: 'reset', items: [...this.kept] }])
-    } else if (resume && this.protocol !== 'acp') {
+    if (this.kept) this.emit([{ type: 'reset', items: [...this.kept] }])
+    else if (resume && this.protocol !== 'acp') {
       const items = await this.deps.history(this.launch.agent, this.launch.cwd, resume).catch(() => null)
       if (items && items.length > 0) this.emit([{ type: 'reset', items }])
     }
@@ -487,7 +496,7 @@ export class GuiHost<O extends GuiOwner> {
     // Ended (exit, failure): a new process continues the same conversation.
     const resume = existing?.agentSessionId ?? launch.resumeAgentSessionId
     if (existing) existing.stop()
-    const session = new GuiSession({ ...launch, ...(resume ? { resumeAgentSessionId: resume } : {}) }, owner, this.deps)
+    const session = new GuiSession({ ...launch, ...(resume ? { resumeAgentSessionId: resume } : {}) }, owner, this.deps, this.relaunchOf(launch.sessionId))
     this.sessions.set(launch.sessionId, session)
     const result = await session.begin(resume)
     if (!result.ok && this.sessions.get(launch.sessionId) === session) this.sessions.delete(launch.sessionId)
@@ -549,11 +558,38 @@ export class GuiHost<O extends GuiOwner> {
     // The pipe host drops a killed session at once (messages are handled in order): `begin` starts a new process.
     this.sessions.delete(sessionId)
     session.stop()
-    const replacement = new GuiSession(next, owner, this.deps, state.items.slice(0, index))
+    const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), state.items.slice(0, index))
     this.sessions.set(sessionId, replacement)
     const result = await replacement.begin(next.resumeAgentSessionId)
     if (!result.ok && this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
     return result
+  }
+
+  private relaunchOf(sessionId: string) {
+    return (change: { permission: GuiPermission; plan: boolean }) => this.relaunch(sessionId, change)
+  }
+
+  /**
+   * Restarts the agent on its conversation with another launch-argument permission or 计划 (Figma 56, Grok): not while
+   * a turn runs or something waits. The new process replays the conversation (ACP `session/load`).
+   */
+  private async relaunch(sessionId: string, change: { permission: GuiPermission; plan: boolean }): Promise<boolean> {
+    const session = this.sessions.get(sessionId)
+    const owner = session?.owner
+    const agentSessionId = session?.agentSessionId
+    if (!session || session.exited || !owner || !agentSessionId) return false
+    const { state, launch } = session
+    if (state.busy || state.prompts.length > 0 || state.queued.length > 0) return false
+    const next: GuiLaunch = { ...launch, permission: change.permission, plan: change.plan, resumeAgentSessionId: agentSessionId }
+    delete next.initialPrompt
+    delete next.resumeAt
+    this.sessions.delete(sessionId)
+    session.stop()
+    const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), [])
+    this.sessions.set(sessionId, replacement)
+    const result = await replacement.begin(agentSessionId)
+    if (!result.ok && this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
+    return result.ok
   }
 
   stop(sessionId: string): void {

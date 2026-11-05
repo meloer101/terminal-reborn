@@ -275,6 +275,30 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(popover).toHaveCount(0)
   })
 
+  test('one set of pickers (Figma 56): 权限 with Claude’s three levels and the 计划 switch', async () => {
+    const permission = composer().getByRole('button', { name: '询问' })
+    await expect(permission).toBeVisible(WITHIN)
+    const plan = composer().getByRole('button', { name: '计划' })
+    await expect(plan).toHaveAttribute('aria-pressed', 'false')
+    await plan.click()
+    await expect(plan).toHaveAttribute('aria-pressed', 'true')
+    await permission.click()
+    const menu = page.getByRole('dialog', { name: '权限' })
+    await expect(menu.getByRole('menuitemradio')).toHaveText(['询问', '接受编辑', '自动'])
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.screenshot({ path: join(SHOTS, `pickers-${theme}.png`) })
+    }
+    // While planning, a level is where 计划 off returns to: 计划 stays on.
+    await menu.getByRole('menuitemradio', { name: '接受编辑' }).click()
+    await expect(composer().getByRole('button', { name: '接受编辑' })).toBeVisible()
+    await expect(plan).toHaveAttribute('aria-pressed', 'true')
+    await plan.click()
+    await expect(plan).toHaveAttribute('aria-pressed', 'false')
+    await expect(composer().getByRole('button', { name: '接受编辑' })).toBeVisible()
+  })
+
   test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {
     await send('copy this one')
     const reply = feed().getByText('Hello: copy this one')

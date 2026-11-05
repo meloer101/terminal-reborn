@@ -1,10 +1,12 @@
 // Drives one ACP agent over JSON-RPC 2.0 (PRD F23 / §6.17; handshake in scripts/spikes/55-gui-acp-handshake-lab.mjs):
 // `initialize`, `session/new` or `session/load`, one `session/prompt` per message (its response ends the turn),
 // `session/cancel` to interrupt, `session/request_permission` answered with the chosen option. Wavi offers no file
-// system or terminal to the agent: those requests get -32601. Electron-free.
+// system or terminal to the agent: those requests get -32601. Figma 56: 权限 is Wavi's — 询问 asks every request,
+// 接受编辑 answers those that change files itself; 自动 and 计划 come from a launch argument (Grok, a restart) or
+// the agent's own plan mode. Electron-free.
 
-import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
-import { acpAnswerResult, acpConfig, acpConfigRequest, createAcpNormalizer } from './acp'
+import type { GuiAnswer, GuiConfigOption, GuiPermission } from '@shared/gui-chat'
+import { acpAnswerResult, acpAutoAllow, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer, type AcpPickerState } from './acp'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
 
@@ -16,7 +18,19 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
   const rpc = new RpcClient(io.write, true)
   const requestIds = new Map<string, unknown>()
   let sessionId: string | undefined
+  /** The pickers as the agent reports them, and as shown (acpPickers). */
+  let agentConfig: GuiConfigOption[] = []
   let config: GuiConfigOption[] = []
+  const launch = options.launchPermission
+  const picks: AcpPickerState = {
+    levels: ['ask', 'accept-edits', ...(launch?.auto ? (['auto'] as const) : [])],
+    permission: options.permission ?? 'ask',
+    ...(launch?.plan ? { launchPlan: options.plan ?? false } : {})
+  }
+  const showConfig = () => {
+    config = acpPickers(agentConfig, picks)
+    io.emit([{ type: 'config', config }])
+  }
   let viaConfigOptions = false
   let images = false
   let loadSession = false
@@ -35,8 +49,8 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
 
   const takeConfig = (result: Rec) => {
     viaConfigOptions = Array.isArray(result.configOptions) && result.configOptions.length > 0
-    config = acpConfig(result)
-    io.emit([{ type: 'config', config }])
+    agentConfig = acpConfig(result)
+    showConfig()
   }
 
   const takeCapabilities = (result: Rec) => {
@@ -47,7 +61,7 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
 
   const ready = async () => {
     // A model asked for at launch (F21 dispatch, 新建会话) is set once the agent says it offers it.
-    const model = config.find((o) => o.category === 'model')
+    const model = agentConfig.find((o) => o.category === 'model')
     if (options.model && model && model.current !== options.model && model.values.some((v) => v.value === options.model)) await setOption(model, options.model)
     isReady = true
     io.ready()
@@ -92,10 +106,34 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
     const result = isRec(outcome.result) ? outcome.result : {}
     if (Array.isArray(result.configOptions)) takeConfig(result)
     else {
-      config = config.map((o) => (o.id === option.id ? { ...o, current: value } : o))
-      io.emit([{ type: 'config', config }])
+      agentConfig = agentConfig.map((o) => (o.id === option.id ? { ...o, current: value } : o))
+      showConfig()
     }
     return true
+  }
+
+  async function setPermission(value: string): Promise<boolean> {
+    const level = picks.levels.find((l) => l === value)
+    if (!level) return false
+    // 自动 is a launch argument; 询问 and 接受编辑 share one (Wavi tells them apart): only crossing 自动 restarts, and
+    // not while planning (the plan argument holds; the level is where 计划 off returns to).
+    if (launch && !picks.launchPlan && (level === 'auto') !== (picks.permission === 'auto')) return io.relaunch({ permission: level, plan: false })
+    picks.permission = level
+    showConfig()
+    return true
+  }
+
+  async function setPlan(on: boolean): Promise<boolean> {
+    if (picks.launchPlan !== undefined) return on === picks.launchPlan || io.relaunch({ permission: picks.permission as GuiPermission, plan: on })
+    const mode = agentConfig.find((o) => o.category === 'mode')
+    const planValue = acpPlanValue(mode)
+    if (!mode || !planValue) return false
+    if (on) {
+      if (mode.current !== planValue) picks.modeBefore = mode.current
+      return mode.current === planValue || setOption(mode, planValue)
+    }
+    const back = mode.values.find((v) => v.value === picks.modeBefore && v.value !== planValue) ?? mode.values.find((v) => v.value !== planValue)
+    return mode.current !== planValue || (back ? setOption(mode, back.value) : false)
   }
 
   function turnDone(stopReason: string | undefined, error?: string): void {
@@ -112,8 +150,8 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
     if (update.sessionUpdate === 'current_mode_update') {
       const mode = str(update.currentModeId)
       if (mode) {
-        config = config.map((o) => (o.category === 'mode' ? { ...o, current: mode } : o))
-        io.emit([{ type: 'config', config }])
+        agentConfig = agentConfig.map((o) => (o.category === 'mode' ? { ...o, current: mode } : o))
+        showConfig()
       }
       return
     }
@@ -158,6 +196,13 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
         const id = String(message.id)
         // Answered before the app quit (the turn has not ended yet): not asked again.
         if (replay && options.answered?.has(id)) return
+        // 接受编辑: a change to files goes through without asking.
+        const allowed = replay ? null : acpAutoAllow(params, picks.permission)
+        if (allowed) {
+          rpc.respond(message.id, { outcome: { outcome: 'selected', optionId: allowed } })
+          io.emit(normalizer.allowed(params))
+          return
+        }
         requestIds.set(id, message.id)
         io.emit(normalizer.request(id, params))
         return
@@ -208,7 +253,9 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
     },
 
     async setConfig(id, value) {
-      const option = config.find((o) => o.id === id)
+      if (id === 'permission') return setPermission(value)
+      if (id === 'plan') return setPlan(value === 'on')
+      const option = agentConfig.find((o) => o.id === id)
       if (!option || !option.values.some((v) => v.value === value)) return false
       return setOption(option, value)
     },

@@ -71,20 +71,26 @@ describe('codexConfig / codexTurnParams', () => {
     { id: 'hidden', hidden: true }
   ]
 
-  it('offers visible models, the chosen one’s efforts and the approval presets, and applies them per turn', () => {
+  it('offers visible models, the chosen one’s efforts and 权限, and applies them per turn (Figma 56)', () => {
     const config = codexConfig(models, {})
     expect(config.map((c) => [c.id, c.current])).toEqual([
       ['model', 'gpt-6.1-sol'],
       ['effort', 'high'],
-      ['mode', 'on-request']
+      ['permission', 'accept-edits']
     ])
+    expect(config[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '自动'])
     expect(codexTurnParams('th', 'hi', config, ['/a.png'])).toEqual({
       threadId: 'th',
       input: [{ type: 'text', text: 'hi', text_elements: [] }, { type: 'localImage', path: '/a.png' }],
       model: 'gpt-6.1-sol',
       effort: 'high',
-      approvalPolicy: 'on-request'
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user'
     })
+    // 自动 is Codex's own reviewer; 询问 asks before anything it is not sure is safe.
+    const at = (permission: 'ask' | 'auto') => codexTurnParams('th', 'hi', codexConfig(models, { permission }))
+    expect(at('auto')).toMatchObject({ approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' })
+    expect(at('ask')).toMatchObject({ approvalPolicy: 'untrusted', approvalsReviewer: 'user' })
   })
 })
 

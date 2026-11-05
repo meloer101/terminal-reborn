@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchCommands, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
+import { matchCommands, permissionOption, planOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import {
   appendToDraft,
@@ -257,11 +257,22 @@ describe('composer', () => {
       current,
       values: values.map((v) => ({ value: v, label: v === 'high' ? '高' : v }))
     })
-    const buttons = pickerButtons([option('mode', 'mode', 'acceptEdits', ['default', 'acceptEdits']), option('effort', 'thought_level', 'high', ['low', 'high']), option('model', 'model', 'Sonnet 5', ['Sonnet 5', 'Opus 5.5']), option('only', 'other', 'x', ['x'])])
-    expect(buttons.map((b) => [b.key, b.label])).toEqual([
-      ['model+effort', 'Sonnet 5 · 高'],
-      ['mode', 'acceptEdits']
+    const buttons = pickerButtons([
+      option('mode', 'mode', 'agent', ['agent', 'ask']),
+      planOption(true),
+      permissionOption(['ask', 'accept-edits'], 'accept-edits'),
+      option('effort', 'thought_level', 'high', ['low', 'high']),
+      option('model', 'model', 'Sonnet 5', ['Sonnet 5', 'Opus 5.5']),
+      option('only', 'other', 'x', ['x'])
     ])
+    // Figma 56: model · effort, 权限, 计划 (a switch), then the agent's own mode; a single choice is not a picker.
+    expect(buttons.map((b) => [b.key, b.label, b.toggle?.on])).toEqual([
+      ['model+effort', 'Sonnet 5 · 高', undefined],
+      ['permission', '接受编辑', undefined],
+      ['plan', '计划', true],
+      ['mode', 'agent', undefined]
+    ])
+    expect(pickerButtons([permissionOption(['ask'], 'ask')])).toEqual([])
   })
 
   it('steps through a list, wrapping', () => {

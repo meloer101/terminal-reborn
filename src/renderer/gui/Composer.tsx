@@ -1,8 +1,8 @@
-// A GUI session's input (PRD F23, Figma 52F–H; `/` menu 49′C, model menu 49′E; formats 50C–E): one line in the box —
+// A GUI session's input (PRD F23, Figma 52F–H, 56; `/` menu 49′C, model menu 49′E; formats 50C–E): one line in the box —
 // + adds attachments, the formatted text (ComposerEditor), stop while a turn runs, send otherwise; it grows upward as
 // lines are added, + and send staying at its foot. ⏎ sends and ⇧⏎ is a newline — a new item in a list; in a code block
-// ⏎ is a newline too (an input method's Enter is left to it). Under the box: 格式 (the format buttons), the pickers the
-// agent offers (model · reasoning effort, mode) and the context ring (ContextButton).
+// ⏎ is a newline too (an input method's Enter is left to it). Under the box: 格式 (the format buttons), the pickers
+// (Figma 56: model · reasoning effort, 权限, the 计划 switch, the agent's own mode) and the context ring (ContextButton).
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { ArrowUp, Check, ChevronDown, Plus, Square, Type, X } from 'lucide-react'
@@ -160,22 +160,36 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
           <Type {...ICON} />
         </button>
         <span className={styles.spacer} />
-        {pickerButtons(config).map((button) => (
-          <button
-            key={button.key}
-            type="button"
-            className={styles.picker}
-            aria-haspopup="dialog"
-            aria-expanded={picker?.button.key === button.key}
-            onClick={(e) => {
-              const anchor = e.currentTarget
-              setPicker((open) => (open?.button.key === button.key ? null : { button, anchor }))
-            }}
-          >
-            <span>{button.label}</span>
-            <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
-          </button>
-        ))}
+        {pickerButtons(config).map((button) =>
+          button.toggle ? (
+            // 计划 (Figma 56): pressed while on.
+            <button
+              key={button.key}
+              type="button"
+              className={styles.picker}
+              aria-pressed={button.toggle.on}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
+            >
+              {button.label}
+            </button>
+          ) : (
+            <button
+              key={button.key}
+              type="button"
+              className={styles.picker}
+              aria-haspopup="dialog"
+              aria-expanded={picker?.button.key === button.key}
+              onClick={(e) => {
+                const anchor = e.currentTarget
+                setPicker((open) => (open?.button.key === button.key ? null : { button, anchor }))
+              }}
+            >
+              <span>{button.label}</span>
+              <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
+            </button>
+          )
+        )}
         <ContextButton sessionId={sessionId} agent={agent} />
       </div>
       {picker && (

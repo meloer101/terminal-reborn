@@ -2,7 +2,7 @@
 // and offers it (PRD F23). A driver speaks one protocol over the agent's stdio lines; it owns no process. Electron-free.
 
 import { randomInt } from 'node:crypto'
-import type { GuiAnswer, GuiEvent } from '@shared/gui-chat'
+import type { GuiAnswer, GuiEvent, GuiPermission } from '@shared/gui-chat'
 
 export type Rec = Record<string, unknown>
 export const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -28,6 +28,11 @@ export interface DriverIO {
   fail(reason: string): void
   /** An image attachment's bytes, or null when it is not an image Wavi sends as one (then its path goes in the text). */
   image(path: string): Promise<ImageBlock | null>
+  /**
+   * A permission level or 计划 that is a launch argument changed (Figma 56): the host restarts the agent on its
+   * conversation with them. False when it could not (a turn runs, nothing to resume).
+   */
+  relaunch(change: { permission: GuiPermission; plan: boolean }): Promise<boolean>
 }
 
 export interface DriverOptions {
@@ -39,6 +44,11 @@ export interface DriverOptions {
   clientVersion: string
   /** A reattach: requests an earlier client already answered; their prompts among the replayed lines are skipped. */
   answered?: ReadonlySet<string>
+  /** The permission level and 计划 the agent starts with (Figma 56). */
+  permission?: GuiPermission
+  plan?: boolean
+  /** An ACP agent whose permission mode is a launch argument: which of 自动 / 计划 its arguments offer. */
+  launchPermission?: { auto: boolean; plan: boolean }
 }
 
 export interface GuiDriver {

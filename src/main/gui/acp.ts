@@ -4,7 +4,18 @@
 // no "message done" signal: a run of chunks is one block, finished when anything else arrives or the prompt returns.
 // Pure: the session host owns the process and the JSON-RPC ids.
 
-import type { GuiAnswer, GuiCommand, GuiConfigOption, GuiEvent, GuiPermissionOption, GuiPrompt } from '@shared/gui-chat'
+import {
+  effortLabel,
+  permissionOption,
+  planOption,
+  type GuiAnswer,
+  type GuiCommand,
+  type GuiConfigOption,
+  type GuiEvent,
+  type GuiPermission,
+  type GuiPermissionOption,
+  type GuiPrompt
+} from '@shared/gui-chat'
 import { CHAT_LIMITS, type ChatItem, type DiffHunk } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
@@ -140,6 +151,8 @@ export interface AcpNormalizer {
   /** The user's own message, shown at once (ACP does not echo it back). */
   sent(id: string, text: string, images: number): GuiEvent[]
   request(id: string, params: Rec): GuiEvent[]
+  /** A permission request Wavi answered itself (接受编辑, acpAutoAllow): its tool row, no prompt. */
+  allowed(params: Rec): GuiEvent[]
   pending(id: string): AcpPending | undefined
   settle(id: string): GuiEvent[]
 }
@@ -244,6 +257,9 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
       const toolCall = isRec(params.toolCall) ? params.toolCall : undefined
       return [...flush(), ...(toolCall ? tool(toolCall) : []), { type: 'prompt', prompt }]
     },
+    allowed(params) {
+      return [...flush(), ...(isRec(params.toolCall) ? tool(params.toolCall) : [])]
+    },
     pending: (id) => waiting.get(id),
     settle(id) {
       return waiting.delete(id) ? [{ type: 'prompt-done', id }] : []
@@ -285,6 +301,18 @@ export function acpCommands(raw: unknown): GuiCommand[] {
   })
 }
 
+/** Option ids that are reasoning effort when the agent does not mark them `thought_level` (as T3 Code reads them). */
+const EFFORT_IDS: ReadonlySet<string> = new Set(['effort', 'reasoning_effort', 'reasoningeffort', 'reasoning', 'thinking', 'thought_level'])
+
+/** A select's values; a grouped list (`{ group, name, options }`) comes flat, its groups' order kept. */
+function selectValues(raw: unknown): { value: string; label: string }[] {
+  return (Array.isArray(raw) ? raw : []).filter(isRec).flatMap((v) => {
+    if (Array.isArray(v.options)) return selectValues(v.options)
+    const value = str(v.value) ?? str(v.id)
+    return value ? [{ value, label: str(v.name) ?? str(v.label) ?? value }] : []
+  })
+}
+
 /** `configOptions` from `session/new` (or `config_option_update`) → pickers; falls back to the older modes / models. */
 export function acpConfig(session: Rec): GuiConfigOption[] {
   const options = (Array.isArray(session.configOptions) ? session.configOptions : []).filter(isRec)
@@ -292,11 +320,9 @@ export function acpConfig(session: Rec): GuiConfigOption[] {
     return options.flatMap((o): GuiConfigOption[] => {
       const id = str(o.id)
       if (!id || o.type !== 'select') return []
-      const category = (['model', 'mode', 'thought_level'] as const).find((c) => c === o.category) ?? 'other'
-      const values = (Array.isArray(o.options) ? o.options : []).filter(isRec).flatMap((v) => {
-        const value = str(v.value) ?? str(v.id)
-        return value ? [{ value, label: str(v.name) ?? str(v.label) ?? value }] : []
-      })
+      const effort = o.category === 'thought_level' || EFFORT_IDS.has(id.toLowerCase())
+      const category = effort ? 'thought_level' : ((['model', 'mode'] as const).find((c) => c === o.category) ?? 'other')
+      const values = selectValues(o.options).map((v) => (effort ? { value: v.value, label: effortLabel(v.value, v.label) } : v))
       return [{ id, category, label: str(o.name) ?? id, current: str(o.currentValue) ?? values[0]?.value ?? '', values }]
     })
   }
@@ -316,6 +342,57 @@ export function acpConfig(session: Rec): GuiConfigOption[] {
     config.push({ id: 'mode', category: 'mode', label: '模式', current: str(session.modes.currentModeId) ?? values[0]?.value ?? '', values })
   }
   return config
+}
+
+/** An agent mode that is planning (`plan`, `architect`, or a namespaced one ending so): it becomes the 计划 switch. */
+const PLAN_MODE = /(^|[#/:.])(plan|architect)$/i
+export const acpPlanValue = (mode: GuiConfigOption | undefined): string | undefined => mode?.values.find((v) => PLAN_MODE.test(v.value))?.value
+
+/** What the ACP driver keeps for Wavi's own pickers (Figma 56). */
+export interface AcpPickerState {
+  /** The levels this agent gets: 询问 and 接受编辑 (Wavi answers its requests), 自动 only where the agent has its own. */
+  levels: readonly GuiPermission[]
+  permission: GuiPermission
+  /** 计划 when it is a launch argument (AGENT_GUI launchPermission); undefined when it is the agent's own plan mode. */
+  launchPlan?: boolean
+  /** The agent mode 计划 off returns to. */
+  modeBefore?: string
+}
+
+/**
+ * The pickers as shown (Figma 56): the agent's own, its plan mode taken out of its mode list into 计划 (a mode list
+ * with one entry left is not shown), then 权限 and 计划.
+ */
+export function acpPickers(agent: readonly GuiConfigOption[], state: AcpPickerState): GuiConfigOption[] {
+  const mode = agent.find((o) => o.category === 'mode')
+  const planValue = acpPlanValue(mode)
+  const shown = agent.flatMap((o): GuiConfigOption[] => {
+    if (o !== mode || !planValue) return [o]
+    const rest = o.values.filter((v) => v.value !== planValue)
+    if (rest.length < 2) return []
+    const before = state.modeBefore && rest.some((v) => v.value === state.modeBefore) ? state.modeBefore : rest[0]!.value
+    return [{ ...o, current: o.current === planValue ? before : o.current, values: rest }]
+  })
+  shown.push(permissionOption(state.levels, state.permission))
+  const plan = state.launchPlan ?? (planValue ? mode!.current === planValue : undefined)
+  if (plan !== undefined) shown.push(planOption(plan))
+  return shown
+}
+
+/** ACP tool kinds that change files: 接受编辑 lets them through without asking. */
+const EDIT_KINDS: ReadonlySet<string> = new Set(['edit', 'delete', 'move'])
+
+/**
+ * Figma 56: under 接受编辑, Wavi answers a request to change files itself — the option to allow it once (or always,
+ * when the agent offers no once). Null: the user is asked.
+ */
+export function acpAutoAllow(params: Rec, permission: GuiPermission): string | null {
+  if (permission !== 'accept-edits') return null
+  const kind = isRec(params.toolCall) ? str(params.toolCall.kind) : undefined
+  if (!kind || !EDIT_KINDS.has(kind)) return null
+  const options = (Array.isArray(params.options) ? params.options : []).filter(isRec)
+  const pick = options.find((o) => o.kind === 'allow_once') ?? options.find((o) => o.kind === 'allow_always')
+  return pick ? (str(pick.optionId) ?? null) : null
 }
 
 /** The request that applies a picker change: `session/set_config_option` when the agent sent configOptions. */

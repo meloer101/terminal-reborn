@@ -49,14 +49,52 @@ export type GuiAnswer =
   | { kind: 'question'; id: string; answers: Record<string, string> }
   | { kind: 'plan'; id: string; decision: 'keep-planning' | 'approve-ask' | 'approve-auto'; message?: string }
 
-/** A picker under the composer (Figma 49″C): model, mode, reasoning effort, as the agent offers them. */
+/**
+ * A picker under the composer (Figma 49″C, 56): model and reasoning effort as the agent offers them; `permission` and
+ * `plan` are Wavi's own (one set of names for every agent, each driver lays them onto its protocol); `mode` is the
+ * agent's own mode list (an ACP agent's, without its plan mode); `other` anything else it offers.
+ */
 export interface GuiConfigOption {
   id: string
-  category: 'model' | 'mode' | 'thought_level' | 'other'
+  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'other'
   label: string
   current: string
   values: { value: string; label: string }[]
 }
+
+/**
+ * Figma 56: how far an agent goes before asking. 询问 asks before edits and commands; 接受编辑 edits without asking;
+ * 自动 lets the agent judge each step itself (Claude `auto`, Codex `auto_review`, Grok `auto`) — offered only by an
+ * agent that can. There is no level that never asks.
+ */
+export type GuiPermission = 'ask' | 'accept-edits' | 'auto'
+export const GUI_PERMISSION_LABELS: Readonly<Record<GuiPermission, string>> = { ask: '询问', 'accept-edits': '接受编辑', auto: '自动' }
+
+export function permissionOption(levels: readonly GuiPermission[], current: GuiPermission): GuiConfigOption {
+  return {
+    id: 'permission',
+    category: 'permission',
+    label: '权限',
+    current: levels.includes(current) ? current : levels[0]!,
+    values: levels.map((level) => ({ value: level, label: GUI_PERMISSION_LABELS[level] }))
+  }
+}
+
+/** Figma 56: the 计划 switch, for an agent with a plan mode. */
+export const planOption = (on: boolean): GuiConfigOption => ({
+  id: 'plan',
+  category: 'plan',
+  label: '计划',
+  current: on ? 'on' : 'off',
+  values: [
+    { value: 'off', label: '关' },
+    { value: 'on', label: '开' }
+  ]
+})
+
+/** Figma 56: reasoning effort in the same words for every agent; a level not listed keeps the agent's own name. */
+const EFFORT_LABELS: Readonly<Record<string, string>> = { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高' }
+export const effortLabel = (value: string, own?: string): string => EFFORT_LABELS[value.toLowerCase()] ?? own ?? value
 
 /** An entry of the `/` menu (Figma 49C), as the agent lists it. */
 export interface GuiCommand {
@@ -109,6 +147,9 @@ export interface GuiLaunch {
    * (`--resume-session-at`), dropping what came after it.
    */
   resumeAt?: string
+  /** Main only (a restart for a launch-argument permission, Figma 56): the level and 计划 to start with. */
+  permission?: GuiPermission
+  plan?: boolean
 }
 
 export type GuiOpenResult =
@@ -206,7 +247,8 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
 
 /** The pickers shown under the composer, in a fixed order whatever order the agent lists them in. */
 export function composerPickers(config: readonly GuiConfigOption[]): GuiConfigOption[] {
-  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'mode', 'other']
+  // Figma 56: model · effort, 权限, 计划, then the agent's own mode and anything else.
+  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'mode', 'other']
   return config.filter((o) => o.values.length > 1).sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
 }
 

@@ -1,10 +1,11 @@
 // Drives one `codex app-server` over JSON-RPC (PRD F23 / §6.17; sequences in
 // scripts/spikes/54-gui-codex-app-server-lab.mjs): `initialize` + `initialized`, `model/list`, `thread/start` or
 // `thread/resume`, one `turn/start` per message, approvals answered as responses to the server's requests,
-// `turn/interrupt`. Model, effort and approval policy go with each `turn/start`. Electron-free.
+// `turn/interrupt`. Model, effort and the permission level (approval policy and reviewer) go with each `turn/start`.
+// Electron-free.
 
-import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
-import { codexAnswerResult, codexConfig, codexTurnParams, createCodexNormalizer } from './codex-app-server'
+import type { GuiAnswer, GuiConfigOption, GuiPermission } from '@shared/gui-chat'
+import { CODEX_APPROVAL, codexAnswerResult, codexConfig, codexTurnParams, createCodexNormalizer, isCodexLevel } from './codex-app-server'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { isImagePath, withPaths } from './launch'
 
@@ -16,7 +17,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
   /** Prompt id → the server request's own id (number or string), to answer with. */
   const requestIds = new Map<string, unknown>()
   let models: unknown[] = []
-  const current: { model?: string; effort?: string; approvalPolicy?: string } = { ...(options.model ? { model: options.model } : {}), approvalPolicy: 'on-request' }
+  const current: { model?: string; effort?: string; permission?: GuiPermission } = { ...(options.model ? { model: options.model } : {}), permission: 'accept-edits' }
   let config: GuiConfigOption[] = []
   let threadId: string | undefined
   let turnId: string | undefined
@@ -68,7 +69,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
     }
     const started = await rpc.request(
       'thread/start',
-      { cwd: options.cwd, approvalPolicy: current.approvalPolicy, sandbox: 'workspace-write', ...(current.model ? { model: current.model } : {}) },
+      { cwd: options.cwd, ...CODEX_APPROVAL[current.permission ?? 'accept-edits'], sandbox: 'workspace-write', ...(current.model ? { model: current.model } : {}) },
       HANDSHAKE_TIMEOUT_MS
     )
     if (!started.ok || !isRec(started.result) || !takeThread(started.result.thread)) {
@@ -181,7 +182,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
         // Another model has its own efforts: start from its default.
         current.effort = undefined
       } else if (id === 'effort') current.effort = value
-      else if (id === 'mode') current.approvalPolicy = value
+      else if (id === 'permission' && isCodexLevel(value)) current.permission = value
       else return false
       emitConfig()
       return true

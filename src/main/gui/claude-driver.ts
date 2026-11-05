@@ -5,7 +5,16 @@
 // from here. Electron-free.
 
 import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
-import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, type ClaudeStreamNormalizer } from './claude-stream'
+import {
+  claudeAnswerResponse,
+  claudeConfig,
+  claudeConfigRequest,
+  claudeLevel,
+  commandsOf,
+  createClaudeStreamNormalizer,
+  type ClaudePickerState,
+  type ClaudeStreamNormalizer
+} from './claude-stream'
 import { isRec, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
 
@@ -22,7 +31,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
   let init: Rec | null = null
   let isReady = false
   let sessionId: string | undefined
-  const current: { model?: string; effort?: string; mode?: string } = options.model ? { model: options.model } : {}
+  const current: ClaudePickerState = options.model ? { model: options.model } : {}
   let config: GuiConfigOption[] = []
 
   const control = (request: Rec, timeoutMs?: number): Promise<ControlOutcome> =>
@@ -200,6 +209,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       // Approving a plan switches the permission mode for the rest of the session.
       if (answer.kind === 'plan' && answer.decision !== 'keep-planning') {
         current.mode = answer.decision === 'approve-auto' ? 'acceptEdits' : 'default'
+        current.level = claudeLevel(current.mode, undefined)
         emitConfig()
       }
       return true
@@ -213,13 +223,25 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
 
     async setConfig(id, value) {
       const option = config.find((o) => o.id === id)
-      const request = claudeConfigRequest(id, value)
+      // The level 计划 returns to: the one chosen before it (or before Claude was put in plan mode some other way).
+      const mode = current.mode ?? str(init?.current_permission_mode)
+      const level = claudeLevel(mode, current.level)
+      // While planning, a level is only where 计划 off returns to.
+      if (id === 'permission' && mode === 'plan' && option?.values.some((v) => v.value === value)) {
+        current.level = value as ClaudePickerState['level']
+        emitConfig()
+        return true
+      }
+      const request = claudeConfigRequest(id, value, level)
       if (!option || !request || !option.values.some((v) => v.value === value)) return false
       const outcome = await control(request, 15_000)
       if (!outcome.ok) return false
       if (id === 'model') current.model = value
-      else if (id === 'mode') current.mode = value
       else if (id === 'effort') current.effort = value
+      else if (isRec(request) && typeof request.mode === 'string') {
+        current.level = id === 'permission' ? (value as ClaudePickerState['level']) : level
+        current.mode = request.mode
+      }
       emitConfig()
       return true
     },

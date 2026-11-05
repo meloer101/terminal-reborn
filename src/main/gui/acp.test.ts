@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuiEvent, emptyGuiState, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { acpAnswerResult, acpCommands, acpConfig, acpConfigRequest, createAcpNormalizer, lineDiff } from './acp'
+import { applyGuiEvent, emptyGuiState, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
+import { acpAnswerResult, acpAutoAllow, acpCommands, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer, lineDiff } from './acp'
 
 // Shapes per the Agent Client Protocol (protocolVersion 1), as Grok `agent stdio` and Cursor `agent acp` send them (PRD §6.17).
 const fold = (events: GuiEvent[], state: GuiState = emptyGuiState()) => events.reduce(applyGuiEvent, state)
@@ -122,5 +122,24 @@ describe('lineDiff', () => {
 
   it('treats a new file as all additions', () => {
     expect(lineDiff('', 'a\nb\n')).toEqual([{ oldStart: 1, newStart: 1, lines: ['+a', '+b'] }])
+  })
+})
+
+describe('Figma 56 pickers', () => {
+  const mode = (values: string[], current: string): GuiConfigOption => ({ id: 'mode', category: 'mode', label: 'Mode', current, values: values.map((value) => ({ value, label: value })) })
+
+  it('takes a plan mode out of the agent’s modes, also a namespaced one, and drops a list left with one entry', () => {
+    expect(acpPlanValue(mode(['code', 'agent#architect'], 'code'))).toBe('agent#architect')
+    const state = { levels: ['ask', 'accept-edits'] as const, permission: 'ask' as const }
+    expect(acpPickers([mode(['default', 'plan'], 'plan')], state).map((c) => `${c.id}=${c.current}`)).toEqual(['permission=ask', 'plan=on'])
+    expect(acpPickers([mode(['a', 'b'], 'a')], state).map((c) => c.id)).toEqual(['mode', 'permission'])
+  })
+
+  it('lets only file changes through under 接受编辑, with the allow-once option', () => {
+    const request = (kind: string) => ({ toolCall: { kind }, options: [{ optionId: 'always', kind: 'allow_always' }, { optionId: 'once', kind: 'allow_once' }] })
+    expect(acpAutoAllow(request('edit'), 'accept-edits')).toBe('once')
+    expect(acpAutoAllow(request('move'), 'accept-edits')).toBe('once')
+    expect(acpAutoAllow(request('execute'), 'accept-edits')).toBeNull()
+    expect(acpAutoAllow(request('edit'), 'ask')).toBeNull()
   })
 })

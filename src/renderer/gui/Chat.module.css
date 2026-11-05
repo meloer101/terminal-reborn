@@ -855,6 +855,12 @@
   background: var(--bg-hover);
 }
 
+/* 计划 on (Figma 56): selected, like a pressed format button. */
+.picker[aria-pressed='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
 .picker svg {
   color: var(--text-primary);
 }

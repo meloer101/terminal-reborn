@@ -382,6 +382,8 @@ export interface PickerButton {
   key: string
   label: string
   options: GuiConfigOption[]
+  /** 计划 (Figma 56): a switch, pressed while on, not a menu. */
+  toggle?: { on: boolean }
 }
 
 const currentLabel = (option: GuiConfigOption): string => option.values.find((v) => v.value === option.current)?.label ?? option.current
@@ -395,7 +397,8 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   if (joined.length > 0) buttons.push({ key: joined.map((o) => o.id).join('+'), label: joined.map(currentLabel).join(' · '), options: joined })
   for (const option of pickers) {
     if (option === model || option === effort) continue
-    buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
+    if (option.category === 'plan') buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' } })
+    else buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
   }
   return buttons
 }
@@ -407,6 +410,8 @@ export function pickerSectionTitle(option: GuiConfigOption): string {
       return '模型'
     case 'thought_level':
       return '推理强度'
+    case 'permission':
+      return '权限'
     case 'mode':
       return '模式'
     default:

@@ -4,7 +4,7 @@
 
 import { AGENT_SPECS, type CliAgent } from '@shared/agents'
 import { shellQuote, tomlString } from '@shared/agent-launch'
-import { AGENT_GUI, guiBinary } from '@shared/gui-agents'
+import { AGENT_GUI, guiBinary, launchPermissionArgs } from '@shared/gui-agents'
 import type { GuiLaunch, GuiProtocol } from '@shared/gui-chat'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { ImageBlock } from './driver'
@@ -27,7 +27,7 @@ export interface GuiArgvInput {
   agent: CliAgent
   /** The folder the agent runs in, resolved (Codex's per-launch trust names it). */
   realCwd: string
-  launch: Pick<GuiLaunch, 'model' | 'resumeAt'>
+  launch: Pick<GuiLaunch, 'model' | 'resumeAt' | 'permission' | 'plan'>
   /** Continue this conversation (Claude `--resume`; Codex and ACP resume over their protocol). */
   resume?: string
   /** Claude's per-launch hooks file (src/main/hooks). */
@@ -62,7 +62,8 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
       'app-server'
     ]
   }
-  return [binary, ...('adapter' in driver ? driver.adapter.args : driver.args)]
+  // A permission mode set at launch goes before the agent's ACP arguments (`grok --permission-mode auto agent stdio`).
+  return [binary, ...launchPermissionArgs(input.agent, input.launch.permission, input.launch.plan), ...('adapter' in driver ? driver.adapter.args : driver.args)]
 }
 
 /** The agent's own environment for its GUI protocol (ACP agents' auto-update switches) on top of its CLI row's. */

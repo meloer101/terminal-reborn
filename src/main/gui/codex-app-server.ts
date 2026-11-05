@@ -2,7 +2,7 @@
 // item/started → deltas → item/completed; approvals and questions are JSON-RPC requests from the server that wait
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
-import type { GuiAnswer, GuiConfigOption, GuiEvent, GuiPermissionOption, GuiPrompt } from '@shared/gui-chat'
+import { effortLabel, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
 import { CHAT_LIMITS, type ChatItem, type DiffHunk } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
@@ -11,13 +11,18 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : und
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text)
 const tail = (text: string, max: number): string => (text.length > max ? `…${text.slice(text.length - max)}` : text)
 
-/** Approval presets offered in the mode picker (`never` is left out on purpose). */
-export const CODEX_MODES: { value: string; label: string }[] = [
-  { value: 'untrusted', label: '询问' },
-  { value: 'on-request', label: '自动' }
-]
-
-const EFFORT_LABELS: Record<string, string> = { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '最高' }
+/**
+ * Figma 56: Wavi's permission levels as Codex's approval settings (each `turn/start` carries them; `never` is left out
+ * on purpose). 询问 asks before anything it is not sure is safe; 接受编辑 works in the workspace without asking; 自动
+ * routes what it would ask to Codex's own reviewer (`auto_review`, codex 0.166). The sandbox stays workspace-write.
+ */
+export const CODEX_APPROVAL: Readonly<Record<GuiPermission, { approvalPolicy: string; approvalsReviewer: string }>> = {
+  ask: { approvalPolicy: 'untrusted', approvalsReviewer: 'user' },
+  'accept-edits': { approvalPolicy: 'on-request', approvalsReviewer: 'user' },
+  auto: { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review' }
+}
+const CODEX_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits', 'auto']
+export const isCodexLevel = (value: string): value is GuiPermission => (CODEX_LEVELS as readonly string[]).includes(value)
 
 /** A unified diff (as `fileChange.changes[].diff` carries it) → hunks with ` ` / `+` / `-` lines. */
 export function hunksOfUnifiedDiff(diff: string): DiffHunk[] {
@@ -265,7 +270,7 @@ export function codexAnswerResult(pending: CodexPending, answer: GuiAnswer): Rec
 }
 
 /** Pickers from `model/list` and the thread's settings; model and effort go with the next `turn/start`. */
-export function codexConfig(models: unknown[], current: { model?: string; effort?: string; approvalPolicy?: string }): GuiConfigOption[] {
+export function codexConfig(models: unknown[], current: { model?: string; effort?: string; permission?: GuiPermission }): GuiConfigOption[] {
   const list = models.filter(isRec).filter((m) => m.hidden !== true)
   const values = list.flatMap((m) => {
     const value = str(m.id) ?? str(m.model)
@@ -282,11 +287,10 @@ export function codexConfig(models: unknown[], current: { model?: string; effort
       category: 'thought_level',
       label: '推理强度',
       current: current.effort && efforts.includes(current.effort) ? current.effort : fallback,
-      values: efforts.map((e) => ({ value: e, label: EFFORT_LABELS[e] ?? e }))
+      values: efforts.map((e) => ({ value: e, label: effortLabel(e) }))
     })
   }
-  const policy = current.approvalPolicy && CODEX_MODES.some((m) => m.value === current.approvalPolicy) ? current.approvalPolicy : 'on-request'
-  config.push({ id: 'mode', category: 'mode', label: '权限模式', current: policy, values: CODEX_MODES })
+  config.push(permissionOption(CODEX_LEVELS, current.permission ?? 'accept-edits'))
   return config
 }
 
@@ -298,6 +302,6 @@ export function codexTurnParams(threadId: string, text: string, config: readonly
     input: [{ type: 'text', text, text_elements: [] }, ...images.map((path) => ({ type: 'localImage', path }))],
     ...(value('model') ? { model: value('model') } : {}),
     ...(value('effort') ? { effort: value('effort') } : {}),
-    ...(value('mode') ? { approvalPolicy: value('mode') } : {})
+    ...CODEX_APPROVAL[isCodexLevel(value('permission') ?? '') ? (value('permission') as GuiPermission) : 'accept-edits']
   }
 }

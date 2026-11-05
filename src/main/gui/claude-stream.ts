@@ -2,22 +2,43 @@
 // transcript's shape and go through the phone's parser (@shared/transcript-chat) after three renames; `stream_event`
 // deltas become the live block; `can_use_tool` requests become prompts. Pure: the session host owns the process.
 
-import type { GuiAnswer, GuiCommand, GuiConfigOption, GuiEvent, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
+import {
+  effortLabel,
+  permissionOption,
+  planOption,
+  type GuiAnswer,
+  type GuiCommand,
+  type GuiConfigOption,
+  type GuiEvent,
+  type GuiPermission,
+  type GuiPermissionOption,
+  type GuiPrompt,
+  type GuiQuestion
+} from '@shared/gui-chat'
 import { createChatParser, type ChatParser } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 
-/** Permission modes offered in the picker (`bypassPermissions` is left out on purpose). */
-export const CLAUDE_MODES: { value: string; label: string }[] = [
-  { value: 'default', label: '询问' },
-  { value: 'acceptEdits', label: '接受编辑' },
-  { value: 'plan', label: '计划' },
-  { value: 'auto', label: '自动' }
-]
+/** Figma 56: Wavi's permission levels as Claude's permission modes (`bypassPermissions` is left out on purpose). */
+export const CLAUDE_MODE_OF: Readonly<Record<GuiPermission, string>> = { ask: 'default', 'accept-edits': 'acceptEdits', auto: 'auto' }
+const CLAUDE_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits', 'auto']
+const isClaudeLevel = (value: string): value is GuiPermission => (CLAUDE_LEVELS as readonly string[]).includes(value)
 
-const EFFORT_LABELS: Record<string, string> = { low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高' }
+/** The level a Claude permission mode stands for; `plan` stands for the level it returns to (`before`). */
+export function claudeLevel(mode: string | undefined, before: GuiPermission | undefined): GuiPermission {
+  if (mode === 'plan') return before ?? 'ask'
+  return mode === 'acceptEdits' ? 'accept-edits' : mode === 'auto' ? 'auto' : 'ask'
+}
+
+/** What the driver keeps for the pickers: Claude's own permission `mode`, and the level 计划 returns to. */
+export interface ClaudePickerState {
+  model?: string
+  effort?: string
+  mode?: string
+  level?: GuiPermission
+}
 
 /** A `can_use_tool` request still waiting, kept to build the answer. */
 export interface ClaudePending {
@@ -181,7 +202,7 @@ export function commandsOf(raw: unknown[]): GuiCommand[] {
 }
 
 /** The pickers from `initialize` (models, their effort levels, permission modes) and `get_settings`' effort. */
-export function claudeConfig(init: Rec, current: { model?: string; effort?: string; mode?: string }): GuiConfigOption[] {
+export function claudeConfig(init: Rec, current: ClaudePickerState): GuiConfigOption[] {
   const models = (Array.isArray(init.models) ? init.models : []).filter(isRec)
   const values = models.flatMap((m) => {
     const value = str(m.value)
@@ -203,18 +224,20 @@ export function claudeConfig(init: Rec, current: { model?: string; effort?: stri
       category: 'thought_level',
       label: '推理强度',
       current: current.effort && levels.includes(current.effort) ? current.effort : (levels.includes('high') ? 'high' : levels[0]!),
-      values: levels.map((l) => ({ value: l, label: EFFORT_LABELS[l] ?? l }))
+      values: levels.map((l) => ({ value: l, label: effortLabel(l) }))
     })
   }
+  // 计划 is Claude's `plan` permission mode; the level it returns to is the one chosen before it.
   const mode = current.mode ?? str(init.current_permission_mode) ?? 'default'
-  config.push({ id: 'mode', category: 'mode', label: '权限模式', current: CLAUDE_MODES.some((m) => m.value === mode) ? mode : 'default', values: CLAUDE_MODES })
+  config.push(permissionOption(CLAUDE_LEVELS, claudeLevel(mode, current.level)), planOption(mode === 'plan'))
   return config
 }
 
-/** The control request that applies a picker change. */
-export function claudeConfigRequest(id: string, value: string): Rec | null {
+/** The control request that applies a picker change; `level` is the permission level 计划 off returns to. */
+export function claudeConfigRequest(id: string, value: string, level: GuiPermission = 'ask'): Rec | null {
   if (id === 'model') return { subtype: 'set_model', model: value }
-  if (id === 'mode') return { subtype: 'set_permission_mode', mode: value }
+  if (id === 'permission') return isClaudeLevel(value) ? { subtype: 'set_permission_mode', mode: CLAUDE_MODE_OF[value] } : null
+  if (id === 'plan') return { subtype: 'set_permission_mode', mode: value === 'on' ? 'plan' : CLAUDE_MODE_OF[level] }
   if (id === 'effort') return { subtype: 'apply_flag_settings', settings: { effortLevel: value } }
   return null
 }

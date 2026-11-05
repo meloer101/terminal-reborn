@@ -10,7 +10,7 @@ import { LocalPipeLink, type PipeAttach, type PipeLink } from '../pty/pipes'
 import { GuiHost, type GuiOwner } from './host'
 
 const FIXTURES = join(__dirname, 'fixtures')
-const FAKES: Partial<Record<CliAgent, string>> = { claude: 'fake-claude.mjs', codex: 'fake-codex.mjs', grok: 'fake-acp.mjs' }
+const FAKES: Partial<Record<CliAgent, string>> = { claude: 'fake-claude.mjs', codex: 'fake-codex.mjs', grok: 'fake-acp.mjs', gemini: 'fake-acp.mjs' }
 
 class FakeOwner implements GuiOwner {
   destroyed = false
@@ -157,7 +157,7 @@ describe('GuiHost · Claude stream-json', () => {
     await until(() => texts(stateOf(h, 'c3')).includes('text:Hello: first') && !stateOf(h, 'c3').busy)
     expect(await h.host.setConfig('c3', 'model', 'haiku')).toBe(true)
     expect(await h.host.setConfig('c3', 'model', 'gpt')).toBe(false)
-    expect(stateOf(h, 'c3').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=haiku', 'mode=default'])
+    expect(stateOf(h, 'c3').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=haiku', 'permission=ask', 'plan=off'])
 
     await h.host.send('c3', { text: 'look', attachments: ['/tmp/shot.png', '/tmp/notes.md'] })
     await until(() => texts(stateOf(h, 'c3')).some((t) => t.startsWith('text:Hello: look')) && !stateOf(h, 'c3').busy)
@@ -271,7 +271,7 @@ describe('GuiHost · Codex app-server', () => {
     const h = harness()
     await h.host.open(launchOf('codex', 'x1'), h.owner)
     await ready(h, 'x1')
-    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-a', 'effort=low', 'mode=on-request'])
+    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-a', 'effort=low', 'permission=accept-edits'])
     expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'thr-new' })
 
     await h.host.send('x1', { text: 'go', attachments: [] })
@@ -282,18 +282,19 @@ describe('GuiHost · Codex app-server', () => {
     h.host.answer('x1', { kind: 'permission', id: prompt.id, optionId: 'accept' })
     await until(() => !stateOf(h, 'x1').busy)
     const done = texts(stateOf(h, 'x1')).find((t) => t.startsWith('text:Done'))
-    expect(done).toBe('text:Done ({"turnId":"turn-1","model":"gpt-a","effort":"low","approvalPolicy":"on-request"})')
+    expect(done).toBe('text:Done ({"turnId":"turn-1","model":"gpt-a","effort":"low","approvalPolicy":"on-request","approvalsReviewer":"user"})')
     expect(h.status.at(-1)).toMatchObject({ type: 'stop', message: done!.slice(5) })
     expect(h.status.filter((e) => e.type === 'tool-end').length).toBeGreaterThan(0)
 
     expect(await h.host.setConfig('x1', 'model', 'gpt-b')).toBe(true)
-    expect(await h.host.setConfig('x1', 'mode', 'untrusted')).toBe(true)
-    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-b', 'effort=medium', 'mode=untrusted'])
+    // 自动 (Figma 56): Codex's own reviewer takes what it would ask.
+    expect(await h.host.setConfig('x1', 'permission', 'auto')).toBe(true)
+    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-b', 'effort=medium', 'permission=auto'])
     await h.host.send('x1', { text: 'go again', attachments: [] })
     await until(() => stateOf(h, 'x1').prompts.length === 1)
     h.host.answer('x1', { kind: 'permission', id: stateOf(h, 'x1').prompts[0]!.id, optionId: 'decline' })
     await until(() => !stateOf(h, 'x1').busy)
-    expect(texts(stateOf(h, 'x1')).at(-1)).toBe('text:Done ({"turnId":"turn-2","model":"gpt-b","effort":"medium","approvalPolicy":"untrusted"})')
+    expect(texts(stateOf(h, 'x1')).at(-1)).toBe('text:Done ({"turnId":"turn-2","model":"gpt-b","effort":"medium","approvalPolicy":"on-request","approvalsReviewer":"auto_review"})')
 
     await h.host.send('x1', { text: 'fail', attachments: [] })
     await until(() => h.status.at(-1)?.type === 'stop-failure')
@@ -359,7 +360,7 @@ describe('GuiHost · ACP', () => {
     h.host.answer('a1', { kind: 'permission', id: prompt.id, optionId: 'yes' })
     await until(() => !stateOf(h, 'a1').busy)
     // The agent's image capability is off: the image went as a path in the text.
-    expect(texts(stateOf(h, 'a1'))).toEqual(['user:fs please\n\n/tmp/a.png', 'text:fs refused -32601. Hi there (m1)'])
+    expect(texts(stateOf(h, 'a1'))).toEqual(['user:fs please\n\n/tmp/a.png', 'text:fs refused -32601. Hi there (m1, agent)'])
     expect(stateOf(h, 'a1').items.find((i) => i.kind === 'tool')).toMatchObject({ name: 'Bash', state: 'ok', output: 'a.txt' })
     expect(h.status.map((e) => e.type)).toEqual(['session-start', 'prompt-submit', 'tool-start', 'permission-request', 'tool-end', 'tool-end', 'stop'])
 
@@ -370,9 +371,57 @@ describe('GuiHost · ACP', () => {
     expect(h.host.interrupt('a1')).toBe(true)
     await until(() => !stateOf(h, 'a1').busy)
     expect(stateOf(h, 'a1').items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
-    expect(texts(stateOf(h, 'a1')).at(-1)).toBe('text:Hi there (m2)')
+    expect(texts(stateOf(h, 'a1')).at(-1)).toBe('text:Hi there (m2, agent)')
     await settle()
     expect(h.view('a1')).toEqual(stateOf(h, 'a1'))
+  }, 30_000)
+
+  it('shows one set of pickers (Figma 56): effort by its id, 权限, and the agent’s plan mode as 计划', async () => {
+    const h = harness()
+    await h.host.open(launchOf('gemini', 'g1'), h.owner)
+    await ready(h, 'g1')
+    const shown = () => stateOf(h, 'g1').config.map((c) => `${c.category}:${c.id}=${c.current}[${c.values.map((v) => v.label).join('/')}]`)
+    // The model list comes flat out of its group; plan leaves the mode list for 计划; no 自动 (Gemini has none).
+    expect(shown()).toEqual(['model:model=m1[M1/M2]', 'thought_level:reasoning_effort=high[高/低]', 'mode:mode=agent[Agent/Ask]', 'permission:permission=ask[询问/接受编辑]', 'plan:plan=off[关/开]'])
+    expect(await h.host.setConfig('g1', 'plan', 'on')).toBe(true)
+    expect(shown().slice(2)).toEqual(['mode:mode=agent[Agent/Ask]', 'permission:permission=ask[询问/接受编辑]', 'plan:plan=on[关/开]'])
+    await h.host.send('g1', { text: 'slow', attachments: [] })
+    await until(() => stateOf(h, 'g1').live?.kind === 'text' && stateOf(h, 'g1').live!.text.includes('plan'))
+    h.host.interrupt('g1')
+    await until(() => !stateOf(h, 'g1').busy)
+    expect(await h.host.setConfig('g1', 'plan', 'off')).toBe(true)
+    expect(shown()[4]).toBe('plan:plan=off[关/开]')
+
+    // 接受编辑: Wavi lets a change to files through itself; anything else is still asked.
+    expect(await h.host.setConfig('g1', 'permission', 'accept-edits')).toBe(true)
+    expect(await h.host.setConfig('g1', 'permission', 'auto')).toBe(false)
+    await h.host.send('g1', { text: 'edit please', attachments: [] })
+    await until(() => !stateOf(h, 'g1').busy)
+    expect(stateOf(h, 'g1').prompts).toEqual([])
+    expect(stateOf(h, 'g1').items.filter((i) => i.kind === 'tool').at(-1)).toMatchObject({ state: 'ok' })
+    await h.host.send('g1', { text: 'run ls', attachments: [] })
+    await until(() => stateOf(h, 'g1').prompts.length === 1)
+    h.host.answer('g1', { kind: 'permission', id: stateOf(h, 'g1').prompts[0]!.id, optionId: 'no' })
+    await until(() => !stateOf(h, 'g1').busy)
+  }, 30_000)
+
+  it('restarts Grok on its conversation when 自动 or 计划 is a launch argument (Figma 56)', async () => {
+    const prepared: GuiLaunch[] = []
+    const h = harness(new LocalPipeLink(), null, 5, false, { prepared })
+    await h.host.open(launchOf('grok', 'k1'), h.owner)
+    await ready(h, 'k1')
+    const pick = () => stateOf(h, 'k1').config.flatMap((c) => (c.category === 'permission' || c.category === 'plan' ? [`${c.id}=${c.current}[${c.values.map((v) => v.label).join('/')}]`] : []))
+    expect(pick()).toEqual(['permission=ask[询问/接受编辑/自动]', 'plan=off[关/开]'])
+    // 询问 ↔ 接受编辑 is Wavi's: no restart.
+    expect(await h.host.setConfig('k1', 'permission', 'accept-edits')).toBe(true)
+    expect(prepared.length).toBe(1)
+    expect(await h.host.setConfig('k1', 'permission', 'auto')).toBe(true)
+    expect(prepared.at(-1)).toMatchObject({ permission: 'auto', plan: false, resumeAgentSessionId: 'acp-session-1' })
+    await until(() => stateOf(h, 'k1').config.length > 0 && texts(stateOf(h, 'k1')).includes('user:earlier question'))
+    expect(pick()).toEqual(['permission=auto[询问/接受编辑/自动]', 'plan=off[关/开]'])
+    expect(await h.host.setConfig('k1', 'plan', 'on')).toBe(true)
+    expect(prepared.at(-1)).toMatchObject({ permission: 'auto', plan: true })
+    await until(() => stateOf(h, 'k1').config.some((c) => c.id === 'plan' && c.current === 'on'))
   }, 30_000)
 
   it('resumes with session/load, which replays the conversation', async () => {

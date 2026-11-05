@@ -11,7 +11,8 @@ function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
     agentSession: () => undefined,
     turnEnd: () => undefined,
     fail: () => undefined,
-    image
+    image,
+    relaunch: () => Promise.resolve(false)
   }
   return { driver: createClaudeDriver(io, { cwd: '/w', clientVersion: '0' }), writes }
 }
