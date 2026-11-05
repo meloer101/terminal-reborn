@@ -102,7 +102,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         }
       }}
     >
-      <Feed sessionId={sessionId} items={state.items} live={state.live} waitingTool={waitingToolId(state.items, state.prompts)} />
+      <Feed sessionId={sessionId} agent={agent} items={state.items} live={state.live} waitingTool={waitingToolId(state.items, state.prompts)} />
       <div className={styles.dock}>
         {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (

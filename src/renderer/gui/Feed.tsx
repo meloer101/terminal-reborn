@@ -1,15 +1,17 @@
-// The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`): user bubbles on the right, the agent's
-// Markdown, runs of tool and thinking rows grouped 8 apart, 16 between blocks, and the block being streamed. Each
+// The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`, 51A): user bubbles on the right with the
+// user's picture beside them, the agent's part of each turn after its mark — its Markdown, runs of tool and thinking
+// rows grouped 8 apart — 16 between blocks, and the block being streamed. Each
 // block is memoised on its items (applyGuiEvent keeps unchanged items by identity), so a streamed delta re-renders
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
-import type { SessionId } from '@shared/types'
+import type { AgentKind, SessionId } from '@shared/types'
+import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
-import { feedBlocks, sentMessage, sentSpace, thinkingLabel, toolView, userBubble, type FeedBlock, type StepItem } from './model'
+import { feedBlocks, liveStartsTurn, sentMessage, sentSpace, thinkingLabel, toolView, turnStarts, userBubble, userMarkdown, type FeedBlock, type StepItem } from './model'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -17,8 +19,9 @@ const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
 
-export function Feed({ sessionId, items, live, waitingTool }: { sessionId: SessionId; items: readonly ChatItem[]; live: GuiLive | null; waitingTool: string | null }) {
+export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId: SessionId; agent: AgentKind; items: readonly ChatItem[]; live: GuiLive | null; waitingTool: string | null }) {
   const blocks = useMemo(() => feedBlocks(items), [items])
+  const starts = useMemo(() => turnStarts(blocks), [blocks])
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const spaceRef = useRef<HTMLDivElement>(null)
@@ -77,10 +80,20 @@ export function Feed({ sessionId, items, live, waitingTool }: { sessionId: Sessi
   return (
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
-        {blocks.map((block) => (
-          <Block key={block.key} sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && block.items.some((i) => i.id === waitingTool) ? waitingTool : null} />
-        ))}
-        {live && <Live sessionId={sessionId} live={live} />}
+        {blocks.map((block) =>
+          block.kind === 'item' && block.item.kind === 'user' ? (
+            <UserBubble key={block.key} sessionId={sessionId} id={block.item.id} text={block.item.text} />
+          ) : (
+            <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)}>
+              <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && block.items.some((i) => i.id === waitingTool) ? waitingTool : null} />
+            </AgentTurn>
+          )
+        )}
+        {live && (
+          <AgentTurn agent={agent} start={liveStartsTurn(blocks)}>
+            <Live sessionId={sessionId} live={live} />
+          </AgentTurn>
+        )}
       </div>
       <div ref={spaceRef} aria-hidden />
     </div>
@@ -99,7 +112,7 @@ const Block = memo(
     const { item } = block
     switch (item.kind) {
       case 'user':
-        return <UserBubble id={item.id} text={item.text} />
+        return null
       case 'text':
         return <ChatMarkdown sessionId={sessionId} text={item.text} className={styles.block} />
       case 'system':
@@ -117,17 +130,34 @@ function sameBlock(a: FeedBlock, b: FeedBlock): boolean {
   return a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i])
 }
 
-function UserBubble({ id, text }: { id: string; text: string }) {
+/** 51A: the agent's part of a turn, after its mark; the mark beside the first block only. */
+function AgentTurn({ agent, start, children }: { agent: AgentKind; start: boolean; children: ReactNode }) {
+  return (
+    <div className={styles.agentTurn}>
+      {start && (
+        <span className={styles.agentAvatar} data-agent-mark aria-hidden>
+          <AgentIcon kind={agent} size={16} />
+        </span>
+      )}
+      {children}
+    </div>
+  )
+}
+
+/** 51A: what the user sent, as Markdown, with their picture beside it when they set one (设置 · 外观 · 对话). */
+const UserBubble = memo(function UserBubble({ sessionId, id, text }: { sessionId: SessionId; id: string; text: string }) {
   const { header, body } = userBubble(text)
+  const markdown = useMemo(() => userMarkdown(body), [body])
   return (
     <div className={styles.userRow} data-item={id}>
       <div className={styles.bubble}>
         {header && <span className={styles.bubbleHeader}>{header}</span>}
-        <p className={styles.bubbleText}>{body}</p>
+        <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
       </div>
+      <span className={styles.userAvatar} aria-hidden />
     </div>
   )
-}
+})
 
 function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
   const [open, setOpen] = useState(false)

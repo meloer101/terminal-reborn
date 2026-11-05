@@ -60,6 +60,52 @@ export function sentMessage(prev: readonly FeedBlock[] | null, next: readonly Fe
 export const sentSpace = (viewport: number, messageTop: number, end: number, gap: number): number => Math.max(0, Math.round(viewport - (end - (messageTop - gap))))
 
 /**
+ * The blocks that start the agent's part of a turn (Figma 51A): the first non-user block after a user message, or at
+ * the top of the feed. The agent's mark sits beside it; the rest of the turn lines up after it.
+ */
+export function turnStarts(blocks: readonly FeedBlock[]): Set<string> {
+  const starts = new Set<string>()
+  let afterUser = true
+  for (const block of blocks) {
+    const user = block.kind === 'item' && block.item.kind === 'user'
+    if (!user && afterUser) starts.add(block.key)
+    afterUser = user
+  }
+  return starts
+}
+
+/** The streamed block starts the agent's part of the turn when nothing of it is in the feed yet. */
+export function liveStartsTurn(blocks: readonly FeedBlock[]): boolean {
+  const last = blocks[blocks.length - 1]
+  return !last || (last.kind === 'item' && last.item.kind === 'user')
+}
+
+/**
+ * A user message as the Markdown its bubble shows (Figma 51A): what the composer sent, with each line break kept — a
+ * text area's lines are not paragraphs — except inside a fenced code block, where lines stay as they are.
+ */
+const BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|>|#{1,6}\s|`{3,}|~{3,})/
+
+export function userMarkdown(text: string): string {
+  let fence: string | null = null
+  return text
+    .split('\n')
+    .map((line, i, lines) => {
+      const open = /^\s*(`{3,}|~{3,})/.exec(line)
+      if (fence === null && open) fence = open[1]!
+      else if (fence !== null && line.trim().startsWith(fence)) {
+        fence = null
+        return line
+      }
+      const next = lines[i + 1]
+      // A trailing backslash is a line break only when the next line goes on with the same paragraph.
+      const goesOn = next !== undefined && next.trim() !== '' && !BLOCK_START.test(next)
+      return fence === null && line.trim() !== '' && goesOn ? `${line}\\` : line
+    })
+    .join('\n')
+}
+
+/**
  * A user bubble. Wavi's own messages (`[Wavi 派活报告] …`, PRD F21) carry their header as a small first line
  * (Figma 49″C, the dispatch report).
  */

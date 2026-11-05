@@ -1,14 +1,18 @@
-/* A GUI session (PRD F23, Figma 49″C–F, 49′C / 49′E): the card a terminal would be, a 720-wide column inside it —
-   feed, then the cards, queued messages and composer, each a bg/section block 8 apart. Colour only on status. */
+/* A GUI session (PRD F23, Figma 49″C–F, 49′C / 49′E, 51): the card a terminal would be, a column inside it (720 by
+   default, 设置 · 外观 · 对话宽度) — feed, then the cards, queued messages and composer, each a bg/section block 8 apart.
+   Colour only on status. */
 
-/* The card on the window's glass, like a terminal pane (TerminalArea.module.css). */
+/* The card on the window's glass, like a terminal pane (TerminalArea.module.css). Its text, column and opacity follow
+   设置 · 外观 · 对话 (appearance/map.ts sets the --chat-* variables on <html>). */
 .pane {
+  --column: var(--chat-column, 720px);
+  --text-composer: var(--chat-weight, 400) var(--chat-size, 14px) / var(--chat-leading, 22px) var(--chat-font, var(--font-ui));
   position: absolute;
   inset: 0;
   overflow: hidden;
   isolation: isolate;
   border-radius: var(--radius-window);
-  background: var(--bg-app);
+  background: var(--tr-chat-bg, var(--bg-app));
   box-shadow: var(--card-shadow);
 }
 
@@ -27,7 +31,6 @@
 }
 
 .chat {
-  --column: 720px;
   /* A status glyph (14) and its gap (8): summaries and plan steps start at the text after it. */
   --glyph-indent: calc(14px + var(--space-8));
   position: relative;
@@ -73,7 +76,42 @@
 
 .userRow {
   display: flex;
+  align-items: flex-start;
   justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+/* Figma 51A: the user's picture (设置 · 外观 · 对话 · 我的头像), top-aligned beside the bubble; none, none drawn. */
+.userAvatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--chat-avatar) center / cover no-repeat;
+}
+
+:global(:root[data-chat-avatar='off']) .userAvatar {
+  display: none;
+}
+
+/* Figma 51A: the agent's part of a turn starts 40 in (mark 28 + 12); the mark sits beside its first line. */
+.agentTurn {
+  position: relative;
+  min-width: 0;
+  padding-left: calc(28px + var(--space-12));
+}
+
+.agentAvatar {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-section);
+  color: var(--text-primary);
 }
 
 .bubble {
@@ -93,9 +131,12 @@
 
 .bubbleText {
   margin: 0;
-  font: var(--text-composer);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* What the user sent, as Markdown (Figma 51A): blocks 8 apart inside the bubble. */
+.bubbleText :is(p, ul, ol, blockquote, pre) {
+  margin: 0 0 var(--space-8);
 }
 
 .block {

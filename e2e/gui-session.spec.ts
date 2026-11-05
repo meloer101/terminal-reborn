@@ -155,7 +155,9 @@ test.describe('F23 GUI session (Claude)', () => {
     await page.keyboard.type('前端删掉 my_token')
     await expect(input().locator('ol > li')).toHaveCount(2)
     await page.keyboard.press('Enter')
-    await expect(lastSent()).toHaveText('步骤：\n\n1. 后端下发 cookie\n2. 前端删掉 my_token', WITHIN)
+    // The bubble shows what the agent got as Markdown (Figma 51A): a paragraph and an ordered list, `my_token` as typed.
+    await expect(lastSent().locator('ol > li')).toHaveText(['后端下发 cookie', '前端删掉 my_token'], WITHIN)
+    await expect(lastSent().locator('p').first()).toHaveText('步骤：')
     await expect(input().locator('ol')).toHaveCount(0)
   })
 
@@ -177,7 +179,9 @@ test.describe('F23 GUI session (Claude)', () => {
     await bar.getByRole('button', { name: /^删除线/ }).click()
     await page.screenshot({ path: join(SHOTS, 'format-bar-dark.png') })
     await page.keyboard.press('Enter')
-    await expect(lastSent()).toHaveText('~~**不是粗体** 和 *斜体*~~', WITHIN)
+    // Sent as `~~**不是粗体** 和 *斜体*~~`: the typed asterisks are Markdown to the agent, so the bubble shows them bold.
+    await expect(lastSent().locator('del em')).toHaveText('斜体', WITHIN)
+    await expect(lastSent().locator('del strong')).toHaveText('不是粗体')
     await composer().getByRole('button', { name: '格式' }).click()
     await expect(bar).toHaveCount(0)
   })
@@ -201,7 +205,8 @@ test.describe('F23 GUI session (Claude)', () => {
     await page.keyboard.type('  b()')
     await expect(input().locator('pre')).toHaveCount(1)
     await page.keyboard.press('Meta+Enter')
-    await expect(lastSent()).toHaveText('run `npm test`\n\n```\na()\n  b()\n```', WITHIN)
+    await expect(lastSent().locator('p code')).toHaveText('npm test', WITHIN)
+    await expect(lastSent().locator('pre')).toHaveText('a()\n  b()')
   })
 
   test('@ puts a file mention at the caret, inside the list it is typed in', async () => {
@@ -215,7 +220,38 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(input().locator('ul > li')).toHaveText('看 @README.md ')
     await page.keyboard.type('里的说明')
     await page.keyboard.press('Enter')
-    await expect(lastSent()).toHaveText('- 看 @README.md 里的说明', WITHIN)
+    await expect(lastSent().locator('ul > li')).toHaveText('看 @README.md 里的说明', WITHIN)
+  })
+
+  test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {
+    // One mark per turn: each run of agent blocks after a user message (a turn stopped before any reply has none).
+    const turns = await feed()
+      .locator('> div')
+      .first()
+      .evaluate((column) => [...column.children].filter((el, i, all) => !el.hasAttribute('data-item') && (i === 0 || all[i - 1]!.hasAttribute('data-item'))).length)
+    expect(turns).toBeGreaterThan(3)
+    await expect(feed().locator('[data-agent-mark]')).toHaveCount(turns)
+    const userAvatar = feed().locator('[data-item]').last().locator('[aria-hidden]').last()
+    await expect(userAvatar).toBeHidden()
+    const avatar = `data:image/png;base64,${'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='}`
+    await page.evaluate(
+      (chat) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { chat } }),
+      { width: 'medium', fontWeight: 500, fontSize: 16, opacity: 0.85, avatar }
+    )
+    await expect(userAvatar).toBeVisible()
+    const bubble = feed().locator('[data-item]').last()
+    await expect.poll(() => bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontSize)).toBe('16px')
+    expect(await bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontWeight)).toBe('500')
+    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('992px')
+    expect(await chat().evaluate((el) => getComputedStyle(el.parentElement!).backgroundColor)).toMatch(/0\.85\)$|color\(srgb .* \/ 0\.85\)$/)
+    await feed().evaluate((el) => el.scrollTo(0, 0))
+    await page.screenshot({ path: join(SHOTS, 'chat-avatars.png') })
+    await page.evaluate(() =>
+      (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({
+        appearance: { chat: { width: 'narrow', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' } }
+      })
+    )
+    await expect(userAvatar).toBeHidden()
   })
 
   test('lists the agent’s commands under /', async () => {

@@ -24,6 +24,9 @@ import {
   thumbnailUrl,
   toolView,
   userBubble,
+  userMarkdown,
+  turnStarts,
+  liveStartsTurn,
   waitingToolId
 } from './model'
 
@@ -68,6 +71,24 @@ describe('a sent message scrolls to the top (Figma 50B)', () => {
     // viewport 600; message at 400 with a 24 gap above; the feed ends at 500 → 600 − (500 − 376) = 476
     expect(sentSpace(600, 400, 500, 24)).toBe(476)
     expect(sentSpace(600, 400, 1100, 24)).toBe(0)
+  })
+})
+
+describe('chat layout (Figma 51A)', () => {
+  it('starts the agent’s part of a turn after each user message', () => {
+    const blocks = feedBlocks([text('x0'), user('u1'), thinking('t1'), tool('a'), text('x1'), user('u2'), text('x2')])
+    expect([...turnStarts(blocks)]).toEqual(['x0', 't1', 'x2'])
+    expect(liveStartsTurn(blocks)).toBe(false)
+    expect(liveStartsTurn(feedBlocks([user('u1')]))).toBe(true)
+    expect(liveStartsTurn([])).toBe(true)
+  })
+
+  it('keeps a user message’s line breaks as Markdown breaks, not inside code or before a new block', () => {
+    expect(userMarkdown('第一行\n第二行')).toBe('第一行\\\n第二行')
+    expect(userMarkdown('步骤：\n\n1. 一\n2. 二')).toBe('步骤：\n\n1. 一\n2. 二')
+    expect(userMarkdown('看这个：\n- a\n- b')).toBe('看这个：\n- a\n- b')
+    expect(userMarkdown('```\na()\n  b()\n```\n完')).toBe('```\na()\n  b()\n```\n完')
+    expect(userMarkdown('src/my_file.ts')).toBe('src/my_file.ts')
   })
 })
 
