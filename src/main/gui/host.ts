@@ -103,7 +103,7 @@ class GuiSession<O extends GuiOwner> {
     return this.protocol !== 'claude-stream'
   }
 
-  private createDriver(resume: string | undefined): GuiDriver {
+  private createDriver(resume: string | undefined, answered?: readonly string[]): GuiDriver {
     const io: DriverIO = {
       write: (message) => !this.exited && this.deps.link().write(this.id, JSON.stringify(message)),
       emit: (events) => this.emit(events),
@@ -118,7 +118,13 @@ class GuiSession<O extends GuiOwner> {
       fail: (reason) => this.fail(reason),
       image: (path) => this.deps.image(path)
     }
-    const options = { cwd: this.launch.cwd, clientVersion: this.deps.clientVersion, ...(resume ? { resume } : {}), ...(this.launch.model ? { model: this.launch.model } : {}) }
+    const options = {
+      cwd: this.launch.cwd,
+      clientVersion: this.deps.clientVersion,
+      ...(resume ? { resume } : {}),
+      ...(this.launch.model ? { model: this.launch.model } : {}),
+      ...(answered && answered.length > 0 ? { answered: new Set(answered) } : {})
+    }
     if (this.protocol === 'claude-stream') return createClaudeDriver(io, options)
     if (this.protocol === 'codex-app-server') return createCodexDriver(io, options)
     return createAcpDriver(io, { ...options, label: LABELS[this.launch.agent] ?? this.launch.agent })
@@ -154,7 +160,7 @@ class GuiSession<O extends GuiOwner> {
       this.early = []
       const snapshot = await this.deps.link().attach(this.id, this.handlers()).catch(() => null)
       if (snapshot) {
-        this.driver = this.createDriver(this.agentSessionId)
+        this.driver = this.createDriver(this.agentSessionId, snapshot.answered)
         await this.reattach(snapshot)
         return { ok: true, state: this.snapshot(), ...(this.exited ? { exited: true } : {}) }
       }

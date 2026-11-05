@@ -18,6 +18,24 @@ const STDERR_KEEP_CHARS = 8 * 1024
  */
 export const PIPE_MAX_LINE_CHARS = 30 * 1024 * 1024
 
+/** Answered request ids kept per session (the newest): enough for every prompt a replay can still show. */
+const ANSWERED_KEEP = 256
+
+/**
+ * The request a stdin line answers, if it is a response: Claude's `control_response` (its `request_id`) or a JSON-RPC
+ * response (Codex app-server, ACP: its `id`). Read by its prefix, as main's drivers write them (key order of
+ * JSON.stringify), so only those lines are parsed, and only the id.
+ */
+export function answeredRequestId(line: string): string | null {
+  const match = /^\{"type":"control_response","response":\{"subtype":"[a-z]+","request_id":("(?:[^"\\]|\\.)*")/.exec(line) ?? /^\{(?:"jsonrpc":"2\.0",)?"id":(-?\d+|"(?:[^"\\]|\\.)*"),"(?:result|error)":/.exec(line)
+  if (!match) return null
+  try {
+    return String(JSON.parse(match[1]!) as string | number)
+  } catch {
+    return null
+  }
+}
+
 export interface PipeSpawn {
   id: string
   cwd: string
@@ -53,6 +71,8 @@ interface PipeSession {
   seq: number
   stderr: string
   exit?: PipeExit
+  /** Requests a response was written for (`answeredRequestId`), oldest first. */
+  answered: string[]
 }
 
 const quote = (word: string): string => (/^[A-Za-z0-9_./=:@%+-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`)
@@ -83,7 +103,7 @@ export class PipeHost {
       return { ok: false, message: error instanceof Error ? error.message : String(error) }
     }
     if (child.pid === undefined) return { ok: false, message: `could not start ${request.command}` }
-    const session: PipeSession = { id: request.id, agent: request.agent, child, pid: child.pid, lines: [], keptChars: 0, truncated: false, seq: 0, stderr: '' }
+    const session: PipeSession = { id: request.id, agent: request.agent, child, pid: child.pid, lines: [], keptChars: 0, truncated: false, seq: 0, stderr: '', answered: [] }
     this.sessions.set(request.id, session)
 
     // The unfinished line; past `maxLineChars` it is dropped and the rest of it skipped (`skipped` counts it).
@@ -148,14 +168,22 @@ export class PipeHost {
     // One JSON message per line: a raw newline would split it.
     if (!session || session.exit || line.includes('\n') || !session.child.stdin || session.child.stdin.destroyed) return false
     session.child.stdin.write(`${line}\n`)
+    const answered = answeredRequestId(line)
+    if (answered !== null) {
+      session.answered.push(answered)
+      if (session.answered.length > ANSWERED_KEEP) session.answered.shift()
+    }
     return true
   }
 
-  /** What a client that (re)attaches needs: the kept lines and where the stream continues. */
-  snapshot(id: string): { pid: number; agent?: string; seq: number; lines: string[]; truncated: boolean; exit?: PipeExit } | null {
+  /**
+   * What a client that (re)attaches needs: the kept lines, where the stream continues, and the requests already
+   * answered (a replayed prompt among the lines may have been answered by an earlier client).
+   */
+  snapshot(id: string): { pid: number; agent?: string; seq: number; lines: string[]; truncated: boolean; exit?: PipeExit; answered: string[] } | null {
     const s = this.sessions.get(id)
     if (!s) return null
-    return { pid: s.pid, ...(s.agent ? { agent: s.agent } : {}), seq: s.seq, lines: s.lines.slice(), truncated: s.truncated, ...(s.exit ? { exit: s.exit } : {}) }
+    return { pid: s.pid, ...(s.agent ? { agent: s.agent } : {}), seq: s.seq, lines: s.lines.slice(), truncated: s.truncated, ...(s.exit ? { exit: s.exit } : {}), answered: s.answered.slice() }
   }
 
   kill(id: string): void {

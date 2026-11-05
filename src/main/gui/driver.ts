@@ -37,6 +37,8 @@ export interface DriverOptions {
   model?: string
   /** Wavi's version, for `clientInfo`. */
   clientVersion: string
+  /** A reattach: requests an earlier client already answered; their prompts among the replayed lines are skipped. */
+  answered?: ReadonlySet<string>
 }
 
 export interface GuiDriver {

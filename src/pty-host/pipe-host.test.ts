@@ -1,8 +1,21 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { PipeHost, type PipeExit } from './pipe-host'
+import { answeredRequestId, PipeHost, type PipeExit } from './pipe-host'
 
 // A real child: a login shell runs `node -e` that echoes each stdin line back as JSON, then exits on "bye".
 const ECHO = `process.stdin.setEncoding('utf8');let b='';process.stdin.on('data',d=>{b+=d;let i;while((i=b.indexOf('\\n'))>=0){const l=b.slice(0,i);b=b.slice(i+1);if(l==='bye'){process.stderr.write('done');process.exit(3)}process.stdout.write(JSON.stringify({echo:l})+'\\n')}})`
+
+describe('answeredRequestId', () => {
+  it('reads the request a response answers, as the drivers write them, and nothing else', () => {
+    const line = (m: unknown) => JSON.stringify(m)
+    expect(answeredRequestId(line({ type: 'control_response', response: { subtype: 'success', request_id: 'req-"1"', response: { behavior: 'allow' } } }))).toBe('req-"1"')
+    expect(answeredRequestId(line({ type: 'control_response', response: { subtype: 'error', request_id: 'r2', error: 'no' } }))).toBe('r2')
+    expect(answeredRequestId(line({ id: 0, result: { decision: 'accept' } }))).toBe('0')
+    expect(answeredRequestId(line({ jsonrpc: '2.0', id: 'abc', error: { code: -32601, message: 'x' } }))).toBe('abc')
+    expect(answeredRequestId(line({ jsonrpc: '2.0', id: 4, method: 'session/prompt', params: {} }))).toBeNull()
+    expect(answeredRequestId(line({ type: 'control_request', request_id: 'w1', request: { subtype: 'interrupt' } }))).toBeNull()
+    expect(answeredRequestId(line({ type: 'user', message: { role: 'user', content: '{"id":1,"result":2}' } }))).toBeNull()
+  })
+})
 
 describe('PipeHost', () => {
   const lines: [string, string, number][] = []

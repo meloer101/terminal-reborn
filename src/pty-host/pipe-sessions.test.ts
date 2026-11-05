@@ -69,13 +69,18 @@ describe('SessionHost pipe sessions', () => {
     h.host.handle({ type: 'detach', id: 'g1' })
     expect(h.host.isAttached('g1')).toBe(false)
     h.host.handle({ type: 'pipe-write', id: 'g1', line: 'two' })
+    // The earlier client answered a prompt (a Claude control_response, a JSON-RPC response); a request is not an answer.
+    h.host.handle({ type: 'pipe-write', id: 'g1', line: JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: 'req-1', response: {} } }) })
+    h.host.handle({ type: 'pipe-write', id: 'g1', line: JSON.stringify({ jsonrpc: '2.0', id: 1007, result: { outcome: { outcome: 'selected', optionId: 'yes' } } }) })
+    h.host.handle({ type: 'pipe-write', id: 'g1', line: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'session/prompt', params: {} }) })
     // Unseen: the line is kept, not sent.
     await new Promise((resolve) => setTimeout(resolve, 400))
     expect(h.echoed('two')).toBe(false)
 
     h.host.handle({ type: 'pipe-attach', id: 'g1' })
     const attached = h.of('pipe-attached')[0]!
-    expect(attached.lines.filter((l) => l.startsWith('{'))).toEqual(['{"echo":"one"}', '{"echo":"two"}'])
+    expect(attached.lines.filter((l) => l === '{"echo":"one"}' || l === '{"echo":"two"}')).toEqual(['{"echo":"one"}', '{"echo":"two"}'])
+    expect(attached.answered).toEqual(['req-1', '1007'])
     expect(attached).toMatchObject({ agent: 'claude', truncated: false })
     expect(attached.exit).toBeUndefined()
     h.host.handle({ type: 'pipe-write', id: 'g1', line: 'three' })

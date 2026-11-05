@@ -139,6 +139,8 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
             if (requestId && !replay) io.write({ type: 'control_response', response: { subtype: 'error', request_id: requestId, error: 'not supported by Wavi' } })
             return
           }
+          // Answered before the app quit, its tool still running: not asked again.
+          if (replay && requestId && options.answered?.has(requestId)) return
           const toolUseId = str(request.tool_use_id)
           if (toolUseId && requestId) asks.set(toolUseId, requestId)
           break

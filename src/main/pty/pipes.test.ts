@@ -124,8 +124,8 @@ describe('HostPipeLink', () => {
     const attach = link.attach('g1', r.handlers)
     expect(posted).toEqual([{ type: 'pipe-attach', id: 'g1' }])
     const hooks = [{ event: 'Stop', agent: 'claude' as const, payload: null, at: 1 }]
-    link.handleEvent({ type: 'pipe-attached', id: 'g1', pid: 7, agent: 'claude', seq: 2, lines: ['{"a":1}', '{"a":2}'], truncated: false, hooks })
-    await expect(attach).resolves.toEqual({ pid: 7, seq: 2, lines: ['{"a":1}', '{"a":2}'], truncated: false, hooks })
+    link.handleEvent({ type: 'pipe-attached', id: 'g1', pid: 7, agent: 'claude', seq: 2, lines: ['{"a":1}', '{"a":2}'], truncated: false, hooks, answered: ['req-1'] })
+    await expect(attach).resolves.toEqual({ pid: 7, seq: 2, lines: ['{"a":1}', '{"a":2}'], truncated: false, hooks, answered: ['req-1'] })
     link.handleEvent({ type: 'pipe-line', id: 'g1', line: '{"a":3}', seq: 3 })
     expect(r.lines).toEqual([['{"a":3}', 3]])
 

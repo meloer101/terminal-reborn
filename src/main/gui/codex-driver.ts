@@ -105,6 +105,8 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
       const params = isRec(message.params) ? message.params : {}
       if (isServerRequest(message)) {
         const id = String(message.id)
+        // Answered before the app quit: not asked again.
+        if (replay && options.answered?.has(id)) return
         const events = normalizer.request(id, method, params)
         if (events.length === 0) {
           if (!replay) rpc.respondError(message.id, -32601, `${method} is not supported by Wavi`)

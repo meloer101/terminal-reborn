@@ -175,7 +175,8 @@ export class PipeSessions {
       seq: snapshot.seq,
       lines: snapshot.lines,
       truncated: snapshot.truncated,
-      ...(snapshot.exit ? { exit: snapshot.exit } : {})
+      ...(snapshot.exit ? { exit: snapshot.exit } : {}),
+      answered: snapshot.answered
     })
     // Like a PTY's last screen: an ended session is shown once, then gone.
     if (snapshot.exit) this.forget(id)

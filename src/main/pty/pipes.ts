@@ -24,6 +24,8 @@ export interface PipeAttach {
   exit?: PipeExit
   /** Hook events the daemon journaled while no app was attached, oldest first (for src/main/hooks' adoptAgentSession). */
   hooks?: HookJournalEntry[]
+  /** Requests already answered (a reply went to stdin); a replayed prompt for one of them is not shown again. */
+  answered?: string[]
 }
 
 export type PipeSessionInfo = { id: string; pid: number; agent?: string; exit?: PipeExit }
@@ -60,7 +62,14 @@ export class LocalPipeLink implements PipeLink {
     const snapshot = this.host.snapshot(id)
     if (!snapshot) return Promise.resolve(null)
     this.handlers.set(id, handlers)
-    return Promise.resolve({ pid: snapshot.pid, seq: snapshot.seq, lines: snapshot.lines, truncated: snapshot.truncated, ...(snapshot.exit ? { exit: snapshot.exit } : {}) })
+    return Promise.resolve({
+      pid: snapshot.pid,
+      seq: snapshot.seq,
+      lines: snapshot.lines,
+      truncated: snapshot.truncated,
+      ...(snapshot.exit ? { exit: snapshot.exit } : {}),
+      answered: snapshot.answered
+    })
   }
 
   write(id: string, line: string): boolean {
@@ -255,7 +264,8 @@ export class HostPipeLink implements PipeLink {
           lines: event.lines,
           truncated: event.truncated,
           ...(event.exit ? { exit: event.exit } : {}),
-          ...(event.hooks ? { hooks: event.hooks } : {})
+          ...(event.hooks ? { hooks: event.hooks } : {}),
+          ...(Array.isArray(event.answered) ? { answered: event.answered.filter((id) => typeof id === 'string') } : {})
         })
         return true
       }

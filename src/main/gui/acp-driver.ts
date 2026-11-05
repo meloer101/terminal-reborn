@@ -156,6 +156,8 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
           return
         }
         const id = String(message.id)
+        // Answered before the app quit (the turn has not ended yet): not asked again.
+        if (replay && options.answered?.has(id)) return
         requestIds.set(id, message.id)
         io.emit(normalizer.request(id, params))
         return

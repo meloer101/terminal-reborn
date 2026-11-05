@@ -141,4 +141,6 @@ export type HostEvent =
       exit?: { exitCode: number; signal?: number; stderr: string }
       /** Hook events missed while detached, oldest first (filled in by the daemon), as for `attached`. */
       hooks?: HookJournalEntry[]
+      /** Requests whose response went to stdin (PipeHost `answeredRequestId`), oldest first. Absent from older hosts. */
+      answered?: string[]
     }

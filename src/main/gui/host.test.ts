@@ -398,6 +398,36 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
     host.stop('r1')
   })
 
+  it('a replayed prompt the earlier app run already answered is not asked again (Claude, Codex, ACP)', async () => {
+    const tool = JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'sleep 60' } }] }, session_id: 's-1', parent_tool_use_id: null })
+    const ask = (id: string) => JSON.stringify({ type: 'control_request', request_id: id, request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'sleep 60' }, tool_use_id: 'tu1' } })
+    const claude = (answered?: string[]) => stubHost({ pid: 1, seq: 4, lines: [user, tool, ask('req-1')], truncated: false, ...(answered ? { answered } : {}) }, null).host
+    const asked = await claude().open(launchOf('claude', 'r1'), new FakeOwner())
+    expect(asked.ok && asked.state.prompts.length).toBe(1)
+    const answered = await claude(['req-1']).open(launchOf('claude', 'r1'), new FakeOwner())
+    expect(answered.ok && answered.state.prompts).toEqual([])
+    expect(answered.ok && answered.state.busy).toBe(true)
+
+    const approval = JSON.stringify({ id: 0, method: 'item/commandExecution/requestApproval', params: { threadId: 't', turnId: 'u', itemId: 'i', command: 'ls', cwd: '/w' } })
+    const codex = (answered?: string[]) => stubHost({ pid: 1, seq: 1, lines: [approval], truncated: false, ...(answered ? { answered } : {}) }, null).host
+    const codexAsked = await codex().open(launchOf('codex', 'r1'), new FakeOwner())
+    expect(codexAsked.ok && codexAsked.state.prompts.length).toBe(1)
+    const codexAnswered = await codex(['0']).open(launchOf('codex', 'r1'), new FakeOwner())
+    expect(codexAnswered.ok && codexAnswered.state.prompts).toEqual([])
+
+    const permission = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1001,
+      method: 'session/request_permission',
+      params: { sessionId: 'a', toolCall: { toolCallId: 'c1', title: 'ls', kind: 'execute' }, options: [{ optionId: 'yes', name: 'Allow', kind: 'allow_once' }] }
+    })
+    const acp = (answered?: string[]) => stubHost({ pid: 1, seq: 1, lines: [permission], truncated: false, ...(answered ? { answered } : {}) }, null).host
+    const acpAsked = await acp().open(launchOf('grok', 'r1'), new FakeOwner())
+    expect(acpAsked.ok && acpAsked.state.prompts.length).toBe(1)
+    const acpAnswered = await acp(['1001']).open(launchOf('grok', 'r1'), new FakeOwner())
+    expect(acpAnswered.ok && acpAnswered.state.prompts).toEqual([])
+  })
+
   it('a process that ended while no app was attached shows why, with the stderr attach brought', async () => {
     const { host, adopted } = stubHost({ pid: 1, seq: 2, lines: [user, reply], truncated: false, exit: { exitCode: 1, stderr: 'Error: not logged in' } }, null)
     const opened = await host.open(launchOf('claude', 'r1'), new FakeOwner())
