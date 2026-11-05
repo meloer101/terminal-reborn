@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, session } from 'electron'
 import { IPC } from '@shared/ipc'
 import { registerActivityHandlers } from './activity'
 import { registerAgentDetection } from './agents-installed'
@@ -35,6 +35,7 @@ import { registerShipHandlers } from './ship'
 import { registerPullRequestHandlers } from './pull-requests'
 import { registerConflictRadarHandlers } from './conflict-radar'
 import { registerSecondaryWindowHandlers } from './secondary-windows'
+import { followSystemProxy, scutilDeps } from './system-proxy'
 
 // Before anything reads userData (the single-instance lock included): dev runs, e2e runs (TR_USER_DATA_DIR) and the
 // installed app each get their own profile; the pre-rename "Terminal Reborn" profile moves to Wavi.
@@ -76,6 +77,8 @@ function useAppIconInDev(): void {
 const sessionOwner = (sessionId: string) => ptySessionOwner(sessionId) ?? guiSessionOwner(sessionId)
 
 function boot(): void {
+  // First: every terminal, agent and helper started from here on inherits the system proxy (PRD §6.18).
+  followSystemProxy(process.env, scutilDeps((url) => session.defaultSession.resolveProxy(url)))
   useAppIconInDev()
   registerAppHandlers()
   registerActivityHandlers()

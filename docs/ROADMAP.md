@@ -227,6 +227,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Figma 52 和实现（PRD v1.130）：输入框一行（「+」· 文字 · 发送），框下「格式」、选择器和 context 圆环，点圆环看 context 和当前 agent 的额度（行样式同设置 · 额度，共用 `session-meta/UsageRows`）；GUI 会话的会话头去掉 context 和额度；@ 按钮去掉；e2e `gui-session.spec.ts` 17 个
 - [x] Figma 54 和实现（PRD v1.132）：消息悬停出现复制 / 编辑和时间，代码块和工具输出可复制；Claude 会话改之前的消息重新问（`--resume-session-at` 重开，读历史只取 transcript 当前分支）；输入框下一行离底边改为 8；e2e `gui-session.spec.ts` 19 个
 - [x] Figma 56 和实现（PRD v1.133）：所有 agent 的选择器用同一套名字——权限（询问 / 接受编辑 / 自动）、「计划」开关、推理强度（低 … 最高）；Claude `permissionMode`、Codex `approvalPolicy` + `approvalsReviewer`、Grok 启动参数（换档重开进程）、其余 ACP agent 由 Wavi 替你回答改文件的请求；ACP 的推理强度按 `thought_level` 和常见 id 认、分组选项展开、agent 的 plan 模式归到「计划」；e2e `gui-session.spec.ts` 20 个，host 测试加通用 ACP 和 Grok 重开
+- [x] Wavi 启动的终端和 agent 用 macOS 系统代理（PRD v1.134 / §6.18）：环境里没有代理变量时读 `scutil --proxy`（PAC 用 Electron 解析），每分钟刷新；去掉代理变量启动后真 Grok GUI 会话能回复
 - [ ] Codex 的「计划」（实验性 `collaborationMode`，要 `experimentalApi`，先实测）；用真 Grok 跑一轮「自动」「计划」；Kiro 和 Gemini、Qwen、OpenCode、Copilot、Kimi、Droid、Amp、Goose、Cline、Auggie、CodeBuddy、Pi 装上后握手实测它们上报的选项、会不会发权限请求
 - [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
