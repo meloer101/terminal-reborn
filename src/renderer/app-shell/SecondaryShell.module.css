@@ -1,8 +1,8 @@
 /* A secondary window with nothing shown (F20 · 多窗口): one line and one next step, like the welcome page. */
 .empty {
   position: absolute;
-  inset: 0 var(--card-gap) var(--card-gap-bottom) var(--lead-gap, 0);
-  border-radius: var(--radius-window);
+  inset: calc(-1 * var(--titlebar-height)) 0 0;
+  border-radius: var(--radius-lead) var(--radius-trail) var(--radius-trail) var(--radius-lead);
   box-shadow: var(--card-edge), var(--card-shadow);
   display: flex;
   flex-direction: column;

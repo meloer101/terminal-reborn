@@ -386,7 +386,7 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(card).toBeVisible()
     // It springs open; drag only once it has settled at its default width.
     await expect.poll(async () => Math.round((await card.boundingBox())!.width)).toBe(480)
-    await expect.poll(async () => card.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(6)
+    await expect.poll(async () => card.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(0)
     const tools = page.locator('[data-region="panel"] header')
     // At the default width every chip is there: todo, context and the account's usage.
     await expect(tools.getByTestId('context-chip')).toBeVisible()

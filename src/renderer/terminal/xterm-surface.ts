@@ -9,6 +9,7 @@ import '@xterm/xterm/css/xterm.css'
 import { whenAppearanceKnown } from './appearance-ready'
 import { atlasAction } from './atlas-guard'
 import { bufferEdgeFill } from './edge-fill'
+import { blankBottomRows, headroomFor, type Headroom } from './headroom'
 import { buildFontStack, DEFAULT_APPEARANCE, readThemeFromDocument, withAlpha } from './appearance'
 import { defersToTextInput, macKeyToBytes } from './keymap'
 import { isAutoPeriod, placePreedit } from './ime'
@@ -111,6 +112,9 @@ export class XtermSurface implements TerminalSurface {
   private visible = true
   /** The padding color a full-screen program asked for by painting every edge cell (edge-fill.ts); null = the theme's. */
   private edgeColor: string | null = null
+  /** Its pane's header over the grid (headroom.ts): measured on fit, applied on render. */
+  private headroomBox = { headroom: 0, padTop: 0, cellHeight: 0 }
+  private headroomShown: Headroom = { shift: 0, under: false, alt: false }
   private disposed = false
   private appearance: TerminalAppearance = { ...DEFAULT_APPEARANCE }
   private readonly themeObserver: MutationObserver
@@ -188,7 +192,12 @@ export class XtermSurface implements TerminalSurface {
     this.term.onData((data) => {
       this.lastInput = { data, at: performance.now() }
     })
-    this.term.onRender(() => this.syncEdgeFill())
+    this.term.onRender(() => {
+      this.syncEdgeFill()
+      this.syncHeadroom()
+    })
+    this.term.onScroll(() => this.syncHeadroom())
+    this.term.buffer.onBufferChange(() => this.syncHeadroom())
 
     // Re-theme when <html data-theme> flips (theme.ts also follows the system setting).
     this.themeObserver = new MutationObserver(() => this.applyTheme())
@@ -498,6 +507,42 @@ export class XtermSurface implements TerminalSurface {
     }
   }
 
+  /** Reads how far the pane's header reaches over the grid (TerminalArea's --term-headroom; none where it is borrowed). */
+  private measureHeadroom(): void {
+    const element = this.term.element
+    if (!element) return
+    const style = element.ownerDocument.defaultView?.getComputedStyle(element)
+    this.headroomBox = {
+      headroom: Number.parseFloat(style?.getPropertyValue('--term-headroom') ?? '') || 0,
+      padTop: Number.parseFloat(style?.paddingTop ?? '') || 0,
+      cellHeight: this.cellHeight() ?? 0
+    }
+  }
+
+  /** Hands the grid's shift and the header blur to TerminalArea (`--term-shift`, `data-under-header`, `data-alt-screen`). */
+  private syncHeadroom(): void {
+    const element = this.term.element
+    if (!element) return
+    const buffer = this.term.buffer.active
+    const { headroom, cellHeight } = this.headroomBox
+    const alt = buffer.type === 'alternate'
+    const next = headroomFor({
+      ...this.headroomBox,
+      alt,
+      baseY: buffer.baseY,
+      viewportY: buffer.viewportY,
+      // Only needed while nothing has scrolled off, and only as many as the header covers.
+      blankRows: !alt && buffer.baseY === 0 && cellHeight > 0 ? blankBottomRows(buffer, this.term.rows, Math.ceil(headroom / cellHeight)) : 0
+    })
+    const shown = this.headroomShown
+    if (next.shift === shown.shift && next.under === shown.under && next.alt === shown.alt) return
+    this.headroomShown = next
+    if (next.shift > 0) element.style.setProperty('--term-shift', `${next.shift}px`)
+    else element.style.removeProperty('--term-shift')
+    element.toggleAttribute('data-under-header', next.under)
+    element.toggleAttribute('data-alt-screen', next.alt)
+  }
+
   private applyTheme(): void {
     this.term.options.theme = this.buildTheme()
     this.clearAtlas()
@@ -583,6 +628,8 @@ export class XtermSurface implements TerminalSurface {
       } catch {
         // Container has no layout yet; keep the current size.
       }
+      this.measureHeadroom()
+      this.syncHeadroom()
       // A resize clears the canvas and leaves the redraw on a rAF. Paint now so a fit that itself
       // runs inside a frame callback does not present the cleared bitmap.
       this.paintNow()

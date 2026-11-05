@@ -3,9 +3,13 @@
   inset: 0;
 }
 
-/* Each terminal is a card on the window's glass (Figma 28): only the agent's CLI is inside, its header sits above it
-   on the glass. The background is the terminal's own (theme, picked or imported), never the shell's. */
+/* Each terminal is a card (Figma 28 / 55): the agent's CLI, with its pane's header (SplitArea) over the top row. The
+   background is the terminal's own (theme, picked or imported), never the shell's. The corners come with the placement
+   (split/model.ts paneCorners). */
 .pane {
+  /* How far the header reaches over the grid; xterm-surface reads it to keep text clear of the header until there is
+     more than a screen of it, then lets it scroll under. */
+  --term-headroom: var(--titlebar-height);
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -44,10 +48,75 @@
   pointer-events: auto;
 }
 
-/* No padding here: xterm's fit addon measures this element's content box. */
+/* No padding here: xterm's fit addon measures this element's content box. The whole card, header row included: the
+   output scrolls under the header. */
 .host {
-  width: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+/* A full-screen program (the alternate screen: vim, htop) gets the rows below the header only, so its first row is
+   never under it. The host's new size refits the grid, which resizes the PTY. */
+.host:has(> :global(.xterm[data-alt-screen])) {
+  top: var(--term-headroom);
+}
+
+/* The grid sits lower while the bottom rows are still blank, by up to the headroom (xterm-surface). */
+.host > :global(.xterm) {
+  transform: translateY(var(--term-shift, 0px));
+}
+
+/* Progressive blur under the header (Figma 55), shown while text runs under it: bands from the card's top edge, the
+   shorter ones blurring more, so the blur builds up toward the top; over them a tint of the terminal's own colour for
+   the header's words. No mask-image: Chromium drops it from a backdrop-filter inside the card's rounded clip, which
+   left a hard edge. Each band fades itself: an ancestor's opacity would cut the backdrop off. */
+.headerBlur {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  /* Only a short fade past the header's bottom edge (the author found 16 too far). */
+  height: calc(var(--term-headroom) + var(--space-6));
+  pointer-events: none;
+}
+
+.headerBlur > i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  transition: opacity var(--duration-press) var(--ease-out);
+}
+
+.pane:has(:global(.xterm[data-under-header])) .headerBlur > i {
+  opacity: 1;
+}
+
+.headerBlur > i:nth-child(1) {
   height: 100%;
+  backdrop-filter: blur(0.5px);
+}
+
+.headerBlur > i:nth-child(2) {
+  height: calc(var(--term-headroom) + var(--space-2));
+  backdrop-filter: blur(1px);
+}
+
+.headerBlur > i:nth-child(3) {
+  height: calc(var(--term-headroom) - var(--space-4));
+  backdrop-filter: blur(2px);
+}
+
+.headerBlur > i:nth-child(4) {
+  height: calc(var(--term-headroom) - var(--space-12));
+  backdrop-filter: blur(4px);
+}
+
+.headerBlur > i:nth-child(5) {
+  height: 100%;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--term-bg) 80%, transparent) 0%, color-mix(in srgb, var(--term-bg) 50%, transparent) 70%, transparent 100%);
 }
 
 /* Breathing room lives on xterm's own element, which the fit addon subtracts. */

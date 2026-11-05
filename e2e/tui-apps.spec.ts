@@ -103,8 +103,9 @@ test('the terminal says what it is: xterm-256color, truecolor, 256 colours', asy
 test('vim: insert CJK text, arrows in normal mode, mouse click, save, and the shell screen comes back', async () => {
   await run('clear; echo before-vim')
   await run('vim -Nu NONE -i NONE notes.txt')
+  // No check for vim's "notes.txt" [New] message: on the alternate screen the terminal gives up the rows under the
+  // session header (PRD v1.125), and vim's redraw for that resize clears the message.
   await expect.poll(screen).toMatch(/^~$/m)
-  await expect.poll(screen).toContain('notes.txt')
 
   await page.keyboard.press('i')
   await page.keyboard.type('one')

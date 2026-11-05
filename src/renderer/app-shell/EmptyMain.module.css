@@ -1,9 +1,10 @@
 /* Figma 14 · welcome page (PRD F18). Centred a little above the middle; rhythm 12 / 40 / 32. */
 .empty {
   position: absolute;
-  /* A card on the window's glass, where the terminal would be (Figma 28). */
-  inset: 0 var(--card-gap) var(--card-gap-bottom) var(--lead-gap, 0);
-  border-radius: var(--radius-window);
+  /* A card where the terminal would be (Figma 28 / 55): up to the window's top, right and bottom edges, the bare
+     session header (AppShell) over its top. */
+  inset: calc(-1 * var(--titlebar-height)) 0 0;
+  border-radius: var(--radius-lead) var(--radius-trail) var(--radius-trail) var(--radius-lead);
   box-shadow: var(--card-edge), var(--card-shadow);
   display: flex;
   align-items: center;
