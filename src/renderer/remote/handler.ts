@@ -22,6 +22,11 @@ async function send(sessionId: string, text: string, paths: string[]): Promise<R
     startEagerly(sessionId)
     await whenAgentReady(sessionId)
   }
+  // A GUI session takes the photos as the message's attachments (PRD F23), not through its composer.
+  if (session.ui === 'gui') {
+    const result = await window.tr.gui.send(sessionId, { text: text.trim(), attachments: [...paths] })
+    return result.ok ? { ok: true } : remoteFail(result.reason)
+  }
   if (paths.length > 0) await insertPaths(sessionId, paths)
   if (text.trim()) await submitPrompt(sessionId, text)
   else await submitInputLine(sessionId, '[Image #')

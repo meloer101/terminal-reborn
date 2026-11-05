@@ -1,11 +1,14 @@
 // Integration seam between UI features and live agent sessions: typing a prompt into an agent's TUI with the
-// measured send protocol (PRD §6.9). Callers never touch PTYs or protocols.
+// measured send protocol (PRD §6.9). Callers never touch PTYs or protocols. A GUI session (PRD F23) has no TUI: its
+// prompts go through `window.tr.gui` (queued by main while a turn runs), text to insert goes into its composer draft,
+// files become attachments of the next message.
 import { claudeOrCodex } from '@shared/agents'
 import { createSendQueue, sendQueued, SendTimeoutError } from '@shared/send-executor'
 import { inputLineText, normalizeSendText, planSend, sendRefusal } from '@shared/send-protocol'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useSessionMeta } from './session-meta/store'
 import { useWorkspace } from './state/workspace'
+import { addAttachments, clearComposer, draftOf, insertIntoDraft, isGuiSession, useGuiSessions } from './gui/store'
 import { attachmentInput } from './terminal/attachments'
 import { acceptsBracketedPaste, getSendIo, readViewport } from './terminal/registry'
 import { noteInserted } from './terminal/typing'
@@ -29,6 +32,13 @@ function refuseOverMenu(sessionId: SessionId): void {
 export async function submitPrompt(sessionId: SessionId, text: string): Promise<void> {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session) throw new Error('会话不存在')
+  if (session.ui === 'gui') {
+    const body = normalizeSendText(text).trim()
+    if (!body) return
+    const result = await window.tr.gui.send(sessionId, { text: body, attachments: [] })
+    if (!result.ok) throw new Error(result.reason)
+    return
+  }
   refuseOverMenu(sessionId)
   const steps = planSend(text, session.kind)
   if (steps.length === 0) return
@@ -48,6 +58,10 @@ export async function submitPrompt(sessionId: SessionId, text: string): Promise<
 export async function insertIntoTerminal(sessionId: SessionId, text: string): Promise<void> {
   const body = normalizeSendText(text)
   if (!body) return
+  if (isGuiSession(sessionId)) {
+    insertIntoDraft(sessionId, body)
+    return
+  }
   refuseOverMenu(sessionId)
   const data = inputLineText(body, acceptsBracketedPaste(sessionId))
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
@@ -60,6 +74,10 @@ export async function insertIntoTerminal(sessionId: SessionId, text: string): Pr
  */
 export async function insertPaths(sessionId: SessionId, paths: readonly string[]): Promise<void> {
   if (!useWorkspace.getState().sessions.some((s) => s.id === sessionId)) return
+  if (isGuiSession(sessionId)) {
+    addAttachments(sessionId, paths)
+    return
+  }
   const data = attachmentInput(paths, claudeOrCodex(agentIn(sessionId)), acceptsBracketedPaste(sessionId))
   if (!data) return
   await sendQueued(queue, sessionId, [{ type: 'write', data }], getSendIo(sessionId))
@@ -71,6 +89,14 @@ export async function insertPaths(sessionId: SessionId, paths: readonly string[]
  * without text (PRD F22): their paths became `[Image #N]`. Rejects with a user-facing message while a menu is open.
  */
 export async function submitInputLine(sessionId: SessionId, needle: string): Promise<void> {
+  if (isGuiSession(sessionId)) {
+    // The photos are the composer's attachments: send them with whatever is typed.
+    const attachments = useGuiSessions.getState().attachments[sessionId] ?? []
+    const result = await window.tr.gui.send(sessionId, { text: draftOf(sessionId).trim(), attachments: [...attachments] })
+    if (!result.ok) throw new Error(result.reason)
+    clearComposer(sessionId)
+    return
+  }
   refuseOverMenu(sessionId)
   try {
     await sendQueued(queue, sessionId, [{ type: 'waitForText', needles: [needle], timeoutMs: 5_000 }, { type: 'delay', ms: 150 }, { type: 'write', data: '\r' }], getSendIo(sessionId))
@@ -88,6 +114,10 @@ export async function submitInputLine(sessionId: SessionId, needle: string): Pro
 export async function insertSlashCommand(sessionId: SessionId, command: string): Promise<void> {
   const kind = agentIn(sessionId)
   if (!kind) return
+  if (isGuiSession(sessionId)) {
+    insertIntoDraft(sessionId, `${command.trim()} `)
+    return
+  }
   refuseOverMenu(sessionId)
   const steps = planSend(command, kind)
   const submit = steps.findIndex((step) => step.type === 'waitForText')
@@ -101,6 +131,10 @@ export async function insertSlashCommand(sessionId: SessionId, command: string):
  */
 export async function interruptAgent(sessionId: SessionId): Promise<void> {
   if (!agentIn(sessionId)) throw new Error('不是 agent 会话')
+  if (isGuiSession(sessionId)) {
+    await window.tr.gui.interrupt(sessionId)
+    return
+  }
   await sendQueued(queue, sessionId, [{ type: 'write', data: '\x1b' }], getSendIo(sessionId))
 }
 
