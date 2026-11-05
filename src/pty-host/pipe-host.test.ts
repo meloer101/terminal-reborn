@@ -39,6 +39,20 @@ describe('PipeHost', () => {
     expect(host.write('s1', 'late')).toBe(false)
   }, 20000)
 
+  it('drops a stdout line longer than its limit, also one that arrives in many chunks, and goes on with the next', async () => {
+    const dropped: [string, number][] = []
+    host = new PipeHost({ line: (id, line, seq) => lines.push([id, line, seq]), exit: (id, exit) => exits.push([id, exit]), dropped: (id, chars) => dropped.push([id, chars]) }, 1000)
+    const script = `const w=(s)=>new Promise(r=>process.stdout.write(s,r));(async()=>{await w('{"a":1}\\n');for(let i=0;i<30;i++){await w('x'.repeat(100));await new Promise(r=>setTimeout(r,5))}await w('\\n{"b":2}\\n'+'y'.repeat(1500)+'\\n{"c":3}\\n')})()`
+    host.spawn({ id: 's3', cwd: process.cwd(), command: process.execPath, args: ['-e', script], baseEnv: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' } })
+    await until(() => exits.length === 1)
+    expect(lines.map(([, l]) => l).filter((l) => l.startsWith('{'))).toEqual(['{"a":1}', '{"b":2}', '{"c":3}'])
+    expect(dropped).toEqual([
+      ['s3', 3000],
+      ['s3', 1500]
+    ])
+    expect(host.snapshot('s3')!.lines.every((l) => l.length <= 1000)).toBe(true)
+  }, 20000)
+
   it('kills a session and forgets it', async () => {
     host = new PipeHost({ line: () => undefined, exit: (id, exit) => exits.push([id, exit]) })
     host.spawn({ id: 's2', cwd: '/nonexistent', command: process.execPath, args: ['-e', 'setInterval(()=>{},1000)'], baseEnv: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' } })

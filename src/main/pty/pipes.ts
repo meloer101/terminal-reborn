@@ -8,7 +8,7 @@
 // from before a host restart.
 
 import { isCliAgent } from '@shared/agents'
-import { PipeHost, type PipeExit, type PipeSpawn } from '../../pty-host/pipe-host'
+import { PIPE_MAX_LINE_CHARS, PipeHost, type PipeExit, type PipeSpawn } from '../../pty-host/pipe-host'
 import type { HookJournalEntry, HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
 
 export interface PipeHandlers {
@@ -179,7 +179,8 @@ export class HostPipeLink implements PipeLink {
   }
 
   write(id: string, line: string): boolean {
-    if (this.gone || !this.handlers.has(id) || line.includes('\n')) return false
+    // Too long for one frame: the host would drop the whole connection (every terminal), so the message is refused.
+    if (this.gone || !this.handlers.has(id) || line.includes('\n') || line.length > PIPE_MAX_LINE_CHARS) return false
     this.post({ type: 'pipe-write', id, line })
     return true
   }

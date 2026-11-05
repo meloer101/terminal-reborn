@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PipeExit } from '../../pty-host/pipe-host'
+import { PIPE_MAX_LINE_CHARS, type PipeExit } from '../../pty-host/pipe-host'
 import type { HostEvent, HostRequest } from '../../pty-host/protocol'
 import { SessionHost } from '../../pty-host/session-host'
 import { HostPipeLink, LocalPipeLink, PipeLinkRouter, pipeHosting, pipeSessionsOf, type PipeHandlers } from './pipes'
@@ -77,6 +77,8 @@ describe('HostPipeLink', () => {
 
     expect(link.write('a', 'hi')).toBe(true)
     expect(link.write('a', 'two\nlines')).toBe(false)
+    // One frame too big for the daemon's socket would end the connection, every terminal with it.
+    expect(link.write('a', 'x'.repeat(PIPE_MAX_LINE_CHARS + 1))).toBe(false)
     expect(posted.at(-1)).toEqual({ type: 'pipe-write', id: 'a', line: 'hi' })
 
     expect(link.handleEvent({ type: 'pipe-exit', id: 'a', exitCode: 2, stderr: 'boom' })).toBe(true)

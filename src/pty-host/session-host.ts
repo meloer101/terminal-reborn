@@ -77,7 +77,11 @@ export class SessionHost {
   private readonly pipes: PipeSessions
 
   constructor(private readonly options: SessionHostOptions) {
-    this.pipes = new PipeSessions({ emit: (event) => options.emit(event), onSessionsChanged: () => options.onSessionsChanged?.() })
+    this.pipes = new PipeSessions({
+      emit: (event) => options.emit(event),
+      onSessionsChanged: () => options.onSessionsChanged?.(),
+      log: (message) => (options.log ? options.log(message, '') : console.error(`[pty-host] ${message}`))
+    })
   }
 
   private guard(label: string, fn: () => void): boolean {

@@ -6,7 +6,7 @@
 import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
 import { acpAnswerResult, acpConfig, acpConfigRequest, createAcpNormalizer } from './acp'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
-import { isImagePath, withPaths } from './launch'
+import { splitAttachments, withPaths } from './launch'
 
 const HANDSHAKE_TIMEOUT_MS = 60_000
 const UPDATES_THAT_RUN = new Set(['agent_message_chunk', 'agent_thought_chunk', 'tool_call', 'tool_call_update', 'plan'])
@@ -172,14 +172,9 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
 
     async send(text, attachments) {
       if (!sessionId) return false
-      const blocks: Rec[] = []
-      const paths: string[] = []
-      for (const path of attachments) {
-        const image = images && isImagePath(path) ? await io.image(path) : null
-        if (image) blocks.push({ type: 'image', mimeType: image.mediaType, data: image.data })
-        else paths.push(path)
-      }
-      const body = withPaths(text, paths)
+      const split = await splitAttachments(attachments, images ? io.image : null)
+      const blocks: Rec[] = split.images.map((image) => ({ type: 'image', mimeType: image.mediaType, data: image.data }))
+      const body = withPaths(text, split.paths)
       io.emit(normalizer.sent(`u-sent-${++sent}`, body, blocks.length))
       const id = sessionId
       void rpc.request('session/prompt', { sessionId: id, prompt: [{ type: 'text', text: body }, ...blocks] }).then((outcome) => {

@@ -7,7 +7,7 @@
 import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
 import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, type ClaudeStreamNormalizer } from './claude-stream'
 import { isRec, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
-import { isImagePath, withPaths } from './launch'
+import { splitAttachments, withPaths } from './launch'
 
 type ControlOutcome = { ok: true; response: Rec } | { ok: false; error: string }
 
@@ -178,14 +178,9 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
     },
 
     async send(text, attachments) {
-      const images: Rec[] = []
-      const paths: string[] = []
-      for (const path of attachments) {
-        const image = isImagePath(path) ? await io.image(path) : null
-        if (image) images.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } })
-        else paths.push(path)
-      }
-      const body = withPaths(text, paths)
+      const split = await splitAttachments(attachments, io.image)
+      const images = split.images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } }))
+      const body = withPaths(text, split.paths)
       const content = images.length === 0 ? body : [...(body ? [{ type: 'text', text: body }] : []), ...images]
       return io.write({ type: 'user', message: { role: 'user', content } })
     },

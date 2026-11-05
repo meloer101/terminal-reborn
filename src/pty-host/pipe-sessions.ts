@@ -4,13 +4,14 @@
 // kept (with its last lines and stderr) for that attach, then forgotten. SessionHost owns one of these, so the daemon
 // and the utilityProcess fallback handle pipe sessions on one code path.
 import type { AgentKind } from '@shared/types'
-import { PipeHost, type PipeExit } from './pipe-host'
+import { PIPE_MAX_LINE_CHARS, PipeHost, type PipeExit } from './pipe-host'
 import type { HostEvent, HostPipeSpawnRequest, HostRequest, HostSessionInfo } from './protocol'
 
 export interface PipeSessionsOptions {
   emit(event: HostEvent): void
   /** A pipe session started, ended or was forgotten (the daemon's idle exit and hook journal follow it). */
   onSessionsChanged?: () => void
+  log?: (message: string) => void
 }
 
 interface PipeRecord {
@@ -38,12 +39,18 @@ function validSpawn(request: HostPipeSpawnRequest): boolean {
 
 export class PipeSessions {
   private readonly records = new Map<string, PipeRecord>()
-  private readonly host = new PipeHost({
-    line: (id, line, seq) => {
-      if (this.records.get(id)?.attached) this.options.emit({ type: 'pipe-line', id, line, seq })
+  // Lines go out over the daemon's socket (or the utilityProcess port): one too long for a frame is dropped and logged,
+  // not sent to end the connection.
+  private readonly host = new PipeHost(
+    {
+      line: (id, line, seq) => {
+        if (this.records.get(id)?.attached) this.options.emit({ type: 'pipe-line', id, line, seq })
+      },
+      exit: (id, exit) => this.onExit(id, exit),
+      dropped: (id, chars) => this.options.log?.(`pipe session ${id}: dropped a ${chars}-character stdout line (over ${PIPE_MAX_LINE_CHARS})`)
     },
-    exit: (id, exit) => this.onExit(id, exit)
-  })
+    PIPE_MAX_LINE_CHARS
+  )
 
   constructor(private readonly options: PipeSessionsOptions) {}
 

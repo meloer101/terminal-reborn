@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { PIPE_MAX_LINE_CHARS } from '../pty-host/pipe-host'
 import { frame, LineReader, MAX_FRAME_CHARS } from './wire'
 
 function reader(): { lines: LineReader; messages: unknown[]; errors: string[] } {
@@ -56,5 +57,12 @@ describe('LineReader', () => {
     const piece = 'x'.repeat(8 * 1024 * 1024)
     for (let sent = 0; sent <= MAX_FRAME_CHARS && errors.length === 0; sent += piece.length) lines.push(piece)
     expect(errors).toEqual(['frame too large'])
+  })
+})
+
+describe('pipe lines and the frame limit', () => {
+  it('a pipe line of the longest allowed length still fits in one frame, framed with every character escaped', () => {
+    const line = '"'.repeat(PIPE_MAX_LINE_CHARS)
+    expect(frame({ type: 'pipe-write', id: 'x'.repeat(128), line }).length).toBeLessThan(MAX_FRAME_CHARS)
   })
 })

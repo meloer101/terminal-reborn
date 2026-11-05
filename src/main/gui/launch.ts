@@ -7,6 +7,7 @@ import { shellQuote, tomlString } from '@shared/agent-launch'
 import { AGENT_GUI, guiBinary } from '@shared/gui-agents'
 import type { GuiLaunch, GuiProtocol } from '@shared/gui-chat'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
+import type { ImageBlock } from './driver'
 
 /** The flags a long-lived headless Claude needs for a GUI (PRD F23 驱动). */
 export const CLAUDE_STREAM_ARGS = [
@@ -85,6 +86,34 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i
 
 /** Claude and ACP agents get png / jpg / gif / webp as image blocks; Codex reads them from the path. */
 export const isImagePath = (path: string): boolean => IMAGE_EXT.test(path)
+
+/**
+ * Image bytes inlined in one message, at most: the message is one stdin line, and a line must fit in one frame of the
+ * pty daemon's socket (PIPE_MAX_LINE_CHARS; base64 is 4/3 of the bytes). Images past it go as paths.
+ */
+export const MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
+
+/**
+ * The attachments sent as image blocks (`image` reads one; null when the agent takes none) and the rest, named by
+ * path in the text.
+ */
+export async function splitAttachments(
+  attachments: readonly string[],
+  image: ((path: string) => Promise<ImageBlock | null>) | null
+): Promise<{ images: ImageBlock[]; paths: string[] }> {
+  const images: ImageBlock[] = []
+  const paths: string[] = []
+  let bytes = 0
+  for (const path of attachments) {
+    const block = image && isImagePath(path) && bytes < MAX_INLINE_IMAGE_BYTES ? await image(path) : null
+    const size = block ? Math.ceil((block.data.length * 3) / 4) : 0
+    if (block && bytes + size <= MAX_INLINE_IMAGE_BYTES) {
+      images.push(block)
+      bytes += size
+    } else paths.push(path)
+  }
+  return { images, paths }
+}
 
 /** Attachments that are not sent as images go into the text as paths, one per line (as F19 drops them). */
 export function withPaths(text: string, paths: readonly string[]): string {
