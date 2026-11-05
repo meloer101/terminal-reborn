@@ -1,0 +1,798 @@
+/* A GUI session (PRD F23, Figma 49″C–F, 49′C / 49′E): the card a terminal would be, a 720-wide column inside it —
+   feed, then the cards, queued messages and composer, each a bg/section block 8 apart. Colour only on status. */
+
+/* The card on the window's glass, like a terminal pane (TerminalArea.module.css). */
+.pane {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: var(--radius-window);
+  background: var(--bg-app);
+  box-shadow: var(--card-shadow);
+}
+
+.pane::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  box-shadow: var(--card-edge);
+  pointer-events: none;
+}
+
+.pane[data-shown='false'] {
+  display: none;
+}
+
+.chat {
+  --column: 720px;
+  /* A status glyph (14) and its gap (8): summaries and plan steps start at the text after it. */
+  --glyph-indent: calc(14px + var(--space-8));
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+  height: 100%;
+  padding-bottom: var(--space-16);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+}
+
+/* --- feed (Figma `Feed`: 16 between blocks, 24 above the first, bottom-aligned while short) --- */
+
+.scroller {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-16);
+  box-sizing: border-box;
+  max-width: calc(var(--column) + 2 * var(--space-16));
+  min-height: 100%;
+  margin: 0 auto;
+  padding: var(--space-24) var(--space-16) 0;
+  user-select: text;
+}
+
+/* Blocks far out of view skip layout and paint; long conversations stay quick. */
+.feed > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px;
+}
+
+.userRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bubble {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 83%;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-window);
+  background: var(--bg-selected);
+}
+
+.bubbleHeader {
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.bubbleText {
+  margin: 0;
+  font: var(--text-composer);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.block {
+  min-width: 0;
+}
+
+.system {
+  margin: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+/* Tool and thinking rows: 8 apart inside a run. */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.thinking,
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.thinkingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.thinkingRow svg {
+  color: var(--text-primary);
+}
+
+.thinkingText {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.thinkingLive {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--text-tertiary);
+}
+
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.toolRow:disabled {
+  cursor: default;
+}
+
+.toolRow > svg {
+  flex-shrink: 0;
+}
+
+.toolName {
+  flex-shrink: 0;
+  font: 500 13px/18px var(--font-mono);
+  color: var(--text-primary);
+}
+
+.toolArg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: 400 13px/18px var(--font-mono);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.added,
+.removed {
+  flex-shrink: 0;
+  font: var(--text-mono-s);
+  line-height: 18px;
+}
+
+.added {
+  color: var(--diff-add-fg);
+}
+
+.removed {
+  color: var(--diff-del-fg);
+}
+
+.waiting {
+  flex-shrink: 0;
+  font: var(--text-caption);
+  line-height: 18px;
+  color: var(--status-attention);
+}
+
+.toolSummary {
+  margin: 0;
+  padding-left: var(--glyph-indent);
+  overflow: hidden;
+  font: var(--text-mono-s);
+  line-height: 18px;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output {
+  margin: 0 0 0 var(--glyph-indent);
+  max-height: 320px;
+  padding: var(--space-8) var(--space-12);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  font: var(--text-mono-s);
+  line-height: 18px;
+  color: var(--text-secondary);
+  white-space: pre;
+}
+
+.hunk + .hunk::before {
+  content: '⋯\A';
+  color: var(--text-tertiary);
+}
+
+.diffLine[data-kind='add'] {
+  color: var(--diff-add-fg);
+}
+
+.diffLine[data-kind='del'] {
+  color: var(--diff-del-fg);
+}
+
+/* --- the agent's Markdown, the files preview's element styles at 14 / 22 --- */
+
+.markdown {
+  composes: markdown from '../panels/files/MarkdownView.module.css';
+  padding: 0;
+  font: var(--text-composer);
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* The text still streaming ends in a caret. */
+.live > :last-child::after {
+  content: ' ▍';
+  color: var(--text-tertiary);
+}
+
+/* --- below the feed: cards, queued messages, failure, composer --- */
+
+.dock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--column) + 2 * var(--space-16));
+  padding: 0 var(--space-16);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.cardHeader > svg {
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font: 500 14px/20px var(--font-ui);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.cardDetail {
+  max-height: 160px;
+  margin: 0;
+  padding: var(--space-8) 10px;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  font: 400 13px/18px var(--font-mono);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+.planActions {
+  padding-top: var(--space-4);
+}
+
+/* Plan (49″D): the steps under the title, from the title's text line. */
+.planBody {
+  max-height: 240px;
+  overflow-y: auto;
+  padding-left: var(--glyph-indent);
+  font: 400 14px/20px var(--font-ui);
+  color: var(--text-secondary);
+}
+
+.card:has(.planBody) {
+  gap: var(--space-8);
+}
+
+/* Button (Figma 9:33): Secondary has a hairline, Primary is filled; the shortcut sits inline. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--text-body-strong);
+  color: var(--text-primary);
+  white-space: nowrap;
+  transition: transform var(--duration-press) var(--ease-out);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.button[data-primary='true'] {
+  border-color: transparent;
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.button:disabled {
+  opacity: 0.5;
+}
+
+.buttonShortcut {
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.button[data-primary='true'] .buttonShortcut {
+  color: inherit;
+  opacity: 0.55;
+}
+
+/* Question (49″F): OptionItem rows, 2 apart. */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 30px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.option[data-focused='true'] {
+  border-color: var(--border-strong);
+  background: var(--bg-selected);
+}
+
+.optionKey {
+  flex-shrink: 0;
+  font: var(--text-mono-s-medium);
+  color: var(--text-tertiary);
+}
+
+.option[data-focused='true'] .optionKey {
+  color: var(--status-attention);
+}
+
+.optionLabel {
+  font: var(--text-body);
+}
+
+.otherInput {
+  height: 30px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  outline: none;
+}
+
+/* Queued (49″C): 排队 · the message · ×. */
+.queued {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+}
+
+.queuedLabel {
+  flex-shrink: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.queuedText,
+.queuedInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--text-body);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.queuedText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queuedInput {
+  color: var(--text-primary);
+  outline: none;
+}
+
+.queuedRemove {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+}
+
+.failure {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+}
+
+.failure > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.failureText {
+  font: var(--text-body);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* Composer (49″C): 12 / 8 / 8 / 12 inside, the text above the bar. */
+.composerWrap {
+  position: relative;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-8) var(--space-8) var(--space-12);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+}
+
+.input {
+  width: 100%;
+  min-height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--text-composer);
+  color: var(--text-primary);
+  resize: none;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: 240px;
+  height: 24px;
+  padding: 0 var(--space-4) 0 var(--space-8);
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
+
+.attachmentName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentRemove {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-primary);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.barIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-primary);
+}
+
+.barIcon:hover {
+  background: var(--bg-hover);
+}
+
+.picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.picker:hover,
+.picker[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.picker svg {
+  color: var(--text-primary);
+}
+
+/* Stop (a running turn) / send: a 28 circle, filled. */
+.round {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+  transition: transform var(--duration-press) var(--ease-out);
+}
+
+.round:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.round:disabled {
+  background: var(--bg-selected);
+  color: var(--text-disabled);
+}
+
+.barIcon:focus-visible,
+.picker:focus-visible,
+.round:focus-visible,
+.button:focus-visible,
+.option:focus-visible,
+.toolRow:focus-visible,
+.thinkingRow:focus-visible,
+.queuedText:focus-visible,
+.queuedRemove:focus-visible,
+.attachmentRemove:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- popovers over the composer: the `/` menu (49′C) and a picker's menu (49′E) --- */
+
+.popover {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  overflow-y: auto;
+  border-radius: var(--radius-popover);
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
+  color: var(--text-primary);
+  user-select: none;
+  animation: pop-in var(--duration-pop) var(--ease-out);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes pop-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.slashMenu {
+  bottom: calc(100% + var(--space-4));
+  left: 0;
+  width: 420px;
+  max-width: 100%;
+  max-height: 320px;
+  transform-origin: bottom left;
+}
+
+.pickerMenu {
+  min-width: 230px;
+  max-height: 360px;
+  transform-origin: bottom right;
+}
+
+.popoverTitle {
+  padding: 6px 10px var(--space-4);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.command {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font: var(--text-body);
+}
+
+.command[aria-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.commandName {
+  flex-shrink: 0;
+  font: 400 13px/18px var(--font-mono);
+  color: var(--text-primary);
+}
+
+.commandText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.pickerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: var(--text-body);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.pickerRow:hover,
+.pickerRow:focus-visible {
+  background: var(--bg-selected);
+  outline: none;
+}
+
+.pickerLabel {
+  flex: 1;
+}
+
+.pickerSegments {
+  margin: 0 var(--space-6) var(--space-4);
+  align-self: flex-start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation-name: pop-fade;
+  }
+
+  .button,
+  .round {
+    transition: none;
+  }
+
+  .button:active:not(:disabled),
+  .round:active:not(:disabled) {
+    transform: none;
+  }
+}

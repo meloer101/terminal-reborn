@@ -80,6 +80,11 @@ export type Signal =
    * while the app was closed (`exited`). Only moves a `not-started` session.
    */
   | { type: 'reattached'; exited: boolean }
+  /**
+   * A GUI session's agent is up: main answered its `gui.open` (PRD F23). There is no screen or title to prove it, and a
+   * reattached process sends no SessionStart again; its status keeps coming from agent events.
+   */
+  | { type: 'opened' }
 
 export interface SessionState {
   kind: AgentKind
@@ -646,6 +651,9 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         ? { ...state, status: 'exited', currentAction: undefined, toolAction: undefined, ended: true, phase: 'exited', phaseSince: now, blocked: undefined, asks: NO_ASKS, under: undefined }
         : // Its hooks reported in the run that launched it; a quiet idle agent is not a silent-hooks one.
           { ...state, phase: 'ready', phaseSince: now, hooksSeen: true }
+
+    case 'opened':
+      return state.phase === 'starting' || state.phase === 'blocked' || state.phase === 'not-started' ? { ...ready(state, now), hooksSeen: true } : state
 
     case 'hooks-silent':
       return state.kind === 'claude' && state.phase === 'ready' && !state.hooksSeen && !state.hooksSilent

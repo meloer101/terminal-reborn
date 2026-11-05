@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { NewSessionInfo } from '@shared/new-session'
-import { branchProblemText, createFailureText, planCreate, prepareText, tilde, type SheetForm } from './model'
+import { binaryInstalled, branchProblemText, createFailureText, planCreate, prepareText, tilde, uiRow, type SheetForm } from './model'
 
 const info: NewSessionInfo = {
   repo: true,
@@ -88,5 +88,36 @@ describe('copy', () => {
   it('puts a git failure in one line', () => {
     expect(createFailureText({ ok: false, reason: 'git', message: "fatal: '/x' already exists\nmore" })).toBe("'/x' already exists")
     expect(createFailureText({ ok: false, reason: 'branch-exists' })).toBe('分支已经存在')
+  })
+})
+
+describe('uiRow (PRD F23, Figma 49″A / B)', () => {
+  const none = () => false
+
+  it('offers GUI for agents that have one, and keeps the choice', () => {
+    expect(uiRow('grok', 'gui', none)).toEqual({ value: 'gui', guiDisabled: false, forced: false })
+    expect(uiRow('claude', 'cli', none)).toEqual({ value: 'cli', guiDisabled: false, forced: false })
+  })
+
+  it('turns GUI off until the adapter is installed, with its install command (Pi, Amp)', () => {
+    expect(uiRow('pi', 'gui', none)).toEqual({ value: 'cli', guiDisabled: true, adapter: { binary: 'pi-acp', install: 'npm install -g pi-acp' }, forced: true })
+    expect(uiRow('pi', 'gui', (b) => b === 'pi-acp')).toEqual({ value: 'gui', guiDisabled: false, forced: false })
+  })
+
+  it('says why on hover for a CLI-only agent; a CLI chosen there is not forced', () => {
+    expect(uiRow('crush', 'gui', none)).toMatchObject({ value: 'cli', guiDisabled: true, guiTitle: 'Crush 没有 ACP，只能用 CLI', forced: true })
+    expect(uiRow('crush', 'cli', none)?.forced).toBe(false)
+  })
+
+  it('has no row for a plain terminal', () => {
+    expect(uiRow('shell', 'gui', none)).toBeNull()
+  })
+
+  it('reads agent binaries from the detection result; adapters are not in it', () => {
+    const installed = binaryInstalled({ claude: true, pi: true })
+    expect(installed('claude')).toBe(true)
+    expect(installed('pi')).toBe(true)
+    expect(installed('pi-acp')).toBe(false)
+    expect(binaryInstalled(null)('claude')).toBe(false)
   })
 })

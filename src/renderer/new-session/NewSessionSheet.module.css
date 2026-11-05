@@ -395,3 +395,44 @@
     backdrop-filter: none;
   }
 }
+
+/* 界面 · the adapter a GUI needs first (Figma 49″B, 794:37262): under the segments, text from the control column, the
+   copy button at the row's end. */
+.adapter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding-bottom: var(--space-6);
+}
+
+.labelSpacer {
+  flex-shrink: 0;
+  width: 64px;
+}
+
+.adapterText {
+  flex: 1;
+  min-width: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.adapterCopy {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
+
+.adapterCopy:hover {
+  background: var(--bg-hover);
+}
+
+.adapterCopy:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

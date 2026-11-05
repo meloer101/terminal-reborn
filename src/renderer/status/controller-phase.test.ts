@@ -196,3 +196,34 @@ describe('phase tracking', () => {
     expect(phase(h, 'a')).toBe('ready')
   })
 })
+
+describe('GUI sessions (PRD F23)', () => {
+  it('are up once gui.open answered, with no screen, title or SessionStart to say so', () => {
+    const h = harness([session('g', { ui: 'gui', kind: 'grok' })], 'g')
+    expect(phase(h, 'g')).toBe('starting')
+    // gui/launch.ts patches the store; the controller's next sync picks it up.
+    h.sessions = h.sessions.map((s) => ({ ...s, phase: 'ready' as const }))
+    h.controller.sync()
+    expect(h.controller.stateOf('g')).toMatchObject({ phase: 'ready', hooksSeen: true })
+    // Status keeps following agent events; no time-based heal takes a running turn away.
+    h.controller.handleEvent('g', { type: 'prompt-submit', prompt: '跑测试' })
+    expect(status(h, 'g')).toBe('running')
+    h.clock.now += 120_000
+    h.controller.tick()
+    expect(status(h, 'g')).toBe('running')
+  })
+
+  it('reattach from not-started after a restart', () => {
+    const h = harness([session('g', { ui: 'gui', phase: 'not-started' })])
+    h.sessions = h.sessions.map((s) => ({ ...s, phase: 'ready' as const }))
+    h.controller.sync()
+    expect(h.controller.stateOf('g')?.phase).toBe('ready')
+  })
+
+  it('a terminal session whose store says ready is not taken for opened', () => {
+    const h = harness([session('t')])
+    h.sessions = h.sessions.map((s) => ({ ...s, phase: 'ready' as const }))
+    h.controller.sync()
+    expect(h.controller.stateOf('t')?.phase).toBe('starting')
+  })
+})

@@ -1,5 +1,9 @@
 // The new-session sheet's decisions (PRD F4, Figma 15), kept apart from React so they can be tested: what 创建 does
 // with the form, what blocks it, and the few lines of copy the sheet shows only when something is limited or wrong.
+import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { guiAvailability, type GuiAvailability } from '@shared/gui-agents'
+import type { AgentAvailability } from '@shared/ipc'
+import type { AgentKind, SessionUi } from '@shared/types'
 import {
   branchNameProblem,
   folderNameFor,
@@ -114,4 +118,39 @@ export function createFailureText(result: Exclude<WorktreeCreateResult, { ok: tr
     case 'git':
       return result.message?.split('\n').find((line) => line.trim() !== '')?.replace(/^fatal:\s*/, '') ?? 'git 出错了'
   }
+}
+
+// --- 界面 (PRD F23, Figma 49″A / 49″B) ----------------------------------------------------------------------------
+
+/**
+ * Whether a binary is on the login shell's PATH, from what main reported for the agent CLIs. An adapter (pi-acp,
+ * amp-acp) is not among them: it counts as missing until main reports it too.
+ */
+export function binaryInstalled(found: AgentAvailability | null): (binary: string) => boolean {
+  return (binary) => CLI_AGENTS.some((id) => AGENT_SPECS[id].binary === binary && found?.[id] === true)
+}
+
+export interface UiRow {
+  /** The 界面 the session gets: the choice, unless the agent cannot run as GUI. */
+  value: SessionUi
+  /** The GUI segment is off: the agent has no GUI, or its adapter is missing. */
+  guiDisabled: boolean
+  /** Hover text of the disabled GUI segment (CLI only, Figma 49″B). */
+  guiTitle?: string
+  /** The adapter to install first (Figma 49″B: 「GUI 要先装 pi-acp」 + 复制安装命令). */
+  adapter?: { binary: string; install: string }
+  /** The value is CLI because GUI was not possible, not because it was chosen: it is not remembered. */
+  forced: boolean
+}
+
+/** The 界面 row for an agent (null for a plain terminal, which has no GUI). `choice` is the user's (or remembered) pick. */
+export function uiRow(kind: AgentKind, choice: SessionUi, installed: (binary: string) => boolean): UiRow | null {
+  if (kind === 'shell') return null
+  const availability: GuiAvailability = guiAvailability(kind, installed)
+  if (availability.kind === 'available') return { value: choice, guiDisabled: false, forced: false }
+  const forced = choice === 'gui'
+  if (availability.kind === 'needs-adapter') {
+    return { value: 'cli', guiDisabled: true, adapter: { binary: availability.binary, install: availability.install }, forced }
+  }
+  return { value: 'cli', guiDisabled: true, guiTitle: availability.reason, forced }
 }

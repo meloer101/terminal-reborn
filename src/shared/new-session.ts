@@ -208,6 +208,24 @@ export function rememberWorkdir(
 
 export const isWorkdir = (value: unknown): value is Workdir => value === 'worktree' || value === 'current'
 
+// --- the remembered 界面 (PRD F23) ----------------------------------------------------------------------------------
+
+/** 界面 for a project: what was used last time; the first time GUI. Whether the agent can run as GUI is the sheet's call. */
+export function initialUi(remembered: Readonly<Record<string, 'cli' | 'gui'>>, projectId: string): 'cli' | 'gui' {
+  return remembered[projectId] ?? 'gui'
+}
+
+/** Records the 界面 a session was created with. A CLI forced by the agent (no GUI for it) is not a choice. */
+export function rememberUi(
+  remembered: Readonly<Record<string, 'cli' | 'gui'>>,
+  projectId: string,
+  choice: 'cli' | 'gui',
+  forced: boolean
+): Readonly<Record<string, 'cli' | 'gui'>> {
+  if (forced || remembered[projectId] === choice) return remembered
+  return { ...remembered, [projectId]: choice }
+}
+
 // --- validation in main -----------------------------------------------------------------------------------------
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)

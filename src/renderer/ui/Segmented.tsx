@@ -9,6 +9,8 @@ export interface SegmentedOption<T extends string> {
   value: T
   label: ReactNode
   disabled?: boolean
+  /** Hover text, e.g. why a disabled option is off. */
+  title?: string
 }
 
 export function Segmented<T extends string>({
@@ -116,6 +118,7 @@ export function Segmented<T extends string>({
             data-selected={selected}
             tabIndex={selected ? 0 : -1}
             disabled={option.disabled}
+            title={option.title}
             className={styles.option}
             onClick={() => onChange(option.value)}
           >

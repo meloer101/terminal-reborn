@@ -18,7 +18,7 @@ function pathsOf(files: FileList): string[] {
     .filter((path) => path.length > 0)
 }
 
-/** Puts the paths in, then gives the terminal the keyboard. */
+/** Puts the paths in, then gives the terminal the keyboard (a GUI session's composer takes it itself, PRD F23). */
 export function addFiles(sessionId: SessionId, paths: readonly string[]): void {
   if (paths.length === 0) return
   void insertPaths(sessionId, paths)

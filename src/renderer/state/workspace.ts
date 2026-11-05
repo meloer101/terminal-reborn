@@ -5,8 +5,8 @@ import { useContext } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { WorktreeArchive } from '@shared/archive'
-import { rememberWorkdir, type Workdir } from '@shared/new-session'
-import type { AgentKind, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
+import { rememberUi, rememberWorkdir, type Workdir } from '@shared/new-session'
+import type { AgentKind, ProjectId, Session, SessionId, SessionUi, Worktree, WorktreeId } from '@shared/types'
 import { hasPane, pane, paneIds, PICKER_PANE, placeSession, removePane, replacePane, sessionsIn, splitPane, type DropZone, type Side, type SplitNode } from '@shared/split-layout'
 import {
   closeWindow,
@@ -97,6 +97,8 @@ interface WorkspaceState extends WorkspaceData {
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
   /** 智能体 last chosen in the new-session sheet, by project (PRD F4 v1.68). */
   newSessionAgent: Readonly<Record<ProjectId, AgentKind>>
+  /** 界面 last chosen in the new-session sheet, by project (PRD F23). */
+  newSessionUi: Readonly<Record<ProjectId, SessionUi>>
   /** Bumped whenever the keyboard should go to the active session's terminal (B7), even if it is already active. */
   focusRequest: number
   /** Bumped by 会话 › 重命名会话: the header starts renaming the active session. */
@@ -136,10 +138,10 @@ interface WorkspaceState extends WorkspaceData {
   /** Adds (or finds) the project for a folder. */
   addProject(rootPath: string): ProjectId
   removeProject(id: ProjectId): void
-  /** Starts a session in the project and selects it; null if the project is gone. */
-  addSession(projectId: ProjectId, kind: AgentKind): SessionId | null
+  /** Starts a session in the project and selects it; null if the project is gone. `ui` 'gui': a GUI session (PRD F23). */
+  addSession(projectId: ProjectId, kind: AgentKind, ui?: SessionUi): SessionId | null
   /** Starts a session in one of the project's worktree folders (Worktree view) and selects it. */
-  addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind): SessionId | null
+  addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, ui?: SessionUi): SessionId | null
   /**
    * 一题多解: starts a session in a new worktree folder without selecting it (the overview shows the group). The
    * selection stays where it was; with none, the new session takes it.
@@ -151,6 +153,8 @@ interface WorkspaceState extends WorkspaceData {
   rememberWorkdir(projectId: ProjectId, choice: Workdir): void
   /** Remembers the new-session sheet's 智能体 for a project. */
   rememberAgent(projectId: ProjectId, kind: AgentKind): void
+  /** Remembers the new-session sheet's 界面 for a project; a CLI the agent forced is not remembered. */
+  rememberUi(projectId: ProjectId, ui: SessionUi, forced: boolean): void
   closeSession(id: SessionId): void
   /** Drops linked worktree records whose folder was deleted, with their sessions (Worktree view). */
   forgetWorktrees(ids: WorktreeId[]): void
@@ -288,6 +292,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     recentProjects: saved?.recentProjects ?? [],
     newSessionWorkdir: saved?.newSessionWorkdir ?? {},
     newSessionAgent: saved?.newSessionAgent ?? {},
+    newSessionUi: saved?.newSessionUi ?? {},
     focusRequest: 0,
     renameRequest: 0,
 
@@ -367,14 +372,14 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       return result.projectId
     },
     removeProject: (id) => commit(removeProject(pick(get()), id)),
-    addSession(projectId, kind) {
-      const result = addSession(pick(get()), projectId, kind, Date.now())
+    addSession(projectId, kind, ui) {
+      const result = addSession(pick(get()), projectId, kind, Date.now(), randomId, ui)
       if (!result) return null
       commit(result.data)
       return result.sessionId
     },
-    addSessionInWorktree(projectId, target, kind) {
-      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now())
+    addSessionInWorktree(projectId, target, kind, ui) {
+      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now(), randomId, ui)
       if (!result) return null
       commit(result.data, { mainView: 'session', focusRequest: get().focusRequest + 1 })
       return result.sessionId
@@ -395,6 +400,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     },
     rememberWorkdir: (projectId, choice) => set((s) => ({ newSessionWorkdir: rememberWorkdir(s.newSessionWorkdir, projectId, choice, true) })),
     rememberAgent: (projectId, kind) => set((s) => (s.newSessionAgent[projectId] === kind ? {} : { newSessionAgent: { ...s.newSessionAgent, [projectId]: kind } })),
+    rememberUi: (projectId, ui, forced) => set((s) => ({ newSessionUi: rememberUi(s.newSessionUi, projectId, ui, forced) })),
     closeSession: (id) => {
       commit(closeSession(pick(get()), id))
       fillProjectWindow()
@@ -485,6 +491,7 @@ setSnapshotProvider(() => {
       recentProjects: state.recentProjects,
       newSessionWorkdir: state.newSessionWorkdir,
       newSessionAgent: state.newSessionAgent,
+      newSessionUi: state.newSessionUi,
       attemptGroups: attemptGroupsSnapshot()
     },
     drafts.snapshot(),

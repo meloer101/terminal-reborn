@@ -6,7 +6,7 @@ import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
 import type { ReviewComment } from '@shared/review-comments'
 import { hasPane, paneIds, persistedSplit, PICKER_PANE, removePane, replacePane, sessionsIn, type SplitNode } from '@shared/split-layout'
-import type { AgentKind, Project, ProjectId, Session, SessionId, Worktree, WorktreeId } from '@shared/types'
+import type { AgentKind, Project, ProjectId, Session, SessionId, SessionUi, Worktree, WorktreeId } from '@shared/types'
 import { MAX_RECENT_PROJECTS, WORKSPACE_FILE_VERSION, type DiffLayout, type PersistedRightPanel, type WorkspaceFile } from '@shared/workspace-file'
 import type { PersistedWindow } from '@shared/window-layout'
 
@@ -64,11 +64,12 @@ export function addSession(
   projectId: ProjectId,
   kind: AgentKind,
   now: number,
-  makeId: MakeId = randomId
+  makeId: MakeId = randomId,
+  ui: SessionUi = 'cli'
 ): { data: WorkspaceData; sessionId: SessionId } | null {
   const worktree = data.worktrees.find((w) => w.projectId === projectId && w.isMain)
   if (!worktree) return null
-  return startSessionIn(data, worktree, kind, now, makeId)
+  return startSessionIn(data, worktree, kind, now, makeId, ui)
 }
 
 /**
@@ -81,11 +82,12 @@ export function addSessionInWorktree(
   target: { path: string; branch: string; baseBranch?: string },
   kind: AgentKind,
   now: number,
-  makeId: MakeId = randomId
+  makeId: MakeId = randomId,
+  ui: SessionUi = 'cli'
 ): { data: WorkspaceData; sessionId: SessionId } | null {
   if (!data.projects.some((p) => p.id === projectId)) return null
   const known = data.worktrees.find((w) => w.projectId === projectId && w.path === target.path)
-  if (known) return startSessionIn(data, known, kind, now, makeId)
+  if (known) return startSessionIn(data, known, kind, now, makeId, ui)
   const worktree: Worktree = {
     id: makeId('w'),
     projectId,
@@ -94,7 +96,7 @@ export function addSessionInWorktree(
     isMain: false,
     ...(target.baseBranch ? { baseBranch: target.baseBranch } : {})
   }
-  return startSessionIn({ ...data, worktrees: [...data.worktrees, worktree] }, worktree, kind, now, makeId)
+  return startSessionIn({ ...data, worktrees: [...data.worktrees, worktree] }, worktree, kind, now, makeId, ui)
 }
 
 /** The Run button's terminal for a worktree (PRD F4): a shell session titled `run`, selected. Null if the worktree is gone. */
@@ -116,12 +118,15 @@ function startSessionIn(
   worktree: Worktree,
   kind: AgentKind,
   now: number,
-  makeId: MakeId
+  makeId: MakeId,
+  ui: SessionUi = 'cli'
 ): { data: WorkspaceData; sessionId: SessionId } {
   const session: Session = {
     id: makeId('s'),
     worktreeId: worktree.id,
     kind,
+    // A shell is always a terminal (PRD F23).
+    ...(ui === 'gui' && kind !== 'shell' ? { ui: 'gui' as const } : {}),
     title: DEFAULT_SESSION_TITLE[kind],
     status: 'idle',
     startedAt: now,
@@ -274,6 +279,8 @@ export interface WorkspaceUi {
   newSessionWorkdir: Readonly<Record<ProjectId, Workdir>>
   /** 智能体 last chosen in the new-session sheet, by project. */
   newSessionAgent?: Readonly<Record<ProjectId, AgentKind>>
+  /** 界面 last chosen in the new-session sheet, by project (PRD F23). */
+  newSessionUi?: Readonly<Record<ProjectId, SessionUi>>
   /** Secondary windows (F20 · 多窗口); `data` holds the main window's panes. */
   secondaryWindows?: readonly PersistedWindow[]
   /** 一题多解 groups; members are kept only while their session exists. */
@@ -302,10 +309,11 @@ export function serializeWorkspace(
       ...(baseBranch ? { baseBranch } : {}),
       ...(archived ? { archived } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, ui, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel }) => ({
       id,
       worktreeId,
       kind,
+      ...(ui ? { ui } : {}),
       title,
       ...(titleSource ? { titleSource } : {}),
       ...(agentSessionId ? { agentSessionId } : {}),
@@ -333,6 +341,9 @@ export function serializeWorkspace(
     ...(ui.newSessionAgent && Object.keys(ui.newSessionAgent).length > 0
       ? { newSessionAgent: Object.fromEntries(Object.entries(ui.newSessionAgent).filter(([id]) => data.projects.some((p) => p.id === id))) }
       : {}),
+    ...(ui.newSessionUi && Object.keys(ui.newSessionUi).length > 0
+      ? { newSessionUi: Object.fromEntries(Object.entries(ui.newSessionUi).filter(([id]) => data.projects.some((p) => p.id === id))) }
+      : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
     ),
@@ -357,6 +368,7 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
       id: s.id,
       worktreeId: s.worktreeId,
       kind: s.kind,
+      ...(s.ui ? { ui: s.ui } : {}),
       title: s.title,
       ...(s.titleSource ? { titleSource: s.titleSource } : {}),
       status: 'idle',
@@ -400,6 +412,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.recentProjects !== prev.recentProjects ||
     next.newSessionWorkdir !== prev.newSessionWorkdir ||
     next.newSessionAgent !== prev.newSessionAgent ||
+    next.newSessionUi !== prev.newSessionUi ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true
@@ -409,6 +422,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     return (
       !before ||
       s.id !== before.id ||
+      s.ui !== before.ui ||
       s.title !== before.title ||
       s.titleSource !== before.titleSource ||
       s.agentSessionId !== before.agentSessionId ||
