@@ -219,8 +219,9 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 主进程 GUI 会话宿主：三个驱动、重新接上 / 续上 / 排队 / 归属、IPC 校验、Codex / ACP 的状态事件、派活报告送进 GUI 会话（`src/main/gui/`）
 - [x] renderer：`Session.ui` / `newSessionUi`、新建会话面板「界面」一行（含 pi-acp / amp-acp 检测）、聊天视图（`src/renderer/gui/`）、`session-io` 对 GUI 会话的路由
 - [x] e2e `gui-session.spec.ts`（真实 app + 假的 headless Claude，7 个）；`more-agents`、`no-dead-ends` 两个 TUI 用例在面板里选 CLI
-- [ ] 独立 code review 的问题
-- [ ] 真 agent 冒烟：Claude（hooks 状态、`entrypoint: wavi`、`--resume` 后的会话 id）、Codex（app-server 下 hooks 是否触发）、一家 ACP
+- [x] 独立 code review 的 8 个问题（中 5、低 3）都已修：孤儿进程、重启后接上没看过的 GUI 会话、旧守护进程下 Claude 的状态、超长行不再断开守护进程连接、重新接上时不再重复弹已回答的确认、JSON-RPC id 撞号、已退出的进程不再标成就绪、流式只发最后一段
+- [x] 真 Claude 冒烟（Haiku，作者 2026-11-05 同意）：回复、权限卡片允许后写入文件、侧栏 1 s 内变「等你确认：编辑 a.txt」、总览计数、标题由 Claude 起名、transcript 全部 `entrypoint: wavi`；顺带修了选择器把实际模型 id 显示成 Default、权限卡片显示绝对路径
+- [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id
 - [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；`/` 菜单不分「命令 / Skills」；附件以小块显示在输入框上方；@ 只做按钮选文件、没有输入时补全；多题提问一次一题、非最后一题按钮叫「下一个」
 - [ ] 没做：总览浮层里 GUI 会话不显示聊天；`wavi run` 派出的子会话仍是 CLI；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上；ACP agent 的状态事件 agent 字段暂报 `opencode`
 

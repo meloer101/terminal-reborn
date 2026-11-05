@@ -79,6 +79,7 @@ describe('createClaudeStreamNormalizer', () => {
     expect(state.prompts.map((p) => p.kind)).toEqual(['permission', 'permission', 'question', 'plan'])
     const [bash, write, question, plan] = state.prompts
     expect(bash).toMatchObject({ tool: 'Bash', detail: 'pnpm test' })
+    expect(write).toMatchObject({ tool: 'Write', detail: 'a.txt' })
     expect(bash?.kind === 'permission' && bash.options.map((o) => o.label)).toEqual(['拒绝', '总是允许', '允许'])
     expect(write?.kind === 'permission' && write.options.map((o) => o.kind)).toEqual(['reject_once', 'allow_once'])
     expect(question).toMatchObject({ questions: [{ question: 'Which color?', header: 'Color', options: [{ label: 'Red' }, { label: 'Blue', description: 'calm' }] }] })
@@ -123,6 +124,17 @@ describe('claudeConfig', () => {
     ])
     expect(config[1]?.values.map((v) => v.label)).toEqual(['低', '中', '高', '更高', '最高'])
     expect(config[2]?.values.map((v) => v.value)).not.toContain('bypassPermissions')
+  })
+
+  it('maps the resolved model a turn reports back to its alias (not to Default)', () => {
+    const models = { models: [
+      { value: 'default', resolvedModel: 'claude-opus-5-5', displayName: 'Default (recommended)' },
+      { value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus 5.5' },
+      { value: 'haiku', resolvedModel: 'claude-haiku-5-5', displayName: 'Haiku 5.5' }
+    ] }
+    expect(claudeConfig(models, { model: 'claude-haiku-5-5' })[0]?.current).toBe('haiku')
+    expect(claudeConfig(models, { model: 'claude-opus-5-5' })[0]?.current).toBe('opus')
+    expect(claudeConfig(models, { model: 'default' })[0]?.current).toBe('default')
   })
 
   it('drops the effort picker for a model without effort', () => {

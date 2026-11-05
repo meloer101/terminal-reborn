@@ -13,11 +13,11 @@ macOS terminal for running many CLI coding agents (Claude Code, Codex) in parall
 ```bash
 npm run dev        # app with hot reload (own "Wavi Dev" profile, never the installed app's)
 npm run app:install  # /Applications/Wavi.app linked to this checkout; `npm run build` updates it
-npm run check      # typecheck + lint + vitest — must pass before every commit
-npm run test:e2e   # build + Playwright Electron smoke test
+npm run check      # typecheck + lint + vitest — must pass before merging into main
+npm run test:e2e   # build + Playwright Electron smoke test — the full run, before merging into main
 ```
 
-In a fresh worktree run `npm install` first.
+In a fresh worktree run `npm install` first. While developing, run `npm run typecheck`, `npm run lint` and only the tests of what changed (`npx vitest run <paths>`, `npx playwright test e2e/<spec> --project=parallel` after `npx electron-vite build`); the full `npm run check` and `npm run test:e2e` run once before a branch merges into main. A full-run failure unrelated to the change (load timeouts in the git-heavy tests) is rerun alone, not with another full run.
 
 ## Layout and ownership
 

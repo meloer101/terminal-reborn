@@ -65,18 +65,21 @@ function questionsOf(input: Rec): GuiQuestion[] {
 }
 
 /** What a permission card says the tool wants to do. */
-function detailOf(tool: string, input: Rec, description: string | undefined): string {
+function detailOf(tool: string, input: Rec, description: string | undefined, cwd?: string): string {
   const command = str(input.command)
   if (tool === 'Bash' && command) return command
-  return str(input.file_path) ?? str(input.url) ?? str(input.pattern) ?? description ?? tool
+  const path = str(input.file_path)
+  // Relative to the session's folder, as the tool row shows it.
+  if (path && cwd && path.startsWith(`${cwd}/`)) return path.slice(cwd.length + 1)
+  return path ?? str(input.url) ?? str(input.pattern) ?? description ?? tool
 }
 
-export function promptOf(pending: ClaudePending, description?: string): GuiPrompt {
+export function promptOf(pending: ClaudePending, description?: string, cwd?: string): GuiPrompt {
   const id = pending.requestId
   if (pending.tool === 'AskUserQuestion') return { kind: 'question', id, questions: questionsOf(pending.input) }
   if (pending.tool === 'ExitPlanMode') return { kind: 'plan', id, plan: str(pending.input.plan) ?? '' }
   const options = pending.suggestions.length > 0 ? ANSWER_OPTIONS : ANSWER_OPTIONS.filter((o) => o.kind !== 'allow_always')
-  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description), options }
+  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options }
 }
 
 export function createClaudeStreamNormalizer(cwd: string, now: () => number = Date.now): ClaudeStreamNormalizer {
@@ -139,7 +142,7 @@ export function createClaudeStreamNormalizer(cwd: string, now: () => number = Da
             suggestions: Array.isArray(request.permission_suggestions) ? request.permission_suggestions : []
           }
           waiting.set(requestId, pending)
-          return [{ type: 'prompt', prompt: promptOf(pending, str(request.description)) }]
+          return [{ type: 'prompt', prompt: promptOf(pending, str(request.description), cwd) }]
         }
         case 'control_cancel_request': {
           const id = str(message.request_id)
@@ -184,7 +187,13 @@ export function claudeConfig(init: Rec, current: { model?: string; effort?: stri
     const value = str(m.value)
     return value ? [{ value, label: str(m.displayName) ?? value }] : []
   })
-  const model = current.model && values.some((v) => v.value === current.model) ? current.model : (values[0]?.value ?? 'default')
+  // A resolved id (`claude-haiku-5-5`, as each turn's init reports it) maps back to its alias; `default` last, since
+  // it resolves to the same model as another alias.
+  const byResolved = current.model
+    ? (models.find((m) => m.value !== 'default' && m.resolvedModel === current.model) ?? models.find((m) => m.resolvedModel === current.model))
+    : undefined
+  const model =
+    current.model && values.some((v) => v.value === current.model) ? current.model : (str(byResolved?.value) ?? values[0]?.value ?? 'default')
   const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: '模型', current: model, values }]
   const chosen = models.find((m) => m.value === model)
   const levels = Array.isArray(chosen?.supportedEffortLevels) ? chosen.supportedEffortLevels.filter((l): l is string => typeof l === 'string') : []

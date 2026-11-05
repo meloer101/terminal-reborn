@@ -150,8 +150,11 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
             noteSession(message)
             const model = str(message.model)
             const mode = str(message.permissionMode)
-            if ((model && model !== current.model) || (mode && mode !== current.mode)) {
-              if (model) current.model = model
+            // Each turn's init names the resolved model (`claude-haiku-5-5`); the picker holds the alias (`haiku`).
+            const chosen = (Array.isArray(init?.models) ? init.models : []).find((m) => isRec(m) && m.value === current.model)
+            const sameModel = !model || model === current.model || (isRec(chosen) && chosen.resolvedModel === model)
+            if (!sameModel || (mode && mode !== current.mode)) {
+              if (model && !sameModel) current.model = model
               if (mode) current.mode = mode
               emitConfig()
             }
