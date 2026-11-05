@@ -1,0 +1,113 @@
+// How a GUI session's agent is started (PRD F23 / §6.17): the argument vector per protocol, the `wavi` PATH prefix,
+// what a message's attachments become, and the short Chinese reason shown when the process could not start or died.
+// Pure: src/main/gui/index.ts supplies the hooks, the dispatch launch and the binary.
+
+import { AGENT_SPECS, type CliAgent } from '@shared/agents'
+import { shellQuote, tomlString } from '@shared/agent-launch'
+import { AGENT_GUI, guiBinary } from '@shared/gui-agents'
+import type { GuiLaunch, GuiProtocol } from '@shared/gui-chat'
+import { isSafeAgentSessionId } from '@shared/workspace-file'
+
+/** The flags a long-lived headless Claude needs for a GUI (PRD F23 驱动). */
+export const CLAUDE_STREAM_ARGS = [
+  '-p',
+  '--input-format',
+  'stream-json',
+  '--output-format',
+  'stream-json',
+  '--verbose',
+  '--include-partial-messages',
+  '--replay-user-messages',
+  '--permission-prompt-tool',
+  'stdio'
+] as const
+
+export interface GuiArgvInput {
+  agent: CliAgent
+  /** The folder the agent runs in, resolved (Codex's per-launch trust names it). */
+  realCwd: string
+  launch: Pick<GuiLaunch, 'model'>
+  /** Continue this conversation (Claude `--resume`; Codex and ACP resume over their protocol). */
+  resume?: string
+  /** Claude's per-launch hooks file (src/main/hooks). */
+  claudeSettingsPath?: string
+  /** Arguments after the binary: the dispatch system prompt (Claude `--append-system-prompt`, Codex `-c …`). */
+  extraArgs?: readonly string[]
+}
+
+const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
+
+/** `[binary, ...args]` for the agent's GUI protocol; null for an agent without one. */
+export function guiArgv(input: GuiArgvInput): string[] | null {
+  const driver = AGENT_GUI[input.agent]
+  if (!driver) return null
+  const binary = guiBinary(input.agent, AGENT_SPECS[input.agent].binary)
+  if (driver.protocol === 'claude-stream') {
+    const resume = isSafeAgentSessionId(input.resume) ? ['--resume', input.resume] : []
+    const model = input.launch.model && MODEL.test(input.launch.model) ? ['--model', input.launch.model] : []
+    return [binary, ...CLAUDE_STREAM_ARGS, ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
+  }
+  if (driver.protocol === 'codex-app-server') {
+    // Global `-c` overrides go before the subcommand; trust for this folder only, nothing written to ~/.codex.
+    return [
+      binary,
+      '-c',
+      'check_for_update_on_startup=false',
+      '-c',
+      `projects={${tomlString(input.realCwd)}={trust_level="trusted"}}`,
+      ...(input.extraArgs ?? []),
+      'app-server'
+    ]
+  }
+  return [binary, ...('adapter' in driver ? driver.adapter.args : driver.args)]
+}
+
+/** The agent's own environment for its GUI protocol (ACP agents' auto-update switches) on top of its CLI row's. */
+export function guiEnv(agent: CliAgent): Record<string, string> {
+  const driver = AGENT_GUI[agent]
+  const acpEnv = driver?.protocol === 'acp' && 'env' in driver ? driver.env : undefined
+  return { ...AGENT_SPECS[agent].env, ...acpEnv }
+}
+
+/**
+ * The command the pipe host runs with `exec` in the login shell. With a PATH prefix (`wavi`, PRD F21) a POSIX `sh`
+ * puts it first after the user's rc files ran, then becomes the agent.
+ */
+export function guiCommand(argv: readonly string[], pathPrefix?: string): { command: string; args: string[] } {
+  if (!pathPrefix) return { command: argv[0] ?? '', args: argv.slice(1) }
+  return { command: '/bin/sh', args: ['-c', `PATH=${shellQuote(pathPrefix)}:"$PATH"; export PATH; exec ${argv.map(shellQuote).join(' ')}`] }
+}
+
+/** Whether dispatch's system prompt goes on this protocol's command line (ACP agents' TUI flags do not apply). */
+export const takesSystemPromptArgs = (protocol: GuiProtocol): boolean => protocol !== 'acp'
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i
+
+/** Claude and ACP agents get png / jpg / gif / webp as image blocks; Codex reads them from the path. */
+export const isImagePath = (path: string): boolean => IMAGE_EXT.test(path)
+
+/** Attachments that are not sent as images go into the text as paths, one per line (as F19 drops them). */
+export function withPaths(text: string, paths: readonly string[]): string {
+  if (paths.length === 0) return text
+  return text.trim() ? `${text}\n\n${paths.join('\n')}` : paths.join('\n')
+}
+
+export interface PipeExitInfo {
+  exitCode: number
+  signal?: number
+  stderr: string
+}
+
+/** Why the agent process ended, for the line above the composer. */
+export function exitReason(exit: PipeExitInfo, binary: string): string {
+  if (exit.exitCode === 127) return `找不到 ${binary}`
+  const tail = exit.stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(-2)
+    .join(' ')
+  const clipped = tail.length > 300 ? `…${tail.slice(-300)}` : tail
+  const how = exit.signal ? `${binary} 被结束了` : `${binary} 退出了（退出码 ${exit.exitCode}）`
+  return clipped ? `${how}：${clipped}` : how
+}

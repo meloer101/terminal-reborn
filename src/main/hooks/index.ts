@@ -6,7 +6,7 @@ import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
-import type { AgentEvent, HookAgent, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from '@shared/agent-events'
+import type { AgentEvent, AgentEventEnvelope, HookAgent, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
@@ -225,7 +225,19 @@ export function setRemoteHooks(listener: RemoteHookListener | null, holds: () =>
  * waits (PRD §6.16); Codex shows nothing until the hook answers (§6.7), which would leave the desk without a dialog.
  * Never behind a pty daemon that answers the relay before the hold ends (an older daemon the app adopted).
  */
-const holdsFor = (agent: HookAgent): boolean => agent === 'claude' && relayHolds && remoteHolds()
+const holdsFor = (agent: HookAgent, sessionId: string): boolean => agent === 'claude' && !guiSessions.has(sessionId) && relayHolds && remoteHolds()
+
+/**
+ * GUI sessions (PRD F23): Claude runs headless and its `can_use_tool` answers each permission, so the hook must return
+ * at once (§6.17); holding it for a phone would stall the GUI's own card.
+ */
+const guiSessions = new Set<string>()
+
+/** src/main/gui marks its Claude sessions before launch (and unmarks them when they end). */
+export function setGuiSession(sessionId: string, gui: boolean): void {
+  if (gui) guiSessions.add(sessionId)
+  else guiSessions.delete(sessionId)
+}
 /** Set once the hook target is known (`relayOutlastsHold`). */
 let relayHolds = true
 
@@ -274,6 +286,16 @@ const emitter: BridgeEmitter = {
     usageStore?.update(usage)
     pollers[usage.vendor]?.nudge()
   }
+}
+
+/**
+ * Status of a GUI session without hooks (Codex app-server, ACP; PRD F23), in the hook bridge's own vocabulary: to its
+ * window like a hook's event, and to the phone server and the plan-usage pollers the same way.
+ */
+export function emitGuiAgentEvent(envelope: AgentEventEnvelope, owner: WebContents | null): void {
+  if (!offPlan.has(envelope.sessionId) && (envelope.agent === 'claude' || envelope.agent === 'codex')) pollers[envelope.agent]?.nudge()
+  if (owner && !owner.isDestroyed()) owner.send(IPC.agentEvent, envelope)
+  remoteListener?.activity(envelope.sessionId)
 }
 
 /** The agents' own session titles, read back from their data files after hooks (PRD F2). */

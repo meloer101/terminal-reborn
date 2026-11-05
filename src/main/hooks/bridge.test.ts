@@ -7,7 +7,7 @@ import { HookBridge, type BridgeEmitter } from './bridge'
 import { claudeFixtures as fx } from './fixtures'
 import { type HookRequest, UnknownSessionError } from './server'
 
-function setup(canDeliver = true, holdPermissions?: boolean | ((agent: string) => boolean), scripts?: ScriptsLookup) {
+function setup(canDeliver = true, holdPermissions?: boolean | ((agent: string, sessionId: string) => boolean), scripts?: ScriptsLookup) {
   const events: AgentEventEnvelope[] = []
   const prompts: PendingPrompt[] = []
   const resolutions: PromptResolution[] = []
@@ -139,6 +139,14 @@ describe('HookBridge', () => {
     expect(bridge.respondPermission(prompts[1]!.id, 'allow-once')).toBe(true)
     await flush()
     expect(JSON.parse(body!)).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } })
+  })
+
+  it('is asked per session: a GUI session (PRD F23) is never held, its can_use_tool answers it', async () => {
+    const { bridge, prompts, req } = setup(true, (_agent, sessionId) => sessionId !== 's1')
+    expect(await bridge.handle(req('PermissionRequest', fx.PermissionRequest_Bash))).toBe('')
+    expect(await bridge.handle(req('PreToolUse', fx.PreToolUse_AskUserQuestion))).toBe('')
+    expect(await bridge.handle(req('PermissionRequest', fx.PermissionRequest_AskUserQuestion))).toBe('')
+    expect(prompts.map((p) => p.kind)).toEqual(['permission', 'question'])
   })
 
   it('holds an AskUserQuestion while a phone can answer and allows it with the answers (PRD §6.16)', async () => {
