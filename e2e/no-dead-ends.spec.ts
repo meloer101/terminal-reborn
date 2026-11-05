@@ -141,6 +141,9 @@ test.describe('first run and the session header', () => {
     // The new-session sheet (PRD F4): a plain folder can only start in itself; Claude Code is the default agent.
     const sheet = page.getByTestId('new-session-sheet')
     await expect(sheet.getByRole('radio', { name: '当前目录' })).toHaveAttribute('aria-checked', 'true')
+    // 界面 defaults to GUI the first time (PRD F23); the fake claude here is a TUI, so this session is a CLI one.
+    await expect(sheet.getByRole('radio', { name: 'GUI', exact: true })).toHaveAttribute('aria-checked', 'true')
+    await sheet.getByRole('radio', { name: 'CLI', exact: true }).click()
     await sheet.getByRole('button', { name: /创建/ }).click()
     await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('empty-main')).toHaveCount(0)

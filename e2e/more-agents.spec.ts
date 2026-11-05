@@ -111,6 +111,8 @@ test.describe('more agent CLIs', () => {
     await menu.getByRole('option', { name: 'OpenCode' }).click()
     await expect(sheet().getByRole('button', { name: '智能体' })).toContainText('OpenCode')
     if (await sheet().getByRole('radio', { name: '当前目录' }).isEnabled()) await sheet().getByRole('radio', { name: '当前目录' }).click()
+    // 界面 defaults to GUI (PRD F23); this test is about the TUI reporting OSC 7501.
+    await sheet().getByRole('radio', { name: 'CLI', exact: true }).click()
     await page.keyboard.press('Meta+Enter')
     await expect(sheet()).toBeHidden()
 
