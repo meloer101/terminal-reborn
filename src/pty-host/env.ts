@@ -8,7 +8,10 @@ const STRIPPED = new Set([
   'ELECTRON_RENDERER_URL',
   'ELECTRON_NO_ATTACH_CONSOLE',
   'NODE_OPTIONS',
-  'CLAUDECODE'
+  'CLAUDECODE',
+  // Who is calling, as Claude reports it to Anthropic (PRD §6.17): a TUI here is `cli`, a GUI session sets `wavi`
+  // itself. Inherited from an SDK app or a headless parent it would bill the 5-hour window at the `sdk-*` rate.
+  'CLAUDE_CODE_ENTRYPOINT'
 ])
 
 /**
@@ -21,6 +24,9 @@ const STRIPPED = new Set([
 function isOuterClaudeSessionVar(key: string, value: string): boolean {
   if (key === 'CLAUDE_CONFIG_DIR') return false
   if (key.startsWith('CLAUDE_')) return true
+  // The Claude desktop app points its sessions at its own proxy; a `claude` here would sign in through it and fail
+  // (PRD §6.17). A base URL the user set in their profile comes back from the login shell.
+  if (key === 'ANTHROPIC_BASE_URL') return true
   // Claude Code's tool shells set these for themselves; a user's terminal must not inherit them.
   return key === 'AI_AGENT' || key === 'BAGGAGE' || (key === 'GIT_EDITOR' && value === 'true')
 }

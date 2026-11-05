@@ -138,11 +138,13 @@ describe('buildPtyEnv', () => {
         BAGGAGE: 'sentry-environment=production',
         GIT_EDITOR: 'true',
         CLAUDE_CONFIG_DIR: '/h/.claude-work',
+        ANTHROPIC_BASE_URL: 'http://localhost:9/desktop-proxy',
         HOME: '/h'
       },
       { CLAUDE_CODE_FROM_LAUNCH: 'kept' }
     )
     expect(Object.keys(env).filter((key) => key.startsWith('CLAUDE'))).toEqual(['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_FROM_LAUNCH'])
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
     expect(env.AI_AGENT).toBeUndefined()
     expect(env.BAGGAGE).toBeUndefined()
     expect(env.GIT_EDITOR).toBeUndefined()
@@ -150,9 +152,15 @@ describe('buildPtyEnv', () => {
   })
 
   it("keeps a user's own Claude Code settings when the app was not started from inside Claude Code", () => {
-    const env = buildPtyEnv({ CLAUDE_CODE_USE_BEDROCK: '1', GIT_EDITOR: 'vim' })
+    const env = buildPtyEnv({ CLAUDE_CODE_USE_BEDROCK: '1', GIT_EDITOR: 'vim', ANTHROPIC_BASE_URL: 'https://gw.example' })
     expect(env.CLAUDE_CODE_USE_BEDROCK).toBe('1')
     expect(env.GIT_EDITOR).toBe('vim')
+    expect(env.ANTHROPIC_BASE_URL).toBe('https://gw.example')
+  })
+
+  it('never passes on an inherited entrypoint label, but a launch may set its own (PRD §6.17)', () => {
+    expect(buildPtyEnv({ CLAUDE_CODE_ENTRYPOINT: 'sdk-cli' }).CLAUDE_CODE_ENTRYPOINT).toBeUndefined()
+    expect(buildPtyEnv({ CLAUDE_CODE_ENTRYPOINT: 'sdk-ts' }, { CLAUDE_CODE_ENTRYPOINT: 'wavi' }).CLAUDE_CODE_ENTRYPOINT).toBe('wavi')
   })
 })
 

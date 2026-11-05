@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.113 · 2026-11-01 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.125 · 2026-11-05 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.125 | 2026-11-05 | **新增 F23 GUI 会话：新建时选定 CLI 或 GUI，之后不切换**（§1.2 / §1.4 / F23 / §6.17，作者 2026-11-05 定：「选定是 GUI 就是 GUI，选定是 CLI 就是 CLI……放弃途中切换来换更好的体验」，驱动方式选「headless 加标签」，进程放守护进程）。GUI 会话不开 PTY：Claude 用用户自己装的未修改的 `claude`，以 `-p` stream-json 常驻并设 `CLAUDE_CODE_ENTRYPOINT=wavi`；Codex 用 `codex app-server`。外部来源（2026-11-05 调研）：Claude Code Remote Control / 桌面版 / VS Code 扩展的文档，Codex app-server 文档，Warp、Zed、Conductor 的文档和 changelog；happy、claudecodeui、T3 Code、crystal、vibe-kanban、opcode、magpie、claude-agent-acp 的源码（同一会话换进程的切换问题：happy#527 #613 #301、claudecodeui#1170 #1004）；额度：anthropics/claude-code#97074——默认的 `sdk-cli` / `sdk-ts` 标签同样的 token 占 5 小时额度约 1.7–2.4 倍，多人独立复现，设自己的标签后和 TUI 相同（frostfire575、qvarker、oviano 实测；T3 Code 2026-11-02 合并 pingdotgg/t3code#28410 设 `t3-code`）；Anthropic 没回复，是规则还是 bug 未确认。Figma 第 48 节（同一会话来回切）未选；以 49″ 为准（作者同日追加：其余 agent 经 ACP 接入；确认卡片和排队的消息不和输入框连在一起）。待定：新建会话「界面」第一次的默认值。 |
 | v1.124 | 2026-11-01 | **灵动岛空闲态（F22 S2）**（作者 2026-11-01 看过 Figma 47′ 后选「30 分钟后结束」）：没有等你处理、没有运行中、10 分钟内也没有完成或出错的会话时，卡片不再立刻结束，换成「空闲」：紧凑态空闲符号 + 「空闲」，展开态和锁屏写这台 Mac 的名字和会话数，右上角是安静了多久；从最后一个会话安静下来算起 30 分钟后结束。空闲不是状态色，符号和文字用正文色。空闲只接着已有的卡片，不为它新开一张。App 被挂起时到点结束不了，卡片到点标为过期、等 App 下次运行再结束；按时结束和锁屏后更新是 S4。测试：`ActivityStateTests` 新增 1 项、改 1 项；iOS 26.3 模拟器对替身 Mac 看过紧凑和展开态。 |
 | v1.123 | 2026-11-01 | **手机收到的提问不再被 Mac 撤掉或白答（F22）**（作者 2026-11-01 真机上 App 里不出选项卡片）：iOS 的提问卡片在模拟器两种时序下都正常，问题在 Mac：① 接管的旧守护进程 10 s 就答空，app 却继续把提问标成可回答，手机或灵动岛上的回答显示成功、到不了 Claude，提问从列表消失而 TUI 还在等；守护进程改为在 welcome 里报转发等多久，不够长就不挂起。② 窗口重新接上同一个进程时不再撤掉它待回答的提问和挂起的权限。灵动岛「过一会儿就消失」：空闲时卡片以 `.immediate` 结束，空闲态的设计在 Figma 47′（待确认）；「被别的 App 抢走」由系统决定，要靠 S4 推送改善。测试：`bridge.test.ts` 2 项、`daemon-endpoint.test.ts` 3 项、`e2e/remote.spec.ts` 新增 AskUserQuestion 端到端。 |
 | v1.122 | 2026-11-01 | **灵动岛和锁屏卡片（F22 S2）**（作者 2026-11-01 确认 Figma 47 后「可以，开始写」）：① 一台 Mac 一个 Live Activity，显示顺序：等你处理里最早的一条（等你确认 / 等你回答）→ 运行中的会话（最多两条，写总数）→ 10 分钟内做完或出错的一条；都没有就结束。② 紧凑态左边状态图形，右边已等时间 / 运行数 / 完成 / 出错，同一个状态色；最小态只有状态图形；展开态和锁屏是状态行 + 会话 + 详情 + 按钮。③ 按钮：权限是「拒绝」「允许（仅这次）」；提问只有一个问题、单选时才能直接点，最多 3 个选项，超过时第三个位置是「更多」，打开 App；多选、多个问题、只能在终端回答的都不给按钮，点卡片进会话。回答走 `LiveActivityIntent`，系统在 App 的进程里执行（没在运行就后台拉起），连上 Mac 后发出，失败时卡片上写原因。④ 时间用系统自己会走的格式，写「已等 2分钟」而不是 App 里的「2m」：锁屏后 App 被挂起，只有这样数字不停；不满一分钟算 1 分钟。⑤ 灵动岛背景固定黑色，按深色色值画；锁屏卡片跟随系统外观（底色 `#141414` 82% / 白 80%）。⑥ 只在 App 前台和刚退到后台时更新；有新提问而 App 不在前台时亮一下灵动岛。锁屏后的更新是 S3 / S4。⑦ Figma 46‴ 同步了 v1.121 的列表层级。⑧ 独立审阅后改了 5 处：系统为按钮在后台拉起 App 时，先拉到会话列表再改卡片（否则空列表会把卡片结束掉），连不上就在卡片上写原因、卡片留着；挂起前的连接可能已经断了，先用一次快照探测，不通就重连再发；过了 10 分钟变成 stale 的卡片照样更新，不再另开一张，启动时只留一张；后台没能开卡片时，回到前台补开；只有 Wavi 新列出的提问才亮灵动岛，答完一条、下一条早就在等时不再响。 |
@@ -169,7 +170,7 @@
 | 外部用户 | 见 §1.5 |
 
 ### 1.4 非目标（v1.0 之前不做）
-- 用自绘聊天 GUI 替代 agent 的 TUI（headless / stream-json 路线）。v1.112：手机端 F22 的聊天视图不算——它读同一个 TUI 会话的 transcript，不替代 TUI
+- ~~用自绘聊天 GUI 替代 agent 的 TUI（headless / stream-json 路线）~~ v1.125 起由 F23 做：用户新建会话时可以选 GUI，CLI 会话不受影响。v1.112：手机端 F22 的聊天视图读同一个 TUI 会话的 transcript
 - Windows / Linux
 - 账号、云同步、默认开启的遥测
 - 内置代码编辑器或 IDE 功能（diff 只做审阅和评论，不做编辑）
@@ -611,6 +612,19 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **不做**：在手机上看终端画面；Wavi 退出后仍能用（要把状态机、发送和会话列表搬进守护进程）；Android；不经过 Wavi 启动的 agent。
 - **验收**：① 扫码后 60 s 内看到全部会话和状态，撤销设备后手机立即断开；② 手机发一条 prompt，Mac 终端里同一个会话收到并开始执行，工具调用在它完成后 2 s 内出现在手机上，一段文字在它写完后 2 s 内出现；③ 手机拍照（HEIC）发出，agent 的回答说明它看到了图片内容；④ agent 请求权限时手机弹出面板，允许后 agent 继续，Mac 终端里的确认框随之消失；AskUserQuestion 在手机上能选；⑤ 手机上新建一个 worktree 会话（指定分支和 agent），Mac 侧栏同步出现；⑥ 手机上看 diff，提交、推送并创建 PR；⑦ 手机走蜂窝网络经 Tailscale 时 ②–④ 照样通过；⑧ `npm run check` 通过，e2e 用假手机客户端走一遍 WebSocket 链路。
 
+### F23 GUI 会话 · P1 · Figma 49″（Section `794:36847`，x=32420）；对话流和间距同 49′（`787:34965`），49A 新建会话面板在 49（`781:34205`）；48（`773:33466`，同一会话来回切）未选（v1.125）
+新建会话时多选一项「界面」：CLI（原生 TUI，和现在一样）或 GUI（聊天式界面，像 Claude Code 桌面版）。建好以后不切换。
+
+- **驱动**：GUI 会话不开 PTY。Claude：用户自己装的未修改的 `claude`，`-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --replay-user-messages --permission-prompt-tool stdio`，常驻一个进程；环境里 `CLAUDE_CODE_ENTRYPOINT=wavi`（覆盖继承来的值，§6.17），Wavi 不碰登录凭据。Codex：`codex app-server`（JSON-RPC over stdio）。其余 agent：ACP（Agent Client Protocol，客户端用 `@agentclientprotocol/sdk`，Apache-2.0），用用户装的 CLI 自带的 ACP 模式（Gemini、Qwen `--acp`，OpenCode、Goose、Kimi、Kiro、Copilot、Droid、Cline、Auggie、CodeBuddy、Antigravity 各自的入口，Cursor `agent acp`，Grok `agent stdio`，命令以 ACP 注册表 `cdn.agentclientprotocol.com/registry/v1/latest/registry.json` 为准）；Pi、Amp 要另装适配器（pi-acp、amp-acp），Wavi 不替用户下载，只给安装命令；Crush 没有 ACP，只能 CLI。进程归守护进程，⌘Q、重启 app 不打断正在跑的一轮（同 §6.8）。
+- **界面**（49′）：对话流（用户消息、逐字出现的 agent 文字、折叠的思考、成组的工具行，Edit / Write 写 `+N −M`、点开看 diff）；输入框上方是等你确认的卡片（权限：拒绝 / 总是允许 / 允许；提问：选项 + 其他；计划：继续规划 / 批准，编辑时问我 / 批准并自动接受编辑）和排队的消息，各自一块、不和输入框连在一起（作者 2026-11-05）；输入框里是文字、附件、@ 文件、停止 / 发送，下方的选择器按 agent 给的画：Claude 模型 · 推理强度和权限模式，Codex 模型 · 推理强度，ACP 的 agent 按 `configOptions`（category model / mode / thought_level）；打「/」出命令菜单，列表来自 agent（Claude 的 `initialize`，Codex 的 skills，ACP 的 `available_commands_update`）。
+- **运行中再发**：先排在输入框上方（可改、可删），这一轮结束后发出。Claude 原生就这样排（§6.17）；Codex 的 `turn/steer` 会改写正在跑的一轮，所以不用它。
+- **状态**：Claude 的 hooks 在 `-p` 下照常触发，沿用现有的按次 `--settings` 和状态机；Codex 用 app-server 的 `turn/*`、`item/*`、`thread/status/changed` 和审批请求。侧栏、总览、通知、Dock 角标和 CLI 会话一样。
+- **历史**：重开 app 或重开会话时从 transcript 重建（`src/shared/transcript-chat.ts`，F22）。
+- **和现有功能**：派活报告（F21）由协议直接送进 GUI 会话，不模拟打字；拖文件进来变成附件（F19）；额度读 `rate_limit_event` / `account/rateLimits/updated`（F11）。
+- **哪些 agent**：19 家里 18 家能选 GUI：Claude、Codex 走原生协议，其余 16 家走 ACP（Pi、Amp 装了适配器才行，没装时「界面」的 GUI 一段置灰，下面一行给安装命令）；Crush 只能 CLI，GUI 一段置灰、悬停写原因。ACP 的 agent 没有 AskUserQuestion 这类提问，权限按 agent 给的选项（allow_once / allow_always / reject_once …）画成同样的按钮。
+- **不做**：同一会话在 CLI 和 GUI 之间切换（v1.125 作者定）；用 `cli` 或别家的来源标签。
+- **验收**：① 选 GUI 新建 Claude / Codex 会话，文字逐字出现；② 工具行从运行中变完成，Edit 显示 `+N −M`；③ 权限、提问、计划在 GUI 里回答后 agent 继续，侧栏 1 s 内变化；④ 换模型、换权限模式从下一条消息起生效；⑤「/」菜单列出 agent 返回的命令；⑥ 排队的消息能改、能删、这一轮结束后发出；⑦ 停止 1 s 内中断；⑧ ⌘Q 后重开，GUI 会话还在跑、历史完整；⑨ Claude 会话 transcript 的 `entrypoint` 是 `wavi`；⑨′ 本机装了的 ACP agent（Grok、Cursor）选 GUI 能跑通一轮，Pi 没装 pi-acp 时 GUI 置灰并给出安装命令；⑩ CLI 会话的 e2e 全部通过；⑪ 10 个会话（5 个 GUI）常驻内存 < 1.5 GB、输入延迟 < 16 ms；⑫ `npm run check` 通过。
+
 ### P2 储备（已验证，但排在后面）
 代码 checkpoint（`refs/tr/checkpoints/…`，对话部分交给 Claude 原生的 `/rewind`）· 历史会话搜索（其中“恢复旧对话”选择器为 P1，放进 ⌘K）· ~~best-of-N 竞赛~~（v1.60 起做成 F4 的“一题多解”）· ~~Claude Remote Control 菜单入口~~（v1.112 起由 F22 取代）· 仓库级预设 prompt（`.tr/settings.toml`）· `@` 文件引用 · GitHub PR 创建 / 合并。（“实时终端网格”已由 F20 取代。）
 
@@ -853,6 +867,16 @@ F21 用。v1.103 起派活改用 `wavi` 命令，下面讲 MCP 的几条（工�
 - **transcript 实跑**：解析器跑本机 60 个 CLI 会话（38176 行）用 1.3 s，没有「未识别的条目」，工具调用都配上了结果；76 个 Codex rollout 同样。
 - **iPhone 真机连接**（v1.119，iPhone 17 / iOS 27.0.1，SwiftUI 版，2026-11-01）：同一个 Wi-Fi 下 `ws://10.x:7429` 直接连上；只开蜂窝时经 Tailscale `ws://100.123.18.119:7429` 连上（走 DERP 中继，`tailscale ping` 330–720 ms）。iOS 的 ATS 会拦明文 `ws://` 到 Tailscale 的 100.64.0.0/10：Info.plist 里同时有 `NSAllowsLocalNetworking` 时 `NSAllowsArbitraryLoads` 被忽略，只放行局域网地址；只留 `NSAllowsArbitraryLoads` 后两条路都通（帧本身有 AES-256-GCM）。断开 Wi-Fi 后旧连接不会马上报错，要等超时，所以手机监听网络变化主动重连。
 - **Live Activity**（v1.122，iOS 26.3 模拟器，2026-11-01）：灵动岛紧凑 / 展开态、锁屏卡片都按 Figma 47 显示；展开态和锁屏上点提问选项、「允许」，替身 Mac 分别收到 `answer`（键是提问原文）和 `permission allow-once`，卡片随即换成下一条、再换成运行中。会自己走的时间文字（`Text(.currentDate, format: .offset…)`）按可能的最宽值占位，不限宽时紧凑态会撑满整条灵动岛，所以给它定了宽度。`Activity.request` 报 `Cannot create new activity as maximum count has been reached` 时，是模拟器上别的 App（闹钟类）的 Live Activity 占满了系统名额，换一台新模拟器即可。App 被杀掉后在灵动岛上点选项，系统在后台拉起 App、连上、发出回答，卡片换成下一条；替身 Mac 关掉时卡片留着并写「没有连上 Mac」。浅色外观下锁屏卡片仍按深色绘制（系统决定的 colorScheme），浅色那套色值没在模拟器里看到。真机上锁屏点按钮是否不解锁就执行，未确认。
+
+### 6.17 实测结论 · GUI 会话的驱动（Claude Code 2.1.317 / Codex 0.166.0，2026-11-05）
+脚本 `scripts/spikes/53-gui-claude-stream-lab.mjs`（Haiku）、`54-gui-codex-app-server-lab.mjs`（gpt-6.1-sol）。
+- **Claude `-p` stream-json**：`initialize` 回答里有 `commands`（本机 210 条，含 skills，每条 `name` / `description` / `argumentHint`）、`models`（`value` / `displayName` / `supportsEffort` / `supportedEffortLevels` 等）、`current_permission_mode`、`account`。`--include-partial-messages` 给 `stream_event`：`text_delta`、`thinking_delta`、工具参数的 `input_json_delta`，首个文字 delta 1–9 s。权限走 `control_request` `can_use_tool`（`tool_name`、`input`、`description`、`permission_suggestions`、`tool_use_id`），回 `{behavior:'allow', updatedInput}` 后执行，回 `{behavior:'deny', message}` 后不执行、agent 说明被拒。AskUserQuestion 同样走 `can_use_tool`（带 `requires_user_interaction`），回 `allow` + `updatedInput.answers`（键是问题原文）后 agent 拿到答案。`set_permission_mode` plan 后 ExitPlanMode 走 `can_use_tool`（`input.plan`、`planFilePath`）。`set_model`、`set_permission_mode` 都回 success。一轮还在跑时再发的消息原生排队，跑完后单独成一轮（两个 `result`）。`interrupt` 后这一轮的 `result` 是 `error_during_execution`。每轮有 `rate_limit_event`（`unifiedWindows`）。
+- **hooks 在 `-p` 下照常触发**：SessionStart、UserPromptSubmit、PreToolUse、PermissionRequest、PostToolUse、Stop。PermissionRequest 和 `can_use_tool` 都会到，hook 要立即返回、由协议回答。
+- **来源标签**：设 `CLAUDE_CODE_ENTRYPOINT=wavi` 后 transcript 每行 `entrypoint: "wavi"`。没在本机测额度（作者 2026-11-05 选只测协议和标签），依据是 anthropics/claude-code#97074 里的多份对照。
+- **继承的宿主变量**：在 Claude Code（桌面版、SDK app）里启动的进程带着宿主的 `CLAUDE_CODE_*` 和 `ANTHROPIC_BASE_URL`，子进程 `claude` 会去走宿主的登录（实测报 `OAuth session expired`），标签也跟着宿主走。所以 Wavi 启动任何 agent 前清掉继承来的 `CLAUDE_CODE_ENTRYPOINT` 等宿主变量，用户自己的配置由登录 shell 重新读入。
+- **Codex app-server**：`initialize`（`clientInfo`）后 `initialized`；`model/list` 给模型和推理强度；`thread/start`（`cwd`、`model`、`approvalPolicy`、`sandbox`）；`turn/start` 后有 `item/agentMessage/delta`（首个 6–9 s）、`item/started|completed`（`commandExecution` 带 `command` / `aggregatedOutput` / `exitCode` / `durationMs`，`fileChange` 带 `changes`）、`thread/tokenUsage/updated`、`account/rateLimits/updated`、`turn/completed`（`status`）。审批是服务端请求：`item/commandExecution/requestApproval`（`command`、`cwd`、`availableDecisions`）回 `{decision:'accept'}` 后执行，`item/fileChange/requestApproval`（`reason`、`grantRoot`）回 `decline` 后不写。`turn/steer` 把消息并进正在跑的一轮（实测模型从头重来），`turn/interrupt` 后 `status: interrupted`。类型用 `codex app-server generate-ts` 从用户装的 codex 生成。`item/tool/requestUserInput`（提问）没测到（没触发）。
+- **ACP 握手**（`55-gui-acp-handshake-lab.mjs`，只握手不发消息）：Grok 1.0.x `grok agent stdio`、Cursor `cursor-agent acp` 都回 `protocolVersion: 1`、`loadSession: true`、图片输入；`session/new` 后马上推 `available_commands_update`（Grok 带用户的 skills，Cursor 134 条）。模型、模式、推理强度都在 `configOptions` 里（`category` 为 model / mode / thought_level）：Grok 只有模型（grok-4.6 / 4.5）和推理强度，Cursor 有 Agent / Plan / Ask 三种模式和 12 个以上模型；Cursor 另有旧的 `modes` / `models` 字段。认证方式各家自报（Grok `cached_token` / `grok.com`，Cursor `cursor_login`）。
+- **作者机器上的 Codex**：走第三方服务商，默认模型 gpt-6-sol 返回 503（无可用渠道），gpt-5.5 连不上，gpt-6.1-sol / gpt-5.6-sol 能用。
 
 ## 7. 开源与工程规范
 
