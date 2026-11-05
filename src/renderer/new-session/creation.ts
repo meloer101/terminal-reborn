@@ -4,7 +4,7 @@
 // the repository's setup script (`.tr/settings.toml`) is approved next and runs in that terminal before the agent.
 import { create } from 'zustand'
 import type { Workdir, WorktreeCreateRequest } from '@shared/new-session'
-import type { AgentKind, ProjectId, SessionId } from '@shared/types'
+import type { AgentKind, ProjectId, SessionId, SessionUi } from '@shared/types'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
 import { prepareSetup } from '../scripts/setup-runs'
 import { useWorkspace } from '../state/workspace'
@@ -26,21 +26,33 @@ function fail(sessionId: SessionId, kind: AgentKind, message: string): void {
   useWorkspace.getState().patchSession(sessionId, { status: 'error', currentAction: `没能创建 worktree：${message}`, ...(kind === 'shell' ? {} : { phase: 'exited' as const }) })
 }
 
-/** Carries out a plan from the sheet and selects the new session. */
-export function runCreatePlan(projectId: ProjectId, plan: CreatePlan, kind: AgentKind, workdir: Workdir, repo: boolean): SessionId | null {
+/**
+ * Carries out a plan from the sheet and selects the new session. `ui`: the 界面 it gets (PRD F23); `uiForced` when
+ * that is CLI only because the agent has no GUI (not remembered).
+ */
+export function runCreatePlan(
+  projectId: ProjectId,
+  plan: CreatePlan,
+  kind: AgentKind,
+  workdir: Workdir,
+  repo: boolean,
+  ui: SessionUi = 'cli',
+  uiForced = false
+): SessionId | null {
   const workspace = useWorkspace.getState()
   if (repo) workspace.rememberWorkdir(projectId, workdir)
   workspace.rememberAgent(projectId, kind)
+  if (kind !== 'shell') workspace.rememberUi(projectId, ui, uiForced)
 
   if (plan.type === 'current') {
-    const id = workspace.addSession(projectId, kind)
+    const id = workspace.addSession(projectId, kind, ui)
     if (id) useWorkspace.getState().setActiveSession(id)
     return id
   }
-  if (plan.type === 'existing') return workspace.addSessionInWorktree(projectId, { path: plan.path, branch: plan.branch }, kind)
+  if (plan.type === 'existing') return workspace.addSessionInWorktree(projectId, { path: plan.path, branch: plan.branch }, kind, ui)
 
   const { request } = plan
-  const id = workspace.addSessionInWorktree(projectId, { path: plan.path, branch: request.branch, baseBranch: request.base }, kind)
+  const id = workspace.addSessionInWorktree(projectId, { path: plan.path, branch: request.branch, baseBranch: request.base }, kind, ui)
   if (!id) return null
   void createWorktreeFor(id, kind, request)
   return id

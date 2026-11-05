@@ -11,18 +11,19 @@ import {
   defaultBase,
   generateBranchName,
   groupBranches,
+  initialUi,
   initialWorkdir,
   type NewSessionInfo,
   type Workdir
 } from '@shared/new-session'
 import { AGENT_SPECS, agentName, CLI_AGENTS } from '@shared/agents'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
-import type { AgentKind, ProjectId } from '@shared/types'
+import type { AgentKind, ProjectId, SessionUi } from '@shared/types'
 import { Toggle } from '../settings/controls'
 import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
 import { runCreatePlan } from './creation'
-import { branchProblemText, folderFor, isElsewhere, planCreate, prepareText, selectedBase, tilde } from './model'
+import { binaryInstalled, branchProblemText, folderFor, isElsewhere, planCreate, prepareText, selectedBase, tilde, uiRow } from './model'
 import { closeNewSessionSheet, useNewSessionSheet } from './sheet-store'
 import { SheetMenu, type SheetMenuSection } from './SheetMenu'
 import styles from './NewSessionSheet.module.css'
@@ -35,6 +36,11 @@ const isKindChoice = (value: string): value is AgentKind => value === 'shell' ||
 export function listedAgents(found: AgentAvailability | null): AgentKind[] {
   return CLI_AGENTS.filter((id) => id === 'claude' || id === 'codex' || found?.[id] === true)
 }
+
+const UIS: ReadonlyArray<{ value: SessionUi; label: string }> = [
+  { value: 'gui', label: 'GUI' },
+  { value: 'cli', label: 'CLI' }
+]
 
 const WORKDIRS: ReadonlyArray<{ value: Workdir; label: string }> = [
   { value: 'worktree', label: '新 worktree' },
@@ -68,6 +74,9 @@ function Sheet() {
   const [kindChoice, setKindChoice] = useState<AgentKind | null>(null)
   const kind: AgentKind = kindChoice ?? (projectId ? rememberedAgents[projectId] : undefined) ?? 'claude'
   const setKind = setKindChoice
+  const rememberedUis = useWorkspace((s) => s.newSessionUi)
+  const [uiChoice, setUiChoice] = useState<SessionUi | null>(null)
+  const [copiedInstall, setCopiedInstall] = useState(false)
   const [found, setFound] = useState<AgentAvailability | null>(null)
   const [versions, setVersions] = useState<AgentVersions>({})
   const [prepareChoice, setPrepareChoice] = useState(true)
@@ -125,6 +134,7 @@ function Sheet() {
   const showAdvanced = !!info?.repo && workdir === 'worktree' && !elsewhere
   const canCreate = !!result?.plan
   const advancedOpen = advanced || branchProblem !== null
+  const ui = uiRow(kind, uiChoice ?? initialUi(rememberedUis, projectId ?? ''), binaryInstalled(found))
 
   const chooseProject = (id: ProjectId): void => {
     setProjectId(id)
@@ -133,13 +143,14 @@ function Sheet() {
     setBranchInput(null)
     setPrepareChoice(true)
     setKindChoice(null)
+    setUiChoice(null)
   }
 
   const create = (): void => {
     if (!project || !result?.plan) return
     closeNewSessionSheet(false)
     // A choice made before the git state arrived still counts; only a folder known not to be a repo is not remembered.
-    runCreatePlan(project.id, result.plan, kind, workdir, !notRepo)
+    runCreatePlan(project.id, result.plan, kind, workdir, !notRepo, ui?.value ?? 'cli', ui?.forced ?? false)
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -281,6 +292,37 @@ function Sheet() {
             <SelectButton label="智能体" value={agentName(kind)} expanded={menu?.kind === 'agent'} onClick={(anchor) => toggleMenu('agent', anchor)} />
           </Field>
 
+          {ui && (
+            <Field label="界面">
+              <Segmented
+                label="界面"
+                value={ui.value}
+                options={UIS.map((o) => (o.value === 'gui' ? { ...o, disabled: ui.guiDisabled, title: ui.guiTitle } : o))}
+                onChange={setUiChoice}
+              />
+            </Field>
+          )}
+
+          {ui?.adapter && (
+            <div className={styles.adapter} role="group" aria-label="GUI 适配器">
+              <span className={styles.labelSpacer} />
+              <span className={styles.adapterText}>GUI 要先装 {ui.adapter.binary}</span>
+              <button
+                type="button"
+                className={styles.adapterCopy}
+                onClick={() => {
+                  const command = ui.adapter?.install ?? ''
+                  void navigator.clipboard
+                    .writeText(command)
+                    .then(() => setCopiedInstall(true))
+                    .catch(() => {})
+                }}
+              >
+                {copiedInstall ? '已复制' : '复制安装命令'}
+              </button>
+            </div>
+          )}
+
           {showAdvanced && (
             <button
               type="button"
@@ -366,6 +408,7 @@ function Sheet() {
           onPick={(value) => {
             if (!isKindChoice(value)) return
             setKind(value)
+            setCopiedInstall(false)
             closeMenu(true)
           }}
           onClose={closeMenu}
