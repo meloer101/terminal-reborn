@@ -156,7 +156,7 @@ class GuiSession<O extends GuiOwner> {
       if (snapshot) {
         this.driver = this.createDriver(this.agentSessionId)
         await this.reattach(snapshot)
-        return { ok: true, state: this.snapshot() }
+        return { ok: true, state: this.snapshot(), ...(this.exited ? { exited: true } : {}) }
       }
       this.early = null
     }

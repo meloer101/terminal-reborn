@@ -106,7 +106,10 @@ export interface GuiLaunch {
   dispatched?: boolean
 }
 
-export type GuiOpenResult = { ok: true; state: GuiState } | { ok: false; reason: string }
+export type GuiOpenResult =
+  /** `exited`: a reattach found the process already ended (while no app was attached); `state` shows why. */
+  | { ok: true; state: GuiState; exited?: boolean }
+  | { ok: false; reason: string }
 
 export type GuiSendResult = { ok: true; queued: boolean } | { ok: false; reason: string }
 

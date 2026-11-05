@@ -104,6 +104,14 @@ describe('openGuiSession', () => {
     expect(guiStateOf('s-1').failure).toBe('no daemon')
   })
 
+  it('a process that ended while the app was away leaves the session exited, its conversation drawn', async () => {
+    const state = { ...emptyGuiState(), failure: 'claude 退出了（退出码 1）' }
+    main.result = { ok: true, state, exited: true }
+    expect(await openGuiSession('s-1', '/w', 'claude', undefined)).toBe(true)
+    expect(guiStateOf('s-1')).toBe(state)
+    expect(ws.patches).toEqual([['s-1', { phase: 'exited', status: 'exited' }]])
+  })
+
   it('reports an agent that dies later the same way', async () => {
     main.result = { ok: true, state: emptyGuiState() }
     await openGuiSession('s-1', '/w', 'claude', undefined)

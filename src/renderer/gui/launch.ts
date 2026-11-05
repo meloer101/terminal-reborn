@@ -50,8 +50,11 @@ export async function openGuiSession(sessionId: SessionId, cwd: string, agent: C
     const result = await window.tr.gui.open(launch)
     if (result.ok) {
       setGuiState(sessionId, result.state)
-      // Up: the status machine takes it from here (controller.sync sees the phase; status comes with agent events).
-      if (useWorkspace.getState().sessions.some((s) => s.id === sessionId)) useWorkspace.getState().patchSession(sessionId, { phase: 'ready' })
+      // Up: the status machine takes it from here (controller.sync sees the phase; status comes with agent events). A
+      // process that ended while the app was away is exited, like an adopted terminal that ended meanwhile.
+      if (useWorkspace.getState().sessions.some((s) => s.id === sessionId)) {
+        useWorkspace.getState().patchSession(sessionId, result.exited ? { phase: 'exited', status: 'exited' } : { phase: 'ready' })
+      }
       return true
     }
     reason = result.reason

@@ -391,6 +391,7 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
     const { host, writes, adopted } = stubHost({ pid: 1, seq: 3, lines: [user, reply, result], truncated: true }, history)
     const opened = await host.open(launchOf('claude', 'r1'), new FakeOwner())
     expect(opened.ok && texts(opened.state)).toEqual(['user:older', 'text:older reply', 'user:hello', 'text:Hello: hello'])
+    expect(opened.ok && opened.exited).toBeUndefined()
     expect(adopted).toEqual(['r1'])
     // No `initialize` answer among the kept lines: the handshake runs again.
     expect(writes.map((w) => (JSON.parse(w) as { request?: { subtype?: string } }).request?.subtype)).toEqual(['initialize'])
@@ -403,6 +404,7 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
     expect(opened.ok && texts(opened.state)).toEqual(['user:hello', 'text:Hello: hello'])
     expect(opened.ok && opened.state.failure).toBe('claude 退出了（退出码 1）：Error: not logged in')
     expect(opened.ok && opened.state.busy).toBe(false)
+    expect(opened.ok && opened.exited).toBe(true)
     expect(adopted).toEqual([])
   })
 })
