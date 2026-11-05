@@ -1,7 +1,7 @@
 import { SquareTerminal } from 'lucide-react'
 import { agentName } from '@shared/agents'
 import type { AgentKind } from '@shared/types'
-import { AGENT_ICON_SVG } from './agent-icon-svg'
+import { AGENT_ICON_SVG } from '@shared/agent-icon-svg'
 import styles from './AgentIcon.module.css'
 
 interface Props {

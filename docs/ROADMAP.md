@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节作者已确认；P2 Mac 端已完成（PRD v1.113）；手机端换成原生 SwiftUI（`ios/`，PRD v1.119），真机经局域网和 Tailscale 都连上了；灵动岛和锁屏卡片做完（App 前台时更新），蓝牙、APNs 还没做。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
 - 2026-10-31：调用树也显示 agent 自己开的子 agent（PRD v1.109，参照 yetone/magpie 读各家文件的做法）：Claude 2.1.316 的子 agent 文件格式已实测（53 个 meta）；Codex `spawn_agent` 因服务商 503 没测成；Figma 第 44 节已出稿（44B 单独成行 / 44C 收进第二行），待作者选定。
@@ -167,10 +168,10 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
   - [x] Figma 第 44 节出稿（同 F21 重做），作者 2026-10-31 选定 44B
   - [x] 实现 Claude（2026-10-31）：读 meta 和模型、和 Wavi 子会话共用一棵树（`src/main/hooks/subagents.ts`、`src/renderer/sidebar/SubagentRow.tsx`）；单元测试用 2.1.316 的 meta 样本，e2e 走真实 hook 链路
   - 原计划：~~学 cmux 用 tmux 假命令接管成侧栏会话~~：agent teams 仍是实验功能，Claude 发出的 tmux 命令没有文档，只有 Claude，队友没有自己的 worktree，跨厂商派活由 F21 做。cc#24122（96 👍）、cc#24189（74）、cc#26572
-- [ ] 手机提醒：不做 App，“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
+- [ ] 手机提醒：“等你处理”推到 Bark / ntfy / 飞书 / 企业微信机器人，设置里打开、默认关闭；给不装 F22 手机应用的人用（装了的走 F22 的推送）。cc#29438（69 👍）、cc#28765（44）、Superset Mobile（Product Hunt 当日第一）
 - [ ] 读 `claude agents --json`，把 Claude 自己在后台开的会话（会自己建 worktree、开 draft PR）也显示到总览
 
-暂不做（追竞品清单，PRD §1.2 不追；单条需求票数也低）：Linear / Jira 接入、SSH / 云 VM / 手机 App、自动合并。多仓库工作区 2026-10-24 改为要做，见下面“借鉴 T3 Code”。
+暂不做（追竞品清单，PRD §1.2 不追；单条需求票数也低）：Linear / Jira 接入、SSH / 云 VM、自动合并。多仓库工作区 2026-10-24 改为要做，见下面“借鉴 T3 Code”；手机 App 2026-11-01 改为要做，见下面“F22 手机远程”。
 
 ## 进行中：借鉴 T3 Code（2026-10-24 定）
 
@@ -204,7 +205,36 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 8. [x] 设置去掉分隔线（作者 2026-10-24 定，2026-10-24 完成）：行与行之间、导航和内容之间、输入框和按钮的描边、外观页预览框都不画线，分组靠留白和分组标题。Figma 第 25 节 `416:17440`（25A 外观 · 25B 智能体 · 25C Worktree · 25D 自动化 · 25E 关于 · 25F 浅色，作者已确认）。行高 40、分组间距 40，输入框 / 按钮 / 开关 / 预览框 / 字体菜单的分组线都去掉；只留主题色板选中时的一圈和弹窗外沿
 9. [x] 同任务多解（原一题多解）改从对话里发起（作者 2026-10-24 定方向、2026-10-25 定细节，2026-10-25 完成，PRD v1.69）：会话头「…」/ ⌘K / 「会话」菜单、终端右键（新加：复制 · 同任务多解… · 全选）、出计划时终端下方那条，都叫「同任务多解…」，⇧⌘N；弹框任务取选中的文字、计划或说过的话；原会话不算一份，几份都开新 worktree、基于原会话的分支，所有已安装的智能体都能选，侧栏缩进在原会话下；都停下后合成一条汇报送给原会话（Claude 收件箱 / `codex queue`，别家点「送进去」）；去掉新建会话面板的「多个智能体一起做」。Figma 第 26 节 `425:19405`（26A–26J）。还没做：汇报只在 Claude / Codex 会话上自动送达；说过的话不跨重启；真 CLI 上没跑过（e2e 用假 Claude / Codex）
 
-不做：中途换 provider（作者 2026-10-24 定）；消息排队（原生 TUI 本来就能排队，最多补“⌘Q 后排着的消息由 Wavi 补发”）；聊天界面。
+不做：中途换 provider（作者 2026-10-24 定）；消息排队（原生 TUI 本来就能排队，最多补“⌘Q 后排着的消息由 Wavi 补发”）；桌面上的聊天界面（手机上的见 F22）。
+
+## 进行中：F22 手机远程（2026-11-01 定）
+
+iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 2026-11-01 选定：自建手机端、Expo React Native（有 Apple 开发者账号，走 TestFlight）、Tailscale + 局域网、Mac 上 Wavi 开着。
+
+- [x] P0 实测（2026-11-01，PRD §6.16）：transcript 结构和延迟（151 个 CLI 会话、`52-transcript-latency-lab.mjs`）；挂起 PermissionRequest 后从外部允许 / 拒绝 / 回答 AskUserQuestion、TUI 先答时 hook 不关（`30-hooks-lab.mjs bash`、`ask-answer`）；图片路径 PNG / JPEG / HEIC（`50-attach-lab.mjs`、`51-remote-image-lab.mjs`）；Codex rollout 结构
+  - [ ] iPhone 经 Tailscale（`tailscale serve` HTTPS）和局域网（`ws://` + `NSAllowsLocalNetworking`）连 WebSocket：阻塞，Mac 上 Tailscale 是停止状态、手机没装；挪到 P3 开头真机测
+  - [ ] Codex 的批准从外部怎么回答、真实 Codex 对话的 rollout：服务商 503，阻塞
+- [ ] P1 Figma：手机端各屏 + 桌面 设置 · 手机，深浅两种主题；作者看过再写界面
+  - [x] 出稿（2026-11-01）：第 45 节 `719:32350`，45A–45K（配对、会话列表、聊天视图、工具详情 diff、权限、提问、照片、新建会话、Git · 变更、出口进度、桌面 设置 · 手机），45B / 45C / 45E / 45I / 45H / 45K 有浅色版
+  - [x] 作者确认（2026-11-01）
+- [x] P2 Mac 端（2026-11-01，PRD v1.113）：`src/main/remote/`（`server.ts` WebSocket 服务、配对和认证，`crypto.ts`，`devices.ts`，`feed.ts` transcript 增量推送，`photos.ts` HEIC 转 JPEG，`index.ts` 接 hooks / git / 窗口）、`src/renderer/remote/`（会话列表、执行发消息 / Esc / 新建会话）、`src/shared/remote.ts`、`src/shared/transcript-chat.ts`、设置 · 手机（`PhonePane.tsx`，Figma 45K）；hooks 有手机连着时挂起权限请求、AskUserQuestion 用 `updatedInput.answers` 作答；守护进程 PermissionRequest 转发等 125 s；新依赖 `ws`、`uqr`（都是 MIT）。测试：`remote.test.ts`、`transcript-chat.test.ts`、`crypto.test.ts`、`server.test.ts`、`feed.test.ts`、`photos.test.ts`、`bridge.test.ts` 新增 3 条、`model.test.ts`、`phone-model.test.ts`；e2e `remote.spec.ts`（假手机配对 → 会话列表 → 发文字和照片进假 Claude → 挂起的权限从手机允许 → 读 transcript 并收到追加 → 撤销后断开，设置 · 手机 两种主题截图 `test-results/remote/`）
+  - [x] 手机端的 Git 出口（2026-11-01，PRD v1.115）：合并到 main 并推送 / 创建 PR / 推送到 PR #N / 打开 PR #N、归档，走窗口里 Git · 变更 的同一段代码（先抽出 `exitPlan` / `shipContextFor`），进度随会话列表推给手机（45I 底部按钮、45J 进度面板）；e2e `remote-exits.spec.ts`（假手机问出口 → 合并到 main → agent 写说明 → 手机改说明后执行 → main 上是改过的说明 → 归档）
+  - [ ] 「合并 PR #N…」的合并面板放到手机上
+  - [ ] 设置 · 手机 的「推送」开关（和 P4 一起）
+- [x] S1 手机端改成原生 SwiftUI（2026-11-01，PRD v1.119）：`ios/`（XcodeGen、iOS 26、Swift 6），功能同原 Expo 版（扫码 / 输码配对、会话列表、聊天、工具详情、权限和提问、照片、新建会话、Git · 变更和出口、归档），系统玻璃；`mobile/` 删除。测试：`ios/WaviTests` 19 项（加密对 `remote-vectors.json` 逐字节、Format、配对链接）、Mac 端 `vectors.test.ts`、`phone-assets.test.ts`、`feed.test.ts` 新增 1 项。iOS 26.3 模拟器对替身 Mac 走过每一屏；iPhone 17（iOS 27.0.1）Release 装机，局域网和 Tailscale（蜂窝）都连上、发消息和回复都能看到
+- [ ] P3 手机端的其余项（PRD v1.114）
+  - [x] 应用（2026-11-01）：扫码 / 输入配对码（PAKE，Mac 端 `pakeReply`）、会话列表、聊天视图（Markdown、思考、工具行和 MiniDiff、当前动作）、工具详情 diff、权限和提问面板、照片（拍照 / 相册，手机上重编 JPEG 去掉位置）、中断、新建会话（项目 / worktree / 基于 / 分支名 / 智能体 / 首条消息）、Git · 变更和文件 diff，深浅两种主题；Keychain 存设备密钥，断线自动重连；Mac 不认识这台手机时保留配对、提示并慢慢重试。测试：`mobile/` 的 `crypto.test.ts`（和 Mac 的加密逐项互通）、`client.test.ts`（对真实 `RemoteServer` 配对、请求、重连、撤销）、`model.test.ts`；Mac 端 `server.test.ts` 新增 PAKE 计次。iOS 模拟器里对替身 Mac 走过以上每一屏
+  - [ ] TestFlight：团队 `U9XR52C9HW`、Bundle ID `app.wavi.remote`；`cd ios && xcodegen` 后用 Xcode Archive 上传（要在 App Store Connect 建 App，ATS 例外要写理由）
+  - [x] 真机经 Tailscale 和局域网连接、ATS 和本地网络权限（2026-11-01，PRD §6.16）
+  - [x] 45I 的出口按钮和 45J 进度面板（2026-11-01，随 Git 出口）
+  - [x] 液态玻璃（2026-11-01，PRD v1.117，Figma 46′）：`mobile/src/ui/atoms.tsx` 的 `Glass`（iOS 26 `GlassView`，更早退回实色）和 `ScrollEdge`，标题栏、输入框、Git · 变更 的出口浮在内容上，面板和附件菜单是着色更重的玻璃。iOS 26.3 模拟器里对替身 Mac 深浅两种主题看过会话列表、会话页、附件菜单、出口面板、Git · 变更；iOS 26 以下的退回样式没在模拟器里看过
+  - [x] 46″ 细节（2026-11-01，PRD v1.118）：「总是允许」改成整宽按钮，面板底角 54 和屏幕圆角同心；模拟器里浅色看过权限面板
+  - [ ] 45G 的「文件」
+- [x] S2 灵动岛和锁屏卡片（2026-11-01，PRD v1.122，Figma 47）：WidgetKit 扩展 `ios/WaviActivity`，App 前台和刚退后台时更新，按钮走 `LiveActivityIntent`（允许 / 拒绝 / 提问选项，「更多」进 App）。测试 `ActivityStateTests`；iOS 26.3 模拟器对替身 Mac 点过提问选项和锁屏上的「允许」。作者手机上没试
+- [x] 手机提问修复（2026-11-01，PRD v1.123）：接管旧守护进程时不为手机挂起（它 10 s 就答空，回答会白发）；窗口重新接上同一进程时保留待回答的提问和权限。测试 `bridge.test.ts`、`daemon-endpoint.test.ts`，`e2e/remote.spec.ts` 新增 AskUserQuestion 端到端
+- [x] S2 空闲态（2026-11-01，PRD v1.124，Figma 47′）：没有要显示的会话时不立刻结束，换成「空闲」，安静 30 分钟后结束；只接着已有的卡片。测试 `ActivityStateTests`；模拟器对替身 Mac 看过紧凑和展开态，锁屏没截图。App 挂起时到点结束要等 S4
+- [ ] S3 蓝牙后台更新：先实测后台被蓝牙唤醒时能否更新灵动岛；Mac 端 `@stoprocent/bleno`
+- [ ] S4 APNs（取代原 P4 的 Expo push）：Mac 直发，.p8 存 Mac 钥匙串；通知和灵动岛的 start / update / end
 
 ## 已完成
 

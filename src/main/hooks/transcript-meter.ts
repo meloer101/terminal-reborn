@@ -248,6 +248,13 @@ export class TranscriptMeter {
     tracked.timers = READ_AFTER_MS.map((ms) => this.scheduler.setTimeout(() => void this.pull(current), ms))
   }
 
+  /** Where the session's conversation is written, while it runs (the phone's chat view reads it, PRD F22). */
+  sourceOf(sessionId: string): { agent: 'claude' | 'codex'; path: string } | null {
+    const tracked = this.sessions.get(sessionId)
+    if (!tracked || !tracked.path || tracked.detachedAt !== undefined || (tracked.agent !== 'claude' && tracked.agent !== 'codex')) return null
+    return { agent: tracked.agent, path: tracked.path }
+  }
+
   /** The session's PTY ended. Its history goes; its spend stays for the windows it was in. */
   forget(sessionId: string): void {
     const tracked = this.sessions.get(sessionId)

@@ -26,7 +26,7 @@ import { ReviewButton } from '../../review/ReviewButton'
 import { ReviewMarker } from '../../review/ReviewMarker'
 import { markKey, useReviewMarks } from '../../review/marks'
 import { openPullRequest } from '../../pull-requests/actions'
-import { shipExits, type ShipExit } from '../../pull-requests/exit-model'
+import { exitPlan, livePr, shipContextFor, type ShipExit } from '../../pull-requests/exit-model'
 import { readRemembered, startShip, useShips } from '../../pull-requests/ship-runner'
 import { ShipBlock } from '../../pull-requests/ShipBlock'
 import { formatAccelerator } from '../../ui/menu-model'
@@ -36,7 +36,7 @@ import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { openMergeSheet, registerPrimaryExit, targetFor } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, endsOpenFile, itemHeight, onOwnBase, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, endsOpenFile, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsLine, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
@@ -85,7 +85,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     [draft?.id, draft?.group, draft?.path, draft?.side, draft?.endLine] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const prStatus = usePrStatus(worktree.path)
-  const prLive = prStatus?.pr && (prStatus.pr.state === 'open' || prStatus.pr.state === 'draft') ? prStatus.pr : null
+  const prLive = livePr(prStatus)
   const items = useMemo(
     () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout) : []),
     [changes, git.expanded, git.diffs, comments, place, layout]
@@ -112,7 +112,6 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   // The preflight and the risk markers follow the change list and the PR.
   const prTarget: PrTarget | null = projectRoot ? { root: projectRoot, worktree: worktree.path } : null
   const local = prStatus?.local
-  const unpushed = Boolean(prLive?.details && local && !local.remoteAhead && local.head !== prLive.details.headOid)
   const gitKey = [changes?.base, changes?.ahead, changes?.behind, changes?.uncommitted.length, prLive?.number, prLive?.state, local?.head, prLive?.details?.headOid].join(':')
   const changeKey = changes ? [...changes.committed, ...changes.uncommitted].map((c) => `${c.path}:${c.added}:${c.removed}`).join('|') : ''
   const preflight = usePreflight(prTarget, gitKey)
@@ -127,13 +126,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const count = mine.length
   const picked = mine.filter(commentPicked).length
   const sessionId = active?.session.id ?? null
-  const uncommittedPaths = changes.uncommitted.filter((c) => !c.nested).map((c) => c.path)
-  // Nothing to propose or merge (merged already, or no work yet): no exits — the PR line says what happened.
-  // The main checkout with a feature branch out ships like a worktree; on its base it has nothing of its own.
-  const onBase = onOwnBase(worktree.isMain, changes)
-  // A squash merge leaves the branch ahead by its commits; the preflight sees their work is in the base.
-  const noNewCommits = changes.ahead === 0 || (preflight?.ok === true && preflight.merged)
-  const nothingToShip = !onBase && !prLive && noNewCommits && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
+  const plan = exitPlan({ preflight, remembered, prStatus, changes, isMain: worktree.isMain, projectRoot })
+  const { exits, idlePr, onBase, nothingToShip } = plan
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
@@ -151,18 +145,9 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     if (scroller.current) scroller.current.scrollTop = offsets[index]!
   }
 
-  const exits = shipExits({ preflight, remembered, unpushed })
-  // A PR is open and there is nothing to push: open it, or merge it.
-  const idlePr = prLive && !unpushed && changes.uncommitted.length === 0 && changes.untrackedOmitted === 0 ? prLive : null
   const reviewSession = target?.id ?? reviewer
   const baseName = preflight?.ok ? preflight.base : (changes.base ?? 'main')
-  const exitBlocker = (exit: ShipExit): string | null => {
-    if (onBase) return '项目主目录检出的是基线分支，没有要合并的分支'
-    if (!projectRoot) return '找不到这个 worktree 的项目'
-    if (!preflight) return '正在检查…'
-    if (!preflight.ok) return preflight.message
-    return exit.blocker
-  }
+  const exitBlocker = plan.blocker
   const go = (exit: ShipExit): void => {
     if (exit.kind === 'open-pr') {
       if (prLive) openPullRequest(sessionId, prLive.url)
@@ -170,19 +155,17 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
     }
     if (!projectRoot || !preflight?.ok) return
     startShip(
-      {
-        root: projectRoot,
-        worktree: worktree.path,
-        sessionId: target?.id ?? null,
-        base: preflight.base,
-        branch: preflight.branch,
-        remote: preflight.remote,
-        paths: uncommittedPaths.length > 0 ? uncommittedPaths : null,
-        openPr: prLive ? { number: prLive.number, url: prLive.url } : null,
+      shipContextFor({
+        projectRoot,
+        worktreePath: worktree.path,
+        preflight,
+        changes,
+        pr: prLive,
+        agentSession: target?.id ?? null,
+        openIn: sessionId,
         checksLine: turnChecks ? `这一轮的检查：${checksText(turnChecks)}` : null,
-        settings: { review: settings.review, pr: settings.pr },
-        openIn: sessionId
-      },
+        settings: { review: settings.review, pr: settings.pr }
+      }),
       exit.kind,
       exit.label
     )

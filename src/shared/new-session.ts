@@ -95,14 +95,14 @@ export function branchPrefix(gitUserName: string, loginName: string): string {
   return ''
 }
 
-const ADJECTIVES = [
+export const ADJECTIVES = [
   'amber', 'bold', 'brave', 'brisk', 'calm', 'clever', 'cosmic', 'crisp', 'dapper', 'eager',
   'fancy', 'gentle', 'glad', 'golden', 'happy', 'jolly', 'keen', 'lively', 'lucky', 'mellow',
   'misty', 'nimble', 'noble', 'plucky', 'polite', 'quick', 'quiet', 'rapid', 'rosy', 'shiny',
   'silver', 'sleek', 'snowy', 'sunny', 'swift', 'tidy', 'vivid', 'warm', 'witty', 'zesty'
 ] as const
 
-const NOUNS = [
+export const NOUNS = [
   'badger', 'beacon', 'bison', 'cedar', 'comet', 'coral', 'crane', 'dune', 'falcon', 'fern',
   'finch', 'fjord', 'gecko', 'heron', 'ibis', 'koala', 'lark', 'lemur', 'lynx', 'maple',
   'meadow', 'otter', 'owl', 'panda', 'pebble', 'puffin', 'quail', 'raven', 'reef', 'river',

@@ -10,6 +10,7 @@ import { registerConfirmHandlers } from './confirm'
 import { registerFileHandlers } from './files'
 import { registerHookHandlers } from './hooks'
 import { registerDispatchHandlers } from './dispatch'
+import { registerRemoteHandlers } from './remote'
 import { selectProfile } from './profile'
 import { ptySessionOwner, registerPtyHandlers } from './pty'
 import { installQuitGuard } from './quit'
@@ -97,6 +98,7 @@ function boot(): void {
   registerBrowserHandlers()
   registerHookHandlers()
   registerDispatchHandlers(ptySessionOwner)
+  registerRemoteHandlers(ptySessionOwner, () => getMainWindow()?.webContents ?? null)
   registerPtyHandlers()
   registerUiHandlers()
   registerSecondaryWindowHandlers(showMainWindow, () => getMainWindow()?.webContents ?? null)

@@ -9,6 +9,7 @@ import {
   type DispatchSettings,
   type PortSettings,
   type PrSettings,
+  type RemoteSettings,
   type ReviewSettings
 } from '@shared/settings'
 
@@ -23,6 +24,7 @@ export interface SettingsHandle {
   updateAlerts(patch: Partial<AlertSettings>): void
   updatePr(patch: Partial<PrSettings>): void
   updateDispatch(patch: Partial<DispatchSettings>): void
+  updateRemote(patch: Partial<RemoteSettings>): void
 }
 
 /**
@@ -86,5 +88,10 @@ export function useSettings(): SettingsHandle {
     void window.tr.settings.update({ dispatch: patch })
   }, [])
 
-  return { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch }
+  const updateRemote = useCallback((patch: Partial<RemoteSettings>) => {
+    setSettings((current) => applySettingsPatch(current, { remote: patch }))
+    void window.tr.settings.update({ remote: patch })
+  }, [])
+
+  return { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch, updateRemote }
 }

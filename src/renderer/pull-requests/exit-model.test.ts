@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShipPreflight } from '@shared/ship'
-import { shipExits, type ExitState } from './exit-model'
+import { exitPlan, shipContextFor, shipExits, type ExitState } from './exit-model'
 
 function ok(patch: Partial<Extract<ShipPreflight, { ok: true }>> = {}): ShipPreflight {
   return {
@@ -130,5 +130,53 @@ describe('shipExits', () => {
       label: '合并到 main',
       blocker: '没有要合并的改动'
     })
+  })
+})
+
+describe('exitPlan', () => {
+  const changes = { branch: 'feat/x', base: 'main', ahead: 2, uncommitted: [], untrackedOmitted: 0 }
+  const pr = { number: 7, state: 'open' as const, url: 'https://github.com/o/r/pull/7', details: { headOid: 'aaa' } } as never
+  const plan = (patch: Partial<Parameters<typeof exitPlan>[0]> = {}) =>
+    exitPlan({ preflight: ok(), remembered: null, prStatus: null, changes, isMain: false, projectRoot: '/r', ...patch })
+
+  it('offers both exits for a branch with work, and says what blocks them', () => {
+    const p = plan()
+    expect(p.exits.primary.kind).toBe('main')
+    expect(p.nothingToShip).toBe(false)
+    expect(p.blocker(p.exits.primary)).toBeNull()
+    expect(plan({ preflight: null }).blocker(p.exits.primary)).toBe('正在检查…')
+    expect(plan({ projectRoot: null }).blocker(p.exits.primary)).toBe('找不到这个 worktree 的项目')
+  })
+
+  it('has nothing to ship once the work is merged, and nothing on the main checkout’s own base', () => {
+    expect(plan({ preflight: ok({ merged: true }) }).nothingToShip).toBe(true)
+    const base = plan({ isMain: true, changes: { ...changes, branch: 'main' } })
+    expect(base.onBase).toBe(true)
+    expect(base.blocker(base.exits.primary)).toMatch(/基线分支/)
+  })
+
+  it('sees an open PR with nothing to push as idle, and one with a newer local head as unpushed', () => {
+    const idle = plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'aaa', remoteAhead: false } } })
+    expect(idle.idlePr?.number).toBe(7)
+    const ahead = plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'bbb', remoteAhead: false } } })
+    expect(ahead.unpushed).toBe(true)
+    expect(ahead.idlePr).toBeNull()
+  })
+})
+
+describe('shipContextFor', () => {
+  it('commits the uncommitted paths that are not nested repositories, and keeps the PR', () => {
+    const ctx = shipContextFor({
+      projectRoot: '/r',
+      worktreePath: '/w',
+      preflight: ok() as Extract<ShipPreflight, { ok: true }>,
+      changes: { uncommitted: [{ path: 'a.ts', status: 'M', added: 1, removed: 0 }, { path: 'sub/', status: 'A', added: null, removed: null, nested: true }] },
+      pr: null,
+      agentSession: 's1',
+      openIn: 's1',
+      checksLine: null,
+      settings: { review: {} as never, pr: {} as never }
+    })
+    expect(ctx).toMatchObject({ root: '/r', worktree: '/w', base: 'main', branch: 'feat/x', paths: ['a.ts'], openPr: null, sessionId: 's1' })
   })
 })

@@ -11,7 +11,7 @@ import { isWaviPrompt } from '@shared/ship-handoff'
 import { beginTurn, emptyTurnChecks, recordEdit, recordRuns, sameTurnChecks, type TurnChecks } from '@shared/turn-checks'
 import type { AgentTitleWatcher } from './agent-title'
 import { normalizeHook } from './normalize'
-import { PermissionRegistry, type Scheduler } from './permission-registry'
+import { PERMISSION_TIMEOUT_MS, PermissionRegistry, type Scheduler } from './permission-registry'
 import { UnknownSessionError, type HookRequest } from './server'
 
 export interface BridgeEmitter {
@@ -22,6 +22,8 @@ export interface BridgeEmitter {
   canDeliver(sessionId: string): boolean
   /** Plan usage from any session: account-level, for every window (PRD F11). */
   usage?(usage: VendorUsage): void
+  /** A question prompt became answerable outside the TUI: its PermissionRequest is now held (PRD F22). */
+  held?(promptId: string, sessionId: string): void
 }
 
 /** What the session last reported about its context window and todo list; only changes are emitted. */
@@ -41,6 +43,13 @@ const hasChecks = (checks: TurnChecks): boolean => checks.edited || checks.runs.
 
 type QuestionPrompt = Extract<PendingPrompt, { kind: 'question' }>
 
+/** Claude's PermissionRequest for an AskUserQuestion, held so a phone can answer it (PRD F22). */
+interface QuestionHold {
+  input: Record<string, unknown>
+  release: (body: string) => void
+  timer: unknown
+}
+
 /** resources/hooks/agent-shim.sh reports this through the hook relay when the agent it started has exited. */
 export const AGENT_EXIT_EVENT = 'AgentExit'
 /** resources/hooks/tr-hook.sh reports this right before Claude's SessionStart: `{"plan": boolean}`. */
@@ -55,6 +64,8 @@ interface HookObserver {
 export class HookBridge {
   private readonly sessions = new Set<string>()
   private readonly questions = new Map<string, QuestionPrompt>()
+  /** By question prompt id. */
+  private readonly questionHolds = new Map<string, QuestionHold>()
   private readonly meta = new Map<string, SessionMeta>()
   /** Which agent last spoke for a session (metrics replayed on reattach carry it). */
   private readonly agents = new Map<string, HookAgent>()
@@ -68,9 +79,11 @@ export class HookBridge {
       permissionTimeoutMs?: number
       /**
        * Hold PermissionRequests for an in-app answer (PRD F3). Off in the app since 2026-10-16: the terminal
-       * is the whole UI, so the request is only announced (status "等你处理") and answered in the TUI.
+       * is the whole UI, so the request is only announced (status "等你处理") and answered in the TUI. A function is
+       * asked per request: since PRD F22 the app holds while a paired phone is connected (the TUI dialog shows anyway,
+       * so the desk can still answer there).
        */
-      holdPermissions?: boolean
+      holdPermissions?: boolean | ((agent: HookAgent) => boolean)
       /** Follows hook traffic to report the agent's own session title (./agent-title.ts). */
       titles?: Pick<AgentTitleWatcher, 'observe' | 'forget'>
       /** Follows Codex hooks to read context and plan usage from its rollout (./codex-usage.ts). */
@@ -90,12 +103,23 @@ export class HookBridge {
     return (this.options.now ?? Date.now)()
   }
 
+  private holds(agent: HookAgent): boolean {
+    const hold = this.options.holdPermissions
+    return typeof hold === 'function' ? hold(agent) : hold !== false
+  }
+
+  private get scheduler(): Scheduler {
+    return this.options.scheduler ?? { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout) }
+  }
+
   /** Only sessions the app spawned may report; this is what makes a foreign hook caller a 404. */
   attach(sessionId: string, options: { adopt?: boolean } = {}): void {
     // A re-spawned id starts clean: whatever the previous process had pending is gone. A window that reattached to
-    // the same process (reload, app restart with the daemon) keeps its metrics and gets them again.
+    // the same process (reload, app restart with the daemon) keeps its metrics and gets them again, and what that
+    // process still waits on stays pending (its TUI dialog is still open; a phone may be answering it).
     const meta = options.adopt ? this.meta.get(sessionId) : undefined
-    this.detach(sessionId)
+    if (!options.adopt) this.withdraw(sessionId)
+    this.forget(sessionId)
     this.sessions.add(sessionId)
     if (!meta) return
     this.meta.set(sessionId, meta)
@@ -114,8 +138,17 @@ export class HookBridge {
 
   /** The session's PTY ended: release every hold and withdraw its prompts. */
   detach(sessionId: string): void {
+    this.withdraw(sessionId)
+    this.forget(sessionId)
+  }
+
+  /** Releases the session's holds and withdraws its prompts. */
+  private withdraw(sessionId: string): void {
     this.registry.resolveSession(sessionId, 'session-ended')
     this.resolveQuestion(sessionId, 'session-ended')
+  }
+
+  private forget(sessionId: string): void {
     this.options.titles?.forget(sessionId)
     this.options.rollouts?.forget(sessionId)
     this.options.transcripts?.forget(sessionId)
@@ -197,7 +230,41 @@ export class HookBridge {
   }
 
   sessionOfPrompt(promptId: string): string | undefined {
-    return this.registry.sessionOf(promptId)
+    return this.registry.sessionOf(promptId) ?? [...this.questions.values()].find((q) => q.id === promptId)?.sessionId
+  }
+
+  /**
+   * Answers an AskUserQuestion from outside the TUI (PRD F22): only while its PermissionRequest is held. `answers`
+   * maps each question's text to the chosen label (or what the user wrote). False when there is nothing to answer.
+   */
+  answerQuestion(promptId: string, answers: Record<string, string>): boolean {
+    const hold = this.questionHolds.get(promptId)
+    const question = [...this.questions.values()].find((q) => q.id === promptId)
+    if (!hold || !question) return false
+    this.questionHolds.delete(promptId)
+    this.scheduler.clearTimeout(hold.timer)
+    this.questions.delete(question.sessionId)
+    hold.release(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', updatedInput: { ...hold.input, answers } } } }))
+    this.emitter.resolved({ id: promptId, sessionId: question.sessionId, by: 'gui' })
+    return true
+  }
+
+  /** Whether the question can be answered from outside the TUI right now. */
+  questionHeld(promptId: string): boolean {
+    return this.questionHolds.has(promptId)
+  }
+
+  /** Whether an answer from outside the TUI would reach the agent: the request behind the prompt is held. */
+  isHeld(promptId: string): boolean {
+    return this.registry.has(promptId) || this.questionHolds.has(promptId)
+  }
+
+  private releaseQuestionHold(promptId: string): void {
+    const hold = this.questionHolds.get(promptId)
+    if (!hold) return
+    this.questionHolds.delete(promptId)
+    this.scheduler.clearTimeout(hold.timer)
+    hold.release('')
   }
 
   get pendingPermissions(): number {
@@ -208,6 +275,7 @@ export class HookBridge {
     const question = this.questions.get(sessionId)
     if (!question) return
     this.questions.delete(sessionId)
+    this.releaseQuestionHold(question.id)
     this.emitter.resolved({ id: question.id, sessionId, by })
   }
 
@@ -274,6 +342,20 @@ export class HookBridge {
       this.emitter.prompt(prompt)
     }
 
+    if (normalized.questionHold && agent === 'claude' && this.holds(agent)) {
+      const question = this.questions.get(sessionId)
+      if (question && !this.questionHolds.has(question.id)) {
+        const { input } = normalized.questionHold
+        return new Promise<string>((resolve) => {
+          // Nobody answered: the TUI's own question stays, as without a hold.
+          const timer = this.scheduler.setTimeout(() => this.releaseQuestionHold(question.id), this.options.permissionTimeoutMs ?? PERMISSION_TIMEOUT_MS)
+          this.questionHolds.set(question.id, { input, release: resolve, timer })
+          request.signal.addEventListener('abort', () => this.releaseQuestionHold(question.id), { once: true })
+          this.emitter.held?.(question.id, sessionId)
+        })
+      }
+    }
+
     if (normalized.permission && this.emitter.canDeliver(sessionId)) {
       const draft = normalized.permission
       const prompt: PendingPrompt = {
@@ -287,7 +369,7 @@ export class HookBridge {
         ...allowAlwaysField(draft.suggestions),
         createdAt: at
       }
-      if (this.options.holdPermissions === false) {
+      if (!this.holds(agent)) {
         // Announce only; an empty body leaves the decision to the TUI's own dialog right away.
         this.emitter.prompt(prompt)
         return ''

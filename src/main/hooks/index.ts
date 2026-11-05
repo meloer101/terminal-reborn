@@ -6,7 +6,7 @@ import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { IPC } from '@shared/ipc'
-import type { AgentEvent, HookAgent, HooksHealth, PermissionDecision, SessionHooksSignal } from '@shared/agent-events'
+import type { AgentEvent, HookAgent, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
 import type { AgentKind } from '@shared/types'
 import type { HookJournalEntry } from '../../pty-host/protocol'
@@ -17,7 +17,8 @@ import { SubagentWatcher } from './subagents'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
 import { CodexUsageWatcher } from './codex-usage'
-import { DaemonHookEndpoint, type DaemonHookTarget } from './daemon-endpoint'
+import { DaemonHookEndpoint, relayOutlastsHold, type DaemonHookTarget } from './daemon-endpoint'
+import { PERMISSION_TIMEOUT_MS } from './permission-registry'
 import { createHookDir, sweepStaleHookDirs } from './hook-dir'
 import { UnknownSessionError, type HookRequest } from './server'
 import { isDispatchEvent } from '../dispatch/broker'
@@ -200,6 +201,55 @@ function trackBilling(sessionId: string, event: AgentEvent): void {
   }
 }
 
+/** 手机远程 (PRD F22): what the phone server sees of the hooks. */
+export interface RemoteHookListener {
+  prompt(prompt: PendingPrompt): void
+  resolved(resolution: PromptResolution): void
+  /** Any hook of the session: its transcript may have grown. */
+  activity(sessionId: string): void
+  /** A question prompt can now be answered from the phone. */
+  held(promptId: string): void
+}
+
+let remoteListener: RemoteHookListener | null = null
+let remoteHolds: () => boolean = () => false
+
+/** src/main/remote: listen to prompts and hook traffic, and hold permission requests while `holds()` (a phone is connected). */
+export function setRemoteHooks(listener: RemoteHookListener | null, holds: () => boolean = () => false): void {
+  remoteListener = listener
+  remoteHolds = holds
+}
+
+/**
+ * Whose permission requests are held while a phone is connected: Claude's only. Its TUI shows the dialog while the hook
+ * waits (PRD §6.16); Codex shows nothing until the hook answers (§6.7), which would leave the desk without a dialog.
+ * Never behind a pty daemon that answers the relay before the hold ends (an older daemon the app adopted).
+ */
+const holdsFor = (agent: HookAgent): boolean => agent === 'claude' && relayHolds && remoteHolds()
+/** Set once the hook target is known (`relayOutlastsHold`). */
+let relayHolds = true
+
+/** A permission answered on the phone; false when it is no longer pending. */
+export async function respondFromRemote(promptId: string, decision: PermissionDecision): Promise<boolean> {
+  const rt = await runtime
+  return rt?.bridge.respondPermission(promptId, decision) ?? false
+}
+
+/** An AskUserQuestion answered on the phone (PRD §6.16); false when it can no longer be answered there. */
+export async function answerFromRemote(promptId: string, answers: Record<string, string>): Promise<boolean> {
+  const rt = await runtime
+  return rt?.bridge.answerQuestion(promptId, answers) ?? false
+}
+
+/** Whether an answer from the phone would reach the agent (the request behind the prompt is held). */
+export async function promptHeld(promptId: string): Promise<boolean> {
+  const rt = await runtime
+  return rt?.bridge.isHeld(promptId) ?? false
+}
+
+/** The session's transcript, once a hook has named it. */
+export const transcriptSource = (sessionId: string): { agent: 'claude' | 'codex'; path: string } | null => transcripts.sourceOf(sessionId)
+
 const emitter: BridgeEmitter = {
   event: (envelope) => {
     // Any hook traffic proves the hooks reach us; withdraw the "silent since launch" countdown.
@@ -208,10 +258,18 @@ const emitter: BridgeEmitter = {
     // A session on a third-party endpoint does not make the account "in use" (it would be asked far more often).
     if (!offPlan.has(envelope.sessionId) && (envelope.agent === 'claude' || envelope.agent === 'codex')) pollers[envelope.agent]?.nudge()
     ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope)
+    remoteListener?.activity(envelope.sessionId)
   },
-  prompt: (prompt) => ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt),
-  resolved: (resolution) => ownerOf(resolution.sessionId)?.send(IPC.agentPromptResolved, resolution),
+  prompt: (prompt) => {
+    ownerOf(prompt.sessionId)?.send(IPC.agentPrompt, prompt)
+    remoteListener?.prompt(prompt)
+  },
+  resolved: (resolution) => {
+    ownerOf(resolution.sessionId)?.send(IPC.agentPromptResolved, resolution)
+    remoteListener?.resolved(resolution)
+  },
   canDeliver: (sessionId) => ownerOf(sessionId) !== null,
+  held: (promptId) => remoteListener?.held(promptId),
   usage: (usage) => {
     usageStore?.update(usage)
     pollers[usage.vendor]?.nudge()
@@ -261,9 +319,11 @@ async function start(): Promise<Runtime | null> {
     targetDecision,
     new Promise<null>((resolve) => setTimeout(() => resolve(null), TARGET_DECISION_TIMEOUT_MS).unref())
   ])
+  relayHolds = relayOutlastsHold(target, PERMISSION_TIMEOUT_MS)
+  if (!relayHolds) console.warn('[hooks] the pty daemon answers permission relays before a phone could; nothing is held for the phone')
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, subagents, scripts })
+      const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, scripts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -286,8 +346,9 @@ async function start(): Promise<Runtime | null> {
     void sweepStaleHookDirs({ userData, keep: dir }).then((removed) => {
       if (removed.length > 0) console.log(`[hooks] removed ${removed.length} stale hook director${removed.length === 1 ? 'y' : 'ies'}`)
     })
-    // No in-app answering UI: permission requests are announced, never held (the TUI answers them).
-    const bridge = new HookBridge(emitter, { holdPermissions: false, titles, rollouts, transcripts, subagents, scripts })
+    // No in-app answering UI: permission requests are announced and answered in the TUI; held only while a paired
+    // phone is connected (PRD F22), and the TUI dialog shows meanwhile all the same.
+    const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, scripts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => route(bridge, request),

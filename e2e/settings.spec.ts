@@ -166,7 +166,7 @@ test('the sidebar\'s 更新 shows the version and checks for updates; settings h
   const app = await launchApp()
   const settings = await openSettings(app)
   // Panes without content yet are not listed (B11): no 即将推出 dead ends.
-  await expect(settings.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化'])
+  await expect(settings.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化', '手机'])
   await settings.keyboard.press('Escape')
   await expect(settings.getByRole('dialog', { name: '设置' })).toHaveCount(0)
   const entry = settings.locator('[data-region="sidebar"]').getByRole('button', { name: '更新', exact: true })

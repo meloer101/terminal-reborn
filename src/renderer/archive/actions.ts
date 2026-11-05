@@ -47,10 +47,16 @@ export function blockerFor(target: ArchiveTarget): string | null {
 
 export async function archiveWorktree(
   target: ArchiveTarget,
-  options: { ignoreScriptFailure?: boolean; onStep?: (step: ArchiveStep) => void } = {}
+  options: { ignoreScriptFailure?: boolean; onStep?: (step: ArchiveStep) => void; unattended?: boolean } = {}
 ): Promise<ArchiveOutcome> {
   const blocker = blockerFor(target)
   if (blocker) return { ok: false, stage: 'blocked', message: blocker }
+  // Nobody at the Mac (the phone archives, PRD F22): an archive script that still needs its approval dialog stops here,
+  // before anything is stopped.
+  if (options.unattended) {
+    const scripts = await window.tr.repoScripts.get(target.worktreePath).catch(() => null)
+    if (scripts?.scripts.archive !== undefined && !scripts.approved) return { ok: false, stage: 'blocked', message: '这个仓库的 archive 脚本要先在 Mac 上批准一次' }
+  }
 
   options.onStep?.('stopping')
   const sessionIds = sessionIdsToStop(useWorkspace.getState().sessions, target.worktreeIds)

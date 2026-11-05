@@ -179,6 +179,23 @@ const SCENARIOS = {
     c.write('1')
     console.log('stop seen:', await waitStop())
   },
+  // Answer AskUserQuestion from outside the TUI (remote control, PRD §6.16): hold its PermissionRequest and allow it
+  // with `updatedInput.answers` keyed by question text, the way the Agent SDK's canUseTool does.
+  async 'ask-answer'() {
+    await prompt('Use the AskUserQuestion tool to ask me which of two options I prefer: A or B (header "Pick"). Then reply with my choice.')
+    const t = Date.now()
+    while (!held.length && Date.now() - t < 60000) await sleep(100)
+    await sleep(2000)
+    show('screen while question pending', c.visible())
+    const h = held.shift()
+    const input = h?.body.tool_input ?? {}
+    log({ dir: 'ask-input', tool: h?.body.tool_name, input })
+    const answers = Object.fromEntries((input.questions ?? []).map((q) => [q.question, q.options?.at(-1)?.label ?? 'B']))
+    h?.decide('allow', { updatedInput: { ...input, answers } })
+    await sleep(2500)
+    show('screen after answer', c.visible())
+    console.log('stop seen:', await waitStop(), 'answers sent:', JSON.stringify(answers))
+  },
   async fail() {
     await prompt('Use the Bash tool to run exactly: ls /tmp/tr-hooks-lab/does-not-exist   Then reply DONE.')
     await sleep(8000)

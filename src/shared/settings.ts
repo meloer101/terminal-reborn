@@ -3,6 +3,7 @@
 // fall back to defaults so a hand-edited file can't break the app.
 import { normalizeHex } from './color'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
+import { DEFAULT_REMOTE_PORT } from './remote'
 
 export type ThemePreference = 'system' | 'dark' | 'light'
 
@@ -136,6 +137,14 @@ export interface DispatchSettings {
   autoApprove: boolean
 }
 
+/** 设置 · 手机 (PRD F22). Off until the user turns it on: while on, Wavi listens on `port` for paired phones. */
+export interface RemoteSettings {
+  enabled: boolean
+  port: number
+  /** Push 等你处理 / 做完 / 出错 to the paired phones. */
+  push: boolean
+}
+
 export interface AppSettings {
   version: 1
   appearance: AppearanceSettings
@@ -145,6 +154,7 @@ export interface AppSettings {
   alerts: AlertSettings
   pr: PrSettings
   dispatch: DispatchSettings
+  remote: RemoteSettings
 }
 
 export interface SettingsPatch {
@@ -155,6 +165,7 @@ export interface SettingsPatch {
   alerts?: Partial<AlertSettings>
   pr?: Partial<PrSettings>
   dispatch?: Partial<DispatchSettings>
+  remote?: Partial<RemoteSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -199,7 +210,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     writerCodexModel: '',
     writeOnOpen: false
   },
-  dispatch: { tools: true, autoApprove: false }
+  dispatch: { tools: true, autoApprove: false },
+  remote: { enabled: false, port: DEFAULT_REMOTE_PORT, push: true }
 }
 
 const MAX_REVIEW_RULES = 8000
@@ -298,6 +310,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
   const a = typeof v.archive === 'object' && v.archive !== null ? (v.archive as Record<string, unknown>) : {}
   const al = typeof v.alerts === 'object' && v.alerts !== null ? (v.alerts as Record<string, unknown>) : {}
   const dp = typeof v.dispatch === 'object' && v.dispatch !== null ? (v.dispatch as Record<string, unknown>) : {}
+  const rm = typeof v.remote === 'object' && v.remote !== null ? (v.remote as Record<string, unknown>) : {}
   return {
     version: 1,
     appearance: appearance(v.appearance),
@@ -309,6 +322,11 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     dispatch: {
       tools: typeof dp.tools === 'boolean' ? dp.tools : DEFAULT_SETTINGS.dispatch.tools,
       autoApprove: typeof dp.autoApprove === 'boolean' ? dp.autoApprove : DEFAULT_SETTINGS.dispatch.autoApprove
+    },
+    remote: {
+      enabled: typeof rm.enabled === 'boolean' ? rm.enabled : DEFAULT_SETTINGS.remote.enabled,
+      port: typeof rm.port === 'number' && Number.isInteger(rm.port) && rm.port >= 1024 && rm.port <= 65535 ? rm.port : DEFAULT_SETTINGS.remote.port,
+      push: typeof rm.push === 'boolean' ? rm.push : DEFAULT_SETTINGS.remote.push
     }
   }
 }
@@ -343,6 +361,7 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const nextAlerts = typeof p.alerts === 'object' && p.alerts !== null ? { ...current.alerts, ...(p.alerts as object) } : current.alerts
   const nextPr = typeof p.pr === 'object' && p.pr !== null ? { ...current.pr, ...(p.pr as object) } : current.pr
   const nextDispatch = typeof p.dispatch === 'object' && p.dispatch !== null ? { ...current.dispatch, ...(p.dispatch as object) } : current.dispatch
+  const nextRemote = typeof p.remote === 'object' && p.remote !== null ? { ...current.remote, ...(p.remote as object) } : current.remote
   return sanitizeSettings({
     ...current,
     appearance: nextAppearance,
@@ -351,6 +370,7 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
     archive: nextArchive,
     alerts: nextAlerts,
     pr: nextPr,
-    dispatch: nextDispatch
+    dispatch: nextDispatch,
+    remote: nextRemote
   })
 }
