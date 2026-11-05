@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-05：新增 F23 GUI 会话（PRD v1.125）：新建时选 CLI 或 GUI、之后不切换；Claude 走 `-p` stream-json + `CLAUDE_CODE_ENTRYPOINT=wavi`，Codex 走 app-server，其余 16 家走 ACP（Crush 只能 CLI），进程归守护进程。调研、Figma 49″、协议实测（§6.17）做完；jacoy/remote-phone 合进 main。还没写代码。
+- 2026-11-05：新增 F23 GUI 会话（PRD v1.125）：新建时选 CLI 或 GUI、之后不切换；Claude 走 `-p` stream-json + `CLAUDE_CODE_ENTRYPOINT=wavi`，Codex 走 app-server，其余 16 家走 ACP（Crush 只能 CLI），进程归守护进程。调研、Figma 49″、协议实测（§6.17）做完；jacoy/remote-phone 合进 main。代码已在 jacoy/gui-sessions：三块并行实现合并、e2e 通过，待独立 review 和真 agent 冒烟。
 - 2026-11-01：新增 F22 手机远程（PRD v1.112）：iPhone 上用 GUI 操作本机会话，Expo React Native + Tailscale / 局域网，Mac 上 Wavi 开着。P0 实测完（§6.16）：transcript 能画对话但文字一块写完才写入；挂起 PermissionRequest 能从外部允许、拒绝和回答 AskUserQuestion；PNG / JPEG 路径变成图片、HEIC 不会，要先转 JPEG。真机连接没测（Tailscale 未开）。Figma 第 45 节作者已确认；P2 Mac 端已完成（PRD v1.113）；手机端换成原生 SwiftUI（`ios/`，PRD v1.119），真机经局域网和 Tailscale 都连上了；灵动岛和锁屏卡片做完（App 前台时更新），蓝牙、APNs 还没做。
 - 2026-11-01：F21 重做落地（PRD v1.111）：`wavi` 命令代替 MCP，19 家 CLI 都能派活和被派；回报三档（Claude 收件箱 / `codex queue` / Pi 扩展；Gemini、Qwen、Grok、Crush、Goose、OpenCode 没人打字时由发消息链路送；其余进「送进去」条）；最多两层、只确认第一层；子会话 `wavi report` + Wavi 兜底；`--base snapshot`；报告送进去时子会话不提醒；侧栏第二层和模型（44B）。e2e `dispatch.spec.ts` 重写（9 个，真实链路）；独立 code review 的 12 条里修了 10 条（Codex `developer_instructions` 覆盖用户配置、token 同用户可读两条待作者定）。真 agent 跑过：Claude、Grok 都会自己读 `wavi --skill` 派活、收报告后自己核对；Codex 因服务商 503 只验证了启动和兜底报告。OpenCode 的 `prompt_async` 仍未测。
 - 2026-10-31：agent 自带的 subagent 显示在侧栏（PRD v1.110，Figma 44B 选定）：Claude 会话里跑着的 subagent 单独成一行挂在会话下（状态 · 任务 · 模型），等你处理的那个单独标出，结束就消失。main 的 `src/main/hooks/subagents.ts` 读 `subagents/agent-<id>.meta.json`，renderer 经 session-meta 交给侧栏（`SubagentRow`）；`subagents.test.ts`、`model.test.ts`、`controller.test.ts`，e2e `session-meta.spec.ts` 走真实 hook 链路。Codex 等实测。
@@ -211,15 +211,18 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 ## 进行中：F23 GUI 会话（2026-11-05 定）
 
 - [x] 调研：闭源产品 UX、开源项目源码、来源标签和额度（PRD v1.125）
-- [x] Figma 49 / 49′ / 49″（作者看过 48 后改为新建时选定；49′ 是 unslop 打磨后的版本；49″ 接上 ACP、确认卡片不连输入框）；48 未选
+- [x] Figma 49 / 49′ / 49″（作者看过 48 后改为新建时选定；49′ 是 unslop 打磨后的版本；49″ 接上 ACP、确认卡片不连输入框）；48 未选；作者 2026-11-05 定稿 49″、「界面」默认 GUI
 - [x] 实测 Claude `-p` stream-json、Codex app-server、Grok / Cursor 的 ACP 握手（PRD §6.17）
-- [ ] 作者确认 49″ 和「界面」的默认值
-- [ ] 启动 agent 前清掉继承来的宿主变量（`CLAUDE_CODE_ENTRYPOINT` 等）
-- [x] 三种协议到对话的转换（`src/main/gui/claude-stream.ts`、`codex-app-server.ts`、`acp.ts`，共享 `src/shared/gui-chat.ts`；44 个单测，含流式、确认卡片、选择器、命令列表、diff）
-- [ ] 守护进程托管 GUI 会话进程；Claude 协议客户端、Codex app-server 客户端、ACP 客户端；统一成对话条目和状态事件
-- [ ] renderer `src/renderer/gui/`：对话流、输入框（确认卡片、排队、附件、@、/ 菜单、选择器）、新建会话面板「界面」一行
-- [ ] 派活报告、附件、额度接到 GUI 会话
-- [ ] 测试和 e2e（假 `claude` / `codex` 协议服务）
+- [x] 启动 agent 前清掉继承来的 `CLAUDE_CODE_ENTRYPOINT` 和 Claude 桌面版的代理地址（`src/pty-host/env.ts`）
+- [x] 三种协议到对话的转换（`src/main/gui/claude-stream.ts`、`codex-app-server.ts`、`acp.ts`，共享 `src/shared/gui-chat.ts`）
+- [x] 守护进程托管 GUI 会话进程（`welcome.pipes`，协议版本不升；旧守护进程时由主进程托管）：`src/pty-host/pipe-host.ts`、`pipe-sessions.ts`，`src/main/pty/pipes.ts`
+- [x] 主进程 GUI 会话宿主：三个驱动、重新接上 / 续上 / 排队 / 归属、IPC 校验、Codex / ACP 的状态事件、派活报告送进 GUI 会话（`src/main/gui/`）
+- [x] renderer：`Session.ui` / `newSessionUi`、新建会话面板「界面」一行（含 pi-acp / amp-acp 检测）、聊天视图（`src/renderer/gui/`）、`session-io` 对 GUI 会话的路由
+- [x] e2e `gui-session.spec.ts`（真实 app + 假的 headless Claude，7 个）；`more-agents`、`no-dead-ends` 两个 TUI 用例在面板里选 CLI
+- [ ] 独立 code review 的问题
+- [ ] 真 agent 冒烟：Claude（hooks 状态、`entrypoint: wavi`、`--resume` 后的会话 id）、Codex（app-server 下 hooks 是否触发）、一家 ACP
+- [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；`/` 菜单不分「命令 / Skills」；附件以小块显示在输入框上方；@ 只做按钮选文件、没有输入时补全；多题提问一次一题、非最后一题按钮叫「下一个」
+- [ ] 没做：总览浮层里 GUI 会话不显示聊天；`wavi run` 派出的子会话仍是 CLI；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上；ACP agent 的状态事件 agent 字段暂报 `opencode`
 
 ## 进行中：F22 手机远程（2026-11-01 定）
 
