@@ -564,24 +564,51 @@
   overflow-wrap: anywhere;
 }
 
-/* Composer (49″C): 12 / 8 / 8 / 12 inside, the text above the bar. */
+/* Composer (Figma 52F–H): the box is one line — + · text · send, 28 high, 8 inside and 8 apart; more lines grow it
+   upward with + and send at its foot. Under it, 4 below: 格式 under +, the pickers, the context ring under send. */
 .composerWrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .composer {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-  padding: var(--space-12) var(--space-8) var(--space-8) var(--space-12);
+  padding: var(--space-8);
   border-radius: var(--radius-window);
   background: var(--bg-section);
 }
 
+.composerLine {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-8);
+}
+
+.composerText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.under {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-8);
+}
+
 /* The text (ComposerEditor, Figma 50C–E): grows to about ten lines, then scrolls. Blocks are compact — a list or a
-   quote is one line from what is around it — so the text reads like the lines it is sent as. */
+   quote is one line from what is around it — so the text reads like the lines it is sent as. 3 above and below put a
+   22 line on the 28 buttons' middle, and the last line on theirs once it grows. */
 .inputScroll {
   max-height: 220px;
+  padding: 3px 0;
   overflow-y: auto;
 }
 
@@ -772,12 +799,6 @@
   color: var(--text-primary);
 }
 
-.bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
 .spacer {
   flex: 1;
 }
@@ -819,6 +840,51 @@
 
 .picker svg {
   color: var(--text-primary);
+}
+
+/* The context ring (Figma 52F): a 16 ring on a 2 stroke, the used part drawn from the top, clockwise; heavier where the
+   agent starts warning. */
+.ring {
+  transform: rotate(-90deg);
+}
+
+.ringTrack,
+.ringUsed {
+  fill: none;
+  stroke-width: 2;
+}
+
+.ringTrack {
+  stroke: var(--border-strong);
+}
+
+.ringUsed {
+  stroke: var(--text-secondary);
+  stroke-linecap: butt;
+}
+
+.ring[data-level='high'] .ringUsed {
+  stroke: var(--text-primary);
+}
+
+/* Its popover (Figma 52G): the 设置 · 额度 rows (Figma 33I) on narrower columns — name 96 · bar · value 40 · reset 100,
+   12 apart. [role] outweighs the session-meta popover's own width. */
+.contextPopover[role='dialog'] {
+  width: 440px;
+}
+
+.contextPanel {
+  --usage-columns: 96px minmax(0, 1fr) 40px 100px;
+  --usage-gap: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+}
+
+.contextVendor {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Stop (a running turn) / send: a 28 circle, filled. */

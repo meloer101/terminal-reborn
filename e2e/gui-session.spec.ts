@@ -218,20 +218,60 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(lastSent().locator('pre')).toHaveText('a()\n  b()')
   })
 
-  test('@ puts a file mention at the caret, inside the list it is typed in', async () => {
+  test('the box is one line (Figma 52F): + adds a file as an attachment, sent with the message', async () => {
     const readme = join(project, 'README.md')
     await app.evaluate(({ dialog }, files) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: files })) as typeof dialog.showOpenDialog
     }, [readme])
-    await input().click()
-    await page.keyboard.type('- 看')
-    await composer().getByRole('button', { name: '提及文件' }).click()
-    await expect(input().locator('ul > li')).toHaveText('看 @README.md ')
-    await page.keyboard.type('里的说明')
-    await page.keyboard.press('Enter')
-    await expect(lastSent().locator('ul > li')).toHaveText('看 @README.md 里的说明', WITHIN)
-    // Long by now: the view follows the end, the reply at the bottom.
-    await expect.poll(() => feed().evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), WITHIN).toBe(0)
+    // + · text · send on one 28 line, 8 inside: 44 high.
+    const box = page.getByTestId('gui-composer-box')
+    expect((await box.boundingBox())!.height).toBe(44)
+    await composer().getByRole('button', { name: '添加附件' }).click()
+    await expect(composer().getByRole('list', { name: '附件' }).getByText('README.md')).toBeVisible(WITHIN)
+    await send('看说明')
+    await expect(lastSent()).toContainText('看说明', WITHIN)
+    await expect(composer().getByRole('list', { name: '附件' })).toHaveCount(0)
+  })
+
+  test('context and usage sit under the composer, not in the header (Figma 52F / 52G)', async () => {
+    const fromMain = (channel: string, payload: unknown) =>
+      app.evaluate(({ BrowserWindow }, [c, p]) => BrowserWindow.getAllWindows()[0]?.webContents.send(c as string, p), [channel, payload] as const)
+    await fromMain('agent:event', { sessionId: 's1', agent: 'claude', at: Date.now(), event: { type: 'context', context: { percent: 48, usedTokens: 96000, windowTokens: 200000 } } })
+    await fromMain('agent:usage-account', { vendor: 'claude', state: 'ok', plan: 'max', at: Date.now() })
+    await fromMain('agent:usage', {
+      vendor: 'claude',
+      at: Date.now(),
+      windows: [
+        { minutes: 300, percent: 28, resetsAt: Date.now() + 2 * 3600_000 },
+        { minutes: 10080, percent: 41, resetsAt: Date.now() + 3 * 86400_000 }
+      ]
+    })
+    const ring = composer().getByTestId('gui-context-ring')
+    await expect(ring).toHaveAttribute('aria-label', 'context 已用 48%', WITHIN)
+    const header = page.locator('[data-region="session-header"]')
+    await expect(header.getByTestId('context-chip')).toHaveCount(0)
+    await expect(header.getByTestId('usage-chip-claude')).toHaveCount(0)
+    // The ring sits under the send button, 格式 under +.
+    const [sendBox, ringBox] = await Promise.all([composer().getByRole('button', { name: '发送' }).boundingBox(), ring.boundingBox()])
+    expect(Math.round(ringBox!.x + ringBox!.width)).toBe(Math.round(sendBox!.x + sendBox!.width))
+    const [addBox, formatBox] = await Promise.all([composer().getByRole('button', { name: '添加附件' }).boundingBox(), composer().getByRole('button', { name: '格式' }).boundingBox()])
+    expect(Math.round(formatBox!.x)).toBe(Math.round(addBox!.x))
+    await ring.click()
+    const popover = page.getByTestId('gui-context-popover')
+    await expect(popover.getByTestId('usage-context-row')).toHaveText('context48%96k / 200k')
+    await expect(popover.getByRole('region', { name: 'Claude' })).toHaveText(/^ClaudeMax5 小时28%.*7 天41%/)
+    // Above the ring, right edges aligned.
+    const popBox = (await popover.boundingBox())!
+    expect(Math.round(popBox.x + popBox.width)).toBe(Math.round(ringBox!.x + ringBox!.width))
+    expect(popBox.y + popBox.height).toBeLessThanOrEqual(ringBox!.y)
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expect.poll(() => popover.evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
+      await page.screenshot({ path: join(SHOTS, `context-popover-${theme}.png`) })
+    }
+    await page.keyboard.press('Escape')
+    await expect(popover).toHaveCount(0)
   })
 
   test('scrolled up, the view stays; sending a message brings it back to the end', async () => {

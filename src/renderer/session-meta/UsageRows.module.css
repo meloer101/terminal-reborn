@@ -46,6 +46,14 @@
   text-overflow: ellipsis;
 }
 
+.contextLabel {
+  overflow: hidden;
+  font: var(--text-body);
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .value {
   font: var(--text-mono-s-medium);
   color: var(--text-secondary);

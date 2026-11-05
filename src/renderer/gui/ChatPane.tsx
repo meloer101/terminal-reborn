@@ -137,6 +137,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         )}
         <Composer
           sessionId={sessionId}
+          agent={agent}
           cwd={cwd}
           busy={state.busy}
           commands={state.commands}

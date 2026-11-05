@@ -26,8 +26,11 @@ export function Popover({
   onClose(): void
   children: ReactNode
   testId?: string
-  /** `above`: over the anchor, left edges aligned — for an anchor near the window's foot (the sidebar's 更新, Figma 36G). */
-  placement?: 'below' | 'above'
+  /**
+   * `above`: over the anchor, left edges aligned — for an anchor near the window's foot (the sidebar's 更新, Figma 36G).
+   * `above-end`: over the anchor, right edges aligned (the GUI composer's context ring, Figma 52G).
+   */
+  placement?: 'below' | 'above' | 'above-end'
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -40,9 +43,10 @@ export function Popover({
     const box = anchor.current?.getBoundingClientRect()
     if (!panel || !box) return
     const width = panel.offsetWidth
+    const above = placement !== 'below'
     const wanted = placement === 'above' ? box.left : box.right - width
     const left = Math.max(EDGE, Math.min(wanted, win.innerWidth - EDGE - width))
-    const top = placement === 'above' ? Math.max(EDGE, box.top - GAP - panel.offsetHeight) : box.bottom + GAP
+    const top = above ? Math.max(EDGE, box.top - GAP - panel.offsetHeight) : box.bottom + GAP
     setPosition({ left, top, origin: originToward(box, { left, top }, { width, height: panel.offsetHeight }) })
   }, [anchor, win, placement])
 

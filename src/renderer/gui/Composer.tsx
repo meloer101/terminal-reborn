@@ -1,15 +1,17 @@
-// A GUI session's input (PRD F23, Figma 49″C `Composer`; `/` menu 49′C, model menu 49′E; formats 50C–E): formatted
-// text (ComposerEditor), ⏎ sends and ⇧⏎ is a newline — a new item in a list; in a code block ⏎ is a newline too (an
-// input method's Enter is left to it); paperclip attaches files, @ mentions one, 格式 shows the format buttons; the
-// pickers the agent offers (model · reasoning effort, mode); stop while a turn runs, send otherwise.
+// A GUI session's input (PRD F23, Figma 52F–H; `/` menu 49′C, model menu 49′E; formats 50C–E): one line in the box —
+// + adds attachments, the formatted text (ComposerEditor), stop while a turn runs, send otherwise; it grows upward as
+// lines are added, + and send staying at its foot. ⏎ sends and ⇧⏎ is a newline — a new item in a list; in a code block
+// ⏎ is a newline too (an input method's Enter is left to it). Under the box: 格式 (the format buttons), the pickers the
+// agent offers (model · reasoning effort, mode) and the context ring (ContextButton).
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, AtSign, Check, ChevronDown, Paperclip, Square, Type, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Plus, Square, Type, X } from 'lucide-react'
 import { matchCommands, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
-import type { SessionId } from '@shared/types'
+import type { AgentKind, SessionId } from '@shared/types'
 import { Segmented } from '../ui/Segmented'
 import { ComposerEditor, type CaretContext } from './ComposerEditor'
-import { composerKey, mention, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, thumbnailUrl, type PickerButton } from './model'
+import { ContextButton } from './ContextButton'
+import { composerKey, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, thumbnailUrl, type PickerButton } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
@@ -17,6 +19,7 @@ const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 interface Props {
   sessionId: SessionId
+  agent: AgentKind
   cwd: string
   busy: boolean
   commands: readonly GuiCommand[]
@@ -30,7 +33,7 @@ interface Props {
   setConfig(optionId: string, value: string): void
 }
 
-export const Composer = memo(function Composer({ sessionId, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig }: Props) {
+export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig }: Props) {
   const draft = useGuiSessions((s) => s.drafts[sessionId]) ?? draftOf(sessionId)
   const attachments = useGuiSessions((s) => s.attachments[sessionId]) ?? []
   const focusRequest = useGuiSessions((s) => s.focus[sessionId] ?? 0)
@@ -113,24 +116,11 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
   const attach = (): void => {
     void window.tr.ui.pickFiles(cwd).then((paths) => addAttachments(sessionId, paths))
   }
-  const mentionFile = (): void => {
-    void window.tr.ui.pickFiles(cwd).then((paths) => {
-      const editor = editorRef.current
-      if (paths.length === 0 || !editor) return
-      const before = editor.state.selection.$from.nodeBefore?.text ?? ''
-      const added = paths.map((p) => mention(p, cwd)).join('')
-      editor
-        .chain()
-        .focus()
-        .insertContent({ type: 'text', text: before && !/\s$/.test(before) ? ` ${added}` : added })
-        .run()
-    })
-  }
 
   return (
-    <div className={styles.composerWrap}>
+    <div className={styles.composerWrap} data-testid="gui-composer">
       {menuOpen && <SlashMenu matches={matches} index={menuIndex} onHover={setMenuIndex} onPick={pick} />}
-      <div className={styles.composer} data-testid="gui-composer">
+      <div className={styles.composer} data-testid="gui-composer-box">
         {attachments.length > 0 && (
           <ul className={styles.attachments} aria-label="附件">
             {attachments.map((path) => (
@@ -138,52 +128,23 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
             ))}
           </ul>
         )}
-        <ComposerEditor
-          draft={draft}
-          onChange={(text) => {
-            setDraft(sessionId, text)
-            setMenuDismissed(null)
-          }}
-          onKeyDown={onKeyDown}
-          editorRef={editorRef}
-          toolbarOpen={formatOpen}
-        />
-        <div className={styles.bar}>
-          {/* The bar's buttons leave the keyboard and the caret in the text. */}
+        <div className={styles.composerLine}>
+          {/* The buttons leave the keyboard and the caret in the text. */}
           <button type="button" className={styles.barIcon} aria-label="添加附件" title="添加附件" onMouseDown={(e) => e.preventDefault()} onClick={attach}>
-            <Paperclip {...ICON} />
+            <Plus {...ICON} />
           </button>
-          <button type="button" className={styles.barIcon} aria-label="提及文件" title="提及文件" onMouseDown={(e) => e.preventDefault()} onClick={mentionFile}>
-            <AtSign {...ICON} />
-          </button>
-          <button
-            type="button"
-            className={styles.barIcon}
-            aria-label="格式"
-            title="格式"
-            aria-pressed={formatOpen}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setFormatOpen(!formatOpen)}
-          >
-            <Type {...ICON} />
-          </button>
-          <span className={styles.spacer} />
-          {pickerButtons(config).map((button) => (
-            <button
-              key={button.key}
-              type="button"
-              className={styles.picker}
-              aria-haspopup="dialog"
-              aria-expanded={picker?.button.key === button.key}
-              onClick={(e) => {
-                const anchor = e.currentTarget
-                setPicker((open) => (open?.button.key === button.key ? null : { button, anchor }))
+          <div className={styles.composerText}>
+            <ComposerEditor
+              draft={draft}
+              onChange={(text) => {
+                setDraft(sessionId, text)
+                setMenuDismissed(null)
               }}
-            >
-              <span>{button.label}</span>
-              <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
-            </button>
-          ))}
+              onKeyDown={onKeyDown}
+              editorRef={editorRef}
+              toolbarOpen={formatOpen}
+            />
+          </div>
           {busy ? (
             <button type="button" className={styles.round} aria-label="停止" title="停止 ⎋" onClick={interrupt}>
               <Square {...ICON} />
@@ -194,6 +155,37 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
             </button>
           )}
         </div>
+      </div>
+      <div className={styles.under}>
+        <button
+          type="button"
+          className={styles.barIcon}
+          aria-label="格式"
+          title="格式"
+          aria-pressed={formatOpen}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setFormatOpen(!formatOpen)}
+        >
+          <Type {...ICON} />
+        </button>
+        <span className={styles.spacer} />
+        {pickerButtons(config).map((button) => (
+          <button
+            key={button.key}
+            type="button"
+            className={styles.picker}
+            aria-haspopup="dialog"
+            aria-expanded={picker?.button.key === button.key}
+            onClick={(e) => {
+              const anchor = e.currentTarget
+              setPicker((open) => (open?.button.key === button.key ? null : { button, anchor }))
+            }}
+          >
+            <span>{button.label}</span>
+            <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
+          </button>
+        ))}
+        <ContextButton sessionId={sessionId} agent={agent} />
       </div>
       {picker && (
         <PickerMenu

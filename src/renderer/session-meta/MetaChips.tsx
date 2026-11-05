@@ -355,19 +355,24 @@ function WindowBlock({ vendor, w, now }: { vendor: UsageVendor; w: UsageWindow; 
 // Session header group
 // ---------------------------------------------------------------------------------------------
 
-/** The header's metrics, in Figma 17A order: todo · context · usage (this session's vendor) · `children` (actions on them). */
-export function SessionMetaChips({ sessionId, vendor, children }: { sessionId: SessionId; vendor: UsageVendor | null; children?: ReactNode }) {
+/**
+ * The header's metrics, in Figma 17A order: todo · context · usage (this session's vendor) · `children` (actions on
+ * them). Without `meters` only the todo and `children`: a GUI session shows context and usage under its composer
+ * (Figma 52F).
+ */
+export function SessionMetaChips({ sessionId, vendor, meters = true, children }: { sessionId: SessionId; vendor: UsageVendor | null; meters?: boolean; children?: ReactNode }) {
   const metrics = useSessionMeta((s) => s.bySession[sessionId])
   const all = useUsageList()
   const now = useMetaNow()
   // Off the plan (a third-party endpoint), the account's usage is not this session's.
-  const usage = vendor && metrics?.plan !== false ? all.find((u) => u.vendor === vendor) : undefined
+  const usage = meters && vendor && metrics?.plan !== false ? all.find((u) => u.vendor === vendor) : undefined
   const showsUsage = usage !== undefined && topWindow(usage, now) !== null
-  if (!metrics?.todos && !metrics?.context && !showsUsage && !children) return null
+  const context = meters ? metrics?.context : undefined
+  if (!metrics?.todos && !context && !showsUsage && !children) return null
   return (
     <span className={styles.headerChips} data-testid="session-meta">
       {metrics?.todos && <TodoChip items={metrics.todos} />}
-      {metrics?.context && <ContextChip sessionId={sessionId} context={metrics.context} />}
+      {context && <ContextChip sessionId={sessionId} context={context} />}
       {usage && showsUsage && <UsageChip usage={usage} current={vendor} all={all} />}
       {children}
     </span>

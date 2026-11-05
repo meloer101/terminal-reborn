@@ -151,7 +151,12 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
         <>
           {/* Figma 17A: todo · context · usage, after the branch and before the pane icons (PRD F11 / F12). */}
           {/* A plain terminal shows the agent started in it by hand, while it runs. */}
-          <SessionMetaChips sessionId={active.session.id} vendor={active.session.kind === 'shell' ? shellAgent ?? null : claudeOrCodex(active.session.kind)}>
+          {/* A GUI session shows context and usage under its composer instead (Figma 52F). */}
+          <SessionMetaChips
+            sessionId={active.session.id}
+            vendor={active.session.kind === 'shell' ? shellAgent ?? null : claudeOrCodex(active.session.kind)}
+            meters={active.session.ui !== 'gui'}
+          >
             {/* After the used-up UsageChip: type 继续 once the plan limit resets (PRD F11). */}
             {limitResume && <LimitResumeButton sessionId={active.session.id} />}
           </SessionMetaChips>

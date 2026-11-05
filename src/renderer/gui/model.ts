@@ -334,13 +334,6 @@ export function slashQuery(draft: string): string | null {
 /** The draft once a command is picked: `/name ` (its argument follows). */
 export const pickCommand = (command: GuiCommand): string => `/${command.name} `
 
-/** A file the @ button adds to the draft, relative to the session's folder when inside it. */
-export function mention(path: string, cwd: string): string {
-  const base = cwd.endsWith('/') ? cwd : `${cwd}/`
-  const rel = path.startsWith(base) ? path.slice(base.length) : path
-  return `@${/\s/.test(rel) ? `"${rel}"` : rel} `
-}
-
 /**
  * An attachment drawn as a 64 px thumbnail (Figma 50C): the `file://` URL of a picture the app can show (the types the
  * agents take as images, §6.9), else null and it stays a name. HEIC is neither.

@@ -6,7 +6,6 @@ import {
   cardKey,
   composerKey,
   feedBlocks,
-  mention,
   permissionButtons,
   permissionPrimary,
   permissionTitle,
@@ -243,13 +242,10 @@ describe('composer', () => {
     expect(pickCommand(commands[0]!)).toBe('/review ')
   })
 
-  it('adds inserted text after what is typed, and mentions files relative to the session', () => {
+  it('adds inserted text after what is typed', () => {
     expect(appendToDraft('', '@a.ts ')).toBe('@a.ts ')
     expect(appendToDraft('look at', '@a.ts ')).toBe('look at @a.ts ')
     expect(appendToDraft('look at ', '@a.ts ')).toBe('look at @a.ts ')
-    expect(mention('/code/acme/src/a.ts', '/code/acme')).toBe('@src/a.ts ')
-    expect(mention('/code/acme/my file.md', '/code/acme/')).toBe('@"my file.md" ')
-    expect(mention('/etc/hosts', '/code/acme')).toBe('@/etc/hosts ')
   })
 
   it('puts model and reasoning effort on one picker, other options on their own', () => {
