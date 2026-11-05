@@ -215,6 +215,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 实测 Claude `-p` stream-json、Codex app-server、Grok / Cursor 的 ACP 握手（PRD §6.17）
 - [ ] 作者确认 49″ 和「界面」的默认值
 - [ ] 启动 agent 前清掉继承来的宿主变量（`CLAUDE_CODE_ENTRYPOINT` 等）
+- [x] 三种协议到对话的转换（`src/main/gui/claude-stream.ts`、`codex-app-server.ts`、`acp.ts`，共享 `src/shared/gui-chat.ts`；44 个单测，含流式、确认卡片、选择器、命令列表、diff）
 - [ ] 守护进程托管 GUI 会话进程；Claude 协议客户端、Codex app-server 客户端、ACP 客户端；统一成对话条目和状态事件
 - [ ] renderer `src/renderer/gui/`：对话流、输入框（确认卡片、排队、附件、@、/ 菜单、选择器）、新建会话面板「界面」一行
 - [ ] 派活报告、附件、额度接到 GUI 会话
