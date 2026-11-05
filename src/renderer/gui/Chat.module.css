@@ -39,6 +39,8 @@
   align-items: center;
   gap: var(--space-8);
   height: 100%;
+  /* The session header is the card's top row (Figma 55): the feed starts under it and scrolls out of view there. */
+  padding-top: var(--titlebar-height);
   /* 8 under the row below the composer: its 16 icons sit 14 from the edge, as + and send do inside the box (52F). */
   padding-bottom: var(--space-8);
   box-sizing: border-box;
