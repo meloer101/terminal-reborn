@@ -286,7 +286,7 @@ export function TerminalArea({ placements }: { placements: Readonly<Record<Sessi
     const alive = new Set(sessions.map((s) => s.id))
     pruneTerminals(alive)
     // A closed GUI session's agent process ends with it.
-    for (const id of forgetGuiSessions(alive)) void window.tr.gui.stop(id).catch(() => {})
+    for (const id of forgetGuiSessions(sessions)) void window.tr.gui.stop(id).catch(() => {})
   }, [sessions])
 
   // A find belongs to one terminal's buffer.

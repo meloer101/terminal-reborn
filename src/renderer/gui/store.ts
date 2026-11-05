@@ -110,10 +110,20 @@ export function requestComposerFocus(sessionId: SessionId): void {
   useGuiSessions.setState((s) => ({ focus: { ...s.focus, [sessionId]: (s.focus[sessionId] ?? 0) + 1 } }))
 }
 
-/** Forgets closed sessions (their agent processes are ended by the caller). */
-export function forgetGuiSessions(alive: ReadonlySet<SessionId>): SessionId[] {
+/** GUI sessions of the workspace as last seen by `forgetGuiSessions`. */
+const knownGui = new Set<SessionId>()
+
+/**
+ * Forgets closed sessions and returns the GUI sessions closed since the last call: every GUI session that left the
+ * workspace, also one never opened in this app run (its process may still run in the pty daemon). The caller ends
+ * their agent processes.
+ */
+export function forgetGuiSessions(sessions: readonly { id: SessionId; ui?: 'gui' }[]): SessionId[] {
+  const alive = new Set(sessions.map((s) => s.id))
   const { states, drafts, attachments, focus } = useGuiSessions.getState()
-  const gone = Object.keys(states).filter((id) => !alive.has(id))
+  const gone = [...new Set([...knownGui, ...Object.keys(states)])].filter((id) => !alive.has(id))
+  knownGui.clear()
+  for (const s of sessions) if (s.ui === 'gui') knownGui.add(s.id)
   if (gone.length === 0) return gone
   const keep = <T>(record: Record<SessionId, T>): Record<SessionId, T> => Object.fromEntries(Object.entries(record).filter(([id]) => alive.has(id)))
   useGuiSessions.setState({ states: keep(states), drafts: keep(drafts), attachments: keep(attachments), focus: keep(focus) })

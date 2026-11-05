@@ -9,7 +9,7 @@ import { readFile, stat } from 'node:fs/promises'
 import type { HookAgent } from '@shared/agent-events'
 import type { CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
-import { GUI_IPC, type GuiLaunch, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_IPC, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
 import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
@@ -149,6 +149,12 @@ function owned(sender: WebContents, raw: unknown): string | null {
   return id && host.ownerOf(id) === sender ? id : null
 }
 
+/** Not another window's: owned by the caller, or by no window (not opened in this app run, or its window is gone). */
+const mayStop = (sender: WebContents, id: string): boolean => {
+  const owner = host.ownerOf(id)
+  return owner === null || owner === sender
+}
+
 export function registerGuiHandlers(): void {
   setGuiDelivery((sessionId, text) => (host.has(sessionId) ? host.send(sessionId, { text, attachments: [] }).then((r) => r.ok) : null))
 
@@ -192,9 +198,18 @@ export function registerGuiHandlers(): void {
     return id !== null && queued !== null && text !== null && host.editQueued(id, queued, text)
   })
 
-  ipcMain.handle(GUI_IPC.stop, (event, rawId: unknown): void => {
-    const id = owned(event.sender, rawId)
-    if (id) host.stop(id)
+  ipcMain.handle(GUI_IPC.stop, async (event, rawId: unknown): Promise<void> => {
+    const id = parseGuiSessionId(rawId)
+    if (id && mayStop(event.sender, id)) await host.end(id)
+  })
+
+  // Asked once per page load (gui/launch.ts adoptGuiSessions). Another window's sessions are left out, so its page
+  // can neither adopt nor end them.
+  ipcMain.handle(GUI_IPC.live, async (event): Promise<GuiLiveSession[]> => {
+    const listed = await pipeLink()
+      .list()
+      .catch(() => [])
+    return listed.filter((s) => mayStop(event.sender, s.id)).map((s) => ({ sessionId: s.id, exited: s.exit !== undefined }))
   })
 
   // Without the daemon the processes are this app's children: end them with it (the next run resumes by id).

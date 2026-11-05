@@ -245,6 +245,7 @@ const api: TrApi = {
     setConfig: (sessionId, optionId, value) => ipcRenderer.invoke(GUI_IPC.setConfig, sessionId, optionId, value),
     editQueued: (sessionId, queuedId, text) => ipcRenderer.invoke(GUI_IPC.editQueued, sessionId, queuedId, text),
     stop: (sessionId) => ipcRenderer.invoke(GUI_IPC.stop, sessionId),
+    live: () => ipcRenderer.invoke(GUI_IPC.live),
     onEvents: (listener) => listen<{ sessionId: SessionId; events: GuiEvent[] }>(GUI_IPC.events, (m) => listener(m.sessionId, m.events))
   },
   remote: {

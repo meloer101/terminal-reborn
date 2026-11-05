@@ -111,6 +111,13 @@ export type GuiOpenResult =
   | { ok: true; state: GuiState; exited?: boolean }
   | { ok: false; reason: string }
 
+/** An agent process the pipe host still holds: from before a restart (the pty daemon kept it) or a reload. */
+export interface GuiLiveSession {
+  sessionId: string
+  /** It ended while no app was attached; opening it shows why. */
+  exited: boolean
+}
+
 export type GuiSendResult = { ok: true; queued: boolean } | { ok: false; reason: string }
 
 /** `window.tr.gui` (preload). Every call is checked in main: payload shape and that this window owns the session. */
@@ -124,8 +131,10 @@ export interface GuiApi {
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean>
   /** Edits a queued message; an empty text removes it. */
   editQueued(sessionId: string, queuedId: string, text: string): Promise<boolean>
-  /** Ends the agent process (closing the session). */
+  /** Ends the agent process (closing the session), also one this app run never opened. */
   stop(sessionId: string): Promise<void>
+  /** Agent processes the pipe host holds that no other window owns (to adopt, or end, at load). */
+  live(): Promise<GuiLiveSession[]>
   /** Events for sessions this window owns, batched per session. */
   onEvents(listener: (sessionId: string, events: GuiEvent[]) => void): () => void
 }
@@ -138,6 +147,7 @@ export const GUI_IPC = {
   setConfig: 'gui:set-config',
   editQueued: 'gui:edit-queued',
   stop: 'gui:stop',
+  live: 'gui:live',
   /** main → renderer */
   events: 'gui:events'
 } as const

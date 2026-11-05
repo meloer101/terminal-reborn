@@ -348,6 +348,41 @@ describe('GuiHost · ACP', () => {
     expect(b.status.at(-1)).toMatchObject({ type: 'stop' })
   }, 30_000)
 
+  it('end kills a process this host never opened (kept from an earlier app run), and only a listed pipe session', async () => {
+    const link = new LocalPipeLink()
+    const h = harness(link)
+    // An earlier app run started it: the pipe host has it, this host has no session for it.
+    const env = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+    const started = await link.spawn({ id: 'o1', cwd: process.cwd(), command: process.execPath, args: ['-e', 'setInterval(() => {}, 1000)'], baseEnv: env }, { line: () => undefined, exit: () => undefined })
+    expect(started.ok).toBe(true)
+    expect(h.host.has('o1')).toBe(false)
+    await h.host.end('o1')
+    expect(link.has('o1')).toBe(false)
+
+    // Not a pipe session (a terminal's id): not killed.
+    const kills: string[] = []
+    const terminalsOnly: PipeLink = {
+      durable: true,
+      spawn: () => Promise.resolve({ ok: false, message: 'not in this test' }),
+      attach: () => Promise.resolve(null),
+      write: () => false,
+      kill: (id) => void kills.push(id),
+      list: () => Promise.resolve([])
+    }
+    const other = new GuiHost<FakeOwner>({
+      link: () => terminalsOnly,
+      prepare: () => Promise.reject(new Error('not in this test')),
+      history: () => Promise.resolve(null),
+      status: () => undefined,
+      adopted: () => undefined,
+      ended: () => undefined,
+      image: () => Promise.resolve(null),
+      clientVersion: '0'
+    })
+    await other.end('t1')
+    expect(kills).toEqual([])
+  }, 30_000)
+
   it('stop ends the process and forgets the session', async () => {
     const h = harness()
     await h.host.open(launchOf('grok', 'a4'), h.owner)

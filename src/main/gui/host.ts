@@ -522,6 +522,20 @@ export class GuiHost<O extends GuiOwner> {
     session.stop()
   }
 
+  /**
+   * Ends a session's process, also one this host never opened (an earlier app run started it and the pty daemon kept
+   * it): that one is killed in the pipe host once the host lists it as a pipe session (a `kill` of a terminal's id would
+   * end the terminal).
+   */
+  async end(sessionId: string): Promise<void> {
+    if (this.sessions.has(sessionId)) return this.stop(sessionId)
+    const listed = await this.deps
+      .link()
+      .list()
+      .catch(() => [])
+    if (listed.some((s) => s.id === sessionId) && !this.sessions.has(sessionId)) this.deps.link().kill(sessionId)
+  }
+
   /** A window is gone: its sessions keep running for the next `open` (a reload, or the next app run with the daemon). */
   release(owner: O): void {
     for (const session of this.sessions.values()) session.release(owner)

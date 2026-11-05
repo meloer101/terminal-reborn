@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GuiEvent, GuiLaunch, GuiOpenResult } from '@shared/gui-chat'
+import type { GuiEvent, GuiLaunch, GuiLiveSession, GuiOpenResult } from '@shared/gui-chat'
 import { emptyGuiState } from '@shared/gui-chat'
 
 // The workspace and the dispatch queue, as far as opening a GUI session reads and writes them.
+const ONE = [{ id: 's-1', kind: 'claude', ui: 'gui', dispatchedBy: 's-0' }]
 const ws = vi.hoisted(() => ({
-  sessions: [{ id: 's-1', kind: 'claude', ui: 'gui', dispatchedBy: 's-0' }] as Array<Record<string, unknown>>,
+  sessions: [] as Array<Record<string, unknown>>,
+  worktrees: [] as Array<Record<string, unknown>>,
   patches: [] as unknown[][]
 }))
 vi.mock('../state/workspace', () => ({
-  useWorkspace: { getState: () => ({ sessions: ws.sessions, patchSession: (...args: unknown[]) => ws.patches.push(args) }), subscribe: () => () => {} }
+  useWorkspace: {
+    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, patchSession: (...args: unknown[]) => ws.patches.push(args) }),
+    subscribe: () => () => {}
+  }
 }))
 const dispatch = vi.hoisted(() => ({ launch: undefined as { initialPrompt: string; model?: string } | undefined }))
 vi.mock('../dispatch/store', () => ({ takeDispatchLaunch: () => dispatch.launch }))
@@ -17,11 +22,19 @@ vi.mock('../dispatch/store', () => ({ takeDispatchLaunch: () => dispatch.launch 
 const main = vi.hoisted(() => ({
   opened: [] as GuiLaunch[],
   result: null as GuiOpenResult | null,
-  emit: null as ((sessionId: string, events: GuiEvent[]) => void) | null
+  emit: null as ((sessionId: string, events: GuiEvent[]) => void) | null,
+  live: [] as GuiLiveSession[],
+  stopped: [] as string[]
 }))
 vi.stubGlobal('window', {
   tr: {
+    homeDir: '/home',
     gui: {
+      live: () => Promise.resolve(main.live),
+      stop: (sessionId: string) => {
+        main.stopped.push(sessionId)
+        return Promise.resolve()
+      },
       open: async (launch: GuiLaunch) => {
         main.opened.push(launch)
         if (!main.result) throw new Error('no daemon')
@@ -35,13 +48,17 @@ vi.stubGlobal('window', {
   }
 })
 
-const { guiLaunch, openGuiSession } = await import('./launch')
+const { adoptGuiSessions, guiLaunch, openGuiSession } = await import('./launch')
 const { guiStateOf, useGuiSessions } = await import('./store')
 const { useLaunchIssues } = await import('../lifecycle/launch-issues')
 
 beforeEach(() => {
   main.opened = []
   main.result = null
+  main.live = []
+  main.stopped = []
+  ws.sessions = ONE.map((s) => ({ ...s }))
+  ws.worktrees = []
   ws.patches = []
   dispatch.launch = undefined
   useGuiSessions.setState({ states: {} })
@@ -117,5 +134,28 @@ describe('openGuiSession', () => {
     await openGuiSession('s-1', '/w', 'claude', undefined)
     main.emit?.('s-1', [{ type: 'failure', failure: '进程退出，退出码 1' }])
     expect(useLaunchIssues.getState().issues['s-1']).toEqual({ kind: 'spawn-failed', message: '进程退出，退出码 1' })
+  })
+})
+
+describe('adoptGuiSessions', () => {
+  it('opens the GUI sessions whose agent still runs, so status flows before they are viewed, and ends orphans', async () => {
+    ws.worktrees = [
+      { id: 'w1', path: '/repo' },
+      { id: 'w2', path: '/old', archived: { id: 'a' } }
+    ]
+    ws.sessions = [
+      { id: 'g-new', kind: 'codex', ui: 'gui', worktreeId: 'w1', phase: 'not-started', agentSessionId: 'thr-1' },
+      { id: 'g-open', kind: 'claude', ui: 'gui', worktreeId: 'w1', phase: 'ready' },
+      { id: 'g-archived', kind: 'claude', ui: 'gui', worktreeId: 'w2', phase: 'not-started' },
+      { id: 't-1', kind: 'claude', worktreeId: 'w1', phase: 'not-started' }
+    ]
+    main.live = ['g-new', 'g-open', 'g-archived', 't-1', 'gone'].map((sessionId) => ({ sessionId, exited: false }))
+    main.result = { ok: true, state: emptyGuiState() }
+    await adoptGuiSessions()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(main.opened).toEqual([{ sessionId: 'g-new', cwd: '/repo', agent: 'codex', resumeAgentSessionId: 'thr-1' }])
+    expect(ws.patches).toEqual([['g-new', { phase: 'ready' }]])
+    // Closed or archived while the app was away (and an id that is not a GUI session): ended.
+    expect(main.stopped).toEqual(['g-archived', 't-1', 'gone'])
   })
 })

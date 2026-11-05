@@ -8,6 +8,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { SessionId } from '@shared/types'
+import { adoptGuiSessions } from '../gui/launch'
 import { loadLiveSessions, useLiveSessions } from '../terminal/live-sessions'
 import { disposeTerminal, isTerminalAlive } from '../terminal/registry'
 import { agentSessionIdPatch, planStart, shouldAutoStart, type StartOptions } from './session-start-plan'
@@ -87,6 +88,8 @@ export function useSessionStartup(): void {
   const liveLoaded = useLiveSessions((s) => s.loaded)
   useEffect(() => {
     void loadLiveSessions().then(adoptLiveSessions)
+    // GUI sessions' agents are not terminals: main's pipe host lists them (PRD F23).
+    void adoptGuiSessions()
   }, [])
 
   // Every session shown is viewed: the active one, the others in a split (PRD F20), and those in other windows.
