@@ -113,11 +113,13 @@ describe('uiRow (PRD F23, Figma 49″A / B)', () => {
     expect(uiRow('shell', 'gui', none)).toBeNull()
   })
 
-  it('reads agent binaries from the detection result; adapters are not in it', () => {
-    const installed = binaryInstalled({ claude: true, pi: true })
+  it('reads agent binaries and ACP adapters from the detection result', () => {
+    const installed = binaryInstalled({ claude: true, pi: true, adapters: { 'pi-acp': true, 'amp-acp': false } })
     expect(installed('claude')).toBe(true)
     expect(installed('pi')).toBe(true)
-    expect(installed('pi-acp')).toBe(false)
+    expect(installed('pi-acp')).toBe(true)
+    expect(installed('amp-acp')).toBe(false)
+    expect(binaryInstalled({ pi: true })('pi-acp')).toBe(false)
     expect(binaryInstalled(null)('claude')).toBe(false)
   })
 })

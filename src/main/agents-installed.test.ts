@@ -15,7 +15,14 @@ describe('findOnPath', () => {
     const found = findOnPath('/usr/bin:/Users/a/.volta/bin:bin', (p) => files.has(p))
     expect(found.claude).toBe(true)
     expect(found.codex).toBe(false)
-    expect(Object.values(findOnPath('', () => true)).some(Boolean)).toBe(false)
+    const none = findOnPath('', () => true)
+    expect(Object.values(none).some((v) => v === true)).toBe(false)
+    expect(Object.values(none.adapters ?? {}).some(Boolean)).toBe(false)
+  })
+
+  it('also looks for the GUI sessions\' ACP adapters (PRD F23)', () => {
+    const found = findOnPath('/opt/bin', (p) => p === '/opt/bin/pi-acp')
+    expect(found.adapters).toEqual({ 'pi-acp': true, 'amp-acp': false })
   })
 
   it('looks each CLI up by its binary, not its id (Cursor Agent is cursor-agent, Qwen Code is qwen)', () => {

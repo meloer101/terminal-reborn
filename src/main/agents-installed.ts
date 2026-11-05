@@ -6,6 +6,7 @@ import { accessSync, constants, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { ipcMain } from 'electron'
 import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { AGENT_GUI } from '@shared/gui-agents'
 import { IPC, type AgentAvailability, type AgentVersions } from '@shared/ipc'
 
 const TIMEOUT_MS = 5000
@@ -33,7 +34,14 @@ function isExecutableFile(path: string): boolean {
 export function findOnPath(pathValue: string, isExecutable: (path: string) => boolean = isExecutableFile): AgentAvailability {
   const dirs = pathValue.split(':').filter((d) => d.startsWith('/'))
   const found = (name: string) => dirs.some((dir) => isExecutable(join(dir, name)))
-  return Object.fromEntries(CLI_AGENTS.map((id) => [id, found(AGENT_SPECS[id].binary)])) as AgentAvailability
+  const adapters = CLI_AGENTS.flatMap((id) => {
+    const driver = AGENT_GUI[id]
+    return driver?.protocol === 'acp' && 'adapter' in driver ? [driver.adapter.binary] : []
+  })
+  return {
+    ...(Object.fromEntries(CLI_AGENTS.map((id) => [id, found(AGENT_SPECS[id].binary)])) as AgentAvailability),
+    adapters: Object.fromEntries(adapters.map((binary) => [binary, found(binary)]))
+  }
 }
 
 function loginShellPath(shell: string): Promise<string | null> {

@@ -338,7 +338,10 @@ export interface UpdateInfo {
 }
 
 /** Whether each agent CLI is on the user's login-shell PATH (first-run screen B10, 新建会话, 设置 · 智能体). */
-export type AgentAvailability = Partial<Record<CliAgent, boolean>>
+export type AgentAvailability = Partial<Record<CliAgent, boolean>> & {
+  /** GUI sessions' ACP adapters (pi-acp, amp-acp; PRD F23) by binary name. */
+  adapters?: Partial<Record<string, boolean>>
+}
 
 /** What `<cli> --version` printed for each installed agent CLI (设置 · 智能体): a version-looking token, or null. */
 export type AgentVersions = Partial<Record<CliAgent, string | null>>

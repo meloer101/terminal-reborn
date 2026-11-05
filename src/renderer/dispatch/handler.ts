@@ -3,6 +3,7 @@
 // 开始 in the strip under its terminal (unless 设置 · 自动化 · 派活 says otherwise), and the user's answer reaches the
 // agent later as a message; one a dispatched session starts begins right away. Children start in new worktrees — a
 // branch off the dispatcher's, or a snapshot of its working tree — with Wavi's brief as their first message (§6.14).
+import { CLI_AGENTS } from '@shared/agents'
 import { diffSummary, diffSummaryText } from '@shared/attempt-groups'
 import {
   ackReport,
@@ -17,7 +18,6 @@ import {
   waviFail,
   waviOk,
   type ChildPlan,
-  type DispatchAgent,
   type DispatchRequest,
   type StartedChild,
   type WaviCommand,
@@ -179,7 +179,8 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
     command.base === 'head' && !autoStart ? hasUncommitted(caller) : Promise.resolve(false)
   ])
   if (!installed[command.agent]) {
-    const names = (Object.keys(installed) as DispatchAgent[]).filter((k) => installed[k])
+    // Only agent ids: the result also carries `adapters` (PRD F23).
+    const names = CLI_AGENTS.filter((k) => installed[k] === true)
     return waviFail('agent_unavailable', `${agentLabel(command.agent)} is not installed here. Installed: ${names.join(', ') || 'none'}.`)
   }
   if (!info.repo) return waviFail('not_allowed', 'This project is not a git repository, so Wavi cannot give a new session its own worktree.')

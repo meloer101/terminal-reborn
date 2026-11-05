@@ -122,12 +122,9 @@ export function createFailureText(result: Exclude<WorktreeCreateResult, { ok: tr
 
 // --- 界面 (PRD F23, Figma 49″A / 49″B) ----------------------------------------------------------------------------
 
-/**
- * Whether a binary is on the login shell's PATH, from what main reported for the agent CLIs. An adapter (pi-acp,
- * amp-acp) is not among them: it counts as missing until main reports it too.
- */
+/** Whether a binary is on the login shell's PATH, from what main reported for the agent CLIs and the ACP adapters. */
 export function binaryInstalled(found: AgentAvailability | null): (binary: string) => boolean {
-  return (binary) => CLI_AGENTS.some((id) => AGENT_SPECS[id].binary === binary && found?.[id] === true)
+  return (binary) => found?.adapters?.[binary] === true || CLI_AGENTS.some((id) => AGENT_SPECS[id].binary === binary && found?.[id] === true)
 }
 
 export interface UiRow {
