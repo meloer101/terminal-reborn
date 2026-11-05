@@ -49,6 +49,7 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 
 ## Conventions
 
+- Every agent, not just two: research, comparisons, designs and code that touch agents cover all the agents Wavi supports (`src/shared/agents.ts`, GUI drivers in `src/shared/gui-agents.ts`), not only Claude Code and Codex. List the ones that could not be measured or checked (not installed, no access) instead of leaving them out.
 - TypeScript strict; no `any`. Pure logic goes in `src/shared/` or a feature's `*.ts` file with a colocated `*.test.ts` (Vitest).
 - Styling: CSS Modules (`*.module.css`). Colors, spacing, radii and type **only** via variables in `src/renderer/styles/tokens.css`. Verify both themes (`<html data-theme="dark|light">`).
 - Design taste: quiet and systematic — chroma-0 neutrals, color only for status, hierarchy from type/alignment/hairlines, small radii, no cards/gradients/decorative captions. Status is never color-only (StatusGlyph shape + text).
