@@ -226,6 +226,11 @@
   height: 28px;
   margin-top: -3px;
   border-radius: 50%;
-  background: var(--bg-section);
-  color: var(--text-primary);
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+/* The mark (AgentIcon) draws in the circle's colour, not its own text colour. */
+.chatAgentAvatar.chatAgentAvatar > * {
+  color: inherit;
 }

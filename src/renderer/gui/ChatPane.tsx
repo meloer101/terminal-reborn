@@ -2,7 +2,7 @@
 // what the agent waits on, the messages queued behind the running turn, a failure, and the composer. Drawn where a
 // terminal would be (TerminalArea / PaneHosts). Files dropped or pasted on it become attachments (terminal/file-input
 // → session-io → the composer).
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { agentName } from '@shared/agents'
 import { emptyGuiState, type GuiAnswer } from '@shared/gui-chat'
@@ -12,8 +12,8 @@ import { StatusGlyph } from '../ui/StatusGlyph'
 import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
 import { Feed } from './Feed'
-import { cardKey, shortAgentName, waitingToolId } from './model'
-import { clearComposer, useGuiSessions } from './store'
+import { cardKey, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
+import { addAttachments, clearComposer, setDraft, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const EMPTY = emptyGuiState()
@@ -51,18 +51,39 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
     [sessionId]
   )
 
+  // The message just sent shows at once: the agent's own copy can come a second or more later (Claude replays it only
+  // once it takes the message). A message that will wait in the queue shows there instead.
+  const [pending, setPending] = useState<PendingSend | null>(null)
+  const users = userCount(state.items)
+  const willQueue = state.busy || state.queued.length > 0
+  // Its copy arrived: drop it (state adjusted while rendering, React's pattern for state derived from props).
+  if (pending && users > pending.users) setPending(null)
+  const items = useMemo(() => withPendingSend(state.items, pending), [state.items, pending])
+
   const send = useCallback(
     (text: string, attachments: readonly string[]) => {
       setSendError(null)
+      if (!willQueue) {
+        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now() })
+        clearComposer(sessionId)
+      }
+      const undo = (reason: string): void => {
+        setPending(null)
+        setSendError(reason)
+        if (willQueue) return
+        setDraft(sessionId, text)
+        addAttachments(sessionId, attachments)
+      }
       void window.tr.gui
         .send(sessionId, { text, attachments: [...attachments] })
         .then((result) => {
-          if (result.ok) clearComposer(sessionId)
-          else setSendError(result.reason)
+          if (!result.ok) return undo(result.reason)
+          if (result.queued) setPending(null)
+          clearComposer(sessionId)
         })
-        .catch((error: unknown) => setSendError(error instanceof Error ? error.message : String(error)))
+        .catch((error: unknown) => undo(error instanceof Error ? error.message : String(error)))
     },
-    [sessionId]
+    [sessionId, willQueue, users]
   )
   const interrupt = useCallback(() => void window.tr.gui.interrupt(sessionId).catch(() => {}), [sessionId])
   const setConfig = useCallback((optionId: string, value: string) => void window.tr.gui.setConfig(sessionId, optionId, value).catch(() => {}), [sessionId])
@@ -102,7 +123,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         }
       }}
     >
-      <Feed sessionId={sessionId} agent={agent} items={state.items} live={state.live} waitingTool={waitingToolId(state.items, state.prompts)} />
+      <Feed sessionId={sessionId} agent={agent} items={items} live={state.live} waitingTool={waitingToolId(state.items, state.prompts)} />
       <div className={styles.dock}>
         {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (

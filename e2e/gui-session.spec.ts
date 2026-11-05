@@ -88,6 +88,15 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(await offsetFromTop('你好')).toBe(24)
   })
 
+  test('a sent message shows at once, before the agent echoes it, and only once after', async () => {
+    const sentAt = Date.now()
+    await send('late echo please')
+    await expect(feed().locator('[data-item]').filter({ hasText: 'late echo please' })).toBeVisible({ timeout: 1000 })
+    expect(Date.now() - sentAt).toBeLessThan(1000)
+    await expect(feed().getByText('Hello: late echo please')).toBeVisible(WITHIN)
+    await expect(feed().locator('[data-item]').filter({ hasText: 'late echo please' })).toHaveCount(1)
+  })
+
   test('a message sent later scrolls to the top of the feed (Figma 50B)', async () => {
     await send('top of the feed')
     await expect(feed().getByText('Hello: top of the feed')).toBeVisible(WITHIN)
@@ -225,12 +234,22 @@ test.describe('F23 GUI session (Claude)', () => {
 
   test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {
     // One mark per turn: each run of agent blocks after a user message (a turn stopped before any reply has none).
-    const turns = await feed()
-      .locator('> div')
-      .first()
-      .evaluate((column) => [...column.children].filter((el, i, all) => !el.hasAttribute('data-item') && (i === 0 || all[i - 1]!.hasAttribute('data-item'))).length)
-    expect(turns).toBeGreaterThan(3)
-    await expect(feed().locator('[data-agent-mark]')).toHaveCount(turns)
+    // The last test's reply may still be on its way: compare until both settle.
+    const counts = () =>
+      feed()
+        .locator('> div')
+        .first()
+        .evaluate((column) => {
+          const turns = [...column.children].filter((el, i, all) => !el.hasAttribute('data-item') && (i === 0 || all[i - 1]!.hasAttribute('data-item'))).length
+          return { turns, marks: column.querySelectorAll('[data-agent-mark]').length }
+        })
+    await expect.poll(async () => { const c = await counts(); return c.turns === c.marks && c.turns > 3 }, WITHIN).toBe(true)
+    // The mark is a solid circle that is never cut by its block (blocks paint only inside themselves).
+    for (const mark of await feed().locator('[data-agent-mark]').all()) {
+      const [box, turn] = await Promise.all([mark.boundingBox(), mark.locator('..').boundingBox()])
+      expect(box!.y).toBeGreaterThanOrEqual(turn!.y)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(turn!.y + turn!.height + 0.5)
+    }
     const userAvatar = feed().locator('[data-item]').last().locator('[aria-hidden]').last()
     await expect(userAvatar).toBeHidden()
     const avatar = `data:image/png;base64,${'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='}`

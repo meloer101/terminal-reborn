@@ -133,7 +133,7 @@ function sameBlock(a: FeedBlock, b: FeedBlock): boolean {
 /** 51A: the agent's part of a turn, after its mark; the mark beside the first block only. */
 function AgentTurn({ agent, start, children }: { agent: AgentKind; start: boolean; children: ReactNode }) {
   return (
-    <div className={styles.agentTurn}>
+    <div className={styles.agentTurn} data-start={start || undefined}>
       {start && (
         <span className={styles.agentAvatar} data-agent-mark aria-hidden>
           <AgentIcon kind={agent} size={16} />

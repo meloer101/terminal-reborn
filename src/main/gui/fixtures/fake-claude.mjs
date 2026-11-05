@@ -1,6 +1,7 @@
 // A stand-in for `claude -p --input-format stream-json --output-format stream-json …` (PRD §6.17, the message shapes
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
-// "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted.
+// "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
+// replays the message 1.5 s late.
 import { writeFileSync } from 'node:fs'
 
 const SESSION = 'fake-claude-session'
@@ -50,12 +51,17 @@ function finish(extra) {
 }
 
 function onUser(message) {
-  // --replay-user-messages: the message comes back as the conversation's.
-  out({ ...message, session_id: SESSION })
   const content = message.message.content
   const text = typeof content === 'string' ? content : content.filter((b) => b.type === 'text').map((b) => b.text).join('') + ` [${content.filter((b) => b.type === 'image').length} image]`
-  if (turn) queue.push(text)
-  else startTurn(text)
+  const take = () => {
+    // --replay-user-messages: the message comes back as the conversation's.
+    out({ ...message, session_id: SESSION })
+    if (turn) queue.push(text)
+    else startTurn(text)
+  }
+  // "late echo": the real CLI replays a message only once it takes it (hooks, its queue), often a second or more.
+  if (text.includes('late echo')) setTimeout(take, 1500)
+  else take()
 }
 
 function control(message) {

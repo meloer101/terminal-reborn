@@ -25,6 +25,7 @@ import {
   toolView,
   userBubble,
   userMarkdown,
+  withPendingSend,
   turnStarts,
   liveStartsTurn,
   waitingToolId
@@ -61,7 +62,8 @@ describe('a sent message scrolls to the top (Figma 50B)', () => {
     expect(sentMessage(before, after)).toBe('u2')
     expect(sentMessage(null, after)).toBeNull()
     expect(sentMessage([], after)).toBeNull()
-    expect(sentMessage([], feedBlocks([user('u1')]))).toBe('u1')
+    // The first message is at the top already.
+    expect(sentMessage([], feedBlocks([user('u1')]))).toBeNull()
     expect(sentMessage(after, after)).toBeNull()
     expect(sentMessage(after, feedBlocks([user('u1'), text('x1'), user('u2'), text('x2')]))).toBeNull()
     expect(sentMessage(before, feedBlocks([user('u1'), text('x1'), user('u2'), text('x2')]))).toBe('u2')
@@ -71,6 +73,16 @@ describe('a sent message scrolls to the top (Figma 50B)', () => {
     // viewport 600; message at 400 with a 24 gap above; the feed ends at 500 → 600 − (500 − 376) = 476
     expect(sentSpace(600, 400, 500, 24)).toBe(476)
     expect(sentSpace(600, 400, 1100, 24)).toBe(0)
+  })
+})
+
+describe('a sent message shows at once', () => {
+  it('is drawn at the end until the agent’s copy arrives', () => {
+    const items = [user('u1'), text('x1')]
+    const pending = { id: 'pending-1', text: '再改一下', users: 1, at: 5 }
+    expect(withPendingSend(items, pending).map((i) => i.id)).toEqual(['u1', 'x1', 'pending-1'])
+    expect(withPendingSend([...items, user('u2', '再改一下')], pending).map((i) => i.id)).toEqual(['u1', 'x1', 'u2'])
+    expect(withPendingSend(items, null)).toBe(items)
   })
 })
 

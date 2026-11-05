@@ -50,7 +50,9 @@ const lastUserKey = (blocks: readonly FeedBlock[]): string | null => {
 export function sentMessage(prev: readonly FeedBlock[] | null, next: readonly FeedBlock[]): string | null {
   if (!prev || (prev.length === 0 && next.length > 1)) return null
   const key = lastUserKey(next)
-  return key !== null && key !== lastUserKey(prev) ? key : null
+  // The first message of a session is at the top already (Figma 50A): nothing to scroll past.
+  if (key === null || key === lastUserKey(prev) || next[0]?.key === key) return null
+  return key
 }
 
 /**
@@ -58,6 +60,23 @@ export function sentMessage(prev: readonly FeedBlock[] | null, next: readonly Fe
  * from `gap` above the message to the end of the feed. 0 once the reply fills the view.
  */
 export const sentSpace = (viewport: number, messageTop: number, end: number, gap: number): number => Math.max(0, Math.round(viewport - (end - (messageTop - gap))))
+
+/** A message just sent, drawn at once while the agent has not echoed it yet (Claude replays it only once it takes it). */
+export interface PendingSend {
+  id: string
+  text: string
+  /** User messages in the feed when it was sent: one more means the agent's own copy arrived. */
+  users: number
+  at: number
+}
+
+export const userCount = (items: readonly ChatItem[]): number => items.reduce((n, item) => (item.kind === 'user' ? n + 1 : n), 0)
+
+/** The feed's items with the message just sent at the end, until the agent's copy of it is there. */
+export function withPendingSend(items: readonly ChatItem[], pending: PendingSend | null): readonly ChatItem[] {
+  if (!pending || userCount(items) > pending.users) return items
+  return [...items, { kind: 'user', id: pending.id, at: pending.at, text: pending.text, images: 0 }]
+}
 
 /**
  * The blocks that start the agent's part of a turn (Figma 51A): the first non-user block after a user message, or at
