@@ -97,12 +97,12 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(feed().locator('[data-item]').filter({ hasText: 'late echo please' })).toHaveCount(1)
   })
 
-  test('a message sent later scrolls to the top of the feed (Figma 50B)', async () => {
+  test('later messages go below the earlier ones, with no room left under them', async () => {
     await send('top of the feed')
     await expect(feed().getByText('Hello: top of the feed')).toBeVisible(WITHIN)
-    // 16 (the gap between blocks): the reply above ends at the feed's top edge.
-    await expect.poll(() => offsetFromTop('top of the feed'), WITHIN).toBe(16)
-    await expect(feed().getByText('Hello: 你好')).not.toBeInViewport()
+    // Short enough to fit: nothing scrolled, the first message where it was, no blank space added after the reply.
+    expect(await offsetFromTop('你好')).toBe(24)
+    expect(await feed().evaluate((el) => [el.scrollTop, el.scrollHeight <= el.clientHeight])).toEqual([0, true])
   })
 
   test('answers a permission card from the GUI and the turn goes on', async () => {
@@ -230,6 +230,17 @@ test.describe('F23 GUI session (Claude)', () => {
     await page.keyboard.type('里的说明')
     await page.keyboard.press('Enter')
     await expect(lastSent().locator('ul > li')).toHaveText('看 @README.md 里的说明', WITHIN)
+    // Long by now: the view follows the end, the reply at the bottom.
+    await expect.poll(() => feed().evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), WITHIN).toBe(0)
+  })
+
+  test('scrolled up, the view stays; sending a message brings it back to the end', async () => {
+    await feed().evaluate((el) => el.scrollTo(0, 0))
+    await feed().evaluate((el) => new Promise((done) => requestAnimationFrame(() => done(el.scrollTop))))
+    expect(await feed().evaluate((el) => el.scrollTop)).toBe(0)
+    await send('back to the end')
+    await expect(feed().getByText('Hello: back to the end')).toBeVisible(WITHIN)
+    await expect.poll(() => feed().evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), WITHIN).toBe(0)
   })
 
   test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {

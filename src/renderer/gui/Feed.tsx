@@ -11,7 +11,7 @@ import type { AgentKind, SessionId } from '@shared/types'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
-import { feedBlocks, liveStartsTurn, sentMessage, sentSpace, thinkingLabel, toolView, turnStarts, userBubble, userMarkdown, type FeedBlock, type StepItem } from './model'
+import { feedBlocks, liveStartsTurn, sentMessage, thinkingLabel, toolView, turnStarts, userBubble, userMarkdown, type FeedBlock, type StepItem } from './model'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -24,30 +24,15 @@ export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId
   const starts = useMemo(() => turnStarts(blocks), [blocks])
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const spaceRef = useRef<HTMLDivElement>(null)
   const stuck = useRef(true)
-  // The message just sent and the blocks it was compared with (Figma 50B).
-  const sent = useRef<string | null>(null)
+  // The blocks last drawn, to tell a message the user just sent.
   const seen = useRef<FeedBlock[] | null>(null)
 
-  // The feed reads top down (Figma 50A). A message just sent gets room under it, so following the end puts it at the
-  // top while its reply comes in below; once the reply fills the view the room is gone and the end is followed again.
-  // Scrolling up leaves the view where it is.
-  const settle = useCallback(() => {
+  // The feed reads top down like any chat (Figma 50A): new blocks go below and the view follows the end while the
+  // user is there; scrolling up leaves the view where it is, and sending a message brings it back to the end.
+  const follow = useCallback(() => {
     const scroller = scrollerRef.current
-    const content = contentRef.current
-    const space = spaceRef.current
-    if (!scroller || !content || !space) return
-    let room = 0
-    const message = sent.current ? content.querySelector<HTMLElement>(`[data-item="${CSS.escape(sent.current)}"]`) : null
-    if (message) {
-      // The gap between blocks: the block above ends exactly at the top edge, no sliver of it shows.
-      const gap = parseFloat(getComputedStyle(content).rowGap) || 0
-      room = sentSpace(scroller.clientHeight, message.offsetTop, content.offsetHeight, gap)
-    }
-    if (room === 0) sent.current = null
-    space.style.height = `${room}px`
-    if (stuck.current) scroller.scrollTop = scroller.scrollHeight
+    if (scroller && stuck.current) scroller.scrollTop = scroller.scrollHeight
   }, [])
 
   useEffect(() => {
@@ -57,7 +42,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId
     const onScroll = (): void => {
       stuck.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_PX
     }
-    const observer = new ResizeObserver(settle)
+    const observer = new ResizeObserver(follow)
     observer.observe(content)
     observer.observe(scroller)
     scroller.addEventListener('scroll', onScroll, { passive: true })
@@ -65,17 +50,13 @@ export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId
       observer.disconnect()
       scroller.removeEventListener('scroll', onScroll)
     }
-  }, [settle])
+  }, [follow])
 
   useLayoutEffect(() => {
-    const message = sentMessage(seen.current, blocks)
+    if (sentMessage(seen.current, blocks)) stuck.current = true
     seen.current = blocks
-    if (message) {
-      sent.current = message
-      stuck.current = true
-    }
-    settle()
-  }, [blocks, live, settle])
+    follow()
+  }, [blocks, live, follow])
 
   return (
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
@@ -95,7 +76,6 @@ export function Feed({ sessionId, agent, items, live, waitingTool }: { sessionId
           </AgentTurn>
         )}
       </div>
-      <div ref={spaceRef} aria-hidden />
     </div>
   )
 }

@@ -43,23 +43,16 @@ const lastUserKey = (blocks: readonly FeedBlock[]): string | null => {
 }
 
 /**
- * The user message just sent (Figma 50B): the feed's last user message changed (its reply may have come in the same
- * batch). Null on the first render and when a whole history arrives at once (an empty feed that gains more than one
- * block), so opening a session stays at the bottom.
+ * The user message just sent: the feed's last user message changed (its reply may have come in the same batch). The
+ * feed then follows the end again even if the user had scrolled up. Null on the first render and when a whole history
+ * arrives at once.
  */
 export function sentMessage(prev: readonly FeedBlock[] | null, next: readonly FeedBlock[]): string | null {
   if (!prev || (prev.length === 0 && next.length > 1)) return null
   const key = lastUserKey(next)
-  // The first message of a session is at the top already (Figma 50A): nothing to scroll past.
-  if (key === null || key === lastUserKey(prev) || next[0]?.key === key) return null
-  return key
+  return key !== null && key !== lastUserKey(prev) ? key : null
 }
 
-/**
- * The room left under a sent message so it can scroll to the top of the feed (Figma 50B): the viewport less what sits
- * from `gap` above the message to the end of the feed. 0 once the reply fills the view.
- */
-export const sentSpace = (viewport: number, messageTop: number, end: number, gap: number): number => Math.max(0, Math.round(viewport - (end - (messageTop - gap))))
 
 /** A message just sent, drawn at once while the agent has not echoed it yet (Claude replays it only once it takes it). */
 export interface PendingSend {

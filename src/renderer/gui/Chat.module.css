@@ -45,8 +45,8 @@
   color: var(--text-primary);
 }
 
-/* --- feed (Figma `Feed`: 16 between blocks, 24 above the first, top down (50A); a sent message scrolls to the top
-   with room under it (50B, Feed.tsx)) --- */
+/* --- feed (Figma `Feed`: 16 between blocks, 24 above the first, top down like any chat (50A); the view follows the
+   end, Feed.tsx) --- */
 
 .scroller {
   flex: 1;
