@@ -4,6 +4,38 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-05
+
+GUI sessions: any agent as a chat instead of a terminal, with one set of pickers for every agent. Plus status grouping in the sidebar, cards that reach the window edges, and agents that use the system proxy.
+GUI 会话：任何 agent 都可以用聊天界面代替终端，所有 agent 用同一套选择器。另外：侧栏按状态分组、卡片贴到窗口边缘、agent 走系统代理。
+
+### GUI sessions / GUI 会话
+- New sessions can be GUI instead of CLI (chosen at creation): Claude through `claude -p` stream-json, Codex through `codex app-server`, 15 more agents (Gemini, Qwen, OpenCode, Copilot, Cursor, Grok, Kimi, Droid, Amp, Kiro, Goose, Cline, Auggie, CodeBuddy, Pi) through ACP; Crush and Antigravity stay CLI only.
+  新建会话可以选 GUI（创建时定，之后不切换）：Claude 走 `claude -p` stream-json，Codex 走 `codex app-server`，另外 15 家 agent 走 ACP；Crush 和 Antigravity 只能用 CLI。
+- A chat with avatars and Markdown, tool rows with diffs, permission / question / plan cards, queued messages, a `/` command menu, image thumbnails and a composer with lists, quotes, code blocks and marks.
+  像聊天：头像、Markdown、带 diff 的工具行、权限 / 提问 / 计划卡片、排队的消息、`/` 命令菜单、图片缩略图，输入框支持列表、引用、代码块和粗斜体。
+- The composer is one line (+ · text · send); under it 格式, model · reasoning effort, 权限 (询问 / 接受编辑 / 自动), a 计划 switch and a context ring that shows context and the agent's plan usage. Every agent lists only what it supports; the choice is kept across restarts.
+  输入框只有一行（+ · 文字 · 发送）；下面一行是格式、模型 · 推理强度、权限（询问 / 接受编辑 / 自动）、计划开关和 context 圆环（点开看 context 和当前 agent 的额度）。每个 agent 只列它支持的；选择跨重启保留。
+- Copy a message, a code block or a tool's output; edit an earlier message of a Claude session and ask again from there.
+  复制消息、代码块、工具输出；Claude 会话可以改之前的消息，从那里重新问。
+- 设置 · 外观 · 对话: your picture, chat width, font, weight and size; window material and opacity.
+  设置 · 外观 · 对话：我的头像、对话宽度、字体、字重、字号；窗口材质和不透明度。
+
+### Sidebar and layout / 侧栏和布局
+- The sidebar can group sessions by status (等你处理 first) as well as by project; Claude's own subagents show under their session.
+  侧栏可以按状态分组（等你处理在最上面），也可以按项目；Claude 自己的子 agent 显示在它的会话下面。
+- Cards reach the window's top, right and bottom edges; the session header is the card's top row and output scrolling under it blurs.
+  卡片贴到窗口的上、右、下边；会话头是卡片的第一行，滚到它下面的输出渐进模糊。
+
+### Agents / Agent
+- Any agent dispatches work to others through a `wavi` command (F21).
+  任何一家 agent 都能用 `wavi` 命令派活（F21）。
+- Terminals and agents use the macOS system proxy when the app has no proxy variables of its own, so agents such as Grok reach their servers like the browser does.
+  App 环境里没有代理变量时，终端和 agent 使用 macOS 系统代理，Grok 等 agent 能和浏览器一样连上自己的服务器。
+- Phone remote control, Mac side (F22): pair an iPhone in 设置 · 手机.
+  手机远程控制的 Mac 端（F22）：在设置 · 手机里配对 iPhone。
+
+
 ## [0.13.0] - 2026-10-31
 
 Quieter type and motion that starts the moment you ask: menus grow out of what opened them, and reduced motion keeps its fades.
