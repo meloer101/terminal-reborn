@@ -1,6 +1,7 @@
 // What a GUI session's protocol driver (claude-driver.ts, codex-driver.ts, acp-driver.ts) gets from the session host
 // and offers it (PRD F23). A driver speaks one protocol over the agent's stdio lines; it owns no process. Electron-free.
 
+import { randomInt } from 'node:crypto'
 import type { GuiAnswer, GuiEvent } from '@shared/gui-chat'
 
 export type Rec = Record<string, unknown>
@@ -58,15 +59,22 @@ export type RpcOutcome = { ok: true; result: unknown } | { ok: false; code: numb
 /**
  * JSON-RPC requests over stdio lines (Codex app-server omits `jsonrpc`; ACP is JSON-RPC 2.0). Responses to ids this
  * client did not send (a reattached session's earlier requests) are left to the driver.
+ *
+ * Ids start at a random number per client: a reattached session's new client must not reuse an id the earlier run's
+ * client still waits on (its `session/prompt` result would be taken for another request's).
  */
 export class RpcClient {
-  private next = 1
+  private next: number
   private readonly pending = new Map<string, (outcome: RpcOutcome) => void>()
 
   constructor(
     private readonly write: (message: Rec) => boolean,
-    private readonly jsonrpc: boolean
-  ) {}
+    private readonly jsonrpc: boolean,
+    /** The first id (tests); a random one in [1, 2^47) otherwise, far below Number.MAX_SAFE_INTEGER. */
+    firstId: number = randomInt(1, 2 ** 47)
+  ) {
+    this.next = firstId
+  }
 
   private envelope(body: Rec): Rec {
     return this.jsonrpc ? { jsonrpc: '2.0', ...body } : body
