@@ -281,6 +281,15 @@ export function mention(path: string, cwd: string): string {
   return `@${/\s/.test(rel) ? `"${rel}"` : rel} `
 }
 
+/**
+ * An attachment drawn as a 64 px thumbnail (Figma 50C): the `file://` URL of a picture the app can show (the types the
+ * agents take as images, §6.9), else null and it stays a name. HEIC is neither.
+ */
+export function thumbnailUrl(path: string): string | null {
+  if (!/\.(png|jpe?g|gif|webp)$/i.test(path)) return null
+  return `file://${path.split('/').map(encodeURIComponent).join('/')}`
+}
+
 /** Appends inserted text to a draft on its own, separated by a space or newline from what is there. */
 export function appendToDraft(draft: string, text: string): string {
   if (!draft) return text

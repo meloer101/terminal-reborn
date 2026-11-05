@@ -4,6 +4,7 @@
 // while a turn runs, the stop button, the 界面 row of the new-session sheet, and the session surviving a reload of
 // the window (last: a reload shows the boot screen's dots for up to 8 s). Screenshots in both themes go to test-results/gui-session/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -113,6 +114,27 @@ test.describe('F23 GUI session (Claude)', () => {
     // The stopped turn ends; the queued message goes next and gets its reply.
     await expect(feed().getByText('Hello: queued one')).toBeVisible(WITHIN)
     await expect(page.getByTestId('gui-queued')).toHaveCount(0)
+  })
+
+  test('a pasted picture is a thumbnail in the composer (Figma 50C)', async () => {
+    const shot = join(root, 'shot.png')
+    writeFileSync(shot, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
+    const saved = execFileSync('pbpaste', { encoding: 'utf8' })
+    try {
+      execFileSync('osascript', ['-e', `set the clipboard to (read (POSIX file "${shot}") as «class PNGf»)`])
+      await input().click()
+      await page.keyboard.press('Meta+V')
+    } finally {
+      execFileSync('pbcopy', { input: saved })
+    }
+    const thumb = composer().getByRole('img', { name: /^paste-.*\.png$/ })
+    await expect(thumb).toBeVisible(WITHIN)
+    expect(await thumb.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true)
+    expect(await thumb.boundingBox()).toMatchObject({ width: 64, height: 64 })
+    await thumb.hover()
+    await page.screenshot({ path: join(SHOTS, 'thumbnail-dark.png') })
+    await composer().getByRole('button', { name: /^移除 / }).click()
+    await expect(thumb).toHaveCount(0)
   })
 
   test('lists the agent’s commands under /', async () => {

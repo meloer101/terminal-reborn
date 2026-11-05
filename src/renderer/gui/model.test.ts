@@ -21,6 +21,7 @@ import {
   slashQuery,
   stepIndex,
   thinkingLabel,
+  thumbnailUrl,
   toolView,
   userBubble,
   waitingToolId
@@ -187,6 +188,13 @@ describe('composer', () => {
   it('leaves the Enter that commits an input method’s text alone (isComposing, or keyCode 229)', () => {
     expect(key('Enter', { isComposing: true })).toBeNull()
     expect(key('Enter', { keyCode: 229 })).toBeNull()
+  })
+
+  it('draws pictures as thumbnails (Figma 50C), other files as names', () => {
+    expect(thumbnailUrl('/tmp/wavi/attachments/paste-1.PNG')).toBe('file:///tmp/wavi/attachments/paste-1.PNG')
+    expect(thumbnailUrl('/Users/m/截屏 2026.jpeg')).toBe('file:///Users/m/%E6%88%AA%E5%B1%8F%202026.jpeg')
+    expect(thumbnailUrl('/Users/m/photo.heic')).toBeNull()
+    expect(thumbnailUrl('/Users/m/notes.md')).toBeNull()
   })
 
   it('drives the / menu while it is open', () => {

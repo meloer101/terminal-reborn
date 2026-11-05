@@ -540,10 +540,12 @@
   color: var(--text-tertiary);
 }
 
+/* Figma 50C: pictures as 64 thumbnails, other files as names, 8 apart */
 .attachments {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  align-items: center;
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -560,6 +562,36 @@
   background: var(--bg-selected);
   font: var(--text-caption);
   color: var(--text-primary);
+}
+
+.thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+.thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb .attachmentRemove {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  border-radius: 50%;
+  background: var(--bg-float);
+  opacity: 0;
+}
+
+.thumb:hover .attachmentRemove,
+.thumb .attachmentRemove:focus-visible {
+  opacity: 1;
 }
 
 .attachmentName {

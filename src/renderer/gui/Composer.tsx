@@ -6,7 +6,7 @@ import { ArrowUp, AtSign, Check, ChevronDown, Paperclip, Square, X } from 'lucid
 import { matchCommands, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
 import type { SessionId } from '@shared/types'
 import { Segmented } from '../ui/Segmented'
-import { composerKey, mention, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, type PickerButton } from './model'
+import { composerKey, mention, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, thumbnailUrl, type PickerButton } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
@@ -125,12 +125,7 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
         {attachments.length > 0 && (
           <ul className={styles.attachments} aria-label="附件">
             {attachments.map((path) => (
-              <li key={path} className={styles.attachment} title={path}>
-                <span className={styles.attachmentName}>{path.slice(path.lastIndexOf('/') + 1)}</span>
-                <button type="button" className={styles.attachmentRemove} aria-label={`移除 ${path}`} onClick={() => removeAttachment(sessionId, path)}>
-                  <X size={12} strokeWidth={1.75} aria-hidden />
-                </button>
-              </li>
+              <Attachment key={path} path={path} remove={() => removeAttachment(sessionId, path)} />
             ))}
           </ul>
         )}
@@ -197,6 +192,32 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
     </div>
   )
 })
+
+/** 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name. */
+function Attachment({ path, remove }: { path: string; remove(): void }) {
+  const [broken, setBroken] = useState(false)
+  const url = broken ? null : thumbnailUrl(path)
+  const name = path.slice(path.lastIndexOf('/') + 1)
+  const button = (
+    <button type="button" className={styles.attachmentRemove} aria-label={`移除 ${path}`} onClick={remove}>
+      <X size={12} strokeWidth={1.75} aria-hidden />
+    </button>
+  )
+  if (url) {
+    return (
+      <li className={styles.thumb} title={path}>
+        <img src={url} alt={name} draggable={false} onError={() => setBroken(true)} />
+        {button}
+      </li>
+    )
+  }
+  return (
+    <li className={styles.attachment} title={path}>
+      <span className={styles.attachmentName}>{name}</span>
+      {button}
+    </li>
+  )
+}
 
 /** 49′C: the agent's commands matching what follows `/`; ↑↓ move, ⏎ / ⇥ pick. */
 function SlashMenu({ matches, index, onHover, onPick }: { matches: readonly GuiCommand[]; index: number; onHover(index: number): void; onPick(command: GuiCommand): void }) {
