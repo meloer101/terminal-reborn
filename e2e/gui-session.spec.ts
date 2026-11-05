@@ -137,6 +137,87 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(thumb).toHaveCount(0)
   })
 
+  /**
+   * ProseMirror takes a selection made with the keyboard from the next `selectionchange`: a shortcut pressed in the
+   * same instant would apply to the old one. Two frames are enough.
+   */
+  const selectionSettles = () => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
+
+  /** The text of the last user bubble: what the agent got. */
+  const lastSent = () => feed().locator('[data-item]').last()
+
+  test('lists start from "- " and ⇧⏎ adds an item; the agent gets Markdown (Figma 50C)', async () => {
+    await input().click()
+    await page.keyboard.type('步骤：')
+    await page.keyboard.press('Shift+Enter')
+    await page.keyboard.type('1. 后端下发 cookie')
+    await page.keyboard.press('Shift+Enter')
+    await page.keyboard.type('前端删掉 my_token')
+    await expect(input().locator('ol > li')).toHaveCount(2)
+    await page.keyboard.press('Enter')
+    await expect(lastSent()).toHaveText('步骤：\n\n1. 后端下发 cookie\n2. 前端删掉 my_token', WITHIN)
+    await expect(input().locator('ol')).toHaveCount(0)
+  })
+
+  test('**x** typed inline stays text; the 格式 bar and ⌘I format a selection (Figma 50D)', async () => {
+    await input().click()
+    await page.keyboard.type('**不是粗体** 和 斜体')
+    await composer().getByRole('button', { name: '格式' }).click()
+    const bar = composer().getByRole('toolbar', { name: '格式' })
+    await expect(bar).toBeVisible()
+    for (let i = 0; i < 2; i++) await page.keyboard.press('Shift+ArrowLeft')
+    await selectionSettles()
+    await page.keyboard.press('Meta+i')
+    await expect(input().locator('em')).toHaveText('斜体')
+    await expect(bar.getByRole('button', { name: /^斜体/ })).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('End')
+    await selectionSettles()
+    await page.keyboard.press('Shift+Home')
+    await selectionSettles()
+    await bar.getByRole('button', { name: /^删除线/ }).click()
+    await page.screenshot({ path: join(SHOTS, 'format-bar-dark.png') })
+    await page.keyboard.press('Enter')
+    await expect(lastSent()).toHaveText('~~**不是粗体** 和 *斜体*~~', WITHIN)
+    await composer().getByRole('button', { name: '格式' }).click()
+    await expect(bar).toHaveCount(0)
+  })
+
+  test('a selection shows the format buttons over it (Figma 50E); ⏎ in a code block is a newline', async () => {
+    await input().click()
+    await page.keyboard.type('run npm test')
+    for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowLeft')
+    await selectionSettles()
+    const floating = composer().getByRole('toolbar', { name: '选中文字的格式' })
+    await expect(floating).toBeVisible()
+    await page.screenshot({ path: join(SHOTS, 'selection-toolbar.png') })
+    await floating.getByRole('button', { name: /^行内代码/ }).click()
+    await page.keyboard.press('End')
+    await selectionSettles()
+    await page.keyboard.press('Shift+Enter')
+    await page.keyboard.type('```')
+    await page.keyboard.type(' ')
+    await page.keyboard.type('a()')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('  b()')
+    await expect(input().locator('pre')).toHaveCount(1)
+    await page.keyboard.press('Meta+Enter')
+    await expect(lastSent()).toHaveText('run `npm test`\n\n```\na()\n  b()\n```', WITHIN)
+  })
+
+  test('@ puts a file mention at the caret, inside the list it is typed in', async () => {
+    const readme = join(project, 'README.md')
+    await app.evaluate(({ dialog }, files) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: files })) as typeof dialog.showOpenDialog
+    }, [readme])
+    await input().click()
+    await page.keyboard.type('- 看')
+    await composer().getByRole('button', { name: '提及文件' }).click()
+    await expect(input().locator('ul > li')).toHaveText('看 @README.md ')
+    await page.keyboard.type('里的说明')
+    await page.keyboard.press('Enter')
+    await expect(lastSent()).toHaveText('- 看 @README.md 里的说明', WITHIN)
+  })
+
   test('lists the agent’s commands under /', async () => {
     await input().fill('/re')
     await expect(page.getByTestId('gui-slash-menu')).toContainText('review', WITHIN)
@@ -144,6 +225,8 @@ test.describe('F23 GUI session (Claude)', () => {
   })
 
   test('looks right in both themes', async () => {
+    // The empty composer shows its placeholder (Tiptap's class, not a module class).
+    expect(await input().locator('p').first().evaluate((p) => getComputedStyle(p, '::before').content)).toBe('"回复"')
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)

@@ -241,13 +241,14 @@ export function cardKey(event: { key: string; metaKey: boolean; ctrlKey: boolean
 export type ComposerAction = 'send' | 'newline' | 'menu-up' | 'menu-down' | 'menu-pick' | 'menu-close' | 'stop' | null
 
 /**
- * What a key in the composer does: ⏎ sends, ⇧⏎ is a newline, ⎋ stops a running turn. While the `/` menu is open ↑↓
- * move, ⏎ / ⇥ pick, ⎋ closes it. A key that ends an input method's composition (keyCode 229, or `isComposing`) belongs to
- * the input method: the Enter that commits a pinyin word must not send.
+ * What a key in the composer does: ⏎ sends, ⇧⏎ is a newline (in a list a new item, Composer), ⎋ stops a running turn.
+ * In a code block ⏎ is a newline too (Figma 50, as in Slack and T3 Code); ⌘⏎ sends from anywhere. While the `/` menu is open ↑↓ move, ⏎ / ⇥
+ * pick, ⎋ closes it. A key that ends an input method's composition (keyCode 229, or `isComposing`) belongs to the input
+ * method: the Enter that commits a pinyin word must not send.
  */
 export function composerKey(
   event: { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean; altKey: boolean; isComposing: boolean; keyCode: number },
-  state: { menuOpen: boolean; busy: boolean }
+  state: { menuOpen: boolean; busy: boolean; inCode?: boolean }
 ): ComposerAction {
   if (event.isComposing || event.keyCode === 229) return null
   if (state.menuOpen) {
@@ -257,7 +258,8 @@ export function composerKey(
     if (event.key === 'Escape') return 'menu-close'
   }
   if (event.key === 'Enter') {
-    if (event.shiftKey || event.altKey) return 'newline'
+    if (event.metaKey && !event.shiftKey) return 'send'
+    if (event.shiftKey || event.altKey || state.inCode) return 'newline'
     if (event.ctrlKey) return null
     return 'send'
   }

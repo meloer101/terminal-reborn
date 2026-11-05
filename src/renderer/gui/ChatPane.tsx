@@ -13,7 +13,7 @@ import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
 import { Feed } from './Feed'
 import { cardKey, shortAgentName, waitingToolId } from './model'
-import { clearComposer, draftOf, useGuiSessions } from './store'
+import { clearComposer, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const EMPTY = emptyGuiState()
@@ -28,7 +28,6 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   const [answering, setAnswering] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const prompt = state.prompts[0]
-  const draftEmpty = useGuiSessions((s) => (s.drafts[sessionId] ?? draftOf(sessionId)).trim() === '' && (s.attachments[sessionId]?.length ?? 0) === 0)
   const label = agent === 'shell' ? '' : shortAgentName(agentName(agent))
 
   // Files dropped on or pasted into the chat (PRD F19): attachments of the next message.
@@ -68,24 +67,36 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   const interrupt = useCallback(() => void window.tr.gui.interrupt(sessionId).catch(() => {}), [sessionId])
   const setConfig = useCallback((optionId: string, value: string) => void window.tr.gui.setConfig(sessionId, optionId, value).catch(() => {}), [sessionId])
 
+  /**
+   * A key for the waiting card: true when the card took it. From the empty composer (it asks first, Composer) digits
+   * and arrows are the card's only for a question (Claude's TUI does the same).
+   */
+  const promptKind = prompt?.kind
+  const routeCardKey = useCallback(
+    (event: KeyboardEvent, inComposer: boolean): boolean => {
+      if (!cardKeys.current) return false
+      const { key, metaKey, ctrlKey, altKey } = event
+      const action = cardKey({ key, metaKey, ctrlKey, altKey, isComposing: event.isComposing || event.keyCode === 229 }, false)
+      if (!action) return false
+      if (inComposer && (action.type === 'pick' || action.type === 'move') && promptKind !== 'question') return false
+      return cardKeys.current(action)
+    },
+    [promptKind]
+  )
+  const composerCardKey = useCallback((event: KeyboardEvent) => routeCardKey(event, true), [routeCardKey])
+
   return (
     <div
       ref={rootRef}
       className={styles.chat}
       data-testid="gui-chat"
       onKeyDown={(event) => {
-        // A waiting card answers from the keyboard; the composer keeps keys while it has text (Composer).
-        if (event.defaultPrevented || !cardKeys.current) return
+        // A waiting card answers from the keyboard. The composer routes its own keys (Composer); typing elsewhere
+        // (其他…, a queued message) keeps its keys.
+        if (event.defaultPrevented) return
         const target = event.target as HTMLElement
-        const inComposer = target.tagName === 'TEXTAREA'
-        // Typing elsewhere (其他…, a queued message) or a composer with text keeps its keys.
-        if (target.tagName === 'INPUT' || (inComposer && !draftEmpty)) return
-        const { key, metaKey, ctrlKey, altKey } = event
-        const action = cardKey({ key, metaKey, ctrlKey, altKey, isComposing: event.nativeEvent.isComposing || event.keyCode === 229 }, false)
-        if (!action) return
-        // Digits and arrows typed into an empty composer are the card's only for a question (Claude's TUI does the same).
-        if (inComposer && (action.type === 'pick' || action.type === 'move') && prompt?.kind !== 'question') return
-        if (cardKeys.current(action)) {
+        if (target.tagName === 'INPUT' || target.closest('[data-gui-input]')) return
+        if (routeCardKey(event.nativeEvent, false)) {
           event.preventDefault()
           event.stopPropagation()
         }
@@ -110,6 +121,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
           commands={state.commands}
           config={state.config}
           cardWaiting={!!prompt}
+          cardKey={composerCardKey}
           send={send}
           interrupt={interrupt}
           setConfig={setConfig}

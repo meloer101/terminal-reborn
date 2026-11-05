@@ -523,21 +523,126 @@
   background: var(--bg-section);
 }
 
+/* The text (ComposerEditor, Figma 50C–E): grows to about ten lines, then scrolls. Blocks are compact — a list or a
+   quote is one line from what is around it — so the text reads like the lines it is sent as. */
+.inputScroll {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 .input {
-  width: 100%;
   min-height: 22px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
   font: var(--text-composer);
   color: var(--text-primary);
-  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   outline: none;
 }
 
-.input::placeholder {
+.input p {
+  margin: 0;
+}
+
+.input p:global(.is-editor-empty):first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
   color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.input ul,
+.input ol {
+  margin: 0;
+  padding-left: var(--space-24);
+}
+
+.input li::marker {
+  color: var(--text-secondary);
+}
+
+.input blockquote {
+  margin: 0;
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.input code {
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  font: var(--text-mono-terminal);
+}
+
+.input pre {
+  margin: var(--space-4) 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  font: var(--text-mono-terminal);
+  white-space: pre-wrap;
+}
+
+.input pre code {
+  padding: 0;
+  background: none;
+}
+
+/* 50D: the format buttons under the text (格式); 50E: the same over a selection */
+.formatBar,
+.selectionButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.formatGroup {
+  display: contents;
+}
+
+.formatDivider {
+  width: 1px;
+  height: 16px;
+  margin: 0 var(--space-4);
+  background: var(--border-subtle);
+}
+
+.formatButton {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+}
+
+.formatButton:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.formatButton[aria-pressed='true'],
+.barIcon[aria-pressed='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.formatButton:disabled {
+  color: var(--text-disabled);
+}
+
+.selectionBar {
+  position: absolute;
+  z-index: 20;
+  padding: var(--space-4);
+  border-radius: var(--radius-window);
+  background: var(--float-bg);
+  box-shadow: var(--float-edge), var(--shadow-glass-menu);
+  user-select: none;
 }
 
 /* Figma 50C: pictures as 64 thumbnails, other files as names, 8 apart */
@@ -694,7 +799,8 @@
 .thinkingRow:focus-visible,
 .queuedText:focus-visible,
 .queuedRemove:focus-visible,
-.attachmentRemove:focus-visible {
+.attachmentRemove:focus-visible,
+.formatButton:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

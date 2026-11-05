@@ -1,18 +1,19 @@
-// A GUI session's input (PRD F23, Figma 49″C `Composer`; `/` menu 49′C, model menu 49′E): a growing text area, ⏎
-// sends and ⇧⏎ is a newline (an input method's Enter is left to it); paperclip attaches files, @ mentions one; the
+// A GUI session's input (PRD F23, Figma 49″C `Composer`; `/` menu 49′C, model menu 49′E; formats 50C–E): formatted
+// text (ComposerEditor), ⏎ sends and ⇧⏎ is a newline — a new item in a list; in a code block ⏎ is a newline too (an
+// input method's Enter is left to it); paperclip attaches files, @ mentions one, 格式 shows the format buttons; the
 // pickers the agent offers (model · reasoning effort, mode); stop while a turn runs, send otherwise.
-import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUp, AtSign, Check, ChevronDown, Paperclip, Square, X } from 'lucide-react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { Editor } from '@tiptap/react'
+import { ArrowUp, AtSign, Check, ChevronDown, Paperclip, Square, Type, X } from 'lucide-react'
 import { matchCommands, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
 import type { SessionId } from '@shared/types'
 import { Segmented } from '../ui/Segmented'
+import { ComposerEditor, type CaretContext } from './ComposerEditor'
 import { composerKey, mention, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, thumbnailUrl, type PickerButton } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
-/** The text area grows to this many px (about ten lines), then scrolls. */
-const MAX_INPUT_PX = 220
 
 interface Props {
   sessionId: SessionId
@@ -20,18 +21,21 @@ interface Props {
   busy: boolean
   commands: readonly GuiCommand[]
   config: readonly GuiConfigOption[]
-  /** A card waits and the draft is empty: ⏎ / ⎋ / 1–9 are the card's (ChatPane routes them). */
+  /** A card waits: with the composer empty, ⏎ / ⎋ / 1–9 / ↑↓ go to `cardKey` first (ChatPane). */
   cardWaiting: boolean
+  /** Answers the waiting card from a key typed into the empty composer; true when the card took it. */
+  cardKey(event: KeyboardEvent): boolean
   send(text: string, attachments: readonly string[]): void
   interrupt(): void
   setConfig(optionId: string, value: string): void
 }
 
-export const Composer = memo(function Composer({ sessionId, cwd, busy, commands, config, cardWaiting, send, interrupt, setConfig }: Props) {
+export const Composer = memo(function Composer({ sessionId, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig }: Props) {
   const draft = useGuiSessions((s) => s.drafts[sessionId]) ?? draftOf(sessionId)
   const attachments = useGuiSessions((s) => s.attachments[sessionId]) ?? []
   const focusRequest = useGuiSessions((s) => s.focus[sessionId] ?? 0)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<Editor | null>(null)
+  const [formatOpen, setFormatOpen] = useState(false)
   // The highlighted command, for the query it was moved in (a new query starts at the top).
   const [menuAt, setMenuAt] = useState<{ query: string | null; index: number }>({ query: null, index: 0 })
   const [menuDismissed, setMenuDismissed] = useState<string | null>(null)
@@ -45,21 +49,12 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
     setMenuAt({ query, index: typeof update === 'function' ? update(menuIndex) : update })
   const empty = draft.trim() === '' && attachments.length === 0
 
-  // The text area grows with its text.
-  useLayoutEffect(() => {
-    const input = inputRef.current
-    if (!input) return
-    input.style.height = 'auto'
-    input.style.height = `${Math.min(input.scrollHeight, MAX_INPUT_PX)}px`
-  }, [draft])
-
   // Asked to take the keyboard (selected, a file added, text inserted): never from a dialog in front.
   useEffect(() => {
     if (focusRequest === 0) return
-    const input = inputRef.current
-    if (!input || input.ownerDocument.querySelector('[role="dialog"][aria-modal="true"]')) return
-    input.focus({ preventScroll: true })
-    input.setSelectionRange(input.value.length, input.value.length)
+    const editor = editorRef.current
+    if (!editor || editor.view.dom.ownerDocument.querySelector('[role="dialog"][aria-modal="true"]')) return
+    editor.commands.focus('end', { scrollIntoView: false })
   }, [focusRequest])
 
   const submit = (): void => {
@@ -69,39 +64,49 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
   const pick = (command: GuiCommand | undefined): void => {
     if (!command) return
     setDraft(sessionId, pickCommand(command))
-    inputRef.current?.focus()
+    // After the editor took the new text: the caret goes after the command.
+    requestAnimationFrame(() => editorRef.current?.commands.focus('end'))
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    // An empty composer leaves ⏎ / ⎋ to the card above it (ChatPane).
-    if (cardWaiting && empty && !menuOpen && (event.key === 'Enter' || event.key === 'Escape')) return
-    const { key, shiftKey, metaKey, ctrlKey, altKey, keyCode } = event
-    const action = composerKey({ key, shiftKey, metaKey, ctrlKey, altKey, keyCode, isComposing: event.nativeEvent.isComposing }, { menuOpen, busy })
-    if (!action) return
+  /** ⇧⏎: a new item in a list (an empty one leaves the list), a newline in a code block, else a new line. */
+  const newline = (editor: Editor, caret: CaretContext): void => {
+    if (caret.inCode) editor.view.dispatch(editor.state.tr.insertText('\n'))
+    else if (caret.inList) void (editor.commands.splitListItem('listItem') || editor.commands.liftListItem('listItem'))
+    else if (caret.inQuote && editor.state.selection.$from.parent.content.size === 0) editor.commands.lift('blockquote')
+    // A new line starts plain: inline code or bold at the end of the line above does not carry on.
+    else editor.commands.splitBlock({ keepMarks: false })
+  }
+
+  const onKeyDown = (event: KeyboardEvent, caret: CaretContext): boolean => {
+    // An empty composer gives the card above it its keys (ChatPane).
+    if (cardWaiting && empty && !menuOpen && cardKey(event)) return true
+    const { key, shiftKey, metaKey, ctrlKey, altKey, keyCode, isComposing } = event
+    const action = composerKey({ key, shiftKey, metaKey, ctrlKey, altKey, keyCode, isComposing }, { menuOpen, busy, inCode: caret.inCode })
+    const editor = editorRef.current
     switch (action) {
+      case null:
+        return false
       case 'newline':
-        return
+        // ⏎ in a code block is the editor's (three in a row leave it).
+        if (!editor || (caret.inCode && !shiftKey)) return false
+        newline(editor, caret)
+        return true
       case 'send':
-        event.preventDefault()
         submit()
-        return
+        return true
       case 'stop':
-        event.preventDefault()
         interrupt()
-        return
+        return true
       case 'menu-up':
       case 'menu-down':
-        event.preventDefault()
         setMenuIndex((at) => stepIndex(at, action === 'menu-up' ? -1 : 1, matches.length))
-        return
+        return true
       case 'menu-pick':
-        event.preventDefault()
         pick(matches[menuIndex])
-        return
+        return true
       case 'menu-close':
-        event.preventDefault()
         setMenuDismissed(query)
-        return
+        return true
     }
   }
 
@@ -110,11 +115,15 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
   }
   const mentionFile = (): void => {
     void window.tr.ui.pickFiles(cwd).then((paths) => {
-      if (paths.length === 0) return
-      const current = draftOf(sessionId)
+      const editor = editorRef.current
+      if (paths.length === 0 || !editor) return
+      const before = editor.state.selection.$from.nodeBefore?.text ?? ''
       const added = paths.map((p) => mention(p, cwd)).join('')
-      setDraft(sessionId, current && !/\s$/.test(current) ? `${current} ${added}` : `${current}${added}`)
-      inputRef.current?.focus()
+      editor
+        .chain()
+        .focus()
+        .insertContent({ type: 'text', text: before && !/\s$/.test(before) ? ` ${added}` : added })
+        .run()
     })
   }
 
@@ -129,26 +138,34 @@ export const Composer = memo(function Composer({ sessionId, cwd, busy, commands,
             ))}
           </ul>
         )}
-        <textarea
-          ref={inputRef}
-          className={styles.input}
-          rows={1}
-          placeholder="回复"
-          aria-label="回复"
-          spellCheck={false}
-          value={draft}
-          onChange={(e) => {
-            setDraft(sessionId, e.currentTarget.value)
+        <ComposerEditor
+          draft={draft}
+          onChange={(text) => {
+            setDraft(sessionId, text)
             setMenuDismissed(null)
           }}
           onKeyDown={onKeyDown}
+          editorRef={editorRef}
+          toolbarOpen={formatOpen}
         />
         <div className={styles.bar}>
-          <button type="button" className={styles.barIcon} aria-label="添加附件" title="添加附件" onClick={attach}>
+          {/* The bar's buttons leave the keyboard and the caret in the text. */}
+          <button type="button" className={styles.barIcon} aria-label="添加附件" title="添加附件" onMouseDown={(e) => e.preventDefault()} onClick={attach}>
             <Paperclip {...ICON} />
           </button>
-          <button type="button" className={styles.barIcon} aria-label="提及文件" title="提及文件" onClick={mentionFile}>
+          <button type="button" className={styles.barIcon} aria-label="提及文件" title="提及文件" onMouseDown={(e) => e.preventDefault()} onClick={mentionFile}>
             <AtSign {...ICON} />
+          </button>
+          <button
+            type="button"
+            className={styles.barIcon}
+            aria-label="格式"
+            title="格式"
+            aria-pressed={formatOpen}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setFormatOpen(!formatOpen)}
+          >
+            <Type {...ICON} />
           </button>
           <span className={styles.spacer} />
           {pickerButtons(config).map((button) => (

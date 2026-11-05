@@ -175,12 +175,14 @@ describe('question card (49″F)', () => {
 })
 
 describe('composer', () => {
-  const key = (k: string, patch: Partial<{ shiftKey: boolean; altKey: boolean; ctrlKey: boolean; isComposing: boolean; keyCode: number }> = {}, state = { menuOpen: false, busy: false }) =>
+  const key = (k: string, patch: Partial<{ shiftKey: boolean; metaKey: boolean; altKey: boolean; ctrlKey: boolean; isComposing: boolean; keyCode: number }> = {}, state: { menuOpen: boolean; busy: boolean; inCode?: boolean } = { menuOpen: false, busy: false }) =>
     composerKey({ key: k, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, isComposing: false, keyCode: 0, ...patch }, state)
 
   it('⏎ sends, ⇧⏎ is a newline, ⎋ stops a running turn', () => {
     expect(key('Enter')).toBe('send')
     expect(key('Enter', { shiftKey: true })).toBe('newline')
+    expect(key('Enter', {}, { menuOpen: false, busy: false, inCode: true })).toBe('newline')
+    expect(key('Enter', { metaKey: true }, { menuOpen: false, busy: false, inCode: true })).toBe('send')
     expect(key('Escape')).toBeNull()
     expect(key('Escape', {}, { menuOpen: false, busy: true })).toBe('stop')
   })
