@@ -16,6 +16,7 @@ import { selectProfile } from './profile'
 import { ptySessionOwner, registerPtyHandlers } from './pty'
 import { installQuitGuard } from './quit'
 import { registerSettingsHandlers } from './settings'
+import { registerThemeImportHandler } from './theme-import'
 import { registerUiHandlers } from './ui'
 import { registerUpdateHandlers } from './updates'
 import { registerLiveRebuilds } from './live-rebuilds'
@@ -88,6 +89,7 @@ function boot(): void {
   registerTerminalSnapshots()
   registerConfirmHandlers()
   registerSettingsHandlers()
+  registerThemeImportHandler()
   registerAppearanceEffects()
   registerFileHandlers()
   registerWorktreeFileHandlers()
