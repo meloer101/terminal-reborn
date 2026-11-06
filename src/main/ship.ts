@@ -24,10 +24,10 @@ import {
   type RepoMergeMethods
 } from '@shared/pull-requests'
 import { riskMarkers, type RiskMarker } from '@shared/risk-markers'
-import { SHIP_IPC, type BaseCi, type BaseCiFailure, type DiffSinceRequest, type HandoffSlot, type ShipMainResult, type ShipPreflight } from '@shared/ship'
+import { SHIP_IPC, type BaseCi, type BaseCiFailure, type DiffSinceRequest, type HandoffSlot, type ShipMainRequest, type ShipMainResult, type ShipPreflight } from '@shared/ship'
 import { HANDOFF_FILES } from '@shared/ship-handoff'
 import { parseDiffSinceRequest, parseHandoffRequest, parseShipMainRequest } from '@shared/ship-requests'
-import { mergePrecheck, mergeWorktree, workInBase } from './git-merge'
+import { mergePrecheck, mergeWorktree, pushBase, workInBase } from './git-merge'
 import {
   branchInfo,
   commitWorktree,
@@ -300,7 +300,7 @@ export function blockerMessage(blocker: MergeBlocker, base: string): string {
   }
 }
 
-const stepFailure = (step: 'commit' | 'merge' | 'push', reason: 'blocked' | 'conflicts' | 'failed' | 'declined', message: string, more: { conflicts?: string[]; output?: string } = {}): ShipMainResult => ({
+const stepFailure = (step: 'commit' | 'merge' | 'push', reason: 'blocked' | 'conflicts' | 'failed' | 'declined', message: string, more: { conflicts?: string[]; output?: string; committed?: true } = {}): ShipMainResult => ({
   ok: false,
   step,
   reason,
@@ -365,6 +365,15 @@ function mergeFailure(result: Extract<MergeResult, { ok: false }>, check: MergeP
 
 const shipping = new Set<string>()
 
+/** A push of the base that git refused, as the sheet shows it (the merge stays on the local base). */
+export function pushFailure(commit: string, base: string, push: string): ShipMainResult {
+  const refused = pushRejectedByProtection(push)
+  const pushError = refused
+    ? `${base} 受保护，origin 不收直接推送：改为创建 PR（合并已留在本地 ${base} 上）。${push}`
+    : `推送到 origin 失败（合并已留在本地 ${base} 上）：${push}`
+  return { ok: true, commit, pushed: false, pushError, ...(refused ? { pushRefused: true as const } : {}) }
+}
+
 /**
  * Exit A: commit the ticked paths with the agent's message (hooks run), bring the base up to its upstream, merge the
  * branch into it and push it. A push that fails keeps the merge (`pushed: false`); a push that works starts watching
@@ -375,53 +384,85 @@ export async function shipToMain(raw: unknown): Promise<ShipMainResult> {
   if (!request || !isProjectRoot(request.root)) return stepFailure('merge', 'failed', '请求无效')
   if (shipping.has(request.worktree)) return stepFailure('merge', 'blocked', '正在合并这个分支')
   shipping.add(request.worktree)
+  const done = { committed: false }
   try {
-    if (request.paths) {
-      const committed = await commitWorktree({ root: request.root, worktree: request.worktree, message: request.message, paths: request.paths })
-      if (!committed.ok) return stepFailure('commit', committed.reason, committed.message, committed.output ? { output: committed.output } : {})
-    }
-
-    let check = await precheck(request.root, request.worktree)
-    if (typeof check === 'string') return stepFailure('merge', 'failed', `没能检查合并：${check}`)
-    const root = await realOrSelf(request.root)
-    if (check.base && !check.blocker) {
-      const caught = await syncBase(root, check)
-      if ('message' in caught) return stepFailure('merge', 'blocked', caught.message)
-      if (caught.moved) {
-        const again = await precheck(request.root, request.worktree)
-        if (typeof again === 'string') return stepFailure('merge', 'failed', `没能检查合并：${again}`)
-        check = again
-      }
-    }
-    if (check.blocker) return stepFailure('merge', 'blocked', blockerMessage(check.blocker, check.base))
-    if (check.conflicts.length > 0) {
-      return stepFailure('merge', 'conflicts', `${check.conflicts.length} 个文件和 ${check.base} 冲突`, { conflicts: check.conflicts.map((c) => c.path) })
-    }
-
-    const merged = await mergeWorktree({
-      root: request.root,
-      worktree: request.worktree,
-      method: request.method,
-      head: check.head,
-      baseHead: check.baseHead,
-      push: check.hasOrigin,
-      // '' (only without paths) keeps the branch's own messages.
-      ...(request.message ? { message: request.message } : {})
-    })
-    if (!merged.ok) return mergeFailure(merged, check)
-    if (merged.push === null) return { ok: true, commit: merged.commit, pushed: false }
-    if (merged.push !== '') {
-      const why = pushRejectedByProtection(merged.push)
-        ? `${check.base} 受保护，origin 不收直接推送：改为创建 PR（合并已留在本地 ${check.base} 上）。${merged.push}`
-        : `推送到 origin 失败（合并已留在本地 ${check.base} 上）：${merged.push}`
-      return { ok: true, commit: merged.commit, pushed: false, pushError: why }
-    }
-    await startBaseCi({ root: request.root, worktree: request.worktree, cwd: root, base: check.base, sha: merged.commit, previous: check.baseHead })
-    return { ok: true, commit: merged.commit, pushed: true }
+    const result = await shipSteps(request, done)
+    return !result.ok && done.committed ? { ...result, committed: true } : result
   } catch (error) {
-    return stepFailure('merge', 'failed', `合并没有成功：${errorText(error)}`)
+    return stepFailure('merge', 'failed', `合并没有成功：${errorText(error)}`, done.committed ? { committed: true } : {})
   } finally {
     shipping.delete(request.worktree)
+  }
+}
+
+async function shipSteps(request: ShipMainRequest, done: { committed: boolean }): Promise<ShipMainResult> {
+  if (request.paths) {
+    const committed = await commitWorktree({ root: request.root, worktree: request.worktree, message: request.message, paths: request.paths })
+    if (!committed.ok) return stepFailure('commit', committed.reason, committed.message, committed.output ? { output: committed.output } : {})
+    done.committed = true
+  }
+
+  let check = await precheck(request.root, request.worktree)
+  if (typeof check === 'string') return stepFailure('merge', 'failed', `没能检查合并：${check}`)
+  const root = await realOrSelf(request.root)
+  if (check.base && !check.blocker) {
+    const caught = await syncBase(root, check)
+    if ('message' in caught) return stepFailure('merge', 'blocked', caught.message)
+    if (caught.moved) {
+      const again = await precheck(request.root, request.worktree)
+      if (typeof again === 'string') return stepFailure('merge', 'failed', `没能检查合并：${again}`)
+      check = again
+    }
+  }
+  if (check.blocker) return stepFailure('merge', 'blocked', blockerMessage(check.blocker, check.base))
+  if (check.conflicts.length > 0) {
+    return stepFailure('merge', 'conflicts', `${check.conflicts.length} 个文件和 ${check.base} 冲突`, { conflicts: check.conflicts.map((c) => c.path) })
+  }
+
+  const merged = await mergeWorktree({
+    root: request.root,
+    worktree: request.worktree,
+    method: request.method,
+    head: check.head,
+    baseHead: check.baseHead,
+    push: check.hasOrigin,
+    // '' (only without paths) keeps the branch's own messages.
+    ...(request.message ? { message: request.message } : {})
+  })
+  if (!merged.ok) return mergeFailure(merged, check)
+  if (merged.push === null) return { ok: true, commit: merged.commit, pushed: false }
+  if (merged.push !== '') return pushFailure(merged.commit, check.base, merged.push)
+  await startBaseCi({ root: request.root, worktree: request.worktree, cwd: root, base: check.base, sha: merged.commit, previous: check.baseHead })
+  return { ok: true, commit: merged.commit, pushed: true }
+}
+
+/**
+ * The retry of a push 合并到 main 并推送 could not make: the merge is on the local base already, so only the base is
+ * pushed (running the exit again would find the branch merged and stop there). A base its upstream already has
+ * counts as pushed.
+ */
+export async function pushBaseAgain(raw: unknown): Promise<ShipMainResult> {
+  const target = parsePrTarget(raw)
+  if (!target || !isProjectRoot(target.root)) return stepFailure('push', 'failed', '请求无效')
+  if (shipping.has(target.worktree)) return stepFailure('push', 'blocked', '正在合并这个分支')
+  shipping.add(target.worktree)
+  try {
+    const check = await precheck(target.root, target.worktree)
+    if (typeof check === 'string') return stepFailure('push', 'failed', `没能检查推送：${check}`)
+    if (!check.base) return stepFailure('push', 'failed', '不知道这个分支合并进哪个分支')
+    if (!check.hasOrigin) return { ok: true, commit: check.baseHead, pushed: false }
+    const root = await realOrSelf(target.root)
+    const remoteRef = `refs/remotes/${check.upstream ?? `origin/${check.base}`}`
+    const remoteTip = (await git(root, ['rev-parse', '--verify', '--quiet', remoteRef])).stdout.trim()
+    if (remoteTip && (await countCommits(root, `${remoteRef}..refs/heads/${check.base}`)) === 0) return { ok: true, commit: check.baseHead, pushed: true }
+    const push = await pushBase(root, check.base)
+    if (push !== '') return pushFailure(check.baseHead, check.base, push)
+    await startBaseCi({ root: target.root, worktree: target.worktree, cwd: root, base: check.base, sha: check.baseHead, previous: remoteTip || check.baseHead })
+    return { ok: true, commit: check.baseHead, pushed: true }
+  } catch (error) {
+    return stepFailure('push', 'failed', `推送没有成功：${errorText(error)}`)
+  } finally {
+    shipping.delete(target.worktree)
   }
 }
 
@@ -763,6 +804,7 @@ export function registerShipHandlers(): void {
   ipcMain.handle(SHIP_IPC.handoff, (_event, raw: unknown) => handoffSlot(raw))
   ipcMain.handle(SHIP_IPC.readHandoff, (_event, raw: unknown) => readHandoffText(raw))
   ipcMain.handle(SHIP_IPC.shipToMain, (_event, raw: unknown) => shipToMain(raw))
+  ipcMain.handle(SHIP_IPC.pushBase, (_event, raw: unknown) => pushBaseAgain(raw))
   ipcMain.handle(SHIP_IPC.diffSince, (_event, raw: unknown) => diffSince(raw))
   ipcMain.handle(SHIP_IPC.discardSince, (_event, raw: unknown) => discardSince(raw))
   ipcMain.handle(SHIP_IPC.risks, (_event, raw: unknown) => shipRisks(raw))

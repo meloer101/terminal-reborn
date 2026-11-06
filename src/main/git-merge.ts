@@ -334,7 +334,8 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
     .map((subject) => ({ subject, body: subject }))
 }
 
-async function pushBase(realRoot: string, base: string): Promise<string> {
+/** Pushes the local base to origin; '' when it went through, else git's error. */
+export async function pushBase(realRoot: string, base: string): Promise<string> {
   try {
     const env: Record<string, string> = {}
     const ssh = sshCommandFor(process.env, (await orEmpty(git(realRoot, ['config', '--get', 'core.sshCommand']))).trim())

@@ -221,6 +221,7 @@ const api: TrApi = {
     handoff: (request) => ipcRenderer.invoke(SHIP_IPC.handoff, request),
     readHandoff: (request) => ipcRenderer.invoke(SHIP_IPC.readHandoff, request),
     shipToMain: (request) => ipcRenderer.invoke(SHIP_IPC.shipToMain, request),
+    pushBase: (target) => ipcRenderer.invoke(SHIP_IPC.pushBase, target),
     diffSince: (request) => ipcRenderer.invoke(SHIP_IPC.diffSince, request),
     discardSince: (request) => ipcRenderer.invoke(SHIP_IPC.discardSince, request),
     risks: (target) => ipcRenderer.invoke(SHIP_IPC.risks, target),

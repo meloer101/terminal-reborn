@@ -82,7 +82,7 @@ vi.mock('@shared/risk-markers', () => ({
 }))
 
 const { detectGh, checkWorktree, watchTargets, unwatch } = await import('./pull-requests')
-const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, discardSince, handoffSlot, pushRejectedByProtection, readHandoffText, resetShip, shipPreflight, shipRisks, shipToMain } = await import('./ship')
+const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, discardSince, handoffSlot, pushBaseAgain, pushFailure, pushRejectedByProtection, readHandoffText, resetShip, shipPreflight, shipRisks, shipToMain } = await import('./ship')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 Object.assign(process.env, identity, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false' })
@@ -496,10 +496,53 @@ describe('shipToMain', () => {
     if (!result.ok) throw new Error('not merged')
     expect(result.pushError).toContain('推送到 origin 失败')
     expect(result.pushError).toContain('pre-receive hook declined')
+    // Not a protected branch: 改为创建 PR is not what to offer.
+    expect(result).not.toHaveProperty('pushRefused')
     expect(sha(root, 'main')).toBe(result.commit)
     expect(git(root, 'log', '-1', '--format=%s', 'main').trim()).toBe('feat: b')
     expect(sha(bare, 'main')).toBe(before)
     expect(baseCi({ root, worktree: wt })).toBeNull()
+  })
+
+  it('pushes the merge it kept once the remote takes it again, and starts watching CI', async () => {
+    const { root, wt, bare } = setup()
+    const hook = join(bare, 'hooks', 'pre-receive')
+    writeFileSync(hook, '#!/bin/sh\necho "no pushes today" >&2\nexit 1\n')
+    chmodSync(hook, 0o755)
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    if (!first.ok) throw new Error('not merged')
+    expect(first.pushed).toBe(false)
+    // Still refused: the merge stays, nothing new is merged.
+    expect(await pushBaseAgain({ root, worktree: wt })).toMatchObject({ ok: true, commit: first.commit, pushed: false })
+    rmSync(hook)
+    expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: first.commit, pushed: true })
+    expect(sha(bare, 'main')).toBe(first.commit)
+    expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: first.commit })
+    // Pushed already: nothing left to push is not an error.
+    expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: first.commit, pushed: true })
+    expect(await pushBaseAgain({ root: join(base, 'elsewhere'), worktree: wt })).toMatchObject({ ok: false, message: '请求无效' })
+  })
+
+  it('says a push refused by branch protection is one, so the sheet offers 改为创建 PR (not after a network error)', () => {
+    const refused = pushFailure('c1', 'main', 'To github.com:acme/widget.git ! [remote rejected] main -> main (protected branch hook declined) error: failed to push some refs')
+    expect(refused).toMatchObject({ ok: true, commit: 'c1', pushed: false, pushRefused: true })
+    expect(refused.ok && refused.pushError).toMatch(/^main 受保护，origin 不收直接推送：改为创建 PR/)
+    const offline = pushFailure('c1', 'main', 'ssh: Could not resolve hostname github.com: nodename nor servname provided')
+    expect(offline).not.toHaveProperty('pushRefused')
+    expect(offline.ok && offline.pushError).toMatch(/^推送到 origin 失败/)
+  })
+
+  it('says whether the ticked files were committed before a later step failed', async () => {
+    const { root, wt } = setup({ github: false })
+    commit(wt, 'a.txt', 'one\nTWO FROM FEAT\nthree\n', 'edit a on feat')
+    commit(root, 'a.txt', 'one\ntwo from main\nthree\n', 'edit a on main')
+    git(root, 'push', '-q', 'origin', 'main')
+    writeFileSync(join(wt, 'new.txt'), 'n\n')
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: new', method: 'squash', paths: ['new.txt'] })
+    expect(result).toMatchObject({ ok: false, step: 'merge', reason: 'conflicts', committed: true })
+    expect(git(wt, 'log', '-1', '--format=%s').trim()).toBe('feat: new')
+    // Refused before anything ran: nothing was committed.
+    expect(await shipToMain({ root: join(base, 'elsewhere'), worktree: wt, message: 'x', method: 'squash', paths: ['new.txt'] })).not.toHaveProperty('committed')
   })
 
   it('recognises the wording of a protected branch', () => {
