@@ -56,13 +56,14 @@ vi.mock('./agents-installed', async (importOriginal) => {
       )
   }
 })
+const quitHandlers = vi.hoisted(() => [] as Array<() => void>)
 vi.mock('electron', () => ({
-  app: { on: () => {} },
+  app: { on: (event: string, handler: () => void) => event === 'before-quit' && quitHandlers.push(handler) },
   ipcMain: { handle: () => {}, on: () => {} },
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { writeShipText } = await import('./pr-writer')
+const { registerPrWriter, writeShipText } = await import('./pr-writer')
 
 Object.assign(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' })
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd, env: process.env }).toString()
@@ -138,6 +139,23 @@ describe('AI 写 (PRD F16 v1.68)', () => {
     expect(await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toMatchObject({ ok: true, agent: 'codex', message: 'fix: x' })
     pathValue = '/usr/bin:/bin'
     expect(await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toEqual({ ok: false, message: '没有找到 claude 或 codex：装好其中一个后再试' })
+  })
+
+  it('stops a run still writing when the app quits (the agent is its own process group)', async () => {
+    const { root, wt } = setup()
+    writeFileSync(join(wt, 'a.txt'), 'x\n')
+    const slow = join(base, 'slow')
+    mkdirSync(slow)
+    writeFileSync(join(slow, 'claude'), '#!/bin/sh\nexec sleep 30\n')
+    chmodSync(join(slow, 'claude'), 0o755)
+    pathValue = `${slow}:/usr/bin:/bin`
+    registerPrWriter()
+    const started = Date.now()
+    const result = writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })
+    await new Promise((r) => setTimeout(r, 500))
+    for (const quit of quitHandlers) quit()
+    expect((await result).ok).toBe(false)
+    expect(Date.now() - started).toBeLessThan(5_000)
   })
 
   it('says what went wrong, and refuses the base branch, files without changes and bad input', async () => {

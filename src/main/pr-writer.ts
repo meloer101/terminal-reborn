@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { untrackedFileDiff } from '@shared/background-review'
 import { commitSubject, PR_IPC } from '@shared/pull-requests'
 import {
@@ -195,7 +195,16 @@ export function cancelShipText(worktree: unknown): void {
   }
 }
 
+/** Stops every run: the agent is its own process group (detached), so it would outlive the app and keep spending. */
+export function cancelAllShipText(): void {
+  for (const [key, child] of running) {
+    running.delete(key)
+    killGroup(child, 'SIGTERM')
+  }
+}
+
 export function registerPrWriter(): void {
   ipcMain.handle(PR_IPC.write, (_event, raw: unknown) => writeShipText(raw))
   ipcMain.on(PR_IPC.cancelWrite, (_event, worktree: unknown) => cancelShipText(worktree))
+  app.on('before-quit', cancelAllShipText)
 }
