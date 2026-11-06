@@ -12,9 +12,15 @@ const base = await vi.hoisted(async () => {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tr-repo-scripts-')))
 })
 vi.mock('./settings', () => ({ getSettings: () => ({ ports: { base: 41000 } }) }))
-vi.mock('electron', () => ({ app: { getPath: () => base }, ipcMain: { handle: () => {} }, BrowserWindow: { fromWebContents: () => null } }))
+const handlers = vi.hoisted(() => new Map<string, (event: unknown, ...args: unknown[]) => unknown>())
+vi.mock('electron', () => ({
+  app: { getPath: () => base, on: () => {} },
+  ipcMain: { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, handler) },
+  BrowserWindow: { fromWebContents: () => null }
+}))
 
-const { approvalHash, approvedScript, isApproved, locateRepo, portFor, readRepoSettings, rememberApproval, RepoScriptsFile } =
+const { IPC } = await import('@shared/ipc')
+const { approvalHash, approvedScript, isApproved, locateRepo, portFor, readRepoSettings, registerRepoScriptHandlers, rememberApproval, RepoScriptsFile } =
   await import('./repo-scripts')
 
 afterAll(() => rmSync(base, { recursive: true, force: true }))
@@ -124,6 +130,32 @@ describe('locateRepo / readRepoSettings / approvedScript', () => {
     await expect(approvedScript(worktree, 'setup')).rejects.toThrow(/not approved/)
     writeFileSync(join(worktree, '.tr', 'settings.toml'), '[scripts]\nsetup = "npm ci"\n')
     await expect(approvedScript(worktree, 'run')).rejects.toThrow(/has no run script/)
+  })
+})
+
+describe('repoScripts run / cancel (PRD F4 · 合并前测试)', () => {
+  const repo = join(base, 'repo-cancel')
+  mkdirSync(join(repo, '.tr'), { recursive: true })
+  writeFileSync(join(repo, '.tr', 'settings.toml'), '[scripts]\ntest = "sleep 5"\n')
+  git(repo, 'init', '-q', '-b', 'main')
+  rememberApproval(join(repo, '.git'), { test: 'sleep 5' })
+  registerRepoScriptHandlers()
+  const invoke = (channel: string, ...args: unknown[]) => handlers.get(channel)!({}, ...args)
+
+  it('cancels a script that is running instead of waiting for it to end', async () => {
+    const started = Date.now()
+    const run = invoke(IPC.repoScriptsRun, repo, 'test') as Promise<{ cancelled: boolean }>
+    await new Promise((r) => setTimeout(r, 300))
+    await invoke(IPC.repoScriptsCancel, repo)
+    const result = await run
+    expect(result.cancelled).toBe(true)
+    expect(Date.now() - started).toBeLessThan(3_000)
+  })
+
+  it('cancels a run that is still starting (the cancel waits for the start, not for the end)', async () => {
+    const run = invoke(IPC.repoScriptsRun, repo, 'test') as Promise<{ cancelled: boolean }>
+    await invoke(IPC.repoScriptsCancel, repo)
+    expect((await run).cancelled).toBe(true)
   })
 })
 

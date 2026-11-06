@@ -164,8 +164,9 @@ function parseCapturedScript(value: unknown): CapturedScript {
 }
 
 /**
- * Cancel and run for one directory stay in order. The renderer fires cancel as a sheet closes and run as the next
- * one opens; without a queue the cancel can land on the run that just started.
+ * Cancel and the start of a run for one directory stay in order. The renderer fires cancel as a sheet closes and run
+ * as the next one opens; without a queue the cancel can land on the run that just started, or miss one still
+ * starting. Only the start is queued: a cancel never waits for a script to end.
  */
 const runQueues = new Map<string, Promise<unknown>>()
 
@@ -229,18 +230,20 @@ export async function approvedScript(realCwd: string, name: RunnableScript | Cap
   return script
 }
 
-async function runCaptured(dirRaw: unknown, nameRaw: unknown): Promise<ScriptRunResult> {
+/** Starts the script; resolves once it is running, with its end (wrapped, so awaiting the start does not wait for it). */
+async function startCaptured(dirRaw: unknown, nameRaw: unknown): Promise<{ done: Promise<ScriptRunResult> }> {
   const name = parseCapturedScript(nameRaw)
   const dir = await resolveRoot(dirRaw)
   const script = await approvedScript(dir, name)
   const port = portFor(dir)
-  return startCapturedScript({
+  const done = startCapturedScript({
     key: dir,
     cwd: dir,
     script,
     baseEnv: process.env,
     ...(port !== null ? { extraEnv: { TR_PORT: String(port) } } : {})
   })
+  return { done }
 }
 
 async function cancelCaptured(dirRaw: unknown): Promise<void> {
@@ -256,7 +259,7 @@ export function registerRepoScriptHandlers(): void {
   ipcMain.handle(IPC.repoScriptsApprove, (event, dir: unknown, name: unknown) => approve(event.sender, dir, name))
   ipcMain.handle(IPC.repoScriptsRun, (_event, dir: unknown, name: unknown) => {
     const key = typeof dir === 'string' ? dir : ''
-    return enqueue(key, () => runCaptured(dir, name))
+    return enqueue(key, () => startCaptured(dir, name)).then((started) => started.done)
   })
   ipcMain.handle(IPC.repoScriptsCancel, (_event, dir: unknown) => {
     const key = typeof dir === 'string' ? dir : ''
