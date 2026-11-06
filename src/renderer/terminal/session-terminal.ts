@@ -177,12 +177,14 @@ export class SessionTerminal {
       return false
     }
     this.cleanups.push(offData)
+    let respawned = false
     this.passAllOutput = () => {
+      respawned = true
       covered = 0
     }
     await this.surface.reattach(result.screen)
     if (this.disposed) return true
-    covered = result.seq
+    if (!respawned) covered = result.seq
     for (const [data, seq] of held.splice(0)) write(data, seq)
     this.dirty = true
     if (result.exit) {
