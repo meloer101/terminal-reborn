@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { claudeFixtures as fx } from './fixtures'
-import { classifyNotification, normalizeHook, parseQuestions, summarizeToolUse } from './normalize'
+import { normalizeHook, parseQuestions, summarizeToolUse } from './normalize'
+import { classifyNotification } from './notification'
 
 const claude = (event: string, payload: unknown) => normalizeHook('claude', event, payload)
 

@@ -11,7 +11,8 @@
 //   `edit` instead of `replace`.
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 import type { AgentEvent } from '@shared/agent-events'
-import { classifyNotification, type NormalizedHook } from './normalize'
+import type { NormalizedHook } from './normalize'
+import { classifyNotification } from './notification'
 
 type Rec = Record<string, unknown>
 
