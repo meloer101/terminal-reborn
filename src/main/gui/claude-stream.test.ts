@@ -163,11 +163,18 @@ describe('claudeConfig', () => {
 })
 
 describe('claudeAnswerResponse', () => {
-  const pending = { requestId: 'r', tool: 'Edit', input: { file_path: '/a' }, suggestions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }] }
+  const rule = { type: 'addRules', rules: [{ toolName: 'Edit' }], behavior: 'allow', destination: 'localSettings' }
+  const pending = {
+    requestId: 'r',
+    tool: 'Edit',
+    input: { file_path: '/a' },
+    suggestions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }, { ...rule, destination: 'userSettings' }, rule]
+  }
 
-  it('allows once, always (with Claude’s own suggestions) or denies with a reason', () => {
+  it('allows once, always (with Claude’s own safe suggestions) or denies with a reason', () => {
     expect(claudeAnswerResponse(pending, { kind: 'permission', id: 'r', optionId: 'allow_once' })).toEqual({ behavior: 'allow', updatedInput: { file_path: '/a' } })
-    expect(claudeAnswerResponse(pending, { kind: 'permission', id: 'r', optionId: 'allow_always' })).toMatchObject({ updatedPermissions: pending.suggestions })
+    // No setMode (it switched the whole session) and nothing for userSettings (~/.claude/settings.json).
+    expect(claudeAnswerResponse(pending, { kind: 'permission', id: 'r', optionId: 'allow_always' })).toMatchObject({ updatedPermissions: [rule] })
     expect(claudeAnswerResponse(pending, { kind: 'permission', id: 'r', optionId: 'reject_once', message: ' not now ' })).toEqual({ behavior: 'deny', message: 'not now' })
   })
 
