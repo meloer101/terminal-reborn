@@ -519,7 +519,9 @@ async function runPhase(worktree: string, token: number): Promise<void> {
     if (run.kind === 'main') await runMain(worktree, token, run, state)
     else await runPr(worktree, token, run, state)
   } catch (error) {
-    const stepId = state.steps.find((s) => s.state === 'working')?.id ?? state.steps.at(-1)!.id
+    // The step working now, not the one at the start: a phase runs several steps.
+    const now = current(worktree) ?? state
+    const stepId = now.steps.find((s) => s.state === 'working')?.id ?? now.steps.at(-1)!.id
     patch(worktree, token, (s) => fail(s, { step: stepId, message: errorText(error) }))
   }
 }
@@ -529,22 +531,24 @@ const stepDone = (state: ShipState, id: string): boolean => state.steps.some((s)
 /** Exit A: commit what is uncommitted, squash into the base, push it — main does all three in one call. */
 async function runMain(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
-  // After a failed push the merge stands: only the push is left (an empty message keeps the branch's own commits).
+  // After a failed push the merge stands on the local base: only the push is left.
   const mergeDone = stepDone(state, 'merge')
-  const result = await window.tr.ship.shipToMain({
-    root: ctx.root,
-    worktree: ctx.worktree,
-    message: mergeDone ? '' : state.texts.commit,
-    method: 'squash',
-    paths: mergeDone || run.committed ? null : ctx.paths
-  })
+  const result = mergeDone
+    ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree })
+    : await window.tr.ship.shipToMain({
+        root: ctx.root,
+        worktree: ctx.worktree,
+        message: state.texts.commit,
+        method: 'squash',
+        paths: run.committed ? null : ctx.paths
+      })
   if (!alive(worktree, token)) return
   if (!result.ok) {
     if (result.reason === 'declined') {
       patch(worktree, token, backToGlance)
       return
     }
-    if (result.step !== 'commit') run.committed = true
+    if (result.committed) run.committed = true
     patch(worktree, token, (s) =>
       fail(s, {
         step: mainFailureStep(result.step),
@@ -555,9 +559,9 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     )
     return
   }
-  patch(worktree, token, (s) => complete(s, 'merge'))
+  if (!mergeDone) patch(worktree, token, (s) => complete(s, 'merge'))
   if (result.pushError) {
-    patch(worktree, token, (s) => fail(s, { step: 'push', message: result.pushError!, pushRefused: true }))
+    patch(worktree, token, (s) => fail(s, { step: 'push', message: result.pushError!, ...(result.pushRefused ? { pushRefused: true } : {}) }))
     return
   }
   patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : '没有远程，没有推送'))
