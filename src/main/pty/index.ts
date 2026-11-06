@@ -25,10 +25,10 @@ import {
 import { dispatchLaunchFor, type DispatchLaunch } from '../dispatch'
 import { approvedScript, portFor } from '../repo-scripts'
 import { daemonLocation, openDaemon } from './daemon-client'
-import { shouldKillLateSpawn } from './late-spawn'
+import { replacePendingStart, shouldKillLateSpawn } from './late-spawn'
 import { HostPipeLink, LocalPipeLink, PipeLinkRouter, pipeHosting, setPipeLink } from './pipes'
 import { assertCwdExists } from './preflight'
-import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
+import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData, writeFrames } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
 const ATTACH_TIMEOUT_MS = 5_000
@@ -416,7 +416,8 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      pendingSpawns.delete(id)
+      // Through the map: a start this one took over (replacePendingStart) hears the timeout too.
+      const timedOut = settle(pendingSpawns, id)
       sessions.delete(id)
       awaitingSetup.delete(id)
       endAgentSession(id)
@@ -424,9 +425,11 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       // The host handles messages in order, so this lands right after the spawn it is still working on.
       // If it somehow slips past, handleHostEvent kills the late process when it reports in.
       if (link) send({ type: 'kill', id })
-      reject(new Error('timed out starting the terminal process'))
+      const error = new Error('timed out starting the terminal process')
+      if (timedOut) timedOut.reject(error)
+      else reject(error)
     }, SPAWN_TIMEOUT_MS)
-    pendingSpawns.set(id, { resolve, reject, timer })
+    replacePendingStart(pendingSpawns, id, { resolve, reject, timer })
     const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, dispatched: _dispatched, ...rest } = options
     send({
       type: 'spawn',
@@ -586,7 +589,8 @@ export function registerPtyHandlers(): void {
 
   ipcMain.on(IPC.ptyWrite, (event, sessionId: unknown, data: unknown) => {
     const id = ownedSession(event.sender, sessionId)
-    if (id) send({ type: 'write', id, data: parseWriteData(data) })
+    if (!id) return
+    for (const frame of writeFrames(parseWriteData(data))) send({ type: 'write', id, data: frame })
   })
 
   ipcMain.on(IPC.ptyResize, (event, sessionId: unknown, cols: unknown, rows: unknown) => {

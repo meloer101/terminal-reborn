@@ -358,6 +358,17 @@ describe('HookBridge · reattach', () => {
     expect(events).toEqual([])
   })
 
+  it('replays the metrics as the agent that reported them, and remembers it for the next adopt', async () => {
+    const { bridge, events, req } = setup()
+    await bridge.handle({ ...req('AgentBilling', { plan: false }), agent: 'codex' })
+    events.length = 0
+    bridge.attach('s1', { adopt: true })
+    expect(events.map((e) => e.agent)).toEqual(['codex'])
+    events.length = 0
+    bridge.attach('s1', { adopt: true })
+    expect(events.map((e) => e.agent)).toEqual(['codex'])
+  })
+
   it('keeps what the same process still waits on when a window adopts it (PRD F22)', async () => {
     const { bridge, prompts, resolutions, req } = setup(true, () => true)
     await bridge.handle(req('PreToolUse', fx.PreToolUse_AskUserQuestion))

@@ -214,7 +214,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 ## 进行中：架构审阅修复（2026-11-06 定）
 
 - [x] 批次 1 · 用户看得到的故障：GUI「总是允许」过滤 `setMode` / `userSettings`（`src/main/gui/claude-stream.ts`）；reattach 后重启的终端（`src/renderer/terminal/session-terminal.ts`）；空闲标题自愈只对 Claude（`src/shared/session-state-machine.ts`）；合并前测试可取消、和归档脚本互不打断（`src/main/repo-scripts.ts`）；登录 shell PATH 不被后台任务卡住（`src/main/agents-installed.ts`）；审阅 diff 用 `core.quotePath=false`（`src/main/git-graph.ts`、`background-review.ts`）
-- [ ] 批次 2 · 低风险小修：同 id 重复 spawn 的超时作废、adopt 时保留 agent、写入上限低于守护进程帧上限、写 PR 文案的进程随退出清理、ACP 报错用 agent 名、拖动时合并保存、冲突雷达改异步 IO
+- [x] 批次 2 · 低风险小修：同 id 重复启动时旧的超时不再杀掉新进程（`src/main/pty/late-spawn.ts`）；adopt 时保留上报的 agent（`src/main/hooks/bridge.ts`）；长写入按帧发给守护进程、不超过帧上限（`src/main/pty/validate.ts`）；AI 写的进程随退出清理、退出开始后不再启动（`src/main/pr-writer.ts`）；ACP 报错用 agent 名（`src/main/gui/host.ts`）；拖动时保存合并为每 100 ms 一次、退出时最后一份立即写盘（`src/renderer/state/persistence.ts`、`src/main/workspace-store.ts`）；冲突雷达复制 index 改异步（`src/main/conflict-radar.ts`）
 - [ ] 批次 3 · Ship：推送失败后重试只推 base；`committed` / `pushRefused` 由 main 返回
 - [ ] 批次 4 · IPC 边界：worktree 文件 handler 校验 root 属于工作区，可执行文件不直接打开
 - [ ] 批次 5 · 边界检查落地：dependency-cruiser（依赖方向、循环）、stylelint（字面 px），消掉 10 个运行时环

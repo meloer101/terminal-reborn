@@ -118,12 +118,15 @@ export class HookBridge {
     // the same process (reload, app restart with the daemon) keeps its metrics and gets them again, and what that
     // process still waits on stays pending (its TUI dialog is still open; a phone may be answering it).
     const meta = options.adopt ? this.meta.get(sessionId) : undefined
+    const adoptedAgent = options.adopt ? this.agents.get(sessionId) : undefined
     if (!options.adopt) this.withdraw(sessionId)
     this.forget(sessionId)
     this.sessions.add(sessionId)
     if (!meta) return
     this.meta.set(sessionId, meta)
-    const agent: HookAgent = this.agents.get(sessionId) ?? 'claude'
+    // Read before forget() cleared it: the replayed meta belongs to the agent that reported it (Codex, Gemini …).
+    const agent: HookAgent = adoptedAgent ?? 'claude'
+    if (adoptedAgent) this.agents.set(sessionId, adoptedAgent)
     const at = this.now()
     if (meta.context) this.emitMeta(sessionId, agent, at, { type: 'context', context: meta.context })
     if (meta.todos.length > 0) this.emitMeta(sessionId, agent, at, { type: 'todos', items: meta.todos })

@@ -12,8 +12,8 @@
 // the base, nothing uncommitted), the main checkout and archived worktrees (the window does not send them) are skipped.
 // git older than 2.38 (no --write-tree) turns the feature off.
 import { execFile } from 'node:child_process'
-import { copyFileSync, mkdtempSync, rmSync, watch, type FSWatcher } from 'node:fs'
-import { lstat, realpath } from 'node:fs/promises'
+import { watch, type FSWatcher } from 'node:fs'
+import { copyFile, lstat, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join, relative, resolve } from 'node:path'
 import { app, ipcMain } from 'electron'
@@ -139,12 +139,13 @@ async function workCommit(dir: string, head: string): Promise<{ commit: string; 
   const status = await git(dir, ['status', '--porcelain=v1', '-z', '--untracked-files=normal'])
   if (status === '') return { commit: head, dirty: false }
   const rawIndex = (await git(dir, ['rev-parse', '--git-path', 'index'])).trim()
-  const indexDir = mkdtempSync(join(tmpdir(), 'tr-radar-idx-'))
+  // Async: a large repository's index is tens of MB, and main forwards every terminal's output meanwhile.
+  const indexDir = await mkdtemp(join(tmpdir(), 'tr-radar-idx-'))
   try {
     const index = join(indexDir, 'index')
     const env = { GIT_INDEX_FILE: index }
     try {
-      copyFileSync(isAbsolute(rawIndex) ? rawIndex : resolve(dir, rawIndex), index)
+      await copyFile(isAbsolute(rawIndex) ? rawIndex : resolve(dir, rawIndex), index)
     } catch {
       await git(dir, ['read-tree', 'HEAD'], { env })
     }
@@ -157,7 +158,7 @@ async function workCommit(dir: string, head: string): Promise<{ commit: string; 
     const commit = (await git(dir, ['commit-tree', tree, '-p', head, '-m', 'wavi conflict radar snapshot'], { env: SNAPSHOT_ENV })).trim()
     return { commit, dirty: true }
   } finally {
-    rmSync(indexDir, { recursive: true, force: true })
+    await rm(indexDir, { recursive: true, force: true })
   }
 }
 

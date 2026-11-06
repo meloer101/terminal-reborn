@@ -357,6 +357,15 @@ describe('GuiHost · Codex app-server', () => {
 })
 
 describe('GuiHost · ACP', () => {
+  it('names the agent by its label in what it reports (Grok, not grok)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('grok', 'n1'), h.owner)
+    await ready(h, 'n1')
+    await h.host.send('n1', { text: 'refuse this', attachments: [] })
+    await until(() => h.status.at(-1)?.type === 'stop-failure')
+    expect(h.status.at(-1)).toEqual({ type: 'stop-failure', message: 'Grok 拒绝了这个请求' })
+  })
+
   it('handshakes, refuses fs requests, answers a permission, sets a picker and cancels', async () => {
     const h = harness()
     await h.host.open(launchOf('grok', 'a1'), h.owner)

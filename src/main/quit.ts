@@ -7,10 +7,17 @@ import { decideQuit, endSessionsQuitConfirmation, quitConfirmation } from '@shar
 import { getActivity } from './activity'
 import { confirm } from './confirm'
 import { endSessionsOnNextQuit, notifySystemShutdown, quitKeepsSessions } from './pty'
+import { workspaceQuitting } from './workspace-store'
 
 let quitting = false
 let osForcedQuit = false
 let confirming = false
+
+/** The quit goes ahead: windows close for real, and the workspace store writes their last snapshots at once. */
+function beginQuit(): void {
+  quitting = true
+  workspaceQuitting()
+}
 
 /** True once a quit is under way: windows must really close instead of hiding. */
 export function isQuitting(): boolean {
@@ -29,7 +36,7 @@ export function installQuitGuard(getParent: () => BrowserWindow | null): void {
     if (quitting) return
     const { active } = getActivity()
     if (decideQuit({ active, forced: osForcedQuit, keepsSessions: quitKeepsSessions() }) === 'quit') {
-      quitting = true
+      beginQuit()
       return
     }
     event.preventDefault()
@@ -40,7 +47,7 @@ export function installQuitGuard(getParent: () => BrowserWindow | null): void {
       .then((ok) => {
         confirming = false
         if (!ok) return
-        quitting = true
+        beginQuit()
         app.quit()
       })
   })
@@ -55,7 +62,7 @@ export function quitEndingSessions(getParent: () => BrowserWindow | null): void 
     confirming = false
     if (!ok) return
     endSessionsOnNextQuit()
-    quitting = true
+    beginQuit()
     app.quit()
   })
 }

@@ -13,3 +13,36 @@ export function isOrphanSpawn(tracked: ReadonlyMap<string, unknown>, id: string)
 export function shouldKillLateSpawn(tracked: ReadonlyMap<string, unknown>, id: string, daemon: boolean): boolean {
   return !daemon && isOrphanSpawn(tracked, id)
 }
+
+export interface PendingStart<T> {
+  resolve(result: T): void
+  reject(error: Error): void
+  timer: ReturnType<typeof setTimeout>
+}
+
+/**
+ * Records a start for `id`, taking over one still waiting for the same id (a second restart before the first one
+ * answered): the earlier start's timer stops, so it cannot time out and kill the newer process, and both callers
+ * get the first outcome the host reports (the host has no per-start token) instead of an error that would mark the
+ * terminal as failed. The session's pid follows the later `spawned` report.
+ */
+export function replacePendingStart<T>(pending: Map<string, PendingStart<T>>, id: string, next: PendingStart<T>): void {
+  const previous = pending.get(id)
+  if (previous) clearTimeout(previous.timer)
+  pending.set(
+    id,
+    previous
+      ? {
+          timer: next.timer,
+          resolve: (result) => {
+            previous.resolve(result)
+            next.resolve(result)
+          },
+          reject: (error) => {
+            previous.reject(error)
+            next.reject(error)
+          }
+        }
+      : next
+  )
+}

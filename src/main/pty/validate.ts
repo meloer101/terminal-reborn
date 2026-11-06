@@ -8,6 +8,12 @@ const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 export const MAX_WRITE_CHARS = 16 * 1024 * 1024
+/**
+ * A write goes to the host in frames of at most this many characters. In a daemon frame (JSON) a control character
+ * becomes six (`\u0001`), and a frame over MAX_FRAME_CHARS ends the connection and with it every terminal, so the
+ * worst case has to fit.
+ */
+export const WRITE_FRAME_CHARS = 8 * 1024 * 1024
 const MAX_STRING = 32 * 1024
 const MAX_ARGS = 256
 const MAX_ENV = 256
@@ -22,6 +28,21 @@ export function parseSessionId(value: unknown): string {
 export function parseWriteData(value: unknown): string {
   if (typeof value !== 'string' || value.length > MAX_WRITE_CHARS) throw new Error('invalid write data')
   return value
+}
+
+/** `data` in pieces of at most `max` characters, never splitting a surrogate pair (the PTY reads them in order). */
+export function writeFrames(data: string, max: number = WRITE_FRAME_CHARS): string[] {
+  if (data.length <= max) return [data]
+  const frames: string[] = []
+  let start = 0
+  while (start < data.length) {
+    let end = Math.min(start + max, data.length)
+    const last = data.charCodeAt(end - 1)
+    if (end < data.length && end - 1 > start && last >= 0xd800 && last <= 0xdbff) end -= 1
+    frames.push(data.slice(start, end))
+    start = end
+  }
+  return frames
 }
 
 export function parseSize(cols: unknown, rows: unknown): { cols: number; rows: number } {

@@ -5,7 +5,7 @@
 // history the process no longer has is rebuilt from the agent's transcript. Electron-free: index.ts wires it.
 
 import type { AgentEvent } from '@shared/agent-events'
-import type { CliAgent } from '@shared/agents'
+import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
@@ -65,8 +65,6 @@ export interface GuiHostDeps<O extends GuiOwner> {
   /** Events of a session are sent together at most this often (default 16 ms). */
   batchMs?: number
 }
-
-const LABELS: Partial<Record<CliAgent, string>> = { claude: 'Claude', codex: 'Codex' }
 
 class GuiSession<O extends GuiOwner> {
   state: GuiState = emptyGuiState()
@@ -154,7 +152,7 @@ class GuiSession<O extends GuiOwner> {
     }
     if (this.protocol === 'claude-stream') return createClaudeDriver(io, options)
     if (this.protocol === 'codex-app-server') return createCodexDriver(io, options)
-    return createAcpDriver(io, { ...options, label: LABELS[this.launch.agent] ?? this.launch.agent })
+    return createAcpDriver(io, { ...options, label: agentName(this.launch.agent) })
   }
 
   private handlers(): PipeHandlers {

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { isOrphanSpawn, shouldKillLateSpawn } from './late-spawn'
+import { describe, expect, it, vi } from 'vitest'
+import { isOrphanSpawn, replacePendingStart, shouldKillLateSpawn, type PendingStart } from './late-spawn'
 
 describe('isOrphanSpawn', () => {
   it('flags a spawn report for an id main no longer tracks (timed out / owner gone)', () => {
@@ -23,5 +23,36 @@ describe('shouldKillLateSpawn', () => {
 
   it('never kills a tracked session', () => {
     expect(shouldKillLateSpawn(new Map([['live', {}]]), 'live', false)).toBe(false)
+  })
+})
+
+describe('replacePendingStart', () => {
+  const start = (timeout: () => void) => {
+    const entry = { resolve: vi.fn(), reject: vi.fn(), timer: setTimeout(timeout, 50) }
+    return entry
+  }
+
+  it('stops the earlier start’s timer, so it cannot time out and kill the newer process', async () => {
+    const pending = new Map<string, PendingStart<{ pid: number }>>()
+    const firstTimedOut = vi.fn()
+    replacePendingStart(pending, 's1', start(firstTimedOut))
+    replacePendingStart(pending, 's1', start(() => {}))
+    await new Promise((r) => setTimeout(r, 80))
+    expect(firstTimedOut).not.toHaveBeenCalled()
+  })
+
+  it('gives both callers the outcome the host reports', () => {
+    const pending = new Map<string, PendingStart<{ pid: number }>>()
+    const first = start(() => {})
+    const second = start(() => {})
+    replacePendingStart(pending, 's1', first)
+    replacePendingStart(pending, 's1', second)
+    pending.get('s1')!.resolve({ pid: 42 })
+    expect(first.resolve).toHaveBeenCalledWith({ pid: 42 })
+    expect(second.resolve).toHaveBeenCalledWith({ pid: 42 })
+    const error = new Error('boom')
+    pending.get('s1')!.reject(error)
+    expect(first.reject).toHaveBeenCalledWith(error)
+    clearTimeout(second.timer)
   })
 })

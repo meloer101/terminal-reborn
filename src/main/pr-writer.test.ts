@@ -39,6 +39,8 @@ const roots = new Set<string>()
 let pathValue = `${bin}:/usr/bin:/bin`
 vi.mock('./workspace-store', () => ({ isProjectRoot: (path: string) => roots.has(path) }))
 vi.mock('./settings', () => ({ getSettings: () => DEFAULT_SETTINGS }))
+let quitting = false
+vi.mock('./quit', () => ({ isQuitting: () => quitting }))
 // searchPath() adds /opt/homebrew/bin and friends after the login PATH: only this test's folders may be searched, so
 // a real claude / codex on the machine is never started.
 vi.mock('./agents-installed', async (importOriginal) => {
@@ -56,13 +58,14 @@ vi.mock('./agents-installed', async (importOriginal) => {
       )
   }
 })
+const quitHandlers = vi.hoisted(() => [] as Array<() => void>)
 vi.mock('electron', () => ({
-  app: { on: () => {} },
+  app: { on: (event: string, handler: () => void) => event === 'before-quit' && quitHandlers.push(handler) },
   ipcMain: { handle: () => {}, on: () => {} },
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { writeShipText } = await import('./pr-writer')
+const { registerPrWriter, writeShipText } = await import('./pr-writer')
 
 Object.assign(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' })
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd, env: process.env }).toString()
@@ -138,6 +141,37 @@ describe('AI 写 (PRD F16 v1.68)', () => {
     expect(await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toMatchObject({ ok: true, agent: 'codex', message: 'fix: x' })
     pathValue = '/usr/bin:/bin'
     expect(await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).toEqual({ ok: false, message: '没有找到 claude 或 codex：装好其中一个后再试' })
+  })
+
+  it('stops a run still writing when the app quits (the agent is its own process group)', async () => {
+    const { root, wt } = setup()
+    writeFileSync(join(wt, 'a.txt'), 'x\n')
+    const slow = join(base, 'slow')
+    mkdirSync(slow)
+    writeFileSync(join(slow, 'claude'), `#!/bin/sh\ntouch "${log}/slow-started"\nexec sleep 30\n`)
+    chmodSync(join(slow, 'claude'), 0o755)
+    pathValue = `${slow}:/usr/bin:/bin`
+    registerPrWriter()
+    const started = Date.now()
+    const result = writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })
+    await vi.waitFor(() => expect(existsSync(join(log, 'slow-started'))).toBe(true), { timeout: 4_000, interval: 20 })
+    for (const quit of quitHandlers) quit()
+    expect((await result).ok).toBe(false)
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
+  it('starts no agent once the quit is going ahead', async () => {
+    quitting = true
+    try {
+      const { root, wt } = setup()
+      writeFileSync(join(wt, 'a.txt'), 'x\n')
+      rmSync(join(log, 'claude-args'), { force: true })
+      pathValue = `${bin}:/usr/bin:/bin`
+      expect((await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).ok).toBe(false)
+      expect(existsSync(join(log, 'claude-args'))).toBe(false)
+    } finally {
+      quitting = false
+    }
   })
 
   it('says what went wrong, and refuses the base branch, files without changes and bad input', async () => {

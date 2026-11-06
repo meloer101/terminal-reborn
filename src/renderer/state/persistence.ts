@@ -77,11 +77,32 @@ export function setSnapshotProvider(provider: () => WorkspaceFile): void {
   snapshot = provider
 }
 
-/** Sends the current workspace to main to be saved (main coalesces). A no-op in fixture runs. */
-export function requestSave(): void {
+/** Saves asked for within this long go out as one snapshot (a drag asks on every pointer move). */
+export const SAVE_COALESCE_MS = 100
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+function saveNow(): void {
+  if (saveTimer !== null) clearTimeout(saveTimer)
+  saveTimer = null
   const api = store()
   if (api && snapshot) api.save(snapshot())
 }
+
+/**
+ * Sends the current workspace to main to be saved, at most once per SAVE_COALESCE_MS: each snapshot serialises the
+ * whole workspace and crosses IPC (main debounces the disk write on top). A no-op in fixture runs.
+ */
+export function requestSave(): void {
+  if (saveTimer !== null || !store()) return
+  saveTimer = setTimeout(saveNow, SAVE_COALESCE_MS)
+}
+
+/** A window going away (reload, close, quit) sends what is still waiting. */
+export function flushSave(): void {
+  if (saveTimer !== null) saveNow()
+}
+const pageWindow = (globalThis as { window?: Window }).window
+pageWindow?.addEventListener?.('beforeunload', flushSave)
 
 /** Composer drafts, loaded with the workspace and saved with it. */
 export const drafts: DraftStore = createDraftStore(initialWorkspaceFile()?.drafts ?? {}, requestSave)
