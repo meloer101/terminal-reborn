@@ -44,22 +44,33 @@ export function findOnPath(pathValue: string, isExecutable: (path: string) => bo
   }
 }
 
+/** After the shell exits, how long output still in the pipe may take to arrive. */
+const DRAIN_MS = 200
+
 function loginShellPath(shell: string): Promise<string | null> {
   return new Promise((resolve) => {
     let output = ''
+    let settled = false
     const child = spawn(shell, ['-l', '-i', '-c', 'env'], { stdio: ['ignore', 'pipe', 'ignore'] })
-    const timer = setTimeout(() => child.kill(), TIMEOUT_MS)
+    // A job an rc file started in the background (`cmd &`) inherits stdout, so 'close' may come only when it ends,
+    // or never: the answer is in once the shell itself has exited (or the timeout passed).
+    const finish = (value: string | null): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.stdout.destroy()
+      resolve(value)
+    }
+    const timer = setTimeout(() => {
+      child.kill()
+      finish(pathFromEnvOutput(output))
+    }, TIMEOUT_MS)
     child.stdout.on('data', (chunk: Buffer) => {
       if (output.length < 1_000_000) output += chunk.toString('utf8')
     })
-    child.once('error', () => {
-      clearTimeout(timer)
-      resolve(null)
-    })
-    child.once('close', () => {
-      clearTimeout(timer)
-      resolve(pathFromEnvOutput(output))
-    })
+    child.once('error', () => finish(null))
+    child.once('exit', () => setTimeout(() => finish(pathFromEnvOutput(output)), DRAIN_MS))
+    child.once('close', () => finish(pathFromEnvOutput(output)))
   })
 }
 

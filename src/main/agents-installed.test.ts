@@ -1,5 +1,27 @@
-import { describe, expect, it } from 'vitest'
-import { findOnPath, pathFromEnvOutput, versionFromOutput } from './agents-installed'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+import { findOnPath, pathFromEnvOutput, userLoginPath, versionFromOutput } from './agents-installed'
+
+vi.mock('electron', () => ({ ipcMain: { handle: () => {} } }))
+
+describe('userLoginPath', () => {
+  it('answers although the rc files leave a background job holding the output open', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tr-login-shell-'))
+    // Stands in for a login shell whose rc file runs `something &`: the job inherits stdout and outlives the shell.
+    const shell = join(dir, 'fake-shell')
+    writeFileSync(shell, '#!/bin/sh\nsleep 10 &\necho PATH=/fake/bin:/usr/bin\n')
+    chmodSync(shell, 0o755)
+    const started = Date.now()
+    try {
+      expect(await userLoginPath(shell)).toBe('/fake/bin:/usr/bin')
+      expect(Date.now() - started).toBeLessThan(3_000)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
 
 describe('pathFromEnvOutput', () => {
   it('takes the last PATH= line and ignores rc-file noise', () => {
