@@ -39,11 +39,8 @@ class FakeSurface {
 let reattach = true
 vi.mock('./xterm-surface', () => ({ XtermSurface: FakeSurface }))
 vi.mock('./live-sessions', () => ({ loadLiveSessions: async () => {}, takeReattach: () => reattach }))
-vi.mock('../state/link-actions', () => ({ handleTerminalLink: () => {}, resolveSessionPaths: () => [] }))
 vi.mock('../lifecycle/launch-issues', () => ({ emitAgentMarker: () => {}, issueFromSpawnError: () => ({ kind: 'other' }), reportLaunchIssue: () => {} }))
-vi.mock('../scripts/run-script', () => ({ takeRunStart: () => false }))
 vi.mock('../scripts/setup-runs', () => ({ forgetSetup: () => {}, handleScriptMarker: () => {}, takeSetup: () => false }))
-vi.mock('../attempts/terminal-menu', () => ({ openTerminalMenu: async () => {} }))
 vi.mock('../dispatch/store', () => ({ takeDispatchLaunch: () => undefined }))
 vi.mock('../state/workspace', () => ({ useWorkspace: { getState: () => ({ sessions: [] }) } }))
 vi.mock('./typing', () => ({ noteInput: () => {} }))
