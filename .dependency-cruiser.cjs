@@ -18,11 +18,32 @@ module.exports = {
       to: { path: '^src/(?!shared/)' }
     },
     {
+      name: 'shared-is-portable',
+      severity: 'error',
+      comment: 'src/shared runs in the renderer too: no node built-ins, no Electron.',
+      from: { path: '^src/shared/' },
+      to: { dependencyTypes: ['core'] }
+    },
+    {
       name: 'renderer-through-window-tr',
       severity: 'error',
       comment: 'The renderer reaches the system only through window.tr: no main, preload or host code.',
       from: { path: '^src/renderer/' },
       to: { path: '^src/(main|preload|pty-host|pty-daemon)/' }
+    },
+    {
+      name: 'renderer-has-no-node',
+      severity: 'error',
+      comment: 'The renderer is sandboxed: node built-ins and Electron are reached through window.tr only.',
+      from: { path: '^src/renderer/' },
+      to: { dependencyTypes: ['core'] }
+    },
+    {
+      name: 'no-electron-outside-main',
+      severity: 'error',
+      comment: 'Electron is loaded by main and preload only: the renderer, src/shared and the pty processes never.',
+      from: { path: '^src/(shared|renderer|pty-host|pty-daemon)/' },
+      to: { path: '(^|/)node_modules/electron/' }
     },
     {
       name: 'preload-is-transport',
@@ -47,10 +68,17 @@ module.exports = {
       name: 'pty-daemon-stands-alone',
       severity: 'error',
       comment:
-        'The daemon outlives the app and never loads Electron. It shares two main modules that need only node and ' +
-        'src/shared: the snapshot files and the hook socket server.',
+        'The daemon outlives the app and never loads Electron. It imports two main modules that need only node and ' +
+        'src/shared (the snapshot files, with the id and size checks they use, and the hook socket server).',
       from: { path: '^src/pty-daemon/' },
       to: { path: '^src/(main|renderer|preload)/', pathNot: '^src/main/(terminal-snapshot-file|hooks/server)\\.ts$' }
+    },
+    {
+      name: 'pty-daemon-never-loads-electron',
+      severity: 'error',
+      comment: 'Not even through the main modules it shares (the direct-import rule above cannot see that far).',
+      from: { path: '^src/pty-daemon/' },
+      to: { path: '(^|/)node_modules/electron/', reachable: true }
     }
   ],
   options: {

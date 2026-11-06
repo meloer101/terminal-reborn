@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run lint:deps
       - run: npm test
       - run: npm run test:e2e
       # Screenshots and traces of a failed e2e run, to see what the runner drew.
