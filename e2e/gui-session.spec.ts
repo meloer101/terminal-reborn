@@ -108,6 +108,7 @@ test.describe('F23 GUI session (Claude)', () => {
 
   test('「思考中」 pulses while Claude thinks; thinking with no text leaves no 「思考了」 row', async () => {
     // The fake answers `--version` as 2.1.318, so Claude is asked for summaries.
+    await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[] }
     expect(launched.args[launched.args.indexOf('--thinking-display') + 1]).toBe('summarized')
     await send('think first')

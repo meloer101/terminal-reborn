@@ -218,7 +218,7 @@
 }
 
 /* 「思考中」 while the agent thinks: the text breathes (T3 Code, Orca keep a live row like it); still under reduced
-   motion. */
+   motion. Two spinner turns per breath, on purpose: the app's waiting signs keep one tempo. */
 .thinkingLive {
   margin: 0;
   font: var(--text-body);

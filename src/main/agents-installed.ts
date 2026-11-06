@@ -124,8 +124,9 @@ function runVersion(path: string): Promise<string | null> {
 const versionOnce = new Map<CliAgent, Promise<string | null | undefined>>()
 
 /**
- * `--version` of one agent CLI, once per app run; undefined when it is not on the login shell's PATH. Alone, so a GUI
- * launch waits for its own agent only, not the slowest of all.
+ * `--version` of one agent CLI; undefined when it is not on the login shell's PATH. Alone, so a GUI launch waits for
+ * its own agent only, not the slowest of all. A version read is kept for the app run; no answer (not installed, timed
+ * out, nothing version-like) is asked again next time.
  */
 export function agentVersion(id: CliAgent, shell: string = process.env.SHELL || '/bin/zsh'): Promise<string | null | undefined> {
   let version = versionOnce.get(id)
@@ -135,6 +136,9 @@ export function agentVersion(id: CliAgent, shell: string = process.env.SHELL || 
       return path ? runVersion(path) : undefined
     })
     versionOnce.set(id, version)
+    void version.then((answer) => {
+      if (typeof answer !== 'string') versionOnce.delete(id)
+    })
   }
   return version
 }

@@ -57,10 +57,12 @@ async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | u
   // Claude keeps its hooks under -p (PRD §6.17): status, titles and the phone work as for a TUI. Marked first, so its
   // PermissionRequest hook is never held.
   if (claude) setGuiSession(launch.sessionId, true)
+  // Asked alongside the hooks and dispatch. Unknown (not on PATH, no answer in 5 s): launched without the flags an
+  // older Claude would exit on.
+  const version = claude ? agentVersion('claude').catch(() => null) : undefined
   const hooks = claude ? await prepareAgentLaunch(launch.sessionId, owner, 'claude', { deferStartWatchdog: true, cwd: realCwd }) : null
   const dispatch = await dispatchLaunchFor(launch.sessionId, launch.agent, { child: launch.dispatched === true })
-  // Unknown (not on PATH, no answer in 5 s): launched without the flags an older Claude would exit on.
-  const claudeVersion = claude ? await agentVersion('claude').catch(() => null) : undefined
+  const claudeVersion = await version
   const argv = guiArgv({
     agent: launch.agent,
     realCwd,
