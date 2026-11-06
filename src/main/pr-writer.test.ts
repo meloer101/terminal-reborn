@@ -39,6 +39,8 @@ const roots = new Set<string>()
 let pathValue = `${bin}:/usr/bin:/bin`
 vi.mock('./workspace-store', () => ({ isProjectRoot: (path: string) => roots.has(path) }))
 vi.mock('./settings', () => ({ getSettings: () => DEFAULT_SETTINGS }))
+let quitting = false
+vi.mock('./quit', () => ({ isQuitting: () => quitting }))
 // searchPath() adds /opt/homebrew/bin and friends after the login PATH: only this test's folders may be searched, so
 // a real claude / codex on the machine is never started.
 vi.mock('./agents-installed', async (importOriginal) => {
@@ -146,16 +148,30 @@ describe('AI 写 (PRD F16 v1.68)', () => {
     writeFileSync(join(wt, 'a.txt'), 'x\n')
     const slow = join(base, 'slow')
     mkdirSync(slow)
-    writeFileSync(join(slow, 'claude'), '#!/bin/sh\nexec sleep 30\n')
+    writeFileSync(join(slow, 'claude'), `#!/bin/sh\ntouch "${log}/slow-started"\nexec sleep 30\n`)
     chmodSync(join(slow, 'claude'), 0o755)
     pathValue = `${slow}:/usr/bin:/bin`
     registerPrWriter()
     const started = Date.now()
     const result = writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })
-    await new Promise((r) => setTimeout(r, 500))
+    await vi.waitFor(() => expect(existsSync(join(log, 'slow-started'))).toBe(true), { timeout: 4_000, interval: 20 })
     for (const quit of quitHandlers) quit()
     expect((await result).ok).toBe(false)
     expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
+  it('starts no agent once the quit is going ahead', async () => {
+    quitting = true
+    try {
+      const { root, wt } = setup()
+      writeFileSync(join(wt, 'a.txt'), 'x\n')
+      rmSync(join(log, 'claude-args'), { force: true })
+      pathValue = `${bin}:/usr/bin:/bin`
+      expect((await writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })).ok).toBe(false)
+      expect(existsSync(join(log, 'claude-args'))).toBe(false)
+    } finally {
+      quitting = false
+    }
   })
 
   it('says what went wrong, and refuses the base branch, files without changes and bad input', async () => {

@@ -25,6 +25,7 @@ import {
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { branchInfo, git, gitOut, prTemplate, refExists, searchPath, uncommittedFiles } from './pull-requests'
+import { isQuitting } from './quit'
 import { getSettings } from './settings'
 import { isProjectRoot } from './workspace-store'
 
@@ -101,6 +102,9 @@ async function material(request: WriteRequest, cwd: string, branch: string, base
 
 function run(key: string, binary: string, args: string[], prompt: string, cwd: string, env: NodeJS.ProcessEnv): Promise<{ code: number | null; stdout: string; stderr: string; cancelled: boolean }> {
   return new Promise((resolve) => {
+    // A write asked for just before ⌘Q reaches here after before-quit stopped the runs: start nothing that would
+    // outlive the app.
+    if (isQuitting()) return resolve({ code: null, stdout: '', stderr: '', cancelled: true })
     const earlier = running.get(key)
     if (earlier) killGroup(earlier, 'SIGTERM')
     const child = spawn(binary, args, { cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
