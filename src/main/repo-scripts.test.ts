@@ -136,9 +136,9 @@ describe('locateRepo / readRepoSettings / approvedScript', () => {
 describe('repoScripts run / cancel (PRD F4 · 合并前测试)', () => {
   const repo = join(base, 'repo-cancel')
   mkdirSync(join(repo, '.tr'), { recursive: true })
-  writeFileSync(join(repo, '.tr', 'settings.toml'), '[scripts]\ntest = "sleep 5"\n')
+  writeFileSync(join(repo, '.tr', 'settings.toml'), '[scripts]\ntest = "sleep 1"\narchive = "echo archived"\n')
   git(repo, 'init', '-q', '-b', 'main')
-  rememberApproval(join(repo, '.git'), { test: 'sleep 5' })
+  rememberApproval(join(repo, '.git'), { test: 'sleep 1', archive: 'echo archived' })
   registerRepoScriptHandlers()
   const invoke = (channel: string, ...args: unknown[]) => handlers.get(channel)!({}, ...args)
 
@@ -150,6 +150,24 @@ describe('repoScripts run / cancel (PRD F4 · 合并前测试)', () => {
     const result = await run
     expect(result.cancelled).toBe(true)
     expect(Date.now() - started).toBeLessThan(3_000)
+  })
+
+  it('runs the archive script next to a running test without stopping either', async () => {
+    const test = invoke(IPC.repoScriptsRun, repo, 'test') as Promise<{ code: number | null; cancelled: boolean }>
+    await new Promise((r) => setTimeout(r, 200))
+    const archive = (await invoke(IPC.repoScriptsRun, repo, 'archive')) as { code: number | null; output: string; cancelled: boolean }
+    expect(archive).toMatchObject({ code: 0, cancelled: false })
+    expect(archive.output).toContain('archived')
+    expect(await test).toMatchObject({ code: 0, cancelled: false })
+  })
+
+  it('cancels the merge test only, never an archive script', async () => {
+    writeFileSync(join(repo, '.tr', 'settings.toml'), '[scripts]\ntest = "sleep 1"\narchive = "sleep 1; echo archived"\n')
+    rememberApproval(join(repo, '.git'), { test: 'sleep 1', archive: 'sleep 1; echo archived' })
+    const archive = invoke(IPC.repoScriptsRun, repo, 'archive') as Promise<{ code: number | null; cancelled: boolean }>
+    await new Promise((r) => setTimeout(r, 200))
+    await invoke(IPC.repoScriptsCancel, repo)
+    expect(await archive).toMatchObject({ code: 0, cancelled: false })
   })
 
   it('cancels a run that is still starting (the cancel waits for the start, not for the end)', async () => {

@@ -230,6 +230,12 @@ export async function approvedScript(realCwd: string, name: RunnableScript | Cap
   return script
 }
 
+/**
+ * One captured run per directory and script: a second run of the same script replaces the first, while the merge
+ * test and the archive script of one worktree may run side by side.
+ */
+const jobKey = (dir: string, name: CapturedScript): string => `${dir}\0${name}`
+
 /** Starts the script; resolves once it is running, with its end (wrapped, so awaiting the start does not wait for it). */
 async function startCaptured(dirRaw: unknown, nameRaw: unknown): Promise<{ done: Promise<ScriptRunResult> }> {
   const name = parseCapturedScript(nameRaw)
@@ -237,7 +243,7 @@ async function startCaptured(dirRaw: unknown, nameRaw: unknown): Promise<{ done:
   const script = await approvedScript(dir, name)
   const port = portFor(dir)
   const done = startCapturedScript({
-    key: dir,
+    key: jobKey(dir, name),
     cwd: dir,
     script,
     baseEnv: process.env,
@@ -246,11 +252,12 @@ async function startCaptured(dirRaw: unknown, nameRaw: unknown): Promise<{ done:
   return { done }
 }
 
+/** Stops the merge test (the only script a sheet cancels); an archive script runs to its end. */
 async function cancelCaptured(dirRaw: unknown): Promise<void> {
   try {
-    cancelCapturedScript(await resolveRoot(dirRaw))
+    cancelCapturedScript(jobKey(await resolveRoot(dirRaw), 'test'))
   } catch {
-    if (typeof dirRaw === 'string') cancelCapturedScript(dirRaw)
+    if (typeof dirRaw === 'string') cancelCapturedScript(jobKey(dirRaw, 'test'))
   }
 }
 
