@@ -56,6 +56,6 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 - Icons: `lucide-react`, `size={16} strokeWidth={1.75}`.
 - CJK: always keep a CJK family in font stacks; CJK occupies 2 terminal cells.
 - UI copy in Chinese; code, comments, commit messages in English. Conventional Commits (`feat(composer): …`).
-- Security: `contextIsolation` + `sandbox` stay on; renderer reaches the system only through `window.tr`. Validate every IPC payload in main.
+- Security: `contextIsolation` + `sandbox` stay on; renderer reaches the system only through `window.tr`. Validate every IPC payload in main. Folder roots from the renderer must be workspace folders (`isWorkspaceDir` / `isProjectRoot`). Every agent runs as the same user, so the hook socket token only keeps other users out, not one session's agent from another's.
 - Never write to the user's global agent config (`~/.claude/settings.json`, `~/.codex/*`). Hooks are injected per launch (PRD §6.2).
 - Adapted third-party code: MIT / Apache-2.0 / BSD / ISC only, attribute in file header and `THIRD_PARTY_NOTICES.md`.
