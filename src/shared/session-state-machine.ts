@@ -725,7 +725,8 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         const healed = healCodex(state, now)
         if (healed !== state) return healed
       }
-      if (state.status === 'running' && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
+      // Only Claude's `✳` title is known to mean idle; another agent's plain title may stay up through a long turn.
+      if (state.kind === 'claude' && state.status === 'running' && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
         return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
       }
       return state
