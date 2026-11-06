@@ -73,6 +73,8 @@ interface Run {
   token: number
   /** The commit went in inside a shipToMain that then failed: a retry does not commit again. */
   committed: boolean
+  /** The merge commit a shipToMain kept although its push failed: the retry pushes it (if the base still has it). */
+  merged?: string
 }
 
 const runs = new Map<string, Run>()
@@ -534,7 +536,7 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
   // After a failed push the merge stands on the local base: only the push is left.
   const mergeDone = stepDone(state, 'merge')
   const result = mergeDone
-    ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree })
+    ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...(run.merged ? { commit: run.merged } : {}) })
     : await window.tr.ship.shipToMain({
         root: ctx.root,
         worktree: ctx.worktree,
@@ -560,6 +562,7 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     return
   }
   if (!mergeDone) patch(worktree, token, (s) => complete(s, 'merge'))
+  run.merged = result.commit
   if (result.pushError) {
     patch(worktree, token, (s) => fail(s, { step: 'push', message: result.pushError!, ...(result.pushRefused ? { pushRefused: true } : {}) }))
     return

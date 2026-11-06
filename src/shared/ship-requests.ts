@@ -1,7 +1,7 @@
 // Validation of what the renderer sends to the ship handlers (src/shared/ship.ts): main trusts none of it. Pure.
 import { MAX_MERGE_MESSAGE, MERGE_METHODS, multiLine, type MergeMethod } from './git-merge'
 import { MAX_SHIP_FILES, parsePrTarget } from './pull-requests'
-import type { DiffSinceRequest, HandoffRequest, ShipMainRequest } from './ship'
+import type { DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest } from './ship'
 import { HANDOFF_FILES, type HandoffKind } from './ship-handoff'
 
 const MAX_PATH = 4096
@@ -34,6 +34,13 @@ export function parseDiffSinceRequest(raw: unknown): DiffSinceRequest | null {
  * 合并到 main 并推送: the message is cleaned like a commit message (newlines kept) and capped; with paths it must not be
  * empty (it is the commit's message). An empty `paths` list means nothing to commit, as null does.
  */
+export function parsePushBaseRequest(raw: unknown): PushBaseRequest | null {
+  const target = parsePrTarget(raw)
+  if (!target || !isRecord(raw)) return null
+  if (raw.commit === undefined) return target
+  return typeof raw.commit === 'string' && SINCE.test(raw.commit) ? { ...target, commit: raw.commit } : null
+}
+
 export function parseShipMainRequest(raw: unknown): ShipMainRequest | null {
   const target = parsePrTarget(raw)
   if (!target || !isRecord(raw)) return null

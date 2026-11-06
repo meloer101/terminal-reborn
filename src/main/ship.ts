@@ -26,7 +26,7 @@ import {
 import { riskMarkers, type RiskMarker } from '@shared/risk-markers'
 import { SHIP_IPC, type BaseCi, type BaseCiFailure, type DiffSinceRequest, type HandoffSlot, type ShipMainRequest, type ShipMainResult, type ShipPreflight } from '@shared/ship'
 import { HANDOFF_FILES } from '@shared/ship-handoff'
-import { parseDiffSinceRequest, parseHandoffRequest, parseShipMainRequest } from '@shared/ship-requests'
+import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest } from '@shared/ship-requests'
 import { mergePrecheck, mergeWorktree, pushBase, workInBase } from './git-merge'
 import {
   branchInfo,
@@ -438,11 +438,11 @@ async function shipSteps(request: ShipMainRequest, done: { committed: boolean })
 
 /**
  * The retry of a push 合并到 main 并推送 could not make: the merge is on the local base already, so only the base is
- * pushed (running the exit again would find the branch merged and stop there). A base its upstream already has
- * counts as pushed.
+ * pushed (running the exit again would find the branch merged and stop there), and only while the base still has
+ * that merge. A base origin already has goes through as pushed (git has nothing to send) and its CI is watched.
  */
 export async function pushBaseAgain(raw: unknown): Promise<ShipMainResult> {
-  const target = parsePrTarget(raw)
+  const target = parsePushBaseRequest(raw)
   if (!target || !isProjectRoot(target.root)) return stepFailure('push', 'failed', '请求无效')
   if (shipping.has(target.worktree)) return stepFailure('push', 'blocked', '正在合并这个分支')
   shipping.add(target.worktree)
@@ -452,13 +452,18 @@ export async function pushBaseAgain(raw: unknown): Promise<ShipMainResult> {
     if (!check.base) return stepFailure('push', 'failed', '不知道这个分支合并进哪个分支')
     if (!check.hasOrigin) return { ok: true, commit: check.baseHead, pushed: false }
     const root = await realOrSelf(target.root)
-    const remoteRef = `refs/remotes/${check.upstream ?? `origin/${check.base}`}`
+    const commit = target.commit ?? check.baseHead
+    if (target.commit && (await git(root, ['merge-base', '--is-ancestor', target.commit, `refs/heads/${check.base}`])).code !== 0) {
+      return stepFailure('push', 'failed', `${check.base} 上已经没有这次的合并（${target.commit.slice(0, 7)}）：没有推送`)
+    }
+    const remoteRef = `refs/remotes/origin/${check.base}`
     const remoteTip = (await git(root, ['rev-parse', '--verify', '--quiet', remoteRef])).stdout.trim()
-    if (remoteTip && (await countCommits(root, `${remoteRef}..refs/heads/${check.base}`)) === 0) return { ok: true, commit: check.baseHead, pushed: true }
     const push = await pushBase(root, check.base)
-    if (push !== '') return pushFailure(check.baseHead, check.base, push)
-    await startBaseCi({ root: target.root, worktree: target.worktree, cwd: root, base: check.base, sha: check.baseHead, previous: remoteTip || check.baseHead })
-    return { ok: true, commit: check.baseHead, pushed: true }
+    if (push !== '') return pushFailure(commit, check.base, push)
+    // What "was it already failing" compares with: origin's base before this push, else the commit before it.
+    const previous = remoteTip && remoteTip !== check.baseHead ? remoteTip : (await git(root, ['rev-parse', '--verify', '--quiet', `${check.baseHead}^`])).stdout.trim()
+    await startBaseCi({ root: target.root, worktree: target.worktree, cwd: root, base: check.base, sha: check.baseHead, previous: previous || check.baseHead })
+    return { ok: true, commit, pushed: true }
   } catch (error) {
     return stepFailure('push', 'failed', `推送没有成功：${errorText(error)}`)
   } finally {

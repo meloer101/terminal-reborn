@@ -518,9 +518,27 @@ describe('shipToMain', () => {
     expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: first.commit, pushed: true })
     expect(sha(bare, 'main')).toBe(first.commit)
     expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: first.commit })
-    // Pushed already: nothing left to push is not an error.
-    expect(await pushBaseAgain({ root, worktree: wt })).toEqual({ ok: true, commit: first.commit, pushed: true })
+    // Pushed already (another worktree's retry pushed the same base): still pushed, and its CI is watched here too.
+    resetShip()
+    expect(await pushBaseAgain({ root, worktree: wt, commit: first.commit })).toEqual({ ok: true, commit: first.commit, pushed: true })
+    expect(await checkBaseCi(wt, true)).toMatchObject({ base: 'main', sha: first.commit })
     expect(await pushBaseAgain({ root: join(base, 'elsewhere'), worktree: wt })).toMatchObject({ ok: false, message: '请求无效' })
+  })
+
+  it('refuses to push a base that no longer has the merge it kept', async () => {
+    const { root, wt, bare } = setup()
+    const hook = join(bare, 'hooks', 'pre-receive')
+    writeFileSync(hook, '#!/bin/sh\nexit 1\n')
+    chmodSync(hook, 0o755)
+    const before = sha(root, 'main')
+    const first = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'squash', paths: null })
+    if (!first.ok) throw new Error('not merged')
+    rmSync(hook)
+    git(root, 'reset', '-q', '--hard', before)
+    const result = await pushBaseAgain({ root, worktree: wt, commit: first.commit })
+    expect(result).toMatchObject({ ok: false, step: 'push', reason: 'failed' })
+    expect(result.ok ? '' : result.message).toContain(`main 上已经没有这次的合并（${first.commit.slice(0, 7)}）`)
+    expect(sha(bare, 'main')).toBe(before)
   })
 
   it('says a push refused by branch protection is one, so the sheet offers 改为创建 PR (not after a network error)', () => {

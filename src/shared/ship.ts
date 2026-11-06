@@ -77,6 +77,12 @@ export type ShipMainResult =
       output?: string
     }
 
+/** The retry of a failed push (ShipApi.pushBase). */
+export interface PushBaseRequest extends PrTarget {
+  /** The merge commit 合并到 main 并推送 kept: the push is refused when the base no longer has it. */
+  commit?: string
+}
+
 /** The diff of the worktree's branch from `since` to HEAD (a fix the agent committed, before Wavi pushes it). */
 export interface DiffSinceRequest extends PrTarget {
   since: string
@@ -108,7 +114,7 @@ export interface ShipApi {
   readHandoff(request: HandoffRequest): Promise<string | null>
   shipToMain(request: ShipMainRequest): Promise<ShipMainResult>
   /** After 合并到 main 并推送 kept the merge but its push failed: pushes the base again (nothing is merged). */
-  pushBase(target: PrTarget): Promise<ShipMainResult>
+  pushBase(request: PushBaseRequest): Promise<ShipMainResult>
   diffSince(request: DiffSinceRequest): Promise<string | null>
   /** 丢弃 (Figma 29G): moves the worktree's branch back to `since` (a fix the brake stopped). Refuses with
    *  uncommitted changes or when `since` is not an ancestor of HEAD. */
@@ -132,7 +138,7 @@ export const SHIP_IPC = {
   readHandoff: 'ship:read-handoff',
   /** invoke(ShipMainRequest) → ShipMainResult */
   shipToMain: 'ship:to-main',
-  /** invoke(PrTarget) → ShipMainResult */
+  /** invoke(PushBaseRequest) → ShipMainResult */
   pushBase: 'ship:push-base',
   /** invoke(DiffSinceRequest) → string | null */
   diffSince: 'ship:diff-since',
