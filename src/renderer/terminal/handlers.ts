@@ -15,10 +15,18 @@ export interface TerminalHandlers {
   takeRunStart(sessionId: SessionId): boolean
 }
 
+/** Before main.tsx hands them over nothing happens; an entry point that forgot to says so once. */
+let warned = false
+const unset = (): void => {
+  if (warned) return
+  warned = true
+  console.error('[terminal] no handlers for links, the menu and Run: call setTerminalHandlers at startup')
+}
+
 let handlers: TerminalHandlers = {
-  link: () => {},
+  link: unset,
   resolvePaths: async (_sessionId, paths) => paths.map(() => null),
-  contextMenu: () => {},
+  contextMenu: unset,
   takeRunStart: () => false
 }
 
