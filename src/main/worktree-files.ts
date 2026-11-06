@@ -357,7 +357,7 @@ const openText = (abs: string): Promise<string> =>
  * A root from the renderer, accepted only when it is one of the workspace's folders: without this a renderer could
  * list, read or open anything the user can (`/`, the home folder).
  */
-function workspaceFolder(root: unknown): string {
+export function workspaceFolder(root: unknown): string {
   if (typeof root !== 'string' || !isWorkspaceDir(root)) throw new Error('not a workspace folder')
   return root
 }

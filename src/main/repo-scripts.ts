@@ -26,7 +26,7 @@ import {
 import { cancelAllCapturedScripts, cancelCapturedScript, startCapturedScript } from './script-run'
 import { confirm } from './confirm'
 import { getSettings } from './settings'
-import { resolveRoot } from './worktree-files'
+import { resolveRoot, workspaceFolder } from './worktree-files'
 
 const GIT_TIMEOUT_MS = 5_000
 const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
@@ -262,11 +262,12 @@ async function cancelCaptured(dirRaw: unknown): Promise<void> {
 }
 
 export function registerRepoScriptHandlers(): void {
-  ipcMain.handle(IPC.repoScriptsGet, (_event, dir: unknown) => repoInfo(dir))
-  ipcMain.handle(IPC.repoScriptsApprove, (event, dir: unknown, name: unknown) => approve(event.sender, dir, name))
+  // Only the workspace's folders: a script is read, approved and run nowhere else (worktree-files.ts).
+  ipcMain.handle(IPC.repoScriptsGet, async (_event, dir: unknown) => repoInfo(workspaceFolder(dir)))
+  ipcMain.handle(IPC.repoScriptsApprove, async (event, dir: unknown, name: unknown) => approve(event.sender, workspaceFolder(dir), name))
   ipcMain.handle(IPC.repoScriptsRun, (_event, dir: unknown, name: unknown) => {
     const key = typeof dir === 'string' ? dir : ''
-    return enqueue(key, () => startCaptured(dir, name)).then((started) => started.done)
+    return enqueue(key, async () => startCaptured(workspaceFolder(dir), name)).then((started) => started.done)
   })
   ipcMain.handle(IPC.repoScriptsCancel, (_event, dir: unknown) => {
     const key = typeof dir === 'string' ? dir : ''

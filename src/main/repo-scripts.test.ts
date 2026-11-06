@@ -12,6 +12,8 @@ const base = await vi.hoisted(async () => {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tr-repo-scripts-')))
 })
 vi.mock('./settings', () => ({ getSettings: () => ({ ports: { base: 41000 } }) }))
+const workspaceDirs = vi.hoisted(() => new Set<string>())
+vi.mock('./workspace-store', () => ({ isWorkspaceDir: (path: string) => workspaceDirs.has(path) }))
 const handlers = vi.hoisted(() => new Map<string, (event: unknown, ...args: unknown[]) => unknown>())
 vi.mock('electron', () => ({
   app: { getPath: () => base, on: () => {} },
@@ -139,8 +141,19 @@ describe('repoScripts run / cancel (PRD F4 · 合并前测试)', () => {
   writeFileSync(join(repo, '.tr', 'settings.toml'), '[scripts]\ntest = "sleep 1"\narchive = "echo archived"\n')
   git(repo, 'init', '-q', '-b', 'main')
   rememberApproval(join(repo, '.git'), { test: 'sleep 1', archive: 'echo archived' })
+  workspaceDirs.add(repo)
   registerRepoScriptHandlers()
   const invoke = (channel: string, ...args: unknown[]) => handlers.get(channel)!({}, ...args)
+
+  it('reads, asks about and runs scripts only in the workspace’s folders', async () => {
+    const outside = join(base, 'not-in-workspace')
+    mkdirSync(join(outside, '.tr'), { recursive: true })
+    writeFileSync(join(outside, '.tr', 'settings.toml'), '[scripts]\ntest = "touch ran"\n')
+    await expect(invoke(IPC.repoScriptsGet, outside)).rejects.toThrow(/not a workspace folder/)
+    await expect(invoke(IPC.repoScriptsApprove, outside, 'test')).rejects.toThrow(/not a workspace folder/)
+    await expect(invoke(IPC.repoScriptsRun, outside, 'test')).rejects.toThrow(/not a workspace folder/)
+    expect(await invoke(IPC.repoScriptsGet, repo)).toMatchObject({ approved: true })
+  })
 
   it('cancels a script that is running instead of waiting for it to end', async () => {
     const started = Date.now()
