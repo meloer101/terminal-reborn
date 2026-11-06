@@ -41,7 +41,7 @@ describe('replacePendingStart', () => {
     expect(firstTimedOut).not.toHaveBeenCalled()
   })
 
-  it('gives both callers the newer start’s outcome', () => {
+  it('gives both callers the outcome the host reports', () => {
     const pending = new Map<string, PendingStart<{ pid: number }>>()
     const first = start(() => {})
     const second = start(() => {})
