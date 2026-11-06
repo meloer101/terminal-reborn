@@ -7,7 +7,11 @@ import { isSafeAgentSessionId } from '@shared/workspace-file'
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-export const MAX_WRITE_CHARS = 16 * 1024 * 1024
+/**
+ * One write goes to the daemon as one JSON frame, where a control character becomes six (`\u0001`); a frame over
+ * MAX_FRAME_CHARS ends the connection and with it every terminal, so the worst case has to fit.
+ */
+export const MAX_WRITE_CHARS = 8 * 1024 * 1024
 const MAX_STRING = 32 * 1024
 const MAX_ARGS = 256
 const MAX_ENV = 256

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
+import { MAX_FRAME_CHARS } from '../../pty-daemon/wire'
+import { MAX_WRITE_CHARS, parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
 
 const base = { sessionId: 's-1', cwd: '/tmp', cols: 80, rows: 24 }
 
@@ -63,6 +64,10 @@ describe('other payloads', () => {
     expect(parseSize(80, 24)).toEqual({ cols: 80, rows: 24 })
     expect(() => parseSize(80, -1)).toThrow()
     expect(parseWriteData('ls\r')).toBe('ls\r')
+    // The longest accepted write still fits one daemon frame when every character is escaped as \u00XX.
+    expect(JSON.stringify('\x01').length - 2).toBe(6)
+    expect(MAX_WRITE_CHARS * 6 + 64 * 1024).toBeLessThan(MAX_FRAME_CHARS)
+    expect(() => parseWriteData('x'.repeat(MAX_WRITE_CHARS + 1))).toThrow()
     expect(() => parseWriteData(new ArrayBuffer(1))).toThrow()
     expect(parseAckCount(10.9)).toBe(10)
     expect(() => parseAckCount(-1)).toThrow()
