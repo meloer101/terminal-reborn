@@ -260,7 +260,8 @@ function claudeParser(now: () => number): ChatParser {
         if (!isRec(block)) continue
         if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') {
           changed.push(add({ kind: 'text', id: nextId('t'), at, text: clip(block.text, CHAT_LIMITS.text) }))
-        } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
+        } else if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim() !== '') {
+          // A signature-only block (display omitted, the default on current models) has nothing to show.
           const ms = typeof line.thinkingDurationMs === 'number' ? line.thinkingDurationMs : undefined
           changed.push(add({ kind: 'thinking', id: nextId('k'), at, text: clip(block.thinking, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}) }))
         } else if (block.type === 'tool_use' && typeof block.name === 'string') {
@@ -379,7 +380,7 @@ function codexParser(now: () => number): ChatParser {
       }
       case 'reasoning': {
         const summary = Array.isArray(p.summary) ? p.summary.filter(isRec).map((s) => str(s.text) ?? '').join('\n').trim() : ''
-        return [add({ kind: 'thinking', id: nextId('k'), at, text: clip(summary, CHAT_LIMITS.thinking) })]
+        return summary ? [add({ kind: 'thinking', id: nextId('k'), at, text: clip(summary, CHAT_LIMITS.thinking) })] : []
       }
       case 'function_call':
       case 'custom_tool_call': {

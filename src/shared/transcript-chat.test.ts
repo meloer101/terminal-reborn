@@ -122,6 +122,16 @@ describe('Claude transcript → chat', () => {
     ])
     expect(items[0]).toMatchObject({ kind: 'user', text: '[Image #1] 按钮被挡住了', images: 1 })
   })
+
+  it('leaves out thinking with no text (signature only, display omitted): there is nothing to open', () => {
+    const items = parse([
+      line({ type: 'assistant', thinkingDurationMs: 2687, message: { id: 'm1', content: [{ type: 'thinking', thinking: '', signature: 'EsYB' }] } }),
+      line({ type: 'assistant', message: { id: 'm1', content: [{ type: 'thinking', thinking: ' \n', signature: 'EsYB' }] } }),
+      line({ type: 'assistant', thinkingDurationMs: 3204, message: { id: 'm2', content: [{ type: 'thinking', thinking: 'Checking divisors', signature: 'EsYB' }] } })
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'thinking', text: 'Checking divisors', ms: 3204 })
+  })
 })
 
 describe('Codex rollout → chat', () => {
@@ -143,6 +153,18 @@ describe('Codex rollout → chat', () => {
     )
     expect(items.map((i) => i.kind)).toEqual(['user', 'tool', 'text', 'system'])
     expect(items[1]).toMatchObject({ name: 'Bash', arg: 'npm test', state: 'ok', output: 'ok 3 passed' })
+  })
+
+  it('leaves out reasoning with an empty summary', () => {
+    const items = parse(
+      [
+        r('response_item', { type: 'reasoning', summary: [], encrypted_content: 'gAAA' }),
+        r('response_item', { type: 'reasoning', summary: [{ type: 'summary_text', text: '**Checking tests**' }] })
+      ],
+      'codex'
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'thinking', text: '**Checking tests**' })
   })
 })
 
