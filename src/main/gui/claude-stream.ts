@@ -161,7 +161,8 @@ export function createClaudeStreamNormalizer(cwd: string, now: () => number = Da
             requestId,
             tool: str(request.tool_name) ?? 'Tool',
             input: isRec(request.input) ? request.input : {},
-            suggestions: Array.isArray(request.permission_suggestions) ? request.permission_suggestions : []
+            // Filtered here, so 总是允许 is offered only when it would allow something (PRD §6.6).
+            suggestions: safeSuggestions(request.permission_suggestions)
           }
           waiting.set(requestId, pending)
           return [{ type: 'prompt', prompt: promptOf(pending, str(request.description), cwd) }]

@@ -86,6 +86,19 @@ describe('createClaudeStreamNormalizer', () => {
     expect(plan).toMatchObject({ plan: '1. a\n2. b' })
   })
 
+  it('offers 总是允许 only when a suggestion survives the filter (no setMode, nothing for userSettings)', () => {
+    const request = (id: string, permission_suggestions: unknown[]) => ({
+      type: 'control_request',
+      request_id: id,
+      request: { subtype: 'can_use_tool', tool_name: 'Edit', input: { file_path: '/repo/a.txt' }, permission_suggestions }
+    })
+    const { state } = run([
+      request('r1', [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }]),
+      request('r2', [{ type: 'addRules', rules: [{ toolName: 'Edit' }], behavior: 'allow', destination: 'userSettings' }])
+    ])
+    for (const prompt of state.prompts) expect(prompt.kind === 'permission' && prompt.options.map((o) => o.kind)).toEqual(['reject_once', 'allow_once'])
+  })
+
   it('ends the turn on result: the stream and the open prompts go', () => {
     const { state } = run([
       start('text'),
