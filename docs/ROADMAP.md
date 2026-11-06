@@ -235,12 +235,14 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] e2e `gui-session.spec.ts`（真实 app + 假的 headless Claude，7 个）；`more-agents`、`no-dead-ends` 两个 TUI 用例在面板里选 CLI
 - [x] 独立 code review 的 8 个问题（中 5、低 3）都已修：孤儿进程、重启后接上没看过的 GUI 会话、旧守护进程下 Claude 的状态、超长行不再断开守护进程连接、重新接上时不再重复弹已回答的确认、JSON-RPC id 撞号、已退出的进程不再标成就绪、流式只发最后一段
 - [x] 真 Claude 冒烟（Haiku，作者 2026-11-05 同意）：回复、权限卡片允许后写入文件、侧栏 1 s 内变「等你确认：编辑 a.txt」、总览计数、标题由 Claude 起名、transcript 全部 `entrypoint: wavi`；顺带修了选择器把实际模型 id 显示成 Default、权限卡片显示绝对路径
-- [x] Figma 50 和实现（PRD v1.126）：对话流从上往下排、按普通聊天滚动（v1.129 去掉了发出后钉到顶部）；图片附件 64 缩略图；输入框换成 Tiptap，列表 / 引用 / 代码块 / 粗斜删 / 行内代码，「格式」工具栏和选区浮条，发出去的是只在有格式处加标记的 Markdown（`rich-text.ts`）；e2e `gui-session.spec.ts` 加到 13 个
+- [x] Figma 50 和实现（PRD v1.126）：对话流从上往下排、按普通聊天滚动（v1.129 去掉了发出后钉到顶部），超过一屏时滚到底最后一块下面留 120（同 Claude 桌面版，作者 2026-11-06 定，未出 Figma 稿）；图片附件 64 缩略图；输入框换成 Tiptap，列表 / 引用 / 代码块 / 粗斜删 / 行内代码，「格式」工具栏和选区浮条，发出去的是只在有格式处加标记的 Markdown（`rich-text.ts`）；e2e `gui-session.spec.ts` 加到 13 个
 - [x] Figma 51 和实现（PRD v1.127）：头像（51A）、你的消息按 Markdown 显示、设置 · 外观 ·「对话」（头像、宽度四档、字体、字重、字号）、对话不透明度、窗口材质（液态玻璃 / 磨砂玻璃）和窗口底层不透明度；e2e `gui-session.spec.ts` 15 个、`settings.spec.ts` 加一个
 - [x] Figma 52 和实现（PRD v1.130）：输入框一行（「+」· 文字 · 发送），框下「格式」、选择器和 context 圆环，点圆环看 context 和当前 agent 的额度（行样式同设置 · 额度，共用 `session-meta/UsageRows`）；GUI 会话的会话头去掉 context 和额度；@ 按钮去掉；e2e `gui-session.spec.ts` 17 个
 - [x] Figma 54 和实现（PRD v1.132）：消息悬停出现复制 / 编辑和时间，代码块和工具输出可复制；Claude 会话改之前的消息重新问（`--resume-session-at` 重开，读历史只取 transcript 当前分支）；输入框下一行离底边改为 8；e2e `gui-session.spec.ts` 19 个
 - [x] Figma 56 和实现（PRD v1.133）：所有 agent 的选择器用同一套名字——权限（询问 / 接受编辑 / 自动）、「计划」开关、推理强度（低 … 最高）；Claude `permissionMode`、Codex `approvalPolicy` + `approvalsReviewer`、Grok 启动参数（换档重开进程）、其余 ACP agent 由 Wavi 替你回答改文件的请求；ACP 的推理强度按 `thought_level` 和常见 id 认、分组选项展开、agent 的 plan 模式归到「计划」；e2e `gui-session.spec.ts` 20 个，host 测试加通用 ACP 和 Grok 重开；权限和计划随会话存进 workspace.json，重新接上或重开时 agent 从这一档开始（Claude `--permission-mode`、Codex 每轮的审批设置、ACP 由 Wavi 回答、Grok 启动参数），界面显示的就是它在跑的档
 - [x] Wavi 启动的终端和 agent 用 macOS 系统代理（PRD v1.134 / §6.18）：环境里没有代理变量时读 `scutil --proxy`（PAC 用 Electron 解析），每分钟刷新；去掉代理变量启动后真 Grok GUI 会话能回复
+- [x] 思考行只在有文字时出现（PRD v1.136 / §6.17）：所有 agent 空的思考不生成（手机远程同一个解析器）；Claude ≥ 2.1.94 启动时加 `--thinking-display summarized`；进行中的「思考中」透明度往复；e2e `gui-session.spec.ts` 21 个
+- [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`
 - [ ] Codex 的「计划」（实验性 `collaborationMode`，要 `experimentalApi`，先实测）；用真 Grok 跑一轮「自动」「计划」；Kiro 和 Gemini、Qwen、OpenCode、Copilot、Kimi、Droid、Amp、Goose、Cline、Auggie、CodeBuddy、Pi 装上后握手实测它们上报的选项、会不会发权限请求
 - [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）

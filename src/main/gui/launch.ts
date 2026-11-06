@@ -8,6 +8,7 @@ import { AGENT_GUI, guiBinary, launchPermissionArgs } from '@shared/gui-agents'
 import { CLAUDE_MODE_OF } from './claude-stream'
 import type { GuiLaunch, GuiProtocol } from '@shared/gui-chat'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
+import { compareSemver, parseSemver } from '../update-check'
 import type { ImageBlock } from './driver'
 
 /** The flags a long-lived headless Claude needs for a GUI (PRD F23 驱动). */
@@ -33,11 +34,25 @@ export interface GuiArgvInput {
   resume?: string
   /** Claude's per-launch hooks file (src/main/hooks). */
   claudeSettingsPath?: string
+  /** `claude --version`, when known: from 2.1.94 on it is asked for thinking summaries. */
+  claudeVersion?: string | null
   /** Arguments after the binary: the dispatch system prompt (Claude `--append-system-prompt`, Codex `-c …`). */
   extraArgs?: readonly string[]
 }
 
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
+
+/** The first Claude Code with `--thinking-display` (2.1.92 lacks it; there is no 2.1.93). An older one exits on it. */
+const THINKING_DISPLAY_SINCE = { major: 2, minor: 1, patch: 94, prerelease: [] }
+
+/**
+ * Current models send thinking without its text unless asked (display omitted); summarized gives the row under
+ * 「思考了 Ns」 something to open, as T3 Code, Paseo and Orca ask. Billed the same either way.
+ */
+function thinkingDisplayArgs(version: string | null | undefined): string[] {
+  const parsed = version ? parseSemver(version) : null
+  return parsed && compareSemver(parsed, THINKING_DISPLAY_SINCE) >= 0 ? ['--thinking-display', 'summarized'] : []
+}
 
 /** `[binary, ...args]` for the agent's GUI protocol; null for an agent without one. */
 export function guiArgv(input: GuiArgvInput): string[] | null {
@@ -51,7 +66,7 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
     const model = input.launch.model && MODEL.test(input.launch.model) ? ['--model', input.launch.model] : []
     // The saved 权限 / 计划 (Figma 56); 询问 is Claude's default (its --permission-mode has no `default` choice).
     const mode = input.launch.plan ? 'plan' : input.launch.permission && input.launch.permission !== 'ask' ? CLAUDE_MODE_OF[input.launch.permission] : undefined
-    return [binary, ...CLAUDE_STREAM_ARGS, ...(mode ? ['--permission-mode', mode] : []), ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
+    return [binary, ...CLAUDE_STREAM_ARGS, ...thinkingDisplayArgs(input.claudeVersion), ...(mode ? ['--permission-mode', mode] : []), ...resume, ...(input.claudeSettingsPath ? ['--settings', input.claudeSettingsPath] : []), ...(input.extraArgs ?? []), ...model]
   }
   if (driver.protocol === 'codex-app-server') {
     // Global `-c` overrides go before the subcommand; trust for this folder only, nothing written to ~/.codex.

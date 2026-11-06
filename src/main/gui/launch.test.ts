@@ -24,6 +24,20 @@ describe('guiArgv', () => {
     expect(mode({ permission: 'auto', plan: true })).toBe('plan')
   })
 
+  it('Claude: asks for thinking summaries from 2.1.94 on, the first version with --thinking-display', () => {
+    const display = (claudeVersion?: string | null) => {
+      const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch: {}, ...(claudeVersion !== undefined ? { claudeVersion } : {}) })!
+      const at = argv.indexOf('--thinking-display')
+      return at < 0 ? null : argv[at + 1]
+    }
+    expect(display('2.1.318')).toBe('summarized')
+    expect(display('2.1.94')).toBe('summarized')
+    expect(display('2.1.92')).toBeNull()
+    expect(display(null)).toBeNull()
+    expect(display()).toBeNull()
+    expect(guiArgv({ agent: 'codex', realCwd: '/r', launch: {}, claudeVersion: '2.1.318' })).not.toContain('--thinking-display')
+  })
+
   it('Claude: an unsafe resume id or model is left out', () => {
     const argv = guiArgv({ agent: 'claude', realCwd: '/r', launch: { model: '--danger' }, resume: '../x' })!
     expect(argv).not.toContain('--resume')

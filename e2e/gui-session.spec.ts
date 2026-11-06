@@ -106,6 +106,20 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(await feed().evaluate((el) => [el.scrollTop, el.scrollHeight <= el.clientHeight])).toEqual([0, true])
   })
 
+  test('「思考中」 pulses while Claude thinks; thinking with no text leaves no 「思考了」 row', async () => {
+    // The fake answers `--version` as 2.1.318, so Claude is asked for summaries.
+    await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)
+    const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[] }
+    expect(launched.args[launched.args.indexOf('--thinking-display') + 1]).toBe('summarized')
+    await send('think first')
+    const live = feed().getByText('思考中', { exact: true })
+    await expect(live).toBeVisible(WITHIN)
+    expect(await live.evaluate((el) => getComputedStyle(el).animationName)).toContain('thinking-pulse')
+    await expect(feed().getByText('Hello: think first')).toBeVisible(WITHIN)
+    await expect(live).toHaveCount(0)
+    await expect(feed().getByText(/^思考了/)).toHaveCount(0)
+  })
+
   test('answers a permission card from the GUI and the turn goes on', async () => {
     await send('please write a file')
     const card = page.getByTestId('gui-permission')
@@ -381,6 +395,17 @@ test.describe('F23 GUI session (Claude)', () => {
     await send('back to the end')
     await expect(feed().getByText('Hello: back to the end')).toBeVisible(WITHIN)
     await expect.poll(() => feed().evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), WITHIN).toBe(0)
+    // Longer than the view, at the end the last block sits 120 above the scroller's edge, clear of the composer
+    // (Claude's desktop app); a short scroller stands in for a long conversation.
+    const room = await feed().evaluate((el) => {
+      el.style.maxHeight = '100px'
+      el.scrollTop = el.scrollHeight
+      const last = el.firstElementChild?.lastElementChild
+      const gap = last ? el.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom : -1
+      el.style.maxHeight = ''
+      return Math.round(gap)
+    })
+    expect(room).toBe(120)
   })
 
   test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {
