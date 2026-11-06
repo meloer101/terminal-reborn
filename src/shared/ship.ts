@@ -56,9 +56,18 @@ export interface ShipMainRequest extends PrTarget {
 }
 
 export type ShipMainResult =
-  | { ok: true; commit: string; pushed: boolean; pushError?: string }
+  | {
+      ok: true
+      commit: string
+      pushed: boolean
+      pushError?: string
+      /** The push was refused because the base is protected: 改为创建 PR is the way on (not after a network error). */
+      pushRefused?: true
+    }
   | {
       ok: false
+      /** The ticked paths were committed before this step failed: a retry must not commit them again. */
+      committed?: true
       step: 'commit' | 'merge' | 'push'
       reason: 'blocked' | 'conflicts' | 'failed' | 'declined'
       message: string
@@ -67,6 +76,12 @@ export type ShipMainResult =
       /** The end of what git and its hooks printed. */
       output?: string
     }
+
+/** The retry of a failed push (ShipApi.pushBase). */
+export interface PushBaseRequest extends PrTarget {
+  /** The merge commit 合并到 main 并推送 kept: the push is refused when the base no longer has it. */
+  commit?: string
+}
 
 /** The diff of the worktree's branch from `since` to HEAD (a fix the agent committed, before Wavi pushes it). */
 export interface DiffSinceRequest extends PrTarget {
@@ -98,6 +113,8 @@ export interface ShipApi {
   /** The text the agent wrote, or null while the file is not there yet. */
   readHandoff(request: HandoffRequest): Promise<string | null>
   shipToMain(request: ShipMainRequest): Promise<ShipMainResult>
+  /** After 合并到 main 并推送 kept the merge but its push failed: pushes the base again (nothing is merged). */
+  pushBase(request: PushBaseRequest): Promise<ShipMainResult>
   diffSince(request: DiffSinceRequest): Promise<string | null>
   /** 丢弃 (Figma 29G): moves the worktree's branch back to `since` (a fix the brake stopped). Refuses with
    *  uncommitted changes or when `since` is not an ancestor of HEAD. */
@@ -121,6 +138,8 @@ export const SHIP_IPC = {
   readHandoff: 'ship:read-handoff',
   /** invoke(ShipMainRequest) → ShipMainResult */
   shipToMain: 'ship:to-main',
+  /** invoke(PushBaseRequest) → ShipMainResult */
+  pushBase: 'ship:push-base',
   /** invoke(DiffSinceRequest) → string | null */
   diffSince: 'ship:diff-since',
   /** invoke(DiffSinceRequest) → { ok } */
