@@ -217,10 +217,28 @@
   overflow-wrap: anywhere;
 }
 
+/* 「思考中」 while the agent thinks: the text breathes (T3 Code, Orca keep a live row like it); still under reduced
+   motion. */
 .thinkingLive {
   margin: 0;
   font: var(--text-body);
   color: var(--text-tertiary);
+  animation: thinking-pulse calc(2 * var(--duration-spin)) var(--ease-in-out) infinite alternate;
+}
+
+@keyframes thinking-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinkingLive {
+    animation: none;
+  }
 }
 
 .toolRow {

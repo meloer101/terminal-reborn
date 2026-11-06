@@ -106,6 +106,19 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(await feed().evaluate((el) => [el.scrollTop, el.scrollHeight <= el.clientHeight])).toEqual([0, true])
   })
 
+  test('「思考中」 pulses while Claude thinks; thinking with no text leaves no 「思考了」 row', async () => {
+    // The fake answers `--version` as 2.1.318, so Claude is asked for summaries.
+    const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[] }
+    expect(launched.args[launched.args.indexOf('--thinking-display') + 1]).toBe('summarized')
+    await send('think first')
+    const live = feed().getByText('思考中', { exact: true })
+    await expect(live).toBeVisible(WITHIN)
+    expect(await live.evaluate((el) => getComputedStyle(el).animationName)).toContain('thinking-pulse')
+    await expect(feed().getByText('Hello: think first')).toBeVisible(WITHIN)
+    await expect(live).toHaveCount(0)
+    await expect(feed().getByText(/^思考了/)).toHaveCount(0)
+  })
+
   test('answers a permission card from the GUI and the turn goes on', async () => {
     await send('please write a file')
     const card = page.getByTestId('gui-permission')

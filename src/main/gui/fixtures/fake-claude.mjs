@@ -1,14 +1,19 @@
 // A stand-in for `claude -p --input-format stream-json --output-format stream-json …` (PRD §6.17, the message shapes
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
 // "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
-// replays the message 1.5 s late. With CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real
-// CLI (`uuid` / `parentUuid`, a `--resume-session-at` resume hangs the next message under that message).
+// replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted). With
+// CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real CLI (`uuid` / `parentUuid`, a
+// `--resume-session-at` resume hangs the next message under that message). `--version` answers as Claude Code 2.1.318.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const SESSION = 'fake-claude-session'
 const args = process.argv.slice(2)
 const argAfter = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined)
+if (args[0] === '--version') {
+  process.stdout.write('2.1.318 (Claude Code)\n')
+  process.exit(0)
+}
 const transcript = process.env.CLAUDE_CONFIG_DIR
   ? join(process.env.CLAUDE_CONFIG_DIR, 'projects', process.cwd().replace(/[^A-Za-z0-9]/g, '-'), `${SESSION}.jsonl`)
   : null
@@ -42,6 +47,15 @@ const queue = []
 function startTurn(text) {
   turn = { text, waiting: null }
   out({ type: 'system', subtype: 'init', session_id: SESSION, model, permissionMode: 'default' })
+  if (!text.includes('think')) return reply(text)
+  out({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } }, session_id: SESSION })
+  setTimeout(() => {
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '', signature: 'EsYB' }] }, session_id: SESSION, parent_tool_use_id: null, thinking_duration_ms: 1200 })
+    reply(text)
+  }, 1200)
+}
+
+function reply(text) {
   out({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }, session_id: SESSION })
   out({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hel' } }, session_id: SESSION })
   out({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'lo' } }, session_id: SESSION })
