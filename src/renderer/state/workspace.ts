@@ -522,7 +522,8 @@ useWorkspace.subscribe((state, prev) => {
   const removed = removedSessionIds(state, prev)
   for (const id of removed) drafts.remove(id)
   if (removed.length > 0) pruneGroups(new Set(state.sessions.map((s) => s.id)))
-  requestSave()
+  // A new project or worktree reaches main before anything asks main to act on its folder.
+  requestSave(state.projects !== prev.projects || state.worktrees !== prev.worktrees)
 })
 
 if (fixtures) (globalThis as { __trWorkspace?: typeof useWorkspace }).__trWorkspace = useWorkspace

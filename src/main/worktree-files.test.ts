@@ -1,8 +1,19 @@
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import { classifyChange, inGeneratedFolder, isInside, normalizeRelative, resolveFileLinks, walkFiles, watchesRecursively } from './worktree-files'
+import { describe, expect, it, vi } from 'vitest'
+
+const handlers = vi.hoisted(() => new Map<string, (event: unknown, ...args: unknown[]) => unknown>())
+const workspaceDirs = vi.hoisted(() => new Set<string>())
+vi.mock('electron', () => ({
+  ipcMain: { handle: (channel: string, handler: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, handler), on: () => {} },
+  shell: { openPath: async () => '', showItemInFolder: () => {} }
+}))
+vi.mock('./workspace-store', () => ({ isWorkspaceDir: (path: string) => workspaceDirs.has(path) }))
+
+const { IPC } = await import('@shared/ipc')
+const { classifyChange, inGeneratedFolder, isInside, normalizeRelative, openAction, openWorktreeEntry, registerWorktreeFileHandlers, resolveFileLinks, walkFiles, watchesRecursively } =
+  await import('./worktree-files')
 
 describe('normalizeRelative', () => {
   it('accepts plain relative paths and the root', () => {
@@ -144,5 +155,72 @@ describe('a root that contains Desktop, Documents and Downloads (the home direct
     expect((await walkFiles(desktop, folders)).sort()).toEqual(['nested/deep.txt', 'todo.txt'])
     expect(watchesRecursively(desktop, folders)).toBe(true)
     expect(await resolveFileLinks(desktop, ['todo.txt', 'nested/deep.txt'], folders)).toEqual(['todo.txt', 'nested/deep.txt'])
+  })
+})
+
+describe('the IPC handlers take only the workspace’s own folders as a root', () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tr-wt-ipc-')))
+  writeFileSync(join(root, 'a.txt'), 'a\n')
+  workspaceDirs.add(root)
+  registerWorktreeFileHandlers()
+  const invoke = (channel: string, ...args: unknown[]) => Promise.resolve(handlers.get(channel)!({}, ...args))
+
+  it('lists, reads and resolves inside a workspace folder', async () => {
+    expect(await invoke(IPC.worktreeListDir, root, '')).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'a.txt' })]))
+    expect(await invoke(IPC.worktreeResolveLinks, root, ['a.txt'])).toEqual(['a.txt'])
+  })
+
+  it('refuses any other folder, however real (/, a folder above the workspace)', async () => {
+    const asks: Array<[string, ...unknown[]]> = [
+      [IPC.worktreeListDir, ''],
+      [IPC.worktreeReadFile, 'etc/hosts'],
+      [IPC.worktreeGitStatus],
+      [IPC.worktreeLineMarks, 'a.txt'],
+      [IPC.worktreeListFiles],
+      [IPC.worktreeResolveLinks, ['etc/hosts']],
+      [IPC.worktreeOpen, 'x']
+    ]
+    for (const other of ['/', tmpdir()]) {
+      for (const [channel, ...args] of asks) await expect(invoke(channel, other, ...args), channel).rejects.toThrow(/not a workspace folder/)
+    }
+  })
+})
+
+describe('用默认编辑器打开 never runs what it opens', () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tr-wt-open-')))
+  const file = (name: string, text: string, mode = 0o644) => {
+    writeFileSync(join(dir, name), text)
+    chmodSync(join(dir, name), mode)
+    return join(dir, name)
+  }
+  const folder = (name: string) => {
+    mkdirSync(join(dir, name), { recursive: true })
+    return join(dir, name)
+  }
+
+  it('opens plain files and folders as before', async () => {
+    expect(await openAction(file('notes.md', '# hi\n'))).toBe('open')
+    expect(await openAction(folder('src'))).toBe('open')
+  })
+
+  it('opens scripts that would run as text, and shows bundles and binaries in Finder', async () => {
+    expect(await openAction(file('deploy.command', 'rm -rf build\n'))).toBe('text')
+    expect(await openAction(file('shell.term', '<plist/>\n'))).toBe('text')
+    expect(await openAction(file('build.sh', 'make\n', 0o755))).toBe('text')
+    // Not executable, but a terminal app may be what opens .sh.
+    expect(await openAction(file('setup.sh', 'npm ci\n'))).toBe('text')
+    expect(await openAction(file('tool', 'bin\0ary', 0o755))).toBe('reveal')
+    expect(await openAction(folder('Tool.app'))).toBe('reveal')
+    expect(await openAction(folder('Setup.pkg'))).toBe('reveal')
+  })
+
+  it('hands each case to its opener', async () => {
+    const script = file('run.command', 'echo hi\n')
+    const bundle = folder('Other.app')
+    const plain = file('readme.txt', 'hi\n')
+    const calls: string[] = []
+    const openers = { openPath: async (p: string) => (calls.push(`open ${p}`), ''), openText: async (p: string) => (calls.push(`text ${p}`), ''), reveal: (p: string) => void calls.push(`reveal ${p}`) }
+    for (const path of [script, bundle, plain]) await openWorktreeEntry(path, openers)
+    expect(calls).toEqual([`text ${script}`, `reveal ${bundle}`, `open ${plain}`])
   })
 })

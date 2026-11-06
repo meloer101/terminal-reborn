@@ -29,7 +29,7 @@ import {
   type WorktreeRemoveResult
 } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
-import { isProjectRoot } from './workspace-store'
+import { addWorkspaceDirSource, isProjectRoot } from './workspace-store'
 import { git as runGit, resolveRoot } from './worktree-files'
 
 const MAX_PATH = 4096
@@ -230,6 +230,13 @@ async function details(realRoot: string, entry: PorcelainWorktree, info: BaseInf
  * Every worktree of the project's repository. With `only` (resolved paths), only those get their details read again;
  * the rest come back with `detailed: false` and the renderer keeps what it had.
  */
+/** Project root → the worktree paths git listed for it last (the Worktree view shows them, records or not). */
+const listed = new Map<string, readonly string[]>()
+
+export function listedWorktreePaths(): string[] {
+  return [...listed.values()].flat()
+}
+
 export async function listWorktrees(root: unknown, knownPaths: unknown, only?: unknown): Promise<GitWorktreeListing | null> {
   const realRoot = await projectRoot(root)
   const all = await readPorcelain(realRoot)
@@ -277,6 +284,7 @@ export async function listWorktrees(root: unknown, knownPaths: unknown, only?: u
       }
     }
   }
+  listed.set(realRoot, worktrees.map((w) => w.path))
   return { mainBranch: info.mainBranch, worktrees, realPaths }
 }
 
@@ -391,6 +399,7 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
 }
 
 export function registerGitWorktreeHandlers(): void {
+  addWorkspaceDirSource(listedWorktreePaths)
   ipcMain.handle(IPC.gitWorktreesList, (_event, root: unknown, knownPaths: unknown, only: unknown) => listWorktrees(root, knownPaths, only))
   ipcMain.handle(IPC.gitWorktreesRemove, (_event, root: unknown, path: unknown, force: unknown) => removeWorktree(root, path, force))
   ipcMain.on(IPC.gitWorktreesWatch, (event, root: unknown) => void startWatch(event.sender, root).catch(() => {}))

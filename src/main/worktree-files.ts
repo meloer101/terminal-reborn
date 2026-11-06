@@ -3,10 +3,11 @@
 import { execFile } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
 import { open, readdir, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join, posix, relative, sep } from 'node:path'
+import { extname, isAbsolute, join, posix, relative, sep } from 'node:path'
 import { ipcMain, shell, type WebContents } from 'electron'
 import { IPC } from '@shared/ipc'
 import { isGuarded, protectedInside } from './protected-folders'
+import { isWorkspaceDir } from './workspace-store'
 import {
   compareEntries,
   looksBinary,
@@ -308,26 +309,85 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
   forSender.set(root, entry)
 }
 
+/** Bundles: folders macOS runs (or installs) when they are opened. */
+const BUNDLES: ReadonlySet<string> = new Set(['.app', '.bundle', '.framework', '.plugin', '.prefpane', '.workflow', '.action', '.appex', '.xpc', '.kext', '.saver', '.qlgenerator', '.mdimporter', '.component', '.pkg', '.mpkg'])
+/**
+ * Files whose default app may run them: Terminal, Installer, the browser for a location file, and shell scripts, which
+ * a terminal app is often the default for (Ghostty takes .sh on the author's machine) whatever their mode.
+ */
+const RUNS_WHEN_OPENED: ReadonlySet<string> = new Set([
+  '.command', '.tool', '.terminal', '.term', '.pkg', '.mpkg', '.jar', '.fileloc', '.webloc', '.inetloc',
+  '.sh', '.bash', '.zsh', '.fish', '.csh', '.tcsh', '.ksh'
+])
+
+/**
+ * How 用默认编辑器打开 opens `abs` without running it: an ordinary file or folder with its default app ('open'), a
+ * script that would run (executable, or a type Terminal / Installer runs) in the default text editor ('text'), a
+ * bundle or a binary in Finder ('reveal').
+ */
+export async function openAction(abs: string): Promise<'open' | 'text' | 'reveal'> {
+  const info = await stat(abs)
+  const ext = extname(abs).toLowerCase()
+  if (info.isDirectory()) return BUNDLES.has(ext) ? 'reveal' : 'open'
+  if ((info.mode & 0o111) === 0 && !RUNS_WHEN_OPENED.has(ext)) return 'open'
+  const handle = await open(abs, 'r')
+  try {
+    const head = Buffer.alloc(8192)
+    const { bytesRead } = await handle.read(head, 0, head.length, 0)
+    return head.subarray(0, bytesRead).includes(0) ? 'reveal' : 'text'
+  } finally {
+    await handle.close()
+  }
+}
+
+export interface EntryOpeners {
+  openPath(abs: string): Promise<string>
+  openText(abs: string): Promise<string>
+  reveal(abs: string): void
+}
+
+/** Opens an entry of the 文件 view the way openAction says; '' or the error. */
+export async function openWorktreeEntry(abs: string, openers: EntryOpeners): Promise<string> {
+  const action = await openAction(abs)
+  if (action === 'reveal') {
+    openers.reveal(abs)
+    return ''
+  }
+  return action === 'text' ? openers.openText(abs) : openers.openPath(abs)
+}
+
+const openText = (abs: string): Promise<string> =>
+  new Promise((resolve) => execFile('open', ['-t', '--', abs], (error) => resolve(error ? error.message : '')))
+
+/**
+ * A root from the renderer, accepted only when it is one of the workspace's folders: without this a renderer could
+ * list, read or open anything the user can (`/`, the home folder).
+ */
+export function workspaceFolder(root: unknown): string {
+  if (typeof root !== 'string' || !isWorkspaceDir(root)) throw new Error('not a workspace folder')
+  return root
+}
+
 export function registerWorktreeFileHandlers(): void {
-  ipcMain.handle(IPC.worktreeListDir, (_event, root: unknown, dir: unknown) => listDir(root, dir))
-  ipcMain.handle(IPC.worktreeReadFile, (_event, root: unknown, path: unknown) => readPreview(root, path))
-  ipcMain.handle(IPC.worktreeGitStatus, (_event, root: unknown) => gitStatus(root))
-  ipcMain.handle(IPC.worktreeLineMarks, (_event, root: unknown, path: unknown) => lineMarks(root, path))
-  ipcMain.handle(IPC.worktreeListFiles, (_event, root: unknown) => listFiles(root))
-  ipcMain.handle(IPC.worktreeResolveLinks, (_event, root: unknown, paths: unknown) => resolveFileLinks(root, paths))
+  ipcMain.handle(IPC.worktreeListDir, async (_event, root: unknown, dir: unknown) => listDir(workspaceFolder(root), dir))
+  ipcMain.handle(IPC.worktreeReadFile, async (_event, root: unknown, path: unknown) => readPreview(workspaceFolder(root), path))
+  ipcMain.handle(IPC.worktreeGitStatus, async (_event, root: unknown) => gitStatus(workspaceFolder(root)))
+  ipcMain.handle(IPC.worktreeLineMarks, async (_event, root: unknown, path: unknown) => lineMarks(workspaceFolder(root), path))
+  ipcMain.handle(IPC.worktreeListFiles, async (_event, root: unknown) => listFiles(workspaceFolder(root)))
+  ipcMain.handle(IPC.worktreeResolveLinks, async (_event, root: unknown, paths: unknown) => resolveFileLinks(workspaceFolder(root), paths))
   ipcMain.handle(IPC.worktreeOpen, async (_event, root: unknown, path: unknown) => {
-    const { abs } = await resolveInside(await resolveRoot(root), path)
-    return shell.openPath(abs)
+    const { abs } = await resolveInside(await resolveRoot(workspaceFolder(root)), path)
+    return openWorktreeEntry(abs, { openPath: (p) => shell.openPath(p), openText, reveal: (p) => shell.showItemInFolder(p) })
   })
   ipcMain.on(IPC.worktreeReveal, (_event, root: unknown, path: unknown) => {
     void (async () => {
-      const realRoot = await resolveRoot(root)
+      const realRoot = await resolveRoot(workspaceFolder(root))
       const { rel, abs } = await resolveInside(realRoot, path)
       if (rel === '') await shell.openPath(abs)
       else shell.showItemInFolder(abs)
     })().catch(() => {})
   })
-  ipcMain.on(IPC.worktreeWatch, (event, root: unknown) => void startWatch(event.sender, root).catch(() => {}))
+  ipcMain.on(IPC.worktreeWatch, (event, root: unknown) => void (async () => startWatch(event.sender, workspaceFolder(root)))().catch(() => {}))
   ipcMain.on(IPC.worktreeUnwatch, (event, root: unknown) => {
     if (typeof root === 'string') stopWatch(event.sender, root)
   })

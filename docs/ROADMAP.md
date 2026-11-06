@@ -216,7 +216,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 批次 1 · 用户看得到的故障：GUI「总是允许」过滤 `setMode` / `userSettings`（`src/main/gui/claude-stream.ts`）；reattach 后重启的终端（`src/renderer/terminal/session-terminal.ts`）；空闲标题自愈只对 Claude（`src/shared/session-state-machine.ts`）；合并前测试可取消、和归档脚本互不打断（`src/main/repo-scripts.ts`）；登录 shell PATH 不被后台任务卡住（`src/main/agents-installed.ts`）；审阅 diff 用 `core.quotePath=false`（`src/main/git-graph.ts`、`background-review.ts`）
 - [x] 批次 2 · 低风险小修：同 id 重复启动时旧的超时不再杀掉新进程（`src/main/pty/late-spawn.ts`）；adopt 时保留上报的 agent（`src/main/hooks/bridge.ts`）；长写入按帧发给守护进程、不超过帧上限（`src/main/pty/validate.ts`）；AI 写的进程随退出清理、退出开始后不再启动（`src/main/pr-writer.ts`）；ACP 报错用 agent 名（`src/main/gui/host.ts`）；拖动时保存合并为每 100 ms 一次、退出时最后一份立即写盘（`src/renderer/state/persistence.ts`、`src/main/workspace-store.ts`）；冲突雷达复制 index 改异步（`src/main/conflict-radar.ts`）
 - [x] 批次 3 · Ship：推送失败后重试只推送 base（`ship.pushBase`，`src/main/ship.ts`）；`committed` / `pushRefused` 由 main 返回，网络失败不再提示「改为创建 PR」、提交前被拒时重试照样提交勾选的文件（`src/renderer/pull-requests/ship-runner.ts`，新增 `ship-runner.test.ts`）
-- [ ] 批次 4 · IPC 边界：worktree 文件 handler 校验 root 属于工作区，可执行文件不直接打开
+- [x] 批次 4 · IPC 边界：文件视图和仓库脚本的 IPC 只接受工作区里的目录（`isWorkspaceDir`，`src/main/worktree-files.ts`、`repo-scripts.ts`）；「用默认编辑器打开」不再运行脚本和应用包：可执行脚本用默认文本编辑器打开，应用包和二进制文件在 Finder 中显示；新项目、新 worktree 立即保存给 main；hook token 的同用户信任模型写进 CLAUDE.md
 - [ ] 批次 5 · 边界检查落地：dependency-cruiser（依赖方向、循环）、stylelint（字面 px），消掉 10 个运行时环
 - [ ] 批次 6 · 长流程迁到 main：自动修复、Ship、派活的运行状态由 main 持有并保存，重载后接上
 - [ ] 批次 7 · 每个 agent 一致：新建会话菜单列出全部 agent、自动修复按 hooks 判断、`AgentSpec` 描述就绪和状态规则
