@@ -2,6 +2,7 @@
 import { app, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '@shared/ipc'
+import { isQuitting } from './quit'
 import { WorkspaceFileStore } from './workspace-file-store'
 
 let store: WorkspaceFileStore | null = null
@@ -17,7 +18,11 @@ export function registerWorkspaceStore(): void {
   ipcMain.on(IPC.workspaceLoad, (event) => {
     event.returnValue = current.load()
   })
-  ipcMain.on(IPC.workspaceSave, (_event, raw: unknown) => current.save(raw))
+  ipcMain.on(IPC.workspaceSave, (_event, raw: unknown) => {
+    current.save(raw)
+    // A window closing during quit sends its last snapshot after before-quit: the debounce would not outlive the app.
+    if (isQuitting()) current.flush()
+  })
   // Anything still waiting for the debounce is written before the app goes away.
   app.on('before-quit', () => current.flush())
 }
