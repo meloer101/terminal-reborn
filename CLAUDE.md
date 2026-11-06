@@ -13,7 +13,7 @@ macOS terminal for running many CLI coding agents (Claude Code, Codex) in parall
 ```bash
 npm run dev        # app with hot reload (own "Wavi Dev" profile, never the installed app's)
 npm run app:install  # /Applications/Wavi.app linked to this checkout; `npm run build` updates it
-npm run check      # typecheck + lint + vitest — must pass before merging into main
+npm run check      # typecheck + lint + dependency rules (.dependency-cruiser.cjs) + vitest — must pass before merging into main
 npm run test:e2e   # build + Playwright Electron smoke test — the full run, before merging into main
 ```
 
