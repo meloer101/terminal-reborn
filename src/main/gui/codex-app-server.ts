@@ -142,7 +142,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
         if (!done) return []
         const summary = (Array.isArray(item.summary) ? item.summary : []).filter((s): s is string => typeof s === 'string').join('\n\n').trim()
         const ms = typeof item.completedAtMs === 'number' && typeof item.startedAtMs === 'number' ? item.completedAtMs - item.startedAtMs : undefined
-        return [...endLive(id), put(id, { kind: 'thinking', id, at, text: clip(summary, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}) })]
+        // No summary, nothing to open: the reasoning leaves no row.
+        return summary ? [...endLive(id), put(id, { kind: 'thinking', id, at, text: clip(summary, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}) })] : endLive(id)
       }
       case 'commandExecution': {
         const exit = typeof item.exitCode === 'number' ? item.exitCode : null

@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { ipcMain } from 'electron'
-import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { AGENT_GUI } from '@shared/gui-agents'
 import { IPC, type AgentAvailability, type AgentVersions } from '@shared/ipc'
 
@@ -132,21 +132,32 @@ function runVersion(path: string): Promise<string | null> {
   })
 }
 
-let versionsOnce: Promise<AgentVersions> | null = null
+const versionOnce = new Map<CliAgent, Promise<string | null | undefined>>()
+
+/**
+ * `--version` of one agent CLI; undefined when it is not on the login shell's PATH. Alone, so a GUI launch waits for
+ * its own agent only, not the slowest of all. A version read is kept for the app run; no answer (not installed, timed
+ * out, nothing version-like) is asked again next time.
+ */
+export function agentVersion(id: CliAgent, shell: string = process.env.SHELL || '/bin/zsh'): Promise<string | null | undefined> {
+  let version = versionOnce.get(id)
+  if (!version) {
+    version = userLoginPath(shell).then((loginPath) => {
+      const path = executableOnPath(loginPath ?? process.env.PATH ?? '', AGENT_SPECS[id].binary)
+      return path ? runVersion(path) : undefined
+    })
+    versionOnce.set(id, version)
+    void version.then((answer) => {
+      if (typeof answer !== 'string') versionOnce.delete(id)
+    })
+  }
+  return version
+}
 
 /** `--version` of every installed agent CLI, once per app run (设置 · 智能体). */
-export function agentVersions(shell: string = process.env.SHELL || '/bin/zsh'): Promise<AgentVersions> {
-  versionsOnce ??= userLoginPath(shell).then(async (loginPath) => {
-    const pathValue = loginPath ?? process.env.PATH ?? ''
-    const entries = await Promise.all(
-      CLI_AGENTS.map(async (id) => {
-        const path = executableOnPath(pathValue, AGENT_SPECS[id].binary)
-        return path ? ([id, await runVersion(path)] as const) : null
-      })
-    )
-    return Object.fromEntries(entries.filter((e) => e !== null)) as AgentVersions
-  })
-  return versionsOnce
+export async function agentVersions(shell: string = process.env.SHELL || '/bin/zsh'): Promise<AgentVersions> {
+  const entries = await Promise.all(CLI_AGENTS.map(async (id) => [id, await agentVersion(id, shell)] as const))
+  return Object.fromEntries(entries.filter(([, version]) => version !== undefined)) as AgentVersions
 }
 
 export function registerAgentDetection(): void {

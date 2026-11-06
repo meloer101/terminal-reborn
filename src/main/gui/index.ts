@@ -11,6 +11,7 @@ import type { CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
 import { GUI_IPC, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
 import type { HookJournalEntry } from '../../pty-host/protocol'
+import { agentVersion } from '../agents-installed'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
 import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
 import { defaultAgentDataDirs } from '../hooks/agent-title'
@@ -56,14 +57,19 @@ async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | u
   // Claude keeps its hooks under -p (PRD §6.17): status, titles and the phone work as for a TUI. Marked first, so its
   // PermissionRequest hook is never held.
   if (claude) setGuiSession(launch.sessionId, true)
+  // Asked alongside the hooks and dispatch. Unknown (not on PATH, no answer in 5 s): launched without the flags an
+  // older Claude would exit on.
+  const version = claude ? agentVersion('claude').catch(() => null) : undefined
   const hooks = claude ? await prepareAgentLaunch(launch.sessionId, owner, 'claude', { deferStartWatchdog: true, cwd: realCwd }) : null
   const dispatch = await dispatchLaunchFor(launch.sessionId, launch.agent, { child: launch.dispatched === true })
+  const claudeVersion = await version
   const argv = guiArgv({
     agent: launch.agent,
     realCwd,
     launch,
     ...(resume ? { resume } : {}),
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
+    ...(claudeVersion ? { claudeVersion } : {}),
     extraArgs: dispatch && takesSystemPromptArgs(driver.protocol) ? dispatch.extraArgs : []
   })
   if (!argv) throw new Error('这个智能体只能用 CLI')

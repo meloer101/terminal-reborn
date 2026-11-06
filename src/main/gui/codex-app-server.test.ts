@@ -52,6 +52,15 @@ describe('createCodexNormalizer', () => {
     expect(n.notification('error', { error: { message: 'Reconnecting... 1/5' }, willRetry: true })).toEqual([])
     expect(fold(n.notification('error', { error: { message: 'unexpected status 503' }, willRetry: false })).items[0]).toMatchObject({ kind: 'system', text: 'unexpected status 503' })
   })
+
+  it('shows reasoning only with a summary to open', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    const s = fold([
+      ...n.notification('item/completed', { item: { type: 'reasoning', id: 'r1', summary: [], content: [], startedAtMs: 1000, completedAtMs: 3000 } }),
+      ...n.notification('item/completed', { item: { type: 'reasoning', id: 'r2', summary: ['**Checking tests**'], content: [], startedAtMs: 4000, completedAtMs: 5500 } })
+    ])
+    expect(s.items).toEqual([{ kind: 'thinking', id: 'r2', at: 4000, text: '**Checking tests**', ms: 1500 }])
+  })
 })
 
 describe('codexAnswerResult', () => {
