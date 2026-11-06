@@ -39,6 +39,10 @@ export class SessionTerminal {
   private ackPending = 0
   private ackTimer: ReturnType<typeof setTimeout> | null = null
   private readonly cleanups: Array<() => void> = []
+  /** Input, resize, exit and marker listeners are wired (once, whichever way the process started). */
+  private listening = false
+  /** After a reattach: lets every chunk through again, for a respawned process whose stream position restarts at 0. */
+  private passAllOutput: (() => void) | null = null
   /** Output arrived since the last snapshot. */
   private dirty = false
   /** A pane shows this terminal; the PTY host gives a hidden one far less output in flight (pty-host/flow-control.ts). */
@@ -115,6 +119,8 @@ export class SessionTerminal {
 
   /** Input, resize, exit and launch-marker listeners (output is wired by the caller). */
   private listen(): void {
+    if (this.listening) return
+    this.listening = true
     const pty = window.tr.pty
     const id = this.sessionId
     const input = this.surface.onInput((data) => this.sendInput(data))
@@ -171,6 +177,9 @@ export class SessionTerminal {
       return false
     }
     this.cleanups.push(offData)
+    this.passAllOutput = () => {
+      covered = 0
+    }
     await this.surface.reattach(result.screen)
     if (this.disposed) return true
     covered = result.seq
@@ -242,6 +251,10 @@ export class SessionTerminal {
     // The dead process may have left the alternate screen, mouse reporting etc. switched on.
     this.surface.write('\x1b[?1049l\x1b[!p')
     this.surface.write(dim('[终端进程已重启]'))
+    // A terminal that reattached keeps that output listener: the new process's chunks count from 0 again. One that
+    // reattached to an exited process never wired its input, resize and exit listeners.
+    this.passAllOutput?.()
+    this.listen()
     return this.spawnProcess(resumeAgentSessionId)
   }
 
