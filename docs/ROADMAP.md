@@ -217,7 +217,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 批次 2 · 低风险小修：同 id 重复启动时旧的超时不再杀掉新进程（`src/main/pty/late-spawn.ts`）；adopt 时保留上报的 agent（`src/main/hooks/bridge.ts`）；长写入按帧发给守护进程、不超过帧上限（`src/main/pty/validate.ts`）；AI 写的进程随退出清理、退出开始后不再启动（`src/main/pr-writer.ts`）；ACP 报错用 agent 名（`src/main/gui/host.ts`）；拖动时保存合并为每 100 ms 一次、退出时最后一份立即写盘（`src/renderer/state/persistence.ts`、`src/main/workspace-store.ts`）；冲突雷达复制 index 改异步（`src/main/conflict-radar.ts`）
 - [x] 批次 3 · Ship：推送失败后重试只推送 base（`ship.pushBase`，`src/main/ship.ts`）；`committed` / `pushRefused` 由 main 返回，网络失败不再提示「改为创建 PR」、提交前被拒时重试照样提交勾选的文件（`src/renderer/pull-requests/ship-runner.ts`，新增 `ship-runner.test.ts`）
 - [x] 批次 4 · IPC 边界：文件视图和仓库脚本的 IPC 只接受工作区里的目录（`isWorkspaceDir`，`src/main/worktree-files.ts`、`repo-scripts.ts`）；「用默认编辑器打开」不再运行脚本和应用包：可执行脚本用默认文本编辑器打开，应用包和二进制文件在 Finder 中显示；新项目、新 worktree 立即保存给 main；hook token 的同用户信任模型写进 CLAUDE.md
-- [ ] 批次 5 · 边界检查落地：dependency-cruiser（依赖方向、循环）、stylelint（字面 px），消掉 10 个运行时环
+- [x] 批次 5 · 边界检查落地：`npm run check` 跑 `lint:deps`（dependency-cruiser，`.dependency-cruiser.cjs`：shared 只依赖自己，renderer 只经 `window.tr`，main 没有界面代码，pty-host / 守护进程独立——守护进程共用 main 里两个只依赖 node 的模块，没有运行时循环依赖），原有的 11 个运行时环都拆掉了（终端的链接、右键菜单、Run 改由 `terminal/handlers.ts` 交给终端）；样式里间距、圆角的字面 px 和十六进制颜色用 `src/renderer/styles/token-usage.test.ts` 按文件计数，只许减少（当前 24 个文件 82 处），新文件不许有
 - [ ] 批次 6 · 长流程迁到 main：自动修复、Ship、派活的运行状态由 main 持有并保存，重载后接上
 - [ ] 批次 7 · 每个 agent 一致：新建会话菜单列出全部 agent、自动修复按 hooks 判断、`AgentSpec` 描述就绪和状态规则
 - [ ] 批次 8 · git / 子进程调用收敛到一处（env、超时、进程组清理、限流）
