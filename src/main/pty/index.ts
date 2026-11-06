@@ -28,7 +28,7 @@ import { daemonLocation, openDaemon } from './daemon-client'
 import { replacePendingStart, shouldKillLateSpawn } from './late-spawn'
 import { HostPipeLink, LocalPipeLink, PipeLinkRouter, pipeHosting, setPipeLink } from './pipes'
 import { assertCwdExists } from './preflight'
-import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData } from './validate'
+import { parseAckCount, parseSessionId, parseSize, parseSpawnOptions, parseVisible, parseWriteData, writeFrames } from './validate'
 
 const SPAWN_TIMEOUT_MS = 10_000
 const ATTACH_TIMEOUT_MS = 5_000
@@ -589,7 +589,8 @@ export function registerPtyHandlers(): void {
 
   ipcMain.on(IPC.ptyWrite, (event, sessionId: unknown, data: unknown) => {
     const id = ownedSession(event.sender, sessionId)
-    if (id) send({ type: 'write', id, data: parseWriteData(data) })
+    if (!id) return
+    for (const frame of writeFrames(parseWriteData(data))) send({ type: 'write', id, data: frame })
   })
 
   ipcMain.on(IPC.ptyResize, (event, sessionId: unknown, cols: unknown, rows: unknown) => {
