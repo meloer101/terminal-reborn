@@ -25,6 +25,7 @@ function ask(method, params, then) {
 
 function runPrompt(id, params) {
   const text = params.prompt.find((b) => b.type === 'text')?.text ?? ''
+  if (text.includes('refuse')) return out({ id, result: { stopReason: 'refusal' } })
   prompt = { id }
   const go = () => {
     update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi ' } })
