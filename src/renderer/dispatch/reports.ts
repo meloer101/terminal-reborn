@@ -11,7 +11,7 @@ import { submitPrompt } from '../session-io'
 import { useAttemptGroups } from '../state/attempt-groups'
 import { useWorkspace } from '../state/workspace'
 import { typingIn } from '../terminal/typing'
-import { checksOf, conflictsOf, childrenOf } from './handler'
+import { checksOf, conflictsOf, childrenOf } from './places'
 import { addHeld, heldReports, queueOf, setMessage, setQueue, setReported, takeHeld, useDispatch, type HeldItem } from './store'
 
 const timers = new Map<SessionId, number>()

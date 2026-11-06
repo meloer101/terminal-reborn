@@ -18,7 +18,7 @@ import {
   type MemberState
 } from '@shared/attempt-groups'
 import type { Session, SessionId } from '@shared/types'
-import { checksOf } from '../dispatch/handler'
+import { checksOf } from '../dispatch/places'
 import { deliverTo } from '../dispatch/reports'
 import { useDispatch } from '../dispatch/store'
 import { submitPrompt } from '../session-io'
