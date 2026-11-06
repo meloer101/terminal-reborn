@@ -68,8 +68,8 @@ describe('styles use the tokens (CLAUDE.md Conventions)', () => {
   })
 
   it('has no file worse than when the check was added, and new files start clean', () => {
-    const counts = Object.fromEntries(cssFiles(ROOT).map((path) => [relative(ROOT, path), violations(readFileSync(path, 'utf8'))]))
-    const worse = Object.entries(counts).filter(([file, count]) => count > (BASELINE[file] ?? 0))
+    const counts = cssFiles(ROOT).map((path): [string, number] => [relative(ROOT, path), violations(readFileSync(path, 'utf8'))])
+    const worse = counts.filter(([file, count]) => count > (BASELINE[file] ?? 0))
     expect(worse, 'use the variables in src/renderer/styles/tokens.css').toEqual([])
   })
 })

@@ -18,5 +18,7 @@
       "@renderer/*": ["./src/renderer/*"]
     }
   },
-  "include": ["./src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/preload/*.d.ts", "src/shared/**/*.ts"]
+  "include": ["./src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/preload/*.d.ts", "src/shared/**/*.ts"],
+  // Reads the stylesheets from disk in node: type-checked with the node config.
+  "exclude": ["src/renderer/styles/token-usage.test.ts"]
 }
