@@ -3,6 +3,7 @@
 // their icons pick the view. The content always follows the active session's worktree.
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useActiveSession, useWorkspace, type PanelView } from '../state/workspace'
+import { PANEL_VIEW_LABEL } from '../state/workspace-model'
 import { PANEL_WIDTH_DEFAULT } from '@shared/workspace-file'
 import { BrowserView } from './browser/BrowserView'
 import { FilesView } from './files/FilesView'
@@ -12,8 +13,6 @@ import { PaneHeader } from './PaneHeader'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { startColumnResize } from '../ui/column-resize'
 import styles from './RightPanel.module.css'
-
-export const PANEL_VIEW_LABEL: Record<PanelView, string> = { browser: '浏览器', git: 'Git', worktree: 'Worktree', files: '文件' }
 
 export function RightPanel({ view }: { view: PanelView }) {
   const active = useActiveSession()

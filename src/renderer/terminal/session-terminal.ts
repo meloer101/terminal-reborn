@@ -4,14 +4,12 @@ import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import { parseScriptMarker, SCRIPT_MARKER_OSC } from '@shared/script-launch'
 import { QuietTimer } from '@shared/quiet-timer'
 import type { AgentKind, SessionId } from '@shared/types'
-import { handleTerminalLink, resolveSessionPaths } from '../state/link-actions'
 import { emitAgentMarker, issueFromSpawnError, reportLaunchIssue } from '../lifecycle/launch-issues'
-import { takeRunStart } from '../scripts/run-script'
 import { forgetSetup, handleScriptMarker, takeSetup } from '../scripts/setup-runs'
 import { loadLiveSessions, takeReattach } from './live-sessions'
+import { terminalHandlers } from './handlers'
 import { uncovered } from './reattach-payload'
 import { XtermSurface } from './xterm-surface'
-import { openTerminalMenu } from '../attempts/terminal-menu'
 import { takeDispatchLaunch } from '../dispatch/store'
 import { useWorkspace } from '../state/workspace'
 import { noteInput } from './typing'
@@ -60,9 +58,9 @@ export class SessionTerminal {
   ) {
     // Links in the output open in the built-in browser, file paths in the 文件 view (PRD F17); the surface drops
     // the listener and the resolver when disposed.
-    this.surface.onLink((link) => handleTerminalLink(sessionId, link))
-    this.surface.setPathResolver((paths) => resolveSessionPaths(sessionId, paths))
-    this.surface.onContextMenu((at) => void openTerminalMenu(sessionId, at))
+    this.surface.onLink((link) => terminalHandlers().link(sessionId, link))
+    this.surface.setPathResolver((paths) => terminalHandlers().resolvePaths(sessionId, paths))
+    this.surface.onContextMenu((at) => terminalHandlers().contextMenu(sessionId, at))
   }
 
   /** The PTY is running (spawn requested, not exited, not disposed). */
@@ -208,7 +206,7 @@ export class SessionTerminal {
     const id = this.sessionId
     const { cols, rows } = this.surface.fit()
     // A new worktree's first launch runs the repository's setup script first; the Run button's terminal runs `run`.
-    const script = takeSetup(id) ? 'setup' : takeRunStart(id) ? 'run' : undefined
+    const script = takeSetup(id) ? 'setup' : terminalHandlers().takeRunStart(id) ? 'run' : undefined
     // A dispatched session's first launch carries its task on the command line (PRD F21); a resume never does.
     const dispatched = resumeAgentSessionId ? undefined : takeDispatchLaunch(id)
     const child = useWorkspace.getState().sessions.some((s) => s.id === id && s.dispatchedBy !== undefined)

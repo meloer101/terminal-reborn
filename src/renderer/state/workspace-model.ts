@@ -26,6 +26,9 @@ export const DEFAULT_SESSION_TITLE: Record<AgentKind, string> = {
   shell: '终端'
 }
 
+/** The right panel's views as the panel and the session header name them. */
+export const PANEL_VIEW_LABEL: Record<PersistedRightPanel, string> = { browser: '浏览器', git: 'Git', worktree: 'Worktree', files: '文件' }
+
 export type MakeId = (prefix: string) => string
 
 export const randomId: MakeId = (prefix) => `${prefix}-${crypto.randomUUID().slice(0, 8)}`

@@ -24,14 +24,12 @@ import {
   type WaviResult
 } from '@shared/dispatch'
 import { DEFAULT_SETTINGS, type DispatchSettings } from '@shared/settings'
-import { checksText, turnCheckView } from '@shared/turn-checks'
-import type { Project, Session, SessionId, Worktree } from '@shared/types'
-import { markFor, useRadar } from '../conflict-radar/store'
+import type { Session, SessionId } from '@shared/types'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
 import { interruptAgent } from '../session-io'
-import { useSessionMeta } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
+import { checksOf, childrenOf, conflictsOf, placeOf, type Place } from './places'
 import { deliverMessage, queueReport } from './reports'
 import { addConfirm, queueOf, setLaunch, setQueue, setReported, takeConfirms, useDispatch, type PendingStart } from './store'
 
@@ -42,28 +40,6 @@ export function setDispatchSettings(next: DispatchSettings): void {
 }
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
-
-export interface Place {
-  session: Session
-  worktree: Worktree
-  project: Project
-}
-
-export function placeOf(id: SessionId): Place | null {
-  const state = useWorkspace.getState()
-  const session = state.sessions.find((s) => s.id === id)
-  const worktree = session && state.worktrees.find((w) => w.id === session.worktreeId)
-  const project = worktree && state.projects.find((p) => p.id === worktree.projectId)
-  return session && worktree && project ? { session, worktree, project } : null
-}
-
-/** The sessions this one dispatched, listed ones first (an archived child is still its child). */
-export function childrenOf(parentId: SessionId): Place[] {
-  return useWorkspace
-    .getState()
-    .sessions.filter((s) => s.dispatchedBy === parentId)
-    .flatMap((s) => placeOf(s.id) ?? [])
-}
 
 const isOpen = (place: Place): boolean => !place.worktree.archived
 
@@ -320,15 +296,6 @@ async function changesText(place: Place): Promise<{ text: string; files: string[
   } catch {
     return { text: 'unknown', files: [], size: 0 }
   }
-}
-
-export function checksOf(id: SessionId): string | undefined {
-  const view = turnCheckView(useSessionMeta.getState().bySession[id]?.checks)
-  return view ? checksText(view) : undefined
-}
-
-export function conflictsOf(place: Place): string | undefined {
-  return markFor(useRadar.getState().byRoot[place.project.rootPath], place.worktree.path)?.label
 }
 
 async function list(caller: Place): Promise<WaviResult> {

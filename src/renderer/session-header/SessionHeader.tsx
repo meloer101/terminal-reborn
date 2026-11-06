@@ -4,7 +4,7 @@ import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'reac
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
 import { useWorktreeCreations } from '../new-session/creation'
-import { PANEL_VIEW_LABEL } from '../panels/RightPanel'
+import { PANEL_VIEW_LABEL } from '../state/workspace-model'
 import { pressRun, runAction, runSessionOf, useRepoScripts, useRunRunning, type RunAction } from '../scripts/run-script'
 import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
 import { MAIN_WINDOW } from '@shared/window-layout'

@@ -163,6 +163,11 @@ function focus(win: BrowserWindow): void {
 
 /** `showMain` shows (or recreates) the main window and focuses it; `mainPage` is its page, the only one with windows. */
 export function registerSecondaryWindowHandlers(showMain: () => void, mainPage: () => WebContents | null): void {
+  // A scheduled 继续 (PRD F11) must keep time in a hidden window; only while one waits, so hidden windows stay cheap.
+  ipcMain.on(IPC.appKeepTimers, (event, raw: unknown) => {
+    if (typeof raw !== 'boolean' || event.sender.isDestroyed()) return
+    setKeepTimers(event.sender, raw)
+  })
   ipcMain.on(IPC.uiWindowFocus, (event, key: unknown) => {
     if (key === 'main') {
       if (event.sender === mainPage()) showMain()
