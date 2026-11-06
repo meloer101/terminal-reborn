@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 const roots = new Set<string>()
 vi.mock('./workspace-store', () => ({ isProjectRoot: (path: string) => roots.has(path) }))
 
-const { listWorktrees, removeWorktree } = await import('./git-worktrees')
+const { listedWorktreePaths, listWorktrees, removeWorktree } = await import('./git-worktrees')
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-git-worktrees-')))
 const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -53,6 +53,8 @@ describe('listWorktrees / removeWorktree on real repositories', () => {
     const freshInfo = await byPath(root, fresh)
     expect(freshInfo).toMatchObject({ branch: 'fresh', ahead: 0, behind: 2, merged: false, dirtyCount: 0 })
     expect(await byPath(root, done)).toMatchObject({ branch: 'done', ahead: 0, merged: true })
+    // Listed for a workspace project: the Worktree view may open them though the workspace has no record of them.
+    expect(listedWorktreePaths()).toEqual(expect.arrayContaining([fresh, done]))
   })
 
   it('reports git failures as unknown and refuses to remove (even with force)', async () => {

@@ -12,9 +12,20 @@ export function isProjectRoot(path: string): boolean {
   return store?.projectRoots().includes(path) ?? false
 }
 
-/** Whether `path` is one of the workspace's folders (a project root or a worktree), as the renderer last saved it. */
+/** More folders that count as the workspace's: the worktrees git lists for its projects (git-worktrees.ts). */
+const dirSources: Array<() => readonly string[]> = []
+
+export function addWorkspaceDirSource(source: () => readonly string[]): void {
+  dirSources.push(source)
+}
+
+/**
+ * Whether `path` is one of the workspace's folders: a project root or worktree the renderer last saved, or a worktree
+ * git lists for one of those projects (made in a terminal, say). The renderer declares them: this keeps a wrong or
+ * stray path out, it is not a boundary against a renderer that is not ours.
+ */
 export function isWorkspaceDir(path: string): boolean {
-  return store?.workspaceDirs().includes(path) ?? false
+  return (store?.workspaceDirs().includes(path) ?? false) || dirSources.some((source) => source().includes(path))
 }
 
 /**

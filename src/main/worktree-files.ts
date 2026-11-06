@@ -310,9 +310,15 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
 }
 
 /** Bundles: folders macOS runs (or installs) when they are opened. */
-const BUNDLES: ReadonlySet<string> = new Set(['.app', '.bundle', '.framework', '.plugin', '.prefpane', '.workflow', '.action', '.appex', '.xpc', '.kext', '.saver', '.qlgenerator', '.mdimporter', '.component'])
-/** Files whose default app runs them (Terminal, Installer, the browser for a location file …). */
-const RUNS_WHEN_OPENED: ReadonlySet<string> = new Set(['.command', '.tool', '.terminal', '.pkg', '.mpkg', '.jar', '.fileloc', '.webloc', '.inetloc'])
+const BUNDLES: ReadonlySet<string> = new Set(['.app', '.bundle', '.framework', '.plugin', '.prefpane', '.workflow', '.action', '.appex', '.xpc', '.kext', '.saver', '.qlgenerator', '.mdimporter', '.component', '.pkg', '.mpkg'])
+/**
+ * Files whose default app may run them: Terminal, Installer, the browser for a location file, and shell scripts, which
+ * a terminal app is often the default for (Ghostty takes .sh on the author's machine) whatever their mode.
+ */
+const RUNS_WHEN_OPENED: ReadonlySet<string> = new Set([
+  '.command', '.tool', '.terminal', '.term', '.pkg', '.mpkg', '.jar', '.fileloc', '.webloc', '.inetloc',
+  '.sh', '.bash', '.zsh', '.fish', '.csh', '.tcsh', '.ksh'
+])
 
 /**
  * How 用默认编辑器打开 opens `abs` without running it: an ordinary file or folder with its default app ('open'), a

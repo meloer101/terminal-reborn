@@ -171,10 +171,17 @@ describe('the IPC handlers take only the workspace’s own folders as a root', (
   })
 
   it('refuses any other folder, however real (/, a folder above the workspace)', async () => {
+    const asks: Array<[string, ...unknown[]]> = [
+      [IPC.worktreeListDir, ''],
+      [IPC.worktreeReadFile, 'etc/hosts'],
+      [IPC.worktreeGitStatus],
+      [IPC.worktreeLineMarks, 'a.txt'],
+      [IPC.worktreeListFiles],
+      [IPC.worktreeResolveLinks, ['etc/hosts']],
+      [IPC.worktreeOpen, 'x']
+    ]
     for (const other of ['/', tmpdir()]) {
-      await expect(invoke(IPC.worktreeListDir, other, '')).rejects.toThrow(/not a workspace folder/)
-      await expect(invoke(IPC.worktreeReadFile, other, 'etc/hosts')).rejects.toThrow(/not a workspace folder/)
-      await expect(invoke(IPC.worktreeOpen, other, 'x')).rejects.toThrow(/not a workspace folder/)
+      for (const [channel, ...args] of asks) await expect(invoke(channel, other, ...args), channel).rejects.toThrow(/not a workspace folder/)
     }
   })
 })
@@ -186,27 +193,34 @@ describe('用默认编辑器打开 never runs what it opens', () => {
     chmodSync(join(dir, name), mode)
     return join(dir, name)
   }
-  mkdirSync(join(dir, 'Tool.app'))
-  mkdirSync(join(dir, 'src'))
+  const folder = (name: string) => {
+    mkdirSync(join(dir, name), { recursive: true })
+    return join(dir, name)
+  }
 
   it('opens plain files and folders as before', async () => {
     expect(await openAction(file('notes.md', '# hi\n'))).toBe('open')
-    expect(await openAction(join(dir, 'src'))).toBe('open')
+    expect(await openAction(folder('src'))).toBe('open')
   })
 
   it('opens scripts that would run as text, and shows bundles and binaries in Finder', async () => {
     expect(await openAction(file('deploy.command', 'rm -rf build\n'))).toBe('text')
+    expect(await openAction(file('shell.term', '<plist/>\n'))).toBe('text')
     expect(await openAction(file('build.sh', 'make\n', 0o755))).toBe('text')
+    // Not executable, but a terminal app may be what opens .sh.
+    expect(await openAction(file('setup.sh', 'npm ci\n'))).toBe('text')
     expect(await openAction(file('tool', 'bin\0ary', 0o755))).toBe('reveal')
-    expect(await openAction(join(dir, 'Tool.app'))).toBe('reveal')
+    expect(await openAction(folder('Tool.app'))).toBe('reveal')
+    expect(await openAction(folder('Setup.pkg'))).toBe('reveal')
   })
 
   it('hands each case to its opener', async () => {
+    const script = file('run.command', 'echo hi\n')
+    const bundle = folder('Other.app')
+    const plain = file('readme.txt', 'hi\n')
     const calls: string[] = []
     const openers = { openPath: async (p: string) => (calls.push(`open ${p}`), ''), openText: async (p: string) => (calls.push(`text ${p}`), ''), reveal: (p: string) => void calls.push(`reveal ${p}`) }
-    await openWorktreeEntry(join(dir, 'deploy.command'), openers)
-    await openWorktreeEntry(join(dir, 'Tool.app'), openers)
-    await openWorktreeEntry(join(dir, 'notes.md'), openers)
-    expect(calls).toEqual([`text ${join(dir, 'deploy.command')}`, `reveal ${join(dir, 'Tool.app')}`, `open ${join(dir, 'notes.md')}`])
+    for (const path of [script, bundle, plain]) await openWorktreeEntry(path, openers)
+    expect(calls).toEqual([`text ${script}`, `reveal ${bundle}`, `open ${plain}`])
   })
 })

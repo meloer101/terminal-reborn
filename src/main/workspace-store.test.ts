@@ -16,7 +16,7 @@ vi.mock('electron', () => ({
 }))
 
 const { IPC } = await import('@shared/ipc')
-const { registerWorkspaceStore, workspaceQuitting } = await import('./workspace-store')
+const { addWorkspaceDirSource, isWorkspaceDir, registerWorkspaceStore, workspaceQuitting } = await import('./workspace-store')
 
 const file = (draft: string) => ({
   version: 2,
@@ -28,6 +28,18 @@ const file = (draft: string) => ({
   rightPanel: null,
   collapsedProjectIds: [],
   drafts: { s1: draft }
+})
+
+describe('isWorkspaceDir', () => {
+  it('knows the saved projects and worktrees, and what a source adds (git’s worktrees of those projects)', () => {
+    registerWorkspaceStore()
+    handlers.get(IPC.workspaceSave)!({}, file('x'))
+    expect(isWorkspaceDir('/code/acme')).toBe(true)
+    expect(isWorkspaceDir('/code/acme-wt')).toBe(false)
+    addWorkspaceDirSource(() => ['/code/acme-wt'])
+    expect(isWorkspaceDir('/code/acme-wt')).toBe(true)
+    expect(isWorkspaceDir('/')).toBe(false)
+  })
 })
 
 describe('workspace store during quit', () => {
