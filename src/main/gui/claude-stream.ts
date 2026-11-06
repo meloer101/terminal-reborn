@@ -16,6 +16,7 @@ import {
   type GuiQuestion
 } from '@shared/gui-chat'
 import { createChatParser, type ChatParser } from '@shared/transcript-chat'
+import { safeSuggestions } from '../hooks/normalize'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -160,7 +161,8 @@ export function createClaudeStreamNormalizer(cwd: string, now: () => number = Da
             requestId,
             tool: str(request.tool_name) ?? 'Tool',
             input: isRec(request.input) ? request.input : {},
-            suggestions: Array.isArray(request.permission_suggestions) ? request.permission_suggestions : []
+            // Filtered here, so 总是允许 is offered only when it would allow something (PRD §6.6).
+            suggestions: safeSuggestions(request.permission_suggestions)
           }
           waiting.set(requestId, pending)
           return [{ type: 'prompt', prompt: promptOf(pending, str(request.description), cwd) }]
@@ -251,6 +253,7 @@ export function claudeAnswerResponse(pending: ClaudePending, answer: GuiAnswer):
     return { behavior: 'allow', updatedInput: pending.input, updatedPermissions: [{ type: 'setMode', mode, destination: 'session' }] }
   }
   if (answer.optionId === 'allow_once') return { behavior: 'allow', updatedInput: pending.input }
-  if (answer.optionId === 'allow_always') return { behavior: 'allow', updatedInput: pending.input, updatedPermissions: pending.suggestions }
+  // The same filter as the TUI's PermissionRequest: no silent mode switch, nothing written to ~/.claude (PRD §6.6).
+  if (answer.optionId === 'allow_always') return { behavior: 'allow', updatedInput: pending.input, updatedPermissions: safeSuggestions(pending.suggestions) }
   return { behavior: 'deny', message: answer.message?.trim() || 'The user declined this.' }
 }

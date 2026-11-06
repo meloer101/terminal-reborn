@@ -262,6 +262,15 @@ describe('self-heal', () => {
     expect(s.status).toBe('running')
   })
 
+  it('is Claude’s alone: another agent’s plain title says nothing about its turn (PRD §3.1 自愈)', () => {
+    for (const kind of ['gemini', 'qwen', 'pi', 'kimi'] as const) {
+      let s = reduce(make('idle', { kind }), promptSubmit, T0 + 1_000)
+      s = reduce(s, { type: 'title', title: `${kind} - repo` }, T0 + 1_100)
+      expect(s.status, kind).toBe('running')
+      expect(reduce(s, tick, T0 + 1_000 + CLAUDE_IDLE_HEAL_MS * 2).status, kind).toBe('running')
+    }
+  })
+
   it('only heals running sessions', () => {
     for (const status of ['needs_you', 'done_unread', 'error'] as const) {
       let s = reduce(make(status), idleTitle, T0 + 1_000)

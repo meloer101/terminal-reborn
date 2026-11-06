@@ -164,8 +164,9 @@ function parseCapturedScript(value: unknown): CapturedScript {
 }
 
 /**
- * Cancel and run for one directory stay in order. The renderer fires cancel as a sheet closes and run as the next
- * one opens; without a queue the cancel can land on the run that just started.
+ * Cancel and the start of a run for one directory stay in order. The renderer fires cancel as a sheet closes and run
+ * as the next one opens; without a queue the cancel can land on the run that just started, or miss one still
+ * starting. Only the start is queued: a cancel never waits for a script to end.
  */
 const runQueues = new Map<string, Promise<unknown>>()
 
@@ -229,25 +230,34 @@ export async function approvedScript(realCwd: string, name: RunnableScript | Cap
   return script
 }
 
-async function runCaptured(dirRaw: unknown, nameRaw: unknown): Promise<ScriptRunResult> {
+/**
+ * One captured run per directory and script: a second run of the same script replaces the first, while the merge
+ * test and the archive script of one worktree may run side by side.
+ */
+const jobKey = (dir: string, name: CapturedScript): string => `${dir}\0${name}`
+
+/** Starts the script; resolves once it is running, with its end (wrapped, so awaiting the start does not wait for it). */
+async function startCaptured(dirRaw: unknown, nameRaw: unknown): Promise<{ done: Promise<ScriptRunResult> }> {
   const name = parseCapturedScript(nameRaw)
   const dir = await resolveRoot(dirRaw)
   const script = await approvedScript(dir, name)
   const port = portFor(dir)
-  return startCapturedScript({
-    key: dir,
+  const done = startCapturedScript({
+    key: jobKey(dir, name),
     cwd: dir,
     script,
     baseEnv: process.env,
     ...(port !== null ? { extraEnv: { TR_PORT: String(port) } } : {})
   })
+  return { done }
 }
 
+/** Stops the merge test (the only script a sheet cancels); an archive script runs to its end. */
 async function cancelCaptured(dirRaw: unknown): Promise<void> {
   try {
-    cancelCapturedScript(await resolveRoot(dirRaw))
+    cancelCapturedScript(jobKey(await resolveRoot(dirRaw), 'test'))
   } catch {
-    if (typeof dirRaw === 'string') cancelCapturedScript(dirRaw)
+    if (typeof dirRaw === 'string') cancelCapturedScript(jobKey(dirRaw, 'test'))
   }
 }
 
@@ -256,7 +266,7 @@ export function registerRepoScriptHandlers(): void {
   ipcMain.handle(IPC.repoScriptsApprove, (event, dir: unknown, name: unknown) => approve(event.sender, dir, name))
   ipcMain.handle(IPC.repoScriptsRun, (_event, dir: unknown, name: unknown) => {
     const key = typeof dir === 'string' ? dir : ''
-    return enqueue(key, () => runCaptured(dir, name))
+    return enqueue(key, () => startCaptured(dir, name)).then((started) => started.done)
   })
   ipcMain.handle(IPC.repoScriptsCancel, (_event, dir: unknown) => {
     const key = typeof dir === 'string' ? dir : ''

@@ -443,7 +443,8 @@ export async function reviewDiff(root: unknown, base: unknown): Promise<ReviewDi
   const listing = await changes(cwd, base)
   if (!listing) return null
   const hasHead = (await gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).trim() !== ''
-  const flags = ['diff', '--no-color', '--no-ext-diff', '-M']
+  // Paths as they are (not octal-quoted), like the untracked files' headers, so the review can name every file.
+  const flags = ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '-M']
   const [tracked, untracked, committed] = await Promise.all([
     git(cwd, [...flags, hasHead ? 'HEAD' : EMPTY_TREE, '--']),
     listUntracked(cwd),

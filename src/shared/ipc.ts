@@ -277,11 +277,11 @@ export interface RepoScriptsApi {
    */
   approve(dir: string, name: RunnableScript | CapturedScript): Promise<ScriptApproval>
   /**
-   * Runs an approved captured script in `dir` (the merge `test`) and resolves when it exits. One run per directory;
-   * cancelling resolves the in-flight call with `cancelled`.
+   * Runs an approved captured script in `dir` (the merge `test`, the `archive` script) and resolves when it exits. One
+   * run per directory and script; cancelling resolves the in-flight call with `cancelled`.
    */
   run(dir: string, name: CapturedScript): Promise<ScriptRunResult>
-  /** Stops the captured script running in `dir`, if any. */
+  /** Stops the merge `test` running in `dir`, if any (an `archive` script is never cancelled). */
   cancel(dir: string): Promise<void>
 }
 

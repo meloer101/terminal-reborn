@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-05
+> 最后更新：2026-11-06
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-06：架构审阅（4 个分片 review + 1 次独立核实，30 条里 21 条属实、9 条部分属实），按 8 批修复，见「进行中：架构审阅修复」。批次 1 合进 main：GUI「总是允许」不再写 `~/.claude/settings.json`、不再切换模式；reattach 之后重启的终端有输出、能输入；6 s 空闲标题自愈只对 Claude；关掉合并面板能停下正在跑的测试脚本，测试和归档脚本互不打断；rc 文件里有后台任务时登录 shell 的 PATH 照样读得到；后台审阅能认出中文文件名。每条都有修复前失败的回归测试。
 - 2026-11-05：主区贴边（PRD v1.135，Figma 55）：卡片贴住窗口的上、右、下边，会话头进卡片，终端超过一屏后滚到会话头下面并渐进模糊。
 - 2026-11-05：侧栏可以按状态聚合（PRD v1.131，Figma 53C 选定）：标题栏「会话分组」按钮切换项目 / 状态，按状态时 等你处理 → 出错 → 已完成 → 运行中 → 空闲 → 已退出，组可折叠，选择和折叠都保存；单元测试 `sidebar/model.test.ts`、`workspace-file.test.ts`，e2e `sidebar-projects.spec.ts`（切换、换组、折叠、重启后还在）。深色主题只在 e2e 截图里看过（窗口底是浅色玻璃），还没在作者机器上用。
 - 2026-11-05：新增 F23 GUI 会话（PRD v1.125）：新建时选 CLI 或 GUI、之后不切换；Claude 走 `-p` stream-json + `CLAUDE_CODE_ENTRYPOINT=wavi`，Codex 走 app-server，其余 16 家走 ACP（Crush 只能 CLI），进程归守护进程。调研、Figma 49″、协议实测（§6.17）做完；jacoy/remote-phone 合进 main。代码已在 jacoy/gui-sessions：三块并行实现合并、e2e 通过，待独立 review 和真 agent 冒烟。
@@ -209,6 +210,17 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 9. [x] 同任务多解（原一题多解）改从对话里发起（作者 2026-10-24 定方向、2026-10-25 定细节，2026-10-25 完成，PRD v1.69）：会话头「…」/ ⌘K / 「会话」菜单、终端右键（新加：复制 · 同任务多解… · 全选）、出计划时终端下方那条，都叫「同任务多解…」，⇧⌘N；弹框任务取选中的文字、计划或说过的话；原会话不算一份，几份都开新 worktree、基于原会话的分支，所有已安装的智能体都能选，侧栏缩进在原会话下；都停下后合成一条汇报送给原会话（Claude 收件箱 / `codex queue`，别家点「送进去」）；去掉新建会话面板的「多个智能体一起做」。Figma 第 26 节 `425:19405`（26A–26J）。还没做：汇报只在 Claude / Codex 会话上自动送达；说过的话不跨重启；真 CLI 上没跑过（e2e 用假 Claude / Codex）
 
 不做：中途换 provider（作者 2026-10-24 定）；消息排队（原生 TUI 本来就能排队，最多补“⌘Q 后排着的消息由 Wavi 补发”）；桌面上的聊天界面（手机上的见 F22）。
+
+## 进行中：架构审阅修复（2026-11-06 定）
+
+- [x] 批次 1 · 用户看得到的故障：GUI「总是允许」过滤 `setMode` / `userSettings`（`src/main/gui/claude-stream.ts`）；reattach 后重启的终端（`src/renderer/terminal/session-terminal.ts`）；空闲标题自愈只对 Claude（`src/shared/session-state-machine.ts`）；合并前测试可取消、和归档脚本互不打断（`src/main/repo-scripts.ts`）；登录 shell PATH 不被后台任务卡住（`src/main/agents-installed.ts`）；审阅 diff 用 `core.quotePath=false`（`src/main/git-graph.ts`、`background-review.ts`）
+- [ ] 批次 2 · 低风险小修：同 id 重复 spawn 的超时作废、adopt 时保留 agent、写入上限低于守护进程帧上限、写 PR 文案的进程随退出清理、ACP 报错用 agent 名、拖动时合并保存、冲突雷达改异步 IO
+- [ ] 批次 3 · Ship：推送失败后重试只推 base；`committed` / `pushRefused` 由 main 返回
+- [ ] 批次 4 · IPC 边界：worktree 文件 handler 校验 root 属于工作区，可执行文件不直接打开
+- [ ] 批次 5 · 边界检查落地：dependency-cruiser（依赖方向、循环）、stylelint（字面 px），消掉 10 个运行时环
+- [ ] 批次 6 · 长流程迁到 main：自动修复、Ship、派活的运行状态由 main 持有并保存，重载后接上
+- [ ] 批次 7 · 每个 agent 一致：新建会话菜单列出全部 agent、自动修复按 hooks 判断、`AgentSpec` 描述就绪和状态规则
+- [ ] 批次 8 · git / 子进程调用收敛到一处（env、超时、进程组清理、限流）
 
 ## 进行中：F23 GUI 会话（2026-11-05 定）
 
@@ -479,6 +491,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
 | 楔子假设不成立（中文开发者没有信号） | 外部验证开始后第 4 周按 PRD §1.5 换楔子，或回到个人工具 | 外部验证延后到 M5 / M6 之后 |
 | `claude -p` 被单独计费（“programmatic usage”） | 两份调研的说法不一致：一说从 2026-06-15 起按 programmatic 计费，一说宣布后又暂停了。F13 后台审阅用的是 `claude -p`；额度轮询不发模型请求，应该不受影响。先查清官方现状，再决定审阅要不要在设置里写明 | 待查 |
 | 原生产品吸收“开会话、看状态” | 不在这一段上竞争：做跨 Claude / Codex 的审阅、验证、合并（PRD §1.2 v1.48） | 已决定 |
+| Gemini / Qwen / Pi 按 Esc 中断后可能一直显示运行中 | 6 s 空闲标题自愈改为只对 Claude（PRD §3.1），因为别家的普通标题在长思考时也不转圈、会被误判空闲；代价是这几家中断时若不发 Stop / AfterAgent，要到下一轮才回到空闲。三家都没在真 CLI 上测过（PRD §6.15）：各开一轮按 Esc，看 hook 日志有没有 Stop / AfterAgent，再决定要不要给它们单独的兜底 | 待实测 |
 | 许可证合规 | 借用的代码逐文件登记在 `THIRD_PARTY_NOTICES.md` | 持续 |
 
 ## 设计稿与里程碑

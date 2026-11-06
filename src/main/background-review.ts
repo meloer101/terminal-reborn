@@ -389,7 +389,7 @@ async function diffSincePrevious(cwd: string, previous: ReviewRecord | null, hea
   if (previous.head === head) return ''
   try {
     await git(cwd, ['merge-base', '--is-ancestor', previous.head, head], path)
-    return await git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', previous.head, head, '--'], path)
+    return await git(cwd, ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '-M', previous.head, head, '--'], path)
   } catch {
     return null
   }

@@ -7,7 +7,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn(), on: vi.fn() } }))
 
-const { changes, fileDiff, logPage, sshCommandFor } = await import('./git-graph')
+const { changes, fileDiff, logPage, reviewDiff, sshCommandFor } = await import('./git-graph')
+const { parseUnifiedDiffFiles } = await import('@shared/background-review')
 
 function repo(): { dir: string; git(...args: string[]): string; write(path: string, text: string): void; commit(message: string): void } {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tr-git-graph-')))
@@ -138,6 +139,20 @@ describe('changes', () => {
       { path: 'tracked.txt', status: 'M', added: 2, removed: 1 }
     ])
     expect(result).toMatchObject({ base: null, untrackedOmitted: 0 })
+  })
+})
+
+describe('reviewDiff', () => {
+  it('names files with non-ASCII paths as they are (git quotes them by default)', async () => {
+    const r = repo()
+    r.write('中文.ts', 'a\n')
+    r.write('ascii.ts', 'a\n')
+    r.commit('init')
+    r.write('中文.ts', 'b\n')
+    r.write('ascii.ts', 'b\n')
+    r.write('新文件.ts', 'c\n')
+    const diff = await reviewDiff(r.dir, null)
+    expect(parseUnifiedDiffFiles(diff!.text).map((f) => f.path).sort()).toEqual(['ascii.ts', '中文.ts', '新文件.ts'].sort())
   })
 })
 
