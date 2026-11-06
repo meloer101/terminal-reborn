@@ -19,7 +19,7 @@ export default tseslint.config(
   },
   {
     // Build-time CommonJS helpers (electron-builder hooks, icon rendering).
-    files: ['build/**/*.cjs', 'scripts/**/*.cjs'],
+    files: ['build/**/*.cjs', 'scripts/**/*.cjs', '.dependency-cruiser.cjs'],
     languageOptions: { globals: globals.node },
     rules: { '@typescript-eslint/no-require-imports': 'off' }
   },
