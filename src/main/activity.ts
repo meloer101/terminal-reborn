@@ -3,7 +3,6 @@
 import { ipcMain, type WebContents } from 'electron'
 import { IPC } from '@shared/ipc'
 import type { ActivitySummary } from '@shared/lifecycle'
-import { setKeepTimers } from './secondary-windows'
 
 const MAX_ACTIVE = 10_000
 /** webContents id → running + waiting sessions in that window. */
@@ -40,10 +39,5 @@ export function registerActivityHandlers(): void {
     const id = sender.id
     if (!reports.has(id)) sender.once('destroyed', () => reports.delete(id))
     reports.set(id, summary.active)
-  })
-  // A scheduled 继续 (PRD F11) must keep time in a hidden window; only while one waits, so hidden windows stay cheap.
-  ipcMain.on(IPC.appKeepTimers, (event, raw: unknown) => {
-    if (typeof raw !== 'boolean' || event.sender.isDestroyed()) return
-    setKeepTimers(event.sender, raw)
   })
 }
