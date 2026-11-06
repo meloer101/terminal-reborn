@@ -381,6 +381,17 @@ test.describe('F23 GUI session (Claude)', () => {
     await send('back to the end')
     await expect(feed().getByText('Hello: back to the end')).toBeVisible(WITHIN)
     await expect.poll(() => feed().evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), WITHIN).toBe(0)
+    // Longer than the view, at the end the last block sits 120 above the scroller's edge, clear of the composer
+    // (Claude's desktop app); a short scroller stands in for a long conversation.
+    const room = await feed().evaluate((el) => {
+      el.style.maxHeight = '100px'
+      el.scrollTop = el.scrollHeight
+      const last = el.firstElementChild?.lastElementChild
+      const gap = last ? el.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom : -1
+      el.style.maxHeight = ''
+      return Math.round(gap)
+    })
+    expect(room).toBe(120)
   })
 
   test('reads like a chat: the agent’s mark on each turn, the user’s picture and 对话 settings (Figma 51A)', async () => {
