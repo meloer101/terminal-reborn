@@ -88,7 +88,8 @@ describe('parseReviewRequest / triggerAllowed', () => {
   })
 })
 
-describe('startReview', () => {
+// Each case runs git and a fake CLI and waits up to 10 s for the review to settle: the case's own limit is above that.
+describe('startReview', { timeout: 15_000 }, () => {
   it('sends the diff on stdin, read-only flags on argv, and lands the findings as comments', async () => {
     const root = repo('claude')
     writeFileSync(join(root, 'a.ts'), 'export const a = items[i]\n')
