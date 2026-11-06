@@ -90,11 +90,13 @@ function saveNow(): void {
 
 /**
  * Sends the current workspace to main to be saved, at most once per SAVE_COALESCE_MS: each snapshot serialises the
- * whole workspace and crosses IPC (main debounces the disk write on top). A no-op in fixture runs.
+ * whole workspace and crosses IPC (main debounces the disk write on top). `urgent` sends it now: main lets file, git
+ * and script IPC act only on folders of the workspace it was last sent. A no-op in fixture runs.
  */
-export function requestSave(): void {
-  if (saveTimer !== null || !store()) return
-  saveTimer = setTimeout(saveNow, SAVE_COALESCE_MS)
+export function requestSave(urgent = false): void {
+  if (!store()) return
+  if (urgent) saveNow()
+  else if (saveTimer === null) saveTimer = setTimeout(saveNow, SAVE_COALESCE_MS)
 }
 
 /** A window going away (reload, close, quit) sends what is still waiting. */

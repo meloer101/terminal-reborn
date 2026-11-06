@@ -39,6 +39,15 @@ describe('requestSave', () => {
     expect(save).toHaveBeenCalledTimes(2)
   })
 
+  it('sends at once when asked to, with what was waiting (main checks folders against the saved workspace)', async () => {
+    const { requestSave } = await load()
+    requestSave()
+    requestSave(true)
+    expect(save).toHaveBeenCalledTimes(1)
+    vi.runAllTimers()
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
   it('sends what is still waiting when the window goes away', async () => {
     const { requestSave } = await load()
     requestSave()
