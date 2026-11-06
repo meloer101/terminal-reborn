@@ -73,6 +73,12 @@ export class WorkspaceFileStore {
     return this.latest?.projects.map((p) => p.rootPath) ?? []
   }
 
+  /** Every folder of the workspace: its projects' roots and the worktrees it lists (file IPC only acts on these). */
+  workspaceDirs(): string[] {
+    if (!this.latest) return []
+    return [...this.latest.projects.map((p) => p.rootPath), ...this.latest.worktrees.map((w) => w.path)]
+  }
+
   /** Writes any pending data now (also used on quit). */
   flush(): void {
     if (this.timer) clearTimeout(this.timer)

@@ -12,6 +12,11 @@ export function isProjectRoot(path: string): boolean {
   return store?.projectRoots().includes(path) ?? false
 }
 
+/** Whether `path` is one of the workspace's folders (a project root or a worktree), as the renderer last saved it. */
+export function isWorkspaceDir(path: string): boolean {
+  return store?.workspaceDirs().includes(path) ?? false
+}
+
 /**
  * The quit is going ahead (quit.ts, once nothing holds it back): from now on a snapshot is written as it arrives,
  * since windows send their last one as they close, after before-quit.
