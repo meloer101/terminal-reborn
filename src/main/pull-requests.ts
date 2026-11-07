@@ -10,11 +10,9 @@
 // roots must be the workspace's, worktrees theirs, and no value reaches git or gh where it could be read as an option.
 // v1.63 adds the write (PRD F16 · L2): merging the PR (pinned to the head Wavi checked; GitHub auto-merge when the
 // repository allows it, else 检查通过后合并 is refused). It runs only on a button the user clicked.
-import { spawn } from 'node:child_process'
 import { readFile, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { delimiter, join } from 'node:path'
-import { StringDecoder } from 'node:string_decoder'
+import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { hostWindowFor } from './app-windows'
 import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
@@ -65,18 +63,15 @@ import {
   type PullRequestInfo
 } from '@shared/pull-requests'
 import { buildPtyEnv } from '../pty-host/env'
-import { executableOnPath, userLoginPath } from './agents-installed'
+import { executableOnPath } from './agents-installed'
 import { confirm } from './confirm'
-import { sshCommandFor } from './git-graph'
+import { git, GIT_TIMEOUT_MS, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pushEnv, refExists, runProcess, searchPath, type Ran } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
-const GIT_TIMEOUT_MS = 15_000
 const GH_TIMEOUT_MS = 30_000
 const PUSH_TIMEOUT_MS = 120_000
 /** A commit runs the repository's hooks (lint, tests): they get this long. */
 const COMMIT_TIMEOUT_MS = 5 * 60_000
-const MAX_STDOUT = 8 * 1024 * 1024
-const MAX_STDERR = 8 * 1024
 /** Of `gh run view --log-failed`, only the end is kept (the failure is at the bottom). */
 const LOG_TAIL_CHARS = 256 * 1024
 const LOGS_PER_FAILURE = 2
@@ -89,87 +84,6 @@ const FOCUS_REFRESH_MS = 60_000
 /** gh processes at once. */
 const GH_CONCURRENCY = 2
 /** Finder launches apps with a minimal PATH; these are where Homebrew usually puts gh. */
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']
-
-// ── processes ───────────────────────────────────────────────────────────────────────────────────────────────────
-
-export interface Ran {
-  code: number
-  stdout: string
-  stderr: string
-}
-
-/** Runs a program; never rejects (a spawn error is code -1). `tail` keeps only the end of stdout. */
-function runProcess(bin: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv; timeout: number; tail?: number; input?: string }): Promise<Ran> {
-  return new Promise((resolve) => {
-    let stdout = ''
-    let stderr = ''
-    let overflow = false
-    let settled = false
-    const out = new StringDecoder('utf8')
-    const err = new StringDecoder('utf8')
-    const child = spawn(bin, args, { cwd: options.cwd, env: options.env, stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
-    if (options.input !== undefined) {
-      child.stdin?.on('error', () => {})
-      child.stdin?.end(options.input)
-    }
-    const timer = setTimeout(() => {
-      stderr += `\n超过 ${Math.round(options.timeout / 1000)} 秒没有结束，已停止`
-      child.kill('SIGTERM')
-    }, options.timeout)
-    const finish = (code: number): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      stdout += out.end()
-      resolve({ code: overflow ? -1 : code, stdout, stderr: (stderr + err.end()).slice(-MAX_STDERR) })
-    }
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += out.write(chunk)
-      if (options.tail !== undefined) {
-        if (stdout.length > options.tail * 2) stdout = stdout.slice(-options.tail)
-      } else if (stdout.length > MAX_STDOUT) {
-        overflow = true
-        child.kill('SIGTERM')
-      }
-    })
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr = (stderr + err.write(chunk)).slice(-MAX_STDERR)
-    })
-    child.once('error', (error) => {
-      stderr += error.message
-      finish(-1)
-    })
-    child.once('close', (code) => finish(code ?? -1))
-  })
-}
-
-export const lastLines = (text: string): string => text.trim().split('\n').slice(-3).join(' ').slice(0, 500)
-
-export function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    GIT_OPTIONAL_LOCKS: '0',
-    GIT_TERMINAL_PROMPT: '0',
-    PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter),
-    ...extra
-  }
-}
-
-export async function git(cwd: string, args: string[], options: { timeout?: number; env?: Record<string, string> } = {}): Promise<Ran> {
-  return runProcess('git', args, { cwd, env: gitEnv(options.env), timeout: options.timeout ?? GIT_TIMEOUT_MS })
-}
-
-/** stdout of a git command, '' when it failed. */
-export async function gitOut(cwd: string, args: string[]): Promise<string> {
-  const ran = await git(cwd, args)
-  return ran.code === 0 ? ran.stdout : ''
-}
-
-export async function searchPath(): Promise<string> {
-  const login = await userLoginPath()
-  return [...(login ?? process.env.PATH ?? '').split(delimiter), ...EXTRA_PATH].filter(Boolean).join(delimiter)
-}
 
 async function ghEnv(): Promise<Record<string, string>> {
   return buildPtyEnv(process.env, {
@@ -558,20 +472,9 @@ const creating = new Set<string>()
 
 const blocked = (message: string): PrCreateResult => ({ ok: false, reason: 'blocked', message })
 
-export async function pushEnv(cwd: string): Promise<Record<string, string>> {
-  const env: Record<string, string> = {}
-  const ssh = sshCommandFor(process.env, (await gitOut(cwd, ['config', '--get', 'core.sshCommand'])).trim())
-  if (ssh) env.GIT_SSH_COMMAND = ssh
-  return env
-}
-
 async function countCommits(cwd: string, range: string): Promise<number | null> {
   const ran = await git(cwd, ['rev-list', '--count', range, '--'])
   return ran.code === 0 ? Number(ran.stdout.trim()) || 0 : null
-}
-
-export async function refExists(cwd: string, ref: string): Promise<boolean> {
-  return (await git(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`])).code === 0
 }
 
 /**
@@ -745,11 +648,11 @@ export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
     const sources = paths.map((path) => known.get(path)!.oldPath).filter((p): p is string => Boolean(p))
     const env = { GIT_LITERAL_PATHSPECS: '1', PATH: await searchPath() }
     const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
-    const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv(env), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
+    const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
     if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added) }
     const committed = await runProcess('git', ['commit', '--only', '--no-edit', `--message=${request.message}`, ...fromStdin], {
       cwd: info.cwd,
-      env: gitEnv(env),
+      env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }),
       timeout: COMMIT_TIMEOUT_MS,
       input: [...new Set([...paths, ...sources])].join('\0')
     })
