@@ -45,6 +45,29 @@ describe('createAcpNormalizer', () => {
     expect(s.items[0]).toMatchObject({ name: 'Edit', arg: 'src/a.ts', diff: { path: 'src/a.ts', added: 1, removed: 1, hunks: [{ lines: [' a', '-b', '+B', ' c'] }] } })
   })
 
+  it('keeps each file of a several-file edit apart', () => {
+    const n = createAcpNormalizer('/repo', () => 0)
+    const s = fold(
+      n.update({
+        sessionUpdate: 'tool_call',
+        toolCallId: 'e2',
+        kind: 'edit',
+        status: 'completed',
+        locations: [{ path: '/repo/src/a.ts' }, { path: '/repo/src/b.ts' }],
+        content: [
+          { type: 'diff', path: '/repo/src/a.ts', oldText: 'a\n', newText: 'A\n' },
+          { type: 'diff', path: '/repo/src/b.ts', oldText: null, newText: 'b\nc\n' }
+        ]
+      })
+    )
+    expect(s.items[0]).toMatchObject({ diff: { path: 'src/a.ts', added: 1, removed: 1 } })
+    const item = s.items[0]
+    expect(item?.kind === 'tool' && item.files?.map((f) => [f.path, f.added, f.removed])).toEqual([
+      ['src/a.ts', 1, 1],
+      ['src/b.ts', 2, 0]
+    ])
+  })
+
   it('turns a permission request into a prompt with the agent’s options and marks a cancelled turn', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(

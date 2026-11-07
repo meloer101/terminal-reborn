@@ -425,16 +425,85 @@
   opacity: 0.6;
 }
 
-.hunk + .hunk::before {
-  content: '⋯\A';
+.fileBlocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+  margin-left: var(--step-indent);
+}
+
+/* Figma 59J / 59I: one file's change (DiffBlock) — a 1px border/subtle frame; the path · +N −M on a header row when
+   the file is not named next to it; added and removed lines tinted across the block's width. */
+.fileBlock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.fileHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--space-12);
+  font: var(--type-code);
+}
+
+.fileHeader:not(:last-child) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.filePath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileLines {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--space-4) 0;
+  overflow: auto;
+  font: var(--type-code);
+  color: var(--text-secondary);
+}
+
+/* As wide as the longest line, at least the block's: a tinted line reaches the frame however far it scrolls. */
+.fileRows {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+.diffLine,
+.hunkGap {
+  display: block;
+  padding: 0 var(--space-12);
+  white-space: pre;
+}
+
+.hunkGap {
   color: var(--text-tertiary);
 }
 
+.diffSign {
+  display: inline-block;
+  width: 3ch;
+}
+
 .diffLine[data-kind='add'] {
+  background: var(--diff-add-bg);
   color: var(--diff-add-fg);
 }
 
 .diffLine[data-kind='del'] {
+  background: var(--diff-del-bg);
   color: var(--diff-del-fg);
 }
 

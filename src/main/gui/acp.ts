@@ -16,7 +16,7 @@ import {
   type GuiPermissionOption,
   type GuiPrompt
 } from '@shared/gui-chat'
-import { CHAT_LIMITS, type ChatItem, type DiffHunk } from '@shared/transcript-chat'
+import { CHAT_LIMITS, fileDiffs, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -100,32 +100,10 @@ function rel(path: string, cwd: string): string {
   return path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path
 }
 
-function diffOfContent(content: unknown, cwd: string): ToolItem['diff'] | undefined {
+/** The diff blocks of a tool call's content, one per file. */
+function diffsOfContent(content: unknown, cwd: string): FileDiff[] {
   const diffs = (Array.isArray(content) ? content : []).filter((c): c is Rec => isRec(c) && c.type === 'diff')
-  if (diffs.length === 0) return undefined
-  let added = 0
-  let removed = 0
-  let budget: number = CHAT_LIMITS.diffLines
-  let truncated = false
-  const hunks: DiffHunk[] = []
-  for (const d of diffs) {
-    for (const h of lineDiff(str(d.oldText) ?? '', str(d.newText) ?? '')) {
-      for (const l of h.lines) {
-        if (l.startsWith('+')) added++
-        else if (l.startsWith('-')) removed++
-      }
-      if (budget <= 0) {
-        truncated = true
-        continue
-      }
-      const lines = h.lines.slice(0, budget)
-      if (lines.length < h.lines.length) truncated = true
-      budget -= lines.length
-      hunks.push({ ...h, lines })
-    }
-  }
-  const path = rel(str(diffs[0]!.path) ?? '', cwd)
-  return { path: diffs.length > 1 ? `${path} 等 ${diffs.length} 个文件` : path, hunks, added, removed, truncated }
+  return fileDiffs(diffs.map((d) => ({ path: rel(str(d.path) ?? '', cwd), hunks: lineDiff(str(d.oldText) ?? '', str(d.newText) ?? '') })))
 }
 
 function outputOfContent(content: unknown): string | undefined {
@@ -199,7 +177,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
     const locations = (Array.isArray(update.locations) ? update.locations : []).filter(isRec)
     const path = str(locations[0]?.path)
     const status = str(update.status)
-    const diff = 'content' in update ? diffOfContent(update.content, cwd) : before?.diff
+    const files = 'content' in update ? diffsOfContent(update.content, cwd) : (before?.files ?? (before?.diff ? [before.diff] : []))
+    const diff = files[0]
     const output = 'content' in update ? outputOfContent(update.content) : before?.output
     const item: ToolItem = {
       kind: 'tool',
@@ -209,7 +188,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
       arg: clip(((path ? rel(path, cwd) : undefined) ?? title ?? before?.arg ?? '').replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg),
       state: status ? (STATE[status] ?? 'running') : (before?.state ?? 'running'),
       ...(output ? { output } : {}),
-      ...(diff ? { diff } : {})
+      ...(diff ? { diff } : {}),
+      ...(files.length > 1 ? { files } : {})
     }
     tools.set(id, item)
     return [...flush(), put(id, item)]

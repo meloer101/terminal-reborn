@@ -47,6 +47,32 @@ describe('createCodexNormalizer', () => {
     expect(s.items[1]).toMatchObject({ state: 'ok', exit: 0, input: 'true' })
   })
 
+  it('keeps each file of a change apart: the first as `diff`, all of them as `files`', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    const s = fold(
+      n.notification('item/completed', {
+        item: {
+          type: 'fileChange',
+          id: 'f1',
+          status: 'completed',
+          changes: [
+            { path: '/repo/src/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1,2 +1,2 @@\n a\n-b\n+c\n' },
+            { path: '/repo/src/new.ts', kind: { type: 'add' }, diff: 'x\ny\n' }
+          ]
+        }
+      })
+    )
+    expect(s.items[0]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'src/a.ts 等 2 个文件', diff: { path: 'src/a.ts', added: 1, removed: 1 } })
+    const item = s.items[0]
+    expect(item?.kind === 'tool' && item.files?.map((f) => [f.path, f.added, f.removed])).toEqual([
+      ['src/a.ts', 1, 1],
+      ['src/new.ts', 2, 0]
+    ])
+    // One file: no `files`.
+    const one = fold(createCodexNormalizer('/repo', () => 0).notification('item/completed', { item: { type: 'fileChange', id: 'f2', status: 'completed', changes: [{ path: '/repo/b.ts', kind: { type: 'add' }, diff: 'z\n' }] } }))
+    expect(one.items[0]).not.toHaveProperty('files')
+  })
+
   it('keeps what an MCP or dynamic tool returned, and why it failed', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const s = fold([

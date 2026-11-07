@@ -183,6 +183,12 @@ describe('rows', () => {
     expect(toolView(tool('b', { name: 'Bash', arg: 'cd a && make', input: 'cd a &&\n  make' }), false)).toMatchObject({ expandable: true, command: 'cd a &&\n  make' })
   })
 
+  it('counts +N −M over every file a tool changed', () => {
+    const file = (path: string, added: number, removed: number) => ({ path, hunks: [], added, removed, truncated: false })
+    const edit = tool('e', { name: 'Edit', diff: file('a.ts', 1, 1), files: [file('a.ts', 1, 1), file('b.ts', 4, 0)] })
+    expect(toolView(edit, false)).toMatchObject({ added: 5, removed: 1, expandable: true })
+  })
+
   it('marks the running tool a permission is about', () => {
     const items = [tool('a'), tool('b', { state: 'running' }), text('x')]
     const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }

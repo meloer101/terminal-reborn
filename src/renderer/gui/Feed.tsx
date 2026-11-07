@@ -19,6 +19,7 @@ import { ansiSpans } from './ansi'
 import { ChatMarkdown } from './ChatMarkdown'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
+import { DiffBlock, diffText } from './DiffBlock'
 import {
   composerKey,
   feedBlocks,
@@ -311,6 +312,8 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
 function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; waiting: boolean }) {
   const [open, setOpen] = useState(false)
   const view = toolView(item, waiting)
+  // Figma 59J: one block per file; a single file's path is on the row already.
+  const files = item.files ?? (item.diff ? [item.diff] : [])
   return (
     <div className={styles.tool}>
       <button type="button" className={styles.toolRow} aria-expanded={view.expandable ? open : undefined} disabled={!view.expandable} onClick={() => setOpen(!open)}>
@@ -325,11 +328,19 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
         {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
       </button>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
-      {open && (item.diff || view.output || view.command) && (
+      {open && (files.length > 0 || view.output || view.command) && (
         <div className={styles.codeWrap}>
-          {item.diff ? <Diff diff={item.diff} /> : <Output raw={item.output ?? ''} command={view.command} />}
+          {files.length > 0 ? (
+            <div className={styles.fileBlocks}>
+              {files.map((file, i) => (
+                <DiffBlock key={i} diff={file} header={files.length > 1} />
+              ))}
+            </div>
+          ) : (
+            <Output raw={item.output ?? ''} command={view.command} />
+          )}
           <CopyButton
-            text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : view.output?.trim() ? view.output : (view.command ?? ''))}
+            text={() => (files.length > 0 ? diffText(files) : view.output?.trim() ? view.output : (view.command ?? ''))}
             label="复制输出"
             className={styles.cornerCopy}
           />
@@ -362,24 +373,6 @@ function Output({ raw, command }: { raw: string; command?: string }) {
           span.text
         )
       )}
-    </pre>
-  )
-}
-
-function Diff({ diff }: { diff: NonNullable<Extract<ChatItem, { kind: 'tool' }>['diff']> }) {
-  return (
-    <pre className={styles.output}>
-      {diff.hunks.map((hunk, h) => (
-        <span key={h} className={styles.hunk}>
-          {hunk.lines.map((line, i) => (
-            <span key={i} className={styles.diffLine} data-kind={line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}>
-              {line}
-              {'\n'}
-            </span>
-          ))}
-        </span>
-      ))}
-      {diff.truncated && <span className={styles.diffLine}>…</span>}
     </pre>
   )
 }

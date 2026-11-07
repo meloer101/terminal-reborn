@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAT_LIMITS, createChatParser, toolArg, toolLabel, type ChatItem } from './transcript-chat'
+import { CHAT_LIMITS, createChatParser, fileDiffs, toolArg, toolLabel, type ChatItem } from './transcript-chat'
 
 const CWD = '/Users/me/.tr/worktrees/acme/session-refresh'
 const T = '2026-11-01T10:00:00.000Z'
@@ -162,6 +162,20 @@ describe('Claude transcript → chat', () => {
     ])
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'thinking', text: 'Checking divisors', ms: 3204 })
+  })
+})
+
+describe('fileDiffs', () => {
+  it('counts each file and caps all of them together at CHAT_LIMITS.diffLines lines', () => {
+    const big = { oldStart: 1, newStart: 1, lines: Array.from({ length: CHAT_LIMITS.diffLines - 1 }, (_, i) => `+${i}`) }
+    const [a, b, c] = fileDiffs([
+      { path: 'a.ts', hunks: [big] },
+      { path: 'b.ts', hunks: [{ oldStart: 3, newStart: 3, lines: [' x', '-y', '+z'] }] },
+      { path: 'c.ts', hunks: [{ oldStart: 1, newStart: 1, lines: ['-gone'] }] }
+    ])
+    expect(a).toMatchObject({ path: 'a.ts', added: CHAT_LIMITS.diffLines - 1, removed: 0, truncated: false })
+    expect(b).toMatchObject({ path: 'b.ts', added: 1, removed: 1, truncated: true, hunks: [{ lines: [' x'] }] })
+    expect(c).toMatchObject({ path: 'c.ts', added: 0, removed: 1, truncated: true, hunks: [] })
   })
 })
 

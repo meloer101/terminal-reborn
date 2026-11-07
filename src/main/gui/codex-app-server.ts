@@ -3,7 +3,7 @@
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
 import { effortLabel, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { CHAT_LIMITS, type ChatItem, type DiffHunk } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -44,39 +44,17 @@ export function hunksOfUnifiedDiff(diff: string): DiffHunk[] {
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
-function diffOfChanges(changes: unknown, cwd: string): ToolItem['diff'] | undefined {
+/** `fileChange.changes` → one diff per file (a new file's text is all additions). */
+function diffsOfChanges(changes: unknown, cwd: string): FileDiff[] {
   const list = Array.isArray(changes) ? changes.filter(isRec) : []
-  if (list.length === 0) return undefined
   const rel = (p: string) => (p.startsWith(`${cwd}/`) ? p.slice(cwd.length + 1) : p)
-  let added = 0
-  let removed = 0
-  const hunks: DiffHunk[] = []
-  for (const change of list) {
-    const diff = str(change.diff) ?? ''
-    const kind = isRec(change.kind) ? change.kind.type : undefined
-    const parsed = kind === 'add' && !diff.includes('@@') ? [{ oldStart: 0, newStart: 1, lines: diff.replace(/\n$/, '').split('\n').map((l) => `+${l}`) }] : hunksOfUnifiedDiff(diff)
-    for (const h of parsed) {
-      for (const l of h.lines) {
-        if (l.startsWith('+')) added++
-        else if (l.startsWith('-')) removed++
-      }
-    }
-    hunks.push(...parsed)
-  }
-  const path = rel(str(list[0]!.path) ?? '')
-  let budget: number = CHAT_LIMITS.diffLines
-  let truncated = false
-  const kept = hunks.flatMap((h) => {
-    if (budget <= 0) {
-      truncated = true
-      return []
-    }
-    const lines = h.lines.slice(0, budget)
-    if (lines.length < h.lines.length) truncated = true
-    budget -= lines.length
-    return [{ ...h, lines }]
-  })
-  return { path: list.length > 1 ? `${path} 等 ${list.length} 个文件` : path, hunks: kept, added, removed, truncated }
+  return fileDiffs(
+    list.map((change) => {
+      const diff = str(change.diff) ?? ''
+      const kind = isRec(change.kind) ? change.kind.type : undefined
+      return { path: rel(str(change.path) ?? ''), hunks: kind === 'add' && !diff.includes('@@') ? [addedFile(diff)] : hunksOfUnifiedDiff(diff) }
+    })
+  )
 }
 
 function userText(content: unknown): { text: string; images: number } {
@@ -188,10 +166,12 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
         ]
       }
       case 'fileChange': {
-        const diff = diffOfChanges(item.changes, cwd)
+        const files = diffsOfChanges(item.changes, cwd)
+        const diff = files[0]
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : status === 'declined' || status === 'failed' ? 'error' : 'ok'
-        return [put(id, { kind: 'tool', id, at, name: 'Edit', arg: diff?.path ?? '', state, ...(diff && done ? { diff } : {}) })]
+        const arg = diff ? (files.length > 1 ? `${diff.path} 等 ${files.length} 个文件` : diff.path) : ''
+        return [put(id, { kind: 'tool', id, at, name: 'Edit', arg, state, ...(diff && done ? { diff } : {}), ...(files.length > 1 && done ? { files } : {}) })]
       }
       case 'mcpToolCall':
       case 'dynamicToolCall': {

@@ -12,6 +12,15 @@ export interface DiffHunk {
 
 export type ToolState = 'running' | 'ok' | 'error'
 
+/** One file's change as the chat draws it: its hunks (capped), and the counts of the whole change. */
+export interface FileDiff {
+  path: string
+  hunks: DiffHunk[]
+  added: number
+  removed: number
+  truncated: boolean
+}
+
 export type ChatItem =
   | { kind: 'user'; id: string; at: number; text: string; images: number }
   | { kind: 'text'; id: string; at: number; text: string }
@@ -30,8 +39,10 @@ export type ChatItem =
       input?: string
       /** A shell call's exit code, when the agent reports one (Codex; Claude does not). */
       exit?: number
-      /** Edit / Write. */
-      diff?: { path: string; hunks: DiffHunk[]; added: number; removed: number; truncated: boolean }
+      /** Edit / Write; of a change to several files, the first file. */
+      diff?: FileDiff
+      /** A change to more than one file (Codex fileChange, ACP): every file, `diff` being the first. */
+      files?: FileDiff[]
     }
   | { kind: 'system'; id: string; at: number; text: string }
   | { kind: 'unknown'; id: string; at: number; type: string }
@@ -167,37 +178,46 @@ function hunksOf(raw: unknown): DiffHunk[] {
   return out
 }
 
+/**
+ * Files' hunks → the diffs the chat draws: each file's counts, their lines capped at `budget` all together (a long
+ * first file leaves the later ones their names and counts only).
+ */
+export function fileDiffs(files: readonly { path: string; hunks: readonly DiffHunk[] }[], budget: number = CHAT_LIMITS.diffLines): FileDiff[] {
+  let left = budget
+  return files.map(({ path, hunks }) => {
+    let added = 0
+    let removed = 0
+    let truncated = false
+    const kept: DiffHunk[] = []
+    for (const h of hunks) {
+      for (const l of h.lines) {
+        if (l.startsWith('+')) added++
+        else if (l.startsWith('-')) removed++
+      }
+      if (left <= 0) {
+        truncated = true
+        continue
+      }
+      const lines = h.lines.slice(0, left)
+      if (lines.length < h.lines.length) truncated = true
+      left -= lines.length
+      kept.push({ ...h, lines })
+    }
+    return { path, hunks: kept, added, removed, truncated }
+  })
+}
+
+/** A new file's whole text as one hunk of additions. */
+export const addedFile = (text: string): DiffHunk => ({ oldStart: 0, newStart: 1, lines: text.replace(/\n$/, '').split('\n').map((l) => `+${l}`) })
+
 /** Edit / Write results → a diff the phone can draw, capped at CHAT_LIMITS.diffLines lines. */
-export function diffOf(result: unknown, cwd?: string): Extract<ChatItem, { kind: 'tool' }>['diff'] | undefined {
+export function diffOf(result: unknown, cwd?: string): FileDiff | undefined {
   if (!isRec(result)) return undefined
   const path = str(result.filePath)
   if (!path) return undefined
   let hunks = hunksOf(result.structuredPatch)
-  if (hunks.length === 0 && result.type === 'create' && typeof result.content === 'string') {
-    hunks = [{ oldStart: 0, newStart: 1, lines: result.content.replace(/\n$/, '').split('\n').map((l) => `+${l}`) }]
-  }
-  let added = 0
-  let removed = 0
-  for (const h of hunks) {
-    for (const l of h.lines) {
-      if (l.startsWith('+')) added++
-      else if (l.startsWith('-')) removed++
-    }
-  }
-  let budget: number = CHAT_LIMITS.diffLines
-  let truncated = false
-  const kept: DiffHunk[] = []
-  for (const h of hunks) {
-    if (budget <= 0) {
-      truncated = true
-      break
-    }
-    const lines = h.lines.slice(0, budget)
-    if (lines.length < h.lines.length) truncated = true
-    budget -= lines.length
-    kept.push({ ...h, lines })
-  }
-  return { path: rel(path, cwd), hunks: kept, added, removed, truncated }
+  if (hunks.length === 0 && result.type === 'create' && typeof result.content === 'string') hunks = [addedFile(result.content)]
+  return fileDiffs([{ path: rel(path, cwd), hunks }])[0]
 }
 
 function outputOf(result: Rec | undefined, block: Rec): string | undefined {

@@ -237,14 +237,18 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
   const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? [Wrench, item.name]
   // Without output a command is worth opening only when the row shows less of it (its lines, its length).
   const hidden = item.input !== undefined && item.input.trim() !== item.arg
+  // A change to several files counts all of them.
+  const files = item.files ?? (item.diff ? [item.diff] : [])
+  const added = files.reduce((n, f) => n + f.added, 0)
+  const removed = files.reduce((n, f) => n + f.removed, 0)
   return {
     status,
     name: item.name,
     icon,
     verb,
     arg: item.arg,
-    ...(item.diff && item.diff.added > 0 ? { added: item.diff.added } : {}),
-    ...(item.diff && item.diff.removed > 0 ? { removed: item.diff.removed } : {}),
+    ...(added > 0 ? { added } : {}),
+    ...(removed > 0 ? { removed } : {}),
     waiting,
     ...(item.state !== 'running' && firstLine && !SUMMARY_SKIP.has(item.name) ? { summary: firstLine } : {}),
     expandable: !!item.diff || !!output?.trim() || hidden,
