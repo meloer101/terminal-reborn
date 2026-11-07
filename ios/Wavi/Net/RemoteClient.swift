@@ -35,6 +35,8 @@ final class RemoteClient {
   private var stopped = true
   private var connecting = false
   private var retries = 0
+  /// When the open link opened: one that held (Link.heldFor) is dialled again at once when it closes.
+  private var openedAt: Date?
   private var retryTask: Task<Void, Never>?
   /// Addresses that said they do not know this phone since the last open link: tried last.
   private var refusedBy = Set<String>()
@@ -208,7 +210,7 @@ final class RemoteClient {
       self.socket = socket
       self.cipher = cipher
       url = socket.url
-      retries = 0
+      openedAt = Date()
       refusedBy.removeAll()
       saidRefused = false
       lastFailures = [:]
@@ -283,9 +285,16 @@ final class RemoteClient {
     let at = url
     drop()
     if code == 4001 || code == 4003 { return refused(at) }
-    // Dialled again at once: by the time the phone says anything (AppModel waits 2 s), it knows why.
     onState(.connecting)
-    Task { await connect() }
+    // A link that held is dialled again at once: by the time the phone says anything (AppModel waits 2 s), it knows why.
+    // One the Mac closes right after opening it waits its turn, with longer waits each time, not a tight loop of pairing
+    // proofs.
+    if let openedAt, Date().timeIntervalSince(openedAt) >= Link.heldFor {
+      retries = 0
+      Task { await connect() }
+    } else {
+      schedule()
+    }
   }
 
   /// `url` said it does not know this phone: try the other addresses at once (another machine may hold that one).

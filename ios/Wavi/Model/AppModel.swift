@@ -39,19 +39,32 @@ final class AppModel {
   @ObservationIgnored private var listed: [String: RemotePrompt] = [:]
   @ObservationIgnored private var answeredHere: Set<String> = []
 
-  /// This phone (the app or the Live Activity) answered `prompt`.
-  func answered(_ prompt: RemotePrompt, decision: String?) {
+  /// Answers `prompt` from this phone (the app or the Live Activity). Marked as answered here before the request: the Mac
+  /// lists the prompts again as soon as it takes the answer, and that list may arrive before the reply.
+  func answer(_ prompt: RemotePrompt, _ command: PhoneCommand) async -> RemoteResult {
     answeredHere.insert(prompt.id)
-    receipts[prompt.sessionId, default: []].append(Receipt(id: "receipt-\(prompt.id)", at: Date().timeIntervalSince1970 * 1000, onPhone: true,
-      text: receiptText(prompt, decision: decision, onPhone: true)))
+    let result = await call(command)
+    if result.error != nil { answeredHere.remove(prompt.id) } else { answered(prompt, decision: command.decision) }
+    return result
+  }
+
+  private func answered(_ prompt: RemotePrompt, decision: String?) {
+    addReceipt(prompt, onPhone: true, decision: decision)
+  }
+
+  /// One receipt per prompt: a later one replaces it.
+  private func addReceipt(_ prompt: RemotePrompt, onPhone: Bool, decision: String?) {
+    let receipt = Receipt(id: "receipt-\(prompt.id)", at: Date().timeIntervalSince1970 * 1000, onPhone: onPhone,
+      text: receiptText(prompt, decision: decision, onPhone: onPhone))
+    receipts[prompt.sessionId, default: []].removeAll { $0.id == receipt.id }
+    receipts[prompt.sessionId, default: []].append(receipt)
   }
 
   /// A new list of prompts: the ones that left without an answer from here were answered on the Mac.
   private func promptsListed(_ list: [RemotePrompt]) {
     let ids = Set(list.map(\.id))
     for (id, prompt) in listed where !ids.contains(id) && !answeredHere.contains(id) {
-      receipts[prompt.sessionId, default: []].append(Receipt(id: "receipt-\(id)", at: Date().timeIntervalSince1970 * 1000, onPhone: false,
-        text: receiptText(prompt, decision: nil, onPhone: false)))
+      addReceipt(prompt, onPhone: false, decision: nil)
     }
     answeredHere.formIntersection(ids)
     listed = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -123,8 +136,6 @@ final class AppModel {
   /// What the connection line under the titles says.
   var connection: ConnectionWords { connectionWords(link, mac: macName, dropped: dropped) }
 
-  /// The notice over the session list while it is not live.
-  var staleNotice: String { Wavi.staleNotice(heardAt: heardAt, now: Date().timeIntervalSince1970 * 1000) }
 
   func session(_ id: String) -> RemoteSession? { sessions.sessions.first { $0.id == id } }
 
@@ -209,17 +220,24 @@ final class AppModel {
   /// sent; the prompt goes at once (Wavi's list follows), or the card says why it did not.
   func answerFromActivity(prompt: String, command: PhoneCommand) async {
     var result = RemoteResult.failed("没有连上 Mac")
+    var target: RemotePrompt?
     if await whenOpen() {
       if !(await refresh(timeout: 4)) {
         client?.networkChanged()
         if await whenOpen() { await refresh(timeout: 4) }
       }
-      if isOpen { result = await client?.request(command, timeout: 10) ?? result }
+      if isOpen {
+        // Taken before the request: the Mac's next list (it may come before the reply) no longer has it.
+        target = prompts.first { $0.id == prompt }
+        answeredHere.insert(prompt)
+        result = await client?.request(command, timeout: 10) ?? result
+      }
     }
     if let failure = result.error {
+      answeredHere.remove(prompt)
       activityFailure = (prompt, String(failure.prefix(80)))
     } else {
-      if let answeredPrompt = prompts.first(where: { $0.id == prompt }) { answered(answeredPrompt, decision: command.decision) }
+      if let target { answered(target, decision: command.decision) }
       prompts.removeAll { $0.id == prompt }
       knownPrompts.remove(prompt)
     }

@@ -135,14 +135,23 @@ struct TurnView: View {
   @Environment(AppModel.self) private var model
 
   var body: some View {
-    let items = model.watching == session ? (model.conversation?.feed.items ?? []).filter { tools.contains($0.id) } : []
+    let ids = Set(tools)
+    let calls = model.watching == session ? (model.conversation?.feed.items ?? []).filter { ids.contains($0.id) } : []
+    // One row per file (a file edited three times is one row with its lines added up), opening its last edit.
+    let items = Dictionary(grouping: calls) { $0.diff?.path ?? $0.arg ?? $0.id }.values
+      .compactMap { group -> (ChatItem, Int, Int)? in
+        guard let last = group.last else { return nil }
+        return (last, group.reduce(0) { $0 + ($1.diff?.added ?? 0) }, group.reduce(0) { $0 + ($1.diff?.removed ?? 0) })
+      }
+      .sorted { $0.0.at < $1.0.at }
     Group {
       if items.isEmpty {
         EmptyState(title: "这一轮的改动不在当前的对话里")
       } else {
         ScrollView {
           LazyVStack(spacing: 0) {
-            ForEach(items) { item in
+            ForEach(items, id: \.0.id) { entry in
+              let (item, added, removed) = entry
               let (name, dir) = splitPath(item.diff?.path ?? item.arg ?? "")
               NavigationLink(value: Route.tool(session: session, item: item.id)) {
                 HStack(spacing: 12) {
@@ -151,7 +160,7 @@ struct TurnView: View {
                     if !dir.isEmpty { Text(dir).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
                   }
                   Spacer(minLength: 0)
-                  Counts(added: item.diff?.added, removed: item.diff?.removed)
+                  Counts(added: added, removed: removed)
                   Icon("chevron-right", size: 14).foregroundStyle(Color.textSecondary)
                 }
                 .padding(.horizontal, Metric.margin)
@@ -168,7 +177,7 @@ struct TurnView: View {
     .background(Color.bgApp)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .principal) { NavTitle(title: "这一轮的改动", subtitle: "\(Set(items.compactMap { $0.diff?.path }).count) 个文件") }
+      ToolbarItem(placement: .principal) { NavTitle(title: "这一轮的改动", subtitle: "\(items.count) 个文件") }
     }
   }
 }

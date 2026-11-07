@@ -43,7 +43,8 @@ extension Color {
   static let solidOn = token(0x000000, 0xffffff)
   static let link = token(0x5ea1ff, 0x2f6fd6)
   static let scrim = token(0x000000, 0x000000, alpha: 0.75, 0.35)
-  // Notices that are not a session status (connection, pairing, send failures): always with words
+  // Notices that are not a session status (connection, pairing, send failures): always with words. The Figma 「Mobile」
+  // variables of their own (PRD v1.141), not the desktop's status colours, so not read from Shared.json.
   static let noticeInfo = token(0x5ea1ff, 0x2f6fd6)
   static let noticeInfoTint = token(0x5ea1ff, 0x5ea1ff, alpha: 0.12, 0.12)
   static let noticeSuccess = token(0x3dd68c, 0x1e8e5a)

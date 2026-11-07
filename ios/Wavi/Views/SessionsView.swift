@@ -56,14 +56,15 @@ struct SessionsView: View {
   private func list(_ groups: [SessionGroup]) -> some View {
     let stale = !model.isOpen
     return ScrollView {
-      VStack(alignment: .leading, spacing: 0) {
-        if stale {
-          Notice(tone: .warning, message: model.staleNotice, action: "重试") { model.wake() }
-            .padding(.horizontal, Metric.margin)
-            .padding(.top, 4)
-        }
-        TimelineView(.periodic(from: .now, by: 15)) { context in
-          let now = context.date.timeIntervalSince1970 * 1000
+      // The notice reads the same clock as the rows: offline nothing else changes, so it would keep its first minute.
+      TimelineView(.periodic(from: .now, by: 15)) { context in
+        let now = context.date.timeIntervalSince1970 * 1000
+        VStack(alignment: .leading, spacing: 0) {
+          if stale {
+            Notice(tone: .warning, message: staleNotice(heardAt: model.heardAt, now: now), action: "重试") { model.wake() }
+              .padding(.horizontal, Metric.margin)
+              .padding(.top, 4)
+          }
           LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(groups) { group in
               GroupHeader(title: group.title, count: group.rows.count, project: true, attention: group.id == SessionGroup.needsYouId)

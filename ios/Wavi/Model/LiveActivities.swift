@@ -8,6 +8,7 @@ import UIKit
 final class LiveActivities {
   private var activity: Activity<WaviActivityAttributes>?
   private var shown: ActivityState?
+  private var pushedAt: Date?
 
   /// What the card shows now.
   var current: ActivityState? { shown }
@@ -34,8 +35,17 @@ final class LiveActivities {
   /// that has to wait for it (an intent, before the system suspends the app again).
   @discardableResult
   func show(_ state: ActivityState?, mac: String, alert: Bool = false) -> Task<Void, Never>? {
-    guard state != shown else { return nil }
+    // The same card again is not sent (Wavi lists sessions every 250 ms); only its stale date is renewed, at half the
+    // window, so a card that stays the same while the Mac is there does not read 已过期.
+    func card(_ s: ActivityState?) -> ActivityState? {
+      var s = s
+      s?.updated = nil
+      return s
+    }
+    let fresh = pushedAt.map { Date().timeIntervalSince($0) < ActivityLimits.recentMs / 2000 } ?? false
+    if card(state) == card(shown), state == nil || fresh { return nil }
     shown = state
+    pushedAt = Date()
     guard let state else {
       let ending = activity
       activity = nil

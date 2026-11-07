@@ -62,7 +62,8 @@ struct Spinner: View {
   // The angle comes from the clock, not from a repeating implicit animation: such an animation also catches the view's
   // moves while a sheet slides in and keeps replaying them, so the arc drifted off its row.
   var body: some View {
-    TimelineView(.animation(paused: reduceMotion)) { context in
+    // At most 60 times a second (not each 120 Hz frame): enough for a 14 pt arc, half the body work on ProMotion.
+    TimelineView(.animation(minimumInterval: 1.0 / 60, paused: reduceMotion)) { context in
       Path { p in p.addArc(center: CGPoint(x: 7, y: 7), radius: 4.5, startAngle: .degrees(-90), endAngle: .degrees(180), clockwise: false) }
         .stroke(color, style: StrokeStyle(lineWidth: 1.75, lineCap: .round))
         .rotationEffect(.degrees(reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
