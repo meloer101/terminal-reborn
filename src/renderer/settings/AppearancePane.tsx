@@ -142,14 +142,17 @@ export function AppearancePane({
           </button>
         </Section>
 
-        <Section title="全屏背景">
-          <ThemeSwatches
-            label="全屏背景"
-            value={appearance.fullscreenBackdrop}
-            options={BACKDROP_OPTIONS}
-            onChange={(fullscreenBackdrop) => update({ fullscreenBackdrop })}
-          />
-        </Section>
+        {/* 实色 (Figma 57C) draws no field in full screen, so there is nothing to choose. */}
+        {material !== 'solid' && (
+          <Section title="全屏背景">
+            <ThemeSwatches
+              label="全屏背景"
+              value={appearance.fullscreenBackdrop}
+              options={BACKDROP_OPTIONS}
+              onChange={(fullscreenBackdrop) => update({ fullscreenBackdrop })}
+            />
+          </Section>
+        )}
 
         <Section title="字体">
           <Row label="英文字体" id="latinFont">
