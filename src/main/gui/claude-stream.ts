@@ -15,9 +15,8 @@ import {
   type GuiPrompt,
   type GuiQuestion
 } from '@shared/gui-chat'
-import { addedFile, createChatParser, fileDiffs, type ChatParser, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
-import { lineDiff } from './acp'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -98,8 +97,8 @@ function detailOf(tool: string, input: Rec, description: string | undefined, cwd
   if (tool === 'Bash' && command) return command
   const path = str(input.file_path)
   // Relative to the session's folder, as the tool row shows it.
-  if (path && cwd && path.startsWith(`${cwd}/`)) return path.slice(cwd.length + 1)
-  return path ?? str(input.url) ?? str(input.pattern) ?? description ?? tool
+  if (path) return rel(path, cwd)
+  return str(input.url) ?? str(input.pattern) ?? description ?? tool
 }
 
 /** Above this many lines of old + new text a permission card shows no diff (the card stays small and quick). */
@@ -118,7 +117,7 @@ export function permissionDiff(tool: string, input: Rec, cwd?: string): FileDiff
   const lines = pairs.reduce((n, [a, b]) => n + count(a) + count(b), 0)
   if (pairs.length === 0 || lines > PROMPT_DIFF_LINES) return undefined
   const hunks: DiffHunk[] = tool === 'Write' ? [addedFile(pairs[0]![1])] : pairs.flatMap(([a, b]) => lineDiff(a, b))
-  return fileDiffs([{ path: cwd && path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path, hunks }])[0]
+  return fileDiffs([{ path: rel(path, cwd), hunks }])[0]
 }
 
 export function promptOf(pending: ClaudePending, description?: string, cwd?: string): GuiPrompt {

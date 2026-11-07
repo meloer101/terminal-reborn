@@ -16,65 +16,13 @@ import {
   type GuiPermissionOption,
   type GuiPrompt
 } from '@shared/gui-chat'
-import { CHAT_LIMITS, fileDiffs, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { CHAT_LIMITS, fileDiffs, lineDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text)
 const tail = (text: string, max: number): string => (text.length > max ? `…${text.slice(text.length - max)}` : text)
-
-const CONTEXT = 3
-/** Above this many line pairs the diff is shown as a whole replacement (the table would be too big). */
-const MAX_PAIRS = 4_000_000
-
-/** Old / new text → hunks with three lines of context (longest common subsequence of lines). */
-export function lineDiff(oldText: string, newText: string): DiffHunk[] {
-  const a = oldText === '' ? [] : oldText.replace(/\n$/, '').split('\n')
-  const b = newText === '' ? [] : newText.replace(/\n$/, '').split('\n')
-  type Op = { op: ' ' | '-' | '+'; line: string; oldNo: number; newNo: number }
-  const ops: Op[] = []
-  if (a.length * b.length > MAX_PAIRS) {
-    a.forEach((line, i) => ops.push({ op: '-', line, oldNo: i + 1, newNo: 1 }))
-    b.forEach((line, i) => ops.push({ op: '+', line, oldNo: a.length + 1, newNo: i + 1 }))
-  } else {
-    const w = b.length + 1
-    const lcs = new Uint32Array((a.length + 1) * w)
-    for (let i = a.length - 1; i >= 0; i--) {
-      for (let j = b.length - 1; j >= 0; j--) {
-        lcs[i * w + j] = a[i] === b[j] ? lcs[(i + 1) * w + j + 1]! + 1 : Math.max(lcs[(i + 1) * w + j]!, lcs[i * w + j + 1]!)
-      }
-    }
-    let i = 0
-    let j = 0
-    while (i < a.length || j < b.length) {
-      if (i < a.length && j < b.length && a[i] === b[j]) ops.push({ op: ' ', line: a[i++]!, oldNo: i, newNo: ++j })
-      // Removals before additions, as git prints them.
-      else if (i < a.length && (j >= b.length || lcs[(i + 1) * w + j]! >= lcs[i * w + j + 1]!)) ops.push({ op: '-', line: a[i++]!, oldNo: i, newNo: j + 1 })
-      else ops.push({ op: '+', line: b[j++]!, oldNo: i + 1, newNo: j })
-    }
-  }
-  const hunks: DiffHunk[] = []
-  let k = 0
-  while (k < ops.length) {
-    if (ops[k]!.op === ' ') {
-      k++
-      continue
-    }
-    const from = Math.max(0, k - CONTEXT)
-    let to = k
-    let quiet = 0
-    while (to < ops.length && quiet <= CONTEXT * 2) {
-      quiet = ops[to]!.op === ' ' ? quiet + 1 : 0
-      to++
-    }
-    const end = Math.min(ops.length, to - Math.max(0, quiet - CONTEXT))
-    const slice = ops.slice(from, end)
-    hunks.push({ oldStart: slice[0]!.oldNo, newStart: slice[0]!.newNo, lines: slice.map((o) => `${o.op}${o.line}`) })
-    k = end
-  }
-  return hunks
-}
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
@@ -94,10 +42,6 @@ const KIND_NAMES: Record<string, string> = {
 
 function textOfBlock(block: unknown): string {
   return isRec(block) && block.type === 'text' ? (str(block.text) ?? '') : ''
-}
-
-function rel(path: string, cwd: string): string {
-  return path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path
 }
 
 /** The diff blocks of a tool call's content, one per file. */

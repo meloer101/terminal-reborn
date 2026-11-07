@@ -3,7 +3,7 @@
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
 import { effortLabel, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { addedFile, CHAT_LIMITS, fileDiffs, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, rel, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -47,12 +47,11 @@ type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 /** `fileChange.changes` → one diff per file (a new file's text is all additions). */
 function diffsOfChanges(changes: unknown, cwd: string): FileDiff[] {
   const list = Array.isArray(changes) ? changes.filter(isRec) : []
-  const rel = (p: string) => (p.startsWith(`${cwd}/`) ? p.slice(cwd.length + 1) : p)
   return fileDiffs(
     list.map((change) => {
       const diff = str(change.diff) ?? ''
       const kind = isRec(change.kind) ? change.kind.type : undefined
-      return { path: rel(str(change.path) ?? ''), hunks: kind === 'add' && !diff.includes('@@') ? [addedFile(diff)] : hunksOfUnifiedDiff(diff) }
+      return { path: rel(str(change.path) ?? '', cwd), hunks: kind === 'add' && !diff.includes('@@') ? [addedFile(diff)] : hunksOfUnifiedDiff(diff) }
     })
   )
 }

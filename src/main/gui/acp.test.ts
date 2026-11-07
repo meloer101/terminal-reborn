@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, emptyGuiState, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { acpAnswerResult, acpAutoAllow, acpCommands, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer, lineDiff } from './acp'
+import { acpAnswerResult, acpAutoAllow, acpCommands, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer } from './acp'
 
 // Shapes per the Agent Client Protocol (protocolVersion 1), as Grok `agent stdio` and Cursor `agent acp` send them (PRD §6.17).
 const fold = (events: GuiEvent[], state: GuiState = emptyGuiState()) => events.reduce(applyGuiEvent, state)
@@ -167,23 +167,6 @@ describe('acpConfig / acpConfigRequest / acpCommands', () => {
 
   it('lists commands with their input hint', () => {
     expect(acpCommands([{ name: 'compact', description: 'Compact', input: { hint: '[focus]' } }, { description: 'x' }])).toEqual([{ name: 'compact', description: 'Compact', argumentHint: '[focus]', kind: 'command' }])
-  })
-})
-
-describe('lineDiff', () => {
-  it('keeps three lines of context and splits distant changes into hunks', () => {
-    const before = Array.from({ length: 20 }, (_, i) => `l${i + 1}`).join('\n')
-    const after = before.replace('l2', 'L2').replace('l18', 'L18')
-    const hunks = lineDiff(before, after)
-    expect(hunks.map((h) => [h.oldStart, h.lines[0]])).toEqual([
-      [1, ' l1'],
-      [15, ' l15']
-    ])
-    expect(hunks[0]?.lines).toEqual([' l1', '-l2', '+L2', ' l3', ' l4', ' l5'])
-  })
-
-  it('treats a new file as all additions', () => {
-    expect(lineDiff('', 'a\nb\n')).toEqual([{ oldStart: 1, newStart: 1, lines: ['+a', '+b'] }])
   })
 })
 

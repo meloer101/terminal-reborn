@@ -124,7 +124,7 @@ function timeOf(line: Rec, fallback: number): number {
 }
 
 /** A path under the session's folder, shown relative to it. */
-function rel(path: string, cwd: string | undefined): string {
+export function rel(path: string, cwd: string | undefined): string {
   if (cwd && path.startsWith(cwd.endsWith('/') ? cwd : `${cwd}/`)) return path.slice(cwd.length + (cwd.endsWith('/') ? 0 : 1))
   return path
 }
@@ -244,6 +244,58 @@ export function fileDiffs(files: readonly { path: string; hunks: readonly DiffHu
 
 /** A new file's whole text as one hunk of additions. */
 export const addedFile = (text: string): DiffHunk => ({ oldStart: 0, newStart: 1, lines: text.replace(/\n$/, '').split('\n').map((l) => `+${l}`) })
+
+const DIFF_CONTEXT = 3
+/** Above this many line pairs the diff is shown as a whole replacement (the table would be too big). */
+const DIFF_MAX_PAIRS = 4_000_000
+
+/** Old / new text → hunks with three lines of context (longest common subsequence of lines). */
+export function lineDiff(oldText: string, newText: string): DiffHunk[] {
+  const a = oldText === '' ? [] : oldText.replace(/\n$/, '').split('\n')
+  const b = newText === '' ? [] : newText.replace(/\n$/, '').split('\n')
+  type Op = { op: ' ' | '-' | '+'; line: string; oldNo: number; newNo: number }
+  const ops: Op[] = []
+  if (a.length * b.length > DIFF_MAX_PAIRS) {
+    a.forEach((line, i) => ops.push({ op: '-', line, oldNo: i + 1, newNo: 1 }))
+    b.forEach((line, i) => ops.push({ op: '+', line, oldNo: a.length + 1, newNo: i + 1 }))
+  } else {
+    const w = b.length + 1
+    const lcs = new Uint32Array((a.length + 1) * w)
+    for (let i = a.length - 1; i >= 0; i--) {
+      for (let j = b.length - 1; j >= 0; j--) {
+        lcs[i * w + j] = a[i] === b[j] ? lcs[(i + 1) * w + j + 1]! + 1 : Math.max(lcs[(i + 1) * w + j]!, lcs[i * w + j + 1]!)
+      }
+    }
+    let i = 0
+    let j = 0
+    while (i < a.length || j < b.length) {
+      if (i < a.length && j < b.length && a[i] === b[j]) ops.push({ op: ' ', line: a[i++]!, oldNo: i, newNo: ++j })
+      // Removals before additions, as git prints them.
+      else if (i < a.length && (j >= b.length || lcs[(i + 1) * w + j]! >= lcs[i * w + j + 1]!)) ops.push({ op: '-', line: a[i++]!, oldNo: i, newNo: j + 1 })
+      else ops.push({ op: '+', line: b[j++]!, oldNo: i + 1, newNo: j })
+    }
+  }
+  const hunks: DiffHunk[] = []
+  let k = 0
+  while (k < ops.length) {
+    if (ops[k]!.op === ' ') {
+      k++
+      continue
+    }
+    const from = Math.max(0, k - DIFF_CONTEXT)
+    let to = k
+    let quiet = 0
+    while (to < ops.length && quiet <= DIFF_CONTEXT * 2) {
+      quiet = ops[to]!.op === ' ' ? quiet + 1 : 0
+      to++
+    }
+    const end = Math.min(ops.length, to - Math.max(0, quiet - DIFF_CONTEXT))
+    const slice = ops.slice(from, end)
+    hunks.push({ oldStart: slice[0]!.oldNo, newStart: slice[0]!.newNo, lines: slice.map((o) => `${o.op}${o.line}`) })
+    k = end
+  }
+  return hunks
+}
 
 /** Edit / Write results → a diff the phone can draw, capped at CHAT_LIMITS.diffLines lines. */
 export function diffOf(result: unknown, cwd?: string): FileDiff | undefined {

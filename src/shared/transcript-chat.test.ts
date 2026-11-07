@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAT_LIMITS, createChatParser, fileDiffs, toolArg, toolLabel, type ChatItem } from './transcript-chat'
+import { CHAT_LIMITS, createChatParser, fileDiffs, lineDiff, toolArg, toolLabel, type ChatItem } from './transcript-chat'
 
 const CWD = '/Users/me/.tr/worktrees/acme/session-refresh'
 const T = '2026-11-01T10:00:00.000Z'
@@ -310,5 +310,22 @@ describe('tool rows', () => {
     expect(toolArg('mcp__figma__use_figma', { fileKey: 'abc', code: 'x' })).toBe('abc')
     expect(toolLabel('mcp__599cb545__use_figma')).toBe('use_figma')
     expect(toolLabel('Bash')).toBe('Bash')
+  })
+})
+
+describe('lineDiff', () => {
+  it('keeps three lines of context and splits distant changes into hunks', () => {
+    const before = Array.from({ length: 20 }, (_, i) => `l${i + 1}`).join('\n')
+    const after = before.replace('l2', 'L2').replace('l18', 'L18')
+    const hunks = lineDiff(before, after)
+    expect(hunks.map((h) => [h.oldStart, h.lines[0]])).toEqual([
+      [1, ' l1'],
+      [15, ' l15']
+    ])
+    expect(hunks[0]?.lines).toEqual([' l1', '-l2', '+L2', ' l3', ' l4', ' l5'])
+  })
+
+  it('treats a new file as all additions', () => {
+    expect(lineDiff('', 'a\nb\n')).toEqual([{ oldStart: 1, newStart: 1, lines: ['+a', '+b'] }])
   })
 })
