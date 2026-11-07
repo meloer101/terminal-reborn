@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { HostEvent } from './protocol'
 import { HIDDEN_HIGH_WATERMARK } from './flow-control'
-import { SessionHost } from './session-host'
+import { existsSync } from 'node:fs'
+import { SessionHost, spawnHelperPath } from './session-host'
 
 function harness(mirror = true, onDetachedOutput?: (id: string) => void) {
   const events: HostEvent[] = []
@@ -46,6 +47,14 @@ let cleanup: SessionHost | null = null
 afterEach(() => {
   cleanup?.killAll()
   cleanup = null
+})
+
+describe('spawnHelperPath', () => {
+  it('finds the spawn-helper next to the pty.node node-pty loads', () => {
+    const helper = spawnHelperPath()
+    expect(helper).toMatch(/node-pty\/(build\/Release|prebuilds\/[\w-]+)\/spawn-helper$/)
+    expect(existsSync(helper ?? '')).toBe(true)
+  })
 })
 
 describe('SessionHost', () => {

@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
-import { closeSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { connect, createServer, type Server } from 'node:net'
 import { dirname, join } from 'node:path'
@@ -120,10 +120,14 @@ describe('DaemonConnection.handshake', () => {
   })
 })
 
-/** A stand-in daemon: answers `hello` with a welcome carrying its pid and exits on `shutdown`. */
+/**
+ * A stand-in daemon: answers `hello` with a welcome carrying its pid (and `spawnHelper` when FAKE_SPAWN_HELPER is set,
+ * as daemons that report it do) and, like the real one, hangs up and exits on `shutdown`.
+ */
 const FAKE_DAEMON = `
 const net = require('node:net')
 const path = process.argv[process.argv.indexOf('--socket') + 1]
+const helper = process.env.FAKE_SPAWN_HELPER
 const server = net.createServer((socket) => {
   let buffer = ''
   socket.on('data', (chunk) => {
@@ -131,8 +135,13 @@ const server = net.createServer((socket) => {
     for (let i = buffer.indexOf('\\n'); i >= 0; i = buffer.indexOf('\\n')) {
       const message = JSON.parse(buffer.slice(0, i))
       buffer = buffer.slice(i + 1)
-      if (message.type === 'hello') socket.write(JSON.stringify({ type: 'welcome', protocol: ${PROTOCOL_VERSION}, pid: process.pid, buildId: 'fake', sessions: [], hooks: null }) + '\\n')
-      if (message.type === 'shutdown') server.close(() => process.exit(0))
+      const welcome = { type: 'welcome', protocol: ${PROTOCOL_VERSION}, pid: process.pid, buildId: 'fake', sessions: [], hooks: null }
+      if (helper) welcome.spawnHelper = helper
+      if (message.type === 'hello') socket.write(JSON.stringify(welcome) + '\\n')
+      if (message.type === 'shutdown') {
+        socket.end()
+        server.close(() => process.exit(0))
+      }
     }
   })
 })
@@ -169,16 +178,27 @@ describe('openDaemon', () => {
     userData = ''
   })
 
-  /** Runs the stand-in daemon from `program` on this profile's socket and waits until it listens. */
-  async function startDaemon(program: string, script: string): Promise<number> {
+  /**
+   * Runs the stand-in daemon on this profile's socket with `program` as its argv[0] (what `ps -o comm=` shows, as for
+   * a daemon `spawnOrphan` started from the app's binary) and waits until it listens. A real binary that is linked or
+   * copied and then deleted would make macOS re-check node's signature for seconds on the next launch.
+   */
+  async function startDaemon(program: string, script: string, env: NodeJS.ProcessEnv = process.env): Promise<number> {
     const location = daemonLocation(userData)
     mkdirSync(dirname(location.socketPath), { recursive: true, mode: 0o700 })
-    const child = spawn(program, [script, '--dir', location.dir, '--socket', location.socketPath], { detached: true, stdio: 'ignore' })
+    const child = spawn(process.execPath, [script, '--dir', location.dir, '--socket', location.socketPath], { argv0: program, detached: true, stdio: 'ignore', env })
     child.unref()
     const pid = child.pid ?? 0
     pids.push(pid)
     await until(() => (existsSync(location.socketPath) ? true : null))
     return pid
+  }
+
+  /** An (empty) file at `path`: stands in for the app's binary, which only has to exist. */
+  function programAt(path: string): string {
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, '')
+    return path
   }
 
   function setUp(): string {
@@ -190,7 +210,7 @@ describe('openDaemon', () => {
 
   it('adopts a running daemon whose program is still there', async () => {
     const script = setUp()
-    const pid = await startDaemon(process.execPath, script)
+    const pid = await startDaemon(programAt(join(userData, 'Wavi')), script)
     const connection = await openDaemon({ userData, script, appVersion: 'test', handlers, log: () => undefined })
     pids.push(connection.pid)
     expect(connection.pid).toBe(pid)
@@ -199,19 +219,48 @@ describe('openDaemon', () => {
 
   it('replaces a daemon whose app was moved or deleted: it could start no new terminal (posix_spawnp failed)', async () => {
     const script = setUp()
-    // The daemon runs from a copy of the program that is then deleted, as when the app bundle goes to the Trash.
-    const program = join(userData, 'old-app')
-    try {
-      linkSync(process.execPath, program)
-    } catch {
-      copyFileSync(process.execPath, program)
-    }
+    // A daemon too old to report its spawn-helper, run from a program that is then deleted (the app went to the Trash).
+    const program = programAt(join(userData, 'old-app'))
     const stale = await startDaemon(program, script)
     rmSync(program)
+    const started = Date.now()
+    const connection = await openDaemon({ userData, script, appVersion: 'test', handlers, log: () => undefined })
+    pids.push(connection.pid)
+    expect(connection.pid).not.toBe(stale)
+    expect(alive(stale)).toBe(false)
+    // Retired by `shutdown`, not by the SIGKILL fallback after 2 + 3 s.
+    expect(Date.now() - started).toBeLessThan(2000)
+    connection.close()
+  }, 15_000)
+
+  it('replaces a daemon whose reported spawn-helper is gone, though its program is still there', async () => {
+    const script = setUp()
+    // A linked install: the binary stays in /Applications, node-pty lived in a worktree that was removed.
+    const helper = join(userData, 'worktree', 'spawn-helper')
+    mkdirSync(dirname(helper))
+    writeFileSync(helper, '')
+    const stale = await startDaemon(programAt(join(userData, 'Wavi')), script, { ...process.env, FAKE_SPAWN_HELPER: helper })
+    rmSync(helper)
     const connection = await openDaemon({ userData, script, appVersion: 'test', handlers, log: () => undefined })
     pids.push(connection.pid)
     expect(connection.pid).not.toBe(stale)
     expect(alive(stale)).toBe(false)
     connection.close()
   }, 15_000)
+
+  it('adopts a daemon run from a path with non-ASCII characters when the app has no UTF-8 locale', async () => {
+    const script = setUp()
+    const pid = await startDaemon(programAt(join(userData, '开发项目', 'Wavi')), script)
+    // Launched from Finder, the app has no LANG / LC_*: `ps` would print the path escaped, which does not exist.
+    const saved = { ...process.env }
+    for (const key of Object.keys(process.env)) if (key === 'LANG' || key.startsWith('LC_')) delete process.env[key]
+    try {
+      const connection = await openDaemon({ userData, script, appVersion: 'test', handlers, log: () => undefined })
+      pids.push(connection.pid)
+      expect(connection.pid).toBe(pid)
+      connection.close()
+    } finally {
+      Object.assign(process.env, saved)
+    }
+  })
 })
