@@ -551,9 +551,26 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(userAvatar).toBeHidden()
   })
 
-  test('lists the agent’s commands under /', async () => {
+  test('lists the agent’s commands under /: 命令, then Skills (Figma 59H)', async () => {
     await input().fill('/re')
-    await expect(page.getByTestId('gui-slash-menu')).toContainText('review', WITHIN)
+    const menu = page.getByTestId('gui-slash-menu')
+    await expect(menu).toContainText('review', WITHIN)
+    // Turns have run, so system/init has said which entries are skills.
+    const groups = menu.getByTestId('gui-slash-group')
+    await expect(groups).toHaveCount(2)
+    await expect(groups.nth(0).getByRole('option')).toHaveText(['/review[path]Review the diff'])
+    await expect(groups.nth(1).getByRole('option')).toHaveText(['/research<topic>Research a topic and write a report'])
+    await expect(groups.locator('[class*="popoverTitle"]')).toHaveText(['命令', 'Skills'])
+    // The keys go down in the order shown.
+    await input().press('ArrowDown')
+    await expect(menu.locator('[aria-selected="true"]')).toContainText('research')
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `slash-menu-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     await input().fill('')
   })
 

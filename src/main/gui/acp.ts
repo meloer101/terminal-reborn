@@ -296,7 +296,7 @@ export function acpCommands(raw: unknown): GuiCommand[] {
     const name = str(c.name)
     if (!name) return []
     const hint = isRec(c.input) ? str(c.input.hint) : undefined
-    return [{ name, description: str(c.description) ?? '', ...(hint ? { argumentHint: hint } : {}) }]
+    return [{ name, description: str(c.description) ?? '', ...(hint ? { argumentHint: hint } : {}), kind: 'command' as const }]
   })
 }
 

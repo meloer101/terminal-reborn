@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, emptyGuiState, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, promptOf, type ClaudePending } from './claude-stream'
+import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, markSkills, promptOf, type ClaudePending } from './claude-stream'
 
 // Shapes as `claude -p --output-format stream-json --include-partial-messages` 2.1.317 prints them (PRD §6.17).
 const at = '2026-11-05T15:54:30.000Z'
@@ -115,7 +115,7 @@ describe('createClaudeStreamNormalizer', () => {
       { type: 'system', subtype: 'status', status: 'requesting' },
       { type: 'system', subtype: 'commands_changed', commands: [{ name: 'review', description: 'Review the branch (user)', argumentHint: '' }] }
     ])
-    expect(events).toEqual([{ type: 'commands', commands: [{ name: 'review', description: 'Review the branch' }] }])
+    expect(events).toEqual([{ type: 'commands', commands: [{ name: 'review', description: 'Review the branch', kind: 'command' }] }])
   })
 })
 
@@ -248,7 +248,15 @@ describe('promptOf · a permission to change a file shows the change (Figma 59I)
 describe('commandsOf', () => {
   it('keeps name, description and argument hint, without the source suffix', () => {
     expect(commandsOf([{ name: 'tdd', description: 'Test first (plugin:mattpocock)', argumentHint: '<file>' }, { description: 'nameless' }])).toEqual([
-      { name: 'tdd', description: 'Test first', argumentHint: '<file>' }
+      { name: 'tdd', description: 'Test first', argumentHint: '<file>', kind: 'command' }
     ])
+  })
+})
+
+describe('markSkills (Figma 59H)', () => {
+  it('marks the commands system/init lists as skills; the rest stay commands', () => {
+    const commands = commandsOf([{ name: 'compact', description: 'Compact' }, { name: 'research', description: 'Research (user)', argumentHint: '<topic>' }, { name: 'figma:figma-use', description: 'x' }])
+    expect(markSkills(commands, new Set(['research', 'figma:figma-use'])).map((c) => `${c.name}:${c.kind}`)).toEqual(['compact:command', 'research:skill', 'figma:figma-use:skill'])
+    expect(markSkills(commands, new Set()).every((c) => c.kind === 'command')).toBe(true)
   })
 })

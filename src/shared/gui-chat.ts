@@ -103,6 +103,8 @@ export interface GuiCommand {
   name: string
   description: string
   argumentHint?: string
+  /** Figma 59H: a skill (Claude's `system/init` `skills`) is listed under Skills; absent = a command. */
+  kind?: 'command' | 'skill'
 }
 
 export interface GuiState {

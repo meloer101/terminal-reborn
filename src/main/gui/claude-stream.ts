@@ -220,8 +220,16 @@ export function commandsOf(raw: unknown[]): GuiCommand[] {
     if (!name) return []
     const description = (str(c.description) ?? '').replace(/\s*\((user|project|plugin[^)]*)\)\s*$/, '')
     const hint = str(c.argumentHint)
-    return [{ name, description, ...(hint ? { argumentHint: hint } : {}) }]
+    return [{ name, description, ...(hint ? { argumentHint: hint } : {}), kind: 'command' as const }]
   })
+}
+
+/**
+ * Figma 59H: the commands Claude's `system/init` lists under `skills` are skills. `initialize` and `commands_changed`
+ * do not say which commands are skills, and init comes only with a turn: until the first one, every entry is a command.
+ */
+export function markSkills(commands: readonly GuiCommand[], skills: ReadonlySet<string>): GuiCommand[] {
+  return commands.map((c) => ({ ...c, kind: skills.has(c.name) ? 'skill' : 'command' }))
 }
 
 /** The pickers from `initialize` (models, their effort levels, permission modes) and `get_settings`' effort. */

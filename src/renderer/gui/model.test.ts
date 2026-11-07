@@ -31,7 +31,8 @@ import {
   waitingToolId,
   currentTodos,
   todoProgress,
-  todoStatus
+  todoStatus,
+  slashGroups
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -338,6 +339,23 @@ describe('composer', () => {
     const commands = [{ name: 'review', description: '审阅' }, { name: 'rewind', description: '回到之前' }, { name: 'compare', description: 'x' }]
     expect(matchCommands(commands, slashQuery('/re')!).map((c) => c.name)).toEqual(['review', 'rewind', 'compare'])
     expect(pickCommand(commands[0]!)).toBe('/review ')
+  })
+
+  it('splits the / menu into 命令 then Skills, the keys going down the same order (Figma 59H)', () => {
+    const matches = [
+      { name: 'research', description: 'r', kind: 'skill' as const },
+      { name: 'review', description: 'v', kind: 'command' as const },
+      { name: 'release-notes', description: 'n' },
+      { name: 'remotion-render', description: 'm', kind: 'skill' as const }
+    ]
+    const groups = slashGroups(matches)
+    expect(groups.map((g) => [g.title, g.commands.map((c) => c.name)])).toEqual([
+      ['命令', ['review', 'release-notes']],
+      ['Skills', ['research', 'remotion-render']]
+    ])
+    expect(groups.map((g) => g.start)).toEqual([0, 2])
+    expect(slashGroups(matches.filter((c) => c.kind === 'skill')).map((g) => g.title)).toEqual(['Skills'])
+    expect(slashGroups([])).toEqual([])
   })
 
   it('adds inserted text after what is typed', () => {

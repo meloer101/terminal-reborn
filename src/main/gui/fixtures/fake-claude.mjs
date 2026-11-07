@@ -49,7 +49,8 @@ const queue = []
 
 function startTurn(text) {
   turn = { text, waiting: null }
-  out({ type: 'system', subtype: 'init', session_id: SESSION, model, permissionMode: 'default' })
+  // Each turn's init lists the skills among the commands (Figma 59H: the / menu's Skills group).
+  out({ type: 'system', subtype: 'init', session_id: SESSION, model, permissionMode: 'default', slash_commands: ['review', 'research'], skills: ['research'] })
   if (!text.includes('think')) return reply(text)
   out({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } }, session_id: SESSION })
   setTimeout(() => {
@@ -142,7 +143,10 @@ function control(message) {
   const reply = (response) => out({ type: 'control_response', response: { subtype: 'success', request_id: message.request_id, response } })
   if (r.subtype === 'initialize') {
     reply({
-      commands: [{ name: 'review', description: 'Review the diff (project)', argumentHint: '[path]' }],
+      commands: [
+        { name: 'review', description: 'Review the diff (project)', argumentHint: '[path]' },
+        { name: 'research', description: 'Research a topic and write a report (user)', argumentHint: '<topic>' }
+      ],
       models: [
         { value: 'opus', displayName: 'Opus', supportsEffort: true, supportedEffortLevels: ['low', 'high', 'max'] },
         { value: 'haiku', displayName: 'Haiku' }

@@ -1542,14 +1542,20 @@
   color: var(--text-tertiary);
 }
 
+.slashGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Figma 59H: name (code, primary) · argument hint (code, tertiary) · description (step, secondary, one line). */
 .command {
   display: flex;
   flex: none;
-  align-items: center;
-  gap: var(--space-12);
+  align-items: baseline;
+  gap: var(--space-8);
   padding: 5px 10px;
   border-radius: 6px;
-  font: var(--text-body);
+  font: var(--type-step);
 }
 
 .command[aria-selected='true'] {
@@ -1558,9 +1564,18 @@
 
 .commandName {
   flex-shrink: 0;
-  font: var(--text-body);
-  font-family: var(--font-mono);
+  font: var(--type-code);
   color: var(--text-primary);
+}
+
+.commandHint {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .commandText {

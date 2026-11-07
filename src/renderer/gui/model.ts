@@ -440,6 +440,23 @@ export function slashQuery(draft: string): string | null {
   return match ? match[1]! : null
 }
 
+/** Figma 59H: the `/` menu's groups — 命令, then Skills — each with where it starts in the keys' order. */
+export interface SlashGroup {
+  title: '命令' | 'Skills'
+  commands: GuiCommand[]
+  /** The index of its first entry in the menu's order (commands, then skills). */
+  start: number
+}
+
+export function slashGroups(matches: readonly GuiCommand[]): SlashGroup[] {
+  const commands = matches.filter((c) => c.kind !== 'skill')
+  const skills = matches.filter((c) => c.kind === 'skill')
+  const groups: SlashGroup[] = []
+  if (commands.length > 0) groups.push({ title: '命令', commands, start: 0 })
+  if (skills.length > 0) groups.push({ title: 'Skills', commands: skills, start: commands.length })
+  return groups
+}
+
 /** The draft once a command is picked: `/name ` (its argument follows). */
 export const pickCommand = (command: GuiCommand): string => `/${command.name} `
 

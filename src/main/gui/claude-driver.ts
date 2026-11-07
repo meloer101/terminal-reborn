@@ -4,7 +4,7 @@
 // `apply_flag_settings` for the pickers, `interrupt`. Its hooks still fire (§6.17), so status comes from them, not
 // from here. Electron-free.
 
-import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
+import type { GuiAnswer, GuiCommand, GuiConfigOption, GuiEvent } from '@shared/gui-chat'
 import {
   claudeAnswerResponse,
   claudeConfig,
@@ -12,6 +12,7 @@ import {
   claudeLevel,
   commandsOf,
   createClaudeStreamNormalizer,
+  markSkills,
   type ClaudePickerState,
   type ClaudeStreamNormalizer
 } from './claude-stream'
@@ -34,6 +35,13 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
   // A saved level started with (launch.ts --permission-mode) is also where 计划 off returns to.
   const current: ClaudePickerState = { ...(options.model ? { model: options.model } : {}), ...(options.permission ? { level: options.permission } : {}) }
   let config: GuiConfigOption[] = []
+  // The / menu (Figma 59H): the latest commands (initialize, commands_changed) and skills (each turn's system/init).
+  let commands: GuiCommand[] = []
+  let skills: ReadonlySet<string> = new Set()
+  const commandsEvent = (list: GuiCommand[]): GuiEvent => {
+    commands = list
+    return { type: 'commands', commands: markSkills(list, skills) }
+  }
 
   const control = (request: Rec, timeoutMs?: number): Promise<ControlOutcome> =>
     new Promise((resolve) => {
@@ -57,7 +65,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
 
   const takeInit = (response: Rec) => {
     init = response
-    if (Array.isArray(response.commands)) io.emit([{ type: 'commands', commands: commandsOf(response.commands) }])
+    if (Array.isArray(response.commands)) io.emit([commandsEvent(commandsOf(response.commands))])
     emitConfig()
   }
 
@@ -158,6 +166,12 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
         case 'system':
           if (message.subtype === 'init') {
             noteSession(message)
+            if (Array.isArray(message.skills)) {
+              const next = new Set(message.skills.filter((s): s is string => typeof s === 'string'))
+              const changed = next.size !== skills.size || [...next].some((s) => !skills.has(s))
+              skills = next
+              if (changed && commands.length > 0) io.emit([commandsEvent(commands)])
+            }
             const model = str(message.model)
             const mode = str(message.permissionMode)
             // Each turn's init names the resolved model (`claude-haiku-5-5`); the picker holds the alias (`haiku`).
@@ -183,7 +197,8 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
           if (replay && isUserTurn(message)) io.emit([{ type: 'busy', busy: true }])
           break
       }
-      const events = normalizer.push(message)
+      // commands_changed: marked with the skills known so far.
+      const events = normalizer.push(message).map((e) => (e.type === 'commands' ? commandsEvent(e.commands) : e))
       if (events.length > 0) io.emit(events)
     },
 

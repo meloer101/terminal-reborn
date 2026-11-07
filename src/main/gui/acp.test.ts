@@ -166,7 +166,7 @@ describe('acpConfig / acpConfigRequest / acpCommands', () => {
   })
 
   it('lists commands with their input hint', () => {
-    expect(acpCommands([{ name: 'compact', description: 'Compact', input: { hint: '[focus]' } }, { description: 'x' }])).toEqual([{ name: 'compact', description: 'Compact', argumentHint: '[focus]' }])
+    expect(acpCommands([{ name: 'compact', description: 'Compact', input: { hint: '[focus]' } }, { description: 'x' }])).toEqual([{ name: 'compact', description: 'Compact', argumentHint: '[focus]', kind: 'command' }])
   })
 })
 
