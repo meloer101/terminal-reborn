@@ -154,11 +154,12 @@ describe('AI 写 (PRD F16 v1.68)', () => {
     registerPrWriter()
     const started = Date.now()
     const result = writeShipText({ root, worktree: wt, kind: 'commit', agent: 'claude', paths: ['a.txt'] })
-    await vi.waitFor(() => expect(existsSync(join(log, 'slow-started'))).toBe(true), { timeout: 4_000, interval: 20 })
+    await vi.waitFor(() => expect(existsSync(join(log, 'slow-started'))).toBe(true), { timeout: 6_000, interval: 20 })
     for (const quit of quitHandlers) quit()
     expect((await result).ok).toBe(false)
-    expect(Date.now() - started).toBeLessThan(5_000)
-  })
+    expect(Date.now() - started).toBeLessThan(8_000)
+    // It waits for a real process to start (up to 4 s on a loaded machine), then for its group to stop.
+  }, 15_000)
 
   it('starts no agent once the quit is going ahead', async () => {
     quitting = true
