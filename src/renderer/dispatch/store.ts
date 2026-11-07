@@ -3,24 +3,10 @@
 // the reports on their way to each dispatcher, and messages held for 送进去 — when the session has no channel, nobody
 // should be typed over, delivery failed, or the hourly budget is used.
 import { create } from 'zustand'
-import { emptyQueue, type ChildPlan, type ChildReport, type ReportQueue } from '@shared/dispatch'
+import { emptyQueue, type ChildReport, type HeldItem, type PendingStart, type ReportQueue } from '@shared/dispatch'
+
+export type { HeldItem, PendingStart } from '@shared/dispatch'
 import type { SessionId } from '@shared/types'
-
-/** One `wavi run` waiting for 开始 under its dispatcher's terminal; several of one dispatcher show as one strip. */
-export interface PendingStart {
-  callId: string
-  parentId: SessionId
-  /** The session it becomes (named in `wavi run`'s answer already). */
-  childId: SessionId
-  plan: ChildPlan
-  /** The dispatcher's branch, which a `head` child starts from. */
-  base: string
-  /** The dispatcher's checkout has uncommitted changes, which a `head` child will not have. */
-  uncommitted: boolean
-}
-
-/** A message that waits under a session's terminal for the user's 送进去. */
-export type HeldItem = { kind: 'report'; report: ChildReport } | { kind: 'message'; key: string; title: string; text: string }
 
 interface State {
   confirms: PendingStart[]

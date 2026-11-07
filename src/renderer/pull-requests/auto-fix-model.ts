@@ -1,34 +1,12 @@
 // 自动修复 and 通过后合并 per PR, and 自动修复 per base push (PRD F16 v1.63 · L3, v1.78), the pure part: what to send,
 // when to stop, and what the rows say. The bridge (auto-fix.ts) reads the PR / base CI and the session, asks this, and
 // acts. The agent fixes and commits but never pushes: after its turn Wavi checks the brakes and pushes.
-import type { BrakeDecision } from '@shared/auto-fix-brakes'
 import { brakeLabel } from '@shared/auto-fix-brakes'
+import type { FixRun, StopDecision } from '@shared/auto-fix-brakes'
+
+export type { FixRun, FixScope, StopDecision } from '@shared/auto-fix-brakes'
 import { checksLabel, type ChecksSummary, type MergeMethod, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
-
-/** Where a failure lives: a PR's checks (and comments), or the base branch after 合并到 main 并推送. */
-export type FixScope = 'pr' | 'base'
-
-/** The decision that stops a fix: a brake (before the push) or the base already failing (before the fix). */
-export type StopDecision = Exclude<BrakeDecision, { kind: 'push' }>
-
-interface FixRunBase {
-  /** The agent session the fix was sent to. */
-  sessionId: string
-  key: string
-  checks: string[]
-  /** Checks failing on the base's tip too, as the ask saw them; null: unknown. */
-  baseFailing: string[] | null
-}
-
-/** One fix in flight or stopped, in this window only. */
-export type FixRun =
-  /** Sent: the agent works; its next Stop ends the turn. `since` is the head when it was sent. */
-  | (FixRunBase & { kind: 'fixing'; since: string; sentAt: number })
-  /** The brakes said push: Wavi is pushing the fix. */
-  | (FixRunBase & { kind: 'pushing'; since: string })
-  /** Stopped by a brake (since is the head to discard back to) or by the base already failing (since null, nothing was sent). */
-  | (FixRunBase & { kind: 'stopped'; since: string | null; decision: StopDecision })
 
 /** One PR's (number > 0) or one worktree's base push's (number 0) automation in this window. Not saved: a restart starts again from 设置 · 自动化 · PR's defaults. */
 export interface PrAutomation {

@@ -112,3 +112,29 @@ export function brakeLabel(decision: Exclude<BrakeDecision, { kind: 'push' }>, a
       return `${head}这一轮没有新的提交`
   }
 }
+
+// --- what a fix run is (the window's 自动修复, saved while unfinished) -------------------------------------------
+
+/** Where a failure lives: a PR's checks (and comments), or the base branch after 合并到 main 并推送. */
+export type FixScope = 'pr' | 'base'
+
+/** The decision that stops a fix: a brake (before the push) or the base already failing (before the fix). */
+export type StopDecision = Exclude<BrakeDecision, { kind: 'push' }>
+
+export interface FixRunBase {
+  /** The agent session the fix was sent to. */
+  sessionId: string
+  key: string
+  checks: string[]
+  /** Checks failing on the base's tip too, as the ask saw them; null: unknown. */
+  baseFailing: string[] | null
+}
+
+/** One fix in flight or stopped, in this window only. */
+export type FixRun =
+  /** Sent: the agent works; its next Stop ends the turn. `since` is the head when it was sent. */
+  | (FixRunBase & { kind: 'fixing'; since: string; sentAt: number })
+  /** The brakes said push: Wavi is pushing the fix. */
+  | (FixRunBase & { kind: 'pushing'; since: string })
+  /** Stopped by a brake (since is the head to discard back to) or by the base already failing (since null, nothing was sent). */
+  | (FixRunBase & { kind: 'stopped'; since: string | null; decision: StopDecision })
