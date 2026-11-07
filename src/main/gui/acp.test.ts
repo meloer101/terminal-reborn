@@ -118,12 +118,25 @@ describe('createAcpNormalizer', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'in_progress' }] }))
     s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'completed' }] }), s)
-    expect(s.items).toEqual([{ kind: 'system', id: 'plan0', at: 0, text: '✓ Read\n✓ Edit' }])
+    expect(s.items).toEqual([
+      {
+        kind: 'tool',
+        id: 'plan0',
+        at: 0,
+        name: 'Plan',
+        arg: '2 项',
+        state: 'ok',
+        todos: [
+          { text: 'Read', status: 'completed' },
+          { text: 'Edit', status: 'completed' }
+        ]
+      }
+    ])
     s = fold(n.sent('m1', 'and the tests', 0), s)
     s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Test', status: 'pending' }] }), s)
     s = fold(n.update(chunk('user_message_chunk', 'replayed')), s)
     s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Lint', status: 'pending' }] }), s)
-    expect(s.items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['✓ Read\n✓ Edit', 'user', '○ Test', 'user', '○ Lint'])
+    expect(s.items.map((i) => (i.kind === 'tool' ? i.todos?.map((t) => t.text).join(',') : i.kind))).toEqual(['Read,Edit', 'user', 'Test', 'user', 'Lint'])
   })
 })
 

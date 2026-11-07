@@ -3,7 +3,7 @@
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
 import { effortLabel, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { addedFile, CHAT_LIMITS, fileDiffs, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -218,6 +218,12 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
           if (!live || live.itemId !== itemId || live.kind !== kind) live = { kind, text: '', itemId }
           live = { ...live, text: live.text + delta }
           return [{ type: 'live', live: { kind, text: live.text } }]
+        }
+        case 'turn/plan/updated': {
+          // The turn's task list: one row per turn, rewritten by each update.
+          const todos = todosOf(params.plan)
+          const id = `plan:${str(params.turnId) ?? ''}`
+          return [put(id, { kind: 'tool', id, at: now(), name: 'Plan', arg: todosArg(todos), state: 'ok', todos })]
         }
         case 'serverRequest/resolved': {
           const id = String(params.requestId ?? '')

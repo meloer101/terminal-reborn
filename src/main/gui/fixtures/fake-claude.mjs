@@ -1,7 +1,8 @@
 // A stand-in for `claude -p --input-format stream-json --output-format stream-json …` (PRD §6.17, the message shapes
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
 // "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
-// replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted). With
+// replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted); "colors"
+// runs a command with colored output; "tasks" writes a task list (TodoWrite), "tasks done" finishes it. With
 // CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real CLI (`uuid` / `parentUuid`, a
 // `--resume-session-at` resume hangs the next message under that message). `--version` answers as Claude Code 2.1.318.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -24,6 +25,7 @@ const lastUuid = () => {
 }
 let parent = argAfter('--resume-session-at') ?? (args.includes('--resume') ? lastUuid() : null)
 let assistants = 0
+let tools = 0
 const out = (m) => {
   if (m.type === 'assistant' && !m.uuid) m = { ...m, uuid: `assistant-${process.pid}-${++assistants}` }
   if (transcript && (m.type === 'assistant' || m.type === 'user') && m.uuid) {
@@ -77,6 +79,19 @@ function reply(text) {
     out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu3', content: colored, is_error: true }] }, session_id: SESSION, parent_tool_use_id: null })
     const markdown = '## 测试结果\n\n1 个失败：刷新接口还在读 `localStorage`。\n\n- 登录改成 Set-Cookie\n- 删掉 `session.ts` 里的 localStorage\n\n```ts\nres.cookie(\'session\', token, { httpOnly: true })\n```\n\n| 文件 | 结果 |\n| --- | --- |\n| login.test.ts | 通过 |\n| refresh.test.ts | 失败 |'
     return finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: markdown }] }, session_id: SESSION, parent_tool_use_id: null })
+  }
+  if (text.includes('tasks')) {
+    // A TodoWrite (Figma 59J's task list); "tasks done" finishes every task.
+    const done = text.includes('tasks done')
+    const todos = [
+      { content: '登录接口改成 Set-Cookie', status: 'completed', activeForm: '改登录接口' },
+      { content: '跑 auth 测试并修失败', status: done ? 'completed' : 'in_progress', activeForm: '跑 auth 测试' },
+      { content: '确认 Safari 的 SameSite 行为', status: done ? 'completed' : 'pending', activeForm: '确认 Safari' }
+    ]
+    const id = `tu-todo-${++tools}`
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'TodoWrite', input: { todos } }] }, session_id: SESSION, parent_tool_use_id: null })
+    out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'Todos have been modified successfully.' }] }, session_id: SESSION, parent_tool_use_id: null })
+    return finish()
   }
   if (text.includes('write')) {
     out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: 'a.txt', content: 'hi' } }] }, session_id: SESSION, parent_tool_use_id: null })

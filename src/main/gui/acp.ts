@@ -16,7 +16,7 @@ import {
   type GuiPermissionOption,
   type GuiPrompt
 } from '@shared/gui-chat'
-import { CHAT_LIMITS, fileDiffs, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { CHAT_LIMITS, fileDiffs, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -223,10 +223,10 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
         case 'tool_call_update':
           return tool(update)
         case 'plan': {
-          const entries = (Array.isArray(update.entries) ? update.entries : []).filter(isRec)
-          const text = entries.map((e) => `${e.status === 'completed' ? '✓' : e.status === 'in_progress' ? '◌' : '○'} ${str(e.content) ?? ''}`).join('\n')
+          // A task row (the list above the composer shows the latest), rewritten by each update within a turn.
+          const todos = todosOf(update.entries)
           planId ??= `plan${seq++}`
-          return [...flush(), put(planId, { kind: 'system', id: planId, at: now(), text })]
+          return [...flush(), put(planId, { kind: 'tool', id: planId, at: now(), name: 'Plan', arg: todosArg(todos), state: 'ok', todos })]
         }
         case 'available_commands_update':
           return [{ type: 'commands', commands: acpCommands(update.availableCommands) }]

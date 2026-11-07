@@ -5,7 +5,7 @@ import { Bot, Brain, ClipboardList, FilePlus, FileText, FolderSearch, Globe, Lis
 import { looksLikeReport } from '@shared/dispatch'
 import type { GuiCommand, GuiConfigOption, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
 import { composerPickers } from '@shared/gui-chat'
-import type { ChatItem } from '@shared/transcript-chat'
+import type { ChatItem, ChatTodo } from '@shared/transcript-chat'
 import type { SessionStatus } from '@shared/types'
 import { CUT_ESCAPE, ESCAPES } from './ansi'
 
@@ -164,7 +164,7 @@ export function thinkingLabel(ms: number | undefined): string {
 }
 
 /** Tools whose result line is worth a summary under the row (Figma: Grep's 「14 处 · 6 个文件」, Bash's last words). */
-const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite'])
+const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite', 'Plan'])
 
 /**
  * Figma 59J: what a tool row says — its icon and a Chinese verb, by the tool's name. Claude's tools; Codex's shell,
@@ -187,6 +187,8 @@ const TOOL_WORDS: Readonly<Record<string, readonly [LucideIcon, string]>> = {
   Agent: [Bot, '子 agent'],
   Task: [Bot, '子 agent'],
   TodoWrite: [ListTodo, '任务'],
+  // Codex's and ACP agents' plan (codex-app-server.ts, acp.ts).
+  Plan: [ListTodo, '任务'],
   Skill: [Sparkles, 'Skill'],
   ExitPlanMode: [ClipboardList, '计划'],
   Delete: [Trash2, '删除'],
@@ -251,12 +253,33 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     ...(removed > 0 ? { removed } : {}),
     waiting,
     ...(item.state !== 'running' && firstLine && !SUMMARY_SKIP.has(item.name) ? { summary: firstLine } : {}),
-    expandable: !!item.diff || !!output?.trim() || hidden,
+    expandable: !!item.diff || !!output?.trim() || hidden || !!item.todos?.length,
     ...(output !== undefined ? { output } : {}),
     ...(item.input ? { command: item.input } : {}),
     ...(item.state === 'error' && item.exit !== undefined && item.exit !== 0 ? { exit: item.exit } : {})
   }
 }
+
+/**
+ * Figma 59J: the task list shown above the composer — the conversation's latest one, while something in it is left
+ * (hidden once every task is done, or when it is empty).
+ */
+export function currentTodos(items: readonly ChatItem[]): readonly ChatTodo[] | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]!
+    if (item.kind !== 'tool' || !item.todos) continue
+    return item.todos.some((t) => t.status !== 'completed') ? item.todos : null
+  }
+  return null
+}
+
+/** The card's 「2 / 4」. */
+export function todoProgress(todos: readonly ChatTodo[]): { done: number; total: number } {
+  return { done: todos.filter((t) => t.status === 'completed').length, total: todos.length }
+}
+
+/** A task's mark: done ✓, the one in progress turning, the rest a ring. */
+export const todoStatus = (status: ChatTodo['status']): SessionStatus => (status === 'completed' ? 'done_unread' : status === 'in_progress' ? 'running' : 'idle')
 
 /** The tool row a pending permission belongs to: the last tool still running, while one is asked about. */
 export function waitingToolId(items: readonly ChatItem[], prompts: readonly GuiPrompt[]): string | null {

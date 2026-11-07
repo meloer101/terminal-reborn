@@ -28,7 +28,10 @@ import {
   turnEnds,
   turnStarts,
   liveStartsTurn,
-  waitingToolId
+  waitingToolId,
+  currentTodos,
+  todoProgress,
+  todoStatus
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -189,12 +192,39 @@ describe('rows', () => {
     expect(toolView(edit, false)).toMatchObject({ added: 5, removed: 1, expandable: true })
   })
 
+  it('reads a task list row as 任务 · N 项 that opens to its tasks', () => {
+    const todos = [{ text: 'a', status: 'completed' as const }]
+    for (const name of ['TodoWrite', 'Plan']) {
+      const view = toolView(tool('t', { name, arg: '1 项', todos, output: 'Todos have been modified successfully' }), false)
+      expect(view).toMatchObject({ verb: '任务', icon: ListTodo, arg: '1 项', expandable: true })
+      expect(view).not.toHaveProperty('summary')
+    }
+  })
+
   it('marks the running tool a permission is about', () => {
     const items = [tool('a'), tool('b', { state: 'running' }), text('x')]
     const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }
     expect(waitingToolId(items, [permission])).toBe('b')
     expect(waitingToolId(items, [])).toBeNull()
     expect(waitingToolId([tool('a')], [permission])).toBeNull()
+  })
+})
+
+describe('task list card (Figma 59J)', () => {
+  const todo = (text: string, status: 'pending' | 'in_progress' | 'completed') => ({ text, status })
+  it('shows the latest list in the conversation while something in it is left', () => {
+    const older = tool('a', { name: 'TodoWrite', todos: [todo('old', 'pending')] })
+    const latest = tool('b', { name: 'TodoWrite', todos: [todo('x', 'completed'), todo('y', 'in_progress')] })
+    expect(currentTodos([older, text('t'), latest, user('u'), tool('c')])).toBe(latest.todos)
+    expect(currentTodos([older])).toEqual([todo('old', 'pending')])
+    expect(currentTodos([older, tool('d', { name: 'Plan', todos: [todo('x', 'completed')] })])).toBeNull()
+    expect(currentTodos([older, tool('e', { name: 'TodoWrite', todos: [] })])).toBeNull()
+    expect(currentTodos([text('t')])).toBeNull()
+  })
+
+  it('counts what is done and draws each task’s status', () => {
+    expect(todoProgress([todo('a', 'completed'), todo('b', 'in_progress'), todo('c', 'pending')])).toEqual({ done: 1, total: 3 })
+    expect(['completed', 'in_progress', 'pending'].map((s) => todoStatus(s as 'pending'))).toEqual(['done_unread', 'running', 'idle'])
   })
 })
 

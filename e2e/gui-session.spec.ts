@@ -168,6 +168,32 @@ test.describe('F23 GUI session (Claude)', () => {
     await bash.click()
   })
 
+  test('the current task list sits above the composer and its row opens to it (Figma 59J)', async () => {
+    await send('make tasks')
+    const card = page.getByTestId('gui-todos')
+    await expect(card).toBeVisible(WITHIN)
+    await expect(card.locator('header')).toHaveText('任务1 / 3')
+    await expect(card.locator('li')).toHaveText(['登录接口改成 Set-Cookie', '跑 auth 测试并修失败', '确认 Safari 的 SameSite 行为'])
+    await expect(card.locator('li[data-status="in_progress"]')).toHaveText('跑 auth 测试并修失败')
+    // Directly above the composer.
+    const [cardBox, box] = await Promise.all([card.boundingBox(), page.getByTestId('gui-composer-box').boundingBox()])
+    expect(cardBox!.y + cardBox!.height).toBeLessThanOrEqual(box!.y)
+    const row = feed().getByRole('button', { name: /任务\s*3 项/ }).last()
+    await row.click()
+    await expect(feed().locator('li').filter({ hasText: '确认 Safari 的 SameSite 行为' })).toBeVisible()
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `tasks-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await row.click()
+    // Every task done: the card goes.
+    await send('tasks done')
+    await expect(card).toHaveCount(0, WITHIN)
+  })
+
   test('queues a message sent while a turn runs, then stops the turn', async () => {
     await send('slow answer')
     await expect(composer().getByRole('button', { name: '停止' })).toBeVisible(WITHIN)

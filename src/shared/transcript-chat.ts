@@ -12,6 +12,12 @@ export interface DiffHunk {
 
 export type ToolState = 'running' | 'ok' | 'error'
 
+/** One task of an agent's task list (Claude TodoWrite, Codex's plan, an ACP plan). */
+export interface ChatTodo {
+  text: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
 /** One file's change as the chat draws it: its hunks (capped), and the counts of the whole change. */
 export interface FileDiff {
   path: string
@@ -43,6 +49,8 @@ export type ChatItem =
       diff?: FileDiff
       /** A change to more than one file (Codex fileChange, ACP): every file, `diff` being the first. */
       files?: FileDiff[]
+      /** A task list (Claude TodoWrite, Codex / ACP `Plan`): every task, as the agent last wrote it. */
+      todos?: ChatTodo[]
     }
   | { kind: 'system'; id: string; at: number; text: string }
   | { kind: 'unknown'; id: string; at: number; type: string }
@@ -148,6 +156,22 @@ export function toolArg(name: string, input: unknown, cwd?: string): string {
   }
   return clip((arg ?? '').replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg)
 }
+
+/**
+ * A task list as each agent writes it → tasks: Claude's `{ content, status }`, Codex's `{ step, status }` (`inProgress`
+ * from the app-server, `in_progress` in a rollout), ACP's `{ content, status }`. Entries without text are left out.
+ */
+export function todosOf(raw: unknown): ChatTodo[] {
+  return (Array.isArray(raw) ? raw : []).filter(isRec).flatMap((t): ChatTodo[] => {
+    const text = str(t.content) ?? str(t.step)
+    if (!text?.trim()) return []
+    const status = t.status === 'completed' ? 'completed' : t.status === 'in_progress' || t.status === 'inProgress' ? 'in_progress' : 'pending'
+    return [{ text: clip(text, CHAT_LIMITS.arg), status }]
+  })
+}
+
+/** A task list's row target: 「N 项」. */
+export const todosArg = (todos: readonly ChatTodo[]): string => `${todos.length} 项`
 
 /** `mcp__server__tool` → `tool`; everything else as it is. */
 export function toolLabel(name: string): string {
@@ -302,14 +326,16 @@ function claudeParser(now: () => number): ChatParser {
         } else if (block.type === 'tool_use' && typeof block.name === 'string') {
           const id = str(block.id) ?? nextId('u')
           const command = block.name === 'Bash' && isRec(block.input) ? str(block.input.command) : undefined
+          const todos = block.name === 'TodoWrite' && isRec(block.input) ? todosOf(block.input.todos) : undefined
           const index = add({
             kind: 'tool',
             id,
             at,
             name: toolLabel(block.name),
-            arg: toolArg(block.name, block.input, cwd),
+            arg: todos ? todosArg(todos) : toolArg(block.name, block.input, cwd),
             state: 'running',
-            ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {})
+            ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}),
+            ...(todos ? { todos } : {})
           })
           tools.set(id, index)
           changed.push(index)
@@ -450,10 +476,12 @@ function codexParser(now: () => number): ChatParser {
         const args = p.type === 'function_call' ? codexArgs(p.arguments) : { input: str(p.input) ?? '' }
         const isShell = name === 'exec_command' || name === 'shell' || name === 'local_shell'
         const command = isShell ? (Array.isArray(args.command) ? args.command.join(' ') : (str(args.cmd) ?? str(args.command))) : undefined
-        const label = isShell ? 'Bash' : name === 'apply_patch' ? 'Edit' : toolLabel(name)
-        const arg = command !== undefined ? clip(command, CHAT_LIMITS.arg) : toolArg(label, args, cwd)
+        // update_plan: the task list, as the live session's `turn/plan/updated` shows it (codex-app-server.ts).
+        const todos = name === 'update_plan' ? todosOf(args.plan) : undefined
+        const label = isShell ? 'Bash' : name === 'apply_patch' ? 'Edit' : todos ? 'Plan' : toolLabel(name)
+        const arg = command !== undefined ? clip(command, CHAT_LIMITS.arg) : todos ? todosArg(todos) : toolArg(label, args, cwd)
         const id = str(p.call_id) ?? nextId('u')
-        const index = add({ kind: 'tool', id, at, name: label, arg, state: 'running', ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}) })
+        const index = add({ kind: 'tool', id, at, name: label, arg, state: 'running', ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}), ...(todos ? { todos } : {}) })
         calls.set(id, index)
         return [index]
       }

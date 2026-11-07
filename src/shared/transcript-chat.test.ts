@@ -49,6 +49,25 @@ describe('Claude transcript → chat', () => {
     expect(read[0]).not.toHaveProperty('input')
   })
 
+  it('keeps TodoWrite’s tasks with their status', () => {
+    const todos = [
+      { content: '改成 Set-Cookie', status: 'completed', activeForm: '改' },
+      { content: '跑测试', status: 'in_progress', activeForm: '跑' },
+      { content: '查 Safari', status: 'pending', activeForm: '查' },
+      { content: 7, status: 'pending' }
+    ]
+    const items = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 't', name: 'TodoWrite', input: { todos } }] } })])
+    expect(items[0]).toMatchObject({
+      name: 'TodoWrite',
+      arg: '3 项',
+      todos: [
+        { text: '改成 Set-Cookie', status: 'completed' },
+        { text: '跑测试', status: 'in_progress' },
+        { text: '查 Safari', status: 'pending' }
+      ]
+    })
+  })
+
   it('reports which items a line added or changed, so main can push just those', () => {
     const p = createChatParser('claude', () => 0)
     expect(p.push(line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'a', name: 'Read', input: { file_path: `${CWD}/src/a.ts` } }] } }))).toEqual([0])
@@ -219,6 +238,20 @@ describe('Codex rollout → chat', () => {
     expect(items.map((i) => (i.kind === 'tool' ? i.state : i.kind))).toEqual(['ok', 'error', 'ok', 'error'])
     expect(items.map((i) => (i.kind === 'tool' ? i.exit : undefined))).toEqual([0, 2, undefined, undefined])
     expect(items[0]).toMatchObject({ input: 'rg error' })
+  })
+
+  it('reads update_plan as the task list, like the live session’s plan', () => {
+    const plan = { explanation: null, plan: [{ step: 'Read', status: 'completed' }, { step: 'Edit', status: 'in_progress' }] }
+    const items = parse([r('response_item', { type: 'function_call', name: 'update_plan', call_id: 'p1', arguments: JSON.stringify(plan) })], 'codex')
+    expect(items[0]).toMatchObject({
+      kind: 'tool',
+      name: 'Plan',
+      arg: '2 项',
+      todos: [
+        { text: 'Read', status: 'completed' },
+        { text: 'Edit', status: 'in_progress' }
+      ]
+    })
   })
 
   it('leaves out reasoning with an empty summary', () => {

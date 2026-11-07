@@ -20,6 +20,7 @@ import { ChatMarkdown } from './ChatMarkdown'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
 import { DiffBlock, diffText } from './DiffBlock'
+import { TodoList } from './Todos'
 import {
   composerKey,
   feedBlocks,
@@ -328,7 +329,8 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
         {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
       </button>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
-      {open && (files.length > 0 || view.output || view.command) && (
+      {open && item.todos && item.todos.length > 0 && <TodoList todos={item.todos} className={styles.todosInFeed} />}
+      {open && !item.todos && (files.length > 0 || view.output || view.command) && (
         <div className={styles.codeWrap}>
           {files.length > 0 ? (
             <div className={styles.fileBlocks}>

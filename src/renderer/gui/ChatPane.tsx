@@ -14,7 +14,8 @@ import { StatusGlyph } from '../ui/StatusGlyph'
 import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
 import { Feed } from './Feed'
-import { cardKey, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
+import { TodoCard } from './Todos'
+import { cardKey, currentTodos, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { addAttachments, clearComposer, setDraft, setGuiState, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
@@ -63,6 +64,8 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   const items = useMemo(() => withPendingSend(state.items, pending), [state.items, pending])
   // Figma 59G: nothing said yet — the agent's mark and name over the composer, in the middle of the card.
   const empty = items.length === 0 && state.live === null && !state.busy
+  // Figma 59J: the agent's current task list, above the composer.
+  const todos = useMemo(() => currentTodos(state.items), [state.items])
 
   const send = useCallback(
     (text: string, attachments: readonly string[]) => {
@@ -165,6 +168,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         />
       )}
       <div className={styles.dock}>
+        {todos && <TodoCard todos={todos} />}
         {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (
           <QueuedBar key={queued.id} sessionId={sessionId} id={queued.id} text={queued.text} />

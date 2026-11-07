@@ -73,6 +73,28 @@ describe('createCodexNormalizer', () => {
     expect(one.items[0]).not.toHaveProperty('files')
   })
 
+  it('shows the turn’s plan (turn/plan/updated) as one task row, updated in place', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    let s = fold(n.notification('turn/plan/updated', { threadId: 'th', turnId: 't1', explanation: null, plan: [{ step: 'Read', status: 'inProgress' }, { step: 'Edit', status: 'pending' }] }))
+    s = fold(n.notification('turn/plan/updated', { threadId: 'th', turnId: 't1', explanation: null, plan: [{ step: 'Read', status: 'completed' }, { step: 'Edit', status: 'inProgress' }] }), s)
+    expect(s.items).toEqual([
+      {
+        kind: 'tool',
+        id: 'plan:t1',
+        at: 0,
+        name: 'Plan',
+        arg: '2 项',
+        state: 'ok',
+        todos: [
+          { text: 'Read', status: 'completed' },
+          { text: 'Edit', status: 'in_progress' }
+        ]
+      }
+    ])
+    s = fold(n.notification('turn/plan/updated', { threadId: 'th', turnId: 't2', explanation: null, plan: [{ step: 'Test', status: 'pending' }] }), s)
+    expect(s.items).toHaveLength(2)
+  })
+
   it('keeps what an MCP or dynamic tool returned, and why it failed', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const s = fold([
