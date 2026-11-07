@@ -163,7 +163,7 @@
 }
 
 /* What the user sent, as Markdown (Figma 51A): blocks 8 apart inside the bubble. */
-.bubbleText :is(p, ul, ol, blockquote, pre) {
+.markdown.bubbleText :is(p, ul, ol, blockquote, pre) {
   margin: 0 0 var(--space-8);
 }
 
@@ -343,6 +343,13 @@
 
 .markdown {
   composes: markdown from '../panels/files/MarkdownView.module.css';
+}
+
+/*
+ * The composed files-preview rules can land after these in the bundle with the same specificity and win, which kept
+ * every reply at 13 / 18 whatever 对话 · 字号 said. Overrides of them here carry the class twice (or with .markdown).
+ */
+.markdown.markdown {
   padding: 0;
   font: var(--text-composer);
 }
@@ -422,7 +429,7 @@
 }
 
 /* Plan (49″D): the steps under the title, from the title's text line. */
-.planBody {
+.markdown.planBody {
   max-height: 240px;
   overflow-y: auto;
   padding-left: var(--glyph-indent);
