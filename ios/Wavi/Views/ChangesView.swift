@@ -9,6 +9,8 @@ struct ChangesView: View {
   @Environment(AppModel.self) private var model
   @Environment(\.dismiss) private var dismiss
   @Environment(\.openURL) private var openURL
+  @Environment(\.dynamicTypeSize) private var typeSize
+  @ScaledMetric(relativeTo: .caption) private var letterWidth: CGFloat = 12
   @State private var data: GitChanges?
   @State private var error: String?
   @State private var exits: RemoteExits?
@@ -104,7 +106,7 @@ struct ChangesView: View {
     let openable = f.nested != true && f.tooLarge != true
     return NavigationLink(value: Route.diff(session: id, path: f.path, scope: scope, oldPath: f.oldPath, untracked: f.untracked == true)) {
       HStack(spacing: 12) {
-        Text(status).font(.mono(.caption, medium: true)).foregroundStyle(status == "A" ? Color.diffAddFg : status == "D" ? Color.diffDelFg : Color.textSecondary).frame(width: 12)
+        Text(status).font(.mono(.caption, medium: true)).foregroundStyle(status == "A" ? Color.diffAddFg : status == "D" ? Color.diffDelFg : Color.textSecondary).frame(width: letterWidth)
         VStack(alignment: .leading, spacing: 2) {
           Text(name).font(.ui(.callout)).foregroundStyle(Color.textPrimary).lineLimit(1)
           if !dir.isEmpty { Text(dir).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
@@ -140,13 +142,13 @@ struct ChangesView: View {
         .buttonStyle(.plain)
       } else if let exits {
         if let primary = exits.primary { exitButton(primary, primary: true) }
-        HStack(spacing: 8) {
+        ButtonRow {
           if let secondary = exits.secondary { exitButton(secondary) }
           Button { exits.archive.blocker.map { alert = ("现在不能归档", $0) } ?? (archiving = true) } label: {
             if busy == "archive" { Spinner(color: .textPrimary) } else { Text("归档") }
           }
           .buttonStyle(.wavi(floating: true))
-          .frame(maxWidth: exits.secondary == nil ? .infinity : 96)
+          .frame(maxWidth: exits.secondary == nil || typeSize.isAccessibilitySize ? .infinity : 96)
           // On the button, so iOS 26 points the dialog at 归档.
           .confirmationDialog("归档这个 worktree？", isPresented: $archiving, titleVisibility: .visible) {
             Button("归档", role: .destructive) { Task { await archive() } }
@@ -317,7 +319,7 @@ struct ShipSheet: View {
   private func buttons(_ ship: RemoteShip) -> some View {
     if let error { Notice(tone: .danger, message: error) }
     if let failure = ship.error {
-      HStack(spacing: 8) {
+      ButtonRow {
         if failure.conflicts { action("交给 \(ship.agent) 解", "conflicts", .conflicts) }
         if failure.pushRefused { action("改为创建 PR", "switch", .switchPr) }
         action("重试", "retry", .retry, primary: true)

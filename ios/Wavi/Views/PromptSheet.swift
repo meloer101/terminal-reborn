@@ -280,18 +280,22 @@ private struct QuestionAsk: View {
 private struct Radio: View {
   let on: Bool
   let multi: Bool
+  @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: multi ? 5 : 10)
     ZStack {
       if on {
         shape.fill(Color.solidFill)
-        if multi { Icon("check", size: 14).foregroundStyle(Color.solidOn) } else { Circle().fill(Color.solidOn).frame(width: 8, height: 8) }
+        if multi { Icon("check", size: 14).foregroundStyle(Color.solidOn).dynamicTypeSize(.large) } else { Circle().fill(Color.solidOn).frame(width: 8, height: 8) }
       } else {
         shape.strokeBorder(Color.lineStrong, lineWidth: 1.5)
       }
     }
     .frame(width: 20, height: 20)
+    // Grows with the text as one piece (the check inside is not scaled again).
+    .scaleEffect(scale)
+    .frame(width: 20 * scale, height: 20 * scale)
     .accessibilityHidden(true)
   }
 }

@@ -141,9 +141,11 @@ extension Font {
 }
 
 /// A lucide icon at the desktop's stroke, in the colour of the text around it.
+/// Grows with the text (Dynamic Type), as SF Symbols do.
 struct Icon: View {
   let name: String
   var size: CGFloat = 16
+  @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
   init(_ name: String, size: CGFloat = 16) {
     self.name = name
@@ -151,7 +153,7 @@ struct Icon: View {
   }
 
   var body: some View {
-    Image("Lucide/\(name)").resizable().renderingMode(.template).frame(width: size, height: size).accessibilityHidden(true)
+    Image("Lucide/\(name)").resizable().renderingMode(.template).frame(width: size * scale, height: size * scale).accessibilityHidden(true)
   }
 }
 

@@ -5,33 +5,41 @@ import SwiftUI
 
 struct DiffView: View {
   let rows: [DiffRow]
+  /// The line-number and sign columns grow with the code's text size.
+  @ScaledMetric(relativeTo: .caption) private var gutter: CGFloat = 36
+  @ScaledMetric(relativeTo: .caption) private var signWidth: CGFloat = 20
 
+  // Lines never wrap: the view scrolls both ways, every row as wide as the widest line (and at least the screen), from
+  // the top left. A VStack, not lazy, so it knows the widest line (a diff comes cut at 400 lines).
   var body: some View {
-    ScrollView([.horizontal, .vertical]) {
-      LazyVStack(alignment: .leading, spacing: 0) {
-        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-          switch row {
-          case .hunk(let text):
-            HStack(spacing: 0) {
-              Color.clear.frame(width: 92)
-              Text(text).foregroundStyle(Color.textSecondary)
+    GeometryReader { geo in
+      ScrollView([.horizontal, .vertical]) {
+        VStack(alignment: .leading, spacing: 0) {
+          ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            switch row {
+            case .hunk(let text):
+              HStack(spacing: 0) {
+                Color.clear.frame(width: gutter * 2 + signWidth, height: 0)
+                Text(text).foregroundStyle(Color.textSecondary).fixedSize()
+              }
+              .frame(minWidth: geo.size.width, maxWidth: .infinity, minHeight: 20, alignment: .leading)
+              .background(Color.fillSubtle)
+            case .line(let sign, let old, let new, let code):
+              HStack(spacing: 0) {
+                Text(old.map(String.init) ?? "").frame(width: gutter, alignment: .trailing).foregroundStyle(Color.textSecondary)
+                Text(new.map(String.init) ?? "").frame(width: gutter, alignment: .trailing).foregroundStyle(Color.textSecondary)
+                Text(sign == "-" ? "−" : String(sign)).frame(width: signWidth).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textSecondary)
+                Text(code).foregroundStyle(Color.textPrimary).fixedSize().padding(.trailing, 16)
+              }
+              .frame(minWidth: geo.size.width, maxWidth: .infinity, minHeight: 20, alignment: .leading)
+              .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
             }
-            .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-            .background(Color.fillSubtle)
-          case .line(let sign, let old, let new, let code):
-            HStack(spacing: 0) {
-              Text(old.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textSecondary)
-              Text(new.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textSecondary)
-              Text(sign == "-" ? "−" : String(sign)).frame(width: 20).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textSecondary)
-              Text(code).foregroundStyle(Color.textPrimary).padding(.trailing, 16)
-            }
-            .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-            .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
           }
         }
+        .font(.mono(.caption))
+        .fixedSize()
+        .frame(minHeight: geo.size.height, alignment: .top)
       }
-      .font(.mono(.caption))
-      .fixedSize(horizontal: true, vertical: false)
     }
     .background(Color.bgGrouped)
   }

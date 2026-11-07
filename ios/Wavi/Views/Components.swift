@@ -51,7 +51,9 @@ struct Notice: View {
 
   var body: some View {
     HStack(spacing: 8) {
-      Text(message).font(.ui(.subheadline, medium: true)).foregroundStyle(colors.0).frame(maxWidth: .infinity, alignment: .leading)
+      // Never cut: in a sheet at its full height the actions are not squeezed, the content above them scrolls.
+      Text(message).font(.ui(.subheadline, medium: true)).foregroundStyle(colors.0).fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
       if let action, let perform {
         Button(action, action: perform).font(.ui(.subheadline, medium: true)).foregroundStyle(Color.textPrimary).buttonStyle(.plain)
       }
@@ -59,6 +61,17 @@ struct Notice: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 12)
     .background(colors.1, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
+  }
+}
+
+/// Buttons side by side, or one above the other once the text is too big for them side by side (accessibility sizes).
+struct ButtonRow<Content: View>: View {
+  @ViewBuilder let content: Content
+  @Environment(\.dynamicTypeSize) private var typeSize
+
+  var body: some View {
+    let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+    layout { content }
   }
 }
 

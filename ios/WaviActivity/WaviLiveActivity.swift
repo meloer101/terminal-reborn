@@ -85,6 +85,8 @@ private struct Glyph: View {
         StatusGlyph(status: kind.status)
       }
     }
+    // The island keeps its sizes at any text size.
+    .dynamicTypeSize(.large)
     .scaleEffect(16 / 14).frame(width: 16, height: 16)
   }
 }

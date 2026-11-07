@@ -5,11 +5,13 @@ import SwiftUI
 /// 14×14: a turning arc (running), the halo dot (needs you), a check, a warning triangle, a ring, a dash.
 struct StatusGlyph: View {
   let status: SessionStatus
+  @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
   var body: some View {
     Group {
       switch status {
-      case .running: Spinner()
+      // Scaled once, by this glyph: the spinner inside keeps its base size.
+      case .running: Spinner().dynamicTypeSize(.large)
       case .needsYou:
         ZStack {
           Circle().fill(Color.statusAttentionBg)
@@ -45,6 +47,7 @@ struct StatusGlyph: View {
       }
     }
     .frame(width: 14, height: 14)
+    .glyphScale(scale)
     .accessibilityLabel(status.label)
   }
 }
@@ -54,6 +57,7 @@ struct StatusGlyph: View {
 struct Spinner: View {
   var color: Color = .statusWorking
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
   // The angle comes from the clock, not from a repeating implicit animation: such an animation also catches the view's
   // moves while a sheet slides in and keeps replaying them, so the arc drifted off its row.
@@ -64,7 +68,13 @@ struct Spinner: View {
         .rotationEffect(.degrees(reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
     }
     .frame(width: 14, height: 14)
+    .glyphScale(scale)
   }
+}
+
+extension View {
+  /// A 14×14 glyph drawn at a larger text size: scaled, and laid out at the scaled size.
+  func glyphScale(_ scale: CGFloat) -> some View { scaleEffect(scale).frame(width: 14 * scale, height: 14 * scale) }
 }
 
 /// The CLI's own one-colour logo in the text colour, the terminal glyph for a shell, the first letter for the few
