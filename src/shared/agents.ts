@@ -312,6 +312,11 @@ export function hasHooks(kind: string | null | undefined): kind is CliAgent {
   return isCliAgent(kind) && AGENT_SPECS[kind].status === 'hooks'
 }
 
+/** The agent as buttons and messages name it (让 … 修复, 交给 … 解决): Claude, as the product always said; any other by its label. */
+export function shortAgentName(kind: CliAgent | 'shell'): string {
+  return kind === 'claude' || kind === 'shell' ? 'Claude' : AGENT_SPECS[kind].label
+}
+
 /** Claude Code and Codex: the two CLIs with plan usage, dispatch, background review and the send profiles. */
 export type ClaudeOrCodex = 'claude' | 'codex'
 

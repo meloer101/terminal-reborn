@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AGENT_SPECS, agentName, claudeOrCodex, CLI_AGENTS, hasHooks, isCliAgent } from './agents'
+import { AGENT_SPECS, agentName, claudeOrCodex, CLI_AGENTS, hasHooks, isCliAgent, shortAgentName } from './agents'
 
 describe('agent registry', () => {
   it('has one row per CLI, keyed by its own id', () => {
@@ -38,5 +38,14 @@ describe('hasHooks', () => {
   it('names the agents whose turns Wavi sees through injected hooks, and nothing else', () => {
     for (const kind of ['claude', 'codex', 'gemini', 'qwen', 'pi']) expect(hasHooks(kind), kind).toBe(true)
     for (const kind of ['opencode', 'grok', 'cursor', 'shell', null, undefined, 'bash']) expect(hasHooks(kind), String(kind)).toBe(false)
+  })
+})
+
+describe('shortAgentName', () => {
+  it('is Claude for Claude Code (as the product has always said) and the label for every other agent', () => {
+    expect(shortAgentName('claude')).toBe('Claude')
+    expect(shortAgentName('codex')).toBe('Codex')
+    expect(shortAgentName('gemini')).toBe('Gemini CLI')
+    expect(shortAgentName('grok')).toBe('Grok')
   })
 })

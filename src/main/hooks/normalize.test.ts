@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { claudeFixtures as fx } from './fixtures'
+import { CLI_AGENTS, hasHooks } from '@shared/agents'
+import type { HookAgent } from '@shared/agent-events'
 import { normalizeHook, parseQuestions, summarizeToolUse } from './normalize'
 import { classifyNotification } from './notification'
 
@@ -347,5 +349,15 @@ describe('normalizeHook · large payloads are clipped (PRD §6.8)', () => {
     const stderr = 'warn: deprecated'
     const call = claude('PostToolUse', { ...fx.PostToolUse_Bash, tool_response: { stdout, stderr } })
     expect(call.bashCall?.result.output).toBe(`${stdout}\n${stderr}`.slice(-16_000))
+  })
+})
+
+describe('every agent the hook socket takes', () => {
+  it('has a normaliser (an agent whose spec says hooks but that normalizeHook does not know would crash the bridge)', () => {
+    for (const agent of CLI_AGENTS.filter((a) => hasHooks(a))) {
+      const turnEnd = agent === 'gemini' ? 'AfterAgent' : 'Stop'
+      expect(normalizeHook(agent as HookAgent, turnEnd, { session_id: 's', last_assistant_message: 'done' }), agent).toBeDefined()
+      expect(normalizeHook(agent as HookAgent, turnEnd, { session_id: 's', last_assistant_message: 'done' }).events.length, agent).toBeGreaterThan(0)
+    }
   })
 })
