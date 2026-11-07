@@ -175,6 +175,8 @@
   margin: 0;
   font: var(--text-caption);
   color: var(--text-tertiary);
+  /* An agent's plan is one entry per line. */
+  white-space: pre-wrap;
 }
 
 /* Tool and thinking rows: 8 apart inside a run. */

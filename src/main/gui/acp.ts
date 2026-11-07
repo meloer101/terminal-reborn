@@ -164,6 +164,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
   const waiting = new Map<string, AcpPending>()
   let seq = 0
   let live: { kind: 'text' | 'thinking'; text: string } | null = null
+  // The plan row of this turn: updates rewrite it; a message from the user starts the next one.
+  let planId: string | null = null
 
   const put = (key: string, item: ChatItem): GuiEvent => {
     let index = indexOf.get(key)
@@ -224,6 +226,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
         }
         case 'user_message_chunk':
           // Replayed history (session/load); a live session shows the user's message from `sent`.
+          planId = null
           return [...flush(), put(`u${seq}`, { kind: 'user', id: `u${seq++}`, at: now(), text: clip(textOfBlock(update.content), CHAT_LIMITS.text), images: 0 })]
         case 'tool_call':
         case 'tool_call_update':
@@ -231,7 +234,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
         case 'plan': {
           const entries = (Array.isArray(update.entries) ? update.entries : []).filter(isRec)
           const text = entries.map((e) => `${e.status === 'completed' ? '✓' : e.status === 'in_progress' ? '◌' : '○'} ${str(e.content) ?? ''}`).join('\n')
-          return [...flush(), put('plan', { kind: 'system', id: 'plan', at: now(), text })]
+          planId ??= `plan${seq++}`
+          return [...flush(), put(planId, { kind: 'system', id: planId, at: now(), text })]
         }
         case 'available_commands_update':
           return [{ type: 'commands', commands: acpCommands(update.availableCommands) }]
@@ -249,6 +253,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
       return events
     },
     sent(id, text, images) {
+      planId = null
       return [...flush(), put(id, { kind: 'user', id, at: now(), text: clip(text, CHAT_LIMITS.text), images }), { type: 'busy', busy: true }]
     },
     request(id, params) {

@@ -77,11 +77,16 @@ describe('createAcpNormalizer', () => {
     expect(s.busy).toBe(false)
   })
 
-  it('shows the plan as one row that updates in place', () => {
+  it('shows the plan as one row that updates in place within a turn, and a new row after the next message', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'in_progress' }] }))
     s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'completed' }] }), s)
-    expect(s.items).toEqual([{ kind: 'system', id: 'plan', at: 0, text: '✓ Read\n✓ Edit' }])
+    expect(s.items).toEqual([{ kind: 'system', id: 'plan0', at: 0, text: '✓ Read\n✓ Edit' }])
+    s = fold(n.sent('m1', 'and the tests', 0), s)
+    s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Test', status: 'pending' }] }), s)
+    s = fold(n.update(chunk('user_message_chunk', 'replayed')), s)
+    s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Lint', status: 'pending' }] }), s)
+    expect(s.items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['✓ Read\n✓ Edit', 'user', '○ Test', 'user', '○ Lint'])
   })
 })
 
