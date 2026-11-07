@@ -2,7 +2,7 @@
 // its time and output, and read its exit; and the environment git always gets (never a prompt, the PATH Finder lacks).
 // Each module keeps what is its own (a longer timeout for a push, no optional locks while an agent works, an editor
 // that never opens) and passes it in. Architecture review, batch 8: these were a dozen copies that had drifted apart.
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { delimiter } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { userLoginPath } from '../agents-installed'
@@ -78,6 +78,23 @@ export function runProcess(bin: string, args: readonly string[], options: RunOpt
     })
     child.once('close', (code) => finish(code ?? -1))
   })
+}
+
+/**
+ * Stops a child started `detached` (its own process group) and whatever it started. Nothing once it has exited: its
+ * process group id may belong to someone else by then.
+ */
+export function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
+  try {
+    process.kill(-child.pid, signal)
+  } catch {
+    try {
+      child.kill(signal)
+    } catch {
+      // already gone
+    }
+  }
 }
 
 /** The end of what a command printed, on one line (an error to show). */

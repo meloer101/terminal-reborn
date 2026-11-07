@@ -8,7 +8,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { app, ipcMain, type WebContents } from 'electron'
 import {
@@ -44,10 +44,11 @@ import {
 } from '@shared/background-review'
 import type { ReviewSettings } from '@shared/settings'
 import { buildPtyEnv } from '../pty-host/env'
-import { executableOnPath, userLoginPath } from './agents-installed'
+import { executableOnPath } from './agents-installed'
 import { headCommit, reviewDiff } from './git-graph'
 import { getSettings } from './settings'
 import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
+import { killGroup, searchPath } from './git/run'
 
 /** One segment may take this long before it is stopped and the review fails. */
 const SEGMENT_TIMEOUT_MS = 15 * 60_000
@@ -55,8 +56,6 @@ const KILL_GRACE_MS = 1000
 const MAX_STDOUT = 16 * 1024 * 1024
 const MAX_STDERR = 8 * 1024
 const MAX_ROOT = 4096
-/** Finder launches apps with a minimal PATH; these are where Homebrew and npm usually put the CLIs. */
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']
 const AGENTS: ReadonlySet<unknown> = new Set<ReviewAgent>(['claude', 'codex'])
 const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
 
@@ -147,19 +146,6 @@ function send(owner: WebContents, status: ReviewStatus): void {
   if (!owner.isDestroyed()) owner.send(REVIEW_IPC.status, status)
 }
 
-function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
-  try {
-    process.kill(-child.pid, signal)
-  } catch {
-    try {
-      child.kill(signal)
-    } catch {
-      // already gone
-    }
-  }
-}
-
 function stopChild(child: ChildProcess | null): void {
   if (!child) return
   killGroup(child, 'SIGTERM')
@@ -187,11 +173,6 @@ export function parseReviewRequest(raw: unknown): ReviewRequest {
 
 function rulesOf(settings: ReviewSettings): string {
   return settings.rules === 'custom' && settings.customRules.trim() !== '' ? settings.customRules : DEFAULT_REVIEW_RULES
-}
-
-async function searchPath(): Promise<string> {
-  const login = await userLoginPath()
-  return [...(login ?? process.env.PATH ?? '').split(delimiter), ...EXTRA_PATH].filter(Boolean).join(delimiter)
 }
 
 /** Runs one reviewer process: argv[0] resolved on the login PATH, the prompt on stdin, its own process group. */
