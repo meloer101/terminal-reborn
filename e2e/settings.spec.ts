@@ -403,5 +403,16 @@ test('设置 · 外观 · 对话 and 窗口 (PRD v1.127, Figma 51D)', async () =
   await windowSection.getByRole('radio', { name: '液态玻璃' }).click()
   await expect.poll(() => settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('transparent')
   await expect.poll(async () => (await look()).shellOpacity).toEqual({ liquid: 0, frosted: 0.6 })
+
+  // 实色 (PRD v1.139, Figma 57C): opaque, so neither the base-layer opacity nor the full-screen field is offered.
+  await windowSection.getByRole('radio', { name: '实色' }).click()
+  await expect.poll(async () => (await look()).windowMaterial).toBe('solid')
+  await expect.poll(() => settings.evaluate(() => document.documentElement.dataset.material)).toBe('solid')
+  expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('var(--glass-shell-color)')
+  await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toHaveCount(0)
+  await expect(settings.getByRole('region', { name: '全屏背景' })).toHaveCount(0)
+  await windowSection.getByRole('radio', { name: '磨砂玻璃' }).click()
+  await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toBeVisible()
+  await expect(settings.getByRole('region', { name: '全屏背景' })).toBeVisible()
   await app.close()
 })
