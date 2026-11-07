@@ -3,10 +3,9 @@
 // change), and handing approved scripts to PTY spawns. Approvals (a hash per repository) and port blocks live in
 // `<userData>/repo-scripts.json`; nothing is written to the repository or to the user's agent config.
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, rename, stat, writeFile } from 'node:fs/promises'
-import { delimiter, isAbsolute, join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { app, BrowserWindow, ipcMain, type WebContents } from 'electron'
 import { IPC, type RepoScriptsInfo, type ScriptApproval, type ScriptRunResult } from '@shared/ipc'
 import { allocatePortBlock, portOf } from '@shared/ports'
@@ -27,28 +26,12 @@ import { cancelAllCapturedScripts, cancelCapturedScript, startCapturedScript } f
 import { confirm } from './confirm'
 import { getSettings } from './settings'
 import { resolveRoot, workspaceFolder } from './worktree-files'
+import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 
 const GIT_TIMEOUT_MS = 5_000
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
 function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: GIT_TIMEOUT_MS,
-        env: {
-          ...process.env,
-          GIT_OPTIONAL_LOCKS: '0',
-          GIT_TERMINAL_PROMPT: '0',
-          PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter)
-        }
-      },
-      (error, stdout) => (error ? reject(error) : resolve(stdout))
-    )
-  })
+  return gitText(cwd, args, { timeout: GIT_TIMEOUT_MS, env: NO_OPTIONAL_LOCKS, message: (ran) => ran.stderr.trim() })
 }
 
 /** Hash of what an approval covers (every script of the file, see approvalInput). */

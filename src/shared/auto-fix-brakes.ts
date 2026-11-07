@@ -24,7 +24,11 @@ export type BrakeDecision =
   | { kind: 'push' }
   | {
       kind: 'stop'
-      reason: 'weakened' | 'repeated' | 'limit' | 'no-progress'
+      /**
+       * interrupted: the window reloaded while this fix was under way (its commits were never checked). no-turn-end:
+       * the agent's turn never reported its end (its hooks did not arrive, PRD v1.138).
+       */
+      reason: 'weakened' | 'repeated' | 'limit' | 'no-progress' | 'interrupted' | 'no-turn-end'
       markers?: RiskMarker[]
       /** reason 'limit': how many fixes were already pushed. */
       attempts?: number
@@ -110,5 +114,35 @@ export function brakeLabel(decision: Exclude<BrakeDecision, { kind: 'push' }>, a
     }
     case 'no-progress':
       return `${head}这一轮没有新的提交`
+    case 'interrupted':
+      return `${head}窗口重新加载时这次修复还没走完`
+    case 'no-turn-end':
+      return `${head}30 分钟没有收到这一轮结束的信号`
   }
 }
+
+// --- what a fix run is (the window's 自动修复, saved while unfinished) -------------------------------------------
+
+/** Where a failure lives: a PR's checks (and comments), or the base branch after 合并到 main 并推送. */
+export type FixScope = 'pr' | 'base'
+
+/** The decision that stops a fix: a brake (before the push) or the base already failing (before the fix). */
+export type StopDecision = Exclude<BrakeDecision, { kind: 'push' }>
+
+export interface FixRunBase {
+  /** The agent session the fix was sent to. */
+  sessionId: string
+  key: string
+  checks: string[]
+  /** Checks failing on the base's tip too, as the ask saw them; null: unknown. */
+  baseFailing: string[] | null
+}
+
+/** One fix in flight or stopped, in this window only. */
+export type FixRun =
+  /** Sent: the agent works; its next Stop ends the turn. `since` is the head when it was sent. */
+  | (FixRunBase & { kind: 'fixing'; since: string; sentAt: number })
+  /** The brakes said push: Wavi is pushing the fix. */
+  | (FixRunBase & { kind: 'pushing'; since: string })
+  /** Stopped by a brake (since is the head to discard back to) or by the base already failing (since null, nothing was sent). */
+  | (FixRunBase & { kind: 'stopped'; since: string | null; decision: StopDecision })

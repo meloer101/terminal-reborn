@@ -167,6 +167,11 @@ export async function sendHeld(sessionId: SessionId): Promise<string | null> {
 }
 
 /** Once per window: watches the children and keeps their last messages. */
+/** Queues taken up from a saved workspace: what is due goes out, the rest waits for its time again. */
+export function resumeReports(): void {
+  for (const [parentId, queue] of Object.entries(useDispatch.getState().queues)) if (queue && queue.pending.length > 0) schedule(parentId)
+}
+
 export function startReports(): () => void {
   const offWorkspace = useWorkspace.subscribe((state, prev) => {
     if (state.sessions === prev.sessions) return

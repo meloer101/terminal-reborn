@@ -2,10 +2,9 @@
 // touches its files; restore leaves an existing folder alone and only recreates a folder that is gone (`git worktree
 // add` on its branch, then the snapshot's uncommitted state), then drops the ref. Every payload is validated: the
 // root is a workspace project, capture targets a non-main worktree git lists, ids are safe ref names.
-import { execFile } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { delimiter, isAbsolute, normalize } from 'node:path'
+import { isAbsolute, normalize } from 'node:path'
 import { ipcMain } from 'electron'
 import {
   ARCHIVE_IPC,
@@ -17,32 +16,13 @@ import {
 import { mainWorktreeIndex, parseWorktreePorcelain, type PorcelainWorktree } from '@shared/git-worktrees'
 import { archiveCommit, captureWorktreeArchive, dropWorktreeArchive, restoreWorktreeArchive } from './archive-ref'
 import { isProjectRoot } from './workspace-store'
+import { gitText, lastLines } from './git/run'
 
 const MAX_PATH = 4096
 const GIT_TIMEOUT_MS = 60_000
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
 function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: GIT_TIMEOUT_MS,
-        maxBuffer: 16 * 1024 * 1024,
-        env: {
-          ...process.env,
-          GIT_TERMINAL_PROMPT: '0',
-          PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter)
-        }
-      },
-      (error, stdout, stderr) => {
-        if (error) reject(new Error(String(stderr || error.message).trim().split('\n').slice(-2).join(' ').slice(0, 300) || 'git failed'))
-        else resolve(stdout)
-      }
-    )
-  })
+  return gitText(cwd, args, { timeout: GIT_TIMEOUT_MS, maxStdout: 16 * 1024 * 1024, message: (ran) => lastLines(ran.stderr || ran.stdout, 2, 300) })
 }
 
 const realOrSelf = (path: string): Promise<string> => realpath(path).catch(() => path)

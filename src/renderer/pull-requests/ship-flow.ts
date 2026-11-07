@@ -1,22 +1,9 @@
 // The state machine of Git · 变更's Ship block (PRD F16 v1.78, Figma 29C / 29D / 29H): which steps each exit has, how
 // they advance, what a failure leaves and what 重试 resumes. Pure; ship-runner.ts does the work and ShipBlock.tsx draws it.
-import type { ShipExitKind, ShipMainResult } from '@shared/ship'
+import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipMainResult, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
+
+export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import type { Session } from '@shared/types'
-
-/** `main`: 合并到 base 并推送; `pr`: 创建 PR; `push-pr`: the branch's PR is open, commit what is uncommitted and push. */
-export type ShipKind = 'main' | 'pr' | 'push-pr'
-export type StepId = 'review' | 'write' | 'commit' | 'merge' | 'push' | 'create'
-export type StepState = 'pending' | 'working' | 'done' | 'failed'
-/** writing: steps before the user sees the text; glance: the text is shown for a last look; running: Wavi's own steps. */
-export type ShipStage = 'writing' | 'glance' | 'running'
-
-export interface FlowStep {
-  id: StepId
-  label: string
-  state: StepState
-  /** A quiet addition to the label (what the step is waiting for, why it was skipped). */
-  note?: string
-}
 
 export interface FlowInput {
   kind: ShipKind
@@ -29,39 +16,6 @@ export interface FlowInput {
   review: boolean
   /** Uncommitted paths exist: the agent also writes a commit message and Wavi commits. */
   uncommitted: boolean
-}
-
-/** What the user can edit in the glance. */
-export interface ShipTexts {
-  /** The commit message: subject, blank line, body. */
-  commit: string
-  title: string
-  body: string
-  draft: boolean
-}
-
-export interface ShipError {
-  step: StepId
-  message: string
-  /** The end of what git and its hooks printed. */
-  output?: string
-  /** 合并 stopped on these files: 交给 agent 解. */
-  conflicts?: string[]
-  /** The push of the base was refused (protection, a hook): 改为创建 PR. */
-  pushRefused?: boolean
-}
-
-export interface ShipState {
-  kind: ShipKind
-  /** The exit's label, the block's title line. */
-  title: string
-  agent: string
-  steps: FlowStep[]
-  stage: ShipStage
-  texts: ShipTexts
-  error: ShipError | null
-  /** The stage the error happened in: 重试 resumes there. */
-  failedIn: ShipStage | null
 }
 
 export const EMPTY_TEXTS: ShipTexts = {
@@ -160,6 +114,15 @@ export function fail(state: ShipState, error: ShipError): ShipState {
     error,
     failedIn: state.stage
   }
+}
+
+/**
+ * A block taken up from the saved workspace after a reload: the step that was under way has no result anyone saw (the
+ * agent may still be writing, main may have merged), so it is failed and 重试 picks it up again. Nothing under way: as it was.
+ */
+export function interruptedShip(state: ShipState): ShipState {
+  const working = state.steps.find((s) => s.state === 'working')
+  return working ? fail(state, { step: working.id, message: '窗口重新加载时这一步还没有结果，点重试' }) : state
 }
 
 /** The user declined a confirmation in main: back to the glance, nothing failed. */

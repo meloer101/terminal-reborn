@@ -222,6 +222,11 @@ test.describe('F13 review block · F16 exit A', () => {
     await expect(ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
     await expect(ship().getByRole('textbox', { name: '提交说明' })).toHaveValue('导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试')
     await shoot('ship-glance')
+    // A reload (a crash, a rebuild) keeps the open block: the same stage and the text the agent wrote.
+    await page.reload()
+    await panel().getByRole('tab', { name: /^变更/ }).click()
+    await expect(ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
+    await expect(ship().getByRole('textbox', { name: '提交说明' })).toHaveValue('导航吸顶\n\n- 导航滚动时吸在顶部\n- 加了测试')
     await page.keyboard.press('Meta+Enter')
 
     await expect(ship()).toHaveCount(0, WITHIN)

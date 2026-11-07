@@ -171,6 +171,12 @@ describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 
     expect(sanitizeSettings({ appearance: { chat: { avatar: `data:image/png;base64,${'A'.repeat(400_001)}` } } }).appearance.chat.avatar).toBe('')
   })
 
+  it('keeps 实色 (PRD v1.139, Figma 57) and the glass materials’ opacities beside it', () => {
+    const { windowMaterial, shellOpacity } = sanitizeSettings({ appearance: { windowMaterial: 'solid', shellOpacity: { liquid: 0.3, frosted: 0.7, solid: 0.1 } } }).appearance
+    expect(windowMaterial).toBe('solid')
+    expect(shellOpacity).toEqual({ liquid: 0.3, frosted: 0.7 })
+  })
+
   it('merges a patch of one chat field or one material’s opacity into the rest', () => {
     const next = applySettingsPatch(DEFAULT_SETTINGS, { appearance: { chat: { width: 'wide' }, shellOpacity: { frosted: 0.8 } } })
     expect(next.appearance.chat).toEqual({ ...DEFAULT_SETTINGS.appearance.chat, width: 'wide' })

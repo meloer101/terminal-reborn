@@ -2,6 +2,7 @@
 // whether Wavi knows its state exactly (准确: per-launch hooks or the terminal's program-status protocol) or only
 // estimates it from the title (估计); 没装 offers the vendor's install command to copy — Wavi never installs anything.
 import { useEffect, useState } from 'react'
+import { create } from 'zustand'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability, AgentVersions } from '@shared/ipc'
@@ -12,6 +13,9 @@ import styles from './AgentsPane.module.css'
 
 /** Not-installed CLIs shown before 显示其余 N 家. */
 const SHOWN_MISSING = 2
+
+/** The not-installed agent the pane opens on (在此新建会话's grey rows): its row is unfolded and scrolled to. */
+export const useAgentFocus = create<{ agent: CliAgent | null }>()(() => ({ agent: null }))
 
 export function AgentsPane() {
   const [found, setFound] = useState<AgentAvailability | null>(null)
@@ -34,10 +38,22 @@ export function AgentsPane() {
     }
   }, [])
 
+  const focus = useAgentFocus((s) => s.agent)
+  useEffect(() => {
+    if (found && focus) requestAnimationFrame(() => document.querySelector(`[data-agent="${focus}"]`)?.scrollIntoView({ block: 'nearest' }))
+  }, [found, focus])
+  useEffect(() => () => useAgentFocus.setState({ agent: null }), [])
+
   const installed = found ? CLI_AGENTS.filter((id) => found[id]) : []
   const missing = found ? CLI_AGENTS.filter((id) => !found[id]) : []
-  const shownMissing = allMissing ? missing : missing.slice(0, SHOWN_MISSING)
   const rest = missing.slice(SHOWN_MISSING)
+  // Unfolded by hand, or for the agent it was opened on.
+  const unfolded = allMissing || (focus !== null && rest.includes(focus))
+  const shownMissing = unfolded ? missing : missing.slice(0, SHOWN_MISSING)
+  const toggleMissing = (): void => {
+    useAgentFocus.setState({ agent: null })
+    setAllMissing(!unfolded)
+  }
 
   const copy = (id: CliAgent): void => {
     void navigator.clipboard
@@ -87,9 +103,9 @@ export function AgentsPane() {
                   </div>
                 ))}
                 {rest.length > 0 && (
-                  <button type="button" className={styles.more} aria-expanded={allMissing} onClick={() => setAllMissing(!allMissing)}>
-                    {allMissing ? <ChevronDown size={16} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.75} aria-hidden />}
-                    {allMissing ? '收起' : `显示其余 ${rest.length} 家（${rest.map((id) => AGENT_SPECS[id].label).join('、')}）`}
+                  <button type="button" className={styles.more} aria-expanded={unfolded} onClick={toggleMissing}>
+                    {unfolded ? <ChevronDown size={16} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.75} aria-hidden />}
+                    {unfolded ? '收起' : `显示其余 ${rest.length} 家（${rest.map((id) => AGENT_SPECS[id].label).join('、')}）`}
                   </button>
                 )}
               </Section>

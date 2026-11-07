@@ -9,9 +9,8 @@
 //
 // Only the workspace's project roots and their own worktrees are accepted; nothing from the renderer reaches git as
 // an option. Both commits the precheck saw are checked again before anything moves.
-import { execFile } from 'node:child_process'
 import { readdir, realpath, stat } from 'node:fs/promises'
-import { delimiter, isAbsolute } from 'node:path'
+import { isAbsolute } from 'node:path'
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
 import {
@@ -29,7 +28,8 @@ import {
 } from '@shared/git-merge'
 import { hadOwnCommits, mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
-import { gitAvailable, sshCommandFor } from './git-graph'
+import { gitAvailable } from './git-graph'
+import { lastLines, pushEnv, runGit } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
 const MAX_PATH = 4096
@@ -39,7 +39,6 @@ const CHECKOUT_TIMEOUT_MS = 5 * 60_000
 const PUSH_TIMEOUT_MS = 60_000
 const MAX_BUFFER = 32 * 1024 * 1024
 const MAX_SQUASH_SUBJECTS = 100
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
 interface RunResult {
   code: number
@@ -48,40 +47,22 @@ interface RunResult {
 }
 
 /** Runs git; resolves for exit codes in `ok` (default 0), rejects otherwise with git's last lines as the message. */
-function run(
+async function run(
   cwd: string,
   args: string[],
   options: { timeout?: number; env?: Record<string, string>; input?: string; ok?: number[] } = {}
 ): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: options.timeout ?? GIT_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        env: {
-          ...process.env,
-          GIT_TERMINAL_PROMPT: '0',
-          // Nothing here may open an editor (rebase's todo list, commit messages).
-          GIT_EDITOR: 'true',
-          GIT_SEQUENCE_EDITOR: 'true',
-          PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter),
-          ...options.env
-        }
-      },
-      (error, stdout, stderr) => {
-        const code = error ? (typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : -1) : 0
-        if ((options.ok ?? [0]).includes(code)) resolve({ code, stdout, stderr })
-        else reject(new Error(lastLines(String(stderr || stdout || error?.message || 'git failed'))))
-      }
-    )
-    if (options.input !== undefined) child.stdin?.end(options.input)
+  const ran = await runGit(cwd, args, {
+    timeout: options.timeout ?? GIT_TIMEOUT_MS,
+    maxStdout: MAX_BUFFER,
+    // Nothing here may open an editor (rebase's todo list, commit messages).
+    env: { GIT_EDITOR: 'true', GIT_SEQUENCE_EDITOR: 'true', ...options.env },
+    ...(options.input !== undefined ? { input: options.input } : {})
   })
+  if ((options.ok ?? [0]).includes(ran.code)) return ran
+  throw new Error(lastLines(ran.stderr || ran.stdout) || 'git failed')
 }
 
-const lastLines = (text: string): string => text.trim().split('\n').slice(-3).join(' ').slice(0, 500)
 
 const git = async (cwd: string, args: string[], options?: Parameters<typeof run>[2]): Promise<string> => (await run(cwd, args, options)).stdout
 
@@ -337,10 +318,7 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
 /** Pushes the local base to origin; '' when it went through, else git's error. */
 export async function pushBase(realRoot: string, base: string): Promise<string> {
   try {
-    const env: Record<string, string> = {}
-    const ssh = sshCommandFor(process.env, (await orEmpty(git(realRoot, ['config', '--get', 'core.sshCommand']))).trim())
-    if (ssh) env.GIT_SSH_COMMAND = ssh
-    await git(realRoot, ['push', '--quiet', 'origin', `refs/heads/${base}:refs/heads/${base}`], { timeout: PUSH_TIMEOUT_MS, env })
+    await git(realRoot, ['push', '--quiet', 'origin', `refs/heads/${base}:refs/heads/${base}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(realRoot) })
     return ''
   } catch (error) {
     return errorText(error)

@@ -11,11 +11,10 @@
 // GIT_CONCURRENCY git processes at once across repositories. Worktrees without work of their own (nothing ahead of
 // the base, nothing uncommitted), the main checkout and archived worktrees (the window does not send them) are skipped.
 // git older than 2.38 (no --write-tree) turns the feature off.
-import { execFile } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
 import { copyFile, lstat, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { app, ipcMain } from 'electron'
 import {
   parseRadarTargets,
@@ -35,6 +34,7 @@ import { affectsWorktreeList, mainWorktreeIndex, parseBaseConfig, parseWorktreeP
 import { gitAvailable } from './git-graph'
 import { isOldGit, mergeTreeConflicts } from './git-merge'
 import { isProjectRoot } from './workspace-store'
+import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 
 const GIT_TIMEOUT_MS = 30_000
 const MAX_BUFFER = 16 * 1024 * 1024
@@ -51,7 +51,6 @@ const MAX_UNTRACKED_BYTES = 1024 * 1024
 const MAX_UNTRACKED_FILES = 1000
 /** Cached merges kept beyond the ones the latest reports use. */
 const MAX_CACHE = 4000
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 /** Snapshot commits: a fixed identity and date, so the same work gives the same commit (and cache key). */
 const SNAPSHOT_ENV = {
   GIT_AUTHOR_NAME: 'Wavi',
@@ -79,32 +78,14 @@ async function limited<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 function git(cwd: string, args: string[], options: { env?: Record<string, string>; input?: string } = {}): Promise<string> {
-  return limited(
-    () =>
-      new Promise<string>((resolveRun, reject) => {
-        const child = execFile(
-          'git',
-          args,
-          {
-            cwd,
-            timeout: GIT_TIMEOUT_MS,
-            maxBuffer: MAX_BUFFER,
-            env: {
-              ...process.env,
-              GIT_TERMINAL_PROMPT: '0',
-              // Never take the repository's index lock away from an agent (status would refresh the index).
-              GIT_OPTIONAL_LOCKS: '0',
-              PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter),
-              ...options.env
-            }
-          },
-          (error, stdout, stderr) => {
-            if (error) reject(new Error(String(stderr || stdout || error.message).trim().split('\n').slice(-3).join(' ').slice(0, 500)))
-            else resolveRun(stdout)
-          }
-        )
-        if (options.input !== undefined) child.stdin?.end(options.input)
-      })
+  // Never take the repository's index lock away from an agent (status would refresh the index).
+  return limited(() =>
+    gitText(cwd, args, {
+      timeout: GIT_TIMEOUT_MS,
+      maxStdout: MAX_BUFFER,
+      env: { ...NO_OPTIONAL_LOCKS, ...options.env },
+      ...(options.input !== undefined ? { input: options.input } : {})
+    })
   )
 }
 

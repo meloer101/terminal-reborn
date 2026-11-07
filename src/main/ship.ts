@@ -28,24 +28,8 @@ import { SHIP_IPC, type BaseCi, type BaseCiFailure, type DiffSinceRequest, type 
 import { HANDOFF_FILES } from '@shared/ship-handoff'
 import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest } from '@shared/ship-requests'
 import { mergePrecheck, mergeWorktree, pushBase, workInBase } from './git-merge'
-import {
-  branchInfo,
-  commitWorktree,
-  detectGh,
-  failedLogs,
-  gh,
-  ghPausedUntil,
-  git,
-  gitEnv,
-  gitOut,
-  lastLines,
-  openPrNumber,
-  pauseGhForRateLimit,
-  prRepoFor,
-  pushEnv,
-  refExists,
-  uncommittedFiles
-} from './pull-requests'
+import { git, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pushEnv, refExists } from './git/run'
+import { branchInfo, commitWorktree, detectGh, failedLogs, gh, ghPausedUntil, openPrNumber, pauseGhForRateLimit, prRepoFor, uncommittedFiles } from './pull-requests'
 import { isProjectRoot } from './workspace-store'
 
 const FETCH_TIMEOUT_MS = 60_000
@@ -708,7 +692,7 @@ function gitCapped(cwd: string, args: string[], cap: number): Promise<string | n
     let capped = false
     let settled = false
     const decoder = new StringDecoder('utf8')
-    const child = spawn('git', args, { cwd, env: gitEnv(), stdio: ['ignore', 'pipe', 'ignore'] })
+    const child = spawn('git', args, { cwd, env: gitEnv(NO_OPTIONAL_LOCKS), stdio: ['ignore', 'pipe', 'ignore'] })
     const finish = (value: string | null): void => {
       if (settled) return
       settled = true

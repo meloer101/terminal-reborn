@@ -8,6 +8,17 @@ import { toAppearanceDom, toTerminalAppearance } from './map'
 
 let lastTerminal = ''
 
+/** Mirrors <html data-material> for the boot screen (public/boot.js), which paints before settings are read. */
+const MATERIAL_BOOT_KEY = 'tr.material.boot'
+
+function rememberMaterial(material: string): void {
+  try {
+    localStorage.setItem(MATERIAL_BOOT_KEY, material)
+  } catch {
+    // Storage unavailable: a 实色 window's boot screen shows the glass for its first frames.
+  }
+}
+
 /** Idempotent: unchanged parts are skipped, so slider drags only touch what moved. */
 export function applyAppearance(appearance: AppearanceSettings): void {
   const root = document.documentElement
@@ -19,7 +30,11 @@ export function applyAppearance(appearance: AppearanceSettings): void {
       root.style.setProperty(name, value)
     }
   }
-  for (const [name, value] of Object.entries(dom.attrs)) if (root.getAttribute(name) !== value) root.setAttribute(name, value)
+  for (const [name, value] of Object.entries(dom.attrs)) {
+    if (root.getAttribute(name) === value) continue
+    root.setAttribute(name, value)
+    if (name === 'data-material') rememberMaterial(value)
+  }
   const terminal = toTerminalAppearance(appearance)
   const key = JSON.stringify(terminal)
   if (key !== lastTerminal) {

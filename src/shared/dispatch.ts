@@ -663,3 +663,21 @@ export function parseDeliverRequest(raw: unknown): DeliverRequest | null {
 
 /** Session ids `wavi` and main agree on (a WAVI_DIR is named after one). */
 export const isSessionIdText = (value: unknown): value is string => typeof value === 'string' && ID.test(value)
+
+// --- what a window keeps of dispatch, saved with the workspace -----------------------------------------------------
+
+/** One `wavi run` waiting for 开始 under its dispatcher's terminal; several of one dispatcher show as one strip. */
+export interface PendingStart {
+  callId: string
+  parentId: SessionId
+  /** The session it becomes (named in `wavi run`'s answer already). */
+  childId: SessionId
+  plan: ChildPlan
+  /** The dispatcher's branch, which a `head` child starts from. */
+  base: string
+  /** The dispatcher's checkout has uncommitted changes, which a `head` child will not have. */
+  uncommitted: boolean
+}
+
+/** A message that waits under a session's terminal for the user's 送进去. */
+export type HeldItem = { kind: 'report'; report: ChildReport } | { kind: 'message'; key: string; title: string; text: string }

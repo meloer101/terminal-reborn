@@ -24,10 +24,12 @@ import {
 } from '@shared/ship-writer'
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
-import { branchInfo, git, gitOut, prTemplate, refExists, searchPath, uncommittedFiles } from './pull-requests'
+import { git, gitOut, refExists, searchPath } from './git/run'
+import { branchInfo, prTemplate, uncommittedFiles } from './pull-requests'
 import { isQuitting } from './quit'
 import { getSettings } from './settings'
 import { isProjectRoot } from './workspace-store'
+import { killGroup } from './git/run'
 
 const RUN_TIMEOUT_MS = 120_000
 const KILL_GRACE_MS = 2_000
@@ -39,14 +41,6 @@ const MAX_UNTRACKED_BYTES = 8 * 1024
 const running = new Map<string, ChildProcess>()
 
 const fail = (message: string): WriteResult => ({ ok: false, message })
-
-function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  try {
-    if (child.pid) process.kill(-child.pid, signal)
-  } catch {
-    child.kill(signal)
-  }
-}
 
 /** `git diff HEAD` of the ticked tracked files plus the start of each ticked untracked file. */
 async function uncommittedDiff(cwd: string, paths: readonly string[]): Promise<string> {

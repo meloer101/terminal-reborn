@@ -3,7 +3,6 @@
 // paths stay inside the worktree (symlinks resolved), refs are full `refs/heads|remotes/…` names, pathspecs are
 // literal, and git never gets an argument that could be read as an option.
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
 import { access, constants, open, realpath, stat } from 'node:fs/promises'
 import { delimiter, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
@@ -29,6 +28,7 @@ import {
 } from '@shared/git-graph/log'
 import { stampDiffGroup, untrackedFileDiff } from '@shared/background-review'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
+import { appPath, gitEnv, NO_OPTIONAL_LOCKS, pushEnv, runProcess } from './git/run'
 import { isInside, normalizeRelative } from './worktree-files'
 
 const GIT_TIMEOUT_MS = 15_000
@@ -44,36 +44,15 @@ const COUNT_CONCURRENCY = 16
 /** git's empty tree: what an unborn branch is compared against. */
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 /** Finder launches apps with a minimal PATH. */
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
-const searchPath = () => [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH]
+const searchPath = (): string[] => appPath().split(delimiter)
 
-function run(command: string, cwd: string, args: string[], options: { timeout?: number; okCodes?: number[]; env?: Record<string, string> } = {}): Promise<string> {
-  const okCodes = options.okCodes ?? [0]
-  return new Promise((resolve, reject) => {
-    execFile(
-      command,
-      args,
-      {
-        cwd,
-        timeout: options.timeout ?? GIT_TIMEOUT_MS,
-        maxBuffer: GIT_MAX_BUFFER,
-        env: {
-          ...process.env,
-          // Never take the index lock (agents run git in the same worktree); paths are paths, never globs.
-          GIT_OPTIONAL_LOCKS: '0',
-          GIT_LITERAL_PATHSPECS: '1',
-          PATH: searchPath().join(delimiter),
-          ...options.env
-        }
-      },
-      (error, stdout, stderr) => {
-        if (!error) return resolve(stdout)
-        const code = typeof error.code === 'number' ? error.code : null
-        if (code !== null && okCodes.includes(code)) return resolve(stdout)
-        reject(new Error(String(stderr || error.message).trim() || `git exited with ${code}`))
-      }
-    )
-  })
+/** stdout of `command` (git, or a probe next to it); rejects with what it printed when the exit code is not in okCodes. */
+async function run(command: string, cwd: string, args: string[], options: { timeout?: number; okCodes?: number[]; env?: Record<string, string> } = {}): Promise<string> {
+  // Never take the index lock (agents run git in the same worktree); paths are paths, never globs.
+  const env = gitEnv({ ...NO_OPTIONAL_LOCKS, GIT_LITERAL_PATHSPECS: '1', ...options.env })
+  const ran = await runProcess(command, args, { cwd, env, timeout: options.timeout ?? GIT_TIMEOUT_MS, maxStdout: GIT_MAX_BUFFER })
+  if ((options.okCodes ?? [0]).includes(ran.code)) return ran.stdout
+  throw new Error(ran.stderr.trim() || `git exited with ${ran.code}`)
 }
 
 const git = (cwd: string, args: string[], options?: Parameters<typeof run>[3]) => run('git', cwd, args, options)
@@ -225,25 +204,11 @@ async function signature(root: unknown): Promise<string> {
   return cwd ? (await readRefs(cwd)).signature : ''
 }
 
-/**
- * ssh for fetch, never prompting: the user's own command (GIT_SSH_COMMAND, core.sshCommand) with BatchMode added,
- * so multi-account keys and agents keep working. GIT_SSH (a program, not a command line) is left alone.
- */
-export function sshCommandFor(env: NodeJS.ProcessEnv, coreSshCommand: string): string | null {
-  if (env.GIT_SSH_COMMAND) return `${env.GIT_SSH_COMMAND} -o BatchMode=yes`
-  if (coreSshCommand) return `${coreSshCommand} -o BatchMode=yes`
-  if (env.GIT_SSH) return null
-  return 'ssh -o BatchMode=yes'
-}
-
 async function fetchAll(root: unknown): Promise<string> {
   const cwd = await topLevel(root)
   if (!cwd) return '不是 git 仓库'
   try {
-    const env: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' }
-    const ssh = sshCommandFor(process.env, (await gitOrEmpty(cwd, ['config', '--get', 'core.sshCommand'])).trim())
-    if (ssh) env.GIT_SSH_COMMAND = ssh
-    await git(cwd, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env })
+    await git(cwd, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(cwd) })
     return ''
   } catch (error) {
     return error instanceof Error && error.message ? error.message : String(error)

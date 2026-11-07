@@ -12,7 +12,7 @@ import { beforeFix, brakeDecision, brakeLabel, failureKey } from '@shared/auto-f
 import { prThreadsPrompt, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import { DEFAULT_SETTINGS, type PrSettings } from '@shared/settings'
 import { handoffPrompt, isWaviPrompt, type HandoffContext, type HandoffFailure } from '@shared/ship-handoff'
-import type { Session } from '@shared/types'
+import type { Session, Worktree } from '@shared/types'
 import { interruptAgent, submitPrompt } from '../session-io'
 import { useBackgroundReview } from '../review/background'
 import { useWorkspace } from '../state/workspace'
@@ -24,7 +24,11 @@ import {
   baseFixDecision,
   fixNote,
   freshAutomation,
+  isInterrupted,
   mergeWhenGreenOn,
+  restoredAutomation,
+  savedFixRuns,
+  stalledFix,
   takenOver,
   type FixRun,
   type FixScope,
@@ -32,6 +36,8 @@ import {
 } from './auto-fix-model'
 import { acceptBaseCi, setBaseAutomation, useBaseCi } from './base-ci'
 import { prWatchTargets, setAutomation, setPrNotice, usePullRequests } from './store'
+import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
+import { hasHooks, shortAgentName } from '@shared/agents'
 
 /** Every 自动修复 prompt starts with this, so its own UserPromptSubmit is not taken for the user taking over. */
 export const AUTO_FIX_MARK = '（Wavi 自动修复'
@@ -49,21 +55,28 @@ const LOG_RETRY_MS = 15_000
 const initialized = new Map<string, number>()
 /** Worktree → the base commit whose CI the base automation last looked at. */
 const baseSeen = new Map<string, string>()
+/** Base runs taken up from the saved workspace: the first CI seen is theirs, not a new 合并到 main 并推送. */
+const restoredBase = new Set<string>()
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
-/** The worktree's agent session (the active one when it is there), or null. */
-function agentFor(worktreePath: string): Session | null {
-  const state = useWorkspace.getState()
+/**
+ * The worktree's agent session that can take a fix — one whose turn reports its end, as the brakes start then: an agent
+ * with hooks, or any GUI session (main tracks its turns) — the active one first. The PR rows show the same one.
+ */
+export function fixAgentIn(state: { worktrees: readonly Worktree[]; sessions: readonly Session[]; activeSessionId: string | null }, worktreePath: string): Session | null {
   const ids = new Set(state.worktrees.filter((w) => w.path === worktreePath).map((w) => w.id))
-  const sessions = state.sessions.filter((s) => ids.has(s.worktreeId) && (s.kind === 'claude' || s.kind === 'codex'))
+  const sessions = state.sessions.filter((s) => ids.has(s.worktreeId) && s.kind !== 'shell' && (s.ui === 'gui' || hasHooks(s.kind)))
   return sessions.find((s) => s.id === state.activeSessionId) ?? sessions[0] ?? null
 }
+
+export const agentFor = (worktreePath: string): Session | null => fixAgentIn(useWorkspace.getState(), worktreePath)
 
 export const agentIdle = (session: Session | null): boolean =>
   session !== null && session.phase !== 'exited' && session.phase !== 'not-started' && (session.status === 'idle' || session.status === 'done_unread')
 
-export const agentName = (session: Session | null): string => (session?.kind === 'codex' ? 'Codex' : 'Claude')
+/** How the PR rows name the fixing agent: Claude as before (not Claude Code), every other one by its label. */
+export const agentName = (session: Session | null): string => shortAgentName(session?.kind ?? 'claude')
 
 function projectRootOf(worktreePath: string): string | null {
   const state = useWorkspace.getState()
@@ -285,7 +298,9 @@ async function handleStop(c: FixCtx): Promise<void> {
   const id = idOf(c.scope, c.worktree)
   const state = read(c.scope, c.worktree)
   const run = state?.run
-  if (!state || run?.kind !== 'fixing' || handling.has(id)) return
+  // A fix that came back interrupted (saved-runs.ts) still gets its brakes when its agent's turn ends after the reload.
+  const interrupted = isInterrupted(run ?? null)
+  if (!state || !run || (run.kind !== 'fixing' && !interrupted) || run.since === null || handling.has(id)) return
   handling.add(id)
   try {
     const target = targetOf(c)
@@ -304,6 +319,8 @@ async function handleStop(c: FixCtx): Promise<void> {
     const latest = read(c.scope, c.worktree)
     // The user took over (or turned it off) while the diff was read: whatever the agent committed is theirs.
     if (!latest || latest.run !== run) return
+    // Off after the reload (the switch is the window's, PRD v1.65): the interrupted fix waits for the user's call.
+    if (!latest.autoFix && interrupted) return
     if (!latest.autoFix) return write(c.scope, c.worktree, { ...latest, run: null, note })
     if (decision.kind === 'push') {
       write(c.scope, c.worktree, { ...latest, note })
@@ -364,6 +381,8 @@ export async function pushAnyway(scope: FixScope, worktreePath: string): Promise
   const run = stoppedRunOf(scope, worktreePath)
   const c = ctxFor(scope, worktreePath)
   if (!run || !c || run.since === null) return
+  // Still working (a fix that came back after a reload may be): what it pushes would be half done.
+  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: `${agentName(c.session)} 还在忙` })
   const confirmed = await window.tr.ui.confirm({ message: '仍然推送这次修复？', detail: brakeLabel(run.decision, read(scope, worktreePath)?.pushed), confirmLabel: '仍然推送', cancelLabel: '取消' })
   if (confirmed && read(scope, worktreePath)?.run === run) await pushFix(c, run)
 }
@@ -373,6 +392,7 @@ export async function discardFix(scope: FixScope, worktreePath: string): Promise
   const run = stoppedRunOf(scope, worktreePath)
   const c = ctxFor(scope, worktreePath)
   if (!run || !c || run.since === null) return
+  if (!agentIdle(c.session)) return setPrNotice(worktreePath, { tone: 'muted', text: `${agentName(c.session)} 还在忙` })
   const result = await window.tr.ship.discardSince({ ...targetOf(c), since: run.since }).catch((error: unknown) => ({ ok: false as const, message: errorText(error) }))
   const state = read(scope, worktreePath)
   if (!result.ok) return setPrNotice(worktreePath, { tone: 'error', text: `没能丢弃：${result.message}` })
@@ -459,7 +479,9 @@ function stepBase(worktreePath: string): void {
   // A commit Wavi did not push for a fix is a new 合并到 main 并推送: counting starts again.
   if (baseSeen.get(worktreePath) !== ci.sha) {
     baseSeen.set(worktreePath, ci.sha)
-    if (!state || !state.pushedShas.includes(ci.sha)) {
+    // A run taken up from the saved workspace keeps what it came back with.
+    const restored = restoredBase.delete(worktreePath)
+    if (!restored && (!state || !state.pushedShas.includes(ci.sha))) {
       state = freshAutomation(0, state?.autoFix ?? settings.autoFix)
       setBaseAutomation(worktreePath, state)
     }
@@ -509,20 +531,69 @@ function watchBaseCi(): () => void {
 let started = false
 
 /** Once per window. Returns a function that stops listening. */
+/** The fixes a window before this one left unfinished come back stopped, the switches from the defaults (PRD v1.65). */
+let restoredOnce = false
+/** Restored states as written, until the settings arrive and give them their switch. */
+const restoredStates: Array<{ scope: FixScope; worktree: string; state: PrAutomation }> = []
+
+function restoreFixRuns(): void {
+  if (restoredOnce) return
+  restoredOnce = true
+  for (const saved of initialWorkspaceFile()?.fixRuns ?? []) {
+    if (read(saved.scope, saved.worktree)) continue
+    const state = restoredAutomation(saved, settings.autoFix)
+    if (!state) continue
+    if (saved.scope === 'base') restoredBase.add(saved.worktree)
+    restoredStates.push({ scope: saved.scope, worktree: saved.worktree, state })
+    write(saved.scope, saved.worktree, state)
+  }
+}
+
+/** The settings are in: a restored state nobody touched since takes the default switch (PRD v1.65). */
+function applyRestoredSwitches(): void {
+  for (const { scope, worktree, state } of restoredStates.splice(0)) {
+    if (read(scope, worktree) === state && state.autoFix !== settings.autoFix) write(scope, worktree, { ...state, autoFix: settings.autoFix })
+  }
+}
+
+/** Fixes whose turn never reported its end (stalledFix) stop, and the session hears why. */
+function stopStalledFixes(now: number): void {
+  for (const scope of ['pr', 'base'] as const) {
+    const all = scope === 'pr' ? usePullRequests.getState().automation : useBaseCi.getState().automation
+    for (const [worktree, state] of Object.entries(all)) {
+      const next = stalledFix(state, now)
+      if (!next) continue
+      write(scope, worktree, next)
+      const c = ctxFor(scope, worktree)
+      if (c && next.run?.kind === 'stopped') notify(c.session, `${placeOf(c)}：${brakeLabel(next.run.decision, next.pushed)}`)
+    }
+  }
+}
+
 export function startPrAutomation(): () => void {
   if (started) return () => {}
   started = true
   const offSettings = window.tr.settings.onChange((next) => {
     settings = next.pr
   })
+  // Before anything can step: a PR status that arrives first must find the restored run, not write a fresh one.
+  restoreFixRuns()
   void window.tr.settings.get().then((initial) => {
     settings = initial.pr
+    applyRestoredSwitches()
     step()
   })
+  // An unfinished fix outlives the window (saved-runs.ts): saved with the workspace whenever a run changes.
+  const offSnapshot = addSnapshotPart(() => {
+    const fixRuns = savedFixRuns(usePullRequests.getState().automation, useBaseCi.getState().automation)
+    return fixRuns.length > 0 ? { fixRuns } : {}
+  })
   const offPr = usePullRequests.subscribe((s, prev) => {
+    if (s.automation !== prev.automation) requestSave()
     if (s.byWorktree !== prev.byWorktree || s.automation !== prev.automation) step()
   })
   const offBase = useBaseCi.subscribe((s, prev) => {
+    if (s.automation !== prev.automation) requestSave()
     if (s.byWorktree !== prev.byWorktree || s.automation !== prev.automation) step()
   })
   const offBaseWatch = watchBaseCi()
@@ -543,7 +614,7 @@ export function startPrAutomation(): () => void {
       for (const scope of ['pr', 'base'] as const) {
         const run = read(scope, path)?.run
         const c = ctxFor(scope, path, session)
-        if (c && run?.kind === 'fixing' && run.sessionId === sessionId) void handleStop(c)
+        if (c && run && (run.kind === 'fixing' || isInterrupted(run)) && run.sessionId === sessionId) void handleStop(c)
       }
       return
     }
@@ -554,8 +625,11 @@ export function startPrAutomation(): () => void {
       if (current && (current.attempts > 0 || current.run)) write(scope, path, takenOver(current))
     }
   })
+  const stalledTimer = setInterval(() => stopStalledFixes(Date.now()), 60_000)
   return () => {
     started = false
+    clearInterval(stalledTimer)
+    offSnapshot()
     offSettings()
     offPr()
     offBase()

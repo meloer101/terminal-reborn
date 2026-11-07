@@ -304,6 +304,19 @@ export function isCliAgent(value: unknown): value is CliAgent {
   return typeof value === 'string' && AGENT_SET.has(value)
 }
 
+/**
+ * Agents whose turns Wavi sees through hooks injected at launch (a Stop when a turn ends): what 自动修复 and Ship's
+ * writing need of the agent they hand work to.
+ */
+export function hasHooks(kind: string | null | undefined): kind is CliAgent {
+  return isCliAgent(kind) && AGENT_SPECS[kind].status === 'hooks'
+}
+
+/** The agent as buttons and messages name it (让 … 修复, 交给 … 解决): Claude, as the product always said; any other by its label. */
+export function shortAgentName(kind: CliAgent | 'shell'): string {
+  return kind === 'claude' || kind === 'shell' ? 'Claude' : AGENT_SPECS[kind].label
+}
+
 /** Claude Code and Codex: the two CLIs with plan usage, dispatch, background review and the send profiles. */
 export type ClaudeOrCodex = 'claude' | 'codex'
 

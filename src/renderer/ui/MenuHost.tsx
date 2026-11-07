@@ -53,6 +53,8 @@ interface PanelProps {
   firstActive?: boolean
   /** Submenus only: ← / Esc hands control back to the parent row. */
   onBack?(): void
+  /** The first this many entries scroll in a list of fixed height; the rest stay under it (a submenu's footer). */
+  scrollCount?: number
 }
 
 interface Submenu {
@@ -61,9 +63,11 @@ interface Submenu {
   fromKeyboard: boolean
 }
 
-function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, onBack }: PanelProps) {
+function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, onBack, scrollCount }: PanelProps) {
   const id = useId()
   const panel = useRef<HTMLDivElement>(null)
+  /** The arrow keys moved the highlight: bring that row into the scrolling list's view (the pointer only hovers seen rows). */
+  const movedByKey = useRef(false)
   const [position, setPosition] = useState<{ left: number; top: number; origin: string } | null>(null)
   const [active, setActive] = useState(() => (firstActive ? stepIndex(entries, -1, 1) : -1))
   const [submenu, setSubmenu] = useState<Submenu | null>(null)
@@ -94,6 +98,12 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     []
   )
 
+  useLayoutEffect(() => {
+    if (!movedByKey.current) return
+    movedByKey.current = false
+    panel.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [active])
+
   const closeSubmenu = useCallback(() => {
     setSubmenu(null)
     panel.current?.focus({ preventScroll: true })
@@ -112,6 +122,7 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     if (!handled) return
     event.preventDefault()
     event.stopPropagation()
+    movedByKey.current = ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)
     if (key === 'ArrowDown') setActive((i) => stepIndex(entries, i, 1))
     else if (key === 'ArrowUp') setActive((i) => stepIndex(entries, i < 0 ? entries.length : i, -1))
     else if (key === 'Home') setActive(stepIndex(entries, -1, 1))
@@ -132,6 +143,58 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     if (entry.type === 'submenu') {
       if (submenu?.index !== index) openSubmenu(index, false)
     } else if (submenu) setSubmenu(null)
+  }
+
+  const row = (entry: MenuEntry, index: number) => {
+    if (entry.type === 'header') {
+      return (
+        <div key={index} className={styles.header} role="presentation">
+          {entry.label}
+        </div>
+      )
+    }
+    if (entry.type === 'separator') return <div key={index} className={styles.separator} role="separator" />
+    return (
+      <div
+        key={index}
+        id={`${id}-${index}`}
+        className={styles.item}
+        role={entry.type === 'item' && entry.checked !== undefined ? 'menuitemradio' : 'menuitem'}
+        aria-checked={entry.type === 'item' && entry.checked !== undefined ? entry.checked : undefined}
+        data-index={index}
+        data-active={index === active}
+        data-muted={entry.type === 'item' && entry.muted ? true : undefined}
+        aria-label={entry.type === 'item' && entry.muted ? `${entry.label}，没装` : undefined}
+        aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
+        aria-haspopup={entry.type === 'submenu' ? 'menu' : undefined}
+        aria-expanded={entry.type === 'submenu' ? submenu?.index === index : undefined}
+        aria-keyshortcuts={entry.type === 'item' && entry.accelerator ? ariaShortcut(entry.accelerator) : undefined}
+        onPointerMove={() => onRowPointerMove(index)}
+        onClick={() => activate(index, false)}
+      >
+        {entry.type === 'item' && entry.icon && (
+          <span className={styles.icon} aria-hidden>
+            <entry.icon size={16} strokeWidth={1.75} />
+          </span>
+        )}
+        <span className={styles.label}>{entry.label}</span>
+        {entry.type === 'item' && entry.accelerator && (
+          <span className={styles.shortcut} aria-hidden>
+            {formatAccelerator(entry.accelerator)}
+          </span>
+        )}
+        {entry.type === 'item' && entry.checked && (
+          <span className={styles.check} aria-hidden>
+            <Check size={16} strokeWidth={1.75} />
+          </span>
+        )}
+        {entry.type === 'submenu' && (
+          <span className={styles.chevron} aria-hidden>
+            <ChevronRight size={16} strokeWidth={1.75} />
+          </span>
+        )}
+      </div>
+    )
   }
 
   const style: CSSProperties = position
@@ -157,56 +220,20 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
         }}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {entries.map((entry, index) =>
-          entry.type === 'header' ? (
-            <div key={index} className={styles.header} role="presentation">
-              {entry.label}
-            </div>
-          ) : (
-          <div
-            key={index}
-            id={`${id}-${index}`}
-            className={styles.item}
-            role={entry.type === 'item' && entry.checked !== undefined ? 'menuitemradio' : 'menuitem'}
-            aria-checked={entry.type === 'item' && entry.checked !== undefined ? entry.checked : undefined}
-            data-index={index}
-            data-active={index === active}
-            aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
-            aria-haspopup={entry.type === 'submenu' ? 'menu' : undefined}
-            aria-expanded={entry.type === 'submenu' ? submenu?.index === index : undefined}
-            aria-keyshortcuts={entry.type === 'item' && entry.accelerator ? ariaShortcut(entry.accelerator) : undefined}
-            onPointerMove={() => onRowPointerMove(index)}
-            onClick={() => activate(index, false)}
-          >
-            {entry.type === 'item' && entry.icon && (
-              <span className={styles.icon} aria-hidden>
-                <entry.icon size={16} strokeWidth={1.75} />
-              </span>
-            )}
-            <span className={styles.label}>{entry.label}</span>
-            {entry.type === 'item' && entry.accelerator && (
-              <span className={styles.shortcut} aria-hidden>
-                {formatAccelerator(entry.accelerator)}
-              </span>
-            )}
-            {entry.type === 'item' && entry.checked && (
-              <span className={styles.check} aria-hidden>
-                <Check size={16} strokeWidth={1.75} />
-              </span>
-            )}
-            {entry.type === 'submenu' && (
-              <span className={styles.chevron} aria-hidden>
-                <ChevronRight size={16} strokeWidth={1.75} />
-              </span>
-            )}
-          </div>
-          )
+        {scrollCount === undefined ? (
+          entries.map(row)
+        ) : (
+          <>
+            <div className={styles.list}>{entries.slice(0, scrollCount).map(row)}</div>
+            {entries.slice(scrollCount).map((entry, i) => row(entry, scrollCount + i))}
+          </>
         )}
       </div>
       {submenu && sub?.type === 'submenu' && (
         <MenuPanel
           key={submenu.index}
-          entries={sub.items}
+          entries={sub.footer ? [...sub.items, ...sub.footer] : sub.items}
+          scrollCount={sub.footer ? sub.items.length : undefined}
           placement={submenu.placement}
           label={sub.label}
           takeFocus={submenu.fromKeyboard}

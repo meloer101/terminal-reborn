@@ -8,6 +8,7 @@ import {
   agentName,
   declineFix,
   discardFix,
+  fixAgentIn,
   prWantsFix,
   proceedAnyway,
   pushAnyway,
@@ -25,12 +26,9 @@ import ci from './CiRows.module.css'
 
 type StoppedRun = Extract<FixRun, { kind: 'stopped' }>
 
-/** The worktree's agent session, for the rows' switches and words (the first Claude / Codex session of the worktree). */
+/** The worktree's agent session, for the rows' switches and words: the one 自动修复 hands fixes to (fixAgentIn). */
 export function useAgentOf(worktreePath: string) {
-  return useWorkspace((s) => {
-    const ids = new Set(s.worktrees.filter((w) => w.path === worktreePath).map((w) => w.id))
-    return s.sessions.find((x) => ids.has(x.worktreeId) && (x.kind === 'claude' || x.kind === 'codex')) ?? null
-  })
+  return useWorkspace((s) => fixAgentIn(s, worktreePath))
 }
 
 /** The stopped fix waiting for the user on this worktree, the PR's first, then the base push's; null when none. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import { displayFamily, fontSizeOptions, formatPercent, previewCaption } from './appearance-form'
+import { displayFamily, fontSizeOptions, formatPercent, materialOptions, previewCaption } from './appearance-form'
 
 describe('previewCaption', () => {
   it('matches the Figma caption', () => {
@@ -27,5 +27,12 @@ describe('fontSizeOptions', () => {
 describe('misc formatting', () => {
   it('formats', () => {
     expect(formatPercent(0.96)).toBe('96%')
+  })
+})
+
+describe('materialOptions (PRD v1.139, Figma 57C)', () => {
+  it('offers Liquid Glass only where the window has it; 实色 everywhere', () => {
+    expect(materialOptions(true).map((o) => o.label)).toEqual(['液态玻璃', '磨砂玻璃', '实色'])
+    expect(materialOptions(false).map((o) => o.label)).toEqual(['磨砂玻璃', '实色'])
   })
 })

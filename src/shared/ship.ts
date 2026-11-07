@@ -155,3 +155,53 @@ export const SHIP_IPC = {
   /** main → renderer, payload BaseCi */
   baseCiChanged: 'ship:base-ci-changed'
 } as const
+
+// --- the Ship block's state (Git · 变更, Figma 29C / 29D / 29H), saved with the workspace while a run is open ---------
+
+/** `main`: 合并到 base 并推送; `pr`: 创建 PR; `push-pr`: the branch's PR is open, commit what is uncommitted and push. */
+export type ShipKind = 'main' | 'pr' | 'push-pr'
+export type StepId = 'review' | 'write' | 'commit' | 'merge' | 'push' | 'create'
+export type StepState = 'pending' | 'working' | 'done' | 'failed'
+/** writing: steps before the user sees the text; glance: the text is shown for a last look; running: Wavi's own steps. */
+export type ShipStage = 'writing' | 'glance' | 'running'
+
+export interface FlowStep {
+  id: StepId
+  label: string
+  state: StepState
+  /** A quiet addition to the label (what the step is waiting for, why it was skipped). */
+  note?: string
+}
+
+/** What the user can edit in the glance. */
+export interface ShipTexts {
+  /** The commit message: subject, blank line, body. */
+  commit: string
+  title: string
+  body: string
+  draft: boolean
+}
+
+export interface ShipError {
+  step: StepId
+  message: string
+  /** The end of what git and its hooks printed. */
+  output?: string
+  /** 合并 stopped on these files: 交给 agent 解. */
+  conflicts?: string[]
+  /** The push of the base was refused (protection, a hook): 改为创建 PR. */
+  pushRefused?: boolean
+}
+
+export interface ShipState {
+  kind: ShipKind
+  /** The exit's label, the block's title line. */
+  title: string
+  agent: string
+  steps: FlowStep[]
+  stage: ShipStage
+  texts: ShipTexts
+  error: ShipError | null
+  /** The stage the error happened in: 重试 resumes there. */
+  failedIn: ShipStage | null
+}
