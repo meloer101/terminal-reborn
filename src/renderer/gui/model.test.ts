@@ -7,6 +7,7 @@ import {
   cardKey,
   composerKey,
   feedBlocks,
+  permissionBody,
   permissionButtons,
   permissionPrimary,
   permissionTitle,
@@ -309,6 +310,22 @@ describe('permission card (49″E)', () => {
     expect(shortAgentName('Claude Code')).toBe('Claude')
     expect(shortAgentName('Gemini CLI')).toBe('Gemini')
     expect(shortAgentName('Codex')).toBe('Codex')
+  })
+
+  it('shows every file a change asks about, and the detail when it says more than the path', () => {
+    const file = (path: string) => ({ path, hunks: [], added: 1, removed: 0, truncated: false })
+    const base = { kind: 'permission' as const, id: 'p', tool: 'Edit', options: [] }
+    // Claude's Edit: the detail is the path the diff's header already shows.
+    expect(permissionBody({ ...base, detail: 'src/a.ts', diff: file('src/a.ts') })).toEqual({ files: [file('src/a.ts')], detail: null })
+    // Codex's reason shows above the change.
+    expect(permissionBody({ ...base, detail: 'needs write access', diff: file('src/a.ts') })).toEqual({ files: [file('src/a.ts')], detail: 'needs write access' })
+    // Several files: each one, the reason too.
+    const files = [file('src/a.ts'), file('src/b.ts')]
+    expect(permissionBody({ ...base, detail: 'refactor', diff: files[0]!, files })).toEqual({ files, detail: 'refactor' })
+    expect(permissionBody({ ...base, detail: 'src/a.ts', diff: files[0]!, files })).toEqual({ files, detail: null })
+    // No change: the detail alone.
+    expect(permissionBody({ ...base, tool: 'Bash', detail: 'pnpm test' })).toEqual({ files: [], detail: 'pnpm test' })
+    expect(permissionBody({ ...base, tool: 'Bash', detail: '' })).toEqual({ files: [], detail: null })
   })
 })
 

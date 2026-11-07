@@ -808,6 +808,27 @@
   max-height: 200px;
 }
 
+.cardDiffs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+/* A change to several files: one scroll for all of them, each file at its full height. */
+.cardDiffs[data-several='true'] {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.cardDiffs[data-several='true'] .cardDiff {
+  flex-shrink: 0;
+}
+
+.cardDiffs[data-several='true'] .cardDiff .fileLines {
+  max-height: none;
+}
+
 .cardActions {
   display: flex;
   flex-wrap: wrap;

@@ -9,7 +9,7 @@ import type { SessionId } from '@shared/types'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
 import { DiffBlock } from './DiffBlock'
-import { permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
+import { permissionBody, permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
 import styles from './Chat.module.css'
 
 /** A card's key handler; true when the key did something. */
@@ -60,6 +60,7 @@ function Button({ label, shortcut, primary = false, disabled, onClick, title }: 
 
 function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardProps<Extract<GuiPrompt, { kind: 'permission' }>>) {
   const buttons = permissionButtons(prompt.options)
+  const body = permissionBody(prompt)
   const primary = permissionPrimary(buttons)
   const choose = (optionId: string | undefined): boolean => {
     if (!optionId || pending) return false
@@ -73,8 +74,15 @@ function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardP
   })
   return (
     <Card label="等你确认" title={permissionTitle(agentLabel, prompt.tool)} testId="gui-permission">
-      {/* Figma 59I: a change to a file shows it, its path on the block's header in place of the detail line. */}
-      {prompt.diff ? <DiffBlock diff={prompt.diff} header className={styles.cardDiff} /> : prompt.detail && <pre className={styles.cardDetail}>{prompt.detail}</pre>}
+      {body.detail && <pre className={styles.cardDetail}>{body.detail}</pre>}
+      {/* Figma 59I: a change shows each file, its path on the block's header; several scroll together. */}
+      {body.files.length > 0 && (
+        <div className={styles.cardDiffs} data-several={body.files.length > 1}>
+          {body.files.map((file, i) => (
+            <DiffBlock key={i} diff={file} header className={styles.cardDiff} />
+          ))}
+        </div>
+      )}
       <div className={styles.cardActions}>
         {buttons.reject && <Button label="拒绝" shortcut="⎋" disabled={pending} onClick={() => choose(buttons.reject?.id)} />}
         {buttons.always && buttons.always !== primary && <Button label="总是允许" title={buttons.always.label} disabled={pending} onClick={() => choose(buttons.always?.id)} />}

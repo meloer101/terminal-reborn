@@ -42,6 +42,8 @@ export type GuiPrompt =
       options: GuiPermissionOption[]
       /** The change it asks to make to a file (Figma 59I): Claude Edit / MultiEdit / Write, Codex's file approval. */
       diff?: FileDiff
+      /** A change to several files: each one (`diff` is the first). Codex's file approval. */
+      files?: FileDiff[]
     }
   | { kind: 'question'; id: string; questions: GuiQuestion[] }
   | { kind: 'plan'; id: string; plan: string }

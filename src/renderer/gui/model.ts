@@ -5,7 +5,7 @@ import { Bot, Brain, ClipboardList, FilePlus, FileText, FolderSearch, Globe, Lis
 import { looksLikeReport } from '@shared/dispatch'
 import type { GuiCommand, GuiConfigOption, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
 import { composerPickers } from '@shared/gui-chat'
-import type { ChatItem, ChatTodo } from '@shared/transcript-chat'
+import type { ChatItem, ChatTodo, FileDiff } from '@shared/transcript-chat'
 import type { SessionStatus } from '@shared/types'
 import { CUT_ESCAPE, ESCAPES } from './ansi'
 
@@ -376,6 +376,16 @@ export const permissionPrimary = (buttons: PermissionButtons): GuiPermissionOpti
 
 /** The agent as a card names it (Figma 49″E 「Claude 要运行一条命令」): the product name without its CLI suffix. */
 export const shortAgentName = (label: string): string => label.replace(/\s+(Code|CLI)$/i, '')
+
+/**
+ * What a permission card shows between its title and buttons (Figma 59I): each file the change touches (with its
+ * header), and the detail line above them unless it only names one of those files (Claude's Edit: the path).
+ */
+export function permissionBody(prompt: Extract<GuiPrompt, { kind: 'permission' }>): { files: FileDiff[]; detail: string | null } {
+  const files = prompt.files ?? (prompt.diff ? [prompt.diff] : [])
+  const detail = prompt.detail && !files.some((f) => f.path === prompt.detail) ? prompt.detail : null
+  return { files, detail }
+}
 
 /** The permission card's title (「Claude 要运行一条命令」): what the tool does, by its name. */
 export function permissionTitle(agentLabel: string, tool: string): string {

@@ -95,16 +95,24 @@ describe('createCodexNormalizer', () => {
     expect(s.items).toHaveLength(2)
   })
 
-  it('shows the change a file approval is about: the first file of its started fileChange item', () => {
+  it('shows the change a file approval is about: every file of its started fileChange item, and its reason', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const changes = [
       { path: '/repo/src/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1,2 +1,2 @@\n a\n-b\n+c\n' },
       { path: '/repo/src/b.ts', kind: { type: 'add' }, diff: 'x\n' }
     ]
     let s = fold(n.notification('item/started', { item: { type: 'fileChange', id: 'f9', status: 'inProgress', changes } }))
-    s = fold(n.request('3', 'item/fileChange/requestApproval', { threadId: 'th', turnId: 't', itemId: 'f9', reason: null }), s)
+    s = fold(n.request('3', 'item/fileChange/requestApproval', { threadId: 'th', turnId: 't', itemId: 'f9', reason: 'needs write access' }), s)
     const prompt = s.prompts[0]
     expect(prompt?.kind === 'permission' && prompt.diff).toMatchObject({ path: 'src/a.ts', added: 1, removed: 1 })
+    expect(prompt?.kind === 'permission' && prompt.files?.map((f) => f.path)).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(prompt).toMatchObject({ detail: 'needs write access' })
+    // One file, no reason: the file is the detail (the card shows it once, on the diff's header).
+    const one = createCodexNormalizer('/repo', () => 0)
+    let t = fold(one.notification('item/started', { item: { type: 'fileChange', id: 'f1', status: 'inProgress', changes: changes.slice(0, 1) } }))
+    t = fold(one.request('5', 'item/fileChange/requestApproval', { itemId: 'f1', reason: null }), t)
+    expect(t.prompts[0]).toMatchObject({ detail: 'src/a.ts', diff: { path: 'src/a.ts' } })
+    expect(t.prompts[0]).not.toHaveProperty('files')
     // An item never seen: no diff.
     const other = fold(n.request('4', 'item/fileChange/requestApproval', { itemId: 'nope' }))
     expect(other.prompts[0]).not.toHaveProperty('diff')
