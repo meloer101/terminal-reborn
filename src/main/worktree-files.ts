@@ -22,6 +22,7 @@ import {
   type LineMarkRange,
   type WorktreeChange
 } from '@shared/worktree-files'
+import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 
 const GIT_TIMEOUT_MS = 10_000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
@@ -100,20 +101,8 @@ async function resolveFileLink(root: string, realRoot: string, path: unknown, gu
 }
 
 export function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: GIT_TIMEOUT_MS,
-        maxBuffer: GIT_MAX_BUFFER,
-        // Never take the index lock: agents run git in the same worktree. Finder launches with a minimal PATH.
-        env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', PATH: `${process.env.PATH ?? ''}:/opt/homebrew/bin:/usr/local/bin:/usr/bin` }
-      },
-      (error, stdout) => (error ? reject(error) : resolve(stdout))
-    )
-  })
+  // Never take the index lock: agents run git in the same worktree.
+  return gitText(cwd, args, { timeout: GIT_TIMEOUT_MS, maxStdout: GIT_MAX_BUFFER, env: NO_OPTIONAL_LOCKS, message: (ran) => ran.stderr.trim() })
 }
 
 async function listDir(root: unknown, dir: unknown): Promise<DirEntry[]> {

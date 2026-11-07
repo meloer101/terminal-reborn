@@ -4,7 +4,7 @@
 // when their switch in 设置 · 自动化 · 代码审阅 is on. Nothing here ever types into the coding session.
 // Finished results and the findings the user ignored are saved in `review-results.json` (v1.63), so a restart neither
 // reviews the same diff again nor lands an ignored finding again.
-import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -47,6 +47,7 @@ import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath, userLoginPath } from './agents-installed'
 import { headCommit, reviewDiff } from './git-graph'
 import { getSettings } from './settings'
+import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 
 /** One segment may take this long before it is stopped and the review fails. */
 const SEGMENT_TIMEOUT_MS = 15 * 60_000
@@ -370,13 +371,11 @@ const GIT_TIMEOUT_MS = 60_000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 
 function git(cwd: string, args: string[], path: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'git',
-      args,
-      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1', PATH: path } },
-      (error, stdout) => (error ? reject(error) : resolve(stdout))
-    )
+  return gitText(cwd, args, {
+    timeout: GIT_TIMEOUT_MS,
+    maxStdout: GIT_MAX_BUFFER,
+    env: { ...NO_OPTIONAL_LOCKS, GIT_LITERAL_PATHSPECS: '1', PATH: path },
+    message: (ran) => ran.stderr.trim()
   })
 }
 
