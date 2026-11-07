@@ -1,12 +1,15 @@
 // 会话列表 (Figma 61A, states 62A–62D and 63B1–63B3): a small centred title with the connection under it, 等你处理
 // first, then by project; each row has its status (shape + text), current action, how long it has waited, project ·
 // branch and the agent's mark (no model name, PRD v1.116). Without a link the last list stays, dimmed, under a notice.
+import PhotosUI
 import SwiftUI
 
 struct SessionsView: View {
   @Environment(AppModel.self) private var model
   @State private var unpairing = false
   @State private var creating = false
+  @State private var pickingAvatar = false
+  @State private var avatarItem: PhotosPickerItem?
 
   var body: some View {
     content
@@ -32,9 +35,22 @@ struct SessionsView: View {
       }
       .sheet(isPresented: $creating) { NewSessionView() }
       .confirmationDialog(model.macName, isPresented: $unpairing, titleVisibility: .visible) {
+        // My avatar is set here (Figma 64G): the only menu the phone has.
+        if MyAvatar.shared.image == nil {
+          Button("设置我的头像") { pickingAvatar = true }
+        } else {
+          Button("更换我的头像") { pickingAvatar = true }
+          Button("去掉我的头像") { MyAvatar.shared.remove() }
+        }
         Button("取消配对", role: .destructive) { model.forget() }
       } message: {
         Text(dialogText)
+      }
+      .photosPicker(isPresented: $pickingAvatar, selection: $avatarItem, matching: .images)
+      .onChange(of: avatarItem) { _, item in
+        guard let item else { return }
+        avatarItem = nil
+        Task { if let data = try? await item.loadTransferable(type: Data.self) { MyAvatar.shared.set(data) } }
       }
   }
 

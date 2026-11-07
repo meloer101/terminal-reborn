@@ -75,6 +75,34 @@ struct ButtonRow<Content: View>: View {
   }
 }
 
+/// A Markdown table: columns as wide as their text, between 48 and 220 (a longer cell wraps), the whole table
+/// scrolling sideways when it is wider than the reply.
+private struct MarkdownTable: View {
+  let header: [String]
+  let rows: [[String]]
+  let inline: (String) -> Text
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 0) {
+        GridRow { ForEach(Array(header.enumerated()), id: \.offset) { _, cell in self.cell(cell, header: true) } }
+        Rectangle().fill(Color.lineStrong).frame(height: 1).gridCellUnsizedAxes(.horizontal)
+        ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+          GridRow { ForEach(Array(row.enumerated()), id: \.offset) { _, cell in self.cell(cell, header: false) } }
+          if index < rows.count - 1 { Rectangle().fill(Color.hairline).frame(height: 1).gridCellUnsizedAxes(.horizontal) }
+        }
+      }
+    }
+  }
+
+  private func cell(_ text: String, header: Bool) -> some View {
+    inline(text).font(.ui(.subheadline, medium: header)).foregroundStyle(Color.textPrimary)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(minWidth: 48, maxWidth: 220, alignment: .leading)
+      .padding(.vertical, 6)
+  }
+}
+
 /// An empty or blocked screen: one sentence of what is true and one way forward, no grey caption (Figma 59
 /// Mobile/EmptyState, 63B2 / 63C4 / 63E2).
 struct EmptyState: View {
@@ -99,57 +127,95 @@ extension ButtonStyle where Self == WaviButtonStyle {
   static func wavi(primary: Bool = false, floating: Bool = false) -> WaviButtonStyle { WaviButtonStyle(primary: primary, floating: floating) }
 }
 
-/// The agent's replies are Markdown (PRD F22 会话页): paragraphs, headings, lists, quotes and fenced code (scrolls
-/// sideways); inside a line the system's inline Markdown (code, bold, italics, links).
+/// One block of an agent's Markdown reply.
+enum MarkdownBlock: Hashable {
+  case paragraph(String), heading(String), item(marker: String, text: String), quote(String), code(String)
+  /// A GitHub table: the header's cells, then each row's (padded or cut to the header's count).
+  case table(header: [String], rows: [[String]])
+}
+
+/// `| a | b |` → ["a", "b"]; an escaped `\|` stays in its cell.
+func tableCells(_ line: String) -> [String] {
+  var body = line.trimmingCharacters(in: .whitespaces)
+  if body.hasPrefix("|") { body.removeFirst() }
+  if body.hasSuffix("|") && !body.hasSuffix("\\|") { body.removeLast() }
+  var cells: [String] = []
+  var cell = ""
+  var escaped = false
+  for ch in body {
+    if escaped { cell.append(ch); escaped = false } else if ch == "\\" { escaped = true } else if ch == "|" { cells.append(cell); cell = "" } else { cell.append(ch) }
+  }
+  cells.append(cell)
+  return cells.map { $0.trimmingCharacters(in: .whitespaces) }
+}
+
+private func isTableDivider(_ line: String) -> Bool {
+  line.wholeMatch(of: /\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*/) != nil
+}
+
+/// Paragraphs, headings, lists, quotes, fenced code and tables, line by line.
+func markdownBlocks(_ text: String) -> [MarkdownBlock] {
+  var out: [MarkdownBlock] = []
+  var paragraph: [String] = []
+  func flush() {
+    if !paragraph.isEmpty { out.append(.paragraph(paragraph.joined(separator: "\n"))) }
+    paragraph = []
+  }
+  let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+  var i = 0
+  while i < lines.count {
+    let line = lines[i]
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+      flush()
+      let fence = String(trimmed.prefix(3))
+      var code: [String] = []
+      i += 1
+      while i < lines.count, !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
+        code.append(lines[i])
+        i += 1
+      }
+      out.append(.code(code.joined(separator: "\n")))
+    } else if trimmed.contains("|"), i + 1 < lines.count, isTableDivider(lines[i + 1]) {
+      flush()
+      let header = tableCells(line)
+      var rows: [[String]] = []
+      i += 2
+      while i < lines.count, lines[i].contains("|"), !lines[i].trimmingCharacters(in: .whitespaces).isEmpty {
+        let cells = tableCells(lines[i])
+        rows.append(Array((cells + Array(repeating: "", count: header.count)).prefix(header.count)))
+        i += 1
+      }
+      out.append(.table(header: header, rows: rows))
+      continue
+    } else if trimmed.isEmpty {
+      flush()
+    } else if let m = line.wholeMatch(of: /#{1,6}\s+(.*)/) {
+      flush()
+      out.append(.heading(String(m.1)))
+    } else if let m = line.wholeMatch(of: /\s*([-*+]|\d+[.)])\s+(.*)/) {
+      flush()
+      let marker = String(m.1)
+      out.append(.item(marker: marker.first?.isNumber == true ? marker : "•", text: String(m.2)))
+    } else if let m = line.wholeMatch(of: />\s?(.*)/) {
+      flush()
+      out.append(.quote(String(m.1)))
+    } else {
+      paragraph.append(line)
+    }
+    i += 1
+  }
+  flush()
+  return out
+}
+
+/// The agent's replies are Markdown (PRD F22 会话页): paragraphs, headings, lists, quotes, fenced code (scrolls
+/// sideways) and tables (Figma 64A: header in medium, a hairline under each row, the whole table scrolls sideways
+/// when wider than the screen); inside a line the system's inline Markdown (code, bold, italics, links).
 struct MarkdownText: View {
   let text: String
 
-  private enum Block: Hashable {
-    case paragraph(String), heading(String), item(marker: String, text: String), quote(String), code(String)
-  }
-
-  private var blocks: [Block] {
-    var out: [Block] = []
-    var paragraph: [String] = []
-    func flush() {
-      if !paragraph.isEmpty { out.append(.paragraph(paragraph.joined(separator: "\n"))) }
-      paragraph = []
-    }
-    let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
-    var i = 0
-    while i < lines.count {
-      let line = lines[i]
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-        flush()
-        let fence = String(trimmed.prefix(3))
-        var code: [String] = []
-        i += 1
-        while i < lines.count, !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
-          code.append(lines[i])
-          i += 1
-        }
-        out.append(.code(code.joined(separator: "\n")))
-      } else if trimmed.isEmpty {
-        flush()
-      } else if let m = line.wholeMatch(of: /#{1,6}\s+(.*)/) {
-        flush()
-        out.append(.heading(String(m.1)))
-      } else if let m = line.wholeMatch(of: /\s*([-*+]|\d+[.)])\s+(.*)/) {
-        flush()
-        let marker = String(m.1)
-        out.append(.item(marker: marker.first?.isNumber == true ? marker : "•", text: String(m.2)))
-      } else if let m = line.wholeMatch(of: />\s?(.*)/) {
-        flush()
-        out.append(.quote(String(m.1)))
-      } else {
-        paragraph.append(line)
-      }
-      i += 1
-    }
-    flush()
-    return out
-  }
+  private var blocks: [MarkdownBlock] { markdownBlocks(text) }
 
   private func inline(_ text: String) -> Text {
     let attributed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
@@ -175,6 +241,8 @@ struct MarkdownText: View {
             Text(t).font(.mono(.caption)).lineSpacing(4).foregroundStyle(Color.textPrimary).padding(12).textSelection(.enabled)
           }
           .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
+        case .table(let header, let rows):
+          MarkdownTable(header: header, rows: rows, inline: inline)
         }
       }
     }

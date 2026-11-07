@@ -83,6 +83,7 @@ extension View {
 struct AgentMark: View {
   let agent: String
   var size: CGFloat = 12
+  var color: Color = .textPrimary
 
   var body: some View {
     let info = Shared.agent(agent)
@@ -97,7 +98,7 @@ struct AgentMark: View {
           .background(Color.fillSubtle, in: RoundedRectangle(cornerRadius: 3))
       }
     }
-    .foregroundStyle(Color.textPrimary)
+    .foregroundStyle(color)
     .accessibilityLabel(info.name)
   }
 }

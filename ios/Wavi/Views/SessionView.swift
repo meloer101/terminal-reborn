@@ -69,8 +69,11 @@ struct SessionView: View {
         let blocks = transcriptBlocks(conversation?.feed.items ?? [], receipts: model.receipts[id] ?? [],
           turnOpen: session.status == .running || session.status == .needsYou)
         ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
-          BlockRow(block: block, session: id)
-            .onAppear { if index == 0 { Task { await model.loadOlder() } } }
+          VStack(alignment: .leading, spacing: 8) {
+            if startsTurn(blocks, at: index) { AgentAvatar(agent: session.agent) }
+            BlockRow(block: block, session: id)
+          }
+          .onAppear { if index == 0 { Task { await model.loadOlder() } } }
         }
         ForEach(model.sending[id] ?? []) { item in FeedRow(item: item, session: id).opacity(0.6) }
         if session.status == .running, let action = session.action { Live(action: action, since: session.since) }
@@ -124,6 +127,38 @@ private struct Live: View {
         Text([action, since.map { shortAge(context.date.timeIntervalSince1970 * 1000 - $0) }].compactMap { $0 }.joined(separator: " · "))
           .font(.ui(.footnote)).monospacedDigit().foregroundStyle(Color.textSecondary).lineLimit(1)
       }
+    }
+  }
+}
+
+/// The agent's first block after a message of the user's (or the first on screen) carries its mark above it.
+private func startsTurn(_ blocks: [TranscriptBlock], at index: Int) -> Bool {
+  func isUser(_ block: TranscriptBlock) -> Bool { if case .item(let item) = block { item.kind == "user" } else { false } }
+  if case .receipt = blocks[index] { return false }
+  guard !isUser(blocks[index]) else { return false }
+  return index == 0 || isUser(blocks[index - 1])
+}
+
+/// The agent's mark in a 24 solid circle, alone on its row (Figma 64A).
+private struct AgentAvatar: View {
+  let agent: String
+  @ScaledMetric(relativeTo: .body) private var side: CGFloat = 24
+
+  var body: some View {
+    AgentMark(agent: agent, size: side * 0.58, color: .solidOn)
+      .frame(width: side, height: side)
+      .background(Color.solidFill, in: Circle())
+  }
+}
+
+/// My avatar, alone on its row on the right; nothing when none is set (Figma 64A).
+private struct MyAvatarView: View {
+  @ScaledMetric(relativeTo: .body) private var side: CGFloat = 24
+
+  var body: some View {
+    if let image = MyAvatar.shared.image {
+      Image(uiImage: image).resizable().scaledToFill().frame(width: side, height: side).clipShape(Circle())
+        .accessibilityHidden(true)
     }
   }
 }
@@ -222,16 +257,20 @@ struct FeedRow: View {
   var body: some View {
     switch item.kind {
     case "user":
-      HStack {
-        Spacer(minLength: 48)
-        VStack(alignment: .leading, spacing: 4) {
-          if let text = item.text, !text.isEmpty { Text(text).font(.ui(.callout)).lineSpacing(5).foregroundStyle(Color.textPrimary) }
-          if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
+      VStack(alignment: .trailing, spacing: 8) {
+        MyAvatarView()
+        HStack {
+          Spacer(minLength: 48)
+          VStack(alignment: .leading, spacing: 4) {
+            if let text = item.text, !text.isEmpty { Text(text).font(.ui(.callout)).lineSpacing(5).foregroundStyle(Color.textPrimary) }
+            if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 8)
+          .background(Color.fillStrong, in: RoundedRectangle(cornerRadius: Metric.radiusGroup))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.fillStrong, in: RoundedRectangle(cornerRadius: Metric.radiusGroup))
       }
+      .frame(maxWidth: .infinity, alignment: .trailing)
     case "text":
       MarkdownText(text: item.text ?? "")
     case "thinking":
