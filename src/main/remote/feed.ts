@@ -18,6 +18,15 @@ const CHUNK_BYTES = 4 * 1024 * 1024
 /** fs.watch fires per write; one read per burst. */
 const SETTLE_MS = 120
 
+/** Items as the phone gets them: a tool's full command (`input`, up to 2000 characters) stays here, the phone shows `arg`. */
+function forPhone(items: readonly ChatItem[]): ChatItem[] {
+  return items.map((item) => {
+    if (item.kind !== 'tool' || item.input === undefined) return item
+    const { input: _input, ...rest } = item
+    return rest
+  })
+}
+
 interface Reader {
   source: FeedSource
   parser: ChatParser
@@ -60,7 +69,7 @@ export class FeedHub {
     const items = reader.parser.items
     const end = Math.min(before ?? items.length, items.length)
     const start = Math.max(0, end - REMOTE_LIMITS.feedPage)
-    const page = { items: items.slice(start, end), start, total: items.length }
+    const page = { items: forPhone(items.slice(start, end)), start, total: items.length }
     this.release(sessionId)
     return page
   }
@@ -159,14 +168,14 @@ export class FeedHub {
     if (this.readers.get(sessionId) !== reader) return
     if (reader.reset) {
       reader.reset = false
-      const items = reader.parser.items.slice(-REMOTE_LIMITS.feedPage)
+      const items = forPhone(reader.parser.items.slice(-REMOTE_LIMITS.feedPage))
       const start = reader.parser.items.length - items.length
       for (const id of reader.watchers) this.options.push(id, { event: 'feed', data: { session: sessionId, items, start, reset: true } })
       return
     }
     if (changed.length === 0) return
     const start = Math.min(...changed)
-    const items = reader.parser.items.slice(start)
+    const items = forPhone(reader.parser.items.slice(start))
     for (const id of reader.watchers) this.options.push(id, { event: 'feed', data: { session: sessionId, items, start } })
   }
 

@@ -61,6 +61,25 @@ describe('FeedHub', () => {
     expect(watchers()).toBe(0)
   })
 
+  it('leaves out a shell call’s full command: the phone shows the one-line form', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'feed-'))
+    const path = join(dir, 's.jsonl')
+    const bash = (id: string) => line({ type: 'assistant', message: { id, content: [{ type: 'tool_use', id, name: 'Bash', input: { command: 'cd server\n&& pnpm test' } }] } })
+    writeFileSync(path, bash('b1'))
+    const { hub, pushed, triggers } = setup({ s1: { agent: 'claude', path } })
+    const page = await hub.page('s1')
+    expect(page!.items[0]).toMatchObject({ kind: 'tool', name: 'Bash', arg: 'cd server && pnpm test' })
+    expect(page!.items[0]).not.toHaveProperty('input')
+    hub.watch('c1', 's1')
+    appendFileSync(path, bash('b2'))
+    triggers.get(path)!()
+    await vi.waitFor(() => expect(pushed).toHaveLength(1))
+    const event = pushed[0]!.event
+    const items = event.event === 'feed' ? event.data.items : []
+    expect(items.map((i) => i.id)).toContain('b2')
+    for (const item of items) expect(item).not.toHaveProperty('input')
+  })
+
   it('reads a half-written last line once it is complete', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'feed-'))
     const path = join(dir, 's.jsonl')
