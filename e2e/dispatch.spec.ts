@@ -252,6 +252,11 @@ test.describe('派活与回报 · wavi', () => {
     await expect(dispatcherRow).toContainText('想开 2 个会话')
     expect(existsSync(worktreesDir)).toBe(false)
     await shoot('confirm')
+    // A reload (a crash, a rebuild) keeps what waits for the user: the strip and the dispatcher's row come back.
+    await page.reload()
+    await expect(strip()).toBeVisible(WITHIN)
+    await expect(strip().getByTestId('dispatch-row')).toHaveCount(2)
+    await expect(dispatcherRow).toHaveAttribute('data-attention', 'true')
     await page.locator('[data-region="terminal"] .xterm').first().click()
     await page.keyboard.press('Meta+Enter')
     await expect(strip()).toBeHidden()
