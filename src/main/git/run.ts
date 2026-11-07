@@ -109,6 +109,17 @@ export function runGit(cwd: string, args: readonly string[], options: GitOptions
   })
 }
 
+/**
+ * stdout of git, or a rejection when its exit code is not in `ok` (default 0). `message` words the rejection (default:
+ * the last lines git printed); the modules differ in how much of git's output they show.
+ */
+export async function gitText(cwd: string, args: readonly string[], options: GitOptions & { ok?: readonly number[]; message?: (ran: Ran) => string } = {}): Promise<string> {
+  const { ok = [0], message, ...rest } = options
+  const ran = await runGit(cwd, args, rest)
+  if (ok.includes(ran.code)) return ran.stdout
+  throw new Error((message ? message(ran) : lastLines(ran.stderr || ran.stdout)) || `git exited with ${ran.code}`)
+}
+
 /** A read-only git command (no optional locks); never rejects. */
 export function git(cwd: string, args: readonly string[], options: GitOptions = {}): Promise<Ran> {
   return runGit(cwd, args, { ...options, env: { ...NO_OPTIONAL_LOCKS, ...options.env } })

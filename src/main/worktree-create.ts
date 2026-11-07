@@ -3,11 +3,10 @@
 // on a new branch: fetch → `git worktree add --no-track -b` → `branch.<name>.base` → copy the ignored files
 // `.worktreeinclude` lists (APFS clones where possible). Only the workspace's own project roots are accepted and every
 // payload is validated here; nothing from the renderer reaches git as an option.
-import { execFile } from 'node:child_process'
 import { constants } from 'node:fs'
 import { cp, mkdir, mkdtemp, readdir, realpath, rm, stat } from 'node:fs/promises'
 import { homedir, tmpdir, userInfo } from 'node:os'
-import { basename, delimiter, isAbsolute, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
 import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
@@ -19,7 +18,8 @@ import {
   type NewSessionInfo,
   type WorktreeCreateResult
 } from '@shared/new-session'
-import { gitAvailable, sshCommandFor } from './git-graph'
+import { gitAvailable } from './git-graph'
+import { gitText, NO_OPTIONAL_LOCKS, pushEnv } from './git/run'
 import { readRepoSettings } from './repo-scripts'
 import { isProjectRoot } from './workspace-store'
 import { isInside, normalizeRelative } from './worktree-files'
@@ -32,28 +32,14 @@ const FETCH_TIMEOUT_MS = 30_000
 const MAX_BUFFER = 32 * 1024 * 1024
 /** `.worktreeinclude` matches copied at most (a pattern that catches node_modules collapses to one folder entry). */
 const MAX_INCLUDE = 1000
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
 function git(cwd: string, args: string[], options: { timeout?: number; env?: Record<string, string>; input?: string } = {}): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: options.timeout ?? GIT_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        env: {
-          ...process.env,
-          GIT_OPTIONAL_LOCKS: '0',
-          GIT_TERMINAL_PROMPT: '0',
-          PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter),
-          ...options.env
-        }
-      },
-      (error, stdout, stderr) => (error ? reject(new Error(String(stderr || error.message).trim())) : resolve(stdout))
-    )
-    if (options.input !== undefined) child.stdin?.end(options.input)
+  return gitText(cwd, args, {
+    timeout: options.timeout ?? GIT_TIMEOUT_MS,
+    maxStdout: MAX_BUFFER,
+    env: { ...NO_OPTIONAL_LOCKS, ...options.env },
+    ...(options.input !== undefined ? { input: options.input } : {}),
+    message: (ran) => ran.stderr.trim()
   })
 }
 
@@ -174,10 +160,7 @@ export async function newSessionInfo(root: unknown): Promise<NewSessionInfo> {
 /** Brings remote branches up to date before branching off; offline or no remote is fine (the local refs are used). */
 async function fetchRemotes(top: string): Promise<void> {
   if ((await orEmpty(git(top, ['remote']))).trim() === '') return
-  const env: Record<string, string> = {}
-  const ssh = sshCommandFor(process.env, (await orEmpty(git(top, ['config', '--get', 'core.sshCommand']))).trim())
-  if (ssh) env.GIT_SSH_COMMAND = ssh
-  await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env }).catch(() => {})
+  await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(top) }).catch(() => {})
 }
 
 const refExists = (top: string, ref: string): Promise<boolean> =>
