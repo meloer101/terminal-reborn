@@ -13,27 +13,85 @@ import { CUT_ESCAPE, ESCAPES } from './ansi'
 
 export type StepItem = Extract<ChatItem, { kind: 'tool' | 'thinking' }>
 
+/** What a subagent did, under its Agent row (Figma 59J): its calls, its thinking and its words. */
+export type NestedItem = Extract<ChatItem, { kind: 'tool' | 'thinking' | 'text' }>
+
 /**
  * One block of the feed: a run of tool and thinking rows (8 apart inside, Figma `Steps`), or any other single item.
- * Blocks are 16 apart. `key` stays the same while a block grows, so React keeps its rows.
+ * Blocks are 16 apart. `key` stays the same while a block grows, so React keeps its rows. `nested`: what each subagent
+ * row of the run (Agent / Task, by id) has under it, its own subagents' too.
  */
-export type FeedBlock = { kind: 'steps'; key: string; items: StepItem[] } | { kind: 'item'; key: string; item: Exclude<ChatItem, StepItem> }
+export type FeedBlock =
+  | { kind: 'steps'; key: string; items: StepItem[]; nested: ReadonlyMap<string, readonly NestedItem[]> }
+  | { kind: 'item'; key: string; item: Exclude<ChatItem, StepItem> }
 
 const isStep = (item: ChatItem): item is StepItem => item.kind === 'tool' || item.kind === 'thinking'
 
+/** Tools that run a subagent: Claude's Agent / Task, a Codex collab call (codex-app-server.ts). */
+export const isSubagentTool = (name: string): boolean => name === 'Agent' || name === 'Task' || name === 'Subagent'
+
+/**
+ * The feed's blocks. A subagent's items (`parent`) go under their Agent row wherever that row is in the list (it may
+ * come after them); without it in the list they show at the top level.
+ */
 export function feedBlocks(items: readonly ChatItem[]): FeedBlock[] {
-  const blocks: FeedBlock[] = []
+  const tools = new Set<string>()
+  for (const item of items) if (item.kind === 'tool') tools.add(item.id)
+  const children = new Map<string, NestedItem[]>()
+  const top: ChatItem[] = []
   for (const item of items) {
+    const parent = 'parent' in item ? item.parent : undefined
+    if (parent !== undefined && parent !== item.id && tools.has(parent) && item.kind !== 'user' && item.kind !== 'system' && item.kind !== 'unknown') {
+      const list = children.get(parent)
+      if (list) list.push(item)
+      else children.set(parent, [item])
+    } else top.push(item)
+  }
+  const blocks: FeedBlock[] = []
+  let run: { items: StepItem[]; nested: Map<string, readonly NestedItem[]> } | null = null
+  for (const item of top) {
     if (item.kind === 'unknown') continue
-    const last = blocks[blocks.length - 1]
-    if (isStep(item)) {
-      if (last?.kind === 'steps') last.items.push(item)
-      else blocks.push({ kind: 'steps', key: item.id, items: [item] })
-    } else {
+    if (!isStep(item)) {
+      run = null
       blocks.push({ kind: 'item', key: item.id, item })
+      continue
+    }
+    if (run) run.items.push(item)
+    else {
+      run = { items: [item], nested: new Map() }
+      blocks.push({ kind: 'steps', key: item.id, ...run })
+    }
+    // This row's subtree: its children, theirs, … (each id once).
+    const stack = [item.id]
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      const list = children.get(id)
+      if (!list || run.nested.has(id)) continue
+      run.nested.set(id, list)
+      for (const child of list) if (child.kind === 'tool') stack.push(child.id)
     }
   }
   return blocks
+}
+
+/** Whether a block holds the row `id`, at the top of its run or under a subagent row. */
+export function blockHas(block: FeedBlock, id: string): boolean {
+  if (block.kind === 'item') return block.item.id === id
+  return block.items.some((i) => i.id === id) || [...block.nested.values()].some((list) => list.some((i) => i.id === id))
+}
+
+/** 0:42, 2:05, 1:02:05 — how long a subagent ran (Figma 59J). */
+export function elapsedLabel(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const s = String(total % 60).padStart(2, '0')
+  const m = Math.floor(total / 60)
+  return m < 60 ? `${m}:${s}` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${s}`
+}
+
+/** A subagent row's time: since it started while it runs, its own duration once done; null when unknown. */
+export function subagentElapsed(item: Extract<ChatItem, { kind: 'tool' }>, now: number): string | null {
+  if (item.state === 'running') return item.at > 0 ? elapsedLabel(now - item.at) : null
+  return item.ms !== undefined ? elapsedLabel(item.ms) : null
 }
 
 const lastUserKey = (blocks: readonly FeedBlock[]): string | null => {
@@ -186,6 +244,8 @@ const TOOL_WORDS: Readonly<Record<string, readonly [LucideIcon, string]>> = {
   WebSearch: [Globe, '搜索网页'],
   Agent: [Bot, '子 agent'],
   Task: [Bot, '子 agent'],
+  // Codex's collab agent call (codex-app-server.ts).
+  Subagent: [Bot, '子 agent'],
   TodoWrite: [ListTodo, '任务'],
   // Codex's and ACP agents' plan (codex-app-server.ts, acp.ts).
   Plan: [ListTodo, '任务'],
@@ -262,12 +322,12 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
 
 /**
  * Figma 59J: the task list shown above the composer — the conversation's latest one, while something in it is left
- * (hidden once every task is done, or when it is empty).
+ * (hidden once every task is done, or when it is empty). A subagent's own list is not the conversation's.
  */
 export function currentTodos(items: readonly ChatItem[]): readonly ChatTodo[] | null {
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i]!
-    if (item.kind !== 'tool' || !item.todos) continue
+    if (item.kind !== 'tool' || !item.todos || item.parent !== undefined) continue
     return item.todos.some((t) => t.status !== 'completed') ? item.todos : null
   }
   return null
@@ -281,7 +341,10 @@ export function todoProgress(todos: readonly ChatTodo[]): { done: number; total:
 /** A task's mark: done ✓, the one in progress turning, the rest a ring. */
 export const todoStatus = (status: ChatTodo['status']): SessionStatus => (status === 'completed' ? 'done_unread' : status === 'in_progress' ? 'running' : 'idle')
 
-/** The tool row a pending permission belongs to: the last tool still running, while one is asked about. */
+/**
+ * The tool row a pending permission belongs to: the last tool still running, while one is asked about. A subagent's
+ * call is in the list after its Agent row, so a subagent asking marks its own row; the Agent row stays running.
+ */
 export function waitingToolId(items: readonly ChatItem[], prompts: readonly GuiPrompt[]): string | null {
   if (!prompts.some((p) => p.kind === 'permission')) return null
   for (let i = items.length - 1; i >= 0; i--) {

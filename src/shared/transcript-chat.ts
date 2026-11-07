@@ -29,12 +29,21 @@ export interface FileDiff {
 
 export type ChatItem =
   | { kind: 'user'; id: string; at: number; text: string; images: number }
-  | { kind: 'text'; id: string; at: number; text: string }
-  | { kind: 'thinking'; id: string; at: number; text: string; ms?: number }
+  | {
+      kind: 'text'
+      id: string
+      at: number
+      text: string
+      /** A subagent's words: the id of the Agent / Task call that started it (Figma 59J; the live Claude stream only). */
+      parent?: string
+    }
+  | { kind: 'thinking'; id: string; at: number; text: string; ms?: number; parent?: string }
   | {
       kind: 'tool'
       id: string
       at: number
+      /** A subagent's call: the id of the Agent / Task call that started it (the live Claude stream only). */
+      parent?: string
       name: string
       /** The one thing worth showing after the name: a command, a path, a pattern. */
       arg: string
@@ -51,6 +60,8 @@ export type ChatItem =
       files?: FileDiff[]
       /** A task list (Claude TodoWrite, Codex / ACP `Plan`): every task, as the agent last wrote it. */
       todos?: ChatTodo[]
+      /** How long a subagent ran (Claude Agent / Task `totalDurationMs`, a Codex collab call's start to end). */
+      ms?: number
     }
   | { kind: 'system'; id: string; at: number; text: string }
   | { kind: 'unknown'; id: string; at: number; type: string }
@@ -306,8 +317,12 @@ function claudeParser(now: () => number): ChatParser {
     if (!isRec(line) || typeof line.type !== 'string') return []
     const type = line.type
     if (CLAUDE_SKIP.has(type)) return []
-    // Subagents' own lines: their work shows as the Agent call that started them.
-    if (line.isSidechain === true) return []
+    // A subagent's own lines. The live stream names the Agent / Task call they belong to (`parentToolUseId`, from
+    // claude-stream.ts): its calls, thinking and words go under that row. A transcript file does not: they stay out,
+    // the work showing as the Agent call that started it.
+    const parent = line.isSidechain === true ? str(line.parentToolUseId) : undefined
+    if (line.isSidechain === true && !parent) return []
+    const under = parent ? { parent } : {}
     const at = timeOf(line, now())
     const cwd = str(line.cwd)
     const message = isRec(line.message) ? line.message : undefined
@@ -318,11 +333,11 @@ function claudeParser(now: () => number): ChatParser {
       for (const block of content) {
         if (!isRec(block)) continue
         if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') {
-          changed.push(add({ kind: 'text', id: nextId('t'), at, text: clip(block.text, CHAT_LIMITS.text) }))
+          changed.push(add({ kind: 'text', id: nextId('t'), at, text: clip(block.text, CHAT_LIMITS.text), ...under }))
         } else if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim() !== '') {
           // A signature-only block (display omitted, the default on current models) has nothing to show.
           const ms = typeof line.thinkingDurationMs === 'number' ? line.thinkingDurationMs : undefined
-          changed.push(add({ kind: 'thinking', id: nextId('k'), at, text: clip(block.thinking, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}) }))
+          changed.push(add({ kind: 'thinking', id: nextId('k'), at, text: clip(block.thinking, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}), ...under }))
         } else if (block.type === 'tool_use' && typeof block.name === 'string') {
           const id = str(block.id) ?? nextId('u')
           const command = block.name === 'Bash' && isRec(block.input) ? str(block.input.command) : undefined
@@ -331,6 +346,7 @@ function claudeParser(now: () => number): ChatParser {
             kind: 'tool',
             id,
             at,
+            ...under,
             name: toolLabel(block.name),
             arg: todos ? todosArg(todos) : toolArg(block.name, block.input, cwd),
             state: 'running',
@@ -356,11 +372,20 @@ function claudeParser(now: () => number): ChatParser {
           if (!item || item.kind !== 'tool') continue
           const output = outputOf(result, block)
           const diff = item.name === 'Edit' || item.name === 'MultiEdit' || item.name === 'Write' ? diffOf(result, cwd) : undefined
-          items[index!] = { ...item, state: block.is_error === true ? 'error' : 'ok', ...(output ? { output } : {}), ...(diff ? { diff } : {}) }
+          const ms = (item.name === 'Agent' || item.name === 'Task') && typeof result?.totalDurationMs === 'number' ? result.totalDurationMs : undefined
+          items[index!] = {
+            ...item,
+            state: block.is_error === true ? 'error' : 'ok',
+            ...(output ? { output } : {}),
+            ...(diff ? { diff } : {}),
+            ...(ms !== undefined ? { ms } : {})
+          }
           changed.push(index!)
         }
         return changed
       }
+      // The prompt a subagent gets: its Agent call says it already.
+      if (parent) return []
       const text = textOfContent(content).trim()
       const images = Array.isArray(content) ? content.filter((b) => isRec(b) && b.type === 'image').length : 0
       const output = localOutput(text)
@@ -371,6 +396,9 @@ function claudeParser(now: () => number): ChatParser {
       if (!text && images === 0) return []
       return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images })]
     }
+
+    // Nothing else of a subagent's shows.
+    if (parent) return []
 
     if (type === 'system') {
       const subtype = str(line.subtype) ?? ''

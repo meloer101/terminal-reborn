@@ -55,10 +55,30 @@ describe('createClaudeStreamNormalizer', () => {
     expect(state.items[1]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'notes.txt', state: 'ok', diff: { path: 'notes.txt', added: 1, removed: 1 } })
   })
 
-  it("leaves a subagent's own stream and messages out of the conversation", () => {
-    const { state } = run([start('text'), delta('inner', 'toolu_agent'), assistant([{ type: 'text', text: 'inner' }], 'toolu_agent')])
-    expect(state.items).toEqual([])
+  it("keeps a subagent's stream out of the live block and its messages under the Agent call (Figma 59J)", () => {
+    const { state } = run([
+      assistant([{ type: 'tool_use', id: 'toolu_agent', name: 'Agent', input: { description: '查 SameSite', prompt: 'look' } }]),
+      start('text'),
+      delta('inner', 'toolu_agent'),
+      { type: 'user', timestamp: at, parent_tool_use_id: 'toolu_agent', message: { role: 'user', content: [{ type: 'text', text: 'look' }] } },
+      assistant([{ type: 'tool_use', id: 'toolu_grep', name: 'Grep', input: { pattern: 'SameSite' } }], 'toolu_agent'),
+      { type: 'user', timestamp: at, parent_tool_use_id: 'toolu_agent', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_grep', content: '3 matches' }] } },
+      assistant([{ type: 'text', text: 'inner' }], 'toolu_agent'),
+      {
+        type: 'user',
+        timestamp: at,
+        parent_tool_use_id: null,
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_agent', content: [{ type: 'text', text: 'inner' }] }] },
+        tool_use_result: { status: 'completed', totalDurationMs: 42_000 }
+      }
+    ])
+    // The subagent's message does not end the main conversation's live block.
     expect(state.live).toEqual({ kind: 'text', text: '' })
+    expect(state.items).toEqual([
+      { kind: 'tool', id: 'toolu_agent', at: Date.parse(at), name: 'Agent', arg: '查 SameSite', state: 'ok', output: 'inner', ms: 42_000 },
+      { kind: 'tool', id: 'toolu_grep', at: Date.parse(at), name: 'Grep', arg: 'SameSite', state: 'ok', output: '3 matches', parent: 'toolu_agent' },
+      { kind: 'text', id: 't0', at: Date.parse(at), text: 'inner', parent: 'toolu_agent' }
+    ])
   })
 
   it('turns can_use_tool into permission, question and plan prompts', () => {

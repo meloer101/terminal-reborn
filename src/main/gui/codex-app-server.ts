@@ -184,6 +184,16 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
         const output = done ? toolCallOutput(item) : ''
         return [put(id, { kind: 'tool', id, at, name, arg: clip(str(item.server) ?? '', CHAT_LIMITS.arg), state, ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}) })]
       }
+      case 'collabAgentToolCall': {
+        // Figma 59J: a call to another agent (spawnAgent, sendInput, wait …) is one 子 agent row; that agent works in
+        // its own thread, so nothing goes under it. Fields from the generated types (`codex app-server generate-ts`,
+        // 0.166.0, v2/ThreadItem.ts); not yet seen from a real Codex.
+        const status = str(item.status)
+        const state: ToolItem['state'] = !done || status === 'inProgress' ? 'running' : status === 'completed' ? 'ok' : 'error'
+        const prompt = str(item.prompt)?.replace(/\s+/g, ' ').trim()
+        const ms = done && typeof item.completedAtMs === 'number' && typeof item.startedAtMs === 'number' ? item.completedAtMs - item.startedAtMs : undefined
+        return [put(id, { kind: 'tool', id, at, name: 'Subagent', arg: clip(prompt || (str(item.tool) ?? ''), CHAT_LIMITS.arg), state, ...(ms !== undefined ? { ms } : {}) })]
+      }
       case 'webSearch':
         return [put(id, { kind: 'tool', id, at, name: 'WebSearch', arg: clip(str(item.query) ?? '', CHAT_LIMITS.arg), state: done ? 'ok' : 'running' })]
       case 'contextCompaction':

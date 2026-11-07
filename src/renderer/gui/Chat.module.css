@@ -56,6 +56,9 @@
   --glyph-indent: calc(14px + var(--space-8));
   /* A step row's mark (16) and its gap (8): a tool's summary and output, the thinking text start at its verb. */
   --step-indent: calc(16px + var(--space-8));
+  /* Figma 59J: where a subagent's 1px line starts, so it runs down the middle of the row's mark (16); its rows start
+     16 right of it, at --step-indent. */
+  --subagent-rail: calc(var(--space-8) - 1px);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -351,6 +354,53 @@
   flex-shrink: 0;
   font: var(--type-step);
   color: var(--status-attention);
+}
+
+/* Figma 59J: a subagent's row — 子 agent · its task (step size, primary) · ⌄ … elapsed (code size, tertiary) at the end —
+   and what it did under it: the same step rows and its words (step size, secondary), 16 right of a 1px line that runs
+   down from the row icon's centre, 8 below the row. */
+.subagentArg {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.elapsed {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-8);
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.subagentSteps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-step);
+  min-width: 0;
+  margin: calc(var(--gap-step) - var(--space-6)) 0 0 var(--subagent-rail);
+  padding-left: var(--space-16);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.subagentText {
+  margin: 0;
+  font: var(--type-step);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Figma 59J: a failed command's exit code at the row's end. */

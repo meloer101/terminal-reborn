@@ -216,6 +216,46 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(card).toHaveCount(0, WITHIN)
   })
 
+  test('a subagent’s work shows under its row, open while it runs, closed once done (Figma 59J)', async () => {
+    await send('run a subagent')
+    const agent = feed().locator('[data-subagent]').last()
+    const row = agent.locator('button').first()
+    const steps = agent.getByTestId('gui-subagent-steps')
+    await expect(row).toContainText('子 agent查 SameSite 在 Safari 的行为', WITHIN)
+    // Running: open, counting up from its start.
+    await expect(steps).toBeVisible()
+    await expect(agent.getByTestId('gui-subagent-time')).toHaveText(/^0:0\d$/)
+    const grep = steps.getByRole('button', { name: /搜索\s*SameSite=Lax/ })
+    await expect(grep).toBeVisible()
+    await expect(steps.getByText('Safari 17 起跨站 POST 不带 Lax cookie，和 Chrome 一致。')).toBeVisible()
+    // Under the row, not at the top level; the subagent's prompt and stream are not the conversation's.
+    await expect(feed().getByText('SameSite=Lax', { exact: true })).toHaveCount(1)
+    await expect(feed().getByText('Check how Safari treats SameSite=Lax')).toHaveCount(0)
+    await expect(feed().getByText('inner stream')).toHaveCount(0)
+    // Done: its own duration, closed.
+    await expect(feed().getByText('子 agent 查完了。')).toBeVisible(WITHIN)
+    await expect(agent.getByTestId('gui-subagent-time')).toHaveText('0:42')
+    await expect(steps).toHaveCount(0)
+    await row.click()
+    await expect(steps).toBeVisible()
+    // The line runs down from the row icon's centre (8), the nested rows 16 right of it.
+    const [rowBox, stepsBox, grepBox] = await Promise.all([row.boundingBox(), steps.boundingBox(), grep.boundingBox()])
+    expect(stepsBox!.x - rowBox!.x).toBeCloseTo(7, 0)
+    expect(grepBox!.x - rowBox!.x).toBeCloseTo(24, 0)
+    expect(grepBox!.y).toBeGreaterThan(rowBox!.y + rowBox!.height)
+    expect(await steps.evaluate((el) => [getComputedStyle(el).borderLeftWidth, getComputedStyle(el).borderLeftStyle])).toEqual(['1px', 'solid'])
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `subagent-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await row.click()
+    await expect(steps).toHaveCount(0)
+    await expect(grep).toHaveCount(0)
+  })
+
   test('queues a message sent while a turn runs, then stops the turn', async () => {
     await send('slow answer')
     await expect(composer().getByRole('button', { name: '停止' })).toBeVisible(WITHIN)

@@ -135,6 +135,40 @@ describe('Claude transcript → chat', () => {
     expect(items).toEqual([{ kind: 'unknown', id: 'x0', at: Date.parse(T), type: 'brand-new-thing' }])
   })
 
+  it('parses a subagent’s lines that name the Agent call they belong to, under it (Figma 59J)', () => {
+    const sub = { isSidechain: true, parentToolUseId: 'ag' }
+    const items = parse([
+      line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'ag', name: 'Agent', input: { description: '查 SameSite', prompt: 'look it up' } }] } }),
+      // The prompt the subagent gets: the Agent call says it already.
+      line({ ...sub, type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'look it up' }] } }),
+      line({ ...sub, type: 'assistant', message: { id: 's1', content: [{ type: 'thinking', thinking: 'search first' }, { type: 'tool_use', id: 'g', name: 'Grep', input: { pattern: 'SameSite' } }] } }),
+      line({ ...sub, type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'g', content: '3 matches' }] } }),
+      line({ ...sub, type: 'assistant', message: { id: 's2', content: [{ type: 'text', text: 'Safari 17 起不带 Lax cookie' }] } }),
+      line({ ...sub, type: 'system', subtype: 'informational', content: 'inner note' }),
+      line({
+        type: 'user',
+        toolUseResult: { status: 'completed', totalDurationMs: 42_000, totalTokens: 900, content: [{ type: 'text', text: 'done' }] },
+        message: { content: [{ type: 'tool_result', tool_use_id: 'ag', content: [{ type: 'text', text: 'done' }] }] }
+      })
+    ])
+    expect(items.map((i) => [i.kind, 'parent' in i ? i.parent : undefined])).toEqual([
+      ['tool', undefined],
+      ['thinking', 'ag'],
+      ['tool', 'ag'],
+      ['text', 'ag']
+    ])
+    expect(items[0]).toMatchObject({ name: 'Agent', arg: '查 SameSite', state: 'ok', ms: 42_000, output: 'done' })
+    expect(items[2]).toMatchObject({ name: 'Grep', state: 'ok', output: '3 matches' })
+    // Transcript files (the phone, history) mark subagent lines without a parent: still left out.
+    expect(parse([line({ type: 'assistant', isSidechain: true, message: { id: 'z', content: [{ type: 'text', text: 'x' }] } })])).toEqual([])
+    // Only Agent / Task carry a duration.
+    const bash = parse([
+      line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'ls' } }] } }),
+      line({ type: 'user', toolUseResult: { stdout: 'a', stderr: '', totalDurationMs: 5 }, message: { content: [{ type: 'tool_result', tool_use_id: 'b', content: 'a' }] } })
+    ])
+    expect(bash[0]).not.toHaveProperty('ms')
+  })
+
   it('shows slash commands, interruptions, compaction and API errors as one line each', () => {
     const items = parse([
       line({ type: 'user', message: { content: '<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>' } }),

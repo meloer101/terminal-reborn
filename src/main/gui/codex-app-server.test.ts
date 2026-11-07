@@ -124,6 +124,26 @@ describe('createCodexNormalizer', () => {
     expect(s.items[2]).toMatchObject({ kind: 'tool', name: 'lookup', state: 'error', output: 'no such key' })
   })
 
+  // Field names from the generated types (v2/ThreadItem.ts `collabAgentToolCall`, codex 0.166.0); not run against a
+  // real Codex spawning an agent.
+  it('shows a collab agent call as one 子 agent row: its prompt, status and duration', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    const call = { type: 'collabAgentToolCall', id: 'c1', tool: 'spawnAgent', senderThreadId: 't0', receiverThreadIds: ['t1'], prompt: '查 SameSite\n在 Safari 的行为', model: null, reasoningEffort: null, agentsStates: {}, startedAtMs: 1000 }
+    let s = fold(n.notification('item/started', { item: { ...call, status: 'inProgress' } }))
+    expect(s.items).toEqual([{ kind: 'tool', id: 'c1', at: 1000, name: 'Subagent', arg: '查 SameSite 在 Safari 的行为', state: 'running' }])
+    s = fold(n.notification('item/completed', { item: { ...call, status: 'completed', completedAtMs: 43_000 } }), s)
+    expect(s.items[0]).toMatchObject({ state: 'ok', ms: 42_000 })
+    const m = createCodexNormalizer('/repo', () => 0)
+    const failed = fold([
+      ...m.notification('item/completed', { item: { ...call, id: 'c2', status: 'failed' } }),
+      ...m.notification('item/completed', { item: { ...call, id: 'c3', tool: 'wait', prompt: null, status: 'interrupted' } })
+    ])
+    expect(failed.items).toMatchObject([
+      { name: 'Subagent', state: 'error' },
+      { name: 'Subagent', arg: 'wait', state: 'error' }
+    ])
+  })
+
   it('turns approvals and questions into prompts and drops them once resolved', () => {
     const n = createCodexNormalizer('/repo')
     let s = fold(n.request('7', 'item/commandExecution/requestApproval', { command: 'rm -rf build', availableDecisions: ['accept', 'acceptForSession', 'decline', 'cancel'] }))

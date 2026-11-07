@@ -1,6 +1,6 @@
 // The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`, 51A, 59J): the composer's width, user bubbles
 // ending at its right edge with the user's picture outside it, the agent's part of each turn from its left edge with
-// the mark outside it — its Markdown, runs of tool and thinking rows grouped 8 apart — 12 between blocks, 24 between
+// the mark outside it — its Markdown, runs of tool and thinking rows grouped 8 apart (a subagent's under its row) — 12 between blocks, 24 between
 // turns, and the block being streamed. Each
 // block is memoised on its items (applyGuiEvent keeps unchanged items by identity), so a streamed delta re-renders
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
@@ -11,7 +11,7 @@ import type { Editor } from '@tiptap/react'
 import { Brain, ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import { formatClock } from '@shared/session-meta'
-import type { ChatItem } from '@shared/transcript-chat'
+import type { ChatItem, FileDiff } from '@shared/transcript-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -22,10 +22,13 @@ import { CopyButton } from './CopyButton'
 import { DiffBlock, diffText } from './DiffBlock'
 import { TodoList } from './Todos'
 import {
+  blockHas,
   composerKey,
   feedBlocks,
+  isSubagentTool,
   liveStartsTurn,
   sentMessage,
+  subagentElapsed,
   thinkingLabel,
   toolView,
   turnEnds,
@@ -33,7 +36,9 @@ import {
   userBubble,
   userMarkdown,
   type FeedBlock,
-  type StepItem
+  type NestedItem,
+  type StepItem,
+  type ToolView
 } from './model'
 import styles from './Chat.module.css'
 
@@ -120,7 +125,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
             />
           ) : (
             <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)} faded={editingAt >= 0 && i > editingAt} end={ends.get(block.key)}>
-              <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && block.items.some((i) => i.id === waitingTool) ? waitingTool : null} />
+              <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && waitingTool !== null && blockHas(block, waitingTool) ? waitingTool : null} />
             </AgentTurn>
           )
         )}
@@ -139,7 +144,9 @@ const Block = memo(
     if (block.kind === 'steps') {
       return (
         <div className={styles.steps}>
-          {block.items.map((item) => (item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} waiting={item.id === waitingTool} />))}
+          {block.items.map((item) =>
+            item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={block.nested} waitingTool={waitingTool} />
+          )}
         </div>
       )
     }
@@ -158,10 +165,12 @@ const Block = memo(
   (a, b) => a.sessionId === b.sessionId && a.waitingTool === b.waitingTool && sameBlock(a.block, b.block)
 )
 
-/** Same block: the same items, by identity (a grown run of steps is a new block). */
+const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean => !!b && a.length === b.length && a.every((item, i) => item === b[i])
+
+/** Same block: the same items, by identity, and the same under each subagent row (a grown run of steps is a new block). */
 function sameBlock(a: FeedBlock, b: FeedBlock): boolean {
   if (a.kind === 'item' || b.kind === 'item') return a.kind === b.kind && a.kind === 'item' && b.kind === 'item' && a.item === b.item
-  return a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i])
+  return sameList(a.items, b.items) && a.nested.size === b.nested.size && [...a.nested].every(([id, list]) => sameList(list, b.nested.get(id)))
 }
 
 /** When a message was sent or a turn ended: `15:04`, with the date on another day. */
@@ -310,24 +319,74 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
   )
 }
 
-function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; waiting: boolean }) {
-  const [open, setOpen] = useState(false)
-  const view = toolView(item, waiting)
+const NO_NESTED: ReadonlyMap<string, readonly NestedItem[]> = new Map()
+const NO_CHILDREN: readonly NestedItem[] = []
+
+/**
+ * A tool row. Figma 59J: a subagent's row (Agent / Task, a Codex collab call) reads 子 agent · its task · ⌄ with how long
+ * it ran at the end; what the subagent did is listed under it, after a line — open while it runs, closed once done.
+ */
+function Tool({
+  item,
+  waitingTool,
+  nested = NO_NESTED
+}: {
+  item: Extract<ChatItem, { kind: 'tool' }>
+  waitingTool: string | null
+  nested?: ReadonlyMap<string, readonly NestedItem[]>
+}) {
+  const subagent = isSubagentTool(item.name)
+  const children = (subagent && nested.get(item.id)) || NO_CHILDREN
+  // null: as the row's state says (a subagent's open while it runs); a click decides from then on.
+  const [chosen, setOpen] = useState<boolean | null>(null)
+  const open = chosen ?? (subagent && item.state === 'running')
+  const view = toolView(item, item.id === waitingTool)
   // Figma 59J: one block per file; a single file's path is on the row already.
   const files = item.files ?? (item.diff ? [item.diff] : [])
+  const hasChildren = children.length > 0
+  const expandable = view.expandable || hasChildren
   return (
-    <div className={styles.tool}>
-      <button type="button" className={styles.toolRow} aria-expanded={view.expandable ? open : undefined} disabled={!view.expandable} onClick={() => setOpen(!open)}>
+    <div className={styles.tool} data-subagent={subagent || undefined}>
+      <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
         <StepMark>{view.status === 'done_unread' ? <view.icon {...ICON} /> : <StatusGlyph status={view.status} />}</StepMark>
         <span className={styles.toolVerb} title={view.name}>
           {view.verb}
         </span>
-        <span className={styles.toolArg}>{view.arg}</span>
+        <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+        {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>等你确认</span>}
         {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
+        {subagent && <Elapsed item={item} />}
       </button>
+      {hasChildren ? (
+        open && (
+          <div className={styles.subagentSteps} data-testid="gui-subagent-steps">
+            {children.map((child) =>
+              child.kind === 'text' ? (
+                <p key={child.id} className={styles.subagentText}>
+                  {child.text}
+                </p>
+              ) : child.kind === 'thinking' ? (
+                <Thinking key={child.id} item={child} />
+              ) : (
+                <Tool key={child.id} item={child} nested={nested} waitingTool={waitingTool} />
+              )
+            )}
+          </div>
+        )
+      ) : (
+        <ToolBody item={item} open={open} files={files} view={view} />
+      )}
+    </div>
+  )
+}
+
+/** Under a row: its summary while closed; open, its task list, its files' changes or its output. */
+function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView }) {
+  return (
+    <>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
       {open && item.todos && item.todos.length > 0 && <TodoList todos={item.todos} className={styles.todosInFeed} />}
       {open && !item.todos && (files.length > 0 || view.output || view.command) && (
@@ -348,7 +407,42 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
           />
         </div>
       )}
-    </div>
+    </>
+  )
+}
+
+/**
+ * A subagent row's time at its end: since it started while it runs (counted each second, only while the row is on
+ * screen), its own duration once done.
+ */
+function Elapsed({ item }: { item: Extract<ChatItem, { kind: 'tool' }> }) {
+  const running = item.state === 'running'
+  const ref = useRef<HTMLSpanElement>(null)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const el = ref.current
+    if (!running || !el) return
+    let timer: number | undefined
+    const stop = (): void => {
+      window.clearInterval(timer)
+      timer = undefined
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return stop()
+      setNow(Date.now())
+      timer ??= window.setInterval(() => setNow(Date.now()), 1000)
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      stop()
+    }
+  }, [running])
+  const label = subagentElapsed(item, now)
+  return (
+    <span ref={ref} className={styles.elapsed} data-testid="gui-subagent-time">
+      {label}
+    </span>
   )
 }
 

@@ -32,7 +32,10 @@ import {
   currentTodos,
   todoProgress,
   todoStatus,
-  slashGroups
+  slashGroups,
+  elapsedLabel,
+  subagentElapsed,
+  blockHas
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -56,6 +59,61 @@ describe('feedBlocks (Figma 49″C)', () => {
 
   it('keys a run by its first item, so a growing run keeps its rows', () => {
     expect(feedBlocks([tool('a')])[0]?.key).toBe(feedBlocks([tool('a'), tool('b')])[0]?.key)
+  })
+})
+
+describe('subagents in place (Figma 59J)', () => {
+  const agent = (id: string, patch: Partial<Extract<ChatItem, { kind: 'tool' }>> = {}) => tool(id, { name: 'Agent', arg: '查 SameSite', state: 'running', ...patch })
+  const shape = (blocks: ReturnType<typeof feedBlocks>) =>
+    blocks.map((b) => (b.kind === 'steps' ? { steps: b.items.map((i) => i.id), nested: Object.fromEntries([...b.nested].map(([k, v]) => [k, v.map((i) => i.id)])) } : b.item.id))
+
+  it('puts a subagent’s rows and words under its Agent row, not at the top level', () => {
+    const items: ChatItem[] = [
+      user('u'),
+      agent('ag'),
+      tool('g', { name: 'Grep', parent: 'ag' }),
+      { kind: 'thinking', id: 'k', at: 0, text: '…', parent: 'ag' },
+      { kind: 'text', id: 'x', at: 0, text: 'found it', parent: 'ag' },
+      tool('b', { name: 'Bash' })
+    ]
+    expect(shape(feedBlocks(items))).toEqual(['u', { steps: ['ag', 'b'], nested: { ag: ['g', 'k', 'x'] } }])
+    // Codex's collab call is a 子 agent row with nothing under it.
+    expect(toolView(tool('c', { name: 'Subagent', arg: 'spawn' }), false)).toMatchObject({ icon: Bot, verb: '子 agent' })
+  })
+
+  it('keeps rows whose Agent row is not there yet aside, and shows them at the top level if it never comes', () => {
+    const orphan = tool('g', { name: 'Grep', parent: 'ag' })
+    const words: ChatItem = { kind: 'text', id: 'x', at: 0, text: 'found it', parent: 'ag' }
+    expect(shape(feedBlocks([user('u'), orphan, words]))).toEqual(['u', { steps: ['g'], nested: {} }, 'x'])
+    // Once it arrives (later in the list), they move under it.
+    expect(shape(feedBlocks([user('u'), orphan, words, agent('ag')]))).toEqual(['u', { steps: ['ag'], nested: { ag: ['g', 'x'] } }])
+  })
+
+  it('finds a row anywhere in a block, nested ones too', () => {
+    const [block] = feedBlocks([agent('ag'), tool('g', { name: 'Bash', parent: 'ag', state: 'running' })])
+    expect(blockHas(block!, 'ag')).toBe(true)
+    expect(blockHas(block!, 'g')).toBe(true)
+    expect(blockHas(block!, 'zz')).toBe(false)
+  })
+
+  it('marks a subagent’s own tool as waiting on you, not its Agent row', () => {
+    const items = [agent('ag'), tool('g', { name: 'Grep', parent: 'ag' }), tool('b', { name: 'Bash', parent: 'ag', state: 'running' })]
+    const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm lint', options: [] }
+    expect(waitingToolId(items, [permission])).toBe('b')
+  })
+
+  it('times a running subagent from its start, a finished one by its own duration (m:ss)', () => {
+    expect(subagentElapsed(agent('a', { at: 1_000 }), 43_500)).toBe('0:42')
+    expect(subagentElapsed(agent('a', { at: 1_000, state: 'ok', ms: 125_000 }), 999_999)).toBe('2:05')
+    expect(subagentElapsed(agent('a', { state: 'ok' }), 5_000)).toBeNull()
+    expect(subagentElapsed(agent('a', { at: 0 }), 5_000)).toBeNull()
+    expect([0, 999, 59_999, 60_000, 3_725_000, -5].map(elapsedLabel)).toEqual(['0:00', '0:00', '0:59', '1:00', '1:02:05', '0:00'])
+  })
+
+  it('leaves a subagent’s own task list out of the card above the composer', () => {
+    const main = tool('t', { name: 'TodoWrite', todos: [{ text: 'main', status: 'pending' }] })
+    const inner = tool('i', { name: 'TodoWrite', parent: 'ag', todos: [{ text: 'inner', status: 'pending' }] })
+    expect(currentTodos([main, agent('ag'), inner])).toBe(main.todos)
   })
 })
 
