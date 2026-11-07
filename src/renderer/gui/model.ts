@@ -216,6 +216,10 @@ export interface ToolView {
   expandable: boolean
   /** What it printed, as shown and copied: without terminal escape codes. */
   output?: string
+  /** A shell call's whole command: the expanded output starts with `$ <command>` (Figma 59J). */
+  command?: string
+  /** `exit N` at the row's end: only a failed call with a non-zero code the agent reported (Codex). */
+  exit?: number
 }
 
 // A command's output as text alone: shown in the summary and copied. The model keeps the escape codes; the expanded
@@ -231,6 +235,8 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     .find((line) => line !== '')
   // Own keys only: a tool named `constructor` is not Object's.
   const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? [Wrench, item.name]
+  // Without output a command is worth opening only when the row shows less of it (its lines, its length).
+  const hidden = item.input !== undefined && item.input.trim() !== item.arg
   return {
     status,
     name: item.name,
@@ -241,8 +247,10 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     ...(item.diff && item.diff.removed > 0 ? { removed: item.diff.removed } : {}),
     waiting,
     ...(item.state !== 'running' && firstLine && !SUMMARY_SKIP.has(item.name) ? { summary: firstLine } : {}),
-    expandable: !!item.diff || !!output?.trim(),
-    ...(output !== undefined ? { output } : {})
+    expandable: !!item.diff || !!output?.trim() || hidden,
+    ...(output !== undefined ? { output } : {}),
+    ...(item.input ? { command: item.input } : {}),
+    ...(item.state === 'error' && item.exit !== undefined && item.exit !== 0 ? { exit: item.exit } : {})
   }
 }
 

@@ -38,6 +38,17 @@ describe('Claude transcript → chat', () => {
     expect(items[2]).toMatchObject({ kind: 'tool', id: 'tu1', name: 'Bash', arg: 'pnpm vitest run auth', state: 'ok', output: '✓ 12 passed' })
   })
 
+  it('keeps a shell call’s whole command, line breaks and all, beside the one-line row text', () => {
+    const command = 'cd server &&\n  pnpm vitest run auth'
+    const items = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command } }] } })])
+    expect(items[0]).toMatchObject({ arg: 'cd server && pnpm vitest run auth', input: command })
+    expect(items[0]).not.toHaveProperty('exit')
+    const long = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'x'.repeat(5000) } }] } })])
+    expect(toolAt(long, 0).input).toHaveLength(CHAT_LIMITS.input + 1)
+    const read = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'r', name: 'Read', input: { file_path: 'a.ts' } }] } })])
+    expect(read[0]).not.toHaveProperty('input')
+  })
+
   it('reports which items a line added or changed, so main can push just those', () => {
     const p = createChatParser('claude', () => 0)
     expect(p.push(line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'a', name: 'Read', input: { file_path: `${CWD}/src/a.ts` } }] } }))).toEqual([0])
@@ -192,6 +203,8 @@ describe('Codex rollout → chat', () => {
       'codex'
     )
     expect(items.map((i) => (i.kind === 'tool' ? i.state : i.kind))).toEqual(['ok', 'error', 'ok', 'error'])
+    expect(items.map((i) => (i.kind === 'tool' ? i.exit : undefined))).toEqual([0, 2, undefined, undefined])
+    expect(items[0]).toMatchObject({ input: 'rg error' })
   })
 
   it('leaves out reasoning with an empty summary', () => {

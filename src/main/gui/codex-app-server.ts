@@ -172,7 +172,20 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : exit === 0 || status === 'completed' ? 'ok' : 'error'
         const output = str(item.aggregatedOutput)
-        return [put(id, { kind: 'tool', id, at, name: 'Bash', arg: clip((str(item.command) ?? '').replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg), state, ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}) })]
+        const command = str(item.command) ?? ''
+        return [
+          put(id, {
+            kind: 'tool',
+            id,
+            at,
+            name: 'Bash',
+            arg: clip(command.replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg),
+            state,
+            ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}),
+            ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}),
+            ...(exit !== null ? { exit } : {})
+          })
+        ]
       }
       case 'fileChange': {
         const diff = diffOfChanges(item.changes, cwd)

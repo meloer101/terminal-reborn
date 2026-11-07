@@ -148,6 +148,8 @@ test.describe('F23 GUI session (Claude)', () => {
     const failed = output.locator('[data-fg="red"]').first()
     await expect(failed).toHaveText('✗ server/auth/refresh.test.ts > rotates the token')
     expect(await output.textContent()).not.toContain('\x1b')
+    // Figma 59J: the output starts with the command it came from.
+    await expect(output.getByTestId('gui-output-command')).toHaveText('$ pnpm vitest run server/auth\n')
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)

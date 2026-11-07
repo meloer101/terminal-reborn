@@ -171,6 +171,18 @@ describe('rows', () => {
     expect(toolView(tool('t', { name: 'Bash', output: '…[0m tail' }), false).output).toBe('… tail')
   })
 
+  it('keeps a command’s whole text for its output, and shows exit N only when it failed with a code (Figma 59J)', () => {
+    const failed = tool('b', { name: 'Bash', arg: 'pnpm vitest run', input: 'pnpm vitest run', state: 'error', exit: 1, output: 'FAIL' })
+    expect(toolView(failed, false)).toMatchObject({ status: 'error', exit: 1, command: 'pnpm vitest run' })
+    expect(toolView(tool('b', { name: 'Bash', state: 'ok', exit: 0, input: 'true', output: 'x' }), false)).not.toHaveProperty('exit')
+    expect(toolView(tool('b', { name: 'Bash', state: 'error', exit: 0, input: 'x' }), false)).not.toHaveProperty('exit')
+    // Claude reports no exit code: a failed call has none to show.
+    expect(toolView(tool('b', { name: 'Bash', state: 'error', input: 'x', output: 'boom' }), false)).not.toHaveProperty('exit')
+    // Nothing printed: it opens only when the row hides part of the command (lines, length).
+    expect(toolView(tool('b', { name: 'Bash', arg: 'true', input: 'true' }), false).expandable).toBe(false)
+    expect(toolView(tool('b', { name: 'Bash', arg: 'cd a && make', input: 'cd a &&\n  make' }), false)).toMatchObject({ expandable: true, command: 'cd a &&\n  make' })
+  })
+
   it('marks the running tool a permission is about', () => {
     const items = [tool('a'), tool('b', { state: 'running' }), text('x')]
     const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }

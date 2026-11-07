@@ -322,23 +322,37 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>等你确认</span>}
+        {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
       </button>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
-      {open && (item.diff || view.output) && (
+      {open && (item.diff || view.output || view.command) && (
         <div className={styles.codeWrap}>
-          {item.diff ? <Diff diff={item.diff} /> : <Output raw={item.output ?? ''} />}
-          <CopyButton text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : (view.output ?? ''))} label="复制输出" className={styles.cornerCopy} />
+          {item.diff ? <Diff diff={item.diff} /> : <Output raw={item.output ?? ''} command={view.command} />}
+          <CopyButton
+            text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : view.output?.trim() ? view.output : (view.command ?? ''))}
+            label="复制输出"
+            className={styles.cornerCopy}
+          />
         </div>
       )}
     </div>
   )
 }
 
-/** What a command printed, in its colors (the --term-* ones); the copy button copies the text alone. */
-function Output({ raw }: { raw: string }) {
+/**
+ * What a command printed, in its colors (the --term-* ones), under `$ <command>` when the agent gave its whole text
+ * (Figma 59J); the copy button copies the text alone.
+ */
+function Output({ raw, command }: { raw: string; command?: string }) {
   const spans = useMemo(() => ansiSpans(raw), [raw])
   return (
     <pre className={styles.output}>
+      {command !== undefined && (
+        <span className={styles.outputCommand} data-testid="gui-output-command">
+          $ {command}
+          {raw ? '\n' : ''}
+        </span>
+      )}
       {spans.map((span, i) =>
         span.fg || span.bold || span.dim ? (
           <span key={i} className={styles.ansi} data-fg={span.fg} data-bold={span.bold} data-dim={span.dim}>

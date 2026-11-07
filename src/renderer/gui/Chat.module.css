@@ -353,6 +353,13 @@
   color: var(--status-attention);
 }
 
+/* Figma 59J: a failed command's exit code at the row's end. */
+.exit {
+  flex-shrink: 0;
+  font: var(--type-code);
+  color: var(--status-error);
+}
+
 .toolSummary {
   margin: 0;
   padding-left: var(--step-indent);
@@ -373,6 +380,11 @@
   font: var(--type-code);
   color: var(--text-secondary);
   white-space: pre;
+}
+
+/* Figma 59J: the command the output came from, as its first line. */
+.outputCommand {
+  color: var(--text-tertiary);
 }
 
 /* A command's colors (ansi.ts), the terminal's; black and white stay the output's own colour. */

@@ -35,6 +35,18 @@ describe('createCodexNormalizer', () => {
     expect(s.items[2]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'src/a.ts', state: 'ok', diff: { added: 1, removed: 1 } })
   })
 
+  it('keeps a command’s whole text and its exit code', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    const command = "/bin/zsh -lc 'pnpm test\n  --run'"
+    const s = fold([
+      ...n.notification('item/started', { item: { type: 'commandExecution', id: 'c1', command, status: 'inProgress' } }),
+      ...n.notification('item/completed', { item: { type: 'commandExecution', id: 'c1', command, status: 'failed', exitCode: 1, aggregatedOutput: 'FAIL' } }),
+      ...n.notification('item/completed', { item: { type: 'commandExecution', id: 'c2', command: 'true', status: 'completed', exitCode: 0 } })
+    ])
+    expect(s.items[0]).toMatchObject({ kind: 'tool', name: 'Bash', arg: "/bin/zsh -lc 'pnpm test --run'", input: command, state: 'error', exit: 1 })
+    expect(s.items[1]).toMatchObject({ state: 'ok', exit: 0, input: 'true' })
+  })
+
   it('keeps what an MCP or dynamic tool returned, and why it failed', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const s = fold([

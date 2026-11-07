@@ -26,6 +26,10 @@ export type ChatItem =
       state: ToolState
       /** Output (its end, when long). */
       output?: string
+      /** A shell call's whole command, line breaks kept (clipped at CHAT_LIMITS.input); `arg` is its one-line form. */
+      input?: string
+      /** A shell call's exit code, when the agent reports one (Codex; Claude does not). */
+      exit?: number
       /** Edit / Write. */
       diff?: { path: string; hunks: DiffHunk[]; added: number; removed: number; truncated: boolean }
     }
@@ -36,6 +40,7 @@ export const CHAT_LIMITS = {
   text: 20_000,
   thinking: 4_000,
   output: 2_000,
+  input: 2_000,
   arg: 300,
   diffLines: 400
 } as const
@@ -276,7 +281,16 @@ function claudeParser(now: () => number): ChatParser {
           changed.push(add({ kind: 'thinking', id: nextId('k'), at, text: clip(block.thinking, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}) }))
         } else if (block.type === 'tool_use' && typeof block.name === 'string') {
           const id = str(block.id) ?? nextId('u')
-          const index = add({ kind: 'tool', id, at, name: toolLabel(block.name), arg: toolArg(block.name, block.input, cwd), state: 'running' })
+          const command = block.name === 'Bash' && isRec(block.input) ? str(block.input.command) : undefined
+          const index = add({
+            kind: 'tool',
+            id,
+            at,
+            name: toolLabel(block.name),
+            arg: toolArg(block.name, block.input, cwd),
+            state: 'running',
+            ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {})
+          })
           tools.set(id, index)
           changed.push(index)
         }
@@ -335,16 +349,17 @@ function claudeParser(now: () => number): ChatParser {
 }
 
 /**
- * Whether a Codex tool output reports a failure. A shell call's header (before `Output:`) carries its exit code
- * (`Exit code: N`, `Process exited with code N`) or `Script failed`; only without one is the start of the text read.
+ * Whether a Codex tool output reports a failure, and the exit code when it gives one. A shell call's header (before
+ * `Output:`) carries its exit code (`Exit code: N`, `Process exited with code N`) or `Script failed`; only without one
+ * is the start of the text read.
  */
-function codexOutputFailed(out: string): boolean {
+function codexOutcome(out: string): { failed: boolean; exit?: number } {
   const head = out.split(/^Output:$/m, 1)[0]!
   const code = /^(?:Exit code: |Process exited with code )(-?\d+)$/m.exec(head)?.[1]
-  if (code !== undefined) return code !== '0'
-  if (/^Script failed$/m.test(head)) return true
-  if (/^Process running with session ID /m.test(head)) return false
-  return /aborted|error|failed/i.test(out.slice(0, 80))
+  if (code !== undefined) return { failed: code !== '0', exit: Number(code) }
+  if (/^Script failed$/m.test(head)) return { failed: true }
+  if (/^Process running with session ID /m.test(head)) return { failed: false }
+  return { failed: /aborted|error|failed/i.test(out.slice(0, 80)) }
 }
 
 /** Codex's own context it puts in user messages: not something the user typed. */
@@ -418,7 +433,7 @@ function codexParser(now: () => number): ChatParser {
         const label = isShell ? 'Bash' : name === 'apply_patch' ? 'Edit' : toolLabel(name)
         const arg = command !== undefined ? clip(command, CHAT_LIMITS.arg) : toolArg(label, args, cwd)
         const id = str(p.call_id) ?? nextId('u')
-        const index = add({ kind: 'tool', id, at, name: label, arg, state: 'running' })
+        const index = add({ kind: 'tool', id, at, name: label, arg, state: 'running', ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}) })
         calls.set(id, index)
         return [index]
       }
@@ -428,7 +443,8 @@ function codexParser(now: () => number): ChatParser {
         const item = index === undefined ? undefined : items[index]
         if (!item || item.kind !== 'tool') return []
         const out = typeof p.output === 'string' ? p.output : textOfOutput(p.output)
-        items[index!] = { ...item, state: codexOutputFailed(out) ? 'error' : 'ok', ...(out ? { output: tail(out, CHAT_LIMITS.output) } : {}) }
+        const { failed, exit } = codexOutcome(out)
+        items[index!] = { ...item, state: failed ? 'error' : 'ok', ...(out ? { output: tail(out, CHAT_LIMITS.output) } : {}), ...(exit !== undefined ? { exit } : {}) }
         return [index!]
       }
       default:
