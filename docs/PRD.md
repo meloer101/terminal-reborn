@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.140 · 2026-11-07 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.142 · 2026-11-07 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.142 | 2026-11-07 | **接管守护进程前先看它的程序还在不在**（§6.8，作者 2026-11-07 报告：用发布版开发时新建终端报 `posix_spawnp failed`）：守护进程 11-01 从 `/Applications/Wavi.app` 启动，这个 app 后来被拖进废纸篓，从另一个路径打开的 Wavi 照样接管了它；node-pty 每次新建终端都要执行旧 app 里的 `spawn-helper`，路径已经不在。现在接管前用 `ps -o comm=` 读守护进程启动时的程序路径，路径不存在就按协议版本不同的方式淘汰它（会话存盘、结束，`--resume` 冷恢复），再拉起新的；读不到路径时照常接管。 |
 | v1.140 | 2026-11-07 | **「在此新建会话」列出全部 agent**（F4，架构审阅批次 7b，Figma 58C，作者 2026-11-07 定）：会话右键和 Worktree 视图「更多」的子菜单原来只有 Claude Code / Codex / 终端；现在按新建会话的顺序列出全部 agent：「已安装」（Claude Code、Codex 一直在，其他装了才在）在前，「没装」置灰在后，列表固定高度 300、超出上下滚动，「终端」在分隔线下固定不动。点没装的 agent 打开 设置 · 智能体（那里有安装命令）。 |
 | v1.139 | 2026-11-07 | **窗口材质加回「实色」，实色下深色、浅色都压低对比**（§5 玻璃外壳 / F7，Figma 第 57 节 `866:40627`，作者 2026-11-07：要把正常的实心模式加回来，「原先的颜色……太白和太黑了，对比太高刺的人眼睛疼」，看过 57 后：「这个配色没毛病」）：① 设置 · 外观 · 窗口 · 材质 三选一：液态玻璃 / 磨砂玻璃 / 实色；macOS 26 之前只有磨砂玻璃 / 实色（这一行以前在 macOS 26 之前不显示）。选实色时窗口不透明、不透出桌面，「窗口底层不透明度」一行不显示；全屏时也保持实色，不画全屏背景的光场，所以「全屏背景」一节也不显示（作者 2026-11-07 确认，独立 review 发现选了没有效果）。② 实色的配色（零彩度，状态色不变）：深色 侧栏 `#181818`、卡片 `#1f1f1f`、正文 `#d5d5d5`（11.2:1）、次要 `#999999`（5.8:1）、三级 `#808080`（4.2:1）；浅色 侧栏 `#ebebeb`、卡片 `#f6f6f6`、正文 `#2e2e2e`（12.6:1）、次要 `#5c5c5c`（6.2:1）、三级 `#787878`（4.1:1）。原来的配色是 17–19:1；参考 VS Code Dark / Light Modern（10.3 / 11.2:1）、Zed One、Material 深色主题（不用纯黑）、GitHub Primer dark dimmed（最亮的字不用纯白）。终端底色「跟随主题」时取卡片色，前景 `#cfcfcf` / `#2e2e2e`；「自定义」时前景和 16 色照 v1.71 按底色明暗取，不随材质变。玻璃材质下的颜色不变（作者确认「只用在实色」这一推荐项）。③ 实现：实色和磨砂一样用 `setVibrancy('sidebar')` 盖住液态玻璃（玻璃移除不掉，v1.127），外壳铺 100% 的 `--glass-shell-color`，窗口圆角由原生材质保留；`<html data-material>` 选用 tokens.css 里实色那一套；启动画面按上次的材质（localStorage 镜像，同主题）第一帧就是实色。 |
 | v1.138 | 2026-11-07 | **自动修复交给每一个能报告「这一轮结束」的 agent**（F16，架构审阅批次 7a，作者 2026-11-07 选「保留扩大、加兜底、GUI 会话也算」）：原来只认 Claude / Codex；现在是带 hooks 的 CLI 会话（Claude、Codex、Gemini CLI、Qwen Code、Pi）和任何 GUI 会话（每轮结束由 Wavi 自己看到），worktree 里正在看的那个优先，PR 那一行显示的就是它，按钮写它的名字（Claude 仍写「Claude」）。发出修复后 30 分钟还没收到这一轮结束，以「自动修复已停：30 分钟没有收到这一轮结束的信号」停下，按钮同其他刹车。**未实测**：Gemini CLI、Qwen Code（本机没装）、Pi 和 ACP 的 GUI 会话都没在真 agent 上跑过一次自动修复；先在 Pi 上各粘一段 30 行的修复消息、跑一轮带工具的修复，看结束信号和长文本是否正常。 |
@@ -770,7 +771,7 @@ Orca：IME 处理、AskUserQuestion 按键序列、worktree porcelain 解析、`
 参考 Orca（MIT）的 `src/main/daemon/*`，只取核心形态，不要 launchd。e2e：`e2e/pty-daemon.spec.ts`；其余 e2e 用 `TR_KILL_SESSIONS_ON_QUIT=1` 退出，不留守护进程。
 - **进程**：应用自己的二进制以 `ELECTRON_RUN_AS_NODE=1` 运行 `out/main/pty-daemon.js`，独立会话和进程组，cwd 为 userData（不能是可能被删的 worktree）。由一个立即退出的启动器（同一个二进制 `-e`，约 30 ms）拉起，所以父进程从一开始就是 launchd，不是应用的子孙进程：按父 pid 停掉一棵进程树的工具（Claude Code 的后台任务、Claude 退出、IDE 的运行配置）碰不到它，也碰不到终端里的 agent。依赖 Electron 的 `runAsNode` fuse 保持开启。应用退出、main 崩溃、开发时 ⌘R 都不影响它。日志开头 Electron 的 `task_name_for_pid` 报错是它查不到已退出的父进程，无害（会话的环境由应用传入）。
 - **端点**：`<userData>/daemon/` 下有 `daemon-v<PROTOCOL>.sock`（路径超过 103 字节时改用 `/tmp/tr-<uid>-ptyd-<hash>/`）、`token`（32 字节）、`daemon.json`（pid、协议、版本）、`daemon.log`（5 MB 轮转）。目录 0700、文件 0600，拒绝符号链接。每个连接的第一帧是 `hello {token, protocol}`，用 `timingSafeEqual` 比较。
-- **启动**：能连上就接管；`ENOENT` / `ECONNREFUSED` 就删掉旧 socket、拉起新的，3 s 内轮询连接；其他错误（超时、`EPERM`）不当作“已死”，本次退回 utilityProcess（`TR_PTY_DAEMON=0` 可强制）。运行中连接断开，按终端进程崩溃处理（恢复卡片 + `--resume`）。
+- **启动**：能连上就接管，但守护进程启动时的程序（`ps -o comm=`）已经不在时不接管（app 被拖进废纸篓或换了路径，node-pty 执行不到旧 app 里的 `spawn-helper`，新建终端全部 `posix_spawnp failed`）：发 `shutdown` 结束它的会话，等它退出（3 s 后 SIGKILL，免得它关 socket 时删掉新守护进程的同名 socket），再按下面拉起新的，会话走冷恢复；`ENOENT` / `ECONNREFUSED` 就删掉旧 socket、拉起新的，3 s 内轮询连接；其他错误（超时、`EPERM`）不当作“已死”，本次退回 utilityProcess（`TR_PTY_DAEMON=0` 可强制）。运行中连接断开，按终端进程崩溃处理（恢复卡片 + `--resume`）。
 - **协议**：NDJSON；在原有 HostRequest / HostEvent 之外加 `hello` / `list` / `attach` / `detach` / `shutdown`，`data` 事件带 `seq`。spawn 使用**应用**当前的环境变量，避免几天前启动的守护进程给新 shell 一个过期的 PATH。`hello` / `list` / `shutdown` 跨版本冻结：协议版本不同时，旧守护进程的会话存盘、结束，再用 `--resume` 冷恢复。
 - **HeadlessMirror**：每个会话一个 `@xterm/headless`（scrollback ≤ 5000、unicode11）。快照 = 序列化的屏幕（含备用屏）+ 重放模式序列（备用屏、bracketed paste、应用光标、隐藏光标、焦点上报、鼠标跟踪和 SGR 编码）+ 最后的标题。用一次空写入的回调取得和 `seq` 一致的切点。没有客户端时不暂停 PTY，agent 不会因为应用关着而卡住。
 - **重连**：每次页面加载只调用一次 `pty.live()`（第二次会把本页会话悄悄 detach），然后 attach 所有活着的会话（状态、通知需要它们的输出）。渲染端清屏 → 按快照尺寸 → 写快照、模式、标题 → 丢掉 `seq` 不超过快照的数据块 → 进入实时。没命中就走冷路径：先画磁盘快照，再 `--resume`。窗口卸载和渲染进程崩溃只 detach，不 kill。

@@ -1,9 +1,10 @@
 // Finds, adopts or launches the pty daemon (src/pty-daemon, PRD §6.8) and speaks its socket
-// protocol. Adopt-if-alive: a daemon answering on this profile's socket is reused with all its sessions; only a
-// socket that provably has nobody behind it (ENOENT / ECONNREFUSED) leads to launching a new one.
-import { spawn } from 'node:child_process'
+// protocol. Adopt-if-alive: a daemon answering on this profile's socket is reused with all its sessions, unless the
+// program it runs from is gone (`retireIfOrphaned`); otherwise only a socket that provably has nobody behind it
+// (ENOENT / ECONNREFUSED) leads to launching a new one.
+import { execFile, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { connect, type Socket } from 'node:net'
 import { dirname, join } from 'node:path'
 import type { HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
@@ -24,6 +25,8 @@ const CONNECT_TIMEOUT_MS = 1000
 const HELLO_TIMEOUT_MS = 2000
 const LAUNCH_TIMEOUT_MS = 5000
 const LAUNCH_POLL_MS = 25
+/** How long a retired daemon gets to exit after `shutdown` before it is SIGKILLed. */
+const RETIRE_EXIT_MS = 3000
 const LOG_ROTATE_BYTES = 5 * 1024 * 1024
 
 export interface DaemonLocation {
@@ -281,10 +284,11 @@ export async function openDaemon(options: OpenDaemonOptions): Promise<DaemonConn
   const first = await tryConnect(location.socketPath)
   if (first.ok) {
     const connection = await handshake(first.socket)
-    log(`adopted pty daemon ${connection.pid} (${connection.sessions.length} sessions)`)
-    return connection
-  }
-  if (!first.dead) throw first.error
+    if (!(await retireIfOrphaned(connection, log))) {
+      log(`adopted pty daemon ${connection.pid} (${connection.sessions.length} sessions)`)
+      return connection
+    }
+  } else if (!first.dead) throw first.error
 
   // Nobody is behind the socket: a leftover of a daemon that crashed. The daemon removes it itself too.
   rmSync(location.socketPath, { force: true })
@@ -301,6 +305,56 @@ export async function openDaemon(options: OpenDaemonOptions): Promise<DaemonConn
     }
     if (Date.now() - started > LAUNCH_TIMEOUT_MS) throw new Error(`the pty daemon did not come up: ${attempt.error.message}`)
   }
+}
+
+/** The program `pid` was started from, as exec'd: `ps` keeps that path after the file is moved or deleted. */
+function programOf(pid: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('ps', ['-o', 'comm=', '-p', String(pid)], { timeout: 1000 }, (error, stdout) => resolve(error ? null : stdout.trim() || null))
+  })
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const started = Date.now()
+  while (isAlive(pid)) {
+    if (Date.now() - started > timeoutMs) return false
+    await sleep(LAUNCH_POLL_MS)
+  }
+  return true
+}
+
+/**
+ * A daemon whose app was moved or deleted after it started (dragged to the Trash, replaced by a build at another path)
+ * keeps its running sessions but can start no new one: node-pty execs `spawn-helper` from the old bundle path and
+ * every spawn fails with `posix_spawnp failed`. Such a daemon is retired like one of another protocol (its sessions
+ * come back through the cold path) and true is returned once it has exited; the caller then launches a new one.
+ * Only a path read and found missing counts: a failed lookup proves nothing and the daemon is adopted.
+ */
+async function retireIfOrphaned(connection: DaemonConnection, log: (message: string) => void): Promise<boolean> {
+  const program = await programOf(connection.pid)
+  if (!program?.startsWith('/') || existsSync(program)) return false
+  log(`retiring pty daemon ${connection.pid}: its program ${program} is gone, it cannot start terminals`)
+  await connection.shutdown(true)
+  // Its listening socket must be closed before a new daemon binds the same path, or closing it would unlink the new one.
+  if (!(await waitForExit(connection.pid, RETIRE_EXIT_MS))) {
+    log(`pty daemon ${connection.pid} did not exit after shutdown; killing it`)
+    try {
+      process.kill(connection.pid, 'SIGKILL')
+    } catch {
+      // It exited in the meantime.
+    }
+    if (!(await waitForExit(connection.pid, RETIRE_EXIT_MS))) throw new Error(`the retired pty daemon ${connection.pid} did not exit`)
+  }
+  return true
 }
 
 /**

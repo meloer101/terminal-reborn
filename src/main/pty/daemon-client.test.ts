@@ -1,11 +1,11 @@
-import { execFileSync } from 'node:child_process'
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { closeSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { connect, createServer, type Server } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { frame, PROTOCOL_VERSION } from '../../pty-daemon/wire'
-import { DaemonConnection, spawnOrphan } from './daemon-client'
+import { DaemonConnection, daemonLocation, openDaemon, spawnOrphan } from './daemon-client'
 
 function parentAndGroup(pid: number): { ppid: number; pgid: number } | null {
   try {
@@ -118,4 +118,100 @@ describe('DaemonConnection.handshake', () => {
     expect(connection.pipes).toBe(false)
     connection.close()
   })
+})
+
+/** A stand-in daemon: answers `hello` with a welcome carrying its pid and exits on `shutdown`. */
+const FAKE_DAEMON = `
+const net = require('node:net')
+const path = process.argv[process.argv.indexOf('--socket') + 1]
+const server = net.createServer((socket) => {
+  let buffer = ''
+  socket.on('data', (chunk) => {
+    buffer += chunk
+    for (let i = buffer.indexOf('\\n'); i >= 0; i = buffer.indexOf('\\n')) {
+      const message = JSON.parse(buffer.slice(0, i))
+      buffer = buffer.slice(i + 1)
+      if (message.type === 'hello') socket.write(JSON.stringify({ type: 'welcome', protocol: ${PROTOCOL_VERSION}, pid: process.pid, buildId: 'fake', sessions: [], hooks: null }) + '\\n')
+      if (message.type === 'shutdown') server.close(() => process.exit(0))
+    }
+  })
+})
+server.listen(path)
+setTimeout(() => process.exit(0), 20_000)
+`
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe('openDaemon', () => {
+  let userData = ''
+  const pids: number[] = []
+  const handlers = { onEvent: () => undefined, onHook: () => Promise.resolve({ status: 200, body: '' }), onLost: () => undefined }
+
+  afterEach(() => {
+    for (const pid of pids.splice(0)) {
+      try {
+        process.kill(pid, 'SIGKILL')
+      } catch {
+        // Already gone.
+      }
+    }
+    if (userData) {
+      rmSync(dirname(daemonLocation(userData).socketPath), { recursive: true, force: true })
+      rmSync(userData, { recursive: true, force: true })
+    }
+    userData = ''
+  })
+
+  /** Runs the stand-in daemon from `program` on this profile's socket and waits until it listens. */
+  async function startDaemon(program: string, script: string): Promise<number> {
+    const location = daemonLocation(userData)
+    mkdirSync(dirname(location.socketPath), { recursive: true, mode: 0o700 })
+    const child = spawn(program, [script, '--dir', location.dir, '--socket', location.socketPath], { detached: true, stdio: 'ignore' })
+    child.unref()
+    const pid = child.pid ?? 0
+    pids.push(pid)
+    await until(() => (existsSync(location.socketPath) ? true : null))
+    return pid
+  }
+
+  function setUp(): string {
+    userData = mkdtempSync(join(tmpdir(), 'tr-od-'))
+    const script = join(userData, 'fake-daemon.js')
+    writeFileSync(script, FAKE_DAEMON)
+    return script
+  }
+
+  it('adopts a running daemon whose program is still there', async () => {
+    const script = setUp()
+    const pid = await startDaemon(process.execPath, script)
+    const connection = await openDaemon({ userData, script, appVersion: 'test', handlers, log: () => undefined })
+    pids.push(connection.pid)
+    expect(connection.pid).toBe(pid)
+    connection.close()
+  })
+
+  it('replaces a daemon whose app was moved or deleted: it could start no new terminal (posix_spawnp failed)', async () => {
+    const script = setUp()
+    // The daemon runs from a copy of the program that is then deleted, as when the app bundle goes to the Trash.
+    const program = join(userData, 'old-app')
+    try {
+      linkSync(process.execPath, program)
+    } catch {
+      copyFileSync(process.execPath, program)
+    }
+    const stale = await startDaemon(program, script)
+    rmSync(program)
+    const connection = await openDaemon({ userData, script, appVersion: 'test', handlers, log: () => undefined })
+    pids.push(connection.pid)
+    expect(connection.pid).not.toBe(stale)
+    expect(alive(stale)).toBe(false)
+    connection.close()
+  }, 15_000)
 })
