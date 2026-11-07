@@ -52,8 +52,10 @@
 }
 
 .chat {
-  /* A status glyph (14) and its gap (8): summaries and plan steps start at the text after it. */
+  /* A status glyph (14) and its gap (8): plan steps start at the text after it. */
   --glyph-indent: calc(14px + var(--space-8));
+  /* A step row's mark (16) and its gap (8): a tool's summary and output, the thinking text start at its verb. */
+  --step-indent: calc(16px + var(--space-8));
   position: relative;
   display: flex;
   flex-direction: column;
@@ -237,7 +239,7 @@
 .thinkingRow {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-8);
   align-self: flex-start;
   padding: 0;
   border: 0;
@@ -246,12 +248,13 @@
   color: var(--text-tertiary);
 }
 
-.thinkingRow svg {
+.thinkingRow > svg {
   color: var(--text-primary);
 }
 
 .thinkingText {
   margin: 0;
+  padding-left: var(--step-indent);
   font: var(--type-step);
   color: var(--text-tertiary);
   white-space: pre-wrap;
@@ -303,10 +306,21 @@
   flex-shrink: 0;
 }
 
-.toolName {
+/* Figma 59J: a step row is icon · verb · target, the status in the icon's place only while it runs, waits on you or
+   failed. */
+.stepMark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+}
+
+.toolVerb {
   flex-shrink: 0;
-  font: 500 var(--size-step) / var(--line-step) var(--font-mono);
-  color: var(--text-primary);
+  font: var(--type-step);
+  color: var(--text-tertiary);
 }
 
 .toolArg {
@@ -341,7 +355,7 @@
 
 .toolSummary {
   margin: 0;
-  padding-left: var(--glyph-indent);
+  padding-left: var(--step-indent);
   overflow: hidden;
   font: var(--type-code);
   color: var(--text-tertiary);
@@ -350,7 +364,7 @@
 }
 
 .output {
-  margin: 0 0 0 var(--glyph-indent);
+  margin: 0 0 0 var(--step-indent);
   max-height: 320px;
   padding: var(--space-8) var(--space-12);
   overflow: auto;
@@ -359,6 +373,44 @@
   font: var(--type-code);
   color: var(--text-secondary);
   white-space: pre;
+}
+
+/* A command's colors (ansi.ts), the terminal's; black and white stay the output's own colour. */
+.ansi[data-fg='red'] {
+  color: var(--term-red);
+}
+
+.ansi[data-fg='green'] {
+  color: var(--term-green);
+}
+
+.ansi[data-fg='yellow'] {
+  color: var(--term-yellow);
+}
+
+.ansi[data-fg='blue'] {
+  color: var(--term-blue);
+}
+
+.ansi[data-fg='magenta'] {
+  color: var(--term-violet);
+}
+
+.ansi[data-fg='cyan'] {
+  color: var(--term-cyan);
+}
+
+.ansi[data-fg='black'],
+.ansi[data-fg='white'] {
+  color: var(--text-secondary);
+}
+
+.ansi[data-bold] {
+  font-weight: 600;
+}
+
+.ansi[data-dim] {
+  opacity: 0.6;
 }
 
 .hunk + .hunk::before {

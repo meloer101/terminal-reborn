@@ -1,11 +1,13 @@
 // A GUI session's chat view (PRD F23, Figma 49″C–F), the decisions behind it kept apart from React so they can be
 // tested: how the feed groups items, what a tool row says, what each card's buttons and keys do, the composer's keys
 // and the pickers under it. Pure.
+import { Bot, Brain, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { looksLikeReport } from '@shared/dispatch'
 import type { GuiCommand, GuiConfigOption, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
 import { composerPickers } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { SessionStatus } from '@shared/types'
+import { CUT_ESCAPE, ESCAPES } from './ansi'
 
 // --- the feed (Figma 49″C) ----------------------------------------------------------------------------------------
 
@@ -164,9 +166,44 @@ export function thinkingLabel(ms: number | undefined): string {
 /** Tools whose result line is worth a summary under the row (Figma: Grep's 「14 处 · 6 个文件」, Bash's last words). */
 const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite'])
 
+/**
+ * Figma 59J: what a tool row says — its icon and a Chinese verb, by the tool's name. Claude's tools; Codex's shell,
+ * patch and search calls (named Bash / Edit / WebSearch by its parsers); the ACP tool kinds (acp.ts). Any other tool
+ * (MCP, an agent's own) is a wrench with its own name.
+ */
+const TOOL_WORDS: Readonly<Record<string, readonly [LucideIcon, string]>> = {
+  Read: [FileText, '读取'],
+  Edit: [Pencil, '编辑'],
+  MultiEdit: [Pencil, '编辑'],
+  Write: [FilePlus, '写入'],
+  NotebookEdit: [Pencil, '编辑'],
+  Bash: [Terminal, '运行'],
+  BashOutput: [Terminal, '读取输出'],
+  KillShell: [Square, '停止'],
+  Grep: [Search, '搜索'],
+  Glob: [FolderSearch, '查找文件'],
+  WebFetch: [Globe, '读取'],
+  WebSearch: [Globe, '搜索网页'],
+  Agent: [Bot, '子 agent'],
+  Task: [Bot, '子 agent'],
+  TodoWrite: [ListTodo, '任务'],
+  Skill: [Sparkles, 'Skill'],
+  ExitPlanMode: [ClipboardList, '计划'],
+  Delete: [Trash2, '删除'],
+  Move: [MoveRight, '移动'],
+  Search: [Search, '搜索'],
+  Think: [Brain, '思考'],
+  Fetch: [Globe, '读取'],
+  Mode: [ToggleLeft, '切换模式'],
+  Tool: [Wrench, '工具']
+}
+
 export interface ToolView {
   status: SessionStatus
   name: string
+  /** Figma 59J: icon · verb · target (`arg`). */
+  icon: LucideIcon
+  verb: string
   arg: string
   /** Edit / Write: `+N −M` (each part only when non-zero). */
   added?: number
@@ -181,13 +218,8 @@ export interface ToolView {
   output?: string
 }
 
-// Escape codes a command writes for a terminal (OSC titles and links, CSI colors and cursor moves, charset picks):
-// a chat shows the text alone. The model keeps them, so colors can be drawn later.
-// eslint-disable-next-line no-control-regex -- matching ESC is the point
-const ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[@-Z\\-_]/g
-/** The kept tail of a long output (`…` + the end) can start inside a CSI sequence whose ESC was cut off. */
-const CUT_ESCAPE = /^…\[[0-?]*[ -/]*[@-~]/
-
+// A command's output as text alone: shown in the summary and copied. The model keeps the escape codes; the expanded
+// output draws their colors (ansi.ts).
 export const plainOutput = (text: string): string => text.replace(ESCAPES, '').replace(CUT_ESCAPE, '…')
 
 export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boolean): ToolView {
@@ -197,9 +229,13 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     ?.split('\n')
     .map((line) => line.trim())
     .find((line) => line !== '')
+  // Own keys only: a tool named `constructor` is not Object's.
+  const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? [Wrench, item.name]
   return {
     status,
     name: item.name,
+    icon,
+    verb,
     arg: item.arg,
     ...(item.diff && item.diff.added > 0 ? { added: item.diff.added } : {}),
     ...(item.diff && item.diff.removed > 0 ? { removed: item.diff.removed } : {}),

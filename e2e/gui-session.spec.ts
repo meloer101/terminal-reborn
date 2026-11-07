@@ -137,6 +137,35 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(card).toHaveCount(0, WITHIN)
   })
 
+  test('tool rows read as icon · verb · target; a command’s output keeps its colors (Figma 59J)', async () => {
+    await send('show colors')
+    const bash = feed().getByRole('button', { name: /运行\s*pnpm vitest run server\/auth/ })
+    await expect(bash).toBeVisible(WITHIN)
+    await expect(feed().getByRole('button', { name: /读取\s*src\/auth\/session\.ts/ })).toBeVisible()
+    await expect(feed().getByRole('heading', { name: '测试结果' })).toBeVisible()
+    await bash.click()
+    const output = feed().locator('pre').filter({ hasText: 'rotates the token' })
+    const failed = output.locator('[data-fg="red"]').first()
+    await expect(failed).toHaveText('✗ server/auth/refresh.test.ts > rotates the token')
+    expect(await output.textContent()).not.toContain('\x1b')
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const red = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--term-red').trim())
+      expect(await failed.evaluate((el) => getComputedStyle(el).color)).toBe(await page.evaluate((hex) => {
+        const probe = document.createElement('span')
+        probe.style.color = hex
+        document.body.append(probe)
+        const color = getComputedStyle(probe).color
+        probe.remove()
+        return color
+      }, red))
+      await page.screenshot({ path: join(SHOTS, `tools-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await bash.click()
+  })
+
   test('queues a message sent while a turn runs, then stops the turn', async () => {
     await send('slow answer')
     await expect(composer().getByRole('button', { name: '停止' })).toBeVisible(WITHIN)

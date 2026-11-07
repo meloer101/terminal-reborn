@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { Bot, Brain, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench } from 'lucide-react'
 import { matchCommands, permissionOption, planOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import {
@@ -120,6 +121,45 @@ describe('rows', () => {
     expect(toolView(tool('r', { state: 'running', name: 'Bash' }), false)).not.toHaveProperty('summary')
     expect(toolView(tool('f', { state: 'error' }), false).status).toBe('error')
     expect(toolView(tool('w', { state: 'running', name: 'Bash' }), true)).toMatchObject({ status: 'needs_you', waiting: true })
+  })
+
+  it('reads a tool row as icon · verb · target, for every agent’s tool names (Figma 59J)', () => {
+    const cases: [string, unknown, string][] = [
+      // Claude Code (and Codex, whose shell, patch and search calls come as Bash / Edit / WebSearch)
+      ['Read', FileText, '读取'],
+      ['Edit', Pencil, '编辑'],
+      ['MultiEdit', Pencil, '编辑'],
+      ['Write', FilePlus, '写入'],
+      ['NotebookEdit', Pencil, '编辑'],
+      ['Bash', Terminal, '运行'],
+      ['BashOutput', Terminal, '读取输出'],
+      ['KillShell', Square, '停止'],
+      ['Grep', Search, '搜索'],
+      ['Glob', FolderSearch, '查找文件'],
+      ['WebFetch', Globe, '读取'],
+      ['WebSearch', Globe, '搜索网页'],
+      ['Agent', Bot, '子 agent'],
+      ['Task', Bot, '子 agent'],
+      ['TodoWrite', ListTodo, '任务'],
+      ['Skill', Sparkles, 'Skill'],
+      ['ExitPlanMode', ClipboardList, '计划'],
+      // ACP tool kinds (acp.ts KIND_NAMES)
+      ['Delete', Trash2, '删除'],
+      ['Move', MoveRight, '移动'],
+      ['Search', Search, '搜索'],
+      ['Think', Brain, '思考'],
+      ['Fetch', Globe, '读取'],
+      ['Mode', ToggleLeft, '切换模式'],
+      ['Tool', Wrench, '工具'],
+      // MCP tools and anything unknown: the tool's own name
+      ['query_docs', Wrench, 'query_docs'],
+      ['update_plan', Wrench, 'update_plan'],
+      ['constructor', Wrench, 'constructor']
+    ]
+    for (const [name, icon, verb] of cases) {
+      const view = toolView(tool('t', { name, arg: 'src/a.ts' }), false)
+      expect({ name, icon: view.icon, verb: view.verb, arg: view.arg }).toEqual({ name, icon, verb, arg: 'src/a.ts' })
+    }
   })
 
   it('shows a command’s output without its terminal escape codes (colors, cursor moves, titles)', () => {

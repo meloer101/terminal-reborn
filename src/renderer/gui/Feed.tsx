@@ -8,13 +8,14 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import { formatClock } from '@shared/session-meta'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { ansiSpans } from './ansi'
 import { ChatMarkdown } from './ChatMarkdown'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
@@ -286,11 +287,19 @@ function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void
   )
 }
 
+/** A step row's mark (Figma 59J): the tool's icon, or its status while it runs, waits on you or failed. */
+function StepMark({ children }: { children: ReactNode }) {
+  return <span className={styles.stepMark}>{children}</span>
+}
+
 function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
   const [open, setOpen] = useState(false)
   return (
     <div className={styles.thinking}>
       <button type="button" className={styles.thinkingRow} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <StepMark>
+          <Brain {...ICON} />
+        </StepMark>
         <span>{thinkingLabel(item.ms)}</span>
         {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
       </button>
@@ -305,8 +314,10 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
   return (
     <div className={styles.tool}>
       <button type="button" className={styles.toolRow} aria-expanded={view.expandable ? open : undefined} disabled={!view.expandable} onClick={() => setOpen(!open)}>
-        <StatusGlyph status={view.status} />
-        <span className={styles.toolName}>{view.name}</span>
+        <StepMark>{view.status === 'done_unread' ? <view.icon {...ICON} /> : <StatusGlyph status={view.status} />}</StepMark>
+        <span className={styles.toolVerb} title={view.name}>
+          {view.verb}
+        </span>
         <span className={styles.toolArg}>{view.arg}</span>
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
@@ -315,11 +326,29 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
       {open && (item.diff || view.output) && (
         <div className={styles.codeWrap}>
-          {item.diff ? <Diff diff={item.diff} /> : <pre className={styles.output}>{view.output}</pre>}
+          {item.diff ? <Diff diff={item.diff} /> : <Output raw={item.output ?? ''} />}
           <CopyButton text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : (view.output ?? ''))} label="复制输出" className={styles.cornerCopy} />
         </div>
       )}
     </div>
+  )
+}
+
+/** What a command printed, in its colors (the --term-* ones); the copy button copies the text alone. */
+function Output({ raw }: { raw: string }) {
+  const spans = useMemo(() => ansiSpans(raw), [raw])
+  return (
+    <pre className={styles.output}>
+      {spans.map((span, i) =>
+        span.fg || span.bold || span.dim ? (
+          <span key={i} className={styles.ansi} data-fg={span.fg} data-bold={span.bold} data-dim={span.dim}>
+            {span.text}
+          </span>
+        ) : (
+          span.text
+        )
+      )}
+    </pre>
   )
 }
 
@@ -346,7 +375,12 @@ function Live({ sessionId, live }: { sessionId: SessionId; live: GuiLive }) {
   if (live.kind === 'thinking') {
     return (
       <div className={styles.steps}>
-        <p className={styles.thinkingLive}>思考中</p>
+        <div className={styles.thinkingRow}>
+          <StepMark>
+            <Brain {...ICON} />
+          </StepMark>
+          <p className={styles.thinkingLive}>思考中</p>
+        </div>
       </div>
     )
   }
