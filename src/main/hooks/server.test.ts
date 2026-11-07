@@ -129,6 +129,8 @@ describe('hook server', () => {
     expect(await rawPost(server, '/hook/Stop', headers)).toBe(400)
     expect(await rawPost(server, '/other/Stop?session=s1', headers)).toBe(400)
     expect(await rawPost(server, '/hook/Stop?session=s1&agent=aider', headers)).toBe(400)
+    // OpenCode reports through OSC 7501 only (its plugin runs in a shared server one launch cannot reach): no hooks.
+    expect(await rawPost(server, '/hook/Stop?session=s1&agent=opencode', headers)).toBe(400)
     expect(await rawPost(server, '/hook/Stop?session=s1', headers)).toBe(200)
   })
 

@@ -8,13 +8,15 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HookAgent } from '@shared/agent-events'
+import { CLI_AGENTS, hasHooks } from '@shared/agents'
 
 /** PostToolUse carries whole tool outputs; anything beyond this is dropped (the hook sees a 413). */
 export const MAX_BODY_BYTES = 32 * 1024 * 1024
 
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
 const EVENT_NAME = /^[A-Za-z]{1,40}$/
-const AGENTS: ReadonlySet<string> = new Set<HookAgent>(['claude', 'codex', 'gemini', 'qwen', 'opencode', 'pi'])
+/** The agents launched with Wavi's hooks, from the agent table (AGENT_SPECS status 'hooks'). */
+const AGENTS: ReadonlySet<string> = new Set<string>(CLI_AGENTS.filter((agent) => hasHooks(agent)))
 
 export interface HookRequest {
   event: string
