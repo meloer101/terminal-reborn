@@ -33,7 +33,7 @@ export interface SavedFixRun {
   run: FixRun
 }
 
-const STOP_REASONS: ReadonlySet<unknown> = new Set(['weakened', 'repeated', 'limit', 'no-progress', 'interrupted'])
+const STOP_REASONS: ReadonlySet<unknown> = new Set(['weakened', 'repeated', 'limit', 'no-progress', 'interrupted', 'no-turn-end'])
 const RISK_KINDS: ReadonlySet<unknown> = new Set(['test-deleted', 'test-skipped', 'check-silenced', 'ci-config', 'dependencies', 'migration'])
 
 function sanitizeMarkers(raw: unknown): RiskMarker[] | undefined {

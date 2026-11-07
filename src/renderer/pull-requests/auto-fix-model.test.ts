@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { brakeLabel } from '@shared/auto-fix-brakes'
 import type { PrDetails, PrThread, PullRequestInfo } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
 import {
@@ -24,6 +25,8 @@ import {
   isInterrupted,
   restoredAutomation,
   savedFixRuns,
+  stalledFix,
+  FIX_TURN_TIMEOUT_MS,
   takenOver,
   type FixRun,
   type PrAutomation
@@ -312,5 +315,21 @@ describe('a fix the window had not finished (architecture review, batch 6)', () 
     const back = restoredAutomation({ scope: 'pr', worktree: '/wt-a', number: 7, run: fixing }, true)!
     expect(isInterrupted(back.run)).toBe(true)
     expect(isInterrupted(stopped)).toBe(false)
+  })
+})
+
+describe('a fix whose turn never ends (an agent whose hooks did not arrive)', () => {
+  const fixing: FixRun = { sessionId: 's1', key: 'k', checks: ['test'], baseFailing: null, kind: 'fixing', since: 'abc1234', sentAt: 1_000 }
+  const state: PrAutomation = { ...freshAutomation(7, true), attempts: 1, run: fixing }
+
+  it('stops after the timeout with that reason, keeping where the fix started for 丢弃 / 仍然推送', () => {
+    expect(stalledFix(state, 1_000 + FIX_TURN_TIMEOUT_MS - 1)).toBeNull()
+    const { sentAt: _sentAt, ...sent } = fixing as Extract<FixRun, { kind: 'fixing' }>
+    expect(stalledFix(state, 1_000 + FIX_TURN_TIMEOUT_MS)?.run).toEqual({ ...sent, kind: 'stopped', decision: { kind: 'stop', reason: 'no-turn-end' } })
+    expect(stalledFix({ ...state, run: null }, 1e12)).toBeNull()
+  })
+
+  it('says why in the row', () => {
+    expect(brakeLabel({ kind: 'stop', reason: 'no-turn-end' })).toBe('自动修复已停：30 分钟没有收到这一轮结束的信号')
   })
 })

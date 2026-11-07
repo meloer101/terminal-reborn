@@ -3,7 +3,7 @@
 // The state lives here, per worktree, so the Ship block can close and open (图谱 ↔ 变更) without losing a run; the
 // block only draws it (ship-flow.ts is the pure part).
 import { create } from 'zustand'
-import { AGENT_SPECS, agentName, claudeOrCodex } from '@shared/agents'
+import { agentName, claudeOrCodex, hasHooks } from '@shared/agents'
 import { reviewEvidence, evidenceBlock, withEvidence } from '@shared/pull-requests'
 import type { PrTarget } from '@shared/pull-requests'
 import type { AppSettings } from '@shared/settings'
@@ -88,7 +88,7 @@ const sessionOf = (id: SessionId | null): Session | undefined => (id ? useWorksp
 /** Whether the session's agent takes the message in its terminal (an agent with hooks, so its Stop is seen). */
 function viaAgent(ctx: ShipContext): boolean {
   const session = sessionOf(ctx.sessionId)
-  return canTakeMessage(session, session && session.kind !== 'shell' ? AGENT_SPECS[session.kind].status === 'hooks' : false)
+  return canTakeMessage(session, hasHooks(session?.kind))
 }
 
 const WRITER_NAME = { claude: 'Claude', codex: 'Codex' } as const
@@ -96,8 +96,7 @@ const WRITER_NAME = { claude: 'Claude', codex: 'Codex' } as const
 /** The agent as the steps name it: the session's, or the CLI that writes headlessly. */
 export function agentLabelFor(ctx: Pick<ShipContext, 'sessionId' | 'settings'>): string {
   const session = sessionOf(ctx.sessionId)
-  const hooks = session && session.kind !== 'shell' ? AGENT_SPECS[session.kind].status === 'hooks' : false
-  if (session && canTakeMessage(session, hooks)) return agentName(session.kind)
+  if (session && canTakeMessage(session, hasHooks(session.kind))) return agentName(session.kind)
   return WRITER_NAME[writerFor(ctx.settings.pr, claudeOrCodex(session?.kind)).agent]
 }
 

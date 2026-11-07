@@ -2,6 +2,7 @@
 import type { GitOperation, MergeBlocker, MergeConflict, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
+import { shortAgentName } from '@shared/agents'
 
 /** `muted`: a plain fact, neither good nor bad (还没有自己的提交). */
 export type CheckTone = 'ok' | 'warn' | 'error' | 'working' | 'muted'
@@ -195,7 +196,7 @@ export function conflictPrompt(check: Pick<MergePrecheck, 'base' | 'branch' | 'c
 }
 
 export function agentLabel(kind: AgentKind): string {
-  return kind === 'codex' ? 'Codex' : 'Claude'
+  return shortAgentName(kind)
 }
 
 /**

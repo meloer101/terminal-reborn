@@ -129,7 +129,7 @@ export function normalizeQwen(event: string, payload: Rec): NormalizedHook {
 }
 
 /**
- * OpenCode and Pi report through Wavi's own plugin / extension (resources/hooks/wavi-opencode.js, wavi-pi.ts), which
- * posts Claude's event names and fields with Claude's tool names already, so they read like Qwen.
+ * Pi reports through Wavi's own extension (resources/hooks/wavi-pi.js), which posts Claude's event names and fields
+ * with Claude's tool names already, so it reads like Qwen. (OpenCode has no hooks: OSC 7501 only, PRD §6.15.)
  */
 export const normalizeAdapter = normalizeQwen

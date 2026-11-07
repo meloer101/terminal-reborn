@@ -64,6 +64,17 @@ export const freshAutomation = (number: number, autoFix: boolean): PrAutomation 
   baseBroken: []
 })
 
+/** A fix sent this long ago whose turn never reported its end is stopped (its agent's hooks may not have arrived). */
+export const FIX_TURN_TIMEOUT_MS = 30 * 60_000
+
+/** The state with a fix that waited too long for its turn's end stopped as no-turn-end; null when nothing is stalled. */
+export function stalledFix(state: PrAutomation, now: number): PrAutomation | null {
+  const run = state.run
+  if (run?.kind !== 'fixing' || now - run.sentAt < FIX_TURN_TIMEOUT_MS) return null
+  const { sentAt: _sentAt, ...rest } = run
+  return { ...state, run: { ...rest, kind: 'stopped', decision: { kind: 'stop', reason: 'no-turn-end' } } }
+}
+
 /** A fix whose window went away mid-run: stopped, so nothing new is sent until the user decides. */
 export const isInterrupted = (run: FixRun | null): boolean => run?.kind === 'stopped' && run.decision.kind === 'stop' && run.decision.reason === 'interrupted'
 

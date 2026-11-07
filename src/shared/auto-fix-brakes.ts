@@ -24,8 +24,11 @@ export type BrakeDecision =
   | { kind: 'push' }
   | {
       kind: 'stop'
-      /** interrupted: the window reloaded while this fix was under way (its commits were never checked). */
-      reason: 'weakened' | 'repeated' | 'limit' | 'no-progress' | 'interrupted'
+      /**
+       * interrupted: the window reloaded while this fix was under way (its commits were never checked). no-turn-end:
+       * the agent's turn never reported its end (its hooks did not arrive, PRD v1.138).
+       */
+      reason: 'weakened' | 'repeated' | 'limit' | 'no-progress' | 'interrupted' | 'no-turn-end'
       markers?: RiskMarker[]
       /** reason 'limit': how many fixes were already pushed. */
       attempts?: number
@@ -113,6 +116,8 @@ export function brakeLabel(decision: Exclude<BrakeDecision, { kind: 'push' }>, a
       return `${head}这一轮没有新的提交`
     case 'interrupted':
       return `${head}窗口重新加载时这次修复还没走完`
+    case 'no-turn-end':
+      return `${head}30 分钟没有收到这一轮结束的信号`
   }
 }
 
