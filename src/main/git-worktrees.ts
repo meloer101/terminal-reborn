@@ -288,11 +288,8 @@ export async function listWorktrees(root: unknown, knownPaths: unknown, only?: u
   return { mainBranch: info.mainBranch, worktrees, realPaths }
 }
 
-const gitMessage = (error: unknown): string => {
-  const stderr = (error as { stderr?: unknown }).stderr
-  const text = typeof stderr === 'string' && stderr.trim() ? stderr : error instanceof Error ? error.message : String(error)
-  return text.trim().split('\n').slice(-2).join(' ').slice(0, 500)
-}
+/** git's own words (worktree-files' git rejects with what git printed). */
+const gitMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error)).trim().split('\n').slice(-2).join(' ').slice(0, 500)
 
 async function hasSubmodules(path: string): Promise<boolean> {
   try {

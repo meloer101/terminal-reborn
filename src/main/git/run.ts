@@ -64,8 +64,9 @@ export function runProcess(bin: string, args: readonly string[], options: RunOpt
       stdout += out.write(chunk)
       if (options.tail !== undefined) {
         if (stdout.length > options.tail * 2) stdout = stdout.slice(-options.tail)
-      } else if (stdout.length > maxStdout) {
+      } else if (stdout.length > maxStdout && !overflow) {
         overflow = true
+        stderr += `\n输出超过 ${Math.round(maxStdout / 1024 / 1024)} MiB，已停止`
         child.kill('SIGTERM')
       }
     })
@@ -81,11 +82,12 @@ export function runProcess(bin: string, args: readonly string[], options: RunOpt
 }
 
 /**
- * Stops a child started `detached` (its own process group) and whatever it started. Nothing once it has exited: its
- * process group id may belong to someone else by then.
+ * Stops a child started `detached` (its own process group) and whatever it started — also after the child itself
+ * exited: what it left running (a job holding the output open, an MCP server) is what is still to stop. The group's id
+ * is not handed out again while any of them lives.
  */
 export function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
+  if (child.pid === undefined) return
   try {
     process.kill(-child.pid, signal)
   } catch {
@@ -137,12 +139,12 @@ export async function gitText(cwd: string, args: readonly string[], options: Git
   throw new Error((message ? message(ran) : lastLines(ran.stderr || ran.stdout)) || `git exited with ${ran.code}`)
 }
 
-/** A read-only git command (no optional locks); never rejects. */
+/** git without optional locks (an agent may be writing in the same worktree; status would refresh the index); never rejects. */
 export function git(cwd: string, args: readonly string[], options: GitOptions = {}): Promise<Ran> {
   return runGit(cwd, args, { ...options, env: { ...NO_OPTIONAL_LOCKS, ...options.env } })
 }
 
-/** stdout of a read-only git command, '' when it failed. */
+/** stdout of `git` (no optional locks), '' when it failed. */
 export async function gitOut(cwd: string, args: readonly string[]): Promise<string> {
   const ran = await git(cwd, args)
   return ran.code === 0 ? ran.stdout : ''

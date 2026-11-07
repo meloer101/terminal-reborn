@@ -83,7 +83,6 @@ const REFRESH_MIN_MS = 10_000
 const FOCUS_REFRESH_MS = 60_000
 /** gh processes at once. */
 const GH_CONCURRENCY = 2
-/** Finder launches apps with a minimal PATH; these are where Homebrew usually puts gh. */
 
 async function ghEnv(): Promise<Record<string, string>> {
   return buildPtyEnv(process.env, {
