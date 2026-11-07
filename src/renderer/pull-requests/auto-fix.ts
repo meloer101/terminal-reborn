@@ -25,6 +25,8 @@ import {
   fixNote,
   freshAutomation,
   mergeWhenGreenOn,
+  restoredAutomation,
+  savedFixRuns,
   takenOver,
   type FixRun,
   type FixScope,
@@ -32,6 +34,7 @@ import {
 } from './auto-fix-model'
 import { acceptBaseCi, setBaseAutomation, useBaseCi } from './base-ci'
 import { prWatchTargets, setAutomation, setPrNotice, usePullRequests } from './store'
+import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 
 /** Every 自动修复 prompt starts with this, so its own UserPromptSubmit is not taken for the user taking over. */
 export const AUTO_FIX_MARK = '（Wavi 自动修复'
@@ -49,6 +52,8 @@ const LOG_RETRY_MS = 15_000
 const initialized = new Map<string, number>()
 /** Worktree → the base commit whose CI the base automation last looked at. */
 const baseSeen = new Map<string, string>()
+/** Base runs taken up from the saved workspace: the first CI seen is theirs, not a new 合并到 main 并推送. */
+const restoredBase = new Set<string>()
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
@@ -459,7 +464,9 @@ function stepBase(worktreePath: string): void {
   // A commit Wavi did not push for a fix is a new 合并到 main 并推送: counting starts again.
   if (baseSeen.get(worktreePath) !== ci.sha) {
     baseSeen.set(worktreePath, ci.sha)
-    if (!state || !state.pushedShas.includes(ci.sha)) {
+    // A run taken up from the saved workspace keeps what it came back with.
+    const restored = restoredBase.delete(worktreePath)
+    if (!restored && (!state || !state.pushedShas.includes(ci.sha))) {
       state = freshAutomation(0, state?.autoFix ?? settings.autoFix)
       setBaseAutomation(worktreePath, state)
     }
@@ -509,6 +516,17 @@ function watchBaseCi(): () => void {
 let started = false
 
 /** Once per window. Returns a function that stops listening. */
+/** The fixes a window before this one left unfinished come back stopped, the switches from the defaults (PRD v1.65). */
+function restoreFixRuns(): void {
+  for (const saved of initialWorkspaceFile()?.fixRuns ?? []) {
+    if (read(saved.scope, saved.worktree)) continue
+    const state = restoredAutomation(saved, settings.autoFix)
+    if (!state) continue
+    if (saved.scope === 'base') restoredBase.add(saved.worktree)
+    write(saved.scope, saved.worktree, state)
+  }
+}
+
 export function startPrAutomation(): () => void {
   if (started) return () => {}
   started = true
@@ -517,12 +535,20 @@ export function startPrAutomation(): () => void {
   })
   void window.tr.settings.get().then((initial) => {
     settings = initial.pr
+    restoreFixRuns()
     step()
   })
+  // An unfinished fix outlives the window (saved-runs.ts): saved with the workspace whenever a run changes.
+  addSnapshotPart(() => {
+    const fixRuns = savedFixRuns(usePullRequests.getState().automation, useBaseCi.getState().automation)
+    return fixRuns.length > 0 ? { fixRuns } : {}
+  })
   const offPr = usePullRequests.subscribe((s, prev) => {
+    if (s.automation !== prev.automation) requestSave()
     if (s.byWorktree !== prev.byWorktree || s.automation !== prev.automation) step()
   })
   const offBase = useBaseCi.subscribe((s, prev) => {
+    if (s.automation !== prev.automation) requestSave()
     if (s.byWorktree !== prev.byWorktree || s.automation !== prev.automation) step()
   })
   const offBaseWatch = watchBaseCi()

@@ -77,6 +77,14 @@ export function setSnapshotProvider(provider: () => WorkspaceFile): void {
   snapshot = provider
 }
 
+/** Fields of the workspace file a feature keeps itself (the runs that must outlive the window: saved-runs.ts). */
+const parts: Array<() => Partial<WorkspaceFile>> = []
+
+/** Adds a feature's own fields to every snapshot; the feature calls requestSave when they change. */
+export function addSnapshotPart(part: () => Partial<WorkspaceFile>): void {
+  parts.push(part)
+}
+
 /** Saves asked for within this long go out as one snapshot (a drag asks on every pointer move). */
 export const SAVE_COALESCE_MS = 100
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -85,7 +93,7 @@ function saveNow(): void {
   if (saveTimer !== null) clearTimeout(saveTimer)
   saveTimer = null
   const api = store()
-  if (api && snapshot) api.save(snapshot())
+  if (api && snapshot) api.save(Object.assign(snapshot(), ...parts.map((part) => part())))
 }
 
 /**

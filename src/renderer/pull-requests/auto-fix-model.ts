@@ -3,12 +3,16 @@
 // acts. The agent fixes and commits but never pushes: after its turn Wavi checks the brakes and pushes.
 import { brakeLabel } from '@shared/auto-fix-brakes'
 import type { FixRun, StopDecision } from '@shared/auto-fix-brakes'
+import type { SavedFixRun } from '@shared/saved-runs'
 
 export type { FixRun, FixScope, StopDecision } from '@shared/auto-fix-brakes'
 import { checksLabel, type ChecksSummary, type MergeMethod, type PrStatus, type PrThread, type PullRequestInfo } from '@shared/pull-requests'
 import type { BaseCi } from '@shared/ship'
 
-/** One PR's (number > 0) or one worktree's base push's (number 0) automation in this window. Not saved: a restart starts again from 设置 · 自动化 · PR's defaults. */
+/**
+ * One PR's (number > 0) or one worktree's base push's (number 0) automation in this window. The switches and counts are
+ * not saved (PRD v1.65: a restart starts again from 设置 · 自动化 · PR's defaults); an unfinished fix run is (savedFixRuns).
+ */
 export interface PrAutomation {
   /** The PR these switches belong to; another PR on the branch starts fresh. */
   number: number
@@ -59,6 +63,37 @@ export const freshAutomation = (number: number, autoFix: boolean): PrAutomation 
   mergeNote: null,
   baseBroken: []
 })
+
+/** A fix whose window went away mid-run: stopped, so nothing new is sent until the user decides. */
+export const isInterrupted = (run: FixRun | null): boolean => run?.kind === 'stopped' && run.decision.kind === 'stop' && run.decision.reason === 'interrupted'
+
+/**
+ * The runs to save with the workspace: a fix sent and not yet looked at, and a stopped one waiting for the user. A run
+ * being pushed is not: its commits passed the brakes, and its push may have gone through.
+ */
+export function savedFixRuns(pr: Readonly<Record<string, PrAutomation>>, base: Readonly<Record<string, PrAutomation>>): SavedFixRun[] {
+  const saved: SavedFixRun[] = []
+  for (const [scope, byWorktree] of [['pr', pr], ['base', base]] as const) {
+    for (const [worktree, state] of Object.entries(byWorktree)) {
+      if (state.run && state.run.kind !== 'pushing') saved.push({ scope, worktree, number: state.number, run: state.run })
+    }
+  }
+  return saved
+}
+
+/**
+ * A saved run in a new window: the switches start from the defaults (PRD v1.65) and a fix that was in flight comes
+ * back stopped as interrupted (its commits were never checked), with 仍然推送 / 丢弃 / 重修 as for any brake.
+ */
+export function restoredAutomation(saved: SavedFixRun, autoFix: boolean): PrAutomation | null {
+  const { run } = saved
+  if (run.kind === 'pushing') return null
+  const stopped: FixRun =
+    run.kind === 'stopped'
+      ? run
+      : { sessionId: run.sessionId, key: run.key, checks: run.checks, baseFailing: run.baseFailing, kind: 'stopped', since: run.since, decision: { kind: 'stop', reason: 'interrupted' } }
+  return { ...freshAutomation(saved.number, autoFix), run: stopped }
+}
 
 /**
  * The user wrote in the session themselves: counting starts again and whatever was in flight is theirs now. The base
