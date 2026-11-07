@@ -268,6 +268,13 @@ describe('rows', () => {
     expect(waitingToolId(items, [])).toBeNull()
     expect(waitingToolId([tool('a')], [permission])).toBeNull()
   })
+
+  it('finds the asking tool past a task list row', () => {
+    const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }
+    const plan = tool('plan:t', { name: 'Plan', arg: '1 项', todos: [{ text: 'a', status: 'in_progress' }] })
+    expect(waitingToolId([tool('b', { name: 'Bash', state: 'running' }), plan], [permission])).toBe('b')
+    expect(waitingToolId([tool('b', { name: 'Bash' }), plan], [permission])).toBeNull()
+  })
 })
 
 describe('task list card (Figma 59J)', () => {

@@ -343,13 +343,14 @@ export const todoStatus = (status: ChatTodo['status']): SessionStatus => (status
 
 /**
  * The tool row a pending permission belongs to: the last tool still running, while one is asked about. A subagent's
- * call is in the list after its Agent row, so a subagent asking marks its own row; the Agent row stays running.
+ * call is in the list after its Agent row, so a subagent asking marks its own row; the Agent row stays running. A task
+ * list row (TodoWrite, Plan) can come after the asking tool and is passed over.
  */
 export function waitingToolId(items: readonly ChatItem[], prompts: readonly GuiPrompt[]): string | null {
   if (!prompts.some((p) => p.kind === 'permission')) return null
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i]!
-    if (item.kind === 'tool') return item.state === 'running' ? item.id : null
+    if (item.kind === 'tool' && !item.todos) return item.state === 'running' ? item.id : null
   }
   return null
 }
