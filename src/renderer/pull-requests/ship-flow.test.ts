@@ -14,6 +14,7 @@ import {
   flowSteps,
   formatCommit,
   glanceFields,
+  interruptedShip,
   mainFailureStep,
   markFailed,
   parseRemembered,
@@ -25,7 +26,8 @@ import {
   submitLabel,
   toGlance,
   toRunning,
-  type FlowInput
+  type FlowInput,
+  type ShipState
 } from './ship-flow'
 
 const input = (patch: Partial<FlowInput> = {}): FlowInput => ({
@@ -225,5 +227,25 @@ describe('helpers', () => {
     expect(agentFree({ ...session, status: 'running' })).toBe(false)
     expect(agentFree({ ...session, status: 'needs_you' })).toBe(false)
     expect(agentFree({ ...session, phase: 'starting' })).toBe(false)
+  })
+})
+
+describe('a Ship block taken up after a reload (architecture review, batch 6)', () => {
+  const running: ShipState = {
+    ...startState({ kind: 'main', agent: 'Claude', base: 'main', branch: 'feat', remote: 'origin', review: false, uncommitted: true }, '合并到 main 并推送'),
+    stage: 'running'
+  }
+
+  it('fails the step that was under way, so 重试 picks it up again', () => {
+    const atMerge = { ...running, steps: running.steps.map((s) => (s.id === 'write' ? { ...s, state: 'done' as const } : s.id === 'merge' ? { ...s, state: 'working' as const } : s)) }
+    const back = interruptedShip(atMerge)
+    expect(back.error).toEqual({ step: 'merge', message: '窗口重新加载时这一步还没有结果，点重试' })
+    expect(back.failedIn).toBe('running')
+    expect(back.steps.find((s) => s.id === 'merge')?.state).toBe('failed')
+  })
+
+  it('leaves a block with nothing under way as it was (the glance, a failure)', () => {
+    const glance: ShipState = { ...running, stage: 'glance', steps: running.steps.map((s) => (s.id === 'write' ? { ...s, state: 'done' as const } : { ...s, state: 'pending' as const })) }
+    expect(interruptedShip(glance)).toBe(glance)
   })
 })

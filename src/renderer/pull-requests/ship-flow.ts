@@ -116,6 +116,15 @@ export function fail(state: ShipState, error: ShipError): ShipState {
   }
 }
 
+/**
+ * A block taken up from the saved workspace after a reload: the step that was under way has no result anyone saw (the
+ * agent may still be writing, main may have merged), so it is failed and 重试 picks it up again. Nothing under way: as it was.
+ */
+export function interruptedShip(state: ShipState): ShipState {
+  const working = state.steps.find((s) => s.state === 'working')
+  return working ? fail(state, { step: working.id, message: '窗口重新加载时这一步还没有结果，点重试' }) : state
+}
+
 /** The user declined a confirmation in main: back to the glance, nothing failed. */
 export function backToGlance(state: ShipState): ShipState {
   const steps = state.steps.map((s): FlowStep => (s.state === 'done' ? s : { ...s, state: 'pending', note: undefined }))

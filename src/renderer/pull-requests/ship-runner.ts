@@ -10,10 +10,12 @@ import type { AppSettings } from '@shared/settings'
 import { handoffPrompt, parseCommitHandoff, parsePrHandoff, type HandoffContext, type HandoffKind } from '@shared/ship-handoff'
 import { writerFor } from '@shared/ship-writer'
 import type { ReviewAgent } from '@shared/background-review'
+import type { SavedShipRun } from '@shared/saved-runs'
 import type { Session, SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { cancelBackgroundReview, startBackgroundReview, useBackgroundReview } from '../review/background'
 import { insertIntoTerminal, submitPrompt } from '../session-io'
+import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
 import {
@@ -26,6 +28,7 @@ import {
   createFailureStep,
   fail,
   formatCommit,
+  interruptedShip,
   mainFailureStep,
   markFailed,
   parseRemembered,
@@ -137,6 +140,45 @@ function remember(root: string, kind: ShipKind): void {
     localStorage.setItem(rememberedKey(root), rememberedKindOf(kind))
   } catch {
     // Not remembered; the preflight's suggestion stands.
+  }
+}
+
+// --- across a reload (saved-runs.ts) -------------------------------------------------------------------------------
+
+/** Every open block with what its run knows, for the workspace file (the settings are read again on the way back). */
+export function savedShipRuns(): SavedShipRun[] {
+  const saved: SavedShipRun[] = []
+  for (const [worktree, run] of runs) {
+    const state = current(worktree)
+    if (!state) continue
+    const { settings: _settings, ...ctx } = run.ctx
+    saved.push({ kind: run.kind, ctx, committed: run.committed, ...(run.merged ? { merged: run.merged } : {}), state })
+  }
+  return saved
+}
+
+/** Blocks an earlier window left open come back; the step that was under way is failed for 重试 (interruptedShip). */
+export function restoreShipRuns(saved: readonly SavedShipRun[], settings: ShipContext['settings']): void {
+  for (const item of saved) {
+    if (runs.has(item.ctx.worktree)) continue
+    runs.set(item.ctx.worktree, { ctx: { ...item.ctx, settings }, kind: item.kind, token: ++counter, committed: item.committed, ...(item.merged ? { merged: item.merged } : {}) })
+    useShips.setState((s) => ({ byWorktree: { ...s.byWorktree, [item.ctx.worktree]: interruptedShip(item.state) } }))
+  }
+}
+
+/** Once per window (AppShell): open blocks are saved with the workspace and taken up again after a reload. */
+export function startShipRuns(): () => void {
+  const offSnapshot = addSnapshotPart(() => {
+    const shipRuns = savedShipRuns()
+    return shipRuns.length > 0 ? { shipRuns } : {}
+  })
+  const offSaves = useShips.subscribe((s, prev) => {
+    if (s.byWorktree !== prev.byWorktree) requestSave()
+  })
+  void window.tr.settings.get().then((all) => restoreShipRuns(initialWorkspaceFile()?.shipRuns ?? [], { review: all.review, pr: all.pr }))
+  return () => {
+    offSnapshot()
+    offSaves()
   }
 }
 
