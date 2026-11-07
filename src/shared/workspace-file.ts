@@ -9,6 +9,7 @@ import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
 import type { AgentKind, Project, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
 import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
+import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedDispatch, type SavedFixRun, type SavedShipRun } from './saved-runs'
 
 export const WORKSPACE_FILE_VERSION = 2
 
@@ -138,6 +139,12 @@ export interface WorkspaceFile {
   windows?: PersistedWindow[]
   /** 一题多解 groups (PRD v1.59): sessions launched together with one prompt. Absent when there are none. */
   attemptGroups?: AttemptGroup[]
+  /** 自动修复 fixes that had not finished (saved-runs.ts); only worktrees that exist. Absent when none. */
+  fixRuns?: SavedFixRun[]
+  /** Open Ship blocks of Git · 变更 (saved-runs.ts); only worktrees that exist. Absent when none. */
+  shipRuns?: SavedShipRun[]
+  /** Dispatch's waiting 开始 and reports on their way (saved-runs.ts); only sessions that exist. Absent when none. */
+  dispatch?: SavedDispatch
 }
 
 export const MAX_RECENT_PROJECTS = 8
@@ -290,6 +297,10 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     : []
   const reviewComments = sanitizeReviewComments(value.reviewComments, new Set(worktrees.map((w) => w.path)))
   const attemptGroups = sanitizeAttemptGroups(value.attemptGroups, sessionIds)
+  const worktreePaths = new Set(worktrees.map((w) => w.path))
+  const fixRuns = sanitizeFixRuns(value.fixRuns, worktreePaths)
+  const shipRuns = sanitizeShipRuns(value.shipRuns, worktreePaths)
+  const dispatch = sanitizeSavedDispatch(value.dispatch, sessionIds)
 
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
   const lastRightPanel = sanitizeRightPanel(value.lastRightPanel)
@@ -340,7 +351,10 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
     ...(split ? { split } : {}),
     ...(windows.length > 0 ? { windows } : {}),
-    ...(attemptGroups.length > 0 ? { attemptGroups } : {})
+    ...(attemptGroups.length > 0 ? { attemptGroups } : {}),
+    ...(fixRuns.length > 0 ? { fixRuns } : {}),
+    ...(shipRuns.length > 0 ? { shipRuns } : {}),
+    ...(dispatch ? { dispatch } : {})
   }
 }
 

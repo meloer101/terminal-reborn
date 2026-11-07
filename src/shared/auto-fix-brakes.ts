@@ -24,7 +24,8 @@ export type BrakeDecision =
   | { kind: 'push' }
   | {
       kind: 'stop'
-      reason: 'weakened' | 'repeated' | 'limit' | 'no-progress'
+      /** interrupted: the window reloaded while this fix was under way (its commits were never checked). */
+      reason: 'weakened' | 'repeated' | 'limit' | 'no-progress' | 'interrupted'
       markers?: RiskMarker[]
       /** reason 'limit': how many fixes were already pushed. */
       attempts?: number
@@ -110,6 +111,8 @@ export function brakeLabel(decision: Exclude<BrakeDecision, { kind: 'push' }>, a
     }
     case 'no-progress':
       return `${head}这一轮没有新的提交`
+    case 'interrupted':
+      return `${head}窗口重新加载时这次修复还没走完`
   }
 }
 
