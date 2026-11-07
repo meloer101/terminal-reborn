@@ -220,7 +220,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 批次 5 · 边界检查落地：`npm run check` 跑 `lint:deps`（dependency-cruiser，`.dependency-cruiser.cjs`：shared 只依赖自己、不用 node 内置模块，renderer 只经 `window.tr`、不用 node 和 Electron，main 没有界面代码，pty-host / 守护进程独立——守护进程共用 main 里两个只依赖 node 的模块，没有运行时循环依赖），原有的 11 个运行时环都拆掉了（终端的链接、右键菜单、Run 改由 `terminal/handlers.ts` 交给终端）；样式里间距、圆角的字面 px 和十六进制颜色用 `src/renderer/styles/token-usage.test.ts` 按文件计数，只许减少（当前 24 个文件 91 处），新文件不许有
 - [x] 批次 6 · 进行中的事跨重载（PRD v1.137；原计划「迁到 main」放弃：会话状态和往终端打字都只在 renderer，迁过去要先搬状态机和发送协议）：没走完的自动修复、Ship 出口块、派活的确认条和汇报随 workspace 文件保存（`src/shared/saved-runs.ts`，renderer 用 `addSnapshotPart` 交出自己的那份），重载后接上；自动修复的开关和次数仍按 v1.65 重置。e2e：`dispatch.spec.ts`、`merge-chain.spec.ts` 在等「开始」和出口块打开时重新加载
 - [ ] 批次 7 · 每个 agent 一致：新建会话菜单列出全部 agent、自动修复按 hooks 判断、`AgentSpec` 描述就绪和状态规则
-- [ ] 批次 8 · git / 子进程调用收敛到一处（env、超时、进程组清理、限流）
+- [x] 批次 8 · git / 子进程调用收敛到 `src/main/git/run.ts`：起进程、喂 stdin、限时、限输出、退出码和 git 的基础环境（从不弹凭据提示、补 Finder 缺的 PATH）、fetch / push 的 ssh 环境、进程组清理都只有一份；12 个模块各自的超时、输出上限、环境（不拿可选锁、字面路径、不开编辑器）和报错措辞作为参数保留；PR 功能文件不再兼做 ship、AI 写的基础设施。限流仍各管各的（冲突雷达、Worktree 列表）
 
 ## 进行中：F23 GUI 会话（2026-11-05 定）
 
