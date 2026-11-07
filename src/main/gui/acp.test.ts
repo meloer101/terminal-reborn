@@ -70,6 +70,20 @@ describe('createAcpNormalizer', () => {
     expect(s.items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
   })
 
+  it('joins the chunks of one replayed message into one bubble (session/load)', () => {
+    const n = createAcpNormalizer('/repo', () => 0)
+    let s = fold(n.update(chunk('user_message_chunk', 'Fix the ')))
+    s = fold(n.update(chunk('user_message_chunk', 'login bug')), s)
+    s = fold(n.update(chunk('agent_message_chunk', 'Done.')), s)
+    s = fold(n.update(chunk('user_message_chunk', 'Thanks')), s)
+    s = fold(n.promptDone('end_turn'), s)
+    expect(s.items.map((i) => (i.kind === 'user' || i.kind === 'text' ? [i.kind, i.text] : [i.kind]))).toEqual([
+      ['user', 'Fix the login bug'],
+      ['text', 'Done.'],
+      ['user', 'Thanks']
+    ])
+  })
+
   it('shows why a prompt failed', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     const s = fold(n.promptDone(undefined, 'Internal error: quota exceeded'))

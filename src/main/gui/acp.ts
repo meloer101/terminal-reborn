@@ -166,6 +166,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
   let live: { kind: 'text' | 'thinking'; text: string } | null = null
   // The plan row of this turn: updates rewrite it; a message from the user starts the next one.
   let planId: string | null = null
+  // The replayed user message still being received: its chunks arrive back to back.
+  let replayed: { key: string; item: Extract<ChatItem, { kind: 'user' }> } | null = null
 
   const put = (key: string, item: ChatItem): GuiEvent => {
     let index = indexOf.get(key)
@@ -215,6 +217,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
 
   return {
     update(update) {
+      if (update.sessionUpdate !== 'user_message_chunk') replayed = null
       switch (update.sessionUpdate) {
         case 'agent_message_chunk':
         case 'agent_thought_chunk': {
@@ -224,10 +227,18 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
           live = { kind, text: (live?.text ?? '') + piece }
           return [...events, { type: 'live', live: { ...live } }]
         }
-        case 'user_message_chunk':
+        case 'user_message_chunk': {
           // Replayed history (session/load); a live session shows the user's message from `sent`.
           planId = null
-          return [...flush(), put(`u${seq}`, { kind: 'user', id: `u${seq++}`, at: now(), text: clip(textOfBlock(update.content), CHAT_LIMITS.text), images: 0 })]
+          const piece = textOfBlock(update.content)
+          if (replayed) {
+            replayed = { ...replayed, item: { ...replayed.item, text: clip(replayed.item.text + piece, CHAT_LIMITS.text) } }
+            return [put(replayed.key, replayed.item)]
+          }
+          const key = `u${seq}`
+          replayed = { key, item: { kind: 'user', id: `u${seq++}`, at: now(), text: clip(piece, CHAT_LIMITS.text), images: 0 } }
+          return [...flush(), put(key, replayed.item)]
+        }
         case 'tool_call':
         case 'tool_call_update':
           return tool(update)
@@ -244,6 +255,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
       }
     },
     promptDone(stopReason, failure) {
+      replayed = null
       const events = flush()
       if (stopReason === 'cancelled') events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: '已中断' }))
       else if (failure) events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: clip(failure, 300) }))
@@ -254,6 +266,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
     },
     sent(id, text, images) {
       planId = null
+      replayed = null
       return [...flush(), put(id, { kind: 'user', id, at: now(), text: clip(text, CHAT_LIMITS.text), images }), { type: 'busy', busy: true }]
     },
     request(id, params) {
