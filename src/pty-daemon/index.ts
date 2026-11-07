@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import { TerminalSnapshotFiles } from '../main/terminal-snapshot-file'
 import { guarded } from '../pty-host/guard'
 import type { HostEvent, HostRequest } from '../pty-host/protocol'
-import { ensureSpawnHelperExecutable, SessionHost } from '../pty-host/session-host'
+import { ensureSpawnHelperExecutable, SessionHost, spawnHelperPath } from '../pty-host/session-host'
 import { DiskSnapshots } from './disk-snapshots'
 import { DaemonHooks, type RelayReply } from './hooks'
 import { IdleTimer } from './idle'
@@ -58,6 +58,8 @@ function argument(name: string): string {
 const dir = argument('--dir')
 const socketPath = argument('--socket')
 const token = readFileSync(join(dir, TOKEN_FILE), 'utf8').trim()
+/** Located now, while the app the daemon runs from is surely there; reported in `welcome`. */
+const spawnHelper = spawnHelperPath()
 const buildId = (() => {
   try {
     return createHash('sha1').update(readFileSync(__filename)).digest('hex').slice(0, 12)
@@ -201,7 +203,8 @@ function onConnection(socket: Socket): void {
             buildId,
             sessions: host.list(),
             hooks: hooks.running ? { socketPath: hooks.socketPath, token: hooks.token, permissionRelayMs: PERMISSION_RELAY_TIMEOUT_MS } : null,
-            pipes: true
+            pipes: true,
+            spawnHelper
           })
         )
         return
