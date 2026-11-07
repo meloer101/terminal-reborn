@@ -16,6 +16,8 @@ struct Composer: View {
   @State private var shooting = false
   @State private var sending = false
   @State private var error: String?
+  /// The + and the round button; one line of text is as tall, so the three share a centre line (and grow with the text).
+  @ScaledMetric(relativeTo: .body) private var control: CGFloat = 42
 
   private struct Picked: Identifiable {
     let id = UUID()
@@ -54,7 +56,8 @@ struct Composer: View {
         .foregroundStyle(Color.textPrimary)
         .padding(.leading, 4)
         .padding(.trailing, 8)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: control)
         .disabled(!model.isOpen)
       round
     }
@@ -67,7 +70,7 @@ struct Composer: View {
       Button { shooting = true } label: { Label { Text("拍照") } icon: { Icon("camera", size: 20) } }
       Button { picking = true } label: { Label { Text("照片") } icon: { Icon("image", size: 20) } }
     } label: {
-      Icon("plus", size: 20).foregroundStyle(Color.textPrimary).frame(width: 42, height: 42)
+      Icon("plus", size: 20).foregroundStyle(Color.textPrimary).frame(width: control, height: control)
     }
     .disabled(photos.count >= limits.photos || !model.isOpen)
     .opacity(model.isOpen ? 1 : 0.4)
@@ -85,7 +88,7 @@ struct Composer: View {
         if sends { Icon("arrow-up", size: 20) } else { RoundedRectangle(cornerRadius: 2.5).frame(width: 12, height: 12) }
       }
       .foregroundStyle(Color.solidOn)
-      .frame(width: 42, height: 42)
+      .frame(width: control, height: control)
       .background(Color.solidFill, in: Circle())
     }
     .buttonStyle(.plain)
