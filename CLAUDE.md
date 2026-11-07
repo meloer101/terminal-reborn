@@ -53,6 +53,7 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 - TypeScript strict; no `any`. Pure logic goes in `src/shared/` or a feature's `*.ts` file with a colocated `*.test.ts` (Vitest).
 - Styling: CSS Modules (`*.module.css`). Colors, spacing, radii and type **only** via variables in `src/renderer/styles/tokens.css`. Verify both themes (`<html data-theme="dark|light">`).
 - Design taste: quiet and systematic — chroma-0 neutrals, color only for status, hierarchy from type/alignment/hairlines, small radii, no cards/gradients/decorative captions. Status is never color-only (StatusGlyph shape + text).
+- Figma hand-off: screenshot and look at every changed screen before reporting, not a sample; a component edit counts as changing every screen that uses it. Render with `get_screenshot` in a separate call (CJK in text set during the same `use_figma` call can render blank).
 - Icons: `lucide-react`, `size={16} strokeWidth={1.75}`.
 - CJK: always keep a CJK family in font stacks; CJK occupies 2 terminal cells.
 - UI copy in Chinese; code, comments, commit messages in English. Conventional Commits (`feat(composer): …`).
