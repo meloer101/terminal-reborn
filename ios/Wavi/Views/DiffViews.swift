@@ -1,5 +1,6 @@
-// Diffs as Figma 45 draws them: the full numbered view of 45D (old / new gutters, sign, code; hunk rows), the few-line
-// MiniDiff under an Edit row in the conversation (45C), the tool detail (45D) and one file of Git · 变更.
+// Diffs (Figma 63C7 / 63C8): the full numbered view (old / new gutters, sign, code; hunk rows), the few-line MiniDiff
+// under an Edit row in the conversation (61B), the tool detail (an Edit's diff, or another tool's 输入 and 输出) and one
+// file of Git · 变更.
 import SwiftUI
 
 struct DiffView: View {
@@ -56,7 +57,7 @@ struct MiniDiff: View {
     }
     .font(.mono(.caption))
     .padding(.vertical, 8)
-    .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 8))
+    .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
   }
 }
 
@@ -66,8 +67,8 @@ private struct NavTitle: View {
 
   var body: some View {
     VStack(spacing: 2) {
-      Text(title).font(.ui(.callout, medium: true)).foregroundStyle(Color.textPrimary).lineLimit(1)
-      Text(subtitle).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1)
+      Text(title).font(.ui(.headline)).foregroundStyle(Color.textPrimary).lineLimit(1)
+      Text(subtitle).font(.ui(.footnote)).foregroundStyle(Color.textSecondary).lineLimit(1)
     }
   }
 }
@@ -95,21 +96,23 @@ struct ToolView: View {
         }
       } else if let tool {
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
-            Text(tool.arg ?? "").font(.mono()).lineSpacing(6).foregroundStyle(Color.textPrimary).textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 10))
+          VStack(alignment: .leading, spacing: 8) {
+            Text("输入").font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary)
+            Text(tool.arg ?? "").font(.mono()).lineSpacing(4).foregroundStyle(Color.textPrimary).textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
             if let output = tool.output, !output.isEmpty {
-              Text(output).font(.mono(.caption)).lineSpacing(5).foregroundStyle(tool.state == "error" ? Color.statusError : Color.textPrimary).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 10))
+              Text("输出").font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary).padding(.top, 16)
+              Text(output).font(.mono(.caption)).lineSpacing(4).foregroundStyle(tool.state == "error" ? Color.statusError : Color.textPrimary).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
             }
           }
-          .padding(20)
+          .padding(Metric.margin)
         }
         .toolbar {
           ToolbarItem(placement: .principal) { NavTitle(title: tool.name ?? "工具", subtitle: tool.state == "running" ? "运行中" : tool.state == "error" ? "出错" : "完成") }
         }
       } else {
-        Color.clear
+        EmptyState(title: "这次工具调用不在当前的对话里")
       }
     }
     .background(Color.bgApp)
@@ -134,11 +137,11 @@ struct FileDiffView: View {
     let (name, dir) = splitPath(path)
     Group {
       if let rows {
-        if rows.isEmpty { message("没有可显示的文本改动") } else { DiffView(rows: rows) }
+        if rows.isEmpty { EmptyState(title: "没有可显示的文本改动") } else { DiffView(rows: rows) }
       } else if let error {
-        message(error)
+        EmptyState(title: error)
       } else {
-        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).padding(20)
+        Spinner(color: .textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityLabel("正在读取改动")
       }
     }
     .background(Color.bgApp)
@@ -150,9 +153,5 @@ struct FileDiffView: View {
       let result = await model.call(.diff(session: session, path: path, scope: scope, oldPath: oldPath, untracked: untracked))
       if let data = result.decode(Text_.self) { rows = unifiedRows(data.text ?? "") } else { error = result.error ?? "没有读到改动" }
     }
-  }
-
-  private func message(_ text: String) -> some View {
-    Text(text).font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
   }
 }

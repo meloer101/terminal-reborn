@@ -53,16 +53,17 @@ struct StatusGlyph: View {
 /// Motion (the arc alone still says "in progress").
 struct Spinner: View {
   var color: Color = .statusWorking
-  @State private var turning = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  // The angle comes from the clock, not from a repeating implicit animation: such an animation also catches the view's
+  // moves while a sheet slides in and keeps replaying them, so the arc drifted off its row.
   var body: some View {
-    Path { p in p.addArc(center: CGPoint(x: 7, y: 7), radius: 4.5, startAngle: .degrees(-90), endAngle: .degrees(180), clockwise: false) }
-      .stroke(color, style: StrokeStyle(lineWidth: 1.75, lineCap: .round))
-      .frame(width: 14, height: 14)
-      .rotationEffect(.degrees(turning ? 360 : 0))
-      .animation(reduceMotion ? nil : .linear(duration: 1).repeatForever(autoreverses: false), value: turning)
-      .onAppear { if !reduceMotion { turning = true } }
+    TimelineView(.animation(paused: reduceMotion)) { context in
+      Path { p in p.addArc(center: CGPoint(x: 7, y: 7), radius: 4.5, startAngle: .degrees(-90), endAngle: .degrees(180), clockwise: false) }
+        .stroke(color, style: StrokeStyle(lineWidth: 1.75, lineCap: .round))
+        .rotationEffect(.degrees(reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
+    }
+    .frame(width: 14, height: 14)
   }
 }
 

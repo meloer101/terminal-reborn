@@ -1,6 +1,7 @@
-// The input under a conversation (Figma 45C / 45G, 46′): one glass capsule — photos from the camera or the library (up
-// to six), the text field, and one round button: send when there is something to send, stop (Esc) while the agent
-// runs. Photos are drawn again as JPEG on the phone before they go: that drops their EXIF, location included.
+// The input under a conversation (Figma 59 Mobile/Composer, 63C3 / 63C5 / 63C6): one glass field — + for photos from the
+// camera or the library (up to six), the text, and one round button: send when there is something to send, stop (Esc)
+// while the agent runs; without a link it is off and says why. A failed send comes back into the field under a notice.
+// Photos are drawn again as JPEG on the phone before they go: that drops their EXIF, location included.
 import PhotosUI
 import SwiftUI
 
@@ -23,15 +24,15 @@ struct Composer: View {
   }
 
   private var limits: Shared.Limits { Shared.data.limits }
-  private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !photos.isEmpty) && !sending }
+  private var canSend: Bool { (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !photos.isEmpty) && !sending && model.isOpen }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if let error { Text(error).font(.ui(.footnote)).foregroundStyle(Color.statusError).padding(.leading, 16) }
+      if let error { Notice(tone: .danger, message: error) }
       if !photos.isEmpty { strip }
       capsule
     }
-    .padding(.horizontal, 12)
+    .padding(.horizontal, Metric.margin)
     .padding(.bottom, 4)
     .photosPicker(isPresented: $picking, selection: $picked, maxSelectionCount: max(1, limits.photos - photos.count), matching: .images)
     .onChange(of: picked) { _, items in
@@ -47,18 +48,18 @@ struct Composer: View {
   private var capsule: some View {
     HStack(alignment: .bottom, spacing: 2) {
       attach
-      TextField("回复", text: $text, axis: .vertical)
-        .font(.ui(.callout))
+      TextField(model.isOpen ? "回复" : "连上 Mac 后才能发送", text: $text, axis: .vertical)
+        .font(.ui(.body))
         .lineLimit(1...6)
         .foregroundStyle(Color.textPrimary)
-        .padding(.leading, 8)
-        .padding(.trailing, 16)
+        .padding(.leading, 4)
+        .padding(.trailing, 8)
         .padding(.vertical, 12)
+        .disabled(!model.isOpen)
       round
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 5)
-    .glass(28)
+    .padding(4)
+    .glass(Metric.radiusField)
   }
 
   private var attach: some View {
@@ -66,29 +67,30 @@ struct Composer: View {
       Button { shooting = true } label: { Label { Text("拍照") } icon: { Icon("camera", size: 20) } }
       Button { picking = true } label: { Label { Text("照片") } icon: { Icon("image", size: 20) } }
     } label: {
-      Icon("image", size: 20).foregroundStyle(Color.textSecondary).frame(width: 36, height: 36)
+      Icon("plus", size: 20).foregroundStyle(Color.textPrimary).frame(width: 42, height: 42)
     }
-    .disabled(photos.count >= limits.photos)
-    .padding(.bottom, 5)
+    .disabled(photos.count >= limits.photos || !model.isOpen)
+    .opacity(model.isOpen ? 1 : 0.4)
     .accessibilityLabel("加照片")
   }
 
   /// Send when there is something to send (or the agent is idle), stop while it runs.
   private var round: some View {
-    let sends: Bool = canSend || !running
-    let idle: Bool = !canSend && !running
+    let sends: Bool = canSend || !running || !model.isOpen
+    let idle: Bool = (!canSend && !running) || !model.isOpen
     return Button {
       if sends { send() } else { stop() }
     } label: {
-      Icon(sends ? "arrow-up" : "square", size: 22)
-        .foregroundStyle(Color.solidOn)
-        .frame(width: 40, height: 40)
-        .background(Color.solidFill, in: Circle())
+      Group {
+        if sends { Icon("arrow-up", size: 20) } else { RoundedRectangle(cornerRadius: 2.5).frame(width: 12, height: 12) }
+      }
+      .foregroundStyle(Color.solidOn)
+      .frame(width: 42, height: 42)
+      .background(Color.solidFill, in: Circle())
     }
     .buttonStyle(.plain)
     .opacity(idle ? 0.3 : 1.0)
     .disabled(idle)
-    .padding(.bottom, 3)
     .accessibilityLabel(Text(sends ? "发送" : "停止"))
   }
 
@@ -96,10 +98,10 @@ struct Composer: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 8) {
         ForEach(photos) { p in
-          Image(uiImage: p.image).resizable().scaledToFill().frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 10))
+          Image(uiImage: p.image).resizable().scaledToFill().frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: Metric.radiusControl))
             .overlay(alignment: .topTrailing) {
               Button { photos.removeAll { $0.id == p.id } } label: {
-                Icon("x", size: 12).foregroundStyle(Color.textPrimary).padding(4).background(Color.bgApp, in: Circle())
+                Icon("x", size: 12).foregroundStyle(Color.textPrimary).frame(width: 22, height: 22).background(Color.bgSheet, in: Circle())
               }
               .padding(4)
               .accessibilityLabel("移除照片")
@@ -134,7 +136,7 @@ struct Composer: View {
       }
       photos.append(Picked(image: redrawn, photo: RemotePhoto(name: "photo-\(Int(Date().timeIntervalSince1970 * 1000))-\(photos.count).jpg", data: jpeg.base64EncodedString())))
     }
-    error = tooBig ? "有照片超过 10 MB，没有加上" : nil
+    error = tooBig ? "有一张照片超过 10 MB，没有加上" : nil
   }
 
   private func send() {
@@ -151,7 +153,7 @@ struct Composer: View {
       sending = false
       if let failure = result.error {
         model.failedToSend(session, id: pending)
-        error = failure
+        error = "没有发出去：\(failure)"
         // Back where it was, to send again.
         if text.isEmpty { text = sentText }
         if photos.isEmpty { photos = sentPhotos }

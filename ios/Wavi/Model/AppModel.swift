@@ -21,6 +21,8 @@ final class AppModel {
   private(set) var link: LinkState = .offline
   private(set) var macName = ""
   private(set) var sessions = RemoteSessionList.empty
+  /// When the Mac last told this phone its sessions (ms): how old the list is once the link drops.
+  private(set) var heardAt: Double?
   private(set) var prompts: [RemotePrompt] = []
   /// The session on screen and its conversation.
   private(set) var watching: String?
@@ -91,6 +93,9 @@ final class AppModel {
 
   var isOpen: Bool { if case .open = link { return true } else { return false } }
 
+  /// The notice over the session list while it is not live.
+  var staleNotice: String { Wavi.staleNotice(heardAt: heardAt, now: Date().timeIntervalSince1970 * 1000) }
+
   func session(_ id: String) -> RemoteSession? { sessions.sessions.first { $0.id == id } }
 
   /// Just paired.
@@ -110,6 +115,7 @@ final class AppModel {
     pairing = nil
     link = .offline
     sessions = .empty
+    heardAt = nil
     prompts = []
     watching = nil
     conversation = nil
@@ -226,6 +232,7 @@ final class AppModel {
   func refresh(timeout: Double = Link.requestSeconds) async -> Bool {
     guard let snapshot = await client?.request(.snapshot, timeout: timeout).decode(Snapshot.self) else { return false }
     sessions = RemoteSessionList(projects: snapshot.projects, sessions: snapshot.sessions)
+    heardAt = Date().timeIntervalSince1970 * 1000
     prompts = snapshot.prompts ?? []
     knownPrompts = Set(prompts.map(\.id))
     loaded = true
@@ -262,6 +269,7 @@ final class AppModel {
       }
     case .sessions(let list):
       sessions = list
+      heardAt = Date().timeIntervalSince1970 * 1000
       syncActivity()
     case .prompts(let list):
       prompts = list

@@ -18,6 +18,14 @@ private func session(_ id: String = "s", project: String = "p1", status: Session
     #expect(feed == Feed(start: 50, items: [text(50), text(51), text(52, "changed"), text(53)]))
   }
 
+  @Test func staleNoticeSaysHowOldTheListIs() {
+    let now = 10_000_000.0
+    #expect(staleNotice(heardAt: now - 20_000, now: now) == "显示的是 1 分钟内的状态")
+    #expect(staleNotice(heardAt: now - 12 * 60_000, now: now) == "显示的是 12 分钟前的状态")
+    #expect(staleNotice(heardAt: now - 125 * 60_000, now: now) == "显示的是 2 小时前的状态")
+    #expect(staleNotice(heardAt: nil, now: now) == "显示的不是最新的状态")
+  }
+
   @Test func feedResetsOnResetOrGap() {
     let feed = Feed(start: 0, items: [text(0)])
     #expect(applyFeed(feed, start: 0, items: [], reset: true) == Feed(start: 0, items: []))

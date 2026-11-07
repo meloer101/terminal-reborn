@@ -31,6 +31,8 @@ struct SessionGroup: Identifiable, Sendable {
     let projectName: String?
     var id: String { session.id }
   }
+  /// 等你处理's group (rows of several projects, its count in the attention colour).
+  static let needsYouId = "waiting"
   let id: String
   let title: String
   let rows: [Row]
@@ -42,7 +44,7 @@ func groupSessions(_ list: RemoteSessionList) -> [SessionGroup] {
   let waiting = list.sessions.filter { $0.status == .needsYou }.sorted { ($0.since ?? $0.activity) > ($1.since ?? $1.activity) }
   var groups: [SessionGroup] = []
   if !waiting.isEmpty {
-    groups.append(SessionGroup(id: "waiting", title: "等你处理", rows: waiting.map { .init(session: $0, projectName: names[$0.projectId]) }))
+    groups.append(SessionGroup(id: SessionGroup.needsYouId, title: "等你处理", rows: waiting.map { .init(session: $0, projectName: names[$0.projectId]) }))
   }
   for project in list.projects {
     let rows = list.sessions.filter { $0.projectId == project.id && $0.status != .needsYou }.sorted { $0.activity > $1.activity }
@@ -58,6 +60,15 @@ func shortAge(_ ms: Double) -> String {
   if s < 3600 { return "\(s / 60)m" }
   if s < 86400 { return "\(s / 3600)h" }
   return "\(s / 86400)d"
+}
+
+/// The notice over a list that is not live (Figma 62B): how old what it shows is. Nothing heard yet: no age to give.
+func staleNotice(heardAt: Double?, now: Double) -> String {
+  guard let heardAt else { return "显示的不是最新的状态" }
+  let minutes = Int(max(0, now - heardAt) / 60000)
+  if minutes < 1 { return "显示的是 1 分钟内的状态" }
+  if minutes < 60 { return "显示的是 \(minutes) 分钟前的状态" }
+  return "显示的是 \(minutes / 60) 小时前的状态"
 }
 
 /// The right-hand time of a session row: how long it has waited, or how long since it last did something.
