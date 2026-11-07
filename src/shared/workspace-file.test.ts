@@ -17,6 +17,21 @@ const valid = {
 }
 
 describe('sanitizeWorkspaceFile', () => {
+  it('keeps the unfinished runs of worktrees and sessions that exist, and reads a file without them', () => {
+    const run = { kind: 'fixing', sessionId: 's1', key: 'k', checks: [], baseFailing: null, since: 'abc1234', sentAt: 1 }
+    const fixRuns = [
+      { scope: 'pr', worktree: '/code/acme', number: 3, run },
+      { scope: 'pr', worktree: '/code/gone', number: 3, run }
+    ]
+    const dispatch = { confirms: [], queues: {}, held: { s1: [{ kind: 'message', key: 'k', title: 't', text: 'x' }], gone: [{ kind: 'message', key: 'k', title: 't', text: 'x' }] } }
+    const file = sanitizeWorkspaceFile({ ...structuredClone(valid), fixRuns, dispatch, shipRuns: 'junk' }, 0)!
+    expect(file.fixRuns?.map((r) => r.worktree)).toEqual(['/code/acme'])
+    expect(file.dispatch).toEqual({ confirms: [], queues: {}, held: { s1: dispatch.held.s1 } })
+    expect(file).not.toHaveProperty('shipRuns')
+    const plain = sanitizeWorkspaceFile(structuredClone(valid), 0)!
+    for (const key of ['fixRuns', 'shipRuns', 'dispatch']) expect(plain).not.toHaveProperty(key)
+  })
+
   it('round-trips a valid file', () => {
     expect(sanitizeWorkspaceFile(structuredClone(valid), 999)).toEqual(valid)
   })

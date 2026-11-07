@@ -205,6 +205,17 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
   )
 }
 
+/** Requests taken up from a saved workspace get their time to be answered again (the old timers went with the window). */
+export function resumeConfirmTimers(): void {
+  for (const { callId } of useDispatch.getState().confirms) {
+    if (timers.has(callId)) continue
+    timers.set(
+      callId,
+      window.setTimeout(() => decide([callId], 'timeout'), DISPATCH_LIMITS.confirmMs)
+    )
+  }
+}
+
 /** The user answered the strip under a dispatcher's terminal (开始 / 拒绝 / ⌘↵): every request it shows. */
 export function decideConfirms(parentId: SessionId, go: boolean): void {
   decide(

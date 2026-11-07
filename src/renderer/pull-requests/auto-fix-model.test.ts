@@ -21,8 +21,12 @@ import {
   stopActions,
   stopLineText,
   stopParts,
+  isInterrupted,
+  restoredAutomation,
+  savedFixRuns,
   takenOver,
-  type FixRun
+  type FixRun,
+  type PrAutomation
 } from './auto-fix-model'
 
 const thread = (id: string, login: string, outdated = false): PrThread => ({
@@ -278,5 +282,35 @@ describe('通过后合并 and the PR rows (Figma 29I)', () => {
     expect(automationText({ ...on, stopped: '自动修复已停：x' }, { pr: pr() }, { idle: true })).toEqual({ text: '自动修复已停：x', tone: 'attention' })
     expect(automationText({ ...on, run: stoppedRun() }, { pr: pr() }, { idle: true })).toEqual({ text: '', tone: 'muted' })
     expect(automationText({ ...on, stopped: '基线上本来就失败：check', baseBroken: ['check'] }, { pr: pr() }, { idle: true })).toEqual({ text: '', tone: 'muted' })
+  })
+})
+
+describe('a fix the window had not finished (architecture review, batch 6)', () => {
+  const base = { sessionId: 's1', key: 'k', checks: ['test'], baseFailing: null }
+  const fixing: FixRun = { ...base, kind: 'fixing', since: 'abc1234', sentAt: 1 }
+  const stopped: FixRun = { ...base, kind: 'stopped', since: 'abc1234', decision: { kind: 'stop', reason: 'repeated' } }
+  const pushing: FixRun = { ...base, kind: 'pushing', since: 'abc1234' }
+  const withRun = (number: number, run: FixRun | null): PrAutomation => ({ ...freshAutomation(number, true), attempts: 2, run })
+
+  it('saves the runs of both scopes that are unfinished, not the ones being pushed', () => {
+    const pr = { '/wt-a': withRun(7, fixing), '/wt-b': withRun(8, null), '/wt-c': withRun(9, pushing) }
+    const baseScope = { '/wt-a': withRun(0, stopped) }
+    expect(savedFixRuns(pr, baseScope)).toEqual([
+      { scope: 'pr', worktree: '/wt-a', number: 7, run: fixing },
+      { scope: 'base', worktree: '/wt-a', number: 0, run: stopped }
+    ])
+  })
+
+  it('comes back stopped: a fix in flight as interrupted, its commits not pushed unchecked; the switches as set', () => {
+    const back = restoredAutomation({ scope: 'pr', worktree: '/wt-a', number: 7, run: fixing }, false)
+    expect(back).toMatchObject({ number: 7, autoFix: false, attempts: 0, run: { ...base, kind: 'stopped', since: 'abc1234', decision: { kind: 'stop', reason: 'interrupted' } } })
+    expect(restoredAutomation({ scope: 'pr', worktree: '/wt-a', number: 7, run: stopped }, true)?.run).toEqual(stopped)
+    expect(restoredAutomation({ scope: 'pr', worktree: '/wt-a', number: 7, run: pushing }, true)).toBeNull()
+  })
+
+  it('sends nothing new while it waits for the user', () => {
+    const back = restoredAutomation({ scope: 'pr', worktree: '/wt-a', number: 7, run: fixing }, true)!
+    expect(isInterrupted(back.run)).toBe(true)
+    expect(isInterrupted(stopped)).toBe(false)
   })
 })

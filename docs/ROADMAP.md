@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-06
+> 最后更新：2026-11-07
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -218,7 +218,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 批次 3 · Ship：推送失败后重试只推送 base（`ship.pushBase`，`src/main/ship.ts`）；`committed` / `pushRefused` 由 main 返回，网络失败不再提示「改为创建 PR」、提交前被拒时重试照样提交勾选的文件（`src/renderer/pull-requests/ship-runner.ts`，新增 `ship-runner.test.ts`）
 - [x] 批次 4 · IPC 边界：文件视图和仓库脚本的 IPC 只接受工作区里的目录（`isWorkspaceDir`，`src/main/worktree-files.ts`、`repo-scripts.ts`）；「用默认编辑器打开」不再运行脚本和应用包：可执行脚本用默认文本编辑器打开，应用包和二进制文件在 Finder 中显示；新项目、新 worktree 立即保存给 main；hook token 的同用户信任模型写进 CLAUDE.md
 - [x] 批次 5 · 边界检查落地：`npm run check` 跑 `lint:deps`（dependency-cruiser，`.dependency-cruiser.cjs`：shared 只依赖自己、不用 node 内置模块，renderer 只经 `window.tr`、不用 node 和 Electron，main 没有界面代码，pty-host / 守护进程独立——守护进程共用 main 里两个只依赖 node 的模块，没有运行时循环依赖），原有的 11 个运行时环都拆掉了（终端的链接、右键菜单、Run 改由 `terminal/handlers.ts` 交给终端）；样式里间距、圆角的字面 px 和十六进制颜色用 `src/renderer/styles/token-usage.test.ts` 按文件计数，只许减少（当前 24 个文件 91 处），新文件不许有
-- [ ] 批次 6 · 长流程迁到 main：自动修复、Ship、派活的运行状态由 main 持有并保存，重载后接上
+- [x] 批次 6 · 进行中的事跨重载（PRD v1.137；原计划「迁到 main」放弃：会话状态和往终端打字都只在 renderer，迁过去要先搬状态机和发送协议）：没走完的自动修复、Ship 出口块、派活的确认条和汇报随 workspace 文件保存（`src/shared/saved-runs.ts`，renderer 用 `addSnapshotPart` 交出自己的那份），重载后接上；自动修复的开关和次数仍按 v1.65 重置。e2e：`dispatch.spec.ts`、`merge-chain.spec.ts` 在等「开始」和出口块打开时重新加载
 - [ ] 批次 7 · 每个 agent 一致：新建会话菜单列出全部 agent、自动修复按 hooks 判断、`AgentSpec` 描述就绪和状态规则
 - [ ] 批次 8 · git / 子进程调用收敛到一处（env、超时、进程组清理、限流）
 

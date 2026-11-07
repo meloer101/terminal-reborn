@@ -48,6 +48,17 @@ describe('requestSave', () => {
     expect(save).toHaveBeenCalledTimes(1)
   })
 
+  it('adds what features keep of their own (unfinished runs) to every snapshot', async () => {
+    const { addSnapshotPart, requestSave } = await load()
+    let runs: unknown[] = [{ id: 1 }]
+    addSnapshotPart(() => (runs.length > 0 ? { fixRuns: runs as never } : {}))
+    requestSave(true)
+    expect(save).toHaveBeenLastCalledWith({ n: 1, fixRuns: [{ id: 1 }] })
+    runs = []
+    requestSave(true)
+    expect(save).toHaveBeenLastCalledWith({ n: 2 })
+  })
+
   it('sends what is still waiting when the window goes away', async () => {
     const { requestSave } = await load()
     requestSave()

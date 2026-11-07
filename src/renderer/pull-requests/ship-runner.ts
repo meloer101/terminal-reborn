@@ -10,10 +10,13 @@ import type { AppSettings } from '@shared/settings'
 import { handoffPrompt, parseCommitHandoff, parsePrHandoff, type HandoffContext, type HandoffKind } from '@shared/ship-handoff'
 import { writerFor } from '@shared/ship-writer'
 import type { ReviewAgent } from '@shared/background-review'
+import type { SavedShipContext, SavedShipRun } from '@shared/saved-runs'
+import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { Session, SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { cancelBackgroundReview, startBackgroundReview, useBackgroundReview } from '../review/background'
 import { insertIntoTerminal, submitPrompt } from '../session-io'
+import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
 import {
@@ -26,6 +29,7 @@ import {
   createFailureStep,
   fail,
   formatCommit,
+  interruptedShip,
   mainFailureStep,
   markFailed,
   parseRemembered,
@@ -45,25 +49,8 @@ import {
 } from './ship-flow'
 import { setPrNotice } from './store'
 
-/** Everything a run needs that does not change while it runs. */
-export interface ShipContext {
-  /** The project's root (main only accepts workspace project roots). */
-  root: string
-  worktree: string
-  /** The worktree's agent session, if any. */
-  sessionId: SessionId | null
-  base: string
-  branch: string
-  remote: string | null
-  /** Uncommitted paths to commit (null: nothing). */
-  paths: string[] | null
-  openPr: { number: number; url: string } | null
-  /** `这一轮的检查：测试 ✓ · …` for the PR evidence, if the session ran any. */
-  checksLine: string | null
-  settings: Pick<AppSettings, 'review' | 'pr'>
-  /** The session whose built-in browser opens the PR. */
-  openIn: SessionId | null
-}
+/** Everything a run needs that does not change while it runs: what is saved with it, and the settings. */
+export type ShipContext = SavedShipContext & { settings: Pick<AppSettings, 'review' | 'pr'> }
 
 export const useShips = create<{ byWorktree: Record<string, ShipState> }>()(() => ({ byWorktree: {} }))
 
@@ -75,6 +62,8 @@ interface Run {
   committed: boolean
   /** The merge commit a shipToMain kept although its push failed: the retry pushes it (if the base still has it). */
   merged?: string
+  /** Taken up after a reload: main may have committed or merged meanwhile, so the first retry asks before it acts. */
+  resumed?: boolean
 }
 
 const runs = new Map<string, Run>()
@@ -137,6 +126,56 @@ function remember(root: string, kind: ShipKind): void {
     localStorage.setItem(rememberedKey(root), rememberedKindOf(kind))
   } catch {
     // Not remembered; the preflight's suggestion stands.
+  }
+}
+
+// --- across a reload (saved-runs.ts) -------------------------------------------------------------------------------
+
+/** Every open block with what its run knows, for the workspace file (the settings are read again on the way back). */
+export function savedShipRuns(): SavedShipRun[] {
+  const saved: SavedShipRun[] = []
+  for (const [worktree, run] of runs) {
+    const state = current(worktree)
+    if (!state) continue
+    const { settings: _settings, ...ctx } = run.ctx
+    saved.push({ kind: run.kind, ctx, committed: run.committed, ...(run.merged ? { merged: run.merged } : {}), state })
+  }
+  return saved
+}
+
+/** Blocks an earlier window left open come back; the step that was under way is failed for 重试 (interruptedShip). */
+export function restoreShipRuns(saved: readonly SavedShipRun[], settings: ShipContext['settings']): void {
+  for (const item of saved) {
+    if (runs.has(item.ctx.worktree)) continue
+    const run: Run = { ctx: { ...item.ctx, settings }, kind: item.kind, token: ++counter, committed: item.committed, resumed: true }
+    if (item.merged) run.merged = item.merged
+    runs.set(item.ctx.worktree, run)
+    useShips.setState((s) => ({ byWorktree: { ...s.byWorktree, [item.ctx.worktree]: interruptedShip(item.state) } }))
+  }
+}
+
+/** Once per window (AppShell): open blocks are saved with the workspace and taken up again after a reload. */
+let restoredOnce = false
+
+export function startShipRuns(): () => void {
+  // Before the first save can go out without them; the settings follow when they arrive.
+  if (!restoredOnce) {
+    restoredOnce = true
+    restoreShipRuns(initialWorkspaceFile()?.shipRuns ?? [], { review: DEFAULT_SETTINGS.review, pr: DEFAULT_SETTINGS.pr })
+  }
+  const offSnapshot = addSnapshotPart(() => {
+    const shipRuns = savedShipRuns()
+    return shipRuns.length > 0 ? { shipRuns } : {}
+  })
+  const offSaves = useShips.subscribe((s, prev) => {
+    if (s.byWorktree !== prev.byWorktree) requestSave()
+  })
+  void window.tr.settings.get().then((all) => {
+    for (const run of runs.values()) if (run.resumed) run.ctx = { ...run.ctx, settings: { review: all.review, pr: all.pr } }
+  })
+  return () => {
+    offSnapshot()
+    offSaves()
   }
 }
 
@@ -533,6 +572,17 @@ const stepDone = (state: ShipState, id: string): boolean => state.steps.some((s)
 /** Exit A: commit what is uncommitted, squash into the base, push it — main does all three in one call. */
 async function runMain(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
+  // Taken up after a reload: main may have finished what the old window started (shipToMain goes on without it).
+  if (run.resumed && !stepDone(state, 'merge')) {
+    run.resumed = false
+    const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
+    if (!alive(worktree, token)) return
+    if (now?.ok && now.uncommitted === 0 && ctx.paths) run.committed = true
+    if (now?.ok && now.merged) {
+      patch(worktree, token, (s) => complete(s, 'merge'))
+      state = current(worktree) ?? state
+    }
+  }
   // After a failed push the merge stands on the local base: only the push is left.
   const mergeDone = stepDone(state, 'merge')
   const result = mergeDone
