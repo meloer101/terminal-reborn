@@ -1,7 +1,8 @@
 // The `--term-*` design tokens of tokens.css (all but --term-bg), per tone. The terminal on a custom background
 // (PRD F7 v1.71) takes its foreground and ANSI colors from the tone that matches the background's lightness, not
-// from the app theme — a light background under the dark theme still gets dark text. `terminal-tokens.test.ts`
-// fails when these drift from tokens.css.
+// from the app theme — a light background under the dark theme still gets dark text; nor from 实色 (PRD v1.139), whose
+// softer --term-fg applies only to the theme's own background. `terminal-tokens.test.ts` fails when these drift from
+// the base blocks of tokens.css.
 export type TerminalTone = 'dark' | 'light'
 
 export const TERMINAL_TOKENS: Record<TerminalTone, Record<string, string>> = {

@@ -61,7 +61,7 @@ describe('toAppearanceDom', () => {
   })
 
   it('names the full-screen palette on <html> (auto picks by theme in CSS)', () => {
-    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off' })
+    expect(toAppearanceDom(base, false).attrs).toEqual({ 'data-fs-backdrop': 'auto', 'data-chat-avatar': 'off', 'data-material': 'frosted' })
     expect(toAppearanceDom({ ...base, fullscreenBackdrop: 'dune' }, false).attrs['data-fs-backdrop']).toBe('dune')
   })
 })
@@ -93,6 +93,16 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     expect(shownMaterial(a, false)).toBe('frosted')
     expect(toAppearanceDom(a, false).vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 60%, transparent)')
     expect(toAppearanceDom({ ...a, windowMaterial: 'frosted', shellOpacity: { liquid: 0, frosted: 1 } }, true).vars['--glass-shell']).toBe('var(--glass-shell-color)')
+  })
+
+  it('实色 (PRD v1.139, Figma 57): an opaque shell on every macOS, named on <html> for the softened tokens', () => {
+    const a = { ...base, windowMaterial: 'solid' as const, shellOpacity: { liquid: 0, frosted: 0.6 } }
+    expect(shownMaterial(a, true)).toBe('solid')
+    expect(shownMaterial(a, false)).toBe('solid')
+    const dom = toAppearanceDom(a, false)
+    expect(dom.vars['--glass-shell']).toBe('var(--glass-shell-color)')
+    expect(dom.attrs['data-material']).toBe('solid')
+    expect(toAppearanceDom({ ...a, windowMaterial: 'liquid' }, false).attrs['data-material']).toBe('frosted')
   })
 
   it('shows the user’s picture only when there is one', () => {

@@ -9,7 +9,6 @@ import {
   CHAT_SIZE_OPTIONS,
   CHAT_WEIGHT_OPTIONS,
   CHAT_WIDTH_OPTIONS,
-  MATERIAL_OPTIONS,
   SYSTEM_UI_FONT,
   THEME_OPTIONS,
   chatPreviewCaption,
@@ -17,6 +16,7 @@ import {
   fontSizeOptions,
   formatLineHeight,
   formatPercent,
+  materialOptions,
   previewCaption,
   sameAppearanceValue
 } from './appearance-form'
@@ -260,22 +260,23 @@ export function AppearancePane({
         </Section>
 
         <Section title="窗口">
-          {window.tr.liquidGlass && (
-            <Row label="材质" id="windowMaterial">
-              <Segmented label="材质" value={appearance.windowMaterial} options={MATERIAL_OPTIONS} onChange={(windowMaterial) => update({ windowMaterial })} />
+          <Row label="材质" id="windowMaterial">
+            <Segmented label="材质" value={material} options={materialOptions(window.tr.liquidGlass)} onChange={(windowMaterial) => update({ windowMaterial })} />
+          </Row>
+          {/* 实色 (Figma 57C) has no base layer to show through. */}
+          {material !== 'solid' && (
+            <Row label="窗口底层不透明度" id="shellOpacity">
+              <Slider
+                label="窗口底层不透明度"
+                value={appearance.shellOpacity[material]}
+                min={LIMITS.shellOpacity.min}
+                max={LIMITS.shellOpacity.max}
+                step={0.01}
+                format={formatPercent}
+                onCommit={(value) => update({ shellOpacity: { [material]: value } })}
+              />
             </Row>
           )}
-          <Row label="窗口底层不透明度" id="shellOpacity">
-            <Slider
-              label="窗口底层不透明度"
-              value={appearance.shellOpacity[material]}
-              min={LIMITS.shellOpacity.min}
-              max={LIMITS.shellOpacity.max}
-              step={0.01}
-              format={formatPercent}
-              onCommit={(value) => update({ shellOpacity: { [material]: value } })}
-            />
-          </Row>
           <Row label="终端底色" id="terminalBackground">
             <Segmented
               label="终端底色"

@@ -314,3 +314,55 @@
   --drop-iris: linear-gradient(115deg, #ffffff, #a0d2ff80 30%, #ffaae673 55%, #fff5b473 75%, #ffffffcc);
   --card-shadow: 0 1px 3px #00000014;
 }
+
+/* 实色 (PRD §5 v1.139, Figma 57): an opaque window, <html data-material='solid'> (appearance/map.ts). The base palettes
+   above run at 17–19:1 (near-black / white against near-white / black text), which reads harsh on an opaque window;
+   this one sits near 11–13:1, as VS Code's Dark / Light Modern do. Still chroma 0; status colours are unchanged. The
+   terminal's theme colour follows the card. */
+:root[data-theme='dark'][data-material='solid'] {
+  --bg-app: #1f1f1f;
+  --bg-sidebar: #181818;
+  --bg-panel: #212121;
+  --bg-raised: #262626;
+  --bg-float: #242424;
+  --bg-section: #292929;
+  --bg-inset: #181818;
+  --bg-popover: #2e2e2e;
+  --text-primary: #d5d5d5;
+  --text-secondary: #999999;
+  --text-tertiary: #808080;
+  --text-disabled: #545454;
+  --text-inverse: #1f1f1f;
+  --fill-primary: #d5d5d5;
+  --glass-primary-fg: #d5d5d5;
+  --card-idle: #303030;
+  --card-idle-hover: #343434;
+  --glass-shell-color: #181818;
+  --float-bg: #2a2a2a;
+  --term-bg: #1f1f1f;
+  --term-fg: #cfcfcf;
+}
+
+:root[data-theme='light'][data-material='solid'] {
+  --bg-app: #f6f6f6;
+  --bg-sidebar: #ebebeb;
+  --bg-panel: #f6f6f6;
+  --bg-raised: #f6f6f6;
+  --bg-float: #f6f6f6;
+  --bg-section: #ededed;
+  --bg-inset: #efefef;
+  --bg-popover: #fafafa;
+  --text-primary: #2e2e2e;
+  --text-secondary: #5c5c5c;
+  --text-tertiary: #787878;
+  --text-disabled: #c2c2c2;
+  --text-inverse: #f6f6f6;
+  --fill-primary: #2e2e2e;
+  --glass-primary-bg: #2e2e2ec7;
+  --card-idle: #e9e9e9;
+  --card-idle-hover: #e2e2e2;
+  --glass-shell-color: #ebebeb;
+  --float-bg: #fafafa;
+  --term-bg: #f6f6f6;
+  --term-fg: #2e2e2e;
+}

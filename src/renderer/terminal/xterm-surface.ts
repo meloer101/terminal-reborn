@@ -199,9 +199,10 @@ export class XtermSurface implements TerminalSurface {
     this.term.onScroll(() => this.syncHeadroom())
     this.term.buffer.onBufferChange(() => this.syncHeadroom())
 
-    // Re-theme when <html data-theme> flips (theme.ts also follows the system setting).
+    // Re-theme when <html data-theme> flips (theme.ts also follows the system setting), or data-material: 实色 has its
+    // own --term-bg / --term-fg (tokens.css).
     this.themeObserver = new MutationObserver(() => this.applyTheme())
-    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material'] })
   }
 
   /**

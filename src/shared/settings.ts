@@ -60,8 +60,13 @@ export interface ChatAppearance {
   avatar: string
 }
 
-/** 窗口 · 材质 (PRD §5 v1.127, Figma 51E / 51F): macOS 26's Liquid Glass, or the older frosted vibrancy. */
-export type WindowMaterial = 'liquid' | 'frosted'
+/**
+ * 窗口 · 材质 (PRD §5 v1.127, Figma 51E / 51F): macOS 26's Liquid Glass, or the older frosted vibrancy; 实色 (v1.139,
+ * Figma 57) is an opaque window in the softer solid palette.
+ */
+export type WindowMaterial = 'liquid' | 'frosted' | 'solid'
+/** The materials the desktop shows through, each with its own 窗口底层不透明度. */
+export type GlassMaterial = Exclude<WindowMaterial, 'solid'>
 
 export interface AppearanceSettings {
   theme: ThemePreference
@@ -92,7 +97,7 @@ export interface AppearanceSettings {
    * 窗口底层不透明度: the theme's color over the base layer (the sidebar's), 0 (none) – 1, one value per material so
    * switching keeps each one's look.
    */
-  shellOpacity: Record<WindowMaterial, number>
+  shellOpacity: Record<GlassMaterial, number>
 }
 
 /** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
@@ -194,7 +199,7 @@ export interface AppSettings {
 /** An appearance patch; its nested objects (chat, shellOpacity) merge one level deeper. */
 export type AppearancePatch = Partial<Omit<AppearanceSettings, 'chat' | 'shellOpacity'>> & {
   chat?: Partial<ChatAppearance>
-  shellOpacity?: Partial<Record<WindowMaterial, number>>
+  shellOpacity?: Partial<Record<GlassMaterial, number>>
 }
 
 export interface SettingsPatch {
@@ -292,7 +297,7 @@ function chat(value: unknown): ChatAppearance {
   }
 }
 
-function shellOpacity(value: unknown): Record<WindowMaterial, number> {
+function shellOpacity(value: unknown): Record<GlassMaterial, number> {
   const d = DEFAULT_SETTINGS.appearance.shellOpacity
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return { liquid: percent(num(v.liquid, d.liquid, LIMITS.shellOpacity)), frosted: percent(num(v.frosted, d.frosted, LIMITS.shellOpacity)) }
@@ -347,7 +352,7 @@ function appearance(value: unknown): AppearanceSettings {
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
     screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader,
     chat: chat(v.chat),
-    windowMaterial: v.windowMaterial === 'frosted' ? 'frosted' : d.windowMaterial,
+    windowMaterial: v.windowMaterial === 'frosted' || v.windowMaterial === 'solid' ? v.windowMaterial : d.windowMaterial,
     shellOpacity: shellOpacity(v.shellOpacity)
   }
 }

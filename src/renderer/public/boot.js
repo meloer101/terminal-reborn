@@ -9,6 +9,8 @@
 // pushed the first interactive frame back by tens of ms).
 ;(() => {
   const THEME_KEY = 'tr.theme.boot'
+  /** 实色 (PRD v1.139): the window is opaque from its first frame (mirrored by appearance/runtime.ts). */
+  const MATERIAL_KEY = 'tr.material.boot'
   const LAYOUT_KEY = 'tr.boot.layout'
   /** The last dot lands: up to 300 ms late, 800 ms each (boot-worker.js). */
   const FORMED = 1100
@@ -26,6 +28,7 @@
   const pref = read(THEME_KEY)
   const light = pref === 'light' || (pref !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches)
   document.documentElement.dataset.theme = light ? 'light' : 'dark'
+  if (read(MATERIAL_KEY) === 'solid') document.documentElement.dataset.material = 'solid'
 
   let layout = null
   try {
@@ -43,6 +46,7 @@
   const style = document.createElement('style')
   style.textContent = `
 #wavi-boot { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
+:root[data-material='solid'] #wavi-boot { background: var(--glass-shell-color); }
 #wavi-boot .card { position: absolute; background: var(--bg-app); box-shadow: var(--card-edge), var(--card-shadow); }
 #wavi-boot canvas { position: absolute; inset: 0; width: 100%; height: 100%; }`
   document.head.appendChild(style)
@@ -74,9 +78,10 @@
     const offscreen = canvas.transferControlToOffscreen()
     worker = new Worker('./boot-worker.js')
     worker.postMessage({ init: { canvas: offscreen, dpr, card, at: { x: ax, y: ay }, color: colour(), started: performance.timeOrigin + performance.now() } }, [offscreen])
-    // The settings can name another theme than the mirror did (first launch): the dots follow.
+    // The settings can name another theme or material than the mirror did (first launch): the dots follow. The same
+    // attributes re-theme xterm (terminal/xterm-surface.ts) and the 底色值 swatch (settings/useThemeBackground.ts).
     observer = new MutationObserver(() => worker.postMessage({ color: colour() }))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-material'] })
     // The canvas keeps its pixels in step with the window, so the dots never stretch.
     onResize = () => worker.postMessage({ size: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio || 1 } })
     addEventListener('resize', onResize)

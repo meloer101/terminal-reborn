@@ -46,7 +46,8 @@
 :global(:root[data-fs-backdrop='auto'][data-theme='dark']) { --fs-field: var(--fsb-ember); }
 :global(:root[data-fs-backdrop='plum']) { --fs-field: var(--fsb-plum); }
 
-.shell[data-fullscreen='true'] {
+/* 实色 (PRD v1.139) stays solid in full screen: no field, the shell's own colour. */
+:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] {
   --card-edge: var(--fs-card-edge);
   background: var(--fs-sheen), linear-gradient(var(--fs-veil), var(--fs-veil)), var(--fs-grain), var(--fs-field);
   background-blend-mode: normal, normal, overlay, normal;
@@ -55,7 +56,7 @@
 /* Text straight on the field — the sidebar (PRD v1.102, Figma 42C; the session headers are in the cards since Figma 55):
    the field's brightness changes from top to bottom and from palette to palette, so a grey level always meets a stretch
    it matches. On the field everything is the primary colour and the quiet text is a size smaller. */
-.shell[data-fullscreen='true'] :global([data-region='sidebar']) {
+:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] :global([data-region='sidebar']) {
   --text-secondary: var(--text-primary);
   --text-tertiary: var(--text-primary);
   --text-caption: var(--fs-text-caption);

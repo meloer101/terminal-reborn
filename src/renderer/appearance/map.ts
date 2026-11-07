@@ -66,9 +66,9 @@ export function chatFontStack(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont'>):
   return `${latin}, ${quote(c.cjkFont)}, var(--font-ui)`
 }
 
-/** The window material actually shown: Liquid Glass needs macOS 26 (main/appearance.ts). */
+/** The window material actually shown: Liquid Glass needs macOS 26 (main/appearance.ts); 实色 works everywhere. */
 export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liquidGlass: boolean): WindowMaterial =>
-  liquidGlass && a.windowMaterial === 'liquid' ? 'liquid' : 'frosted'
+  a.windowMaterial === 'liquid' ? (liquidGlass ? 'liquid' : 'frosted') : a.windowMaterial
 
 /** A theme color at `opacity` over what is behind it; fully opaque is the color itself, none is transparent. */
 const over = (color: string, opacity: number): string =>
@@ -77,10 +77,12 @@ const over = (color: string, opacity: number): string =>
 export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): AppearanceDom {
   const transparent = needsTransparency(a)
   const chat = a.chat
+  const material = shownMaterial(a, liquidGlass)
   return {
     vars: {
-      // 窗口底层不透明度 (PRD §5 v1.127): the theme's shell color over the base layer, per material.
-      '--glass-shell': over('var(--glass-shell-color)', a.shellOpacity[shownMaterial(a, liquidGlass)]),
+      // 窗口底层不透明度 (PRD §5 v1.127): the theme's shell color over the base layer, per material. 实色 (v1.139) covers
+      // the base layer with it: nothing of the desktop shows.
+      '--glass-shell': material === 'solid' ? 'var(--glass-shell-color)' : over('var(--glass-shell-color)', a.shellOpacity[material]),
       // 对话 (Figma 51D): GUI sessions read these (gui/Chat.module.css).
       '--chat-column': CHAT_COLUMN[chat.width],
       '--chat-font': chatFontStack(chat),
@@ -99,6 +101,7 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
       '--tr-term-ring': ringCss(a)
     },
     // The full-screen field (AppShell.module.css picks the palette, `auto` by theme).
-    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop, 'data-chat-avatar': chat.avatar ? 'on' : 'off' }
+    // data-material: 实色 swaps in the softer solid palette (tokens.css) and keeps full screen solid (AppShell.module.css).
+    attrs: { 'data-fs-backdrop': a.fullscreenBackdrop, 'data-chat-avatar': chat.avatar ? 'on' : 'off', 'data-material': material }
   }
 }
