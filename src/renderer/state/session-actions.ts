@@ -1,6 +1,5 @@
 // User-facing workspace commands: opening projects and creating sessions in them (Figma 09).
 // Menus are the app's own (ui/MenuHost.tsx), anchored to the control or pointer that opened them.
-import { agentName } from '@shared/agents'
 import {
   closeSessionConfirmation,
   countActive,
@@ -9,18 +8,18 @@ import {
 } from '@shared/lifecycle'
 import type { AgentKind, ProjectId, SessionId } from '@shared/types'
 import { canRunSameTask, closeSameTask, isSameTaskOpen, openSameTask } from '../attempts/same-task-store'
-import { closeNewSessionSheet, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
+import { hereChoice, hereMenu } from '../new-session/model'
+import { closeNewSessionSheet, installedAgents, isNewSessionSheetOpen, openNewSessionSheet } from '../new-session/sheet-store'
 import { closeArchiveSheet, openArchiveSheet, useArchiveSheet } from '../archive/store'
 import { closeMergeSheet, isMergeSheetOpen } from '../panels/merge/store'
 import { removeWorktreeWithSessions } from '../panels/worktree/actions'
+import { openSettings } from '../settings/SettingsDialog'
 import { popupMenu, type MenuAnchor, type MenuEntry } from '../ui/menu'
 import { everyWindow, windowOf } from '../app-shell/windows-runtime'
 import { moveSessionToNewWindow } from '../split/commands'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
 import { projectOfSession } from './workspace-model'
-
-const KINDS: AgentKind[] = ['claude', 'codex', 'shell']
 
 /**
  * Opens a folder as a project: a known one selects its latest session (or starts `kind` when it has none),
@@ -153,17 +152,17 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
     { type: 'item', id: 'close', label: '关闭会话', accelerator: 'CmdOrCtrl+W' }
   ]
   if (worktree) {
-    entries.push(
-      { type: 'submenu', label: '在此新建会话', items: KINDS.map((kind) => ({ type: 'item', id: `here:${kind}`, label: agentName(kind) })) }
-    )
+    entries.push(hereMenu(await installedAgents(), 'here:'))
     if (!worktree.isMain) entries.push({ type: 'item', id: 'archive', label: '归档 worktree…' })
   }
   const choice = await popupMenu(entries, anchor)
   if (choice === 'close') await closeSessionInteractive(sessionId)
   if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'archive' && worktree) openArchiveSheet(worktree.id)
-  const kind = choice?.startsWith('here:') ? (choice.slice('here:'.length) as AgentKind) : null
-  if (!kind || !worktree || !KINDS.includes(kind)) return
+  const here = hereChoice(choice, 'here:')
+  if (here && 'install' in here) openSettings('agents')
+  if (!here || !('kind' in here) || !worktree) return
+  const { kind } = here
   const workspace = useWorkspace.getState()
   if (worktree.isMain) {
     const id = workspace.addSession(worktree.projectId, kind)

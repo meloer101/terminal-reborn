@@ -1,18 +1,18 @@
 // Worktree view commands: switching to a worktree's session, the row's 更多 menu, delete and 清理. Every removal is
 // confirmed and refused whenever work could be lost (see deleteBlocker; main checks again). `--force` is offered in a
 // second confirmation only for git's submodule refusal.
-import { agentName } from '@shared/agents'
 import type { WorktreeRemoveResult } from '@shared/git-worktrees'
 import type { AgentKind, ProjectId, WorktreeId } from '@shared/types'
 import { restoreArchivedWorktree } from '../../archive/actions'
 import { openArchiveSheet } from '../../archive/store'
+import { hereChoice, hereMenu } from '../../new-session/model'
+import { installedAgents } from '../../new-session/sheet-store'
+import { openSettings } from '../../settings/SettingsDialog'
 import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
 import { cleanupPlan, COLLAPSED, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
-
-const KIND_LABEL = (kind: AgentKind): string => agentName(kind)
 
 /** Said in every delete confirmation: a plain `git worktree remove` takes ignored files with it. */
 const IGNORED_FILES_NOTE = '被 .gitignore 忽略的文件（如 .env、node_modules）也会一起删除。'
@@ -182,15 +182,11 @@ export async function openRowMenu(
   anchor: MenuAnchor,
   refresh: () => Promise<void>
 ): Promise<void> {
-  const kinds: AgentKind[] = ['claude', 'codex', 'shell']
+  const here = hereMenu(await installedAgents(), 'new:', row.info.prunable === null)
   const archivedId = useWorkspace.getState().worktrees.find((w) => row.worktreeIds.includes(w.id) && w.archived)?.id
   const choice = await popupMenu(
     [
-      {
-        type: 'submenu',
-        label: '在此新建会话',
-        items: kinds.map((kind) => ({ type: 'item', id: `new:${kind}`, label: KIND_LABEL(kind), enabled: row.info.prunable === null }))
-      },
+      here,
       { type: 'item', id: 'copy-path', label: '复制路径' },
       archivedId
         ? { type: 'item', id: 'restore', label: '恢复归档' }
@@ -207,5 +203,9 @@ export async function openRowMenu(
     )
   }
   else if (choice === 'delete') await deleteWorktreeInteractive(root, row, refresh)
-  else if (choice?.startsWith('new:')) startSessionIn(projectId, row, choice.slice(4) as AgentKind)
+  else {
+    const picked = hereChoice(choice, 'new:')
+    if (picked && 'install' in picked) openSettings('agents')
+    else if (picked) startSessionIn(projectId, row, picked.kind)
+  }
 }

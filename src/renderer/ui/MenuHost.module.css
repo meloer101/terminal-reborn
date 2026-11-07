@@ -122,3 +122,25 @@
   margin-left: var(--space-16);
   color: var(--text-primary);
 }
+
+/* A submenu's list of fixed height (Figma 57C): its rows scroll, the footer under it (终端) stays put. */
+.list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* A hairline between groups. */
+.separator {
+  flex: none;
+  height: 1px;
+  margin: var(--space-4) var(--space-8);
+  background: var(--border-subtle);
+}
+
+/* Chosen like any item, drawn like a disabled one (an agent that is not installed, Figma 57C). */
+.item[data-muted='true'] {
+  color: var(--text-disabled);
+}

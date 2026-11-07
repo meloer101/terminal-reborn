@@ -65,7 +65,23 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   await expect(menu.getByRole('menuitem')).toHaveText(['移到新窗口', '关闭会话⌘W', '在此新建会话', '归档 worktree…'])
   const submenu = page.getByRole('menu', { name: '在此新建会话' })
   await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此新建会话' }), submenu)
-  await expect(submenu.getByRole('menuitem')).toHaveText(['Claude Code', 'Codex', '终端'])
+  // Every agent (Figma 57C): 已安装 first (Claude Code and Codex always), 没装 after them, 终端 under the list — 19 + 1.
+  const rows = submenu.getByRole('menuitem')
+  await expect(rows).toHaveCount(20)
+  await expect(rows.nth(0)).toHaveText('Claude Code')
+  await expect(rows.nth(1)).toHaveText('Codex')
+  await expect(rows.last()).toHaveText('终端')
+  // The agents scroll in a list of fixed height; 终端 stays where it is.
+  const terminalTop = (await rows.last().boundingBox())?.y
+  const scrolled = await submenu.evaluate((panel) => {
+    const list = panel.firstElementChild as HTMLElement
+    const scrolls = list.scrollHeight > list.clientHeight
+    list.scrollTop = list.scrollHeight
+    return scrolls
+  })
+  expect(scrolled).toBe(true)
+  expect((await rows.last().boundingBox())?.y).toBe(terminalTop)
+  await expect(rows.nth(19)).toBeInViewport()
   await page.screenshot({ path: 'test-results/sidebar-session-context-menu.png' })
   for (const theme of ['light', 'dark'] as const) {
     await page.locator('html').evaluate((html, t) => html.setAttribute('data-theme', t), theme)
@@ -74,6 +90,21 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   // A press outside dismisses it without choosing anything.
   await page.mouse.click(700, 400)
   await expect(page.getByRole('menu')).toHaveCount(0)
+
+  // An agent that is not installed is grey but chosen: it opens 设置 · 智能体, where its install command is.
+  await cookie.click({ button: 'right' })
+  await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此新建会话' }), submenu)
+  const missing = submenu.locator('[data-muted="true"]')
+  if ((await missing.count()) > 0) {
+    await missing.first().scrollIntoViewIfNeeded()
+    await missing.first().click()
+    const settings = page.getByRole('dialog', { name: '设置' })
+    await expect(settings.getByRole('tab', { name: '智能体' })).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.press('Escape')
+    await expect(settings).toHaveCount(0)
+  } else {
+    await page.keyboard.press('Escape')
+  }
 
   // Sessions stay under their project, whatever their status (PRD §3.3): the error session is in terminal-reborn.
   await expect(sidebar.locator('section[aria-label="terminal-reborn"] [data-session-id="s-graph"]')).toBeVisible()

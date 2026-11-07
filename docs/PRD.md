@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.138 · 2026-11-07 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.139 · 2026-11-07 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.139 | 2026-11-07 | **「在此新建会话」列出全部 agent**（F4，架构审阅批次 7b，Figma 57C，作者 2026-11-07 定）：会话右键和 Worktree 视图「更多」的子菜单原来只有 Claude Code / Codex / 终端；现在按新建会话的顺序列出全部 agent：「已安装」（Claude Code、Codex 一直在，其他装了才在）在前，「没装」置灰在后，列表固定高度 300、超出上下滚动，「终端」在分隔线下固定不动。点没装的 agent 打开 设置 · 智能体（那里有安装命令）。 |
 | v1.138 | 2026-11-07 | **自动修复交给每一个能报告「这一轮结束」的 agent**（F16，架构审阅批次 7a，作者 2026-11-07 选「保留扩大、加兜底、GUI 会话也算」）：原来只认 Claude / Codex；现在是带 hooks 的 CLI 会话（Claude、Codex、Gemini CLI、Qwen Code、Pi）和任何 GUI 会话（每轮结束由 Wavi 自己看到），worktree 里正在看的那个优先，PR 那一行显示的就是它，按钮写它的名字（Claude 仍写「Claude」）。发出修复后 30 分钟还没收到这一轮结束，以「自动修复已停：30 分钟没有收到这一轮结束的信号」停下，按钮同其他刹车。**未实测**：Gemini CLI、Qwen Code（本机没装）、Pi 和 ACP 的 GUI 会话都没在真 agent 上跑过一次自动修复；先在 Pi 上各粘一段 30 行的修复消息、跑一轮带工具的修复，看结束信号和长文本是否正常。 |
 | v1.137 | 2026-11-07 | **重新加载窗口不再丢掉进行中的事**（F16 / F21，架构审阅批次 6，作者 2026-11-07 选「保持 v1.65，只保存没走完的那次修复」）：窗口重新加载、崩溃或应用重开后，① 自动修复正在进行的那次修复回到 PR / CI 那一行，以「自动修复已停：窗口重新加载时这次修复还没走完」停下，按钮同其他刹车（仍然推送 / 丢弃 / 让 agent 重修），它的提交不会不经检查就推送；开关和次数仍按 v1.65 回到设置里的默认值；正在推送的那次不保存（它已经过了刹车）。② Git · 变更的出口块（Ship）照原样回来，重新加载时还在进行的那一步标为失败「窗口重新加载时这一步还没有结果，点重试」。③ 派活等「开始」的确认条、发给派活方的汇报队列和等「送进去」的消息都回来，确认条重新计 10 分钟。这些随 workspace 文件保存（`src/shared/saved-runs.ts`）。 |
 | v1.136 | 2026-11-06 | **思考行只在有文字时出现，进行中的「思考中」闪烁；Claude 请求思考摘要**（F23，作者 2026-11-06：展开「思考了 · 秒」下面没有内容，「如果不显示内容的话就没啥必要显示了」，选「空的不显示，并且请求摘要」，「进行中显示一个闪烁的 thinking」；调研 T3 Code `6577c6b6`、Paseo `1efcb31a`、Orca `60ced6e4`、Zed `e231594b`：四家都在思考没有文字时不画这一行，T3 Code / Paseo / Orca 请求 Claude 的 summarized 摘要，没有一家自己去总结）：① 原因：当前 Claude 模型默认不返回思考文字（只有签名），Claude Code 的 `showThinkingSummaries` 默认关，所以 transcript 和 stream-json 里的 thinking 块是空的，Wavi 却照样画「思考了 Ns」。② 所有 agent：思考文字 trim 后为空就不生成这一项（Claude transcript / stream-json、Codex rollout 和 app-server；ACP 原来就是这样）；手机远程用同一个解析器，一起不显示。③ Claude GUI 会话在 `claude --version` ≥ 2.1.94 时加 `--thinking-display summarized`（2.1.92 没有这个参数、npm 上没有 2.1.93，旧版遇到不认识的参数会退出，所以按版本加，同 Orca）；摘要由 Anthropic 生成、计费不变，实测是英文。④ 进行中的「思考中」透明度 1 ↔ 0.35 往复（2 s，减少动态效果时不动），不用渐变文字。⑤ Codex 的 `turn/start` 不带 `summary`：协议支持（`auto / concise / detailed / none`），但有模型收到 summary 会报错（openai/codex#31846），`model/list` 不报哪个模型支持，作者机器上的 Codex 返回 503 没法实测；先用 Codex 自己的默认值。 |
@@ -324,7 +325,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
   - **智能体**（v1.68 改为下拉菜单，Figma 24A）：分「已安装」（Claude Code、Codex 总在，其他 CLI 在登录 shell 的 PATH 上找到才列，右边写版本）和「其他」（终端、多个智能体一起做）；可以搜索；选中项盖在控件上，菜单在窗口内放得下；最后一行写“还有 N 家没装”指去设置 · 智能体；按项目记住上次的选择。能选的 CLI 和它们的启动方式见 §6.15。
   - **高级**（默认收起，收起时显示分支名）：分支名（自动生成 `<前缀>/<两个词>`，如 `jacob/swift-otter`，可改）· 文件夹（`~/.tr/worktrees/<repo>/<name>`，存放位置在设置里改）· 准备（复制 `.worktreeinclude` 列出的文件 + 运行 setup，开关）（15D）。分支名已存在时输入框标红、写明原因，“创建”不可点（15E）。
   - **不写任务描述**：创建后直接进入会话，用户在终端里自己发第一句话。面板里只在出错或有限制时显示说明文字，平时不加解释。
-- **入口**：⌘N 和项目标题的 ＋ 打开面板（＋ 预选那个项目；还没有项目时 ⌘N 先打开项目）。会话右键和 Worktree 视图的“在此新建会话”不弹面板，直接在那个 worktree 里再开一个会话。
+- **入口**：⌘N 和项目标题的 ＋ 打开面板（＋ 预选那个项目；还没有项目时 ⌘N 先打开项目）。会话右键和 Worktree 视图的“在此新建会话”不弹面板，直接在那个 worktree 里再开一个会话。子菜单列出全部 agent（Figma 57C，v1.139）：已安装的在前，没装的置灰在后（点了打开 设置 · 智能体），列表固定高度、超出上下滚动，「终端」固定在最下面。
 - 点“创建”后面板立即关闭，侧栏马上出现该会话。新 worktree 的后台执行：`git fetch` → `git worktree add --no-track -b <branch> ~/.tr/worktrees/<repo>/<name> <base>` → 记录 `branch.<name>.base` → 按 `.worktreeinclude` 用 `cp -c`（APFS 写时复制）复制被忽略文件 → 在可见终端里运行 setup 脚本 → 启动 agent（不送 prompt）。
 - **脚本与端口**：可以提交进仓库的 `.tr/settings.toml`，配置 `setup`、`run`、`archive` 和可选的 `test`；会话头放一个 Run 按钮；按工作区分配端口段，注入 `TR_PORT`。起点在设置 · Worktree（默认 41000）；Worktree 详情显示分到的端口段。
   ```toml

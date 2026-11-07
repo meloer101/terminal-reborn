@@ -1,5 +1,6 @@
 // Whether the new-session sheet is open, and for which project (⌘N: the current one; a project's ＋: that one).
 import { create } from 'zustand'
+import type { AgentAvailability } from '@shared/ipc'
 import type { ProjectId } from '@shared/types'
 
 export const useNewSessionSheet = create<{ open: boolean; projectId: ProjectId | null; generation: number }>()(() => ({
@@ -28,3 +29,14 @@ export function closeNewSessionSheet(refocus: boolean): void {
 }
 
 export const isNewSessionSheetOpen = (): boolean => useNewSessionSheet.getState().open
+
+let lastFound: AgentAvailability | null = null
+
+/**
+ * Which agent CLIs are installed, for a menu that must open at once (在此新建会话): the last answer, asking again
+ * behind it; only the first time waits for main (which caches its own answer for a few seconds).
+ */
+export function installedAgents(): Promise<AgentAvailability> {
+  const next = window.tr.app.detectAgents().then((found) => (lastFound = found))
+  return lastFound ? Promise.resolve(lastFound) : next
+}

@@ -16,10 +16,20 @@ export type MenuEntry =
       icon?: MenuIcon
       /** One of a set of choices: a ✓ after the label when true (Figma 53C). */
       checked?: boolean
+      /** Drawn like a disabled item but still chosen (an agent that is not installed: choosing it shows how to install it, Figma 57C). */
+      muted?: boolean
     }
-  | { type: 'submenu'; label: string; items: MenuEntry[] }
+  | {
+      type: 'submenu'
+      label: string
+      items: MenuEntry[]
+      /** Rows under `items` that stay put: `items` then scroll in a list of fixed height (Figma 57C). */
+      footer?: MenuEntry[]
+    }
   /** A section label above the items it names; not a choice (Figma 53C 「分组」). */
   | { type: 'header'; label: string }
+  /** A hairline between groups; not a choice. */
+  | { type: 'separator' }
 
 export interface Size {
   width: number
