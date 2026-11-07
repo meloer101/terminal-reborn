@@ -70,6 +70,13 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(chat()).toBeVisible(WITHIN)
     await expect(composer()).toBeVisible()
     await expect(page.locator('[data-region="terminal"] .xterm')).toHaveCount(0)
+    // Nothing said yet (Figma 59G): the agent's mark and name over the composer, the two in the middle of the card.
+    const welcome = page.getByTestId('gui-welcome')
+    await expect(welcome).toHaveText('Claude Code')
+    const [hello, box, card] = await Promise.all([welcome.boundingBox(), page.getByTestId('gui-composer-box').boundingBox(), chat().boundingBox()])
+    expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
+    expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
+    await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
     await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[]; entrypoint: string | null }
     expect(launched.entrypoint).toBe('wavi')
@@ -87,6 +94,7 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(feed().getByText('你好', { exact: true })).toBeVisible(WITHIN)
     await expect(feed().getByText('Hello: 你好')).toBeVisible(WITHIN)
     expect(await offsetFromTop('你好')).toBe(24)
+    await expect(page.getByTestId('gui-welcome')).toHaveCount(0)
   })
 
   test('a sent message shows at once, before the agent echoes it, and only once after', async () => {
@@ -437,7 +445,22 @@ test.describe('F23 GUI session (Claude)', () => {
     const bubble = feed().locator('[data-item]').last()
     await expect.poll(() => bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontSize)).toBe('16px')
     expect(await bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontWeight)).toBe('500')
-    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('992px')
+    // The column is the composer's (960 for 中) with 40 each side for the pictures (Figma 59J).
+    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1040px')
+    // The agent's words start at the composer's left edge, its mark 12 outside; the bubble ends at its right edge, the
+    // picture 8 outside.
+    await feed().evaluate((el) => el.scrollTo(0, 0))
+    const [boxEdge, words, mark, sent, picture] = await Promise.all([
+      page.getByTestId('gui-composer-box').boundingBox(),
+      feed().getByText('Hello: 你好').boundingBox(),
+      feed().locator('[data-agent-mark]').first().boundingBox(),
+      bubble.locator('> div > div').first().boundingBox(),
+      userAvatar.boundingBox()
+    ])
+    expect(Math.round(words!.x)).toBe(Math.round(boxEdge!.x))
+    expect(Math.round(mark!.x + mark!.width + 12)).toBe(Math.round(boxEdge!.x))
+    expect(Math.round(sent!.x + sent!.width)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
+    expect(Math.round(picture!.x - 8)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
     expect(await chat().evaluate((el) => getComputedStyle(el.parentElement!).backgroundColor)).toMatch(/0\.85\)$|color\(srgb .* \/ 0\.85\)$/)
     await feed().evaluate((el) => el.scrollTo(0, 0))
     await page.screenshot({ path: join(SHOTS, 'chat-avatars.png') })

@@ -1,5 +1,6 @@
-// A GUI session's card in the main area (PRD F23, Figma 49″C `GUI`): the feed, then — each its own block, 8 apart —
-// what the agent waits on, the messages queued behind the running turn, a failure, and the composer. Drawn where a
+// A GUI session's card in the main area (PRD F23, Figma 49″C `GUI`, 59J): the feed, then — each its own block, 8 apart —
+// what the agent waits on, the messages queued behind the running turn, a failure, and the composer. Before anything is
+// said (59G) the agent's mark and name stand over the composer, the two in the middle of the card. Drawn where a
 // terminal would be (TerminalArea / PaneHosts). Files dropped or pasted on it become attachments (terminal/file-input
 // → session-io → the composer).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -8,6 +9,7 @@ import { agentName } from '@shared/agents'
 import { emptyGuiState, guiCanEdit, type GuiAnswer } from '@shared/gui-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { attachFileInput } from '../terminal/file-input'
+import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
@@ -59,6 +61,8 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   // Its copy arrived: drop it (state adjusted while rendering, React's pattern for state derived from props).
   if (pending && users > pending.users) setPending(null)
   const items = useMemo(() => withPendingSend(state.items, pending), [state.items, pending])
+  // Figma 59G: nothing said yet — the agent's mark and name over the composer, in the middle of the card.
+  const empty = items.length === 0 && state.live === null && !state.busy
 
   const send = useCallback(
     (text: string, attachments: readonly string[]) => {
@@ -128,6 +132,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
       ref={rootRef}
       className={styles.chat}
       data-testid="gui-chat"
+      data-empty={empty || undefined}
       onKeyDown={(event) => {
         // A waiting card answers from the keyboard. The composer routes its own keys (Composer); typing elsewhere
         // (其他…, a queued message) keeps its keys.
@@ -140,16 +145,25 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         }
       }}
     >
-      <Feed
-        sessionId={sessionId}
-        agent={agent}
-        items={items}
-        live={state.live}
-        waitingTool={waitingToolId(state.items, state.prompts)}
-        busy={state.busy}
-        canEdit={guiCanEdit(agent) && !prompt && state.queued.length === 0}
-        onEdit={edit}
-      />
+      {empty ? (
+        <div className={styles.welcome} data-testid="gui-welcome">
+          <span className={styles.agentAvatar} aria-hidden>
+            <AgentIcon kind={agent} size={16} />
+          </span>
+          <span className={styles.welcomeName}>{agentName(agent)}</span>
+        </div>
+      ) : (
+        <Feed
+          sessionId={sessionId}
+          agent={agent}
+          items={items}
+          live={state.live}
+          waitingTool={waitingToolId(state.items, state.prompts)}
+          busy={state.busy}
+          canEdit={guiCanEdit(agent) && !prompt && state.queued.length === 0}
+          onEdit={edit}
+        />
+      )}
       <div className={styles.dock}>
         {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (

@@ -1,6 +1,7 @@
-// The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`, 51A): user bubbles on the right with the
-// user's picture beside them, the agent's part of each turn after its mark — its Markdown, runs of tool and thinking
-// rows grouped 8 apart — 16 between blocks, and the block being streamed. Each
+// The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`, 51A, 59J): the composer's width, user bubbles
+// ending at its right edge with the user's picture outside it, the agent's part of each turn from its left edge with
+// the mark outside it — its Markdown, runs of tool and thinking rows grouped 8 apart — 12 between blocks, 24 between
+// turns, and the block being streamed. Each
 // block is memoised on its items (applyGuiEvent keeps unchanged items by identity), so a streamed delta re-renders
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
 // Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
