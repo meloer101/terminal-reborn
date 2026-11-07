@@ -64,6 +64,9 @@ describe('which agent 自动修复 hands the fix to (every agent with hooks)', (
       sessions.splice(0, 1, { ...sessions[0], kind: 'grok' })
       // No hooks: no Stop to look at the brakes after its turn.
       expect(agentFor('/repo-wt')).toBeNull()
+      // Its GUI session reports the turn's end itself (main's status tracker), so it can take a fix.
+      sessions.splice(0, 1, { ...sessions[0], kind: 'grok', ui: 'gui' })
+      expect(agentName(agentFor('/repo-wt'))).toBe('Grok')
       expect(agentName(null)).toBe('Claude')
     } finally {
       sessions.splice(0, sessions.length, ...original)

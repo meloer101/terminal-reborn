@@ -28,6 +28,7 @@ import {
   mergeWhenGreenOn,
   restoredAutomation,
   savedFixRuns,
+  stalledFix,
   takenOver,
   type FixRun,
   type FixScope,
@@ -60,12 +61,12 @@ const restoredBase = new Set<string>()
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 /**
- * The worktree's agent session that can take a fix (an agent with hooks: its Stop starts the brakes), the active one
- * first. The PR rows show the same one (PrRows' useAgentOf).
+ * The worktree's agent session that can take a fix — one whose turn reports its end, as the brakes start then: an agent
+ * with hooks, or any GUI session (main tracks its turns) — the active one first. The PR rows show the same one.
  */
 export function fixAgentIn(state: { worktrees: readonly Worktree[]; sessions: readonly Session[]; activeSessionId: string | null }, worktreePath: string): Session | null {
   const ids = new Set(state.worktrees.filter((w) => w.path === worktreePath).map((w) => w.id))
-  const sessions = state.sessions.filter((s) => ids.has(s.worktreeId) && hasHooks(s.kind))
+  const sessions = state.sessions.filter((s) => ids.has(s.worktreeId) && s.kind !== 'shell' && (s.ui === 'gui' || hasHooks(s.kind)))
   return sessions.find((s) => s.id === state.activeSessionId) ?? sessions[0] ?? null
 }
 
@@ -555,6 +556,20 @@ function applyRestoredSwitches(): void {
   }
 }
 
+/** Fixes whose turn never reported its end (stalledFix) stop, and the session hears why. */
+function stopStalledFixes(now: number): void {
+  for (const scope of ['pr', 'base'] as const) {
+    const all = scope === 'pr' ? usePullRequests.getState().automation : useBaseCi.getState().automation
+    for (const [worktree, state] of Object.entries(all)) {
+      const next = stalledFix(state, now)
+      if (!next) continue
+      write(scope, worktree, next)
+      const c = ctxFor(scope, worktree)
+      if (c && next.run?.kind === 'stopped') notify(c.session, `${placeOf(c)}：${brakeLabel(next.run.decision, next.pushed)}`)
+    }
+  }
+}
+
 export function startPrAutomation(): () => void {
   if (started) return () => {}
   started = true
@@ -610,8 +625,10 @@ export function startPrAutomation(): () => void {
       if (current && (current.attempts > 0 || current.run)) write(scope, path, takenOver(current))
     }
   })
+  const stalledTimer = setInterval(() => stopStalledFixes(Date.now()), 60_000)
   return () => {
     started = false
+    clearInterval(stalledTimer)
     offSnapshot()
     offSettings()
     offPr()
