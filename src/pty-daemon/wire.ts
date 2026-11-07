@@ -73,6 +73,12 @@ export type DaemonMessage =
       hooks: HookEndpointInfo | null
       /** The daemon hosts pipe sessions (`pipe-*` requests, PRD F23). Absent from older daemons of the same protocol. */
       pipes?: boolean
+      /**
+       * The spawn-helper node-pty execs for every new terminal, located when the daemon started (null: not found).
+       * Gone means the app the daemon came from was moved or deleted and it can start no terminal. Absent from older
+       * daemons of the same protocol.
+       */
+      spawnHelper?: string | null
     }
   | { type: 'refused'; reason: string }
   /** A hook from an agent whose session this app has attached; answer with `hook-reply`. */

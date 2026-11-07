@@ -89,6 +89,7 @@
 - [x] 半透明终端里中文行超出网格（2026-10-27，PRD §6.3）：DOM 渲染器量字宽时 Chromium 的 `text-spacing-trim` 把连写的全角标点压成半宽，每个单独的 ，；。 多画约 0.8 格，Claude Code 高亮块右边参差、行尾的字被裁半个。改为 `space-all`，行回到按网格裁切。e2e `cjk-dom-width.spec.ts`，修复前一行超出 2.4 格，修复后 0
 - [x] 依赖和构建缓存目录的写入不再触发 git 重扫（2026-10-27，PRD F17）：右侧栏开着文件或 Git 视图时，agent 跑 `npm install`、dev server 重建写 `node_modules` / `.next` 等，原来每 250 ms 一次 `git status` + `ls-files`，Git 视图每秒一套约 8 个 git。现在这些目录只刷新已展开的文件夹，状态、文件列表和变更不重读。单元测试 `worktree-files.test.ts`
 - [x] 侧栏和终端容器不再随任意会话的 hook 事件整体重渲染（2026-10-27）：`SessionRow` 按画出来的内容比较（`sameRow`），`TerminalPane` 按自己的 props 比较（`rect` 按值）。单元测试 `sidebar/model.test.ts`
+- [x] app 换了位置后新建终端报 `posix_spawnp failed`（2026-11-07，PRD §6.8 v1.142）：从 `/Applications/Wavi.app` 启动的守护进程在 app 被拖进废纸篓后还活着，新路径的 Wavi 接管了它，而 node-pty 要执行旧 app 里的 `spawn-helper`。守护进程在 `welcome` 里报告 `spawn-helper` 路径，接管前不存在就淘汰它再拉起新的；旧守护进程看 argv[0]（`src/main/pty/daemon-client.ts` 的 `retireIfOrphaned`）。单元测试 `daemon-client.test.ts`：程序路径不在、报告的 spawn-helper 不在时被换掉，程序还在、中文路径且没有 UTF-8 locale 时照常接管；`session-host.test.ts` 的 `spawnHelperPath`
 - [x] e2e 不再留下守护进程（2026-10-27）：守护进程按设计忽略普通 SIGTERM（PRD §6.8），`scale.spec.ts` 和打包测试却用 SIGTERM 清理，机器上积了跑了 6–8 天的守护进程和 agent。改用 SIGKILL（`e2e/daemons.ts`），并在整轮结束时结束本轮各 profile 下还活着的守护进程（`e2e/global-setup.ts`，只碰本轮的 profile）。`pty-daemon.spec.ts` 在负载下丢掉开头几个字（点击时 xterm 还没打开，键盘没进终端），改为等终端拿到焦点、shell 画出提示符再打字：8 路并行 16/16
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：

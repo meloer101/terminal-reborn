@@ -1,9 +1,10 @@
 // Finds, adopts or launches the pty daemon (src/pty-daemon, PRD §6.8) and speaks its socket
-// protocol. Adopt-if-alive: a daemon answering on this profile's socket is reused with all its sessions; only a
-// socket that provably has nobody behind it (ENOENT / ECONNREFUSED) leads to launching a new one.
-import { spawn } from 'node:child_process'
+// protocol. Adopt-if-alive: a daemon answering on this profile's socket is reused with all its sessions, unless it
+// can start no terminal because the app it came from is gone (`retireIfOrphaned`); otherwise only a socket that provably has nobody behind it
+// (ENOENT / ECONNREFUSED) leads to launching a new one.
+import { execFile, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { connect, type Socket } from 'node:net'
 import { dirname, join } from 'node:path'
 import type { HostEvent, HostRequest, HostSessionInfo } from '../../pty-host/protocol'
@@ -24,6 +25,8 @@ const CONNECT_TIMEOUT_MS = 1000
 const HELLO_TIMEOUT_MS = 2000
 const LAUNCH_TIMEOUT_MS = 5000
 const LAUNCH_POLL_MS = 25
+/** How long a retired daemon gets to exit after `shutdown` before it is SIGKILLed. */
+const RETIRE_EXIT_MS = 3000
 const LOG_ROTATE_BYTES = 5 * 1024 * 1024
 
 export interface DaemonLocation {
@@ -107,6 +110,8 @@ export class DaemonConnection {
     readonly hooks: HookEndpointInfo | null,
     /** The daemon runs pipe sessions (GUI, PRD F23); false for a daemon of the same protocol built before them. */
     readonly pipes: boolean,
+    /** Where the daemon's node-pty execs spawn-helper; undefined for a daemon built before it reported that. */
+    readonly spawnHelper: string | null | undefined,
     handlers: DaemonConnectionHandlers,
     reader: LineReader,
     buffered: DaemonMessage[]
@@ -160,7 +165,7 @@ export class DaemonConnection {
           // Hand over on the next turn so frames that arrived in the same chunk are kept in order.
           queueMicrotask(() => {
             const w = welcome as Extract<DaemonMessage, { type: 'welcome' }>
-            resolve(new DaemonConnection(socket, w.sessions, w.pid, w.buildId, w.hooks ?? null, w.pipes === true, handlers, reader, early))
+            resolve(new DaemonConnection(socket, w.sessions, w.pid, w.buildId, w.hooks ?? null, w.pipes === true, w.spawnHelper, handlers, reader, early))
           })
         },
         (error) => fail(error)
@@ -228,7 +233,10 @@ function rotateLog(path: string): void {
   }
 }
 
-/** Run by the launcher (`<binary> -e`): starts `argv[1..]` in a session of its own and exits at once. */
+/**
+ * Run by the launcher (`<binary> -e`): starts `argv[1..]` in a session of its own and exits at once. Its argv[0] is
+ * `process.execPath`, which `argv0Of` reads to judge a daemon too old to report its spawn-helper.
+ */
 const ORPHAN_LAUNCHER =
   "require('node:child_process').spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit' }).unref()"
 
@@ -281,10 +289,11 @@ export async function openDaemon(options: OpenDaemonOptions): Promise<DaemonConn
   const first = await tryConnect(location.socketPath)
   if (first.ok) {
     const connection = await handshake(first.socket)
-    log(`adopted pty daemon ${connection.pid} (${connection.sessions.length} sessions)`)
-    return connection
-  }
-  if (!first.dead) throw first.error
+    if (!(await retireIfOrphaned(connection, log))) {
+      log(`adopted pty daemon ${connection.pid} (${connection.sessions.length} sessions)`)
+      return connection
+    }
+  } else if (!first.dead) throw first.error
 
   // Nobody is behind the socket: a leftover of a daemon that crashed. The daemon removes it itself too.
   rmSync(location.socketPath, { force: true })
@@ -301,6 +310,71 @@ export async function openDaemon(options: OpenDaemonOptions): Promise<DaemonConn
     }
     if (Date.now() - started > LAUNCH_TIMEOUT_MS) throw new Error(`the pty daemon did not come up: ${attempt.error.message}`)
   }
+}
+
+/**
+ * The daemon's argv[0]: `spawnOrphan` starts it as `process.execPath`, an absolute path that `ps` keeps after the
+ * file is moved or deleted. `ps` escapes non-ASCII bytes outside a UTF-8 locale (the app's own env may have none).
+ */
+function argv0Of(pid: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('ps', ['-o', 'comm=', '-p', String(pid)], { timeout: 1000, env: { ...process.env, LC_ALL: 'en_US.UTF-8' } }, (error, stdout) =>
+      resolve(error ? null : stdout.trim() || null)
+    )
+  })
+}
+
+/** What the daemon's new terminals would fail on, or null when they would not (or that cannot be told). */
+async function missingSpawnFile(connection: DaemonConnection): Promise<string | null> {
+  if (connection.spawnHelper !== undefined) {
+    return connection.spawnHelper !== null && !existsSync(connection.spawnHelper) ? connection.spawnHelper : null
+  }
+  // A daemon built before it reported its spawn-helper: the program it runs from stands in (same app bundle).
+  const program = await argv0Of(connection.pid)
+  return program?.startsWith('/') && !existsSync(program) ? program : null
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const started = Date.now()
+  while (isAlive(pid)) {
+    if (Date.now() - started > timeoutMs) return false
+    await sleep(LAUNCH_POLL_MS)
+  }
+  return true
+}
+
+/**
+ * A daemon whose app was moved or deleted after it started (dragged to the Trash, replaced by a build at another path,
+ * a linked install whose worktree was removed) keeps its running sessions but can start no new one: node-pty execs
+ * spawn-helper from the old path and every spawn fails with `posix_spawnp failed`. Such a daemon is retired like one
+ * of another protocol (its sessions come back through the cold path) and true is returned once it has exited; the
+ * caller then launches a new one. Only a path read and found missing counts: otherwise the daemon is adopted.
+ */
+async function retireIfOrphaned(connection: DaemonConnection, log: (message: string) => void): Promise<boolean> {
+  const missing = await missingSpawnFile(connection)
+  if (missing === null) return false
+  log(`retiring pty daemon ${connection.pid}: ${missing} is gone, it cannot start terminals`)
+  await connection.shutdown(true)
+  // Its listening socket must be closed before a new daemon binds the same path, or closing it would unlink the new one.
+  if (!(await waitForExit(connection.pid, RETIRE_EXIT_MS))) {
+    log(`pty daemon ${connection.pid} did not exit after shutdown; killing it`)
+    try {
+      process.kill(connection.pid, 'SIGKILL')
+    } catch {
+      // It exited in the meantime.
+    }
+    if (!(await waitForExit(connection.pid, RETIRE_EXIT_MS))) throw new Error(`the retired pty daemon ${connection.pid} did not exit`)
+  }
+  return true
 }
 
 /**

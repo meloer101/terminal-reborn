@@ -1,7 +1,7 @@
 // Owns the node-pty sessions, independent of how requests arrive: the pty daemon (src/pty-daemon, Unix socket)
 // and the fallback utilityProcess (./index.ts) both drive one of these with the messages in ./protocol. Pipe sessions
 // (GUI, PRD F23) go to its PipeSessions; `list`, `liveCount`, `isAttached`, `detachAll` and `killAll` cover both kinds.
-import { accessSync, chmodSync, constants, realpathSync } from 'node:fs'
+import { accessSync, chmodSync, constants, existsSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import * as nodePty from 'node-pty'
@@ -42,6 +42,22 @@ export interface SessionHostOptions {
   /** A session no client is attached to printed something (its screen changed unseen). */
   onDetachedOutput?: (id: string) => void
   log?: Logger
+}
+
+/**
+ * The spawn-helper node-pty execs for every spawn: next to the `pty.node` it loads, which it looks for in
+ * build/Release, build/Debug, then prebuilds/<platform>-<arch> (node-pty lib/utils.js), outside app.asar. Null when
+ * node-pty cannot be found.
+ */
+export function spawnHelperPath(): string | null {
+  try {
+    const pkgDir = dirname(require.resolve('node-pty/package.json')).replace('app.asar', 'app.asar.unpacked')
+    const dirs = ['build/Release', 'build/Debug', `prebuilds/${process.platform}-${process.arch}`].map((dir) => join(pkgDir, dir))
+    const dir = dirs.find((candidate) => existsSync(join(candidate, 'pty.node')))
+    return dir ? join(dir, 'spawn-helper') : null
+  } catch {
+    return null
+  }
 }
 
 /**
