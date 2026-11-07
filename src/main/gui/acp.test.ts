@@ -70,6 +70,13 @@ describe('createAcpNormalizer', () => {
     expect(s.items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
   })
 
+  it('shows why a prompt failed', () => {
+    const n = createAcpNormalizer('/repo', () => 0)
+    const s = fold(n.promptDone(undefined, 'Internal error: quota exceeded'))
+    expect(s.items).toEqual([{ kind: 'system', id: 's0', at: 0, text: 'Internal error: quota exceeded' }])
+    expect(s.busy).toBe(false)
+  })
+
   it('shows the plan as one row that updates in place', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'in_progress' }] }))

@@ -100,6 +100,8 @@ export interface CodexNormalizer {
   request(id: string, method: string, params: Rec): GuiEvent[]
   pending(id: string): CodexPending | undefined
   settle(id: string): GuiEvent[]
+  /** A turn that failed outside a notification (`turn/start` refused): why, as a line in the conversation. */
+  failed(message: string): GuiEvent[]
 }
 
 export function createCodexNormalizer(cwd: string, now: () => number = Date.now): CodexNormalizer {
@@ -118,6 +120,14 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     return { type: 'items', changes: [{ index, item }] }
   }
   const system = (text: string): GuiEvent => put(`s${items.length}`, { kind: 'system', id: `s${items.length}`, at: now(), text })
+  // The error already shown this turn: a failed turn/completed repeats the final `error` notification.
+  let shownError: string | null = null
+  const errorLine = (message: string): GuiEvent[] => {
+    const text = clip(message, 300)
+    if (text === shownError) return []
+    shownError = text
+    return [system(text)]
+  }
   const endLive = (itemId?: string): GuiEvent[] => {
     if (!live || (itemId && live.itemId !== itemId)) return []
     live = null
@@ -177,11 +187,14 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     notification(method, params) {
       switch (method) {
         case 'turn/started':
+          shownError = null
           return [{ type: 'busy', busy: true }]
         case 'turn/completed': {
           const turn = isRec(params.turn) ? params.turn : {}
           const events: GuiEvent[] = [...endLive()]
           if (turn.status === 'interrupted') events.push(system('已中断'))
+          if (turn.status === 'failed') events.push(...errorLine((isRec(turn.error) ? str(turn.error.message) : undefined) ?? 'Codex 出错'))
+          shownError = null
           for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
           waiting.clear()
           events.push({ type: 'busy', busy: false })
@@ -207,7 +220,7 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
           const error = isRec(params.error) ? params.error : {}
           // Retries report here too ("Reconnecting… 1/5"); only a final error is the conversation's.
           if (params.willRetry === true) return []
-          return [system(clip(str(error.message) ?? 'Codex 出错', 300))]
+          return errorLine(str(error.message) ?? 'Codex 出错')
         }
         default:
           return []
@@ -222,7 +235,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     pending: (id) => waiting.get(id),
     settle(id) {
       return waiting.delete(id) ? [{ type: 'prompt-done', id }] : []
-    }
+    },
+    failed: (message) => errorLine(message)
   }
 }
 

@@ -156,7 +156,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
       void rpc.request('turn/start', params).then((outcome) => {
         if (outcome.ok) return
         // Refused before it began: there is no turn/completed to end it.
-        io.emit([{ type: 'busy', busy: false }])
+        io.emit([...normalizer.failed(outcome.message), { type: 'busy', busy: false }])
         io.turnEnd({ failed: true, message: outcome.message })
       })
       return true

@@ -53,6 +53,15 @@ describe('createCodexNormalizer', () => {
     expect(fold(n.notification('error', { error: { message: 'unexpected status 503' }, willRetry: false })).items[0]).toMatchObject({ kind: 'system', text: 'unexpected status 503' })
   })
 
+  it('shows why a turn failed or never started, once', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    let s = fold(n.notification('error', { error: { message: 'unexpected status 503' }, willRetry: false }))
+    s = fold(n.notification('turn/completed', { turn: { id: 't', status: 'failed', error: { message: 'unexpected status 503' } } }), s)
+    s = fold(n.notification('turn/completed', { turn: { id: 't2', status: 'failed', error: { message: 'stream disconnected' } } }), s)
+    s = fold(n.failed('model not supported'), s)
+    expect(s.items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['unexpected status 503', 'stream disconnected', 'model not supported'])
+  })
+
   it('shows reasoning only with a summary to open', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const s = fold([

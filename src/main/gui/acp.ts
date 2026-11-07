@@ -146,8 +146,8 @@ export interface AcpPending {
 
 export interface AcpNormalizer {
   update(update: Rec): GuiEvent[]
-  /** `session/prompt` returned: the turn is over. */
-  promptDone(stopReason: string | undefined): GuiEvent[]
+  /** `session/prompt` returned: the turn is over. `failure`: why it failed (an error, a refusal), shown as a line. */
+  promptDone(stopReason: string | undefined, failure?: string): GuiEvent[]
   /** The user's own message, shown at once (ACP does not echo it back). */
   sent(id: string, text: string, images: number): GuiEvent[]
   request(id: string, params: Rec): GuiEvent[]
@@ -239,9 +239,10 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
           return []
       }
     },
-    promptDone(stopReason) {
+    promptDone(stopReason, failure) {
       const events = flush()
       if (stopReason === 'cancelled') events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: '已中断' }))
+      else if (failure) events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: clip(failure, 300) }))
       for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
       waiting.clear()
       events.push({ type: 'busy', busy: false })
