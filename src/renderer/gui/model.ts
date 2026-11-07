@@ -177,11 +177,23 @@ export interface ToolView {
   summary?: string
   /** It has something to open: output or a diff. */
   expandable: boolean
+  /** What it printed, as shown and copied: without terminal escape codes. */
+  output?: string
 }
+
+// Escape codes a command writes for a terminal (OSC titles and links, CSI colors and cursor moves, charset picks):
+// a chat shows the text alone. The model keeps them, so colors can be drawn later.
+// eslint-disable-next-line no-control-regex -- matching ESC is the point
+const ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[@-Z\\-_]/g
+/** The kept tail of a long output (`…` + the end) can start inside a CSI sequence whose ESC was cut off. */
+const CUT_ESCAPE = /^…\[[0-?]*[ -/]*[@-~]/
+
+export const plainOutput = (text: string): string => text.replace(ESCAPES, '').replace(CUT_ESCAPE, '…')
 
 export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boolean): ToolView {
   const status: SessionStatus = waiting ? 'needs_you' : item.state === 'running' ? 'running' : item.state === 'error' ? 'error' : 'done_unread'
-  const firstLine = item.output
+  const output = item.output === undefined ? undefined : plainOutput(item.output)
+  const firstLine = output
     ?.split('\n')
     .map((line) => line.trim())
     .find((line) => line !== '')
@@ -193,7 +205,8 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     ...(item.diff && item.diff.removed > 0 ? { removed: item.diff.removed } : {}),
     waiting,
     ...(item.state !== 'running' && firstLine && !SUMMARY_SKIP.has(item.name) ? { summary: firstLine } : {}),
-    expandable: !!item.diff || !!item.output?.trim()
+    expandable: !!item.diff || !!output?.trim(),
+    ...(output !== undefined ? { output } : {})
   }
 }
 

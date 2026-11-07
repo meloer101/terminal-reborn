@@ -122,6 +122,15 @@ describe('rows', () => {
     expect(toolView(tool('w', { state: 'running', name: 'Bash' }), true)).toMatchObject({ status: 'needs_you', waiting: true })
   })
 
+  it('shows a command’s output without its terminal escape codes (colors, cursor moves, titles)', () => {
+    const output = '\x1b]0;vitest\x07\x1b[1m\x1b[32m✓\x1b[39m\x1b[22m 12 passed\n\x1b[2K\x1b[1Gdone\x1b(B'
+    const view = toolView(tool('b', { name: 'Bash', arg: 'npm test', output }), false)
+    expect(view.summary).toBe('✓ 12 passed')
+    expect(view.output).toBe('✓ 12 passed\ndone')
+    // A sequence cut in two by the kept tail of a long output loses its visible half too.
+    expect(toolView(tool('t', { name: 'Bash', output: '…[0m tail' }), false).output).toBe('… tail')
+  })
+
   it('marks the running tool a permission is about', () => {
     const items = [tool('a'), tool('b', { state: 'running' }), text('x')]
     const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }

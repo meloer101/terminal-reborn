@@ -312,10 +312,10 @@ function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; wa
         {view.waiting && <span className={styles.waiting}>等你确认</span>}
       </button>
       {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
-      {open && (item.diff || item.output) && (
+      {open && (item.diff || view.output) && (
         <div className={styles.codeWrap}>
-          {item.diff ? <Diff diff={item.diff} /> : <pre className={styles.output}>{item.output}</pre>}
-          <CopyButton text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : (item.output ?? ''))} label="复制输出" className={styles.cornerCopy} />
+          {item.diff ? <Diff diff={item.diff} /> : <pre className={styles.output}>{view.output}</pre>}
+          <CopyButton text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : (view.output ?? ''))} label="复制输出" className={styles.cornerCopy} />
         </div>
       )}
     </div>
