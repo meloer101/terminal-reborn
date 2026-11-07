@@ -239,10 +239,17 @@ test.describe('F23 GUI session (Claude)', () => {
     await row.click()
     await expect(steps).toBeVisible()
     // The line runs down from the row icon's centre (8), the nested rows 16 right of it.
-    const [rowBox, stepsBox, grepBox] = await Promise.all([row.boundingBox(), steps.boundingBox(), grep.boundingBox()])
-    expect(stepsBox!.x - rowBox!.x).toBeCloseTo(7, 0)
-    expect(grepBox!.x - rowBox!.x).toBeCloseTo(24, 0)
-    expect(grepBox!.y).toBeGreaterThan(rowBox!.y + rowBox!.height)
+    // Measured in one frame: opening the row grows the feed, which follows its end, so separate reads can straddle a scroll.
+    const box = await agent.evaluate((el) => {
+      const rect = (node: Element | null | undefined) => node!.getBoundingClientRect()
+      const stepsEl = el.querySelector('[data-testid="gui-subagent-steps"]')
+      const grepEl = [...(stepsEl?.querySelectorAll('button') ?? [])].find((b) => /搜索\s*SameSite=Lax/.test(b.textContent ?? ''))
+      const [r, s, g] = [rect(el.querySelector('button')), rect(stepsEl), rect(grepEl)]
+      return { rowX: r.x, rowBottom: r.bottom, stepsX: s.x, grepX: g.x, grepY: g.y }
+    })
+    expect(box.stepsX - box.rowX).toBeCloseTo(7, 0)
+    expect(box.grepX - box.rowX).toBeCloseTo(24, 0)
+    expect(box.grepY).toBeGreaterThan(box.rowBottom)
     expect(await steps.evaluate((el) => [getComputedStyle(el).borderLeftWidth, getComputedStyle(el).borderLeftStyle])).toEqual(['1px', 'solid'])
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
