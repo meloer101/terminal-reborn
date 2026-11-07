@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-06
+> 最后更新：2026-11-07
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -242,6 +242,8 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Figma 56 和实现（PRD v1.133）：所有 agent 的选择器用同一套名字——权限（询问 / 接受编辑 / 自动）、「计划」开关、推理强度（低 … 最高）；Claude `permissionMode`、Codex `approvalPolicy` + `approvalsReviewer`、Grok 启动参数（换档重开进程）、其余 ACP agent 由 Wavi 替你回答改文件的请求；ACP 的推理强度按 `thought_level` 和常见 id 认、分组选项展开、agent 的 plan 模式归到「计划」；e2e `gui-session.spec.ts` 20 个，host 测试加通用 ACP 和 Grok 重开；权限和计划随会话存进 workspace.json，重新接上或重开时 agent 从这一档开始（Claude `--permission-mode`、Codex 每轮的审批设置、ACP 由 Wavi 回答、Grok 启动参数），界面显示的就是它在跑的档
 - [x] Wavi 启动的终端和 agent 用 macOS 系统代理（PRD v1.134 / §6.18）：环境里没有代理变量时读 `scutil --proxy`（PAC 用 Electron 解析），每分钟刷新；去掉代理变量启动后真 Grok GUI 会话能回复
 - [x] 思考行只在有文字时出现（PRD v1.136 / §6.17）：所有 agent 空的思考不生成（手机远程同一个解析器）；Claude ≥ 2.1.94 启动时加 `--thinking-display summarized`；进行中的「思考中」透明度往复；e2e `gui-session.spec.ts` 21 个
+- [x] 数据丢失和显示 bug（2026-11-07，作者看过审查后定「先修 bug 和数据丢失」，只用现有样式）：重开 Claude 会话后 `/cost` `/context` 等本地命令的输出不再消失（实测 `-p` 实时是 synthetic 文字、transcript 是 `<local-command-stdout>`）；Codex `turn/start` 被拒、ACP prompt 出错或被拒时对话流写出原因（Codex 的最终 `error` 不重复）；Codex MCP / dynamic 工具的结果和错误进输出；ACP 计划一项一行、每轮一行；ACP 载入历史时一条消息不再拆成多个气泡；Codex 历史按 `Exit code` / `Process exited with code` 判工具成败；工具输出去掉终端转义码（模型里保留）；回复、气泡、计划卡片的 Markdown 跟随「对话 · 字号」（文件预览的同权重规则在打包后排在后面、一直盖住了它们，main 上 e2e「reads like a chat」原本就失败）
+- [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：输入框没有边界和聚焦态、对话不透明度低时和背景融在一起、新会话没有空状态；对话字号只有正文跟随设置（标题、代码、工具行、思考行、卡片固定 12–13，标题会比正文小）；Claude subagent 的过程全部丢弃（sidechain）、Codex `collabAgentToolCall` 不处理；shell 命令多行被压成一行、不显示退出码和 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`/` 菜单不分命令和 skills、不显示参数提示（`system/init` 的 `skills` `slash_commands` `agents` 没读）、Codex 没有菜单；TodoWrite 只显示「N 项」、Codex 计划不处理；Claude / Codex 改文件的确认卡片没有 diff、多文件 diff 没有文件名；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
 - [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`
 - [ ] Codex 的「计划」（实验性 `collaborationMode`，要 `experimentalApi`，先实测）；用真 Grok 跑一轮「自动」「计划」；Kiro 和 Gemini、Qwen、OpenCode、Copilot、Kimi、Droid、Amp、Goose、Cline、Auggie、CodeBuddy、Pi 装上后握手实测它们上报的选项、会不会发权限请求
 - [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
