@@ -8,6 +8,8 @@ import { resumeReports, startReports } from './reports'
 import { restoreDispatch, savedDispatch, useDispatch } from './store'
 
 let started = false
+/** The saved waits are taken up once per window (not again on a remount). */
+let restored = false
 
 export function startDispatchBridge(): () => void {
   if (started) return () => {}
@@ -20,7 +22,10 @@ export function startDispatchBridge(): () => void {
   })
   const offReports = startReports()
   // What an earlier window left waiting comes back (a reload, a crash, a restart): saved with the workspace.
-  restoreDispatch(initialWorkspaceFile()?.dispatch)
+  if (!restored) {
+    restored = true
+    restoreDispatch(initialWorkspaceFile()?.dispatch)
+  }
   resumeConfirmTimers()
   resumeReports()
   const offSnapshot = addSnapshotPart(() => {

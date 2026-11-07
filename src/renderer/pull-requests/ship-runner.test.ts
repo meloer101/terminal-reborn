@@ -19,6 +19,7 @@ const { cancelShip, restoreShipRuns, retryShip, savedShipRuns, startShip, submit
 
 const shipToMain = vi.fn<(request: unknown) => Promise<ShipMainResult>>()
 const pushBase = vi.fn<(target: unknown) => Promise<ShipMainResult>>()
+const preflight = vi.fn<(target: unknown) => Promise<unknown>>()
 
 const ctx = {
   root: '/repo',
@@ -53,11 +54,13 @@ beforeEach(() => {
   useShips.setState({ byWorktree: {} })
   shipToMain.mockReset()
   pushBase.mockReset()
+  preflight.mockReset()
+  preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1 })
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
   vi.stubGlobal('window', {
     tr: {
       pr: { write: async () => ({ ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {} },
-      ship: { shipToMain, pushBase },
+      ship: { shipToMain, pushBase, preflight },
       ui: { notify: () => {} }
     }
   })
@@ -132,6 +135,24 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
     await settle()
     expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'], message: 'feat: new' }))
     expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c3' })
+  })
+
+  it('asks main first: a merge it finished after the old window went is not run again, only the push', async () => {
+    shipToMain.mockReturnValueOnce(new Promise(() => {}))
+    startShip(ctx, 'main', 'feat: new')
+    await settle()
+    submitShip(ctx.worktree)
+    await settle()
+    const [saved] = savedShipRuns()
+    cancelShip(ctx.worktree)
+    restoreShipRuns([saved!], ctx.settings)
+    preflight.mockResolvedValueOnce({ ok: true, merged: true, uncommitted: 0 })
+    pushBase.mockResolvedValueOnce({ ok: true, commit: 'c9', pushed: true })
+    retryShip(ctx.worktree)
+    await settle()
+    expect(shipToMain).toHaveBeenCalledTimes(1)
+    expect(pushBase).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt' })
+    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c9' })
   })
 
   it('keeps the kept merge across it, so 重试 after a failed push still pushes the base alone', async () => {
