@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentName, AGENT_SPECS, claudeOrCodex, CLI_AGENTS, isCliAgent } from './agents'
+import { AGENT_SPECS, agentName, claudeOrCodex, CLI_AGENTS, hasHooks, isCliAgent } from './agents'
 
 describe('agent registry', () => {
   it('has one row per CLI, keyed by its own id', () => {
@@ -31,5 +31,12 @@ describe('agent registry', () => {
     expect(isCliAgent('shell')).toBe(false)
     expect(claudeOrCodex('codex')).toBe('codex')
     expect(claudeOrCodex('gemini')).toBeNull()
+  })
+})
+
+describe('hasHooks', () => {
+  it('names the agents whose turns Wavi sees through injected hooks, and nothing else', () => {
+    for (const kind of ['claude', 'codex', 'gemini', 'qwen', 'pi']) expect(hasHooks(kind), kind).toBe(true)
+    for (const kind of ['opencode', 'grok', 'cursor', 'shell', null, undefined, 'bash']) expect(hasHooks(kind), String(kind)).toBe(false)
   })
 })

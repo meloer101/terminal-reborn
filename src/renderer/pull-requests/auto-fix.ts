@@ -36,6 +36,7 @@ import {
 import { acceptBaseCi, setBaseAutomation, useBaseCi } from './base-ci'
 import { prWatchTargets, setAutomation, setPrNotice, usePullRequests } from './store'
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
+import { agentName as agentLabel, hasHooks } from '@shared/agents'
 
 /** Every 自动修复 prompt starts with this, so its own UserPromptSubmit is not taken for the user taking over. */
 export const AUTO_FIX_MARK = '（Wavi 自动修复'
@@ -58,18 +59,19 @@ const restoredBase = new Set<string>()
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
-/** The worktree's agent session (the active one when it is there), or null. */
-function agentFor(worktreePath: string): Session | null {
+/** The worktree's agent session that can take a fix (an agent with hooks: its Stop starts the brakes), the active one first. */
+export function agentFor(worktreePath: string): Session | null {
   const state = useWorkspace.getState()
   const ids = new Set(state.worktrees.filter((w) => w.path === worktreePath).map((w) => w.id))
-  const sessions = state.sessions.filter((s) => ids.has(s.worktreeId) && (s.kind === 'claude' || s.kind === 'codex'))
+  const sessions = state.sessions.filter((s) => ids.has(s.worktreeId) && hasHooks(s.kind))
   return sessions.find((s) => s.id === state.activeSessionId) ?? sessions[0] ?? null
 }
 
 export const agentIdle = (session: Session | null): boolean =>
   session !== null && session.phase !== 'exited' && session.phase !== 'not-started' && (session.status === 'idle' || session.status === 'done_unread')
 
-export const agentName = (session: Session | null): string => (session?.kind === 'codex' ? 'Codex' : 'Claude')
+/** How the PR rows name the fixing agent: Claude as before (not Claude Code), every other one by its label. */
+export const agentName = (session: Session | null): string => (!session || session.kind === 'claude' || session.kind === 'shell' ? 'Claude' : agentLabel(session.kind))
 
 function projectRootOf(worktreePath: string): string | null {
   const state = useWorkspace.getState()

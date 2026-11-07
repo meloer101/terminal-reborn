@@ -22,14 +22,15 @@ import { usePullRequests } from '../../pull-requests/store'
 import { useWorkspace } from '../../state/workspace'
 import { Toggle } from '../../ui/Toggle'
 import ci from './CiRows.module.css'
+import { hasHooks } from '@shared/agents'
 
 type StoppedRun = Extract<FixRun, { kind: 'stopped' }>
 
-/** The worktree's agent session, for the rows' switches and words (the first Claude / Codex session of the worktree). */
+/** The worktree's agent session, for the rows' switches and words (its first session of an agent with hooks). */
 export function useAgentOf(worktreePath: string) {
   return useWorkspace((s) => {
     const ids = new Set(s.worktrees.filter((w) => w.path === worktreePath).map((w) => w.id))
-    return s.sessions.find((x) => ids.has(x.worktreeId) && (x.kind === 'claude' || x.kind === 'codex')) ?? null
+    return s.sessions.find((x) => ids.has(x.worktreeId) && hasHooks(x.kind)) ?? null
   })
 }
 
