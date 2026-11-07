@@ -9,6 +9,8 @@
 // pushed the first interactive frame back by tens of ms).
 ;(() => {
   const THEME_KEY = 'tr.theme.boot'
+  /** 实色 (PRD v1.139): the window is opaque from its first frame (mirrored by appearance/runtime.ts). */
+  const MATERIAL_KEY = 'tr.material.boot'
   const LAYOUT_KEY = 'tr.boot.layout'
   /** The last dot lands: up to 300 ms late, 800 ms each (boot-worker.js). */
   const FORMED = 1100
@@ -26,6 +28,8 @@
   const pref = read(THEME_KEY)
   const light = pref === 'light' || (pref !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches)
   document.documentElement.dataset.theme = light ? 'light' : 'dark'
+  const solid = read(MATERIAL_KEY) === 'solid'
+  if (solid) document.documentElement.dataset.material = 'solid'
 
   let layout = null
   try {
@@ -43,12 +47,14 @@
   const style = document.createElement('style')
   style.textContent = `
 #wavi-boot { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
+#wavi-boot.solid { background: var(--glass-shell-color); }
 #wavi-boot .card { position: absolute; background: var(--bg-app); box-shadow: var(--card-edge), var(--card-shadow); }
 #wavi-boot canvas { position: absolute; inset: 0; width: 100%; height: 100%; }`
   document.head.appendChild(style)
 
   const el = document.createElement('div')
   el.id = 'wavi-boot'
+  if (solid) el.className = 'solid'
   el.setAttribute('aria-hidden', 'true')
   const cardEl = document.createElement('div')
   cardEl.className = 'card'

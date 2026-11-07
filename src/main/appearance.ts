@@ -2,7 +2,8 @@
 // window is transparent over Liquid Glass (NSGlassEffectView); 窗口 · 材质 「磨砂玻璃」 lays native vibrancy over it
 // (PRD §5 v1.127: `setVibrancy('sidebar')` covers the glass, `setVibrancy(null)` shows it again — measured, no window
 // to recreate). Before macOS 26 the shell is always vibrancy. The renderer tints either with --glass-shell at the
-// user's 窗口底层不透明度 (appearance/map.ts).
+// user's 窗口底层不透明度 (appearance/map.ts). 「实色」 (v1.139) takes the vibrancy path too, covering the Liquid Glass (which
+// cannot be removed); the renderer paints the shell opaque over it, which keeps the window's rounded corners.
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import liquidGlass from 'electron-liquid-glass'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'

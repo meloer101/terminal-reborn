@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-07：窗口材质加回「实色」（PRD v1.139，Figma 57）：不透明的窗口，深色、浅色都不再是纯黑 / 纯白，对比从 17–19:1 降到 11–13:1。
 - 2026-11-06：架构审阅（4 个分片 review + 1 次独立核实，30 条里 21 条属实、9 条部分属实），按 8 批修复，见「进行中：架构审阅修复」。批次 1 合进 main：GUI「总是允许」不再写 `~/.claude/settings.json`、不再切换模式；reattach 之后重启的终端有输出、能输入；6 s 空闲标题自愈只对 Claude；关掉合并面板能停下正在跑的测试脚本，测试和归档脚本互不打断；rc 文件里有后台任务时登录 shell 的 PATH 照样读得到；后台审阅能认出中文文件名。每条都有修复前失败的回归测试。
 - 2026-11-05：主区贴边（PRD v1.135，Figma 55）：卡片贴住窗口的上、右、下边，会话头进卡片，终端超过一屏后滚到会话头下面并渐进模糊。
 - 2026-11-05：侧栏可以按状态聚合（PRD v1.131，Figma 53C 选定）：标题栏「会话分组」按钮切换项目 / 状态，按状态时 等你处理 → 出错 → 已完成 → 运行中 → 空闲 → 已退出，组可折叠，选择和折叠都保存；单元测试 `sidebar/model.test.ts`、`workspace-file.test.ts`，e2e `sidebar-projects.spec.ts`（切换、换组、折叠、重启后还在）。深色主题只在 e2e 截图里看过（窗口底是浅色玻璃），还没在作者机器上用。
@@ -239,6 +240,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 真 Claude 冒烟（Haiku，作者 2026-11-05 同意）：回复、权限卡片允许后写入文件、侧栏 1 s 内变「等你确认：编辑 a.txt」、总览计数、标题由 Claude 起名、transcript 全部 `entrypoint: wavi`；顺带修了选择器把实际模型 id 显示成 Default、权限卡片显示绝对路径
 - [x] Figma 50 和实现（PRD v1.126）：对话流从上往下排、按普通聊天滚动（v1.129 去掉了发出后钉到顶部），超过一屏时滚到底最后一块下面留 120（同 Claude 桌面版，作者 2026-11-06 定，未出 Figma 稿）；图片附件 64 缩略图；输入框换成 Tiptap，列表 / 引用 / 代码块 / 粗斜删 / 行内代码，「格式」工具栏和选区浮条，发出去的是只在有格式处加标记的 Markdown（`rich-text.ts`）；e2e `gui-session.spec.ts` 加到 13 个
 - [x] Figma 51 和实现（PRD v1.127）：头像（51A）、你的消息按 Markdown 显示、设置 · 外观 ·「对话」（头像、宽度四档、字体、字重、字号）、对话不透明度、窗口材质（液态玻璃 / 磨砂玻璃）和窗口底层不透明度；e2e `gui-session.spec.ts` 15 个、`settings.spec.ts` 加一个
+- [x] 窗口材质加回「实色」（PRD v1.139，Figma 57）：材质三选一，实色时窗口不透明、配色压到 11–13:1（深色卡片 `#1f1f1f` / 正文 `#d5d5d5`，浅色 `#f6f6f6` / `#2e2e2e`），全屏保持实色，启动画面第一帧就是实色；单元测试 `settings.test.ts`、`appearance/map.test.ts`、`appearance-form.test.ts`；构建版里截图核对过深色 / 浅色实色和设置页（2026-11-07）
 - [x] Figma 52 和实现（PRD v1.130）：输入框一行（「+」· 文字 · 发送），框下「格式」、选择器和 context 圆环，点圆环看 context 和当前 agent 的额度（行样式同设置 · 额度，共用 `session-meta/UsageRows`）；GUI 会话的会话头去掉 context 和额度；@ 按钮去掉；e2e `gui-session.spec.ts` 17 个
 - [x] Figma 54 和实现（PRD v1.132）：消息悬停出现复制 / 编辑和时间，代码块和工具输出可复制；Claude 会话改之前的消息重新问（`--resume-session-at` 重开，读历史只取 transcript 当前分支）；输入框下一行离底边改为 8；e2e `gui-session.spec.ts` 19 个
 - [x] Figma 56 和实现（PRD v1.133）：所有 agent 的选择器用同一套名字——权限（询问 / 接受编辑 / 自动）、「计划」开关、推理强度（低 … 最高）；Claude `permissionMode`、Codex `approvalPolicy` + `approvalsReviewer`、Grok 启动参数（换档重开进程）、其余 ACP agent 由 Wavi 替你回答改文件的请求；ACP 的推理强度按 `thought_level` 和常见 id 认、分组选项展开、agent 的 plan 模式归到「计划」；e2e `gui-session.spec.ts` 20 个，host 测试加通用 ACP 和 Grok 重开；权限和计划随会话存进 workspace.json，重新接上或重开时 agent 从这一档开始（Claude `--permission-mode`、Codex 每轮的审批设置、ACP 由 Wavi 回答、Grok 启动参数），界面显示的就是它在跑的档
