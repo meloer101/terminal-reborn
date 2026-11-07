@@ -17,7 +17,7 @@ struct PromptBar: View {
           HStack(spacing: 10) {
             StatusGlyph(status: .needsYou)
             Text(prompt.kind == "permission" ? "等你确认：\(prompt.summary ?? "")" : "等你回答：\(prompt.questions?.first?.question ?? "")")
-              .font(.ui(14)).foregroundStyle(Color.statusAttention).lineLimit(1)
+              .font(.ui(.subheadline)).foregroundStyle(Color.statusAttention).lineLimit(1)
             Spacer(minLength: 0)
           }
           .padding(.horizontal, 16)
@@ -43,7 +43,7 @@ private struct PromptSheet: View {
     FittedSheet {
       VStack(alignment: .leading, spacing: 16) {
         if prompt.kind == "permission" { PermissionAsk(prompt: prompt, done: done) } else { QuestionAsk(prompt: prompt, done: done) }
-        if let error { Text(error).font(.ui(14)).foregroundStyle(Color.statusError) }
+        if let error { Text(error).font(.ui(.subheadline)).foregroundStyle(Color.statusError) }
       }
     }
   }
@@ -69,7 +69,7 @@ struct FittedSheet<Content: View>: View {
     .scrollBounceBehavior(.basedOnSize)
     .presentationDetents([.height(height)])
     .presentationDragIndicator(.visible)
-    .presentationBackground(Color.bgRaised.opacity(0.9))
+    .presentationBackground(Color.bgSheet.opacity(0.9))
   }
 }
 
@@ -81,15 +81,15 @@ private struct Head: View {
   var body: some View {
     HStack(spacing: 8) {
       StatusGlyph(status: .needsYou)
-      Text(label).font(.ui(13, 500)).foregroundStyle(Color.statusAttention)
+      Text(label).font(.ui(.footnote, medium: true)).foregroundStyle(Color.statusAttention)
       if let since {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-          Text("已等 \(shortAge(context.date.timeIntervalSince1970 * 1000 - since))").font(.mono(12)).foregroundStyle(Color.textTertiary)
+          Text("已等 \(shortAge(context.date.timeIntervalSince1970 * 1000 - since))").font(.mono(.caption)).foregroundStyle(Color.textSecondary)
         }
       }
       if let chip {
-        Text(chip).font(.ui(13)).foregroundStyle(Color.textSecondary).padding(.horizontal, 8).padding(.vertical, 2)
-          .background(Color.bgSelected, in: RoundedRectangle(cornerRadius: 6))
+        Text(chip).font(.ui(.footnote)).foregroundStyle(Color.textSecondary).padding(.horizontal, 8).padding(.vertical, 2)
+          .background(Color.fillStrong, in: RoundedRectangle(cornerRadius: 6))
       }
     }
   }
@@ -104,13 +104,13 @@ private struct PermissionAsk: View {
   var body: some View {
     let input = prompt.input ?? [:]
     Head(label: "等你确认", since: prompt.createdAt)
-    Text(permissionTitle(prompt.tool ?? "")).font(.ui(22, 500)).foregroundStyle(Color.textPrimary)
-    Text(permissionSubject(input, summary: prompt.summary ?? "")).font(.mono(15)).foregroundStyle(Color.textPrimary).lineLimit(8)
+    Text(permissionTitle(prompt.tool ?? "")).font(.ui(.title2)).foregroundStyle(Color.textPrimary)
+    Text(permissionSubject(input, summary: prompt.summary ?? "")).font(.mono(.subheadline)).foregroundStyle(Color.textPrimary).lineLimit(8)
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 16)
       .padding(.vertical, 12)
-      .background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
-    if let description = input["description"]?.string { Text(description).font(.ui(15)).lineSpacing(4).foregroundStyle(Color.textSecondary) }
+      .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 10))
+    if let description = input["description"]?.string { Text(description).font(.ui(.subheadline)).lineSpacing(4).foregroundStyle(Color.textSecondary) }
     if prompt.answerable {
       HStack(spacing: 8) {
         answerButton("拒绝", "deny")
@@ -119,7 +119,7 @@ private struct PermissionAsk: View {
       // 46″: as wide as the two above, left on 拒绝 and right on 允许.
       if prompt.canAllowAlways == true { answerButton(allowAlwaysLabel(prompt.allowAlways?.rules), "allow-always") }
     } else {
-      Text("这个请求只能在 Mac 的终端里回答").font(.ui(15)).foregroundStyle(Color.textSecondary)
+      Text("这个请求只能在 Mac 的终端里回答").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary)
     }
   }
 
@@ -153,7 +153,7 @@ private struct QuestionAsk: View {
     Head(label: "等你回答", chip: questions.count == 1 ? questions[0].header : nil)
     ForEach(Array(questions.enumerated()), id: \.offset) { index, q in
       VStack(alignment: .leading, spacing: 16) {
-        Text(q.question).font(.ui(20, 500)).foregroundStyle(Color.textPrimary)
+        Text(q.question).font(.ui(.title3)).foregroundStyle(Color.textPrimary)
         VStack(spacing: 2) {
           ForEach(q.options.map(\.label) + [Self.otherKey], id: \.self) { label in
             option(index, q, label, description: q.options.first { $0.label == label }?.description)
@@ -176,7 +176,7 @@ private struct QuestionAsk: View {
       .buttonStyle(.wavi(primary: true))
       .disabled(busy || !questions.indices.allSatisfy { answer($0) != nil })
     } else {
-      Text("这个问题现在只能在 Mac 的终端里回答").font(.ui(15)).foregroundStyle(Color.textSecondary)
+      Text("这个问题现在只能在 Mac 的终端里回答").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary)
     }
   }
 
@@ -187,11 +187,11 @@ private struct QuestionAsk: View {
       // A sibling of the button, so typing in it does not toggle the option.
       if label == Self.otherKey && on {
         TextField("写下你的回答", text: Binding(get: { other[index] ?? "" }, set: { other[index] = $0 }), axis: .vertical)
-          .font(.ui(16)).foregroundStyle(Color.textPrimary)
+          .font(.ui(.callout)).foregroundStyle(Color.textPrimary)
           .padding(.leading, 46).padding(.trailing, 12).padding(.bottom, 12)
       }
     }
-    .background(on ? Color.bgSelected : .clear, in: RoundedRectangle(cornerRadius: 10))
+    .background(on ? Color.fillStrong : .clear, in: RoundedRectangle(cornerRadius: 10))
   }
 
   private func optionButton(_ index: Int, _ q: AgentQuestion, _ label: String, description: String?, on: Bool) -> some View {
@@ -203,8 +203,8 @@ private struct QuestionAsk: View {
       HStack(alignment: .top, spacing: 12) {
         if q.multiSelect { Icon(on ? "square-check" : "square", size: 22) } else { Radio(on: on) }
         VStack(alignment: .leading, spacing: 2) {
-          Text(label == Self.otherKey ? "其他" : label).font(.ui(16)).foregroundStyle(Color.textPrimary)
-          if let description { Text(description).font(.ui(14)).foregroundStyle(Color.textSecondary) }
+          Text(label == Self.otherKey ? "其他" : label).font(.ui(.callout)).foregroundStyle(Color.textPrimary)
+          if let description { Text(description).font(.ui(.subheadline)).foregroundStyle(Color.textSecondary) }
         }
         Spacer(minLength: 0)
       }

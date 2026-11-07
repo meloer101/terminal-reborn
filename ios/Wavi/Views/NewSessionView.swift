@@ -43,11 +43,11 @@ struct NewSessionView: View {
               Picker("基于", selection: $base) {
                 let local = data.info.branches.filter { !$0.remote }
                 let remote = data.info.branches.filter(\.remote)
-                Section("本地分支") { ForEach(local, id: \.name) { Text($0.name).font(.mono(14)).tag(Optional($0.name)) } }
-                if !remote.isEmpty { Section("远程分支") { ForEach(remote, id: \.name) { Text($0.name).font(.mono(14)).tag(Optional($0.name)) } } }
+                Section("本地分支") { ForEach(local, id: \.name) { Text($0.name).font(.mono()).tag(Optional($0.name)) } }
+                if !remote.isEmpty { Section("远程分支") { ForEach(remote, id: \.name) { Text($0.name).font(.mono()).tag(Optional($0.name)) } } }
               }
               LabeledContent("分支名") {
-                TextField("", text: $branch).font(.mono(14)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never)
+                TextField("", text: $branch).font(.mono()).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never)
               }
               if let problem = branchProblem(data) { Text(problem).foregroundStyle(Color.statusError) }
             }
@@ -68,7 +68,7 @@ struct NewSessionView: View {
                   HStack(spacing: 8) {
                     AgentMark(agent: agent, size: 16)
                     Text(Shared.agent(agent).name)
-                    Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)).foregroundStyle(Color.textTertiary)
+                    Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)).foregroundStyle(Color.textSecondary)
                   }
                   .foregroundStyle(Color.textPrimary)
                 }

@@ -111,11 +111,11 @@ private struct CompactValue: View {
   var body: some View {
     Group {
       switch state.kind {
-      case .permission, .question: Elapsed(since: state.since, width: 44).font(.ui(13, 600))
-      case .running: Text("\(state.runningCount)").font(.mono(15, 500)).foregroundStyle(Color.textPrimary)
-      case .done: Text("完成").font(.ui(13, 600))
-      case .error: Text("出错").font(.ui(13, 600))
-      case .idle: Text("空闲").font(.ui(13, 600))
+      case .permission, .question: Elapsed(since: state.since, width: 44).font(.ui(.footnote, medium: true))
+      case .running: Text("\(state.runningCount)").font(.mono(.subheadline, medium: true)).foregroundStyle(Color.textPrimary)
+      case .done: Text("完成").font(.ui(.footnote, medium: true))
+      case .error: Text("出错").font(.ui(.footnote, medium: true))
+      case .idle: Text("空闲").font(.ui(.footnote, medium: true))
       }
     }
     .foregroundStyle(state.kind.color)
@@ -130,7 +130,7 @@ private struct StatusWord: View {
   var body: some View {
     HStack(spacing: 6) {
       Glyph(kind: state.kind)
-      Text(word).font(.ui(13, 600)).foregroundStyle(state.kind.color).lineLimit(1)
+      Text(word).font(.ui(.footnote, medium: true)).foregroundStyle(state.kind.color).lineLimit(1)
     }
   }
 
@@ -161,8 +161,8 @@ private struct Age: View {
         Elapsed(since: state.since)
       }
     }
-    .font(.ui(12, 500))
-    .foregroundStyle(Color.textTertiary)
+    .font(.ui(.caption, medium: true))
+    .foregroundStyle(Color.textSecondary)
     .lineLimit(1)
   }
 }
@@ -197,23 +197,23 @@ private struct ActivityBody: View {
             VStack(alignment: .leading, spacing: 2) {
               HStack(spacing: 8) {
                 AgentMark(agent: row.agent, size: 16)
-                Text(row.title).font(.ui(15, 500)).foregroundStyle(Color.textPrimary).lineLimit(1)
+                Text(row.title).font(.ui(.subheadline, medium: true)).foregroundStyle(Color.textPrimary).lineLimit(1)
                 Spacer(minLength: 8)
-                Elapsed(since: row.since).font(.ui(12, 500)).foregroundStyle(Color.textTertiary)
+                Elapsed(since: row.since).font(.ui(.caption, medium: true)).foregroundStyle(Color.textSecondary)
               }
-              Text(row.action).font(.ui(13, 500)).foregroundStyle(Color.textSecondary).lineLimit(1).padding(.leading, 24)
+              Text(row.action).font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary).lineLimit(1).padding(.leading, 24)
             }
           }
         }
       } else {
         HStack(spacing: 8) {
           if !state.agent.isEmpty { AgentMark(agent: state.agent, size: 16) }
-          Text(state.title).font(.ui(16, 600)).foregroundStyle(Color.textPrimary).lineLimit(1)
+          Text(state.title).font(.ui(.callout, medium: true)).foregroundStyle(Color.textPrimary).lineLimit(1)
         }
         // A failed answer takes the detail's line: the expanded island has no room for another (160 pt at most).
         Group {
           if let failure = state.failure {
-            Text(failure).font(.ui(14, 500)).foregroundStyle(Color.statusError).lineLimit(1)
+            Text(failure).font(.ui(.subheadline, medium: true)).foregroundStyle(Color.statusError).lineLimit(1)
           } else {
             detail
           }
@@ -230,12 +230,12 @@ private struct ActivityBody: View {
   @ViewBuilder private var detail: some View {
     if state.kind == .permission {
       HStack(spacing: 6) {
-        Text(state.detail).font(.ui(14, 500)).foregroundStyle(Color.textSecondary)
-        if let subject = state.subject { Text(subject).font(.mono(13, 500)).foregroundStyle(Color.textPrimary).truncationMode(.middle) }
+        Text(state.detail).font(.ui(.subheadline, medium: true)).foregroundStyle(Color.textSecondary)
+        if let subject = state.subject { Text(subject).font(.mono(medium: true)).foregroundStyle(Color.textPrimary).truncationMode(.middle) }
       }
       .lineLimit(1)
     } else {
-      Text(state.detail).font(.ui(14, 500)).foregroundStyle(Color.textSecondary).lineLimit(2)
+      Text(state.detail).font(.ui(.subheadline, medium: true)).foregroundStyle(Color.textSecondary).lineLimit(2)
     }
   }
 
@@ -257,11 +257,11 @@ private struct ActivityBody: View {
   }
 
   private func label(_ text: String, primary: Bool) -> some View {
-    Text(text).font(.ui(15, 600)).lineLimit(1).minimumScaleFactor(0.8)
-      .foregroundStyle(primary ? Color.textInverse : Color.textPrimary)
+    Text(text).font(.ui(.subheadline, medium: true)).lineLimit(1).minimumScaleFactor(0.8)
+      .foregroundStyle(primary ? Color.solidOn : Color.textPrimary)
       .frame(maxWidth: .infinity, minHeight: 40)
       .padding(.horizontal, 8)
-      .background(primary ? Color.fillPrimary : Color.activityButton, in: shape)
+      .background(primary ? Color.solidFill : Color.activityButton, in: shape)
   }
 
   /// Concentric with the island (a capsule) or the Lock Screen card (24 − its 14 margin).

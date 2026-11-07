@@ -21,16 +21,16 @@ struct PairView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 32) {
-      Text("扫描 Mac 上的二维码").font(.ui(28, 500)).foregroundStyle(Color.textPrimary)
+      Text("扫描 Mac 上的二维码").font(.ui(.title2)).foregroundStyle(Color.textPrimary)
       ZStack {
-        Color.bgInset
+        Color.bgGrouped
         QRScanner { scanned($0) }
         Viewfinder().stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round)).frame(width: 220, height: 220)
       }
       .aspectRatio(1, contentMode: .fit)
       .clipShape(RoundedRectangle(cornerRadius: 24))
-      if busy && !typing { Text("正在配对…").font(.ui(15)).foregroundStyle(Color.textSecondary).padding(.top, -16) }
-      if let error, !typing { Text(error).font(.ui(15)).foregroundStyle(Color.statusError).padding(.top, -16) }
+      if busy && !typing { Text("正在配对…").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).padding(.top, -16) }
+      if let error, !typing { Text(error).font(.ui(.subheadline)).foregroundStyle(Color.statusError).padding(.top, -16) }
       Spacer()
       Button("输入配对码") { error = nil; typing = true }.buttonStyle(.wavi)
     }
@@ -57,7 +57,7 @@ struct PairView: View {
     let url = Link.addressURL(address, defaultPort: Shared.data.pairing.defaultPort)
     let bare = code.uppercased().filter { $0.isLetter || $0.isNumber }
     return VStack(alignment: .leading, spacing: 16) {
-      Text("输入配对码").font(.ui(20, 500)).foregroundStyle(Color.textPrimary)
+      Text("输入配对码").font(.ui(.title3)).foregroundStyle(Color.textPrimary)
       VStack(spacing: 4) {
         field("地址") {
           TextField("100.101.1.2", text: $address).keyboardType(.URL)
@@ -70,7 +70,7 @@ struct PairView: View {
             }
         }
       }
-      if let error { Text(error).font(.ui(15)).foregroundStyle(Color.statusError) }
+      if let error { Text(error).font(.ui(.subheadline)).foregroundStyle(Color.statusError) }
       Button {
         guard let url else { return }
         run { try await Link.pair(url: url, rawCode: bare, phoneName: AppModel.phoneName) }
@@ -87,8 +87,8 @@ struct PairView: View {
 
   private func field(_ label: String, @ViewBuilder input: () -> some View) -> some View {
     HStack(spacing: 12) {
-      Text(label).font(.ui(16)).foregroundStyle(Color.textSecondary)
-      input().font(.mono(15)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never)
+      Text(label).font(.ui(.callout)).foregroundStyle(Color.textSecondary)
+      input().font(.mono(.subheadline)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never)
     }
     .padding(.vertical, 14)
   }

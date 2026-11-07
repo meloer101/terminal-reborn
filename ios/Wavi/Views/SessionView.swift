@@ -14,7 +14,7 @@ struct SessionView: View {
       if let session {
         feed(session)
       } else {
-        Text(model.isOpen ? "这个会话已经不在 Mac 上了" : "Mac 上的 Wavi 没有运行").font(.ui(15)).foregroundStyle(Color.textTertiary)
+        Text(model.isOpen ? "这个会话已经不在 Mac 上了" : "Mac 上的 Wavi 没有运行").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
       }
     }
@@ -27,7 +27,7 @@ struct SessionView: View {
           NavigationLink(value: Route.changes(id)) {
             HStack(spacing: 8) {
               Icon("git-branch")
-              Text("\(changed)").font(.mono(13))
+              Text("\(changed)").font(.mono())
             }
             .foregroundStyle(Color.textSecondary)
           }
@@ -46,13 +46,13 @@ struct SessionView: View {
 
   private func title(_ session: RemoteSession?) -> some View {
     VStack(spacing: 2) {
-      Text(session?.title ?? "会话").font(.ui(16, 500)).foregroundStyle(Color.textPrimary).lineLimit(1)
+      Text(session?.title ?? "会话").font(.ui(.callout, medium: true)).foregroundStyle(Color.textPrimary).lineLimit(1)
       if let session {
         HStack(spacing: 8) {
           StatusGlyph(status: session.status)
           let project = model.sessions.projects.first { $0.id == session.projectId }?.name
           let place = [project, session.branch].compactMap { $0 }.joined(separator: " · ")
-          if !place.isEmpty { Text(place).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
+          if !place.isEmpty { Text(place).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
           AgentMark(agent: session.agent)
         }
       }
@@ -104,8 +104,8 @@ private struct Live: View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
       HStack(spacing: 10) {
         StatusGlyph(status: .running)
-        Text(action).font(.ui(14)).foregroundStyle(Color.textSecondary).lineLimit(1)
-        if let since { Text(shortAge(context.date.timeIntervalSince1970 * 1000 - since)).font(.mono(13)).foregroundStyle(Color.textTertiary) }
+        Text(action).font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).lineLimit(1)
+        if let since { Text(shortAge(context.date.timeIntervalSince1970 * 1000 - since)).font(.mono()).foregroundStyle(Color.textSecondary) }
       }
     }
   }
@@ -124,12 +124,12 @@ struct FeedRow: View {
       HStack {
         Spacer(minLength: 48)
         VStack(alignment: .leading, spacing: 4) {
-          if let text = item.text, !text.isEmpty { Text(text).font(.ui(16)).lineSpacing(5).foregroundStyle(Color.textPrimary) }
-          if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(13)).foregroundStyle(Color.textTertiary) }
+          if let text = item.text, !text.isEmpty { Text(text).font(.ui(.callout)).lineSpacing(5).foregroundStyle(Color.textPrimary) }
+          if let images = item.images, images > 0 { Text("\(images) 张图片").font(.ui(.footnote)).foregroundStyle(Color.textSecondary) }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.bgSelected, in: RoundedRectangle(cornerRadius: 14))
+        .background(Color.fillStrong, in: RoundedRectangle(cornerRadius: 14))
       }
     case "text":
       MarkdownText(text: item.text ?? "")
@@ -138,19 +138,19 @@ struct FeedRow: View {
         Button { open.toggle() } label: {
           HStack(spacing: 8) {
             Icon("chevron-right", size: 16).rotationEffect(.degrees(open ? 90 : 0))
-            Text("思考\(item.ms.map { " \(max(1, Int(($0 / 1000).rounded())))s" } ?? "")").font(.ui(14))
+            Text("思考\(item.ms.map { " \(max(1, Int(($0 / 1000).rounded())))s" } ?? "")").font(.ui(.subheadline))
           }
-          .foregroundStyle(Color.textTertiary)
+          .foregroundStyle(Color.textSecondary)
         }
         .buttonStyle(.plain)
-        if open, let text = item.text { Text(text).font(.ui(14)).lineSpacing(4).foregroundStyle(Color.textTertiary).padding(.leading, 24) }
+        if open, let text = item.text { Text(text).font(.ui(.subheadline)).lineSpacing(4).foregroundStyle(Color.textSecondary).padding(.leading, 24) }
       }
     case "tool":
       NavigationLink(value: Route.tool(session: session, item: item.id)) { ToolLine(item: item) }.buttonStyle(.plain)
     case "system":
-      Text(item.text ?? "").font(.ui(13)).foregroundStyle(Color.textTertiary)
+      Text(item.text ?? "").font(.ui(.footnote)).foregroundStyle(Color.textSecondary)
     default:
-      Text("未识别的条目").font(.ui(13)).foregroundStyle(Color.textTertiary)
+      Text("未识别的条目").font(.ui(.footnote)).foregroundStyle(Color.textSecondary)
     }
   }
 }
@@ -163,13 +163,13 @@ private struct ToolLine: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 8) {
         StatusGlyph(status: glyph)
-        Text(item.name ?? "").font(.mono(13, 500)).foregroundStyle(Color.textPrimary)
-        Text(item.arg ?? "").font(.mono(13)).foregroundStyle(Color.textSecondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+        Text(item.name ?? "").font(.mono(medium: true)).foregroundStyle(Color.textPrimary)
+        Text(item.arg ?? "").font(.mono()).foregroundStyle(Color.textSecondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
         if let diff = item.diff { Counts(added: diff.added, removed: diff.removed) }
-        Icon("chevron-right", size: 16).foregroundStyle(Color.textTertiary)
+        Icon("chevron-right", size: 16).foregroundStyle(Color.textSecondary)
       }
       if item.diff == nil, let tail = lastLine(item.output) {
-        Text(tail).font(.mono(12)).foregroundStyle(item.state == "error" ? Color.statusError : Color.textTertiary).lineLimit(1).padding(.leading, 22)
+        Text(tail).font(.mono(.caption)).foregroundStyle(item.state == "error" ? Color.statusError : Color.textSecondary).lineLimit(1).padding(.leading, 22)
       }
       if let diff = item.diff, item.name != "Write", let hunk = diff.hunks.first {
         MiniDiff(lines: miniLines(hunk.lines))

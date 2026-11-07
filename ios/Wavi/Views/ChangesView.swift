@@ -25,7 +25,7 @@ struct ChangesView: View {
       if let data {
         list(data)
       } else if let error {
-        Text(error).font(.ui(15)).foregroundStyle(Color.textTertiary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
+        Text(error).font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
       } else {
         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).padding(20)
       }
@@ -35,8 +35,8 @@ struct ChangesView: View {
     .toolbar {
       ToolbarItem(placement: .principal) {
         VStack(spacing: 2) {
-          Text("变更").font(.ui(16, 500)).foregroundStyle(Color.textPrimary)
-          if let data { Text(subtitle(data)).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
+          Text("变更").font(.ui(.callout, medium: true)).foregroundStyle(Color.textPrimary)
+          if let data { Text(subtitle(data)).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
         }
       }
     }
@@ -58,14 +58,14 @@ struct ChangesView: View {
     return ScrollView {
       LazyVStack(alignment: .leading, spacing: 0) {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-          Text("+\(all.reduce(0) { $0 + ($1.added ?? 0) })").font(.mono(20)).foregroundStyle(Color.diffAddFg)
-          Text("−\(all.reduce(0) { $0 + ($1.removed ?? 0) })").font(.mono(20)).foregroundStyle(Color.diffDelFg)
-          Text("\(all.count) 个文件").font(.ui(15)).foregroundStyle(Color.textSecondary)
+          Text("+\(all.reduce(0) { $0 + ($1.added ?? 0) })").font(.mono(.title3)).foregroundStyle(Color.diffAddFg)
+          Text("−\(all.reduce(0) { $0 + ($1.removed ?? 0) })").font(.mono(.title3)).foregroundStyle(Color.diffDelFg)
+          Text("\(all.count) 个文件").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 4)
-        if all.isEmpty { Text("没有改动").font(.ui(15)).foregroundStyle(Color.textTertiary).padding(20) }
+        if all.isEmpty { Text("没有改动").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).padding(20) }
         if !data.uncommitted.isEmpty {
           GroupHeader(title: "未提交", count: data.uncommitted.count)
           ForEach(data.uncommitted, id: \.path) { file($0, scope: "uncommitted") }
@@ -77,9 +77,9 @@ struct ChangesView: View {
         if let exits, let pr = prLine(exits) {
           HStack(spacing: 10) {
             Icon("git-pull-request", size: 16)
-            Text(pr).font(.ui(14)).lineLimit(1)
+            Text(pr).font(.ui(.subheadline)).lineLimit(1)
           }
-          .foregroundStyle(Color.textTertiary)
+          .foregroundStyle(Color.textSecondary)
           .padding(.horizontal, 20)
           .padding(.top, 16)
         }
@@ -96,14 +96,14 @@ struct ChangesView: View {
     let openable = f.nested != true && f.tooLarge != true
     return NavigationLink(value: Route.diff(session: id, path: f.path, scope: scope, oldPath: f.oldPath, untracked: f.untracked == true)) {
       HStack(spacing: 10) {
-        Text(status).font(.mono(12, 500)).foregroundStyle(status == "A" ? Color.diffAddFg : status == "D" ? Color.diffDelFg : Color.textTertiary).frame(width: 10)
+        Text(status).font(.mono(.caption, medium: true)).foregroundStyle(status == "A" ? Color.diffAddFg : status == "D" ? Color.diffDelFg : Color.textSecondary).frame(width: 10)
         VStack(alignment: .leading, spacing: 2) {
-          Text(name).font(.mono(15)).foregroundStyle(Color.textPrimary).lineLimit(1)
-          if !dir.isEmpty { Text(dir).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
+          Text(name).font(.mono(.subheadline)).foregroundStyle(Color.textPrimary).lineLimit(1)
+          if !dir.isEmpty { Text(dir).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
         }
         Spacer(minLength: 0)
         Counts(added: f.added, removed: f.removed)
-        if openable { Icon("chevron-right", size: 16).foregroundStyle(Color.textTertiary) }
+        if openable { Icon("chevron-right", size: 16).foregroundStyle(Color.textSecondary) }
       }
       .padding(.horizontal, 20)
       .padding(.vertical, 12)
@@ -120,10 +120,10 @@ struct ChangesView: View {
         Button { sheet = true } label: {
           HStack(spacing: 10) {
             StatusGlyph(status: ship.error != nil ? .error : ship.stage == .glance ? .needsYou : .running)
-            Text(ship.title).font(.ui(15)).foregroundStyle(Color.textPrimary).lineLimit(1)
+            Text(ship.title).font(.ui(.subheadline)).foregroundStyle(Color.textPrimary).lineLimit(1)
             Spacer(minLength: 0)
             Text(ship.error != nil ? "没有完成" : ship.stage == .glance ? "等你看一眼" : ship.steps.first { $0.state == .working }?.label ?? "")
-              .font(.ui(13)).foregroundStyle(ship.error != nil ? Color.statusError : Color.textSecondary).lineLimit(1)
+              .font(.ui(.footnote)).foregroundStyle(ship.error != nil ? Color.statusError : Color.textSecondary).lineLimit(1)
           }
           .padding(.horizontal, 16)
           .frame(minHeight: 52)
@@ -142,7 +142,7 @@ struct ChangesView: View {
           .opacity(exits.archive.blocker == nil ? 1 : 0.4)
         }
       } else if let exitsError {
-        Text(exitsError).font(.ui(14)).foregroundStyle(Color.textTertiary).padding(.vertical, 8)
+        Text(exitsError).font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).padding(.vertical, 8)
       }
     }
     .padding(.horizontal, 20)
@@ -243,14 +243,14 @@ struct ShipSheet: View {
 
   @ViewBuilder
   private func running(_ ship: RemoteShip) -> some View {
-    Text(ship.title).font(.ui(20, 500)).foregroundStyle(Color.textPrimary)
+    Text(ship.title).font(.ui(.title3)).foregroundStyle(Color.textPrimary)
     if let texts, editable(ship) || ship.stage == .running,
       ship.fields.contains(where: { $0 != "draft" && !(value(texts, $0)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
       ForEach(ship.fields.filter { $0 != "draft" }, id: \.self) { field in
         VStack(alignment: .leading, spacing: 8) {
-          if ship.fields.count > 1 { Text(["commit": "提交说明", "title": "标题", "body": "正文"][field] ?? field).font(.ui(13, 500)).foregroundStyle(Color.textSecondary) }
+          if ship.fields.count > 1 { Text(["commit": "提交说明", "title": "标题", "body": "正文"][field] ?? field).font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary) }
           TextField("", text: binding(field), axis: field == "title" ? .horizontal : .vertical)
-            .font(.mono(field == "body" ? 13 : 14))
+            .font(.mono(field == "body" ? .caption : .footnote))
             .lineLimit(field == "title" ? 1...1 : 1...10)
             .disabled(!editable(ship))
             .foregroundStyle(Color.textPrimary)
@@ -258,14 +258,14 @@ struct ShipSheet: View {
             .textInputAutocapitalization(.never)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+            .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 10))
         }
       }
       if ship.fields.contains("draft") && editable(ship) {
         Button { edit { $0.draft.toggle() } } label: {
           HStack(spacing: 10) {
             Icon(texts.draft ? "square-check" : "square", size: 20)
-            Text("草稿").font(.ui(15))
+            Text("草稿").font(.ui(.subheadline))
           }
           .foregroundStyle(Color.textPrimary)
         }
@@ -277,15 +277,15 @@ struct ShipSheet: View {
         VStack(alignment: .leading, spacing: 8) {
           HStack(spacing: 10) {
             StatusGlyph(status: step.state == .working ? .running : step.state == .done ? .doneUnread : step.state == .failed ? .error : .idle)
-            Text(step.label).font(.ui(15)).foregroundStyle(step.state == .pending ? Color.textTertiary : Color.textPrimary).lineLimit(1)
+            Text(step.label).font(.ui(.subheadline)).foregroundStyle(step.state == .pending ? Color.textSecondary : Color.textPrimary).lineLimit(1)
             Spacer(minLength: 0)
-            if let note = step.note { Text(note).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1) }
+            if let note = step.note { Text(note).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
           }
           if let failure = ship.error, failure.step == step.id {
             VStack(alignment: .leading, spacing: 8) {
-              Text(failure.message).font(.ui(14)).foregroundStyle(Color.statusError)
+              Text(failure.message).font(.ui(.subheadline)).foregroundStyle(Color.statusError)
               if let output = failure.output {
-                Text(output).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(8).padding(12).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 8))
+                Text(output).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(8).padding(12).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 8))
               }
             }
             .padding(.leading, 24)
@@ -293,7 +293,7 @@ struct ShipSheet: View {
         }
       }
     }
-    if let error { Text(error).font(.ui(14)).foregroundStyle(Color.statusError) }
+    if let error { Text(error).font(.ui(.subheadline)).foregroundStyle(Color.statusError) }
     if let failure = ship.error {
       action("重试", "retry", .retry, primary: true)
       if failure.conflicts { action("交给 \(ship.agent) 解", "conflicts", .conflicts) }
@@ -318,7 +318,7 @@ struct ShipSheet: View {
   private var finished: some View {
     HStack(spacing: 10) {
       StatusGlyph(status: model.session(session)?.shipNotice != nil ? .doneUnread : .idle)
-      Text(model.session(session)?.shipNotice ?? "这个出口已经结束了").font(.ui(15)).foregroundStyle(Color.textPrimary)
+      Text(model.session(session)?.shipNotice ?? "这个出口已经结束了").font(.ui(.subheadline)).foregroundStyle(Color.textPrimary)
     }
     Button("完成") { dismiss() }.buttonStyle(.wavi(primary: true))
   }

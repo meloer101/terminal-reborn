@@ -13,7 +13,7 @@ struct SessionsView: View {
         macLine
         let groups = groupSessions(model.sessions)
         if groups.isEmpty && model.isOpen {
-          Text("Mac 上还没有会话").font(.ui(15)).foregroundStyle(Color.textTertiary).padding(.horizontal, 20).padding(.top, 24)
+          Text("Mac 上还没有会话").font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).padding(.horizontal, 20).padding(.top, 24)
         }
         TimelineView(.periodic(from: .now, by: 15)) { context in
           let now = context.date.timeIntervalSince1970 * 1000
@@ -54,9 +54,9 @@ struct SessionsView: View {
     Button { unpairing = true } label: {
       HStack(spacing: 8) {
         Icon("smartphone")
-        Text(location).font(.ui(13)).lineLimit(1)
+        Text(location).font(.ui(.footnote)).lineLimit(1)
       }
-      .foregroundStyle(model.link == .refused ? Color.statusError : Color.textTertiary)
+      .foregroundStyle(model.link == .refused ? Color.statusError : Color.textSecondary)
     }
     .buttonStyle(.plain)
     .padding(.horizontal, 20)
@@ -92,8 +92,8 @@ struct GroupHeader: View {
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
-      Text(title).font(project ? .ui(17, 600) : .ui(13, 500)).foregroundStyle(project ? Color.textPrimary : Color.textSecondary)
-      Text("\(count)").font(.mono(13)).foregroundStyle(Color.textTertiary)
+      Text(title).font(project ? .ui(.headline) : .ui(.footnote, medium: true)).foregroundStyle(project ? Color.textPrimary : Color.textSecondary)
+      Text("\(count)").font(.mono()).foregroundStyle(Color.textSecondary)
     }
     .padding(.horizontal, 20)
     .padding(.top, 24)
@@ -112,13 +112,13 @@ private struct SessionRow: View {
       StatusGlyph(status: session.status).padding(.top, 3)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 8) {
-          Text(session.title).font(.ui(16)).foregroundStyle(Color.textPrimary).lineLimit(1)
+          Text(session.title).font(.ui(.callout)).foregroundStyle(Color.textPrimary).lineLimit(1)
           Spacer(minLength: 0)
-          Text(rowTime(session, now: now)).font(.mono(12)).foregroundStyle(Color.textTertiary)
+          Text(rowTime(session, now: now)).font(.mono(.caption)).foregroundStyle(Color.textSecondary)
         }
-        Text(session.action ?? session.status.label).font(.ui(14)).foregroundStyle(waiting ? Color.statusAttention : Color.textSecondary).lineLimit(1)
+        Text(session.action ?? session.status.label).font(.ui(.subheadline)).foregroundStyle(waiting ? Color.statusAttention : Color.textSecondary).lineLimit(1)
         HStack(spacing: 8) {
-          Text([projectName, session.branch].compactMap { $0 }.joined(separator: " · ")).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1)
+          Text([projectName, session.branch].compactMap { $0 }.joined(separator: " · ")).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1)
           Spacer(minLength: 0)
           AgentMark(agent: session.agent)
         }
@@ -133,6 +133,6 @@ private struct SessionRow: View {
 /// A list row's pressed state: the hover fill, no dimming of the text.
 struct RowStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label.background(configuration.isPressed ? Color.bgHover : .clear)
+    configuration.label.background(configuration.isPressed ? Color.fillSubtle : .clear)
   }
 }

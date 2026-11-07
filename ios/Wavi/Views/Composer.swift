@@ -27,7 +27,7 @@ struct Composer: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if let error { Text(error).font(.ui(13)).foregroundStyle(Color.statusError).padding(.leading, 16) }
+      if let error { Text(error).font(.ui(.footnote)).foregroundStyle(Color.statusError).padding(.leading, 16) }
       if !photos.isEmpty { strip }
       capsule
     }
@@ -48,7 +48,7 @@ struct Composer: View {
     HStack(alignment: .bottom, spacing: 2) {
       attach
       TextField("回复", text: $text, axis: .vertical)
-        .font(.ui(16))
+        .font(.ui(.callout))
         .lineLimit(1...6)
         .foregroundStyle(Color.textPrimary)
         .padding(.leading, 8)
@@ -81,9 +81,9 @@ struct Composer: View {
       if sends { send() } else { stop() }
     } label: {
       Icon(sends ? "arrow-up" : "square", size: 22)
-        .foregroundStyle(Color.textInverse)
+        .foregroundStyle(Color.solidOn)
         .frame(width: 40, height: 40)
-        .background(Color.fillPrimary, in: Circle())
+        .background(Color.solidFill, in: Circle())
     }
     .buttonStyle(.plain)
     .opacity(idle ? 0.3 : 1.0)

@@ -13,26 +13,26 @@ struct DiffView: View {
           case .hunk(let text):
             HStack(spacing: 0) {
               Color.clear.frame(width: 92)
-              Text(text).foregroundStyle(Color.textTertiary)
+              Text(text).foregroundStyle(Color.textSecondary)
             }
             .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-            .background(Color.bgHover)
+            .background(Color.fillSubtle)
           case .line(let sign, let old, let new, let code):
             HStack(spacing: 0) {
-              Text(old.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textTertiary)
-              Text(new.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textTertiary)
-              Text(sign == "-" ? "−" : String(sign)).frame(width: 20).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textTertiary)
-              Text(code).foregroundStyle(Color.termFg).padding(.trailing, 16)
+              Text(old.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textSecondary)
+              Text(new.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textSecondary)
+              Text(sign == "-" ? "−" : String(sign)).frame(width: 20).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textSecondary)
+              Text(code).foregroundStyle(Color.textPrimary).padding(.trailing, 16)
             }
             .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
             .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
           }
         }
       }
-      .font(.mono(12))
+      .font(.mono(.caption))
       .fixedSize(horizontal: true, vertical: false)
     }
-    .background(Color.bgInset)
+    .background(Color.bgGrouped)
   }
 }
 
@@ -45,7 +45,7 @@ struct MiniDiff: View {
       ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
         let sign = line.first == "+" || line.first == "-" ? line.first! : " "
         HStack(spacing: 8) {
-          Text(sign == "-" ? "−" : String(sign)).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textTertiary)
+          Text(sign == "-" ? "−" : String(sign)).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textSecondary)
           Text(String(line.dropFirst())).foregroundStyle(sign == " " ? Color.textSecondary : Color.textPrimary).lineLimit(1)
           Spacer(minLength: 0)
         }
@@ -54,9 +54,9 @@ struct MiniDiff: View {
         .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
       }
     }
-    .font(.mono(12))
+    .font(.mono(.caption))
     .padding(.vertical, 8)
-    .background(Color.bgInset, in: RoundedRectangle(cornerRadius: 8))
+    .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 8))
   }
 }
 
@@ -66,8 +66,8 @@ private struct NavTitle: View {
 
   var body: some View {
     VStack(spacing: 2) {
-      Text(title).font(.ui(16, 500)).foregroundStyle(Color.textPrimary).lineLimit(1)
-      Text(subtitle).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1)
+      Text(title).font(.ui(.callout, medium: true)).foregroundStyle(Color.textPrimary).lineLimit(1)
+      Text(subtitle).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1)
     }
   }
 }
@@ -84,7 +84,7 @@ struct ToolView: View {
       if let tool, let diff = tool.diff {
         VStack(spacing: 0) {
           DiffView(rows: hunkRows(diff.hunks))
-          if diff.truncated { Text("只显示了前 400 行").font(.ui(13)).foregroundStyle(Color.textTertiary).frame(maxWidth: .infinity).padding(12).background(Color.bgInset) }
+          if diff.truncated { Text("只显示了前 400 行").font(.ui(.footnote)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity).padding(12).background(Color.bgGrouped) }
         }
         .toolbar {
           ToolbarItem(placement: .principal) {
@@ -96,11 +96,11 @@ struct ToolView: View {
       } else if let tool {
         ScrollView {
           VStack(alignment: .leading, spacing: 12) {
-            Text(tool.arg ?? "").font(.mono(13)).lineSpacing(6).foregroundStyle(Color.textPrimary).textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+            Text(tool.arg ?? "").font(.mono()).lineSpacing(6).foregroundStyle(Color.textPrimary).textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 10))
             if let output = tool.output, !output.isEmpty {
-              Text(output).font(.mono(12)).lineSpacing(5).foregroundStyle(tool.state == "error" ? Color.statusError : Color.termFg).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+              Text(output).font(.mono(.caption)).lineSpacing(5).foregroundStyle(tool.state == "error" ? Color.statusError : Color.textPrimary).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: 10))
             }
           }
           .padding(20)
@@ -153,6 +153,6 @@ struct FileDiffView: View {
   }
 
   private func message(_ text: String) -> some View {
-    Text(text).font(.ui(15)).foregroundStyle(Color.textTertiary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
+    Text(text).font(.ui(.subheadline)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
   }
 }
