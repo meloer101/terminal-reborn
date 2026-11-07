@@ -215,6 +215,16 @@ function commandText(text: string): string | null {
   return null
 }
 
+/**
+ * What a local command (/cost, /context, /model …) printed, as the transcript records it. The live stream sends the
+ * same output as an assistant message of text, so history shows it as a reply too. `null`: not a local command's output.
+ */
+function localOutput(text: string): string | null {
+  if (!/^<local-command-(stdout|stderr)>/.test(text)) return null
+  const parts = [...text.matchAll(/<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-(?:stdout|stderr)>/g)].map((m) => m[1]!.trim())
+  return parts.filter((p) => p !== '').join('\n')
+}
+
 export interface ChatParser {
   /** Parses one appended line; returns the indexes of items it added or changed. */
   push(line: string): number[]
@@ -293,6 +303,8 @@ function claudeParser(now: () => number): ChatParser {
       }
       const text = textOfContent(content).trim()
       const images = Array.isArray(content) ? content.filter((b) => isRec(b) && b.type === 'image').length : 0
+      const output = localOutput(text)
+      if (output !== null) return output ? [add({ kind: 'text', id: nextId('t'), at, text: clip(output, CHAT_LIMITS.text) })] : []
       const command = commandText(text)
       if (command !== null) return command ? [add({ kind: 'system', id: nextId('s'), at, text: command })] : []
       if (/^\[Request interrupted by user/.test(text)) return [add({ kind: 'system', id: nextId('s'), at, text: '已中断' })]
@@ -307,6 +319,8 @@ function claudeParser(now: () => number): ChatParser {
       const content = str(line.content)
       if (subtype === 'api_error') return [add({ kind: 'system', id: nextId('s'), at, text: content ? clip(content, 300) : 'API 出错' })]
       if (content && (subtype === 'local_command' || subtype === 'informational' || subtype === 'away_summary')) {
+        const output = localOutput(content)
+        if (output !== null) return output ? [add({ kind: 'text', id: nextId('t'), at, text: clip(output, CHAT_LIMITS.text) })] : []
         const command = commandText(content)
         if (command === '') return []
         return [add({ kind: 'system', id: nextId('s'), at, text: clip(command ?? content, 500) })]

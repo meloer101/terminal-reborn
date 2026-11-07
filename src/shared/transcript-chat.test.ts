@@ -116,6 +116,26 @@ describe('Claude transcript → chat', () => {
     expect(items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['/clear', '已中断', '对话已压缩', 'Overloaded'])
   })
 
+  it('shows what a local command printed (/cost, /context) as a reply, as the live stream does', () => {
+    const items = parse([
+      line({ type: 'user', message: { content: '<local-command-caveat>The command below was run directly in Claude Code</local-command-caveat>' } }),
+      line({ type: 'user', message: { content: '<command-name>/usage</command-name>\n<command-message>usage</command-message>\n<command-args></command-args>' } }),
+      line({ type: 'system', subtype: 'local_command', content: '<local-command-stdout>Current session: 23% used\n\nCurrent week: 36% used</local-command-stdout>' }),
+      line({ type: 'user', message: { content: '<local-command-stdout>Set model to `Opus`</local-command-stdout>' } }),
+      line({
+        type: 'system',
+        subtype: 'local_command',
+        content: '<local-command-stdout>Running in the background as @code-review</local-command-stdout>\n<forked-skill-launch>{"agentId":"a"}</forked-skill-launch>'
+      })
+    ])
+    expect(items.map((i) => [i.kind, i.kind === 'system' || i.kind === 'text' ? i.text : ''])).toEqual([
+      ['system', '/usage'],
+      ['text', 'Current session: 23% used\n\nCurrent week: 36% used'],
+      ['text', 'Set model to `Opus`'],
+      ['text', 'Running in the background as @code-review']
+    ])
+  })
+
   it('counts the photos sent with a prompt', () => {
     const items = parse([
       line({ type: 'user', message: { content: [{ type: 'text', text: '[Image #1] 按钮被挡住了' }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } }] } })
