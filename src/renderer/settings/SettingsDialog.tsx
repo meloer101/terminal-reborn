@@ -3,6 +3,8 @@
 // open it on 额度.
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 import { create } from 'zustand'
+import type { CliAgent } from '@shared/agents'
+import { useAgentFocus } from './AgentsPane'
 import { SettingsApp, useSettingsPane, type SettingsPaneId } from './SettingsApp'
 import styles from './SettingsDialog.module.css'
 
@@ -13,9 +15,13 @@ export const useSettingsDialog = useDialog
 
 let restoreFocus: HTMLElement | null = null
 
-/** `pane`: the one to show (also when the dialog is already up); otherwise the one shown last. */
-export function openSettings(pane?: SettingsPaneId): void {
+/**
+ * `pane`: the one to show (also when the dialog is already up); otherwise the one shown last. `agent` (with
+ * 'agents'): a not-installed agent whose install command to show.
+ */
+export function openSettings(pane?: SettingsPaneId, agent?: CliAgent): void {
   if (pane) useSettingsPane.setState({ pane })
+  if (agent) useAgentFocus.setState({ agent })
   // Already on 额度 (the pane does not mount again): ⇧⌘U still asks the accounts now.
   if (pane === 'usage') window.tr.agent.refreshUsage(true)
   if (useDialog.getState().open) return

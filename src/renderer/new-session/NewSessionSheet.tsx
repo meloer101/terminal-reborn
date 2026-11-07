@@ -23,7 +23,7 @@ import { Toggle } from '../settings/controls'
 import { Segmented } from '../ui/Segmented'
 import { useWorkspace } from '../state/workspace'
 import { runCreatePlan } from './creation'
-import { binaryInstalled, branchProblemText, folderFor, isElsewhere, planCreate, prepareText, selectedBase, tilde, uiRow } from './model'
+import { binaryInstalled, branchProblemText, folderFor, isElsewhere, listedAgents, planCreate, prepareText, selectedBase, tilde, uiRow } from './model'
 import { closeNewSessionSheet, useNewSessionSheet } from './sheet-store'
 import { SheetMenu, type SheetMenuSection } from './SheetMenu'
 import styles from './NewSessionSheet.module.css'
@@ -31,11 +31,6 @@ import styles from './NewSessionSheet.module.css'
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 
 const isKindChoice = (value: string): value is AgentKind => value === 'shell' || (CLI_AGENTS as readonly string[]).includes(value)
-
-/** 已安装: Claude Code and Codex always (a missing one says so in the terminal), every other CLI only when it is on PATH. */
-export function listedAgents(found: AgentAvailability | null): AgentKind[] {
-  return CLI_AGENTS.filter((id) => id === 'claude' || id === 'codex' || found?.[id] === true)
-}
 
 const UIS: ReadonlyArray<{ value: SessionUi; label: string }> = [
   { value: 'gui', label: 'GUI' },

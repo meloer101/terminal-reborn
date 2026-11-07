@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { CLI_AGENTS } from '@shared/agents'
 import type { NewSessionInfo } from '@shared/new-session'
-import { binaryInstalled, branchProblemText, createFailureText, planCreate, prepareText, tilde, uiRow, type SheetForm } from './model'
+import { binaryInstalled, branchProblemText, createFailureText, hereChoice, hereMenu, planCreate, prepareText, tilde, uiRow, type SheetForm } from './model'
 
 const info: NewSessionInfo = {
   repo: true,
@@ -121,5 +122,38 @@ describe('uiRow (PRD F23, Figma 49″A / B)', () => {
     expect(installed('amp-acp')).toBe(false)
     expect(binaryInstalled({ pi: true })('pi-acp')).toBe(false)
     expect(binaryInstalled(null)('claude')).toBe(false)
+  })
+})
+
+describe('在此新建会话 (Figma 58C)', () => {
+  const labels = (entries: ReturnType<typeof hereMenu>['items']) =>
+    entries.map((e) => (e.type === 'item' ? `${e.muted ? '~' : ''}${e.label}` : e.type === 'header' ? `[${e.label}]` : e.type === 'separator' ? '—' : e.label))
+
+  it('lists every agent: 已安装 in 新建会话 order, 没装 grey after them, 终端 under the list', () => {
+    const menu = hereMenu({ claude: true, codex: false, gemini: true, grok: true }, 'here:')
+    const shown = labels(menu.items)
+    expect(shown.slice(0, 6)).toEqual(['[已安装]', 'Claude Code', 'Codex', 'Gemini CLI', 'Grok', '—'])
+    expect(shown[6]).toBe('[没装]')
+    expect(shown.slice(7)).toHaveLength(CLI_AGENTS.length - 4)
+    expect(shown.slice(7).every((l) => l.startsWith('~'))).toBe(true)
+    expect(labels(menu.footer ?? [])).toEqual(['—', '终端'])
+  })
+
+  it('has no 没装 group when everything is installed, and disables only the rows that start a session', () => {
+    const all = Object.fromEntries(CLI_AGENTS.map((id) => [id, true]))
+    expect(labels(hereMenu(all, 'new:').items)).not.toContain('[没装]')
+    const off = hereMenu({}, 'new:', false)
+    expect(off.items.find((e) => e.type === 'item' && e.id === 'new:claude')).toMatchObject({ enabled: false })
+    expect(off.items.find((e) => e.type === 'item' && e.id === 'new:install:pi')).not.toHaveProperty('enabled')
+  })
+
+  it('reads a choice back, and nothing it did not offer', () => {
+    expect(hereChoice('here:gemini', 'here:')).toEqual({ kind: 'gemini' })
+    expect(hereChoice('here:shell', 'here:')).toEqual({ kind: 'shell' })
+    expect(hereChoice('here:install:amp', 'here:')).toEqual({ install: 'amp' })
+    expect(hereChoice('here:install:shell', 'here:')).toBeNull()
+    expect(hereChoice('here:nope', 'here:')).toBeNull()
+    expect(hereChoice('close', 'here:')).toBeNull()
+    expect(hereChoice(null, 'here:')).toBeNull()
   })
 })

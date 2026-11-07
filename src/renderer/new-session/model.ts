@@ -1,9 +1,10 @@
 // The new-session sheet's decisions (PRD F4, Figma 15), kept apart from React so they can be tested: what 创建 does
 // with the form, what blocks it, and the few lines of copy the sheet shows only when something is limited or wrong.
-import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { AGENT_SPECS, agentName, CLI_AGENTS, isCliAgent, type CliAgent } from '@shared/agents'
 import { guiAvailability, type GuiAvailability } from '@shared/gui-agents'
 import type { AgentAvailability } from '@shared/ipc'
 import type { AgentKind, SessionUi } from '@shared/types'
+import type { MenuEntry } from '../ui/menu-model'
 import {
   branchNameProblem,
   folderNameFor,
@@ -150,4 +151,48 @@ export function uiRow(kind: AgentKind, choice: SessionUi, installed: (binary: st
     return { value: 'cli', guiDisabled: true, adapter: { binary: availability.binary, install: availability.install }, forced }
   }
   return { value: 'cli', guiDisabled: true, guiTitle: availability.reason, forced }
+}
+
+/** 已安装: Claude Code and Codex always (a missing one says so in the terminal), every other CLI only when it is on PATH. */
+export function listedAgents(found: AgentAvailability | null): AgentKind[] {
+  return CLI_AGENTS.filter((id) => id === 'claude' || id === 'codex' || found?.[id] === true)
+}
+
+/**
+ * 在此新建会话 (a session's right-click, a Worktree row's 更多; Figma 58C): every agent, in 新建会话's order — 已安装,
+ * then 没装 drawn grey (choosing one opens 设置 · 智能体, where its install command is) — in a list of fixed height,
+ * and 终端 under it. Item ids are `${prefix}${kind}` and `${prefix}install:${agent}`; `enabled` covers the ones that
+ * start a session.
+ */
+export function hereMenu(found: AgentAvailability | null, prefix: string, enabled = true): Extract<MenuEntry, { type: 'submenu' }> {
+  const installed = listedAgents(found)
+  const missing = CLI_AGENTS.filter((id) => !installed.includes(id))
+  const start = (kind: AgentKind): MenuEntry => ({ type: 'item', id: `${prefix}${kind}`, label: agentName(kind), ...(enabled ? {} : { enabled: false }) })
+  return {
+    type: 'submenu',
+    label: '在此新建会话',
+    items: [
+      { type: 'header', label: '已安装' },
+      ...installed.map(start),
+      ...(missing.length > 0
+        ? [
+            { type: 'separator' } as const,
+            { type: 'header', label: '没装' } as const,
+            ...missing.map((id): MenuEntry => ({ type: 'item', id: `${prefix}install:${id}`, label: agentName(id), muted: true }))
+          ]
+        : [])
+    ],
+    footer: [{ type: 'separator' }, start('shell')]
+  }
+}
+
+/** What a 在此新建会话 choice asks for: a session of `kind`, or how to install `install`; null for another id. */
+export function hereChoice(choice: string | null, prefix: string): { kind: AgentKind } | { install: CliAgent } | null {
+  if (!choice?.startsWith(prefix)) return null
+  const rest = choice.slice(prefix.length)
+  if (rest.startsWith('install:')) {
+    const id = rest.slice('install:'.length)
+    return isCliAgent(id) ? { install: id } : null
+  }
+  return rest === 'shell' || isCliAgent(rest) ? { kind: rest } : null
 }
