@@ -2,15 +2,14 @@
 // (HEAD, the index, and untracked files) built with commit-tree, so nothing is written to refs/stash,
 // the branch, the index, or git config. A clean worktree points the ref at HEAD. Restore puts that
 // state back; HEAD stays where it is.
-import { execFile } from 'node:child_process'
 import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { archiveRefName } from '@shared/archive'
+import { lastLines, runGit } from './git/run'
 
 const GIT_TIMEOUT_MS = 60_000
 const MAX_BUFFER = 32 * 1024 * 1024
-const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
 export interface ArchiveSnapshot {
   ref: string
@@ -22,30 +21,15 @@ interface RunResult {
   stderr: string
 }
 
-function git(cwd: string, args: string[], extra?: { env?: Record<string, string>; input?: string }): Promise<RunResult> {
-  return new Promise((resolveRun, reject) => {
-    const child = execFile(
-      'git',
-      args,
-      {
-        cwd,
-        timeout: GIT_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        env: {
-          ...process.env,
-          GIT_TERMINAL_PROMPT: '0',
-          GIT_EDITOR: 'true',
-          PATH: [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter),
-          ...extra?.env
-        }
-      },
-      (error, stdout, stderr) => {
-        if (error) reject(new Error(String(stderr || stdout || error.message || 'git failed').trim().split('\n').slice(-3).join(' ').slice(0, 500)))
-        else resolveRun({ stdout, stderr })
-      }
-    )
-    if (extra?.input !== undefined) child.stdin?.end(extra.input)
+async function git(cwd: string, args: string[], extra?: { env?: Record<string, string>; input?: string }): Promise<RunResult> {
+  const ran = await runGit(cwd, args, {
+    timeout: GIT_TIMEOUT_MS,
+    maxStdout: MAX_BUFFER,
+    env: { GIT_EDITOR: 'true', ...extra?.env },
+    ...(extra?.input !== undefined ? { input: extra.input } : {})
   })
+  if (ran.code !== 0) throw new Error(lastLines(ran.stderr || ran.stdout) || 'git failed')
+  return { stdout: ran.stdout, stderr: ran.stderr }
 }
 
 /** Identity for snapshot commits only. `-c` does not write git config. */

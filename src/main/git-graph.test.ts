@@ -7,7 +7,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn(), on: vi.fn() } }))
 
-const { changes, fileDiff, logPage, reviewDiff, sshCommandFor } = await import('./git-graph')
+const { changes, fileDiff, logPage, reviewDiff } = await import('./git-graph')
+const { sshCommandFor } = await import('./git/run')
 const { parseUnifiedDiffFiles } = await import('@shared/background-review')
 
 function repo(): { dir: string; git(...args: string[]): string; write(path: string, text: string): void; commit(message: string): void } {

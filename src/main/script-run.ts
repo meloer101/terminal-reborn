@@ -5,6 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
 import { appendScriptOutput, runShellArgs } from '@shared/script-launch'
 import { buildPtyEnv, resolveShell } from '../pty-host/env'
+import { killGroup } from './git/run'
 
 const KILL_GRACE_MS = 1000
 
@@ -24,20 +25,6 @@ interface Job {
 }
 
 const jobs = new Map<string, Job>()
-
-function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  const pid = child.pid
-  if (pid === undefined) return
-  try {
-    process.kill(-pid, signal)
-  } catch {
-    try {
-      child.kill(signal)
-    } catch {
-      // already gone
-    }
-  }
-}
 
 function finish(key: string, job: Job, result: CapturedRun): void {
   if (jobs.get(key) === job) jobs.delete(key)

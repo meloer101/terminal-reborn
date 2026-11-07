@@ -34,6 +34,15 @@ describe('startCapturedScript', () => {
     expect(result.output).toContain('FAIL src/nav.test.ts')
   })
 
+  it('cancel stops what the script left running after its shell exited (it holds the output open)', async () => {
+    const pending = startCapturedScript({ key: 'orphan', cwd, script: 'sleep 30 &\necho started', baseEnv })
+    await new Promise((r) => setTimeout(r, 500))
+    cancelCapturedScript('orphan')
+    const result = await pending
+    expect(result.cancelled).toBe(true)
+    expect(result.output).toContain('started')
+  }, 10_000)
+
   it('cancel stops a running script', async () => {
     const pending = startCapturedScript({ key: 'sleep', cwd, script: 'sleep 30', baseEnv })
     await new Promise((resolve) => setTimeout(resolve, 200))
