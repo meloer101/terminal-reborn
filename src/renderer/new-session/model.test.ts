@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CLI_AGENTS } from '@shared/agents'
 import type { NewSessionInfo } from '@shared/new-session'
 import { binaryInstalled, branchProblemText, createFailureText, hereChoice, hereMenu, planCreate, prepareText, tilde, uiRow, type SheetForm } from './model'
 
@@ -133,13 +134,13 @@ describe('在此新建会话 (Figma 57C)', () => {
     const shown = labels(menu.items)
     expect(shown.slice(0, 6)).toEqual(['[已安装]', 'Claude Code', 'Codex', 'Gemini CLI', 'Grok', '—'])
     expect(shown[6]).toBe('[没装]')
-    expect(shown.slice(7)).toHaveLength(19 - 4)
+    expect(shown.slice(7)).toHaveLength(CLI_AGENTS.length - 4)
     expect(shown.slice(7).every((l) => l.startsWith('~'))).toBe(true)
     expect(labels(menu.footer ?? [])).toEqual(['—', '终端'])
   })
 
   it('has no 没装 group when everything is installed, and disables only the rows that start a session', () => {
-    const all = Object.fromEntries(['claude', 'codex', 'opencode', 'gemini', 'qwen', 'pi', 'copilot', 'cursor', 'grok', 'kimi', 'droid', 'amp', 'kiro', 'crush', 'goose', 'cline', 'antigravity', 'auggie', 'codebuddy'].map((id) => [id, true]))
+    const all = Object.fromEntries(CLI_AGENTS.map((id) => [id, true]))
     expect(labels(hereMenu(all, 'new:').items)).not.toContain('[没装]')
     const off = hereMenu({}, 'new:', false)
     expect(off.items.find((e) => e.type === 'item' && e.id === 'new:claude')).toMatchObject({ enabled: false })

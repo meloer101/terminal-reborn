@@ -164,6 +164,7 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
         data-index={index}
         data-active={index === active}
         data-muted={entry.type === 'item' && entry.muted ? true : undefined}
+        aria-label={entry.type === 'item' && entry.muted ? `${entry.label}，没装` : undefined}
         aria-disabled={entry.type === 'item' && entry.enabled === false ? true : undefined}
         aria-haspopup={entry.type === 'submenu' ? 'menu' : undefined}
         aria-expanded={entry.type === 'submenu' ? submenu?.index === index : undefined}

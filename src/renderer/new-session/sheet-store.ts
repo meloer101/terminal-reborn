@@ -1,4 +1,5 @@
-// Whether the new-session sheet is open, and for which project (⌘N: the current one; a project's ＋: that one).
+// Whether the new-session sheet is open, and for which project (⌘N: the current one; a project's ＋: that one); and
+// the installed agents its quicker sibling, 在此新建会话, lists at once.
 import { create } from 'zustand'
 import type { AgentAvailability } from '@shared/ipc'
 import type { ProjectId } from '@shared/types'
@@ -36,7 +37,10 @@ let lastFound: AgentAvailability | null = null
  * Which agent CLIs are installed, for a menu that must open at once (在此新建会话): the last answer, asking again
  * behind it; only the first time waits for main (which caches its own answer for a few seconds).
  */
-export function installedAgents(): Promise<AgentAvailability> {
-  const next = window.tr.app.detectAgents().then((found) => (lastFound = found))
+export function installedAgents(): Promise<AgentAvailability | null> {
+  const next = window.tr.app
+    .detectAgents()
+    .then((found) => (lastFound = found))
+    .catch(() => lastFound)
   return lastFound ? Promise.resolve(lastFound) : next
 }

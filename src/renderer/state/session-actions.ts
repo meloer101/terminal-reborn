@@ -160,7 +160,7 @@ export async function openSessionContextMenu(sessionId: SessionId, anchor: MenuA
   if (choice === 'window') moveSessionToNewWindow(sessionId)
   if (choice === 'archive' && worktree) openArchiveSheet(worktree.id)
   const here = hereChoice(choice, 'here:')
-  if (here && 'install' in here) openSettings('agents')
+  if (here && 'install' in here) openSettings('agents', here.install)
   if (!here || !('kind' in here) || !worktree) return
   const { kind } = here
   const workspace = useWorkspace.getState()

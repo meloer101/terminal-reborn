@@ -4,6 +4,7 @@ import { expect, test, type Locator } from '@playwright/test'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { CLI_AGENTS } from '../src/shared/agents'
 import { launchApp } from './launch'
 
 /**
@@ -65,9 +66,9 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   await expect(menu.getByRole('menuitem')).toHaveText(['移到新窗口', '关闭会话⌘W', '在此新建会话', '归档 worktree…'])
   const submenu = page.getByRole('menu', { name: '在此新建会话' })
   await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此新建会话' }), submenu)
-  // Every agent (Figma 57C): 已安装 first (Claude Code and Codex always), 没装 after them, 终端 under the list — 19 + 1.
+  // Every agent (Figma 57C): 已安装 first (Claude Code and Codex always), 没装 after them, 终端 under the list.
   const rows = submenu.getByRole('menuitem')
-  await expect(rows).toHaveCount(20)
+  await expect(rows).toHaveCount(CLI_AGENTS.length + 1)
   await expect(rows.nth(0)).toHaveText('Claude Code')
   await expect(rows.nth(1)).toHaveText('Codex')
   await expect(rows.last()).toHaveText('终端')
@@ -81,7 +82,7 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   })
   expect(scrolled).toBe(true)
   expect((await rows.last().boundingBox())?.y).toBe(terminalTop)
-  await expect(rows.nth(19)).toBeInViewport()
+  await expect(rows.nth(CLI_AGENTS.length - 1)).toBeInViewport()
   await page.screenshot({ path: 'test-results/sidebar-session-context-menu.png' })
   for (const theme of ['light', 'dark'] as const) {
     await page.locator('html').evaluate((html, t) => html.setAttribute('data-theme', t), theme)
@@ -96,10 +97,13 @@ test('projects stay listed and offer 新建会话; hovering a header reveals ＋
   await hoverUntilVisible(menu.getByRole('menuitem', { name: '在此新建会话' }), submenu)
   const missing = submenu.locator('[data-muted="true"]')
   if ((await missing.count()) > 0) {
-    await missing.first().scrollIntoViewIfNeeded()
-    await missing.first().click()
+    // The last one: 设置 · 智能体 folds all but two of the missing ones, and unfolds for this one.
+    const name = (await missing.last().textContent()) ?? ''
+    await missing.last().scrollIntoViewIfNeeded()
+    await missing.last().click()
     const settings = page.getByRole('dialog', { name: '设置' })
     await expect(settings.getByRole('tab', { name: '智能体' })).toHaveAttribute('aria-selected', 'true')
+    await expect(settings.getByRole('group', { name, exact: true })).toBeInViewport()
     await page.keyboard.press('Escape')
     await expect(settings).toHaveCount(0)
   } else {

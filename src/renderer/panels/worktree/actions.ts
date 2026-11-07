@@ -205,7 +205,7 @@ export async function openRowMenu(
   else if (choice === 'delete') await deleteWorktreeInteractive(root, row, refresh)
   else {
     const picked = hereChoice(choice, 'new:')
-    if (picked && 'install' in picked) openSettings('agents')
+    if (picked && 'install' in picked) openSettings('agents', picked.install)
     else if (picked) startSessionIn(projectId, row, picked.kind)
   }
 }
