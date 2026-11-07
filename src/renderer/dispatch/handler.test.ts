@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import type { DispatchRequest, WaviCommand, WaviResult } from '@shared/dispatch'
+import { DISPATCH_LIMITS, type DispatchRequest, type WaviCommand, type WaviResult } from '@shared/dispatch'
 import type { Session } from '@shared/types'
-import { decideConfirms, dropConfirmsOf, handleWaviRequest, setDispatchSettings } from './handler'
-import { useDispatch } from './store'
+import { decideConfirms, dropConfirmsOf, handleWaviRequest, resumeConfirmTimers, setDispatchSettings } from './handler'
+import { restoreDispatch, savedDispatch, useDispatch } from './store'
 
 let sessions: Session[] = []
 const addBackgroundSession = vi.fn((_project: string, _target: unknown, _kind: string, id?: string): string | null => id ?? 'child')
@@ -93,6 +93,27 @@ describe('wavi in a window (PRD F21)', () => {
     dropConfirmsOf('top')
     expect(useDispatch.getState().confirms).toHaveLength(0)
     expect(deliverMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves what waits for the user, and after a reload still tells the dispatcher when nobody answered', async () => {
+    await call('top', runCmd('Fix the login form'))
+    const saved = savedDispatch(useDispatch.getState())!
+    expect(saved.confirms).toHaveLength(1)
+    // The window goes (its request and timer with it); a new one takes the request up and its 10 minutes run again.
+    dropConfirmsOf('top')
+    restoreDispatch(saved)
+    expect(useDispatch.getState().confirms).toEqual(saved.confirms)
+    vi.useFakeTimers()
+    Object.assign(window, { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout })
+    try {
+      resumeConfirmTimers()
+      vi.advanceTimersByTime(DISPATCH_LIMITS.confirmMs)
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(useDispatch.getState().confirms).toHaveLength(0)
+    expect((deliverMessage.mock.calls.at(-1) as unknown[])[1]).toContain('10 分钟内没有回答')
+    expect(savedDispatch(useDispatch.getState())).toBeNull()
   })
 
   it('lets a child start a grandchild at once, and refuses a grandchild that tries again', async () => {

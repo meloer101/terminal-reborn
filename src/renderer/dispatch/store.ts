@@ -1,11 +1,13 @@
-// What dispatch (PRD F21) keeps in a window, none of it saved (who dispatched whom is on the sessions themselves):
-// `wavi run` requests waiting for the user's 开始, the first message a child starts with, each child's last message,
-// the reports on their way to each dispatcher, and messages held for 送进去 — when the session has no channel, nobody
-// should be typed over, delivery failed, or the hourly budget is used.
+// What dispatch (PRD F21) keeps in a window (who dispatched whom is on the sessions themselves): `wavi run` requests
+// waiting for the user's 开始, the first message a child starts with, each child's last message, the reports on their
+// way to each dispatcher, and messages held for 送进去 — when the session has no channel, nobody should be typed over,
+// delivery failed, or the hourly budget is used. The waits, the queues and the held messages are saved with the
+// workspace (saved-runs.ts), so a reload does not drop what an agent was promised.
 import { create } from 'zustand'
 import { emptyQueue, type ChildReport, type HeldItem, type PendingStart, type ReportQueue } from '@shared/dispatch'
 
 export type { HeldItem, PendingStart } from '@shared/dispatch'
+import type { SavedDispatch } from '@shared/saved-runs'
 import type { SessionId } from '@shared/types'
 
 interface State {
@@ -21,6 +23,28 @@ interface State {
 }
 
 export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {}, reported: {} }))
+
+/** What a reload must not lose (null: nothing). */
+export function savedDispatch(state: Pick<State, 'confirms' | 'queues' | 'held'>): SavedDispatch | null {
+  const queues: SavedDispatch['queues'] = {}
+  for (const [id, queue] of Object.entries(state.queues)) if (queue && (queue.pending.length > 0 || queue.sent.length > 0 || queue.seen.length > 0)) queues[id] = queue
+  const held: SavedDispatch['held'] = {}
+  for (const [id, items] of Object.entries(state.held)) if (items && items.length > 0) held[id] = items
+  return state.confirms.length > 0 || Object.keys(queues).length > 0 || Object.keys(held).length > 0 ? { confirms: state.confirms, queues, held } : null
+}
+
+/** Takes up what an earlier window saved; what this window already has wins. */
+export function restoreDispatch(saved: SavedDispatch | undefined): void {
+  if (!saved) return
+  useDispatch.setState((s) => {
+    const known = new Set(s.confirms.map((c) => c.callId))
+    return {
+      confirms: [...s.confirms, ...saved.confirms.filter((c) => !known.has(c.callId))],
+      queues: { ...saved.queues, ...s.queues },
+      held: { ...saved.held, ...s.held }
+    }
+  })
+}
 
 export function addConfirm(pending: PendingStart): void {
   useDispatch.setState((s) => ({ confirms: [...s.confirms, pending] }))

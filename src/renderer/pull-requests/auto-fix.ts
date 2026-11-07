@@ -539,7 +539,7 @@ export function startPrAutomation(): () => void {
     step()
   })
   // An unfinished fix outlives the window (saved-runs.ts): saved with the workspace whenever a run changes.
-  addSnapshotPart(() => {
+  const offSnapshot = addSnapshotPart(() => {
     const fixRuns = savedFixRuns(usePullRequests.getState().automation, useBaseCi.getState().automation)
     return fixRuns.length > 0 ? { fixRuns } : {}
   })
@@ -582,6 +582,7 @@ export function startPrAutomation(): () => void {
   })
   return () => {
     started = false
+    offSnapshot()
     offSettings()
     offPr()
     offBase()

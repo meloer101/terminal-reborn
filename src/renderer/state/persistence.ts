@@ -80,9 +80,13 @@ export function setSnapshotProvider(provider: () => WorkspaceFile): void {
 /** Fields of the workspace file a feature keeps itself (the runs that must outlive the window: saved-runs.ts). */
 const parts: Array<() => Partial<WorkspaceFile>> = []
 
-/** Adds a feature's own fields to every snapshot; the feature calls requestSave when they change. */
-export function addSnapshotPart(part: () => Partial<WorkspaceFile>): void {
+/** Adds a feature's own fields to every snapshot (the feature calls requestSave when they change); returns the undo. */
+export function addSnapshotPart(part: () => Partial<WorkspaceFile>): () => void {
   parts.push(part)
+  return () => {
+    const at = parts.indexOf(part)
+    if (at >= 0) parts.splice(at, 1)
+  }
 }
 
 /** Saves asked for within this long go out as one snapshot (a drag asks on every pointer move). */
