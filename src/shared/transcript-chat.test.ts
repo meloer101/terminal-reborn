@@ -175,6 +175,25 @@ describe('Codex rollout → chat', () => {
     expect(items[1]).toMatchObject({ name: 'Bash', arg: 'npm test', state: 'ok', output: 'ok 3 passed' })
   })
 
+  it('reads a shell call’s exit code before guessing from its output', () => {
+    const call = (id: string): string => r('response_item', { type: 'function_call', name: 'exec_command', call_id: id, arguments: JSON.stringify({ cmd: 'rg error' }) })
+    const out = (id: string, output: string): string => r('response_item', { type: 'function_call_output', call_id: id, output })
+    const items = parse(
+      [
+        call('a'),
+        out('a', 'Exit code: 0\nWall time: 0.1 seconds\nOutput:\nerror.ts: export class AuthError'),
+        call('b'),
+        out('b', 'Chunk ID: dff8d5\nWall time: 0.0006 seconds\nProcess exited with code 2\nOriginal token count: 0\nOutput:\n'),
+        call('c'),
+        out('c', 'Chunk ID: 232234\nWall time: 1.0 seconds\nProcess running with session ID 50328\nOutput:\nfailed to bind, retrying'),
+        call('d'),
+        out('d', 'aborted by user after 5.6s')
+      ],
+      'codex'
+    )
+    expect(items.map((i) => (i.kind === 'tool' ? i.state : i.kind))).toEqual(['ok', 'error', 'ok', 'error'])
+  })
+
   it('leaves out reasoning with an empty summary', () => {
     const items = parse(
       [

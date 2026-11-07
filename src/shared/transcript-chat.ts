@@ -334,6 +334,19 @@ function claudeParser(now: () => number): ChatParser {
   return { push, items }
 }
 
+/**
+ * Whether a Codex tool output reports a failure. A shell call's header (before `Output:`) carries its exit code
+ * (`Exit code: N`, `Process exited with code N`) or `Script failed`; only without one is the start of the text read.
+ */
+function codexOutputFailed(out: string): boolean {
+  const head = out.split(/^Output:$/m, 1)[0]!
+  const code = /^(?:Exit code: |Process exited with code )(-?\d+)$/m.exec(head)?.[1]
+  if (code !== undefined) return code !== '0'
+  if (/^Script failed$/m.test(head)) return true
+  if (/^Process running with session ID /m.test(head)) return false
+  return /aborted|error|failed/i.test(out.slice(0, 80))
+}
+
 /** Codex's own context it puts in user messages: not something the user typed. */
 const CODEX_CONTEXT = /^\s*<(environment_context|user_instructions|permissions instructions|turn_aborted)>/
 
@@ -415,7 +428,7 @@ function codexParser(now: () => number): ChatParser {
         const item = index === undefined ? undefined : items[index]
         if (!item || item.kind !== 'tool') return []
         const out = typeof p.output === 'string' ? p.output : textOfOutput(p.output)
-        items[index!] = { ...item, state: /aborted|error|failed/i.test(out.slice(0, 80)) ? 'error' : 'ok', ...(out ? { output: tail(out, CHAT_LIMITS.output) } : {}) }
+        items[index!] = { ...item, state: codexOutputFailed(out) ? 'error' : 'ok', ...(out ? { output: tail(out, CHAT_LIMITS.output) } : {}) }
         return [index!]
       }
       default:
