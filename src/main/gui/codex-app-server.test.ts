@@ -118,6 +118,20 @@ describe('createCodexNormalizer', () => {
     expect(other.prompts[0]).not.toHaveProperty('diff')
   })
 
+  it('forgets a file change once it is done or its approval is resolved', () => {
+    const changes = [{ path: '/repo/src/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1 +1 @@\n-b\n+c\n' }]
+    const started = { item: { type: 'fileChange', id: 'f9', status: 'inProgress', changes } }
+    const n = createCodexNormalizer('/repo', () => 0)
+    n.notification('item/started', started)
+    n.notification('item/completed', { item: { ...started.item, status: 'completed' } })
+    expect(fold(n.request('3', 'item/fileChange/requestApproval', { itemId: 'f9' })).prompts[0]).not.toHaveProperty('diff')
+    const m = createCodexNormalizer('/repo', () => 0)
+    m.notification('item/started', started)
+    expect(fold(m.request('4', 'item/fileChange/requestApproval', { itemId: 'f9' })).prompts[0]).toHaveProperty('diff')
+    m.notification('serverRequest/resolved', { requestId: 4 })
+    expect(fold(m.request('5', 'item/fileChange/requestApproval', { itemId: 'f9' })).prompts[0]).not.toHaveProperty('diff')
+  })
+
   it('keeps what an MCP or dynamic tool returned, and why it failed', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const s = fold([

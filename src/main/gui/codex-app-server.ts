@@ -97,7 +97,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
   const waiting = new Map<string, CodexPending>()
-  // Each fileChange item's files, so its approval can show the change.
+  // Each fileChange item's files while it runs, so its approval can show the change (dropped once it is done or its
+  // approval is resolved: the prompt already holds them).
   const fileChanges = new Map<string, FileDiff[]>()
   let live: { kind: 'text' | 'thinking'; text: string; itemId: string } | null = null
 
@@ -168,7 +169,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
       }
       case 'fileChange': {
         const files = diffsOfChanges(item.changes, cwd)
-        if (files.length > 0) fileChanges.set(id, files)
+        if (done) fileChanges.delete(id)
+        else if (files.length > 0) fileChanges.set(id, files)
         const diff = files[0]
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : status === 'declined' || status === 'failed' ? 'error' : 'ok'
@@ -239,6 +241,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
         }
         case 'serverRequest/resolved': {
           const id = String(params.requestId ?? '')
+          const itemId = str(waiting.get(id)?.params.itemId)
+          if (itemId) fileChanges.delete(itemId)
           return waiting.delete(id) ? [{ type: 'prompt-done', id }] : []
         }
         case 'error': {
