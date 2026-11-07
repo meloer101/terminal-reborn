@@ -98,4 +98,13 @@ private func question(_ id: String, at: Double, options: [String], multi: Bool =
     #expect(ActivityLink.session(in: ActivityLink.url(session: nil)) == .some(nil))
     #expect(ActivityLink.session(in: URL(string: "wavi://pair?d=x")!) == nil)
   }
+
+  @Test func aWaitingCardSaysWhatElseIsGoingOn() {
+    let sessions = [session("s1", status: .needsYou), session("s2", status: .needsYou), session("s3", status: .running), session("s4", status: .running)]
+    let prompts = [question("p1", at: 1000, options: ["a"]), question("p2", at: 2000, options: ["b"])]
+    #expect(activityState(sessions: sessions, prompts: prompts, now: 9000)?.others == "另有 1 个等你处理 · 2 个运行中")
+    #expect(activityState(sessions: [session("s1", status: .needsYou)], prompts: [question("p1", at: 1000, options: ["a"])], now: 9000)?.others == nil)
+    #expect(activityState(sessions: [session("s1", status: .needsYou), session("s3", status: .running)], prompts: [question("p1", at: 1000, options: ["a"])], now: 9000)?.others == "另有 1 个运行中")
+  }
 }
+

@@ -27,6 +27,25 @@ private func date(_ ms: Double) -> Date { Date(timeIntervalSince1970: ms / 1000)
 
 /// `mac`: the paired Mac's name, the 空闲 card's title.
 func activityState(sessions: [RemoteSession], prompts: [RemotePrompt], now: Double, mac: String = "") -> ActivityState? {
+  var state = activityCard(sessions: sessions, prompts: prompts, now: now, mac: mac)
+  state?.updated = date(now)
+  if let kind = state?.kind, kind != .running && kind != .idle {
+    state?.others = othersLine(waiting: max(0, prompts.count - (kind.isWaiting ? 1 : 0)), running: sessions.filter { $0.status == .running }.count)
+  }
+  return state
+}
+
+/// 另有 1 个等你处理 · 2 个运行中; nil when nothing else goes on.
+private func othersLine(waiting: Int, running: Int) -> String? {
+  let parts = [waiting > 0 ? "\(waiting) 个等你处理" : nil, running > 0 ? "\(running) 个运行中" : nil].compactMap { $0 }
+  return parts.isEmpty ? nil : "另有 " + parts.joined(separator: " · ")
+}
+
+private extension ActivityState.Kind {
+  var isWaiting: Bool { self == .permission || self == .question }
+}
+
+private func activityCard(sessions: [RemoteSession], prompts: [RemotePrompt], now: Double, mac: String) -> ActivityState? {
   let byId = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
   if let prompt = prompts.min(by: { $0.createdAt < $1.createdAt }) {
     let session = byId[prompt.sessionId]

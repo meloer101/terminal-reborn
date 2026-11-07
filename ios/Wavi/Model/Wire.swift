@@ -260,6 +260,9 @@ enum PhoneCommand: Sendable {
   case ship(session: String, action: ShipAction)
   case archive(session: String)
 
+  /// A permission answer's decision (for the receipt it leaves).
+  var decision: String? { if case .permission(_, let d) = self { return d } else { return nil } }
+
   var fields: [String: JSONValue] {
     switch self {
     case .snapshot: return ["type": .string("snapshot")]

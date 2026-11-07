@@ -43,10 +43,12 @@ final class LiveActivities {
     }
     // A finished or failed session goes stale once it is no longer recent, 空闲 once its half hour is up (the app may be
     // suspended then and end it only when it next runs).
+    // Waiting and running cards go stale when nothing has refreshed them for a while (the Mac is gone, or the app is
+    // suspended): the card then says 已过期 and when it was last updated (Figma 62I) instead of passing old news as live.
     let stale: Date? = switch state.kind {
     case .done, .error: state.since.addingTimeInterval(ActivityLimits.recentMs / 1000)
     case .idle: state.since.addingTimeInterval(ActivityLimits.idleMs / 1000)
-    default: nil
+    default: Date().addingTimeInterval(ActivityLimits.recentMs / 1000)
     }
     let content = ActivityContent(state: state, staleDate: stale)
     if let activity, Self.live(activity) {

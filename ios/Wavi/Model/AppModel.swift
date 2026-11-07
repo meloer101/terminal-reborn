@@ -32,6 +32,31 @@ final class AppModel {
   /// Messages sent from this phone that the session's transcript has not shown yet (the agent writes a message there
   /// only once it takes it): drawn at the end of the conversation at once, gone when the transcript has them.
   private(set) var sending: [String: [ChatItem]] = [:]
+  /// Answers given while this phone was connected, per session: left in the conversation where they happened.
+  private(set) var receipts: [String: [Receipt]] = [:]
+  /// The prompts as last listed, and the ones this phone answered (so a prompt that leaves without it was answered on the
+  /// Mac).
+  @ObservationIgnored private var listed: [String: RemotePrompt] = [:]
+  @ObservationIgnored private var answeredHere: Set<String> = []
+
+  /// This phone (the app or the Live Activity) answered `prompt`.
+  func answered(_ prompt: RemotePrompt, decision: String?) {
+    answeredHere.insert(prompt.id)
+    receipts[prompt.sessionId, default: []].append(Receipt(id: "receipt-\(prompt.id)", at: Date().timeIntervalSince1970 * 1000, onPhone: true,
+      text: receiptText(prompt, decision: decision, onPhone: true)))
+  }
+
+  /// A new list of prompts: the ones that left without an answer from here were answered on the Mac.
+  private func promptsListed(_ list: [RemotePrompt]) {
+    let ids = Set(list.map(\.id))
+    for (id, prompt) in listed where !ids.contains(id) && !answeredHere.contains(id) {
+      receipts[prompt.sessionId, default: []].append(Receipt(id: "receipt-\(id)", at: Date().timeIntervalSince1970 * 1000, onPhone: false,
+        text: receiptText(prompt, decision: nil, onPhone: false)))
+    }
+    answeredHere.formIntersection(ids)
+    listed = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    prompts = list
+  }
 
   /// Sent from the composer: on screen now, before the Mac answers.
   func willSend(_ session: String, text: String, photos: Int) -> String {
@@ -123,6 +148,9 @@ final class AppModel {
     sessions = .empty
     heardAt = nil
     prompts = []
+    receipts = [:]
+    listed = [:]
+    answeredHere = []
     watching = nil
     conversation = nil
     loaded = false
@@ -191,6 +219,7 @@ final class AppModel {
     if let failure = result.error {
       activityFailure = (prompt, String(failure.prefix(80)))
     } else {
+      if let answeredPrompt = prompts.first(where: { $0.id == prompt }) { answered(answeredPrompt, decision: command.decision) }
       prompts.removeAll { $0.id == prompt }
       knownPrompts.remove(prompt)
     }
@@ -241,7 +270,7 @@ final class AppModel {
     guard let snapshot = await client?.request(.snapshot, timeout: timeout).decode(Snapshot.self) else { return false }
     sessions = RemoteSessionList(projects: snapshot.projects, sessions: snapshot.sessions)
     heardAt = Date().timeIntervalSince1970 * 1000
-    prompts = snapshot.prompts ?? []
+    promptsListed(snapshot.prompts ?? [])
     knownPrompts = Set(prompts.map(\.id))
     loaded = true
     syncActivity()
@@ -280,7 +309,7 @@ final class AppModel {
       heardAt = Date().timeIntervalSince1970 * 1000
       syncActivity()
     case .prompts(let list):
-      prompts = list
+      promptsListed(list)
       let ids = Set(list.map(\.id))
       let fresh = !ids.subtracting(knownPrompts).isEmpty
       knownPrompts = ids

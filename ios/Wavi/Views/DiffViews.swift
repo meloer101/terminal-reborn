@@ -120,6 +120,51 @@ struct ToolView: View {
   }
 }
 
+/// The files one turn changed (Figma 62E 这一轮改了 N 个文件): each opens its tool call's diff.
+struct TurnView: View {
+  let session: String
+  let tools: [String]
+  @Environment(AppModel.self) private var model
+
+  var body: some View {
+    let items = model.watching == session ? (model.conversation?.feed.items ?? []).filter { tools.contains($0.id) } : []
+    Group {
+      if items.isEmpty {
+        EmptyState(title: "这一轮的改动不在当前的对话里")
+      } else {
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(items) { item in
+              let (name, dir) = splitPath(item.diff?.path ?? item.arg ?? "")
+              NavigationLink(value: Route.tool(session: session, item: item.id)) {
+                HStack(spacing: 12) {
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(name).font(.ui(.callout)).foregroundStyle(Color.textPrimary).lineLimit(1)
+                    if !dir.isEmpty { Text(dir).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
+                  }
+                  Spacer(minLength: 0)
+                  Counts(added: item.diff?.added, removed: item.diff?.removed)
+                  Icon("chevron-right", size: 14).foregroundStyle(Color.textSecondary)
+                }
+                .padding(.horizontal, Metric.margin)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(RowStyle())
+            }
+          }
+          .padding(.vertical, 8)
+        }
+      }
+    }
+    .background(Color.bgApp)
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .principal) { NavTitle(title: "这一轮的改动", subtitle: "\(Set(items.compactMap { $0.diff?.path }).count) 个文件") }
+    }
+  }
+}
+
 /// One file of Git · 变更, drawn like 45D: `git diff` as numbered rows.
 struct FileDiffView: View {
   let session: String

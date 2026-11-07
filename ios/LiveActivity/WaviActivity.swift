@@ -39,6 +39,10 @@ struct WaviActivityAttributes: ActivityAttributes {
     var runningCount = 0
     /// The last answer from the Lock Screen or the island did not reach the Mac.
     var failure: String?
+    /// What else is going on, under a waiting or finished card (Figma 62G / 62H): 另有 1 个等你处理 · 2 个运行中.
+    var others: String?
+    /// When the phone last put this together: the stale card says 上次更新 then (Figma 62I).
+    var updated: Date?
   }
 
   /// The Mac's name (设置 · 手机).

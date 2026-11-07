@@ -163,7 +163,10 @@ private struct PermissionAsk: View {
       Task {
         let result = await model.call(.permission(prompt: prompt.id, decision: decision))
         busy = nil
-        if let failure = result.error { error = "没有送到 Mac：\(failure)" } else { close() }
+        if let failure = result.error { error = "没有送到 Mac：\(failure)" } else {
+          model.answered(prompt, decision: decision)
+          close()
+        }
       }
     } label: {
       busyLabel(label, busy: busy == decision, primary: primary)
@@ -205,7 +208,10 @@ private struct QuestionAsk: View {
             let answers = Dictionary(questions.enumerated().map { ($0.element.question, answer($0.offset) ?? "") }, uniquingKeysWith: { a, _ in a })
             let result = await model.call(.answer(prompt: prompt.id, answers: answers))
             busy = false
-            if let failure = result.error { error = "没有送到 Mac：\(failure)" } else { close() }
+            if let failure = result.error { error = "没有送到 Mac：\(failure)" } else {
+              model.answered(prompt, decision: nil)
+              close()
+            }
           }
         } label: {
           busyLabel("提交", busy: busy, primary: true)

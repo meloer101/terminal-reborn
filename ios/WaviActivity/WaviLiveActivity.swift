@@ -13,7 +13,7 @@ struct WaviActivityBundle: WidgetBundle {
 struct WaviLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: WaviActivityAttributes.self) { context in
-      LockCard(state: context.state)
+      LockCard(state: context.state, stale: context.isStale)
         .activityBackgroundTint(Color.activityBackground)
         .activitySystemActionForegroundColor(Color.textPrimary)
         .widgetURL(ActivityLink.url(session: context.state.session))
@@ -24,10 +24,10 @@ struct WaviLiveActivity: Widget {
           StatusWord(state: state).frame(maxHeight: .infinity).padding(.leading, 6).dark()
         }
         DynamicIslandExpandedRegion(.trailing) {
-          Age(state: state).frame(maxHeight: .infinity).padding(.trailing, 6).dark()
+          Age(state: state, stale: context.isStale).frame(maxHeight: .infinity).padding(.trailing, 6).dark()
         }
         DynamicIslandExpandedRegion(.bottom) {
-          ActivityBody(state: state, island: true).padding(.horizontal, 6).padding(.top, 4).dark()
+          ActivityBody(state: state, island: true, stale: context.isStale).padding(.horizontal, 6).padding(.top, 4).dark()
         }
       } compactLeading: {
         Glyph(kind: state.kind).dark()
@@ -146,13 +146,17 @@ private struct StatusWord: View {
   }
 }
 
-/// 已等 2分钟 while it waits, how long ago it finished; nothing for the running list (each row has its own).
+/// 已等 2分钟 while it waits, how long ago it finished; nothing for the running list (each row has its own). 已过期 once
+/// the phone has not updated it past its stale date (the app was closed or lost the Mac).
 private struct Age: View {
   let state: WaviActivityAttributes.ContentState
+  var stale = false
 
   var body: some View {
     Group {
-      if state.kind.waiting {
+      if stale {
+        Text("已过期")
+      } else if state.kind.waiting {
         HStack(spacing: 4) {
           Text("已等")
           Elapsed(since: state.since)
@@ -167,20 +171,37 @@ private struct Age: View {
   }
 }
 
-/// The Lock Screen: the island's expanded content with its status line on top.
+/// The Lock Screen: the island's expanded content with its status line on top, and under a hairline what else waits or
+/// runs (Figma 62 Live Activity) — or, once stale, when it was last right and how to bring it back.
 private struct LockCard: View {
   let state: WaviActivityAttributes.ContentState
+  let stale: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
         StatusWord(state: state)
         Spacer(minLength: 8)
-        Age(state: state)
+        Age(state: state, stale: stale)
       }
-      ActivityBody(state: state, island: false)
+      .opacity(stale ? 0.5 : 1)
+      ActivityBody(state: state, island: false, stale: stale)
+      if let line = footer {
+        VStack(alignment: .leading, spacing: 8) {
+          Rectangle().fill(Color.hairline).frame(height: 0.5)
+          Text(line).font(.ui(.caption, medium: true)).foregroundStyle(Color.textSecondary).lineLimit(1)
+        }
+      }
     }
     .padding(14)
+  }
+
+  private var footer: String? {
+    if stale {
+      let time = state.updated.map { "上次更新 \($0.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))) · " } ?? ""
+      return time + "打开 Wavi 重新连接"
+    }
+    return state.others
   }
 }
 
@@ -188,6 +209,7 @@ private struct LockCard: View {
 private struct ActivityBody: View {
   let state: WaviActivityAttributes.ContentState
   let island: Bool
+  var stale = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
@@ -219,11 +241,13 @@ private struct ActivityBody: View {
           }
         }
         .padding(.leading, state.agent.isEmpty ? 0 : 24)
-        if state.answerable, let prompt = state.prompt {
+        // A stale card's prompt may be answered already: no buttons until the app updates it.
+        if state.answerable, !stale, let prompt = state.prompt {
           buttons(prompt).padding(.top, 8)
         }
       }
     }
+    .opacity(stale ? 0.5 : 1)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 

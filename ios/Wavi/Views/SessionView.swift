@@ -66,8 +66,10 @@ struct SessionView: View {
     return ScrollView {
       LazyVStack(alignment: .leading, spacing: 12) {
         if conversation?.loading == true { Spinner(color: .textSecondary).frame(maxWidth: .infinity).accessibilityLabel("正在读取更早的消息") }
-        ForEach(Array((conversation?.feed.items ?? []).enumerated()), id: \.element.id) { index, item in
-          FeedRow(item: item, session: id)
+        let blocks = transcriptBlocks(conversation?.feed.items ?? [], receipts: model.receipts[id] ?? [],
+          turnOpen: session.status == .running || session.status == .needsYou)
+        ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+          BlockRow(block: block, session: id)
             .onAppear { if index == 0 { Task { await model.loadOlder() } } }
         }
         ForEach(model.sending[id] ?? []) { item in FeedRow(item: item, session: id).opacity(0.6) }
@@ -126,6 +128,90 @@ private struct Live: View {
   }
 }
 
+/// One block of the conversation (Figma 62E): an item, a folded run of tool calls, a turn's totals or an answer.
+private struct BlockRow: View {
+  let block: TranscriptBlock
+  let session: String
+
+  var body: some View {
+    switch block {
+    case .item(let item): FeedRow(item: item, session: session)
+    case .tools(let run): ToolGroupRow(run: run, session: session)
+    case .turn(let turn):
+      NavigationLink(value: Route.turn(session: session, tools: turn.tools)) { TurnRow(turn: turn) }.buttonStyle(.plain)
+    case .receipt(let receipt):
+      HStack(spacing: 8) {
+        Icon(receipt.onPhone ? "smartphone" : "square-terminal", size: 14)
+        Text(receipt.text).font(.ui(.footnote)).lineLimit(1)
+      }
+      .foregroundStyle(Color.textSecondary)
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 4)
+      .accessibilityElement(children: .combine)
+    }
+  }
+}
+
+/// Consecutive tool calls as one line that says what they did; open, the calls in an inset box that scrolls on its own
+/// past 156 (a running run starts open).
+private struct ToolGroupRow: View {
+  let run: ToolRun
+  let session: String
+  @State private var open: Bool?
+  @State private var height: CGFloat = 0
+
+  var body: some View {
+    let expanded = open ?? run.running
+    VStack(alignment: .leading, spacing: 8) {
+      Button { open = !expanded } label: {
+        HStack(spacing: 8) {
+          Icon("chevron-right", size: 14).rotationEffect(.degrees(expanded ? 90 : 0))
+          Text(run.summary).font(.ui(.subheadline)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+          if run.showCounts { Counts(added: run.added, removed: run.removed) }
+        }
+        .foregroundStyle(Color.textSecondary)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityValue(expanded ? "已展开" : "已收起")
+      if expanded {
+        ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            ForEach(run.items) { item in
+              NavigationLink(value: Route.tool(session: session, item: item.id)) { ToolLine(item: item, compact: true) }.buttonStyle(.plain)
+            }
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 4)
+          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        }
+        .frame(height: min(max(height, 1), 156))
+        .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
+      }
+    }
+  }
+}
+
+/// The end of a turn that changed files: one place to see what it changed (Figma 59 Mobile/TurnSummary).
+private struct TurnRow: View {
+  let turn: TurnChange
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Icon("file", size: 16).foregroundStyle(Color.textPrimary)
+      Text("这一轮改了 \(turn.files) 个文件").font(.ui(.subheadline, medium: true)).foregroundStyle(Color.textPrimary)
+      Spacer(minLength: 0)
+      Counts(added: turn.added, removed: turn.removed)
+      Icon("chevron-right", size: 14).foregroundStyle(Color.textSecondary)
+    }
+    .padding(12)
+    .background(Color.fillSubtle, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
+    .contentShape(Rectangle())
+    .accessibilityElement(children: .combine)
+  }
+}
+
 /// One item of the conversation: the user's bubble, the agent's Markdown, thinking (folded), one row per tool call
 /// (tap for 45D), system lines, and 未识别的条目 so an unknown line never breaks the rest.
 struct FeedRow: View {
@@ -174,6 +260,8 @@ struct FeedRow: View {
 
 private struct ToolLine: View {
   let item: ChatItem
+  /// Inside a run's box: no MiniDiff.
+  var compact = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
@@ -186,7 +274,7 @@ private struct ToolLine: View {
       if item.diff == nil, let tail = lastLine(item.output) {
         Text(tail).font(.mono(.caption)).foregroundStyle(item.state == "error" ? Color.statusError : Color.textSecondary).lineLimit(1)
       }
-      if let diff = item.diff, item.name != "Write", let hunk = diff.hunks.first {
+      if !compact, let diff = item.diff, item.name != "Write", let hunk = diff.hunks.first {
         MiniDiff(lines: miniLines(hunk.lines))
       }
     }
