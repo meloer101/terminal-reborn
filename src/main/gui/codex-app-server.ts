@@ -104,6 +104,18 @@ export interface CodexNormalizer {
   failed(message: string): GuiEvent[]
 }
 
+/** The text an MCP call (`result.content`, MCP content blocks) or a dynamic tool (`contentItems`) returned, or its error. */
+function toolCallOutput(item: Rec): string {
+  const error = isRec(item.error) ? str(item.error.message) : undefined
+  if (error) return error
+  const blocks = isRec(item.result) && Array.isArray(item.result.content) ? item.result.content : Array.isArray(item.contentItems) ? item.contentItems : []
+  return blocks
+    .filter(isRec)
+    .map((b) => (b.type === 'text' || b.type === 'inputText' ? (str(b.text) ?? '') : ''))
+    .filter((t) => t.trim() !== '')
+    .join('\n')
+}
+
 export function createCodexNormalizer(cwd: string, now: () => number = Date.now): CodexNormalizer {
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
@@ -171,8 +183,10 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
       case 'mcpToolCall':
       case 'dynamicToolCall': {
         const name = str(item.tool) ?? str(item.name) ?? 'Tool'
-        const state: ToolItem['state'] = !done ? 'running' : str(item.status) === 'failed' ? 'error' : 'ok'
-        return [put(id, { kind: 'tool', id, at, name, arg: clip(str(item.server) ?? '', CHAT_LIMITS.arg), state })]
+        const failed = str(item.status) === 'failed' || item.success === false
+        const state: ToolItem['state'] = !done ? 'running' : failed ? 'error' : 'ok'
+        const output = done ? toolCallOutput(item) : ''
+        return [put(id, { kind: 'tool', id, at, name, arg: clip(str(item.server) ?? '', CHAT_LIMITS.arg), state, ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}) })]
       }
       case 'webSearch':
         return [put(id, { kind: 'tool', id, at, name: 'WebSearch', arg: clip(str(item.query) ?? '', CHAT_LIMITS.arg), state: done ? 'ok' : 'running' })]

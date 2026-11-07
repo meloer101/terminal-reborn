@@ -35,6 +35,20 @@ describe('createCodexNormalizer', () => {
     expect(s.items[2]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'src/a.ts', state: 'ok', diff: { added: 1, removed: 1 } })
   })
 
+  it('keeps what an MCP or dynamic tool returned, and why it failed', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    const s = fold([
+      ...n.notification('item/completed', {
+        item: { type: 'mcpToolCall', id: 'm1', server: 'figma', tool: 'get_screenshot', status: 'completed', result: { content: [{ type: 'text', text: 'node 1:2' }, { type: 'image', data: 'x' }], structuredContent: null }, error: null }
+      }),
+      ...n.notification('item/completed', { item: { type: 'mcpToolCall', id: 'm2', server: 'figma', tool: 'use_figma', status: 'failed', result: null, error: { message: 'not authorised' } } }),
+      ...n.notification('item/completed', { item: { type: 'dynamicToolCall', id: 'd1', tool: 'lookup', status: 'completed', success: false, contentItems: [{ type: 'inputText', text: 'no such key' }] } })
+    ])
+    expect(s.items[0]).toMatchObject({ kind: 'tool', name: 'get_screenshot', state: 'ok', output: 'node 1:2' })
+    expect(s.items[1]).toMatchObject({ kind: 'tool', name: 'use_figma', state: 'error', output: 'not authorised' })
+    expect(s.items[2]).toMatchObject({ kind: 'tool', name: 'lookup', state: 'error', output: 'no such key' })
+  })
+
   it('turns approvals and questions into prompts and drops them once resolved', () => {
     const n = createCodexNormalizer('/repo')
     let s = fold(n.request('7', 'item/commandExecution/requestApproval', { command: 'rm -rf build', availableDecisions: ['accept', 'acceptForSession', 'decline', 'cancel'] }))
