@@ -18,7 +18,9 @@ final class AppModel {
   }
 
   private(set) var pairing: Pairing?
-  private(set) var link: LinkState = .offline
+  private(set) var link: LinkState = .offline(.unknown)
+  /// A link that was open went away (the line says 连接断了，正在重连 rather than 正在连接).
+  private(set) var dropped = false
   private(set) var macName = ""
   private(set) var sessions = RemoteSessionList.empty
   /// When the Mac last told this phone its sessions (ms): how old the list is once the link drops.
@@ -93,6 +95,9 @@ final class AppModel {
 
   var isOpen: Bool { if case .open = link { return true } else { return false } }
 
+  /// What the connection line under the titles says.
+  var connection: ConnectionWords { connectionWords(link, mac: macName, dropped: dropped) }
+
   /// The notice over the session list while it is not live.
   var staleNotice: String { Wavi.staleNotice(heardAt: heardAt, now: Date().timeIntervalSince1970 * 1000) }
 
@@ -113,7 +118,8 @@ final class AppModel {
     clientToken = UUID()
     PairingStore.clear()
     pairing = nil
-    link = .offline
+    link = .offline(.unknown)
+    dropped = false
     sessions = .empty
     heardAt = nil
     prompts = []
@@ -133,6 +139,8 @@ final class AppModel {
 
   /// The app came back to the foreground: check the link, and start the Live Activity if the background could not.
   func wake() {
+    // 重试 says it is trying (the retries in between keep the reason on screen).
+    if case .offline = link { link = .connecting }
     client?.wake()
     syncActivity()
   }
@@ -285,7 +293,31 @@ final class AppModel {
     }
   }
 
+  /// A drop shows only after this: a link back within it never flashes a notice.
+  @ObservationIgnored private var grace: Task<Void, Never>?
+  @ObservationIgnored private var pendingLink: LinkState?
+
   private func changed(_ state: LinkState) {
+    if case .open = state {
+      grace?.cancel()
+      grace = nil
+      dropped = false
+    } else {
+      // While it cannot connect, a retry does not flash 正在连接 over the reason.
+      if case .connecting = state, case .offline = link { return }
+      if grace != nil || isOpen {
+        pendingLink = state
+        guard grace == nil else { return }
+        grace = Task {
+          try? await Task.sleep(for: .seconds(2))
+          guard !Task.isCancelled, let pending = pendingLink else { return }
+          dropped = true
+          link = pending
+          grace = nil
+        }
+        return
+      }
+    }
     link = state
     guard case .open = state else { return }
     Task {

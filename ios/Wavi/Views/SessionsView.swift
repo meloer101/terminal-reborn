@@ -18,7 +18,7 @@ struct SessionsView: View {
           Button { unpairing = true } label: {
             VStack(spacing: 2) {
               Text("会话").font(.ui(.headline)).foregroundStyle(Color.textPrimary)
-              ConnectionLine(link: model.link, mac: model.macName)
+              ConnectionLine(words: model.connection, busy: model.link == .connecting)
             }
           }
           .buttonStyle(.plain)
@@ -47,7 +47,7 @@ struct SessionsView: View {
     } else if groups.isEmpty && model.link == .connecting {
       SkeletonList()
     } else if groups.isEmpty {
-      EmptyState(title: "连不上 \(model.macName)", action: "重试") { model.wake() }
+      EmptyState(title: model.connection.text, action: "重试") { model.wake() }
     } else {
       list(groups)
     }
@@ -93,27 +93,21 @@ struct SessionsView: View {
   }
 }
 
-/// The connection under a screen title (Figma 59 Mobile/ConnectionTitle): where the Mac is reached, or what is wrong in
-/// words; the small mark is never the only signal.
+/// The connection under a screen title (Figma 59 Mobile/ConnectionTitle): the words say it, the small mark is never
+/// the only signal.
 struct ConnectionLine: View {
-  let link: LinkState
-  let mac: String
+  let words: ConnectionWords
+  var busy = false
 
   var body: some View {
+    let color: Color = switch words.tone {
+    case .quiet: .textSecondary
+    case .warning: .noticeWarning
+    case .danger: .noticeDanger
+    }
     HStack(spacing: 8) {
-      switch link {
-      case .open(let url):
-        Text("\(mac) · \(viaOf(url))").foregroundStyle(Color.textSecondary)
-      case .connecting:
-        Spinner(color: .textSecondary)
-        Text("正在连接 \(mac)").foregroundStyle(Color.textSecondary)
-      case .refused:
-        Circle().fill(Color.noticeDanger).frame(width: 6, height: 6)
-        Text("\(mac) 不认识这台手机").foregroundStyle(Color.noticeDanger)
-      case .offline:
-        Circle().fill(Color.noticeWarning).frame(width: 6, height: 6)
-        Text("连不上 \(mac)").foregroundStyle(Color.noticeWarning)
-      }
+      if busy { Spinner(color: .textSecondary) } else if words.tone != .quiet { Circle().fill(color).frame(width: 6, height: 6) }
+      Text(words.text).foregroundStyle(color)
     }
     .font(.ui(.footnote))
     .lineLimit(1)

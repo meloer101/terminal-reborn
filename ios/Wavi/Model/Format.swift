@@ -140,9 +140,33 @@ func lastLine(_ output: String?) -> String? {
 }
 
 /// Tailscale's CGNAT range 100.64.0.0/10: how the top of 45B names the way it is connected.
-func viaOf(_ url: String) -> String {
-  if let m = url.firstMatch(of: /^wss?:\/\/100\.(\d+)\./), let second = Int(m.1), (64...127).contains(second) { return "Tailscale" }
-  return "局域网"
+func viaOf(_ url: String) -> String { Link.isTailscale(url) ? "Tailscale" : "局域网" }
+
+/// The connection under a screen title (Figma 59 Mobile/ConnectionTitle, 62A–62D): where the Mac is reached, or what is
+/// wrong in words; `dropped` once a link that was open went away.
+struct ConnectionWords: Equatable, Sendable {
+  enum Tone: Sendable { case quiet, warning, danger }
+  let text: String
+  let tone: Tone
+}
+
+func connectionWords(_ link: LinkState, mac: String, dropped: Bool) -> ConnectionWords {
+  switch link {
+  case .open(let url): return ConnectionWords(text: "\(mac) · \(viaOf(url))", tone: .quiet)
+  case .connecting: return ConnectionWords(text: dropped ? "连接断了，正在重连" : "正在连接 \(mac)", tone: .quiet)
+  case .refused: return ConnectionWords(text: "\(mac) 不认识这台手机", tone: .danger)
+  case .offline(let reason):
+    let text = switch reason {
+    case .macAsleep: "\(mac) 已睡眠或离线"
+    case .waviNotRunning: "Mac 上的 Wavi 没有打开"
+    case .tailscaleOff: "连不上 · 检查这台手机的 Tailscale"
+    case .noNetwork: "这台手机没有网络"
+    case .macOutdated: "Mac 上的 Wavi 需要更新"
+    case .phoneOutdated: "这台手机上的 Wavi 需要更新"
+    case .unknown: "连不上 \(mac)"
+    }
+    return ConnectionWords(text: text, tone: .warning)
+  }
 }
 
 /// 45E's title: what the agent wants to do.

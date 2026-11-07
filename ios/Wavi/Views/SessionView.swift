@@ -16,7 +16,7 @@ struct SessionView: View {
       } else if model.isOpen {
         EmptyState(title: "这个会话已经不在 Mac 上", action: "回到会话列表") { model.showList() }
       } else {
-        EmptyState(title: "连不上 \(model.macName)", action: "重试") { model.wake() }
+        EmptyState(title: model.connection.text, action: "重试") { model.wake() }
       }
     }
     .background(Color.bgApp)
@@ -92,9 +92,9 @@ struct SessionView: View {
       if !model.isOpen {
         Group {
           if model.link == .connecting {
-            Notice(tone: .info, message: "连接断了，正在重连")
+            Notice(tone: .info, message: model.connection.text)
           } else {
-            Notice(tone: .warning, message: "连不上 \(model.macName)", action: "重试") { model.wake() }
+            Notice(tone: .warning, message: model.connection.text, action: "重试") { model.wake() }
           }
         }
         .padding(.horizontal, Metric.margin)

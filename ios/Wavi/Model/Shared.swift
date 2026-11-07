@@ -36,6 +36,8 @@ struct Shared: Decodable, Sendable {
   let branchWords: Words
   let limits: Limits
   let pairing: Pairing
+  /// What this app speaks to the Mac (REMOTE_PROTOCOL).
+  let `protocol`: Int
 
   static let data: Shared = {
     guard let url = Bundle.main.url(forResource: "Shared", withExtension: "json"), let bytes = try? Data(contentsOf: url),

@@ -35,6 +35,11 @@ struct Refused: Error {
 
 struct Timeout: Error {}
 
+enum AddressFailure: Hashable, Sendable { case portClosed, timeout, noNetwork, other }
+
+/// Why the phone has no link, as the connection line says it (Figma 62A–62D).
+enum OfflineReason: Equatable, Sendable { case macAsleep, waviNotRunning, tailscaleOff, noNetwork, macOutdated, phoneOutdated, unknown }
+
 enum Link {
   static let openSeconds = 6.0
   static let replySeconds = 10.0
@@ -82,9 +87,71 @@ enum Link {
   }
 
   /// Every address at once; the first to open wins and the others are closed.
-  /// Why each address could not be opened, for the Mac line's dialog.
+  /// Why each address could not be opened: in words for the Mac line's dialog, and as a kind for the connection line.
   struct OpenFailed: Error {
     let reasons: [String: String]
+    var kinds: [String: AddressFailure] = [:]
+  }
+
+  /// An address refused at once (the Mac is there, nothing listens), timed out (asleep, off this network), or the phone
+  /// has no network. URLError.cannotConnectToHost covers both a refusal and an unreachable host; only a refusal is
+  /// that quick. Measured on the simulator; on an iPhone over Tailscale, 未确认.
+  static let refusedWithin = 1.5
+
+  static func kind(_ error: Error, elapsed: Double) -> AddressFailure {
+    if error is Timeout { return .timeout }
+    guard let url = error as? URLError else { return .other }
+    switch url.code {
+    case .notConnectedToInternet: return .noNetwork
+    case .timedOut: return .timeout
+    case .cannotConnectToHost: return elapsed < refusedWithin ? .portClosed : .timeout
+    default: return .other
+    }
+  }
+
+  /// What the connection line says when no address opened (Figma 62).
+  static func offlineReason(_ failures: [String: AddressFailure], tailscaleUp: Bool) -> OfflineReason {
+    let kinds = Set(failures.values)
+    if kinds.contains(.noNetwork) { return .noNetwork }
+    if kinds.contains(.portClosed) { return .waviNotRunning }
+    guard kinds.contains(.timeout) else { return .unknown }
+    if !tailscaleUp && failures.keys.contains(where: isTailscale) { return .tailscaleOff }
+    return .macAsleep
+  }
+
+  /// A Tailscale address: 100.64.0.0/10 or a MagicDNS name.
+  static func isTailscale(_ url: String) -> Bool {
+    guard let host = URL(string: url)?.host else { return false }
+    return host.hasSuffix(".ts.net") || isTailscaleIPv4(host)
+  }
+
+  static func isTailscaleIPv4(_ text: String) -> Bool {
+    let parts = text.split(separator: ".").compactMap { Int($0) }
+    return parts.count == 4 && parts[0] == 100 && (64...127).contains(parts[1])
+  }
+
+  /// This phone has a Tailscale address (Tailscale is connected here). A VPN tunnel alone does not say so: iOS keeps
+  /// utun interfaces of its own.
+  static func tailscaleUp() -> Bool {
+    var list: UnsafeMutablePointer<ifaddrs>?
+    guard getifaddrs(&list) == 0, let first = list else { return false }
+    defer { freeifaddrs(list) }
+    for entry in sequence(first: first, next: { $0.pointee.ifa_next }) {
+      guard let addr = entry.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) else { continue }
+      var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+      if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0,
+        isTailscaleIPv4(String(cString: host)) { return true }
+    }
+    return false
+  }
+
+  /// Which side needs updating when their protocols differ (src/shared/remote.ts REMOTE_PROTOCOL); a Mac without it
+  /// in hello speaks 1.
+  static func protocolMismatch(mac: Int?, phone: Int) -> OfflineReason? {
+    let spoken = mac ?? 1
+    if spoken < phone { return .macOutdated }
+    if spoken > phone { return .phoneOutdated }
+    return nil
   }
 
   static func reason(_ error: Error) -> String {
@@ -107,22 +174,27 @@ enum Link {
     let sockets = urls.compactMap(Socket.init(url:))
     guard !sockets.isEmpty else { throw OpenFailed(reasons: [:]) }
     var reasons: [String: String] = [:]
-    let winner = await withTaskGroup(of: (Socket, String?).self) { group -> Socket? in
+    var kinds: [String: AddressFailure] = [:]
+    let winner = await withTaskGroup(of: (Socket, (String, AddressFailure)?).self) { group -> Socket? in
       for socket in sockets {
         group.addTask {
+          let started = Date()
           do {
             try await withTimeout(openSeconds, onTimeout: socket.close) { try await socket.waitOpen() }
             return (socket, nil)
           } catch {
             socket.close()
-            return (socket, reason(error))
+            return (socket, (reason(error), kind(error, elapsed: Date().timeIntervalSince(started))))
           }
         }
       }
       var winner: Socket?
       for await (socket, failure) in group {
         if let failure {
-          if winner == nil { reasons[socket.url] = failure }
+          if winner == nil {
+            reasons[socket.url] = failure.0
+            kinds[socket.url] = failure.1
+          }
           continue
         }
         let opened = socket
@@ -136,7 +208,7 @@ enum Link {
       }
       return winner
     }
-    guard let winner else { throw OpenFailed(reasons: reasons) }
+    guard let winner else { throw OpenFailed(reasons: reasons, kinds: kinds) }
     return winner
   }
 

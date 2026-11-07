@@ -7,7 +7,7 @@ import Foundation
 enum LinkState: Equatable, Sendable {
   case connecting
   case open(url: String)
-  case offline
+  case offline(OfflineReason)
   /// Every address said it does not know this phone (revoked on the Mac, or another machine now has that address). The
   /// refusal is not authenticated, so the pairing is kept and retried; the user decides to pair anew.
   case refused
@@ -197,6 +197,14 @@ final class RemoteClient {
         socket.close()
         return
       }
+      if let mismatch = Link.protocolMismatch(mac: hello.protocol, phone: Shared.data.protocol) {
+        // The two sides would misread each other: say which one to update, and check again slowly.
+        socket.close()
+        retries = Link.retrySeconds.count
+        onState(.offline(mismatch))
+        schedule()
+        return
+      }
       self.socket = socket
       self.cipher = cipher
       url = socket.url
@@ -209,13 +217,17 @@ final class RemoteClient {
       onEvent(.hello(hello))
       onState(.open(url: url))
     } catch {
-      if let failed = error as? Link.OpenFailed { lastFailures = failed.reasons }
+      var reason = OfflineReason.unknown
+      if let failed = error as? Link.OpenFailed {
+        lastFailures = failed.reasons
+        reason = Link.offlineReason(failed.kinds, tailscaleUp: Link.tailscaleUp())
+      }
       if let opened, opened !== socket { opened.close() }
       if let refusal = error as? Refused, refusal.isUnknownDevice, let opened {
         refused(opened.url)
         return
       }
-      if !saidRefused { onState(.offline) }
+      if !saidRefused { onState(.offline(reason)) }
       schedule()
     }
   }
@@ -271,8 +283,9 @@ final class RemoteClient {
     let at = url
     drop()
     if code == 4001 || code == 4003 { return refused(at) }
-    onState(.offline)
-    schedule()
+    // Dialled again at once: by the time the phone says anything (AppModel waits 2 s), it knows why.
+    onState(.connecting)
+    Task { await connect() }
   }
 
   /// `url` said it does not know this phone: try the other addresses at once (another machine may hold that one).

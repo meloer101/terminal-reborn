@@ -205,6 +205,8 @@ struct NewSessionInfo: Codable, Hashable, Sendable {
 struct Hello: Codable, Sendable {
   let name: String
   let version: String
+  /// REMOTE_PROTOCOL; absent from a Mac before it (that Mac speaks 1).
+  let `protocol`: Int?
   let urls: [String]?
 }
 

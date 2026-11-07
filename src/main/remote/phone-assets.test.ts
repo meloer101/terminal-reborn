@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { AGENT_ICON_SVG } from '../../shared/agent-icon-svg'
 import { agentName, CLI_AGENTS } from '../../shared/agents'
 import { ADJECTIVES, NOUNS } from '../../shared/new-session'
-import { DEFAULT_REMOTE_PORT, PAIRING_ALPHABET, PAIRING_CODE_LENGTH, REMOTE_LIMITS } from '../../shared/remote'
+import { DEFAULT_REMOTE_PORT, PAIRING_ALPHABET, PAIRING_CODE_LENGTH, REMOTE_LIMITS, REMOTE_PROTOCOL } from '../../shared/remote'
 import { STATUS_LABEL } from '../../shared/session-status'
 
 const IOS = join(__dirname, '../../../ios/Wavi')
@@ -68,7 +68,8 @@ function shared(): string {
     agents: [...CLI_AGENTS.map((id) => ({ id, name: agentName(id), mark: AGENT_ICON_SVG[id] !== undefined })), { id: 'shell', name: agentName('shell'), mark: false }],
     branchWords: { adjectives: ADJECTIVES, nouns: NOUNS },
     limits: REMOTE_LIMITS,
-    pairing: { alphabet: PAIRING_ALPHABET, length: PAIRING_CODE_LENGTH, defaultPort: DEFAULT_REMOTE_PORT }
+    pairing: { alphabet: PAIRING_ALPHABET, length: PAIRING_CODE_LENGTH, defaultPort: DEFAULT_REMOTE_PORT },
+    protocol: REMOTE_PROTOCOL
   }
   return JSON.stringify(value, null, 2) + '\n'
 }

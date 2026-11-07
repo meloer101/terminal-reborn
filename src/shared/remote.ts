@@ -27,6 +27,11 @@ export const REMOTE_IPC = {
 
 /** Default port of the phone server (设置 · 手机); one per Mac, the dev profile included. */
 export const DEFAULT_REMOTE_PORT = 7429
+/**
+ * What the phone and the Mac speak: bumped when a change would break the other side, so a phone can say which of the
+ * two needs updating (Figma 62, 「需要更新」) instead of failing in odd ways. A Mac without it in hello speaks 1.
+ */
+export const REMOTE_PROTOCOL = 1
 
 export const REMOTE_LIMITS = {
   /** A pairing code is good for this long and this many wrong tries. */
@@ -411,7 +416,7 @@ export type RemotePrompt = PendingPrompt & { answerable: boolean }
 
 export type PhoneEvent =
   /** `urls`: where this Mac can be reached now (its LAN address may have changed since pairing). */
-  | { event: 'hello'; data: { name: string; version: string; urls?: string[] } }
+  | { event: 'hello'; data: { name: string; version: string; protocol: number; urls?: string[] } }
   | { event: 'sessions'; data: RemoteSessionList }
   | { event: 'prompts'; data: RemotePrompt[] }
   /** New or changed items at the end of a watched session's feed; `reset` replaces what the phone has. */

@@ -254,5 +254,6 @@
     "alphabet": "23456789ABCDEFGHJKMNPQRSTUVWXYZ",
     "length": 6,
     "defaultPort": 7429
-  }
+  },
+  "protocol": 1
 }
