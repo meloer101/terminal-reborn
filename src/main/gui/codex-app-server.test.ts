@@ -130,6 +130,11 @@ describe('createCodexNormalizer', () => {
     expect(fold(m.request('4', 'item/fileChange/requestApproval', { itemId: 'f9' })).prompts[0]).toHaveProperty('diff')
     m.notification('serverRequest/resolved', { requestId: 4 })
     expect(fold(m.request('5', 'item/fileChange/requestApproval', { itemId: 'f9' })).prompts[0]).not.toHaveProperty('diff')
+    // A turn that ends (interrupted, failed) before the change completes takes it along.
+    const k = createCodexNormalizer('/repo', () => 0)
+    k.notification('item/started', started)
+    k.notification('turn/completed', { turn: { id: 't', status: 'interrupted' } })
+    expect(fold(k.request('6', 'item/fileChange/requestApproval', { itemId: 'f9' })).prompts[0]).not.toHaveProperty('diff')
   })
 
   it('keeps what an MCP or dynamic tool returned, and why it failed', () => {

@@ -218,6 +218,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
           shownError = null
           for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
           waiting.clear()
+          // A change the turn never completed (interrupted, failed) is not asked about any more.
+          fileChanges.clear()
           events.push({ type: 'busy', busy: false })
           return events
         }
