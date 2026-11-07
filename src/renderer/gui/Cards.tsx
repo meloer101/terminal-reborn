@@ -1,5 +1,6 @@
 // What a GUI session's agent waits on (PRD F23, Figma 49″D–F): a card above the composer, its own block (bg/section),
-// magenta only on the status glyph. Permission: 拒绝 ⎋ · 总是允许 · 允许 ↵. Question: numbered options + 其他…,
+// magenta only on the status glyph. Permission: 拒绝 ⎋ · 总是允许 · 允许 ↵, a change to a file drawn between the title and
+// the buttons (Figma 59I). Question: numbered options + 其他…,
 // 跳过 ⎋ · 提交 ↵. Plan: 继续规划 · 批准，编辑时问我 · 批准并自动接受编辑 ↵. Each card answers keys through `bindKeys`
 // (the chat routes them, see ChatPane).
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -7,6 +8,7 @@ import type { GuiAnswer, GuiPrompt } from '@shared/gui-chat'
 import type { SessionId } from '@shared/types'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
+import { DiffBlock } from './DiffBlock'
 import { permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
 import styles from './Chat.module.css'
 
@@ -71,7 +73,8 @@ function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardP
   })
   return (
     <Card label="等你确认" title={permissionTitle(agentLabel, prompt.tool)} testId="gui-permission">
-      {prompt.detail && <pre className={styles.cardDetail}>{prompt.detail}</pre>}
+      {/* Figma 59I: a change to a file shows it, its path on the block's header in place of the detail line. */}
+      {prompt.diff ? <DiffBlock diff={prompt.diff} header className={styles.cardDiff} /> : prompt.detail && <pre className={styles.cardDetail}>{prompt.detail}</pre>}
       <div className={styles.cardActions}>
         {buttons.reject && <Button label="拒绝" shortcut="⎋" disabled={pending} onClick={() => choose(buttons.reject?.id)} />}
         {buttons.always && buttons.always !== primary && <Button label="总是允许" title={buttons.always.label} disabled={pending} onClick={() => choose(buttons.always?.id)} />}

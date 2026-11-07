@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, emptyGuiState, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer } from './claude-stream'
+import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, promptOf, type ClaudePending } from './claude-stream'
 
 // Shapes as `claude -p --output-format stream-json --include-partial-messages` 2.1.317 prints them (PRD §6.17).
 const at = '2026-11-05T15:54:30.000Z'
@@ -204,6 +204,44 @@ describe('claudeAnswerResponse', () => {
     expect(claudeAnswerResponse(p, { kind: 'plan', id: 'r', decision: 'approve-auto' })).toMatchObject({ behavior: 'allow', updatedPermissions: [{ mode: 'acceptEdits' }] })
     expect(claudeAnswerResponse(p, { kind: 'plan', id: 'r', decision: 'approve-ask' })).toMatchObject({ updatedPermissions: [{ mode: 'default' }] })
     expect(claudeAnswerResponse(p, { kind: 'plan', id: 'r', decision: 'keep-planning' })).toEqual({ behavior: 'deny', message: 'Keep planning.' })
+  })
+})
+
+describe('promptOf · a permission to change a file shows the change (Figma 59I)', () => {
+  const ask = (tool: string, input: Record<string, unknown>): ClaudePending => ({ requestId: 'r', tool, input, suggestions: [] })
+  const diffOf = (tool: string, input: Record<string, unknown>) => {
+    const prompt = promptOf(ask(tool, input), undefined, '/repo')
+    return prompt.kind === 'permission' ? prompt.diff : undefined
+  }
+
+  it('Edit: old_string → new_string, the path relative to the session', () => {
+    expect(diffOf('Edit', { file_path: '/repo/src/refresh.ts', old_string: 'a\nb\nc', new_string: 'a\nB\nc' })).toEqual({
+      path: 'src/refresh.ts',
+      hunks: [{ oldStart: 1, newStart: 1, lines: [' a', '-b', '+B', ' c'] }],
+      added: 1,
+      removed: 1,
+      truncated: false
+    })
+  })
+
+  it('MultiEdit: every edit; Write: the whole file as additions', () => {
+    const multi = diffOf('MultiEdit', { file_path: '/repo/a.ts', edits: [{ old_string: 'x', new_string: 'y' }, { old_string: 'p', new_string: 'q\nr' }] })
+    expect(multi).toMatchObject({ path: 'a.ts', added: 3, removed: 2 })
+    expect(multi?.hunks).toHaveLength(2)
+    expect(diffOf('Write', { file_path: '/elsewhere/new.md', content: '# hi\nthere\n' })).toMatchObject({
+      path: '/elsewhere/new.md',
+      added: 2,
+      removed: 0,
+      hunks: [{ lines: ['+# hi', '+there'] }]
+    })
+  })
+
+  it('leaves the diff out for a change over 200 lines and for tools that change no file', () => {
+    const long = Array.from({ length: 201 }, (_, i) => `l${i}`).join('\n')
+    expect(diffOf('Write', { file_path: '/repo/big.txt', content: long })).toBeUndefined()
+    expect(diffOf('Edit', { file_path: '/repo/a.ts', old_string: long, new_string: 'x' })).toBeUndefined()
+    expect(diffOf('Bash', { command: 'rm -rf build' })).toBeUndefined()
+    expect(diffOf('Edit', { old_string: 'a', new_string: 'b' })).toBeUndefined()
   })
 })
 

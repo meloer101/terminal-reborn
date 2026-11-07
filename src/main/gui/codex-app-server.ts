@@ -98,6 +98,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
   const waiting = new Map<string, CodexPending>()
+  // Each fileChange item's files, so its approval can show the change.
+  const fileChanges = new Map<string, FileDiff[]>()
   let live: { kind: 'text' | 'thinking'; text: string; itemId: string } | null = null
 
   const put = (key: string, item: ChatItem): GuiEvent => {
@@ -167,6 +169,7 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
       }
       case 'fileChange': {
         const files = diffsOfChanges(item.changes, cwd)
+        if (files.length > 0) fileChanges.set(id, files)
         const diff = files[0]
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : status === 'declined' || status === 'failed' ? 'error' : 'ok'
@@ -240,7 +243,7 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
       }
     },
     request(id, method, params) {
-      const prompt = promptOfCodex(id, method, params)
+      const prompt = promptOfCodex(id, method, params, fileChanges.get(str(params.itemId) ?? '')?.[0])
       if (!prompt) return []
       waiting.set(id, { id, method, params })
       return [{ type: 'prompt', prompt }]
@@ -259,7 +262,8 @@ const DECISIONS: Record<string, GuiPermissionOption> = {
   accept: { id: 'accept', label: '允许', kind: 'allow_once' }
 }
 
-export function promptOfCodex(id: string, method: string, params: Rec): GuiPrompt | null {
+/** A server request as a prompt; `diff`: the change a file approval is about (its item's first file). */
+export function promptOfCodex(id: string, method: string, params: Rec, diff?: FileDiff): GuiPrompt | null {
   if (method === 'item/commandExecution/requestApproval') {
     const offered = (Array.isArray(params.availableDecisions) ? params.availableDecisions : []).filter((d): d is string => typeof d === 'string')
     const keys = (offered.length > 0 ? offered : ['decline', 'accept']).filter((d) => d in DECISIONS)
@@ -267,7 +271,7 @@ export function promptOfCodex(id: string, method: string, params: Rec): GuiPromp
     return { kind: 'permission', id, tool: 'Bash', detail: str(params.command) ?? str(params.reason) ?? '运行命令', options }
   }
   if (method === 'item/fileChange/requestApproval' || method === 'applyPatchApproval') {
-    return { kind: 'permission', id, tool: 'Edit', detail: str(params.reason) ?? '修改文件', options: [DECISIONS.decline!, DECISIONS.accept!] }
+    return { kind: 'permission', id, tool: 'Edit', detail: str(params.reason) ?? '修改文件', options: [DECISIONS.decline!, DECISIONS.accept!], ...(diff ? { diff } : {}) }
   }
   if (method === 'item/tool/requestUserInput') {
     const questions = (Array.isArray(params.questions) ? params.questions : []).filter(isRec).map((q) => ({

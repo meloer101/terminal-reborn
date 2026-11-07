@@ -749,6 +749,15 @@
   overflow-wrap: anywhere;
 }
 
+/* Figma 59I: the change a permission is about, at most 200 high, then it scrolls. */
+.cardDiff {
+  background: var(--bg-inset);
+}
+
+.cardDiff .fileLines {
+  max-height: 200px;
+}
+
 .cardActions {
   display: flex;
   flex-wrap: wrap;

@@ -2,7 +2,8 @@
 // of scripts/spikes/53-gui-claude-stream-lab.mjs) for the GUI host's tests: no model, no tokens. A message containing
 // "write" asks `can_use_tool` for a Write first; "die" exits with an error; "slow" streams until interrupted; "late echo"
 // replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted); "colors"
-// runs a command with colored output; "tasks" writes a task list (TodoWrite), "tasks done" finishes it. With
+// runs a command with colored output; "tasks" writes a task list (TodoWrite), "tasks done" finishes it; "patch file" asks
+// `can_use_tool` for an Edit. With
 // CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real CLI (`uuid` / `parentUuid`, a
 // `--resume-session-at` resume hangs the next message under that message). `--version` answers as Claude Code 2.1.318.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -93,10 +94,20 @@ function reply(text) {
     out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'Todos have been modified successfully.' }] }, session_id: SESSION, parent_tool_use_id: null })
     return finish()
   }
+  if (text.includes('patch file')) {
+    // An Edit asked about first (Figma 59I: the permission card shows its diff).
+    const input = { file_path: `${process.cwd()}/src/auth/refresh.ts`, old_string: "export async function refresh(req) {\n  const token = localStorage.getItem('token')", new_string: 'export async function refresh(req) {\n  const token = req.cookies.session\n  if (!token) return unauthorized()' }
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu-edit', name: 'Edit', input }] }, session_id: SESSION, parent_tool_use_id: null })
+    out({ type: 'control_request', request_id: 'req-edit', request: { subtype: 'can_use_tool', tool_name: 'Edit', input, permission_suggestions: [{ type: 'addRules' }], tool_use_id: 'tu-edit' } })
+    turn.waiting = 'req-edit'
+    turn.toolUse = 'tu-edit'
+    return
+  }
   if (text.includes('write')) {
     out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: 'a.txt', content: 'hi' } }] }, session_id: SESSION, parent_tool_use_id: null })
     out({ type: 'control_request', request_id: 'req-1', request: { subtype: 'can_use_tool', tool_name: 'Write', input: { file_path: 'a.txt', content: 'hi' }, permission_suggestions: [{ type: 'addRules' }], tool_use_id: 'tu1' } })
     turn.waiting = 'req-1'
+    turn.toolUse = 'tu1'
     return
   }
   finish()
@@ -161,10 +172,10 @@ function controlResponse(message) {
   const allowed = r.response.behavior === 'allow'
   out({
     type: 'user',
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: allowed ? 'File created' : r.response.message, is_error: !allowed }] },
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: turn.toolUse, content: allowed ? 'File created' : r.response.message, is_error: !allowed }] },
     session_id: SESSION,
     parent_tool_use_id: null,
-    tool_use_result: allowed ? { type: 'create', filePath: 'a.txt', content: 'hi' } : undefined
+    tool_use_result: allowed && turn.toolUse === 'tu1' ? { type: 'create', filePath: 'a.txt', content: 'hi' } : undefined
   })
   finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: allowed ? 'Wrote it' : 'Refused' }] }, session_id: SESSION, parent_tool_use_id: null })
 }

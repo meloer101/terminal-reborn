@@ -5,7 +5,7 @@
 // the window (last: a reload shows the boot screen's dots for up to 8 s). Screenshots in both themes go to test-results/gui-session/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { outerClaudeEnv } from './fake-claude'
@@ -19,7 +19,8 @@ test.describe.configure({ mode: 'serial' })
 test.setTimeout(90_000)
 
 test.describe('F23 GUI session (Claude)', () => {
-  const root = mkdtempSync(join(tmpdir(), 'tr-e2e-gui-'))
+  // Resolved (/private/var/…): the agent names files under its real working folder, shown relative to the session's.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tr-e2e-gui-')))
   const bin = join(root, 'bin')
   const zdot = join(root, 'zdot')
   const project = join(root, 'demo')
@@ -133,6 +134,27 @@ test.describe('F23 GUI session (Claude)', () => {
     const card = page.getByTestId('gui-permission')
     await expect(card).toBeVisible(WITHIN)
     await page.screenshot({ path: join(SHOTS, 'permission-dark.png') })
+    await card.getByRole('button', { name: /^允许/ }).click()
+    await expect(card).toHaveCount(0, WITHIN)
+  })
+
+  test('a permission to edit a file shows the change (Figma 59I)', async () => {
+    await send('patch file')
+    const card = page.getByTestId('gui-permission')
+    await expect(card).toBeVisible(WITHIN)
+    const diff = card.getByTestId('gui-diff')
+    await expect(diff.locator('[class*="fileHeader"]')).toHaveText('src/auth/refresh.ts+2−1')
+    await expect(diff.locator('[data-kind="del"]')).toHaveText("-  const token = localStorage.getItem('token')\n")
+    await expect(diff.locator('[data-kind="add"]')).toHaveCount(2)
+    // The path is on the block's header, not repeated as the detail line.
+    await expect(card.locator('pre').filter({ hasText: /^src\/auth\/refresh\.ts$/ })).toHaveCount(0)
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `permission-diff-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     await card.getByRole('button', { name: /^允许/ }).click()
     await expect(card).toHaveCount(0, WITHIN)
   })

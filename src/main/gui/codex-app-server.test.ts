@@ -95,6 +95,21 @@ describe('createCodexNormalizer', () => {
     expect(s.items).toHaveLength(2)
   })
 
+  it('shows the change a file approval is about: the first file of its started fileChange item', () => {
+    const n = createCodexNormalizer('/repo', () => 0)
+    const changes = [
+      { path: '/repo/src/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1,2 +1,2 @@\n a\n-b\n+c\n' },
+      { path: '/repo/src/b.ts', kind: { type: 'add' }, diff: 'x\n' }
+    ]
+    let s = fold(n.notification('item/started', { item: { type: 'fileChange', id: 'f9', status: 'inProgress', changes } }))
+    s = fold(n.request('3', 'item/fileChange/requestApproval', { threadId: 'th', turnId: 't', itemId: 'f9', reason: null }), s)
+    const prompt = s.prompts[0]
+    expect(prompt?.kind === 'permission' && prompt.diff).toMatchObject({ path: 'src/a.ts', added: 1, removed: 1 })
+    // An item never seen: no diff.
+    const other = fold(n.request('4', 'item/fileChange/requestApproval', { itemId: 'nope' }))
+    expect(other.prompts[0]).not.toHaveProperty('diff')
+  })
+
   it('keeps what an MCP or dynamic tool returned, and why it failed', () => {
     const n = createCodexNormalizer('/repo', () => 0)
     const s = fold([

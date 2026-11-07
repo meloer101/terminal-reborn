@@ -15,8 +15,9 @@ import {
   type GuiPrompt,
   type GuiQuestion
 } from '@shared/gui-chat'
-import { createChatParser, type ChatParser } from '@shared/transcript-chat'
+import { addedFile, createChatParser, fileDiffs, type ChatParser, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
+import { lineDiff } from './acp'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -96,12 +97,32 @@ function detailOf(tool: string, input: Rec, description: string | undefined, cwd
   return path ?? str(input.url) ?? str(input.pattern) ?? description ?? tool
 }
 
+/** Above this many lines of old + new text a permission card shows no diff (the card stays small and quick). */
+const PROMPT_DIFF_LINES = 200
+
+/** Figma 59I: the change an Edit / MultiEdit / Write asks to make (Write as a new file: all additions). */
+export function permissionDiff(tool: string, input: Rec, cwd?: string): FileDiff | undefined {
+  const path = str(input.file_path)
+  if (!path) return undefined
+  let pairs: [string, string][]
+  if (tool === 'Edit') pairs = [[str(input.old_string) ?? '', str(input.new_string) ?? '']]
+  else if (tool === 'MultiEdit') pairs = (Array.isArray(input.edits) ? input.edits : []).filter(isRec).map((e) => [str(e.old_string) ?? '', str(e.new_string) ?? ''])
+  else if (tool === 'Write') pairs = [['', str(input.content) ?? '']]
+  else return undefined
+  const count = (text: string): number => (text === '' ? 0 : text.split('\n').length)
+  const lines = pairs.reduce((n, [a, b]) => n + count(a) + count(b), 0)
+  if (pairs.length === 0 || lines > PROMPT_DIFF_LINES) return undefined
+  const hunks: DiffHunk[] = tool === 'Write' ? [addedFile(pairs[0]![1])] : pairs.flatMap(([a, b]) => lineDiff(a, b))
+  return fileDiffs([{ path: cwd && path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path, hunks }])[0]
+}
+
 export function promptOf(pending: ClaudePending, description?: string, cwd?: string): GuiPrompt {
   const id = pending.requestId
   if (pending.tool === 'AskUserQuestion') return { kind: 'question', id, questions: questionsOf(pending.input) }
   if (pending.tool === 'ExitPlanMode') return { kind: 'plan', id, plan: str(pending.input.plan) ?? '' }
   const options = pending.suggestions.length > 0 ? ANSWER_OPTIONS : ANSWER_OPTIONS.filter((o) => o.kind !== 'allow_always')
-  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options }
+  const diff = permissionDiff(pending.tool, pending.input, cwd)
+  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options, ...(diff ? { diff } : {}) }
 }
 
 export function createClaudeStreamNormalizer(cwd: string, now: () => number = Date.now): ClaudeStreamNormalizer {

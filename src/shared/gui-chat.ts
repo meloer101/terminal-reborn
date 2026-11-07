@@ -5,7 +5,7 @@
 // the same. Pure: no Electron, no Node.
 
 import type { CliAgent } from './agents'
-import type { ChatItem } from './transcript-chat'
+import type { ChatItem, FileDiff } from './transcript-chat'
 
 export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'acp'
 
@@ -40,6 +40,8 @@ export type GuiPrompt =
       /** What it wants to do: a command, a path, the agent's own description. */
       detail: string
       options: GuiPermissionOption[]
+      /** The change it asks to make to a file (Figma 59I): Claude Edit / MultiEdit / Write, Codex's file approval. */
+      diff?: FileDiff
     }
   | { kind: 'question'; id: string; questions: GuiQuestion[] }
   | { kind: 'plan'; id: string; plan: string }
