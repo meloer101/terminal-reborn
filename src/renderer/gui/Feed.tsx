@@ -8,7 +8,7 @@
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { Brain, ChevronDown, ChevronRight, Pencil } from 'lucide-react'
+import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import { formatClock } from '@shared/session-meta'
 import type { ChatItem, FileDiff } from '@shared/transcript-chat'
@@ -38,11 +38,33 @@ import {
   type FeedBlock,
   type NestedItem,
   type StepItem,
+  type ToolIcon,
   type ToolView
 } from './model'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
+
+/** A tool row's icon key (model.ts `toolView`) → its lucide icon. */
+const TOOL_ICONS: Readonly<Record<ToolIcon, LucideIcon>> = {
+  'file-text': FileText,
+  'file-plus': FilePlus,
+  pencil: Pencil,
+  terminal: Terminal,
+  square: Square,
+  search: Search,
+  'folder-search': FolderSearch,
+  globe: Globe,
+  bot: Bot,
+  'list-todo': ListTodo,
+  sparkles: Sparkles,
+  'clipboard-list': ClipboardList,
+  trash: Trash2,
+  'move-right': MoveRight,
+  brain: Brain,
+  toggle: ToggleLeft,
+  wrench: Wrench
+}
 
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
@@ -298,6 +320,11 @@ function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void
   )
 }
 
+function ToolIconMark({ icon }: { icon: ToolIcon }) {
+  const Icon = TOOL_ICONS[icon]
+  return <Icon {...ICON} />
+}
+
 /** A step row's mark (Figma 59J): the tool's icon, or its status while it runs, waits on you or failed. */
 function StepMark({ children }: { children: ReactNode }) {
   return <span className={styles.stepMark}>{children}</span>
@@ -348,7 +375,7 @@ function Tool({
   return (
     <div className={styles.tool} data-subagent={subagent || undefined}>
       <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
-        <StepMark>{view.status === 'done_unread' ? <view.icon {...ICON} /> : <StatusGlyph status={view.status} />}</StepMark>
+        <StepMark>{view.status === 'done_unread' ? <ToolIconMark icon={view.icon} /> : <StatusGlyph status={view.status} />}</StepMark>
         <span className={styles.toolVerb} title={view.name}>
           {view.verb}
         </span>

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { Bot, Brain, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench } from 'lucide-react'
 import { matchCommands, permissionOption, planOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import {
@@ -79,7 +78,7 @@ describe('subagents in place (Figma 59J)', () => {
     ]
     expect(shape(feedBlocks(items))).toEqual(['u', { steps: ['ag', 'b'], nested: { ag: ['g', 'k', 'x'] } }])
     // Codex's collab call is a 子 agent row with nothing under it.
-    expect(toolView(tool('c', { name: 'Subagent', arg: 'spawn' }), false)).toMatchObject({ icon: Bot, verb: '子 agent' })
+    expect(toolView(tool('c', { name: 'Subagent', arg: 'spawn' }), false)).toMatchObject({ icon: 'bot', verb: '子 agent' })
   })
 
   it('keeps rows whose Agent row is not there yet aside, and shows them at the top level if it never comes', () => {
@@ -189,35 +188,35 @@ describe('rows', () => {
   it('reads a tool row as icon · verb · target, for every agent’s tool names (Figma 59J)', () => {
     const cases: [string, unknown, string][] = [
       // Claude Code (and Codex, whose shell, patch and search calls come as Bash / Edit / WebSearch)
-      ['Read', FileText, '读取'],
-      ['Edit', Pencil, '编辑'],
-      ['MultiEdit', Pencil, '编辑'],
-      ['Write', FilePlus, '写入'],
-      ['NotebookEdit', Pencil, '编辑'],
-      ['Bash', Terminal, '运行'],
-      ['BashOutput', Terminal, '读取输出'],
-      ['KillShell', Square, '停止'],
-      ['Grep', Search, '搜索'],
-      ['Glob', FolderSearch, '查找文件'],
-      ['WebFetch', Globe, '读取'],
-      ['WebSearch', Globe, '搜索网页'],
-      ['Agent', Bot, '子 agent'],
-      ['Task', Bot, '子 agent'],
-      ['TodoWrite', ListTodo, '任务'],
-      ['Skill', Sparkles, 'Skill'],
-      ['ExitPlanMode', ClipboardList, '计划'],
+      ['Read', 'file-text', '读取'],
+      ['Edit', 'pencil', '编辑'],
+      ['MultiEdit', 'pencil', '编辑'],
+      ['Write', 'file-plus', '写入'],
+      ['NotebookEdit', 'pencil', '编辑'],
+      ['Bash', 'terminal', '运行'],
+      ['BashOutput', 'terminal', '读取输出'],
+      ['KillShell', 'square', '停止'],
+      ['Grep', 'search', '搜索'],
+      ['Glob', 'folder-search', '查找文件'],
+      ['WebFetch', 'globe', '读取'],
+      ['WebSearch', 'globe', '搜索网页'],
+      ['Agent', 'bot', '子 agent'],
+      ['Task', 'bot', '子 agent'],
+      ['TodoWrite', 'list-todo', '任务'],
+      ['Skill', 'sparkles', 'Skill'],
+      ['ExitPlanMode', 'clipboard-list', '计划'],
       // ACP tool kinds (acp.ts KIND_NAMES)
-      ['Delete', Trash2, '删除'],
-      ['Move', MoveRight, '移动'],
-      ['Search', Search, '搜索'],
-      ['Think', Brain, '思考'],
-      ['Fetch', Globe, '读取'],
-      ['Mode', ToggleLeft, '切换模式'],
-      ['Tool', Wrench, '工具'],
+      ['Delete', 'trash', '删除'],
+      ['Move', 'move-right', '移动'],
+      ['Search', 'search', '搜索'],
+      ['Think', 'brain', '思考'],
+      ['Fetch', 'globe', '读取'],
+      ['Mode', 'toggle', '切换模式'],
+      ['Tool', 'wrench', '工具'],
       // MCP tools and anything unknown: the tool's own name
-      ['query_docs', Wrench, 'query_docs'],
-      ['update_plan', Wrench, 'update_plan'],
-      ['constructor', Wrench, 'constructor']
+      ['query_docs', 'wrench', 'query_docs'],
+      ['update_plan', 'wrench', 'update_plan'],
+      ['constructor', 'wrench', 'constructor']
     ]
     for (const [name, icon, verb] of cases) {
       const view = toolView(tool('t', { name, arg: 'src/a.ts' }), false)
@@ -256,7 +255,7 @@ describe('rows', () => {
     const todos = [{ text: 'a', status: 'completed' as const }]
     for (const name of ['TodoWrite', 'Plan']) {
       const view = toolView(tool('t', { name, arg: '1 项', todos, output: 'Todos have been modified successfully' }), false)
-      expect(view).toMatchObject({ verb: '任务', icon: ListTodo, arg: '1 项', expandable: true })
+      expect(view).toMatchObject({ verb: '任务', icon: 'list-todo', arg: '1 项', expandable: true })
       expect(view).not.toHaveProperty('summary')
     }
   })

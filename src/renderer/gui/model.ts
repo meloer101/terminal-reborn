@@ -1,7 +1,6 @@
 // A GUI session's chat view (PRD F23, Figma 49″C–F), the decisions behind it kept apart from React so they can be
 // tested: how the feed groups items, what a tool row says, what each card's buttons and keys do, the composer's keys
 // and the pickers under it. Pure.
-import { Bot, Brain, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { looksLikeReport } from '@shared/dispatch'
 import type { GuiCommand, GuiConfigOption, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
 import { composerPickers } from '@shared/gui-chat'
@@ -224,47 +223,50 @@ export function thinkingLabel(ms: number | undefined): string {
 /** Tools whose result line is worth a summary under the row (Figma: Grep's 「14 处 · 6 个文件」, Bash's last words). */
 const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite', 'Plan'])
 
+/** A tool row's icon, by name; Feed draws it (the model stays free of React). */
+export type ToolIcon = 'file-text' | 'file-plus' | 'pencil' | 'terminal' | 'square' | 'search' | 'folder-search' | 'globe' | 'bot' | 'list-todo' | 'sparkles' | 'clipboard-list' | 'trash' | 'move-right' | 'brain' | 'toggle' | 'wrench'
+
 /**
  * Figma 59J: what a tool row says — its icon and a Chinese verb, by the tool's name. Claude's tools; Codex's shell,
  * patch and search calls (named Bash / Edit / WebSearch by its parsers); the ACP tool kinds (acp.ts). Any other tool
  * (MCP, an agent's own) is a wrench with its own name.
  */
-const TOOL_WORDS: Readonly<Record<string, readonly [LucideIcon, string]>> = {
-  Read: [FileText, '读取'],
-  Edit: [Pencil, '编辑'],
-  MultiEdit: [Pencil, '编辑'],
-  Write: [FilePlus, '写入'],
-  NotebookEdit: [Pencil, '编辑'],
-  Bash: [Terminal, '运行'],
-  BashOutput: [Terminal, '读取输出'],
-  KillShell: [Square, '停止'],
-  Grep: [Search, '搜索'],
-  Glob: [FolderSearch, '查找文件'],
-  WebFetch: [Globe, '读取'],
-  WebSearch: [Globe, '搜索网页'],
-  Agent: [Bot, '子 agent'],
-  Task: [Bot, '子 agent'],
+const TOOL_WORDS: Readonly<Record<string, readonly [ToolIcon, string]>> = {
+  Read: ['file-text', '读取'],
+  Edit: ['pencil', '编辑'],
+  MultiEdit: ['pencil', '编辑'],
+  Write: ['file-plus', '写入'],
+  NotebookEdit: ['pencil', '编辑'],
+  Bash: ['terminal', '运行'],
+  BashOutput: ['terminal', '读取输出'],
+  KillShell: ['square', '停止'],
+  Grep: ['search', '搜索'],
+  Glob: ['folder-search', '查找文件'],
+  WebFetch: ['globe', '读取'],
+  WebSearch: ['globe', '搜索网页'],
+  Agent: ['bot', '子 agent'],
+  Task: ['bot', '子 agent'],
   // Codex's collab agent call (codex-app-server.ts).
-  Subagent: [Bot, '子 agent'],
-  TodoWrite: [ListTodo, '任务'],
+  Subagent: ['bot', '子 agent'],
+  TodoWrite: ['list-todo', '任务'],
   // Codex's and ACP agents' plan (codex-app-server.ts, acp.ts).
-  Plan: [ListTodo, '任务'],
-  Skill: [Sparkles, 'Skill'],
-  ExitPlanMode: [ClipboardList, '计划'],
-  Delete: [Trash2, '删除'],
-  Move: [MoveRight, '移动'],
-  Search: [Search, '搜索'],
-  Think: [Brain, '思考'],
-  Fetch: [Globe, '读取'],
-  Mode: [ToggleLeft, '切换模式'],
-  Tool: [Wrench, '工具']
+  Plan: ['list-todo', '任务'],
+  Skill: ['sparkles', 'Skill'],
+  ExitPlanMode: ['clipboard-list', '计划'],
+  Delete: ['trash', '删除'],
+  Move: ['move-right', '移动'],
+  Search: ['search', '搜索'],
+  Think: ['brain', '思考'],
+  Fetch: ['globe', '读取'],
+  Mode: ['toggle', '切换模式'],
+  Tool: ['wrench', '工具']
 }
 
 export interface ToolView {
   status: SessionStatus
   name: string
   /** Figma 59J: icon · verb · target (`arg`). */
-  icon: LucideIcon
+  icon: ToolIcon
   verb: string
   arg: string
   /** Edit / Write: `+N −M` (each part only when non-zero). */
@@ -296,7 +298,7 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
     .map((line) => line.trim())
     .find((line) => line !== '')
   // Own keys only: a tool named `constructor` is not Object's.
-  const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? [Wrench, item.name]
+  const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? ['wrench', item.name]
   // Without output a command is worth opening only when the row shows less of it (its lines, its length).
   const hidden = item.input !== undefined && item.input.trim() !== item.arg
   // A change to several files counts all of them.
