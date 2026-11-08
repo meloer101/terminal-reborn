@@ -242,6 +242,23 @@ export function fileDiffs(files: readonly { path: string; hunks: readonly DiffHu
   })
 }
 
+/** A unified diff (Codex's `fileChange.changes[].diff`, Pi's edit `details.patch`) → hunks with ` ` / `+` / `-` lines. */
+export function hunksOfUnifiedDiff(diff: string): DiffHunk[] {
+  const hunks: DiffHunk[] = []
+  let current: DiffHunk | null = null
+  for (const line of diff.split('\n')) {
+    const head = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line)
+    if (head) {
+      current = { oldStart: Number(head[1]), newStart: Number(head[2]), lines: [] }
+      hunks.push(current)
+      continue
+    }
+    if (!current || line.startsWith('\\')) continue
+    if (line.startsWith('+') || line.startsWith('-') || line.startsWith(' ')) current.lines.push(line)
+  }
+  return hunks
+}
+
 /** A new file's whole text as one hunk of additions. */
 export const addedFile = (text: string): DiffHunk => ({ oldStart: 0, newStart: 1, lines: text.replace(/\n$/, '').split('\n').map((l) => `+${l}`) })
 

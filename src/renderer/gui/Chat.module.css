@@ -28,6 +28,9 @@
   --gap-step: calc(var(--chat-px) * 8 / 14);
   /* The agent's mark and the user's picture, outside the column. */
   --avatar: 28px;
+  /* Figma 65H: the empty session's welcome — the agent's mark and the line. */
+  --avatar-welcome: 36px;
+  --type-welcome: 500 calc(var(--chat-px) * 24 / 14) / calc(var(--chat-px) * 32 / 14) var(--chat-family);
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -750,13 +753,65 @@
 .welcome {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-12);
   margin-bottom: var(--space-16);
 }
 
-.welcomeName {
-  font: var(--type-h2);
+/* Figma 65H: the agent's mark at 36, the line at 24 / 32 Medium. */
+.welcomeMark.welcomeMark {
+  width: var(--avatar-welcome);
+  height: var(--avatar-welcome);
+}
+
+.welcomeLine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font: var(--type-welcome);
   color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* The project: its name on a grey block without a border (65H); hovered, darker with ⇅, its neighbours peeking (65I). */
+.projectChip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-md);
+  background: var(--bg-section);
+  outline: none;
+}
+
+.projectChip[data-switchable] {
+  cursor: ns-resize;
+}
+
+.projectChip[data-switchable]:hover,
+.projectChip[data-switchable]:focus-visible {
+  padding-right: var(--space-6);
+  background: var(--bg-selected);
+}
+
+.projectChip > svg {
+  color: var(--text-secondary);
+}
+
+.projectPeek {
+  position: absolute;
+  left: var(--space-8);
+  font: var(--type-h3);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.projectPeek[data-at='before'] {
+  bottom: 100%;
+}
+
+.projectPeek[data-at='after'] {
+  top: 100%;
 }
 
 .card {
@@ -1092,8 +1147,8 @@
   overflow-wrap: anywhere;
 }
 
-/* Composer (Figma 52F–H): the box is one line — + · text · send, 28 high, 8 inside and 8 apart; more lines grow it
-   upward with + and send at its foot. Under it, 4 below: 格式 under +, the pickers, the context ring under send. */
+/* Composer (Figma 65, as Paseo): one box — the text on top (16 in from the box's edge, one line high until it grows),
+   under it + · the pickers · … · the context ring · send, 28 high. */
 .composerWrap {
   position: relative;
   display: flex;
@@ -1105,7 +1160,7 @@
 .composer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-4);
   padding: var(--space-8);
   border-radius: var(--radius-window);
   background: var(--bg-section);
@@ -1117,25 +1172,19 @@
   box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
-.composerLine {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-8);
-}
-
 .composerText {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: var(--space-8);
   min-width: 0;
+  padding: var(--space-2) var(--space-8) 0;
 }
 
-.under {
+.controls {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: 0 var(--space-8);
+  min-width: 0;
 }
 
 /* The text (ComposerEditor, Figma 50C–E): grows to about ten lines, then scrolls. Blocks are compact — a list or a
@@ -1206,8 +1255,7 @@
   background: none;
 }
 
-/* 50D: the format buttons under the text (格式); 50E: the same over a selection */
-.formatBar,
+/* 50E: the format buttons over a selection (formats are always on, Figma 65: no 格式 button) */
 .selectionButtons {
   display: flex;
   align-items: center;
@@ -1242,8 +1290,7 @@
   color: var(--text-primary);
 }
 
-.formatButton[aria-pressed='true'],
-.barIcon[aria-pressed='true'] {
+.formatButton[aria-pressed='true'] {
   background: var(--bg-selected);
   color: var(--text-primary);
 }
@@ -1373,13 +1420,35 @@
   background: var(--bg-hover);
 }
 
-/* 计划 on (Figma 56): selected, like a pressed format button. */
-.picker[aria-pressed='true'] {
-  background: var(--bg-selected);
+/* Figma 65: the pickers' marks and chevrons in the label's colour; the agent's mark stays black / white. */
+.picker svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.picker > span:first-child:not(:only-of-type) {
   color: var(--text-primary);
 }
 
-.picker svg {
+/* 快速 (Figma 65): the mark only; pressed while on, like a pressed format button. */
+.pickerIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+}
+
+.pickerIcon:hover {
+  background: var(--bg-hover);
+}
+
+.pickerIcon[aria-pressed='true'] {
+  background: var(--bg-selected);
   color: var(--text-primary);
 }
 
@@ -1602,9 +1671,51 @@
 }
 
 .pickerMenu {
-  min-width: 230px;
+  min-width: 180px;
   max-height: 360px;
-  transform-origin: bottom right;
+  transform-origin: bottom left;
+}
+
+.pickerMenu[data-below] {
+  transform-origin: top left;
+}
+
+/* Figma 65B: the agents, and beside them the hovered one's models — two menus 2 apart. */
+.pickerPair {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.pickerColumn {
+  position: static;
+  width: 220px;
+  max-height: 360px;
+  transform-origin: top left;
+}
+
+.pickerColumn + .pickerColumn {
+  width: 180px;
+}
+
+.pickerRow[data-muted] {
+  color: var(--text-disabled);
+}
+
+.menuDivider {
+  flex: none;
+  height: 1px;
+  margin: var(--space-4) 0;
+  background: var(--border-default);
+}
+
+/* 65C: the agent's name over its models. */
+.agentTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
 }
 
 .popoverTitle {
@@ -1663,11 +1774,14 @@
   flex-direction: column;
 }
 
+/* Figma 65 (the author, 2026-11-08: a little roomier): 32 a row. */
 .pickerRow {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-8);
-  height: 28px;
+  height: 32px;
+  white-space: nowrap;
   padding: 0 10px;
   border: 0;
   border-radius: 6px;

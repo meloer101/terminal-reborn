@@ -43,8 +43,8 @@ describe('findOnPath', () => {
   })
 
   it('also looks for the GUI sessions\' ACP adapters (PRD F23)', () => {
-    const found = findOnPath('/opt/bin', (p) => p === '/opt/bin/pi-acp')
-    expect(found.adapters).toEqual({ 'pi-acp': true, 'amp-acp': false })
+    const found = findOnPath('/opt/bin', (p) => p === '/opt/bin/amp-acp')
+    expect(found.adapters).toEqual({ 'amp-acp': true })
   })
 
   it('looks each CLI up by its binary, not its id (Cursor Agent is cursor-agent, Qwen Code is qwen)', () => {

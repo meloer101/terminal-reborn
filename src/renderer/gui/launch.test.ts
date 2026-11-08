@@ -7,11 +7,12 @@ const ONE = [{ id: 's-1', kind: 'claude', ui: 'gui', dispatchedBy: 's-0' }]
 const ws = vi.hoisted(() => ({
   sessions: [] as Array<Record<string, unknown>>,
   worktrees: [] as Array<Record<string, unknown>>,
-  patches: [] as unknown[][]
+  patches: [] as unknown[][],
+  guiPicks: {} as Record<string, Record<string, unknown>>
 }))
 vi.mock('../state/workspace', () => ({
   useWorkspace: {
-    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, patchSession: (...args: unknown[]) => ws.patches.push(args) }),
+    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, guiPicks: ws.guiPicks, retargetSession: (...args: unknown[]) => ws.patches.push(['retarget', ...args]), patchSession: (...args: unknown[]) => ws.patches.push(args) }),
     subscribe: () => () => {}
   }
 }))
@@ -48,8 +49,8 @@ vi.stubGlobal('window', {
   }
 })
 
-const { adoptGuiSessions, guiLaunch, openGuiSession } = await import('./launch')
-const { guiStateOf, useGuiSessions } = await import('./store')
+const { adoptGuiSessions, guiLaunch, openGuiSession, retargetGuiSession } = await import('./launch')
+const { guiStateOf, setGuiState: setGuiStateForTest, useGuiSessions } = await import('./store')
 const { useLaunchIssues } = await import('../lifecycle/launch-issues')
 
 beforeEach(() => {
@@ -60,6 +61,7 @@ beforeEach(() => {
   ws.sessions = ONE.map((s) => ({ ...s }))
   ws.worktrees = []
   ws.patches = []
+  ws.guiPicks = {}
   dispatch.launch = undefined
   useGuiSessions.setState({ states: {} })
   useLaunchIssues.setState({ issues: {} })
@@ -105,6 +107,39 @@ describe('openGuiSession', () => {
       { type: 'busy', busy: false }
     ])
     expect(guiStateOf('s-1')).toMatchObject({ busy: false, live: null, items: [{ id: 'a' }] })
+  })
+
+  it('starts a new session with what its agent last ran with; the session’s own 权限 / 计划 win (Figma 65)', async () => {
+    main.result = { ok: true, state: emptyGuiState() }
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui' }]
+    ws.guiPicks = { claude: { model: 'opus', effort: 'max', permission: 'auto', plan: true, fast: true } }
+    await openGuiSession('s-1', '/w', 'claude', undefined)
+    expect(main.opened[0]).toEqual({ sessionId: 's-1', cwd: '/w', agent: 'claude', permission: 'auto', plan: true, model: 'opus', effort: 'max', fast: true })
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui', guiPermission: 'ask' }]
+    await openGuiSession('s-1', '/w', 'claude', undefined)
+    expect(main.opened[1]).toMatchObject({ permission: 'ask' })
+    expect(main.opened[1]).not.toHaveProperty('plan')
+  })
+
+  it('resumes a conversation, or starts a dispatched task, without the agent’s last picks (Figma 65)', async () => {
+    main.result = { ok: true, state: emptyGuiState() }
+    ws.guiPicks = { claude: { model: 'opus', permission: 'auto', plan: true, fast: true } }
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui' }]
+    await openGuiSession('s-1', '/w', 'claude', 'conv')
+    expect(main.opened[0]).toEqual({ sessionId: 's-1', cwd: '/w', agent: 'claude', resumeAgentSessionId: 'conv' })
+    dispatch.launch = { initialPrompt: '写测试' }
+    await openGuiSession('s-1', '/w', 'claude', undefined)
+    expect(main.opened[1]).toEqual({ sessionId: 's-1', cwd: '/w', agent: 'claude', initialPrompt: '写测试' })
+  })
+
+  it('drops an answer that comes after the session moved to another agent (Figma 65)', async () => {
+    main.result = { ok: false, reason: '会话已关闭' }
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui' }]
+    const opening = openGuiSession('s-1', '/w', 'claude', undefined)
+    ws.sessions = [{ id: 's-1', kind: 'codex', ui: 'gui' }]
+    expect(await opening).toBe(false)
+    expect(guiStateOf('s-1').failure).toBeNull()
+    expect(useLaunchIssues.getState().issues['s-1']).toBeUndefined()
   })
 
   it('shows why it could not start and leaves the session exited (a launch issue)', async () => {
@@ -157,5 +192,19 @@ describe('adoptGuiSessions', () => {
     expect(ws.patches).toEqual([['g-new', { phase: 'ready' }]])
     // Closed or archived while the app was away (and an id that is not a GUI session): ended.
     expect(main.stopped).toEqual(['g-archived', 't-1', 'gone'])
+  })
+})
+
+describe('retargetGuiSession (Figma 65)', () => {
+  it('ends the agent, clears its pickers and gives the session the new agent, only while nothing is said', async () => {
+    setGuiStateForTest('s-1', { ...emptyGuiState(), config: [{ id: 'model', category: 'model', label: '模型', current: 'opus', values: [] }] })
+    await retargetGuiSession('s-1', { kind: 'codex' })
+    expect(main.stopped).toEqual(['s-1'])
+    expect(guiStateOf('s-1').config).toEqual([])
+    expect(ws.patches).toEqual([['retarget', 's-1', { kind: 'codex' }]])
+
+    setGuiStateForTest('s-1', { ...emptyGuiState(), items: [{ kind: 'user', id: 'u', at: 0, text: 'hi', images: 0 }] })
+    await retargetGuiSession('s-1', { kind: 'grok' })
+    expect(ws.patches).toHaveLength(1)
   })
 })

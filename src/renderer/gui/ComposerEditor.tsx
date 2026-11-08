@@ -1,6 +1,6 @@
 // The composer's text (PRD F23, Figma 50C–E): a Tiptap (ProseMirror) editor with bold, italic, strike, inline code,
 // bullet and ordered lists, quotes and code blocks. A list, quote or code block starts from `- ` / `1. ` / `> ` / ```
-// at a line's start; marks come from the 格式 toolbar, the toolbar over a selection, or ⌘I / ⌘⇧S / ⌘E (⌘B and ⌘⇧B are
+// at a line's start; marks come from the toolbar over a selection (formats are always on, Figma 65) or ⌘I / ⌘⇧S / ⌘E (⌘B and ⌘⇧B are
 // the app's). `**x**` typed inline stays text. The draft in the store is the text the agent gets (rich-text.ts); text
 // set from outside (a picked command, inserted text, a restored draft) comes in as plain lines. Paste is plain text,
 // spaces kept; pasted or dropped files are the chat's (attachFileInput). Keys go to the Composer first.
@@ -30,7 +30,6 @@ interface Props {
   /** The Composer's keys: true when it took the key (the editor does nothing more with it). */
   onKeyDown(event: KeyboardEvent, caret: CaretContext): boolean
   editorRef: RefObject<Editor | null>
-  toolbarOpen: boolean
   /** The text box's name and placeholder (default 回复). */
   label?: string
   /** Takes the keyboard, the caret at the end, as soon as it is there (an inline edit). */
@@ -48,7 +47,7 @@ export function insertNewline(editor: Editor, caret: CaretContext): void {
   else editor.commands.splitBlock({ keepMarks: false })
 }
 
-export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, toolbarOpen, label = '回复', autoFocus = false }: Props) {
+export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, label = '回复', autoFocus = false }: Props) {
   // The text the editor last reported: a draft equal to it came from the editor itself.
   const reported = useRef(draft)
   // The editor's callbacks are set once; they reach the latest props through this.
@@ -130,8 +129,7 @@ export function ComposerEditor({ draft, onChange, onKeyDown, editorRef, toolbarO
       <div className={styles.inputScroll}>
         <EditorContent editor={editor} />
       </div>
-      {toolbarOpen && <FormatButtons editor={editor} className={styles.formatBar} label="格式" />}
-      {!toolbarOpen && <SelectionToolbar editor={editor} />}
+      <SelectionToolbar editor={editor} />
     </>
   )
 }

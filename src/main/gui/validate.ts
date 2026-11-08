@@ -3,11 +3,10 @@
 
 import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { AGENT_GUI } from '@shared/gui-agents'
-import type { GuiAnswer, GuiLaunch } from '@shared/gui-chat'
+import { GUI_MODEL_ID, isGuiPermission, type GuiAnswer, type GuiLaunch } from '@shared/gui-chat'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
 
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/
-const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 const AGENTS: ReadonlySet<unknown> = new Set<CliAgent>(CLI_AGENTS)
 
 export const GUI_LIMITS = {
@@ -41,7 +40,7 @@ export function parseGuiLaunch(raw: unknown): GuiLaunch | null {
     launch.resumeAgentSessionId = raw.resumeAgentSessionId
   }
   if (raw.model !== undefined) {
-    if (typeof raw.model !== 'string' || !MODEL.test(raw.model)) return null
+    if (typeof raw.model !== 'string' || !GUI_MODEL_ID.test(raw.model)) return null
     launch.model = raw.model
   }
   if (raw.initialPrompt !== undefined) {
@@ -49,12 +48,20 @@ export function parseGuiLaunch(raw: unknown): GuiLaunch | null {
     if (raw.initialPrompt.trim()) launch.initialPrompt = raw.initialPrompt
   }
   if (raw.permission !== undefined) {
-    if (raw.permission !== 'ask' && raw.permission !== 'accept-edits' && raw.permission !== 'auto') return null
+    if (!isGuiPermission(raw.permission)) return null
     launch.permission = raw.permission
   }
   if (raw.plan !== undefined) {
     if (typeof raw.plan !== 'boolean') return null
     if (raw.plan) launch.plan = true
+  }
+  if (raw.effort !== undefined) {
+    if (typeof raw.effort !== 'string' || !GUI_MODEL_ID.test(raw.effort)) return null
+    launch.effort = raw.effort
+  }
+  if (raw.fast !== undefined) {
+    if (typeof raw.fast !== 'boolean') return null
+    launch.fast = raw.fast
   }
   if (raw.dispatched !== undefined) {
     if (typeof raw.dispatched !== 'boolean') return null

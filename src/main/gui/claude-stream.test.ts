@@ -176,7 +176,23 @@ describe('claudeConfig', () => {
     ] }
     expect(claudeConfig(models, { model: 'claude-haiku-5-5' })[0]?.current).toBe('haiku')
     expect(claudeConfig(models, { model: 'claude-opus-5-5' })[0]?.current).toBe('opus')
-    expect(claudeConfig(models, { model: 'default' })[0]?.current).toBe('default')
+    // Figma 65 (the author, 2026-11-08): no 「Default」 — it is listed as the model it resolves to.
+    expect(claudeConfig(models, { model: 'default' })[0]?.current).toBe('opus')
+    expect(claudeConfig(models, {})[0]?.current).toBe('opus')
+    expect(claudeConfig(models, {})[0]?.values.map((v) => v.label)).toEqual(['Opus 5.5', 'Haiku 5.5'])
+  })
+
+  it('offers 快速 only on a model with supportsFastMode, with why it is not taking effect (Figma 65)', () => {
+    const fast = { models: [
+      { value: 'opus', displayName: 'Opus 5.5', supportsFastMode: true },
+      { value: 'sonnet', displayName: 'Sonnet 5.5' }
+    ] }
+    const option = (state: Parameters<typeof claudeConfig>[1]) => claudeConfig(fast, state).find((c) => c.id === 'fast')
+    expect(option({ model: 'opus' })).toMatchObject({ category: 'fast', current: 'off' })
+    expect(option({ model: 'opus', fast: true, fastBlocked: 'extra_usage_disabled' })).toMatchObject({ current: 'on', hint: expect.stringContaining('额外用量') })
+    expect(option({ model: 'sonnet', fast: true })).toBeUndefined()
+    expect(claudeConfigRequest('fast', 'on')).toEqual({ subtype: 'apply_flag_settings', settings: { fastMode: true } })
+    expect(claudeConfigRequest('fast', 'off')).toEqual({ subtype: 'apply_flag_settings', settings: { fastMode: false } })
   })
 
   it('drops the effort picker for a model without effort', () => {

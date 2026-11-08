@@ -4,7 +4,9 @@
 import { useContext } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
+import type { CliAgent } from '@shared/agents'
 import type { WorktreeArchive } from '@shared/archive'
+import type { GuiPicks } from '@shared/gui-chat'
 import { rememberUi, rememberWorkdir, type Workdir } from '@shared/new-session'
 import type { AgentKind, ProjectId, Session, SessionId, SessionStatus, SessionUi, Worktree, WorktreeId } from '@shared/types'
 import { hasPane, pane, paneIds, PICKER_PANE, placeSession, removePane, replacePane, sessionsIn, splitPane, type DropZone, type Side, type SplitNode } from '@shared/split-layout'
@@ -50,6 +52,7 @@ import {
   removedSessionIds,
   removeProject,
   restoreWorkspace,
+  retargetSession,
   serializeWorkspace,
   type MakeId,
   type WorkspaceData
@@ -103,6 +106,8 @@ interface WorkspaceState extends WorkspaceData {
   newSessionAgent: Readonly<Record<ProjectId, AgentKind>>
   /** 界面 last chosen in the new-session sheet, by project (PRD F23). */
   newSessionUi: Readonly<Record<ProjectId, SessionUi>>
+  /** Figma 65: what each agent last ran with in a GUI session (gui/store.ts rememberPicks). */
+  guiPicks: Readonly<Partial<Record<CliAgent, GuiPicks>>>
   /** Bumped whenever the keyboard should go to the active session's terminal (B7), even if it is already active. */
   focusRequest: number
   /** Bumped by 会话 › 重命名会话: the header starts renaming the active session. */
@@ -161,6 +166,10 @@ interface WorkspaceState extends WorkspaceData {
   rememberAgent(projectId: ProjectId, kind: AgentKind): void
   /** Remembers the new-session sheet's 界面 for a project; a CLI the agent forced is not remembered. */
   rememberUi(projectId: ProjectId, ui: SessionUi, forced: boolean): void
+  /** Figma 65: an empty GUI session gets another agent and / or folder (workspace-model retargetSession). */
+  retargetSession(id: SessionId, change: { kind?: CliAgent; worktreeId?: WorktreeId }): void
+  /** Figma 65: the picks an agent's GUI session runs with now; a new session of that agent starts with them. */
+  rememberGuiPicks(agent: CliAgent, picks: GuiPicks): void
   closeSession(id: SessionId): void
   /** Drops linked worktree records whose folder was deleted, with their sessions (Worktree view). */
   forgetWorktrees(ids: WorktreeId[]): void
@@ -303,6 +312,7 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     newSessionWorkdir: saved?.newSessionWorkdir ?? {},
     newSessionAgent: saved?.newSessionAgent ?? {},
     newSessionUi: saved?.newSessionUi ?? {},
+    guiPicks: saved?.guiPicks ?? {},
     focusRequest: 0,
     renameRequest: 0,
 
@@ -418,6 +428,18 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     rememberWorkdir: (projectId, choice) => set((s) => ({ newSessionWorkdir: rememberWorkdir(s.newSessionWorkdir, projectId, choice, true) })),
     rememberAgent: (projectId, kind) => set((s) => (s.newSessionAgent[projectId] === kind ? {} : { newSessionAgent: { ...s.newSessionAgent, [projectId]: kind } })),
     rememberUi: (projectId, ui, forced) => set((s) => ({ newSessionUi: rememberUi(s.newSessionUi, projectId, ui, forced) })),
+    retargetSession: (id, change) =>
+      set((s) => {
+        const next = retargetSession(s, id, change)
+        return next === s ? {} : { sessions: next.sessions }
+      }),
+    rememberGuiPicks: (agent, picks) =>
+      set((s) => {
+        const before = s.guiPicks[agent] ?? {}
+        const next = { ...before, ...picks }
+        const same = JSON.stringify(next) === JSON.stringify(before)
+        return same ? {} : { guiPicks: { ...s.guiPicks, [agent]: next } }
+      }),
     closeSession: (id) => {
       commit(closeSession(pick(get()), id))
       fillProjectWindow()
@@ -511,6 +533,7 @@ setSnapshotProvider(() => {
       newSessionWorkdir: state.newSessionWorkdir,
       newSessionAgent: state.newSessionAgent,
       newSessionUi: state.newSessionUi,
+      guiPicks: state.guiPicks,
       attemptGroups: attemptGroupsSnapshot()
     },
     drafts.snapshot(),

@@ -1,5 +1,5 @@
 // A GUI session's conversation (PRD F23, Figma 49″): what main sends the renderer and how the renderer folds it.
-// Main runs the agent headless (Claude `-p` stream-json, `codex app-server`, ACP) and turns its messages into
+// Main runs the agent headless (Claude `-p` stream-json, `codex app-server`, Pi `--mode rpc`, ACP) and turns its messages into
 // `GuiEvent`s; `applyGuiEvent` folds them into a `GuiState` the chat view draws. Finished conversation items reuse
 // the phone's `ChatItem` (@shared/transcript-chat), so history read back from a transcript and a live session look
 // the same. Pure: no Electron, no Node.
@@ -7,7 +7,7 @@
 import type { CliAgent } from './agents'
 import type { ChatItem, FileDiff } from './transcript-chat'
 
-export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'acp'
+export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'pi-rpc' | 'acp'
 
 /** The block being streamed right now; replaced by a finished `ChatItem` when the agent completes it. */
 export interface GuiLive {
@@ -60,10 +60,12 @@ export type GuiAnswer =
  */
 export interface GuiConfigOption {
   id: string
-  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'other'
+  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'fast' | 'other'
   label: string
   current: string
   values: { value: string; label: string }[]
+  /** Figma 65: why the option, though chosen, does not take effect (the agent said so), for the button's tooltip. */
+  hint?: string
 }
 
 /**
@@ -72,6 +74,10 @@ export interface GuiConfigOption {
  * agent that can. There is no level that never asks.
  */
 export type GuiPermission = 'ask' | 'accept-edits' | 'auto'
+export const isGuiPermission = (value: unknown): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
+
+/** A model (or effort) id as an agent names it, safe to pass on a command line and to keep in the workspace file. */
+export const GUI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 export const GUI_PERMISSION_LABELS: Readonly<Record<GuiPermission, string>> = { ask: '询问', 'accept-edits': '接受编辑', auto: '自动' }
 
 export function permissionOption(levels: readonly GuiPermission[], current: GuiPermission): GuiConfigOption {
@@ -95,6 +101,85 @@ export const planOption = (on: boolean): GuiConfigOption => ({
     { value: 'on', label: '开' }
   ]
 })
+
+/**
+ * Figma 65: 快速, for an agent whose current model can answer faster (Claude `fastMode` on a model with
+ * `supportsFastMode`, Codex's `priority` service tier). `hint`: why it is on but not taking effect.
+ */
+export const fastOption = (on: boolean, hint?: string): GuiConfigOption => ({
+  id: 'fast',
+  category: 'fast',
+  label: '快速',
+  current: on ? 'on' : 'off',
+  values: [
+    { value: 'off', label: '关' },
+    { value: 'on', label: '开' }
+  ],
+  ...(hint ? { hint } : {})
+})
+
+/**
+ * Figma 65: what the user last chose with an agent, so a new session of it (or the agent picked in an empty one)
+ * starts with them. Kept per agent in the workspace file (`guiPicks`).
+ */
+export interface GuiPicks {
+  model?: string
+  /** The models it offered last time: an empty session lists them under the agent before switching to it. */
+  models?: { value: string; label: string }[]
+  /** Where `models` came from: a running session (its own ids, kept) or a probe (GuiModelCatalog, replaced by a run). */
+  modelsFrom?: 'live' | 'probe'
+  effort?: string
+  permission?: GuiPermission
+  plan?: boolean
+  fast?: boolean
+}
+
+/** The picks a session runs with now, from its pickers. */
+export function picksOf(config: readonly GuiConfigOption[]): GuiPicks {
+  const now = (category: GuiConfigOption['category']) => config.find((o) => o.category === category)?.current
+  const [model, effort, permission, plan, fast] = [now('model'), now('thought_level'), now('permission'), now('plan'), now('fast')]
+  const models = config.find((o) => o.category === 'model')?.values.slice(0, MAX_PICK_MODELS)
+  return {
+    ...(model ? { model } : {}),
+    ...(models && models.length > 0 ? { models: models.map(({ value, label }) => ({ value, label })), modelsFrom: 'live' as const } : {}),
+    ...(effort ? { effort } : {}),
+    ...(permission && isGuiPermission(permission) ? { permission } : {}),
+    ...(plan !== undefined ? { plan: plan === 'on' } : {}),
+    ...(fast !== undefined ? { fast: fast === 'on' } : {})
+  }
+}
+
+/** Cursor lists 270 (2026-11-08). */
+const MAX_PICK_MODELS = 300
+
+const modelsOf = (raw: unknown[]): { value: string; label: string }[] =>
+  raw
+    .flatMap((m) => {
+      if (typeof m !== 'object' || m === null) return []
+      const { value, label } = m as Record<string, unknown>
+      return typeof value === 'string' && GUI_MODEL_ID.test(value) && typeof label === 'string' && label.length <= 80 ? [{ value, label }] : []
+    })
+    .slice(0, MAX_PICK_MODELS)
+
+/** `guiPicks` read back from disk: known agents only, each value checked. */
+export function sanitizeGuiPicks(raw: unknown, agents: ReadonlySet<string>): Record<string, GuiPicks> {
+  const out: Record<string, GuiPicks> = {}
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return out
+  for (const [agent, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!agents.has(agent) || typeof value !== 'object' || value === null) continue
+    const v = value as Record<string, unknown>
+    out[agent] = {
+      ...(typeof v.model === 'string' && GUI_MODEL_ID.test(v.model) ? { model: v.model } : {}),
+      ...(Array.isArray(v.models) ? { models: modelsOf(v.models) } : {}),
+      ...(v.modelsFrom === 'live' || v.modelsFrom === 'probe' ? { modelsFrom: v.modelsFrom } : {}),
+      ...(typeof v.effort === 'string' && GUI_MODEL_ID.test(v.effort) ? { effort: v.effort } : {}),
+      ...(isGuiPermission(v.permission) ? { permission: v.permission } : {}),
+      ...(typeof v.plan === 'boolean' ? { plan: v.plan } : {}),
+      ...(typeof v.fast === 'boolean' ? { fast: v.fast } : {})
+    }
+  }
+  return out
+}
 
 /** Figma 56: reasoning effort in the same words for every agent; a level not listed keeps the agent's own name. */
 const EFFORT_LABELS: Readonly<Record<string, string>> = { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高' }
@@ -159,6 +244,9 @@ export interface GuiLaunch {
    */
   permission?: GuiPermission
   plan?: boolean
+  /** Figma 65: the reasoning effort and 快速 last used with this agent, applied once it is ready. Absent = its default. */
+  effort?: string
+  fast?: boolean
 }
 
 export type GuiOpenResult =
@@ -175,8 +263,21 @@ export interface GuiLiveSession {
 
 export type GuiSendResult = { ok: true; queued: boolean } | { ok: false; reason: string }
 
+/**
+ * Figma 65: an agent's models, asked without starting a conversation (as T3 Code and Paseo do): Claude `initialize`,
+ * Codex `model/list`, Grok ACP `initialize` (`_meta.modelState`), `cursor-agent models`, Pi `--mode rpc --no-session`.
+ * `current` is the model it would start with. Not `ok`: why it could not say (shown with 重试).
+ */
+export interface GuiModelCatalog {
+  models: { value: string; label: string }[]
+  current?: string
+}
+export type GuiCatalogResult = { ok: true; catalog: GuiModelCatalog } | { ok: false; reason: string } | { ok: false; unsupported: true }
+
 /** `window.tr.gui` (preload). Every call is checked in main: payload shape and that this window owns the session. */
 export interface GuiApi {
+  /** Figma 65: the agent's models without a conversation (cached a few minutes in main). */
+  models(agent: CliAgent): Promise<GuiCatalogResult>
   /** Starts the agent if it is not running (or reattaches to it) and returns the state to draw. */
   open(launch: GuiLaunch): Promise<GuiOpenResult>
   /** Text and attachment paths; queued while a turn runs (Figma 49″C). */
@@ -209,6 +310,7 @@ export const GUI_IPC = {
   edit: 'gui:edit',
   stop: 'gui:stop',
   live: 'gui:live',
+  models: 'gui:models',
   /** main → renderer */
   events: 'gui:events'
 } as const
@@ -256,8 +358,8 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
 
 /** The pickers shown under the composer, in a fixed order whatever order the agent lists them in. */
 export function composerPickers(config: readonly GuiConfigOption[]): GuiConfigOption[] {
-  // Figma 56: model · effort, 权限, 计划, then the agent's own mode and anything else.
-  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'mode', 'other']
+  // Figma 56 / 65: model · effort, 权限 and 计划 (one 模式 button), 快速, then the agent's own mode and anything else.
+  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'fast', 'mode', 'other']
   return config.filter((o) => o.values.length > 1).sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
 }
 

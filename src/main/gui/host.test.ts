@@ -10,7 +10,10 @@ import { LocalPipeLink, type PipeAttach, type PipeLink } from '../pty/pipes'
 import { GuiHost, type GuiOwner } from './host'
 
 const FIXTURES = join(__dirname, 'fixtures')
-const FAKES: Partial<Record<CliAgent, string>> = { claude: 'fake-claude.mjs', codex: 'fake-codex.mjs', grok: 'fake-acp.mjs', gemini: 'fake-acp.mjs' }
+const FAKES: Partial<Record<CliAgent, string>> = { claude: 'fake-claude.mjs', codex: 'fake-codex.mjs', grok: 'fake-acp.mjs', gemini: 'fake-acp.mjs', pi: 'fake-pi.mjs' }
+/** Pi's launch arguments, as fake-pi.mjs reads them in these tests. */
+const fakeEnv = (launch: GuiLaunch): Record<string, string> =>
+  launch.agent === 'pi' ? { FAKE_PI_MODEL: launch.model ?? '', FAKE_PI_THINKING: launch.effort ?? '', FAKE_PI_SESSION: launch.resumeAgentSessionId ?? '' } : {}
 
 class FakeOwner implements GuiOwner {
   destroyed = false
@@ -59,7 +62,7 @@ function harness(link = new LocalPipeLink(), history: ChatItem[] | null = null, 
       return Promise.resolve({
         command: process.execPath,
         args: [join(FIXTURES, FAKES[launch.agent]!)],
-        env: {},
+        env: fakeEnv(launch),
         baseEnv: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
         binary: FAKES[launch.agent]!,
         ...(synthStatus ? { synthStatus } : {})
@@ -272,7 +275,8 @@ describe('GuiHost · Codex app-server', () => {
     const h = harness()
     await h.host.open(launchOf('codex', 'x1'), h.owner)
     await ready(h, 'x1')
-    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-a', 'effort=low', 'permission=accept-edits'])
+    // gpt-a has the priority tier: 快速 (Figma 65).
+    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-a', 'effort=low', 'permission=accept-edits', 'fast=off'])
     expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'thr-new' })
 
     await h.host.send('x1', { text: 'go', attachments: [] })
@@ -335,6 +339,20 @@ describe('GuiHost · Codex app-server', () => {
     expect(texts(stateOf(h, 'x9')).at(-1)).toContain('"approvalPolicy":"untrusted"')
   }, 30_000)
 
+  it('applies the effort and 快速 last used with the agent once it is ready (Figma 65)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x8', { effort: 'high', fast: true }), h.owner)
+    await ready(h, 'x8')
+    await until(() => stateOf(h, 'x8').config.find((c) => c.id === 'fast')?.current === 'on')
+    expect(stateOf(h, 'x8').config.find((c) => c.id === 'effort')?.current).toBe('high')
+    // One the model does not offer is left alone.
+    const h2 = harness()
+    await h2.host.open(launchOf('codex', 'x7', { effort: 'max' }), h2.owner)
+    await ready(h2, 'x7')
+    await settle()
+    expect(stateOf(h2, 'x7').config.find((c) => c.id === 'effort')?.current).toBe('low')
+  }, 30_000)
+
   it('resumes a thread with its history from the transcript', async () => {
     const history: ChatItem[] = [
       { kind: 'user', id: 'h0', at: 1, text: 'old question', images: 0 },
@@ -362,7 +380,7 @@ describe('GuiHost · Codex app-server', () => {
     const opened = await b.host.open(launchOf('codex', 'x3'), b.owner)
     expect(opened.ok && opened.state.busy).toBe(true)
     expect(opened.ok && opened.state.prompts.map((p) => p.kind)).toEqual(['permission'])
-    expect(opened.ok && opened.state.config.length).toBe(3)
+    expect(opened.ok && opened.state.config.length).toBe(4)
     await until(() => b.status.some((e) => e.type === 'permission-request'))
     expect(b.status.map((e) => e.type)).toEqual(['prompt-submit', 'tool-start', 'permission-request', 'session-start'])
     expect(b.host.answer('x3', { kind: 'permission', id: stateOf(b, 'x3').prompts[0]!.id, optionId: 'accept' })).toBe(true)
@@ -541,6 +559,114 @@ describe('GuiHost · ACP', () => {
   }, 30_000)
 })
 
+describe('GuiHost · Pi rpc (PRD F23 v1.160)', () => {
+  const tools = (state: GuiState) => state.items.filter((i) => i.kind === 'tool')
+
+  it('streams a turn, asks before bash, lets 接受编辑’s edits and 总是允许’s repeats through, and stops', async () => {
+    const prepared: GuiLaunch[] = []
+    const h = harness(new LocalPipeLink(), null, 5, false, { prepared })
+    await h.host.open(launchOf('pi', 'p1'), h.owner)
+    await ready(h, 'p1')
+    expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'fake-pi-session' })
+    const shown = () => stateOf(h, 'p1').config.map((c) => `${c.id}=${c.current}[${c.values.map((v) => v.label).join('/')}]`)
+    expect(shown()).toEqual(['model=deepseek/deepseek-v4-flash[DeepSeek V4 Flash/DeepSeek V4 Pro]', 'effort=high[关/高/最高]', 'permission=ask[询问/接受编辑]'])
+    expect(stateOf(h, 'p1').commands.map((c) => `${c.name}:${c.kind}`)).toEqual(['review:command', 'skill:lark:skill'])
+
+    await h.host.send('p1', { text: 'hello', attachments: ['/tmp/a.png'] })
+    await until(() => !stateOf(h, 'p1').busy && texts(stateOf(h, 'p1')).length === 2)
+    // DeepSeek V4 Flash takes no images: the image went as a path.
+    expect(texts(stateOf(h, 'p1'))).toEqual(['user:hello\n\n/tmp/a.png', 'text:Hello: hello\n\n/tmp/a.png (deepseek-v4-flash, high)'])
+
+    await h.host.send('p1', { text: 'bash please', attachments: [] })
+    await until(() => stateOf(h, 'p1').prompts.length === 1)
+    const prompt = stateOf(h, 'p1').prompts[0]!
+    expect(prompt).toMatchObject({ kind: 'permission', tool: 'Bash', detail: 'ls' })
+    expect(tools(stateOf(h, 'p1')).at(-1)).toMatchObject({ name: 'Bash', state: 'running' })
+    h.host.answer('p1', { kind: 'permission', id: prompt.id, optionId: 'always' })
+    await until(() => !stateOf(h, 'p1').busy)
+    expect(tools(stateOf(h, 'p1')).at(-1)).toMatchObject({ name: 'Bash', state: 'ok', output: 'a.txt' })
+    expect(h.status.map((e) => e.type)).toEqual(['session-start', 'prompt-submit', 'stop', 'prompt-submit', 'tool-start', 'permission-request', 'tool-end', 'tool-end', 'stop'])
+    // The same call again: through without asking.
+    await h.host.send('p1', { text: 'bash again', attachments: [] })
+    await until(() => !stateOf(h, 'p1').busy && tools(stateOf(h, 'p1')).length === 2)
+    expect(tools(stateOf(h, 'p1')).at(-1)).toMatchObject({ state: 'ok' })
+
+    // 接受编辑 is Wavi's: no restart, the edit goes through with Pi's own patch.
+    expect(await h.host.setConfig('p1', 'permission', 'accept-edits')).toBe(true)
+    expect(await h.host.setConfig('p1', 'permission', 'auto')).toBe(false)
+    expect(prepared.length).toBe(1)
+    await h.host.send('p1', { text: 'edit it', attachments: [] })
+    await until(() => !stateOf(h, 'p1').busy && tools(stateOf(h, 'p1')).length === 3)
+    const edit = tools(stateOf(h, 'p1')).at(-1)
+    expect(edit).toMatchObject({ name: 'Edit', arg: 'a.txt', state: 'ok', diff: { added: 1, removed: 1 } })
+    expect(edit?.kind === 'tool' && edit.diff?.hunks[0]?.oldStart).toBe(3)
+    expect(stateOf(h, 'p1').prompts).toEqual([])
+
+    await h.host.send('p1', { text: 'slow', attachments: [] })
+    await until(() => stateOf(h, 'p1').live !== null)
+    expect(h.host.interrupt('p1')).toBe(true)
+    await until(() => !stateOf(h, 'p1').busy)
+    expect(stateOf(h, 'p1').items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
+    await settle()
+    expect(h.view('p1')).toEqual(stateOf(h, 'p1'))
+  }, 30_000)
+
+  it('a model or thinking change restarts Pi on its conversation with them, the chat kept; not while a turn runs', async () => {
+    const prepared: GuiLaunch[] = []
+    const h = harness(new LocalPipeLink(), null, 5, false, { prepared })
+    await h.host.open(launchOf('pi', 'p2'), h.owner)
+    await ready(h, 'p2')
+    await h.host.send('p2', { text: 'hello', attachments: [] })
+    await until(() => !stateOf(h, 'p2').busy && texts(stateOf(h, 'p2')).length === 2)
+
+    expect(await h.host.setConfig('p2', 'effort', 'max')).toBe(true)
+    expect(prepared.at(-1)).toMatchObject({ model: 'deepseek/deepseek-v4-flash', effort: 'max', resumeAgentSessionId: 'fake-pi-session' })
+    await until(() => stateOf(h, 'p2').config.length > 0)
+    expect(stateOf(h, 'p2').config.find((c) => c.id === 'effort')?.current).toBe('max')
+    expect(texts(stateOf(h, 'p2'))).toEqual(['user:hello', 'text:Hello: hello (deepseek-v4-flash, high)'])
+    await h.host.send('p2', { text: 'again', attachments: [] })
+    await until(() => !stateOf(h, 'p2').busy && texts(stateOf(h, 'p2')).length === 4)
+    expect(texts(stateOf(h, 'p2')).at(-1)).toBe('text:Hello: again (deepseek-v4-flash, max)')
+
+    expect(await h.host.setConfig('p2', 'model', 'deepseek/deepseek-v4-pro')).toBe(true)
+    expect(prepared.at(-1)).toMatchObject({ model: 'deepseek/deepseek-v4-pro', effort: 'max' })
+    await until(() => stateOf(h, 'p2').config.length > 0)
+    await h.host.send('p2', { text: 'slow', attachments: [] })
+    await until(() => stateOf(h, 'p2').live !== null)
+    expect(await h.host.setConfig('p2', 'effort', 'high')).toBe(false)
+    expect(stateOf(h, 'p2').config.find((c) => c.id === 'effort')?.current).toBe('max')
+    expect(prepared.length).toBe(3)
+    h.host.interrupt('p2')
+    await until(() => !stateOf(h, 'p2').busy)
+  }, 30_000)
+
+  it('choosing 接受编辑 while an edit waits lets it through', async () => {
+    const h = harness()
+    await h.host.open(launchOf('pi', 'p4'), h.owner)
+    await ready(h, 'p4')
+    await h.host.send('p4', { text: 'edit it', attachments: [] })
+    await until(() => stateOf(h, 'p4').prompts.length === 1)
+    expect(stateOf(h, 'p4').prompts[0]).toMatchObject({ kind: 'permission', tool: 'Edit', detail: 'a.txt', diff: { added: 1, removed: 1 } })
+    expect(await h.host.setConfig('p4', 'permission', 'accept-edits')).toBe(true)
+    await until(() => !stateOf(h, 'p4').busy)
+    expect(stateOf(h, 'p4').prompts).toEqual([])
+    expect(stateOf(h, 'p4').items.filter((i) => i.kind === 'tool').at(-1)).toMatchObject({ name: 'Edit', state: 'ok' })
+  }, 30_000)
+
+  it('a refused prompt ends the turn as failed; a resumed conversation comes from its session file', async () => {
+    const history: ChatItem[] = [{ kind: 'user', id: 'h0', at: 1, text: 'earlier question', images: 0 }, { kind: 'text', id: 'h1', at: 2, text: 'earlier answer' }]
+    const h = harness(new LocalPipeLink(), history)
+    await h.host.open(launchOf('pi', 'p3', { resumeAgentSessionId: 'pi-old' }), h.owner)
+    await ready(h, 'p3')
+    expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'pi-old' })
+    expect(texts(stateOf(h, 'p3'))).toEqual(['user:earlier question', 'text:earlier answer'])
+    await h.host.send('p3', { text: 'refuse this', attachments: [] })
+    await until(() => h.status.at(-1)?.type === 'stop-failure')
+    expect(h.status.at(-1)).toEqual({ type: 'stop-failure', message: 'No API key for deepseek' })
+    expect(stateOf(h, 'p3').busy).toBe(false)
+  }, 30_000)
+})
+
 describe('GuiHost · reattach edge cases (a stub link)', () => {
   const user = JSON.stringify({ type: 'user', message: { role: 'user', content: 'hello' }, session_id: 's-1' })
   const reply = JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Hello: hello' }] }, session_id: 's-1', parent_tool_use_id: null })
@@ -610,7 +736,7 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
     host.stop('r1')
   })
 
-  it('a replayed prompt the earlier app run already answered is not asked again (Claude, Codex, ACP)', async () => {
+  it('a replayed prompt the earlier app run already answered is not asked again (Claude, Codex, ACP, Pi)', async () => {
     const tool = JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'sleep 60' } }] }, session_id: 's-1', parent_tool_use_id: null })
     const ask = (id: string) => JSON.stringify({ type: 'control_request', request_id: id, request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'sleep 60' }, tool_use_id: 'tu1' } })
     const claude = (answered?: string[]) => stubHost({ pid: 1, seq: 4, lines: [user, tool, ask('req-1')], truncated: false, ...(answered ? { answered } : {}) }, null).host
@@ -638,6 +764,23 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
     expect(acpAsked.ok && acpAsked.state.prompts.length).toBe(1)
     const acpAnswered = await acp(['1001']).open(launchOf('grok', 'r1'), new FakeOwner())
     expect(acpAnswered.ok && acpAnswered.state.prompts).toEqual([])
+
+    const confirm = JSON.stringify({ type: 'extension_ui_request', id: 'ui-1', method: 'confirm', title: 'Allow bash?', message: JSON.stringify({ wavi: 1, tool: 'bash', input: { command: 'ls' } }) })
+    const pi = (answered?: string[]) => stubHost({ pid: 1, seq: 1, lines: [confirm], truncated: false, ...(answered ? { answered } : {}) }, null).host
+    const piAsked = await pi().open(launchOf('pi', 'r1'), new FakeOwner())
+    expect(piAsked.ok && piAsked.state.prompts.length).toBe(1)
+    const piAnswered = await pi(['ui-1']).open(launchOf('pi', 'r1'), new FakeOwner())
+    expect(piAnswered.ok && piAnswered.state.prompts).toEqual([])
+  })
+
+  it('Pi: an edit asked while no app was attached goes through on reattach under 接受编辑; a command is still asked', async () => {
+    const confirm = (id: string, tool: string, input: unknown) => JSON.stringify({ type: 'extension_ui_request', id, method: 'confirm', title: `Allow ${tool}?`, message: JSON.stringify({ wavi: 1, tool, input }) })
+    const state = JSON.stringify({ id: 'w1-0', type: 'response', command: 'get_state', success: true, data: { sessionId: 'pi-1', model: { provider: 'deepseek', id: 'deepseek-v4-flash' }, thinkingLevel: 'high' } })
+    const { host, writes } = stubHost({ pid: 1, seq: 3, lines: [state, confirm('ui-1', 'edit', { path: 'a.txt', edits: [] }), confirm('ui-2', 'bash', { command: 'ls' })], truncated: false }, null)
+    const opened = await host.open(launchOf('pi', 'r1', { permission: 'accept-edits' }), new FakeOwner())
+    expect(opened.ok && opened.state.prompts.map((p) => p.id)).toEqual(['ui-2'])
+    expect(writes.map((w) => JSON.parse(w) as unknown)).toContainEqual({ type: 'extension_ui_response', id: 'ui-1', confirmed: true })
+    host.stop('r1')
   })
 
   it('a process that ended while no app was attached shows why, with the stderr attach brought', async () => {

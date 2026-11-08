@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuiEvent, composerPickers, emptyGuiState, matchCommands, type GuiConfigOption } from './gui-chat'
+import { applyGuiEvent, composerPickers, emptyGuiState, fastOption, matchCommands, permissionOption, picksOf, planOption, sanitizeGuiPicks, type GuiConfigOption } from './gui-chat'
 
 describe('applyGuiEvent', () => {
   it('appends and replaces items by index and keeps untouched parts', () => {
@@ -52,5 +52,27 @@ describe('matchCommands', () => {
     expect(matchCommands(commands, '/re').map((c) => c.name)).toEqual(['review', 'rewind', 'pr-review'])
     expect(matchCommands(commands, '/review').map((c) => c.name)).toEqual(['review', 'pr-review'])
     expect(matchCommands(commands, '/').map((c) => c.name)).toEqual(['review', 'rewind', 'pr-review', 'compact'])
+  })
+})
+
+describe('agent picks (Figma 65)', () => {
+  it('reads the picks a session runs with from its pickers', () => {
+    const config = [
+      { id: 'model', category: 'model' as const, label: '模型', current: 'opus', values: [{ value: 'opus', label: 'Opus' }] },
+      { id: 'effort', category: 'thought_level' as const, label: '推理强度', current: 'high', values: [{ value: 'high', label: '高' }] },
+      permissionOption(['ask', 'accept-edits', 'auto'], 'auto'),
+      planOption(true),
+      fastOption(true)
+    ]
+    expect(picksOf(config)).toEqual({ model: 'opus', models: [{ value: 'opus', label: 'Opus' }], modelsFrom: 'live', effort: 'high', permission: 'auto', plan: true, fast: true })
+    expect(picksOf([])).toEqual({})
+  })
+
+  it('keeps only known agents and well-formed values from disk', () => {
+    const agents = new Set(['claude', 'codex'])
+    expect(
+      sanitizeGuiPicks({ claude: { model: 'opus', models: [{ value: 'opus', label: 'Opus 5.5' }, { value: 1 }], effort: 'max', permission: 'auto', plan: false, fast: true }, codex: { model: 'a b', permission: 'yolo', fast: 'on', models: 'x' }, nope: { model: 'x' } }, agents)
+    ).toEqual({ claude: { model: 'opus', models: [{ value: 'opus', label: 'Opus 5.5' }], effort: 'max', permission: 'auto', plan: false, fast: true }, codex: {} })
+    expect(sanitizeGuiPicks('x', agents)).toEqual({})
   })
 })

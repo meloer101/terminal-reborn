@@ -186,6 +186,14 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
           break
         case 'result':
           noteSession(message)
+          // 快速 on but not serving: the turn's result says why (Figma 65 tooltip).
+          if (current.fast && !replay) {
+            const blocked = message.fast_mode_state === 'on' ? undefined : str(message.fast_mode_disabled_reason)
+            if (blocked !== current.fastBlocked) {
+              current.fastBlocked = blocked
+              emitConfig()
+            }
+          }
           if (!replay) {
             // An interrupt ends the turn with `error_during_execution`: stopped by the user, not failed.
             const failed = message.is_error === true && message.subtype !== 'error_during_execution'
@@ -256,6 +264,10 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       if (!outcome.ok) return false
       if (id === 'model') current.model = value
       else if (id === 'effort') current.effort = value
+      else if (id === 'fast') {
+        current.fast = value === 'on'
+        current.fastBlocked = undefined
+      }
       else if (isRec(request) && typeof request.mode === 'string') {
         current.level = id === 'permission' ? (value as ClaudePickerState['level']) : level
         current.mode = request.mode

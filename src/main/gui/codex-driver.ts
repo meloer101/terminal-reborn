@@ -17,7 +17,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
   /** Prompt id → the server request's own id (number or string), to answer with. */
   const requestIds = new Map<string, unknown>()
   let models: unknown[] = []
-  const current: { model?: string; effort?: string; permission?: GuiPermission } = { ...(options.model ? { model: options.model } : {}), permission: options.permission ?? 'accept-edits' }
+  const current: { model?: string; effort?: string; permission?: GuiPermission; fast?: boolean } = { ...(options.model ? { model: options.model } : {}), permission: options.permission ?? 'accept-edits' }
   let config: GuiConfigOption[] = []
   let threadId: string | undefined
   /** 自动 sent `approvalsReviewer: auto_review` on this thread: later turns at another level send `user`. */
@@ -198,6 +198,7 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
         current.effort = undefined
       } else if (id === 'effort') current.effort = value
       else if (id === 'permission' && isCodexLevel(value)) current.permission = value
+      else if (id === 'fast') current.fast = value === 'on'
       else return false
       emitConfig()
       return true

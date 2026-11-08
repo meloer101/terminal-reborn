@@ -4,6 +4,7 @@
 
 import {
   effortLabel,
+  fastOption,
   permissionOption,
   planOption,
   type GuiAnswer,
@@ -39,6 +40,24 @@ export interface ClaudePickerState {
   effort?: string
   mode?: string
   level?: GuiPermission
+  /** Figma 65: 快速 as chosen, and why Claude says it is not serving (a result's `fast_mode_disabled_reason`). */
+  fast?: boolean
+  fastBlocked?: string
+}
+
+/** Claude's `fast_mode_disabled_reason` (2.1.319) in words, for the 快速 button's tooltip; null = nothing to say. */
+export function claudeFastHint(reason: string | undefined): string | undefined {
+  if (!reason || reason === 'pending' || reason === 'sdk_opt_in_required') return undefined
+  const why: Record<string, string> = {
+    extra_usage_disabled: '账户没有开启额外用量',
+    free: '免费账户不能用',
+    model_not_allowed: '组织不允许这个模型',
+    not_first_party: '只在直接连 Anthropic API 时可用',
+    preference: '组织设置关掉了快速模式',
+    disabled_by_env: '环境变量关掉了快速模式',
+    network_error: '查不到是否可用（网络错误）'
+  }
+  return `快速没有生效：${why[reason] ?? reason}`
 }
 
 /** A `can_use_tool` request still waiting, kept to build the answer. */
@@ -238,16 +257,20 @@ export function markSkills(commands: readonly GuiCommand[], skills: ReadonlySet<
 
 /** The pickers from `initialize` (models, their effort levels, permission modes) and `get_settings`' effort. */
 export function claudeConfig(init: Rec, current: ClaudePickerState): GuiConfigOption[] {
-  const models = (Array.isArray(init.models) ? init.models : []).filter(isRec)
+  const all = (Array.isArray(init.models) ? init.models : []).filter(isRec)
+  // Figma 65 (the author, 2026-11-08): no 「Default (recommended)」 — it is listed as the model it resolves to (2.1.319:
+  // `default` → claude-opus-5-5, the same as `opus`). Kept only when no other entry is that model.
+  const fallback = all.find((m) => m.value === 'default')
+  const twin = fallback && all.find((m) => m.value !== 'default' && m.resolvedModel !== undefined && m.resolvedModel === fallback.resolvedModel)
+  const models = twin ? all.filter((m) => m !== fallback) : all
   const values = models.flatMap((m) => {
     const value = str(m.value)
     return value ? [{ value, label: str(m.displayName) ?? value }] : []
   })
-  // A resolved id (`claude-haiku-5-5`, as each turn's init reports it) maps back to its alias; `default` last, since
-  // it resolves to the same model as another alias.
-  const byResolved = current.model
-    ? (models.find((m) => m.value !== 'default' && m.resolvedModel === current.model) ?? models.find((m) => m.resolvedModel === current.model))
-    : undefined
+  // A resolved id (`claude-haiku-5-5`, as each turn's init reports it) maps back to its alias; no model chosen, or
+  // `default`, is the model `default` resolves to.
+  const wanted = !current.model || current.model === 'default' ? str(fallback?.resolvedModel) : current.model
+  const byResolved = wanted ? models.find((m) => m.value !== 'default' && m.resolvedModel === wanted) ?? models.find((m) => m.resolvedModel === wanted) : undefined
   const model =
     current.model && values.some((v) => v.value === current.model) ? current.model : (str(byResolved?.value) ?? values[0]?.value ?? 'default')
   const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: '模型', current: model, values }]
@@ -265,6 +288,9 @@ export function claudeConfig(init: Rec, current: ClaudePickerState): GuiConfigOp
   // 计划 is Claude's `plan` permission mode; the level it returns to is the one chosen before it.
   const mode = current.mode ?? str(init.current_permission_mode) ?? 'default'
   config.push(permissionOption(CLAUDE_LEVELS, claudeLevel(mode, current.level)), planOption(mode === 'plan'))
+  // 快速 (Figma 65): only a model Claude says can answer faster. In `-p` it is off until the session opts in (a flag
+  // setting), which is what turning it on sends.
+  if (chosen?.supportsFastMode === true) config.push(fastOption(current.fast === true, current.fast ? claudeFastHint(current.fastBlocked) : undefined))
   return config
 }
 
@@ -274,6 +300,7 @@ export function claudeConfigRequest(id: string, value: string, level: GuiPermiss
   if (id === 'permission') return isClaudeLevel(value) ? { subtype: 'set_permission_mode', mode: CLAUDE_MODE_OF[value] } : null
   if (id === 'plan') return { subtype: 'set_permission_mode', mode: value === 'on' ? 'plan' : CLAUDE_MODE_OF[level] }
   if (id === 'effort') return { subtype: 'apply_flag_settings', settings: { effortLevel: value } }
+  if (id === 'fast') return { subtype: 'apply_flag_settings', settings: { fastMode: value === 'on' } }
   return null
 }
 

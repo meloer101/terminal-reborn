@@ -1,6 +1,7 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
-import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
+import type { GuiPicks } from '@shared/gui-chat'
 import type { WorktreeArchive } from '@shared/archive'
 import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
@@ -136,6 +137,32 @@ function startSessionIn(
     lastActivityAt: now
   }
   return { data: { ...data, sessions: [...data.sessions, session], activeSessionId: session.id }, sessionId: session.id }
+}
+
+/**
+ * Figma 65: an empty GUI session gets another agent and / or folder (another project's main worktree) before anything
+ * is said. A title that is still the old agent's default follows the new agent, so the first message still names the
+ * session; the conversation id the old agent reported (its SessionStart hook runs before any message) is dropped, so
+ * the new agent starts fresh instead of resuming it. Anything else — a terminal session, a folder not in the
+ * workspace — is left as it was.
+ */
+export function retargetSession(data: WorkspaceData, sessionId: SessionId, change: { kind?: CliAgent; worktreeId?: WorktreeId }): WorkspaceData {
+  const session = data.sessions.find((s) => s.id === sessionId)
+  if (!session || session.ui !== 'gui' || session.kind === 'shell') return data
+  if (change.worktreeId !== undefined && !data.worktrees.some((w) => w.id === change.worktreeId && w.archived === undefined)) return data
+  const kind = change.kind ?? session.kind
+  // Another agent starts with its own last 权限 / 计划 (gui/launch.ts), not the one it replaces.
+  const { agentSessionId: _dropped, guiPermission, guiPlan, ...rest } = session
+  const sameAgent = kind === session.kind
+  const next: Session = {
+    ...rest,
+    ...(sameAgent && guiPermission !== undefined ? { guiPermission } : {}),
+    ...(sameAgent && guiPlan !== undefined ? { guiPlan } : {}),
+    kind,
+    worktreeId: change.worktreeId ?? session.worktreeId,
+    title: session.title === DEFAULT_SESSION_TITLE[session.kind] ? DEFAULT_SESSION_TITLE[kind] : session.title
+  }
+  return { ...data, sessions: data.sessions.map((s) => (s.id === sessionId ? next : s)) }
 }
 
 /** Removes a session; if it was selected, selects its neighbour (next, else previous). */
@@ -288,6 +315,8 @@ export interface WorkspaceUi {
   newSessionAgent?: Readonly<Record<ProjectId, AgentKind>>
   /** 界面 last chosen in the new-session sheet, by project (PRD F23). */
   newSessionUi?: Readonly<Record<ProjectId, SessionUi>>
+  /** Figma 65: what each agent last ran with in a GUI session. */
+  guiPicks?: Readonly<Partial<Record<CliAgent, GuiPicks>>>
   /** Secondary windows (F20 · 多窗口); `data` holds the main window's panes. */
   secondaryWindows?: readonly PersistedWindow[]
   /** 一题多解 groups; members are kept only while their session exists. */
@@ -354,6 +383,9 @@ export function serializeWorkspace(
       : {}),
     ...(ui.newSessionUi && Object.keys(ui.newSessionUi).length > 0
       ? { newSessionUi: Object.fromEntries(Object.entries(ui.newSessionUi).filter(([id]) => data.projects.some((p) => p.id === id))) }
+      : {}),
+    ...(ui.guiPicks && Object.values(ui.guiPicks).some((p) => p && Object.keys(p).length > 0)
+      ? { guiPicks: Object.fromEntries(Object.entries(ui.guiPicks).filter(([, p]) => p && Object.keys(p).length > 0)) as Record<string, GuiPicks> }
       : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
@@ -428,6 +460,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.newSessionWorkdir !== prev.newSessionWorkdir ||
     next.newSessionAgent !== prev.newSessionAgent ||
     next.newSessionUi !== prev.newSessionUi ||
+    next.guiPicks !== prev.guiPicks ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true
@@ -437,6 +470,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     return (
       !before ||
       s.id !== before.id ||
+      s.kind !== before.kind ||
       s.ui !== before.ui ||
       s.guiPermission !== before.guiPermission ||
       s.guiPlan !== before.guiPlan ||

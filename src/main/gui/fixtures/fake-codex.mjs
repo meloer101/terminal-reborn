@@ -48,7 +48,7 @@ function request(m) {
         id: m.id,
         result: {
           data: [
-            { id: 'gpt-a', displayName: 'GPT A', isDefault: true, supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }], defaultReasoningEffort: 'low' },
+            { id: 'gpt-a', displayName: 'GPT A', isDefault: true, supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }], defaultReasoningEffort: 'low', serviceTiers: [{ id: 'priority', name: 'Fast', description: '' }] },
             { id: 'gpt-b', displayName: 'GPT B', supportedReasoningEfforts: [{ reasoningEffort: 'medium' }], defaultReasoningEffort: 'medium' }
           ]
         }

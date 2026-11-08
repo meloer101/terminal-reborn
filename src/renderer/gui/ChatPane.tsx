@@ -1,13 +1,16 @@
 // A GUI session's card in the main area (PRD F23, Figma 49″C `GUI`, 59J): the feed, then — each its own block, 8 apart —
 // what the agent waits on, the messages queued behind the running turn, a failure, and the composer. Before anything is
-// said (59G) the agent's mark and name stand over the composer, the two in the middle of the card. Drawn where a
+// said (59G, 65H) the agent's mark and 「让我们在 <project> 中开工吧」 stand over the composer, the two in the middle of
+// the card; the project (ProjectChip) and the agent (the model menu) can still change then. Drawn where a
 // terminal would be (TerminalArea / PaneHosts). Files dropped or pasted on it become attachments (terminal/file-input
 // → session-io → the composer).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import { agentName } from '@shared/agents'
+import { agentName, type CliAgent } from '@shared/agents'
 import { emptyGuiState, guiCanEdit, type GuiAnswer } from '@shared/gui-chat'
 import type { AgentKind, SessionId } from '@shared/types'
+import { useWorkspace } from '../state/workspace'
+import { useSecondaryWindow } from '../state/window-scope'
 import { attachFileInput } from '../terminal/file-input'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -15,8 +18,10 @@ import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
 import { Feed } from './Feed'
 import { TodoCard } from './Todos'
-import { cardKey, currentTodos, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
-import { addAttachments, clearComposer, setDraft, setGuiState, useGuiSessions } from './store'
+import { retargetGuiSession } from './launch'
+import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
+import { ProjectChip } from './ProjectChip'
+import { addAttachments, clearComposer, notePick, setDraft, setGuiState, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const EMPTY = emptyGuiState()
@@ -62,8 +67,15 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   // Its copy arrived: drop it (state adjusted while rendering, React's pattern for state derived from props).
   if (pending && users > pending.users) setPending(null)
   const items = useMemo(() => withPendingSend(state.items, pending), [state.items, pending])
-  // Figma 59G: nothing said yet — the agent's mark and name over the composer, in the middle of the card.
-  const empty = items.length === 0 && state.live === null && !state.busy
+  // Figma 59G / 65H: nothing said yet — the welcome over the composer, in the middle of the card.
+  const empty = items.length === 0 && chatIsEmpty(state)
+  const worktreeId = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId)?.worktreeId)
+  const projects = useWorkspace((s) => s.projects)
+  const worktrees = useWorkspace((s) => s.worktrees)
+  // A project's own window (F20) shows only that project: the session stays in it.
+  const scope = useSecondaryWindow()?.projectId ?? null
+  const choices = useMemo(() => projectChoices(scope ? projects.filter((p) => p.id === scope) : projects, worktrees), [scope, projects, worktrees])
+  const projectId = worktrees.find((w) => w.id === worktreeId)?.projectId
   // Figma 59J: the agent's current task list, above the composer.
   const todos = useMemo(() => currentTodos(state.items), [state.items])
 
@@ -110,7 +122,21 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
     },
     [sessionId]
   )
-  const setConfig = useCallback((optionId: string, value: string) => void window.tr.gui.setConfig(sessionId, optionId, value).catch(() => {}), [sessionId])
+  const setConfig = useCallback(
+    (optionId: string, value: string) => {
+      notePick(sessionId)
+      return window.tr.gui.setConfig(sessionId, optionId, value).catch(() => false)
+    },
+    [sessionId]
+  )
+  // Figma 65B: another agent, with one of its models when it listed them before (its last picks hold the rest).
+  const switchAgent = useCallback(
+    (next: CliAgent, model: string | undefined) => {
+      if (model) useWorkspace.getState().rememberGuiPicks(next, { model })
+      void retargetGuiSession(sessionId, { kind: next })
+    },
+    [sessionId]
+  )
 
   /**
    * A key for the waiting card: true when the card took it. From the empty composer (it asks first, Composer) digits
@@ -150,10 +176,20 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
     >
       {empty ? (
         <div className={styles.welcome} data-testid="gui-welcome">
-          <span className={styles.agentAvatar} aria-hidden>
-            <AgentIcon kind={agent} size={16} />
+          <span className={`${styles.agentAvatar} ${styles.welcomeMark}`} title={agent === 'shell' ? undefined : agentName(agent)}>
+            <AgentIcon kind={agent} size={20} />
           </span>
-          <span className={styles.welcomeName}>{agentName(agent)}</span>
+          <span className={styles.welcomeLine}>
+            让我们在
+            {projectId ? (
+              <ProjectChip choices={choices} current={projectId} onPick={(choice) => void retargetGuiSession(sessionId, { worktreeId: choice.worktreeId })} />
+            ) : (
+              <span className={styles.projectChip}>
+                <span className={styles.projectName}>{cwd.slice(cwd.lastIndexOf('/') + 1)}</span>
+              </span>
+            )}
+            中开工吧
+          </span>
         </div>
       ) : (
         <Feed
@@ -191,6 +227,8 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
           send={send}
           interrupt={interrupt}
           setConfig={setConfig}
+          switchable={empty}
+          switchAgent={switchAgent}
         />
       </div>
     </div>

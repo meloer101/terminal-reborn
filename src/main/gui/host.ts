@@ -7,13 +7,14 @@
 import type { AgentEvent } from '@shared/agent-events'
 import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
 import { createAcpDriver } from './acp-driver'
 import { createClaudeDriver } from './claude-driver'
 import { createCodexDriver } from './codex-driver'
+import { createPiDriver } from './pi-driver'
 import { isRec, type DriverIO, type GuiDriver, type ImageBlock } from './driver'
 import { cleanTitle } from '../hooks/agent-title'
 import { exitReason } from './launch'
@@ -157,6 +158,7 @@ class GuiSession<O extends GuiOwner> {
     }
     if (this.protocol === 'claude-stream') return createClaudeDriver(io, options)
     if (this.protocol === 'codex-app-server') return createCodexDriver(io, options)
+    if (this.protocol === 'pi-rpc') return createPiDriver(io, options)
     return createAcpDriver(io, { ...options, label: agentName(this.launch.agent) })
   }
 
@@ -299,12 +301,34 @@ class GuiSession<O extends GuiOwner> {
     if (this.ready || this.exited) return
     this.ready = true
     this.started()
+    // The agent's last picks go first, so the first message already runs with them.
+    if (this.reattached) this.sendInitial()
+    else void this.applyPicks().finally(() => this.sendInitial())
+  }
+
+  private sendInitial(): void {
+    if (this.exited) return
     if (this.launch.initialPrompt && !this.initialSent && !this.reattached) {
       this.initialSent = true
       if (!this.state.busy && this.state.queued.length === 0) void this.sendNow(this.launch.initialPrompt, [])
       else this.enqueue(this.launch.initialPrompt, [])
     }
     this.pump()
+  }
+
+  /**
+   * Figma 65: the effort and 快速 last used with this agent (the launch carries them). Applied once its pickers are in,
+   * before the first message is sent; a value the current model does not offer is left alone.
+   */
+  private async applyPicks(): Promise<void> {
+    const { effort, fast } = this.launch
+    const effortOption = this.state.config.find((o) => o.category === 'thought_level')
+    if (effort && effortOption && effortOption.current !== effort && effortOption.values.some((v) => v.value === effort)) {
+      await this.setConfig(effortOption.id, effort)
+    }
+    const fastOption = this.state.config.find((o) => o.category === 'fast')
+    const wanted = fast ? 'on' : 'off'
+    if (fast !== undefined && fastOption && fastOption.current !== wanted) await this.setConfig(fastOption.id, wanted)
   }
 
   private status(events: AgentEvent[]): void {
@@ -498,10 +522,13 @@ function parseLine(line: string): Record<string, unknown> | null {
   }
 }
 
-/** The model chosen in the session now (it may differ from the one it was launched with): a restart keeps it. */
-function currentModel(state: GuiState): { model?: string } {
-  const model = state.config.find((o) => o.category === 'model')?.current
-  return model ? { model } : {}
+/** The model, effort and 快速 chosen in the session now (they may differ from the launch's): a restart keeps them. */
+function currentModel(state: GuiState): Pick<GuiLaunch, 'model' | 'effort' | 'fast'> {
+  const now = (category: GuiConfigOption['category']) => state.config.find((o) => o.category === category)?.current
+  const model = now('model')
+  const effort = now('thought_level')
+  const fast = now('fast')
+  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(fast ? { fast: fast === 'on' } : {}) }
 }
 
 export class GuiHost<O extends GuiOwner> {
@@ -590,8 +617,9 @@ export class GuiHost<O extends GuiOwner> {
   }
 
   /**
-   * Restarts the agent on its conversation with another launch-argument permission or 计划 (Figma 56, Grok): not while
-   * a turn runs or something waits. The new process replays the conversation (ACP `session/load`).
+   * Restarts the agent on its conversation with another launch-argument permission or 计划 (Figma 56, Grok), or another
+   * model or thinking level (Pi): not while a turn runs or something waits. An ACP agent replays the conversation
+   * (`session/load`); Pi does not, so what is drawn stays.
    */
   private async relaunch(sessionId: string, change: { permission: GuiPermission; plan: boolean }): Promise<boolean> {
     const session = this.sessions.get(sessionId)
@@ -605,12 +633,13 @@ export class GuiHost<O extends GuiOwner> {
     delete next.resumeAt
     this.sessions.delete(sessionId)
     session.stop()
-    const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), [])
+    const kept = AGENT_GUI[launch.agent]?.protocol === 'pi-rpc' ? state.items.slice() : []
+    const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), kept)
     this.sessions.set(sessionId, replacement)
     const result = await replacement.begin(agentSessionId)
     if (!result.ok) {
       if (this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
-      // The chat was cleared for the replay: say why it stays empty.
+      // The chat was cleared for the replay (or kept, Pi): say why nothing more comes.
       if (!owner.isDestroyed()) owner.send(GUI_IPC.events, { sessionId, events: [{ type: 'failure', failure: result.reason }] })
     }
     return result.ok

@@ -2,6 +2,7 @@
 // Pure: main sanitizes on read and on every save, the renderer sanitizes what `loadSync()` returns,
 // and the one-time migration from the old localStorage keys lives here too.
 import { CLI_AGENTS } from './agents'
+import { sanitizeGuiPicks, type GuiPicks } from './gui-chat'
 import { archiveRefName, type WorktreeArchive } from './archive'
 import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
@@ -128,6 +129,8 @@ export interface WorkspaceFile {
   newSessionAgent?: Record<string, AgentKind>
   /** 界面 last chosen in the new-session sheet, by project id (PRD F23). Absent when empty. */
   newSessionUi?: Record<string, SessionUi>
+  /** Figma 65: model, effort, 权限, 计划 and 快速 last used with each agent in a GUI session. Absent when empty. */
+  guiPicks?: Record<string, GuiPicks>
   /** Unsent inline review comments (PRD F5) by worktree path; only worktrees that exist. Absent when empty. */
   reviewComments?: Record<string, ReviewComment[]>
   /** The main area's split (PRD F20): two to four sessions, `activeSessionId` among them. Absent = one session. */
@@ -292,6 +295,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     for (const [id, choice] of Object.entries(value.newSessionUi)) if (projectIds.has(id) && (choice === 'gui' || choice === 'cli')) newSessionUi[id] = choice
   }
 
+  const guiPicks = Object.fromEntries(Object.entries(sanitizeGuiPicks(value.guiPicks, new Set<string>(CLI_AGENTS))).filter(([, picks]) => Object.keys(picks).length > 0))
+
   const collapsedStatusGroups = Array.isArray(value.collapsedStatusGroups)
     ? SESSION_STATUSES.filter((status) => (value.collapsedStatusGroups as unknown[]).includes(status))
     : []
@@ -348,6 +353,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(Object.keys(newSessionWorkdir).length > 0 ? { newSessionWorkdir } : {}),
     ...(Object.keys(newSessionAgent).length > 0 ? { newSessionAgent } : {}),
     ...(Object.keys(newSessionUi).length > 0 ? { newSessionUi } : {}),
+    ...(Object.keys(guiPicks).length > 0 ? { guiPicks } : {}),
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
     ...(split ? { split } : {}),
     ...(windows.length > 0 ? { windows } : {}),

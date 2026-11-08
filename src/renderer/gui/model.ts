@@ -1,11 +1,15 @@
 // A GUI session's chat view (PRD F23, Figma 49″C–F), the decisions behind it kept apart from React so they can be
 // tested: how the feed groups items, what a tool row says, what each card's buttons and keys do, the composer's keys
 // and the pickers under it. Pure.
+import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { looksLikeReport } from '@shared/dispatch'
-import type { GuiCommand, GuiConfigOption, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
-import { composerPickers } from '@shared/gui-chat'
+import { AGENT_GUI, guiAvailability } from '@shared/gui-agents'
+import type { GuiCommand, GuiConfigOption, GuiPermission, GuiPermissionOption, GuiPrompt, GuiQuestion, GuiState } from '@shared/gui-chat'
+import { composerPickers, isGuiPermission } from '@shared/gui-chat'
 import type { ChatItem, ChatTodo, FileDiff } from '@shared/transcript-chat'
 import type { SessionStatus } from '@shared/types'
+import type { AgentAvailability } from '@shared/ipc'
+import { binaryInstalled, listedAgents } from '../new-session/model'
 import { CUT_ESCAPE, ESCAPES } from './ansi'
 
 // --- the feed (Figma 49″C) ----------------------------------------------------------------------------------------
@@ -552,16 +556,22 @@ export function appendToDraft(draft: string, text: string): string {
 }
 
 /**
- * The pickers under the composer: model and reasoning effort share one button (「Sonnet 5 · 高」, Figma 49′E), every
- * other option (mode, …) has its own.
+ * The pickers in the composer (Figma 65): model, reasoning effort, 模式 (权限 and 计划 in one list), 快速 (a switch),
+ * then every other option (the agent's own mode, …), each its own button.
  */
 export interface PickerButton {
   key: string
   label: string
   options: GuiConfigOption[]
-  /** 计划 (Figma 56): a switch, pressed while on, not a menu. */
+  /** 快速 (Figma 65): a switch, pressed while on, not a menu. */
   toggle?: { on: boolean }
+  /** 模式 (Figma 65): 询问 / 接受编辑 / 自动 / 计划 as one list; `current` is 'plan' while planning. */
+  mode?: { current: ModeChoice; choices: { value: ModeChoice; label: string }[] }
+  /** Why the option, though chosen, is not taking effect (the button's tooltip). */
+  hint?: string
 }
+
+export type ModeChoice = GuiPermission | 'plan'
 
 const currentLabel = (option: GuiConfigOption): string => option.values.find((v) => v.value === option.current)?.label ?? option.current
 
@@ -569,15 +579,39 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   const pickers = composerPickers(config)
   const model = pickers.find((o) => o.category === 'model')
   const effort = pickers.find((o) => o.category === 'thought_level')
+  // 模式 takes the levels even when there is only one (an agent that only asks but has a plan mode).
+  const permission = config.find((o) => o.category === 'permission')
+  const plan = pickers.find((o) => o.category === 'plan')
   const buttons: PickerButton[] = []
-  const joined = [model, effort].filter((o): o is GuiConfigOption => !!o)
-  if (joined.length > 0) buttons.push({ key: joined.map((o) => o.id).join('+'), label: joined.map(currentLabel).join(' · '), options: joined })
+  for (const option of [model, effort]) if (option) buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
+  const levels = (permission?.values ?? []).filter((v): v is { value: GuiPermission; label: string } => isGuiPermission(v.value))
+  if (levels.length + (plan ? 1 : 0) > 1) {
+    const planning = plan?.current === 'on'
+    const current: ModeChoice = planning ? 'plan' : isGuiPermission(permission?.current) ? permission.current : (levels[0]?.value ?? 'ask')
+    const choices = [...levels, ...(plan ? [{ value: 'plan' as const, label: plan.label }] : [])]
+    buttons.push({
+      key: [permission, plan].flatMap((o) => (o ? [o.id] : [])).join('+'),
+      label: choices.find((c) => c.value === current)?.label ?? current,
+      options: [permission, plan].filter((o): o is GuiConfigOption => !!o),
+      mode: { current, choices }
+    })
+  }
   for (const option of pickers) {
-    if (option === model || option === effort) continue
-    if (option.category === 'plan') buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' } })
+    if (option === model || option === effort || option.category === 'permission' || option === plan) continue
+    if (option.category === 'fast') buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' }, ...(option.hint ? { hint: option.hint } : {}) })
     else buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
   }
   return buttons
+}
+
+
+/**
+ * Figma 65: the picker changes a 模式 choice sends, in order. Leaving 计划 sends the level first — Claude and Grok keep
+ * it as where plan off returns — then plan off.
+ */
+export function modeChanges(choice: ModeChoice, planning: boolean): [string, string][] {
+  if (choice === 'plan') return planning ? [] : [['plan', 'on']]
+  return planning ? [['permission', choice], ['plan', 'off']] : [['permission', choice]]
 }
 
 /** 「模型」 / 「推理强度」 / 「模式」: the heading of each section of a picker's menu. */
@@ -601,4 +635,39 @@ export function stepIndex(index: number, delta: number, length: number): number 
   if (length === 0) return -1
   if (index < 0) return delta > 0 ? 0 : length - 1
   return (index + delta + length) % length
+}
+
+/** Figma 59G / 65: nothing said, running or waiting yet — the welcome shows, and the agent and project can change. */
+export function chatIsEmpty(state: Pick<GuiState, 'items' | 'live' | 'busy' | 'queued'>): boolean {
+  return state.items.length === 0 && state.live === null && !state.busy && state.queued.length === 0
+}
+
+/**
+ * Figma 65: the agents an empty GUI session can switch to, in 新建会话's order — installed ones that run as GUI (Claude
+ * Code and Codex always listed, as there), then the GUI ones still to install (or whose adapter is missing).
+ */
+export function guiAgentMenu(found: AgentAvailability | null): { installed: CliAgent[]; adapter: CliAgent[]; missing: CliAgent[] } {
+  const listed = new Set<string>(listedAgents(found))
+  const gui = CLI_AGENTS.filter((id) => AGENT_GUI[id] !== null)
+  const kind = (id: CliAgent) => (listed.has(id) ? guiAvailability(id, binaryInstalled(found)).kind : 'missing')
+  // Installed, but its GUI needs an adapter (Amp without amp-acp): still the user's agent, with its models.
+  return { installed: gui.filter((id) => kind(id) === 'available'), adapter: gui.filter((id) => kind(id) === 'needs-adapter'), missing: gui.filter((id) => kind(id) === 'missing' || kind(id) === 'cli-only') }
+}
+
+/** Figma 65: the projects the welcome line steps through, each by its main worktree, in the sidebar's order. */
+export function projectChoices(
+  projects: readonly { id: string; name: string }[],
+  worktrees: readonly { id: string; projectId: string; isMain: boolean; archived?: unknown }[]
+): { projectId: string; name: string; worktreeId: string }[] {
+  return projects.flatMap((p) => {
+    const main = worktrees.find((w) => w.projectId === p.id && w.isMain && w.archived === undefined)
+    return main ? [{ projectId: p.id, name: p.name, worktreeId: main.id }] : []
+  })
+}
+
+/** Wheel deltas as whole steps of `per` px (a trackpad sends many small ones); the rest carries to the next event. */
+export function wheelSteps(rest: number, deltaY: number, per = 40): { steps: number; rest: number } {
+  const total = rest + deltaY
+  const steps = Math.trunc(total / per)
+  return { steps, rest: total - steps * per }
 }

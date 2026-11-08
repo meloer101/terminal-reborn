@@ -1,7 +1,7 @@
-// Which agents a GUI session can drive, and how (PRD F23 / §6.17). Claude and Codex speak their own protocols; the
-// rest speak ACP, with the arguments the ACP registry lists for them
-// (cdn.agentclientprotocol.com/registry/v1/latest/registry.json, read 2026-11-05). Pi and Amp need an adapter the
-// user installs; Wavi never downloads one. Pure.
+// Which agents a GUI session can drive, and how (PRD F23 / §6.17). Claude, Codex and Pi speak their own protocols
+// (Pi `--mode rpc`, as Paseo and T3 Code drive it); the rest speak ACP, with the arguments the ACP registry lists for
+// them (cdn.agentclientprotocol.com/registry/v1/latest/registry.json, read 2026-11-05). Amp needs an adapter the user
+// installs; Wavi never downloads one. Pure.
 
 import type { CliAgent } from './agents'
 import type { GuiPermission, GuiProtocol } from './gui-chat'
@@ -20,6 +20,8 @@ export interface GuiLaunchPermission {
 export type GuiDriver =
   | { protocol: 'claude-stream' }
   | { protocol: 'codex-app-server' }
+  /** `pi --mode rpc` (PRD F23 v1.160). */
+  | { protocol: 'pi-rpc' }
   /** The agent's own binary in ACP mode. */
   | { protocol: 'acp'; args: readonly string[]; env?: Readonly<Record<string, string>>; launchPermission?: GuiLaunchPermission }
   /** A separate ACP adapter for the agent. */
@@ -37,7 +39,7 @@ export const AGENT_GUI: Readonly<Record<CliAgent, GuiDriver | null>> = {
   opencode: { protocol: 'acp', args: ['acp'] },
   gemini: { protocol: 'acp', args: ['--acp'] },
   qwen: { protocol: 'acp', args: ['--acp', '--experimental-skills'] },
-  pi: { protocol: 'acp', adapter: { binary: 'pi-acp', args: [], install: 'npm install -g pi-acp' } },
+  pi: { protocol: 'pi-rpc' },
   copilot: { protocol: 'acp', args: ['--acp'] },
   cursor: { protocol: 'acp', args: ['acp'] },
   // `grok --help`: --permission-mode default | acceptEdits | auto | dontAsk | bypassPermissions | plan (2026-11-05).
@@ -82,6 +84,12 @@ export function guiProtocolOf(agent: CliAgent): GuiProtocol | null {
 export function guiBinary(agent: CliAgent, agentBinary: string): string {
   const driver = AGENT_GUI[agent]
   return driver?.protocol === 'acp' && 'adapter' in driver ? driver.adapter.binary : agentBinary
+}
+
+/** The adapter an agent's GUI needs (amp-acp for Amp), or null. */
+export function guiAdapterOf(agent: CliAgent): string | null {
+  const driver = AGENT_GUI[agent]
+  return driver?.protocol === 'acp' && 'adapter' in driver ? driver.adapter.binary : null
 }
 
 /** What 「界面」 shows for an agent (Figma 49″A / B): GUI available, GUI after installing an adapter, or CLI only. */
