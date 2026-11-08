@@ -4,11 +4,12 @@
 // is a newline — a new item in a list; in a code block ⏎ is a newline too (an input method's Enter is left to it).
 // Formats are always on: there is no 格式 button, a selection gets the format buttons over it (50E).
 // Before anything is said (`switchable`) the model menu lists the agents first, each with its models (Figma 65B).
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
 import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, X, Zap } from 'lucide-react'
 import { agentName, type CliAgent } from '@shared/agents'
-import { matchCommands, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
+import { guiAdapterOf } from '@shared/gui-agents'
+import { matchCommands, type GuiCatalogResult, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
 import type { AgentAvailability } from '@shared/ipc'
 import type { AgentKind, SessionId } from '@shared/types'
 import { installedAgents } from '../new-session/sheet-store'
@@ -473,13 +474,16 @@ function PickerRow({ checked, mark, label, onClick }: { checked: boolean; mark?:
 }
 
 /**
- * Figma 65B: the agents an empty session can run — installed ones (✓ the current, › its models), then 没装 in grey
- * (choosing one opens 设置 · 智能体, where its install command is). The hovered agent's models stand beside the list:
- * the current agent's as it reports them, another's as it listed them last time (or just its default).
+ * Figma 65B: the agents an empty session can run — installed ones (› their models), Pi-like ones whose GUI needs an
+ * adapter (their models show; a pick opens 设置 · 智能体 for it), then 没装 in grey. The hovered agent's models stand
+ * beside the list: the current agent's as it reports them; another's as it listed them in a session before, else as
+ * main asks it without a conversation (catalog.ts, as T3 Code / Paseo) — 加载中 meanwhile, the reason and 重试 if it
+ * could not say, just its default for an agent that only lists models in a session.
  */
 function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; models: readonly { value: string; label: string }[]; current: string | undefined; onAgent(agent: CliAgent, model: string | undefined): void }) {
   const [found, setFound] = useState<AgentAvailability | null>(null)
   const [hovered, setHovered] = useState<CliAgent | null>(agent === 'shell' ? null : agent)
+  const [asked, setAsked] = useState<Partial<Record<CliAgent, GuiCatalogResult | 'loading'>>>({})
   const picks = useWorkspace((s) => s.guiPicks)
   useEffect(() => {
     let live = true
@@ -488,29 +492,79 @@ function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; mo
       live = false
     }
   }, [])
-  const { installed, missing } = guiAgentMenu(found)
-  const listed = hovered === agent ? models : (hovered ? picks[hovered]?.models : undefined) ?? []
-  const chosen = hovered === agent ? current : hovered ? picks[hovered]?.model : undefined
+  const { installed, adapter, missing } = guiAgentMenu(found)
+
+  const probe = useCallback((id: CliAgent) => {
+    void window.tr.gui
+      .models(id)
+      .catch((error: unknown): GuiCatalogResult => ({ ok: false, reason: error instanceof Error ? error.message : String(error) }))
+      .then((result) => {
+        setAsked((at) => ({ ...at, [id]: result }))
+        // Kept (as T3 Code keeps its catalog on disk) unless a session of it listed its own ids since.
+        if (result.ok && useWorkspace.getState().guiPicks[id]?.modelsFrom !== 'live') {
+          useWorkspace.getState().rememberGuiPicks(id, { models: result.catalog.models, modelsFrom: 'probe' })
+        }
+      })
+  }, [])
+  // Every installed agent but the running one, asked once the menu opens (main keeps answers a few minutes).
+  const toAsk = [...installed, ...adapter].filter((id) => id !== agent).join(',')
+  useEffect(() => {
+    for (const id of toAsk ? (toAsk.split(',') as CliAgent[]) : []) probe(id)
+  }, [toAsk, probe])
+
+  const needsAdapter = hovered !== null && adapter.includes(hovered)
+  // Not answered yet (asked as the menu opened, or again by 重试): 加载中.
+  const answer = hovered ? (asked[hovered] ?? (hovered !== agent && toAsk.split(',').includes(hovered) ? 'loading' : undefined)) : undefined
+  const catalog = answer && answer !== 'loading' && answer.ok ? answer.catalog : undefined
+  const listed = hovered === agent ? models : (hovered ? picks[hovered]?.models : undefined) ?? catalog?.models ?? []
+  const chosen = hovered === agent ? current : hovered ? (picks[hovered]?.model ?? catalog?.current) : undefined
+  const pick = (id: CliAgent, model: string | undefined) => (needsAdapter ? openSettings('agents', id) : onAgent(id, model))
+  const agentRow = (id: CliAgent) => (
+    <button
+      key={id}
+      type="button"
+      role="menuitem"
+      aria-haspopup="menu"
+      aria-expanded={hovered === id}
+      className={styles.pickerRow}
+      onMouseEnter={() => setHovered(id)}
+      onFocus={() => setHovered(id)}
+      onClick={() => setHovered(id)}
+    >
+      <AgentIcon kind={id} size={14} />
+      <span className={styles.pickerLabel}>{agentName(id)}</span>
+      <ChevronRight {...SMALL} />
+    </button>
+  )
+  let body: ReactNode
+  if (!hovered) body = null
+  else if (listed.length > 0) body = listed.map((v) => <PickerRow key={v.value} checked={v.value === chosen} label={v.label} onClick={() => pick(hovered, v.value)} />)
+  else if (answer === 'loading') body = <span className={styles.popoverTitle} data-testid="gui-agent-models-loading">加载中…</span>
+  else if (answer && !answer.ok && 'reason' in answer)
+    body = (
+      <>
+        <span className={styles.popoverTitle}>{answer.reason}</span>
+        <button
+          type="button"
+          role="menuitem"
+          className={styles.pickerRow}
+          onClick={() => {
+            setAsked((at) => ({ ...at, [hovered]: 'loading' }))
+            probe(hovered)
+          }}
+        >
+          <span className={styles.pickerLabel}>重试</span>
+        </button>
+      </>
+    )
+  else body = <PickerRow checked={false} label="默认" onClick={() => pick(hovered, undefined)} />
+  const adapterName = needsAdapter ? guiAdapterOf(hovered) : null
+
   return (
     <>
       <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label="智能体" data-testid="gui-agent-menu">
-        {installed.map((id) => (
-          <button
-            key={id}
-            type="button"
-            role="menuitem"
-            aria-haspopup="menu"
-            aria-expanded={hovered === id}
-            className={styles.pickerRow}
-            onMouseEnter={() => setHovered(id)}
-            onFocus={() => setHovered(id)}
-            onClick={() => setHovered(id)}
-          >
-            <AgentIcon kind={id} size={14} />
-            <span className={styles.pickerLabel}>{agentName(id)}</span>
-            <ChevronRight {...SMALL} />
-          </button>
-        ))}
+        {installed.map(agentRow)}
+        {adapter.map(agentRow)}
         {missing.length > 0 && (
           <>
             <span className={styles.menuDivider} role="separator" />
@@ -526,11 +580,9 @@ function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; mo
       </div>
       {hovered && (
         <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label={`${agentName(hovered)} 的模型`} data-testid="gui-agent-models">
-          {listed.length === 0 ? (
-            <PickerRow checked={false} label="默认" onClick={() => onAgent(hovered, undefined)} />
-          ) : (
-            listed.map((v) => <PickerRow key={v.value} checked={v.value === chosen} label={v.label} onClick={() => onAgent(hovered, v.value)} />)
-          )}
+          {/* Pi without pi-acp: its models, and a pick opens 设置 · 智能体 where the adapter's install command is. */}
+          {adapterName && <span className={styles.popoverTitle}>装 {adapterName} 后可用</span>}
+          {body}
         </div>
       )}
     </>

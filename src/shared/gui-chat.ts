@@ -126,6 +126,8 @@ export interface GuiPicks {
   model?: string
   /** The models it offered last time: an empty session lists them under the agent before switching to it. */
   models?: { value: string; label: string }[]
+  /** Where `models` came from: a running session (its own ids, kept) or a probe (GuiModelCatalog, replaced by a run). */
+  modelsFrom?: 'live' | 'probe'
   effort?: string
   permission?: GuiPermission
   plan?: boolean
@@ -139,7 +141,7 @@ export function picksOf(config: readonly GuiConfigOption[]): GuiPicks {
   const models = config.find((o) => o.category === 'model')?.values.slice(0, MAX_PICK_MODELS)
   return {
     ...(model ? { model } : {}),
-    ...(models && models.length > 0 ? { models: models.map(({ value, label }) => ({ value, label })) } : {}),
+    ...(models && models.length > 0 ? { models: models.map(({ value, label }) => ({ value, label })), modelsFrom: 'live' as const } : {}),
     ...(effort ? { effort } : {}),
     ...(permission && isGuiPermission(permission) ? { permission } : {}),
     ...(plan !== undefined ? { plan: plan === 'on' } : {}),
@@ -147,7 +149,8 @@ export function picksOf(config: readonly GuiConfigOption[]): GuiPicks {
   }
 }
 
-const MAX_PICK_MODELS = 60
+/** Cursor lists 270 (2026-11-08). */
+const MAX_PICK_MODELS = 300
 
 const modelsOf = (raw: unknown[]): { value: string; label: string }[] =>
   raw
@@ -168,6 +171,7 @@ export function sanitizeGuiPicks(raw: unknown, agents: ReadonlySet<string>): Rec
     out[agent] = {
       ...(typeof v.model === 'string' && GUI_MODEL_ID.test(v.model) ? { model: v.model } : {}),
       ...(Array.isArray(v.models) ? { models: modelsOf(v.models) } : {}),
+      ...(v.modelsFrom === 'live' || v.modelsFrom === 'probe' ? { modelsFrom: v.modelsFrom } : {}),
       ...(typeof v.effort === 'string' && GUI_MODEL_ID.test(v.effort) ? { effort: v.effort } : {}),
       ...(isGuiPermission(v.permission) ? { permission: v.permission } : {}),
       ...(typeof v.plan === 'boolean' ? { plan: v.plan } : {}),
@@ -259,8 +263,21 @@ export interface GuiLiveSession {
 
 export type GuiSendResult = { ok: true; queued: boolean } | { ok: false; reason: string }
 
+/**
+ * Figma 65: an agent's models, asked without starting a conversation (as T3 Code and Paseo do): Claude `initialize`,
+ * Codex `model/list`, Grok ACP `initialize` (`_meta.modelState`), `cursor-agent models`, Pi `--mode rpc --no-session`.
+ * `current` is the model it would start with. Not `ok`: why it could not say (shown with 重试).
+ */
+export interface GuiModelCatalog {
+  models: { value: string; label: string }[]
+  current?: string
+}
+export type GuiCatalogResult = { ok: true; catalog: GuiModelCatalog } | { ok: false; reason: string } | { ok: false; unsupported: true }
+
 /** `window.tr.gui` (preload). Every call is checked in main: payload shape and that this window owns the session. */
 export interface GuiApi {
+  /** Figma 65: the agent's models without a conversation (cached a few minutes in main). */
+  models(agent: CliAgent): Promise<GuiCatalogResult>
   /** Starts the agent if it is not running (or reattaches to it) and returns the state to draw. */
   open(launch: GuiLaunch): Promise<GuiOpenResult>
   /** Text and attachment paths; queued while a turn runs (Figma 49″C). */
@@ -293,6 +310,7 @@ export const GUI_IPC = {
   edit: 'gui:edit',
   stop: 'gui:stop',
   live: 'gui:live',
+  models: 'gui:models',
   /** main → renderer */
   events: 'gui:events'
 } as const

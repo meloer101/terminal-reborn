@@ -7,9 +7,9 @@ import { app, ipcMain, type WebContents } from 'electron'
 import { realpathSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import type { HookAgent } from '@shared/agent-events'
-import type { CliAgent } from '@shared/agents'
+import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
-import { GUI_IPC, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_IPC, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
@@ -19,6 +19,7 @@ import { pipeLink } from '../pty/pipes'
 import { sniffPhoto } from '../remote/photos'
 import { portFor } from '../repo-scripts'
 import type { ImageBlock } from './driver'
+import { agentModels } from './catalog'
 import { claudeResumePoint, claudeTranscriptFor, codexRolloutFor, readTranscript } from './history'
 import { GuiHost, type PreparedLaunch } from './host'
 import { guiArgv, guiCommand, guiEnv, takesSystemPromptArgs } from './launch'
@@ -232,6 +233,11 @@ export function registerGuiHandlers(): void {
       .catch(() => [])
     return listed.filter((s) => mayStop(event.sender, s.id)).map((s) => ({ sessionId: s.id, exited: s.exit !== undefined }))
   })
+
+  // Figma 65: an agent's models without a conversation (catalog.ts); any agent name not known is refused.
+  ipcMain.handle(GUI_IPC.models, (_event, raw: unknown): Promise<GuiCatalogResult> =>
+    isCliAgent(raw) ? agentModels(raw) : Promise.resolve({ ok: false, reason: '智能体无效' })
+  )
 
   // Without the daemon the processes are this app's children: end them with it (the next run resumes by id).
   app.on('will-quit', () => {

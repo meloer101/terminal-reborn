@@ -497,12 +497,15 @@ describe('composer', () => {
   })
 
   it('lists the agents an empty session can switch to: installed with a GUI first, the others to install (Figma 65)', () => {
-    const menu = guiAgentMenu({ claude: true, codex: false, grok: true, cursor: false, crush: true })
+    const menu = guiAgentMenu({ claude: true, codex: false, grok: true, cursor: false, crush: true, pi: true, adapters: { 'pi-acp': false } })
     // Claude Code and Codex are always there (as in 新建会话); Crush has no GUI at all.
     expect(menu.installed).toEqual(expect.arrayContaining(['claude', 'codex', 'grok']))
     expect(menu.installed).not.toContain('cursor')
     expect(menu.missing).toContain('cursor')
     expect([...menu.installed, ...menu.missing]).not.toContain('crush')
+    // Pi is installed; its GUI needs pi-acp: listed with the installed ones, apart (its models show, a pick installs).
+    expect(menu.adapter).toEqual(['pi'])
+    expect([...menu.installed, ...menu.missing]).not.toContain('pi')
   })
 
   it('offers each project once, by its main worktree, in the sidebar’s order (Figma 65)', () => {

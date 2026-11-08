@@ -66,9 +66,13 @@ test.describe('F23 GUI session · switching agent and project before the first m
     await expect(composer().locator('[data-picker="model"]')).toHaveText('Opus', WITHIN)
     await composer().locator('[data-picker="model"]').click()
     await page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Codex' }).hover()
-    // Codex has not run here before: just its default.
-    await page.getByTestId('gui-agent-models').getByRole('menuitemradio', { name: '默认' }).click()
-    await expect(composer().locator('[data-picker="model"]')).toHaveText('GPT A', WITHIN)
+    // Codex has not run here: its models are asked without a conversation (`model/list`), its default checked.
+    const models = page.getByTestId('gui-agent-models')
+    await expect(models.getByRole('menuitemradio')).toHaveText(['GPT A', 'GPT B'], WITHIN)
+    await expect(models.getByRole('menuitemradio', { name: 'GPT A' })).toHaveAttribute('aria-checked', 'true')
+    await page.screenshot({ path: join(SHOTS, 'agent-models-probed-dark.png') })
+    await models.getByRole('menuitemradio', { name: 'GPT B' }).click()
+    await expect(composer().locator('[data-picker="model"]')).toHaveText('GPT B', WITHIN)
     await expect(page.locator('[data-region="sidebar"]').getByText('Codex', { exact: true })).toBeVisible()
     await expect.poll(() => saved().sessions[0], WITHIN).toMatchObject({ kind: 'codex', title: 'Codex' })
     // Codex reported its models: switching back to Claude lists Claude's from last time, and back again Codex's.

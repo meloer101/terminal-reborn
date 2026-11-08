@@ -84,6 +84,12 @@ export function guiBinary(agent: CliAgent, agentBinary: string): string {
   return driver?.protocol === 'acp' && 'adapter' in driver ? driver.adapter.binary : agentBinary
 }
 
+/** The adapter an agent's GUI needs (pi-acp for Pi), or null. */
+export function guiAdapterOf(agent: CliAgent): string | null {
+  const driver = AGENT_GUI[agent]
+  return driver?.protocol === 'acp' && 'adapter' in driver ? driver.adapter.binary : null
+}
+
 /** What 「界面」 shows for an agent (Figma 49″A / B): GUI available, GUI after installing an adapter, or CLI only. */
 export type GuiAvailability = { kind: 'available' } | { kind: 'needs-adapter'; binary: string; install: string } | { kind: 'cli-only'; reason: string }
 

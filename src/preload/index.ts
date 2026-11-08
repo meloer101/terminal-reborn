@@ -250,6 +250,7 @@ const api: TrApi = {
     edit: (sessionId, messageId, text) => ipcRenderer.invoke(GUI_IPC.edit, sessionId, messageId, text),
     stop: (sessionId) => ipcRenderer.invoke(GUI_IPC.stop, sessionId),
     live: () => ipcRenderer.invoke(GUI_IPC.live),
+    models: (agent) => ipcRenderer.invoke(GUI_IPC.models, agent),
     onEvents: (listener) => listen<{ sessionId: SessionId; events: GuiEvent[] }>(GUI_IPC.events, (m) => listener(m.sessionId, m.events))
   },
   remote: {

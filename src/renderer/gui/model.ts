@@ -646,11 +646,12 @@ export function chatIsEmpty(state: Pick<GuiState, 'items' | 'live' | 'busy' | 'q
  * Figma 65: the agents an empty GUI session can switch to, in 新建会话's order — installed ones that run as GUI (Claude
  * Code and Codex always listed, as there), then the GUI ones still to install (or whose adapter is missing).
  */
-export function guiAgentMenu(found: AgentAvailability | null): { installed: CliAgent[]; missing: CliAgent[] } {
+export function guiAgentMenu(found: AgentAvailability | null): { installed: CliAgent[]; adapter: CliAgent[]; missing: CliAgent[] } {
   const listed = new Set<string>(listedAgents(found))
   const gui = CLI_AGENTS.filter((id) => AGENT_GUI[id] !== null)
-  const ready = (id: CliAgent) => listed.has(id) && guiAvailability(id, binaryInstalled(found)).kind === 'available'
-  return { installed: gui.filter(ready), missing: gui.filter((id) => !ready(id)) }
+  const kind = (id: CliAgent) => (listed.has(id) ? guiAvailability(id, binaryInstalled(found)).kind : 'missing')
+  // Installed, but its GUI needs an adapter (Pi without pi-acp): still the user's agent, with its models.
+  return { installed: gui.filter((id) => kind(id) === 'available'), adapter: gui.filter((id) => kind(id) === 'needs-adapter'), missing: gui.filter((id) => kind(id) === 'missing' || kind(id) === 'cli-only') }
 }
 
 /** Figma 65: the projects the welcome line steps through, each by its main worktree, in the sidebar's order. */

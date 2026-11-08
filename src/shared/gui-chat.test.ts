@@ -64,7 +64,7 @@ describe('agent picks (Figma 65)', () => {
       planOption(true),
       fastOption(true)
     ]
-    expect(picksOf(config)).toEqual({ model: 'opus', models: [{ value: 'opus', label: 'Opus' }], effort: 'high', permission: 'auto', plan: true, fast: true })
+    expect(picksOf(config)).toEqual({ model: 'opus', models: [{ value: 'opus', label: 'Opus' }], modelsFrom: 'live', effort: 'high', permission: 'auto', plan: true, fast: true })
     expect(picksOf([])).toEqual({})
   })
 
