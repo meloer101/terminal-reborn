@@ -84,7 +84,11 @@ test.describe('F23 GUI session (Claude)', () => {
     await composer().locator('[data-picker="model"]').click()
     await expect(page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Claude Code' })).toBeVisible(WITHIN)
     await expect(page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Codex' })).toBeVisible()
+    // No 「Default (recommended)」: Claude's default is listed as the model it is (Opus here).
     await expect(page.getByTestId('gui-agent-models').getByRole('menuitemradio')).toHaveText(['Opus', 'Haiku'])
+    await expect(page.getByTestId('gui-agent-models').getByRole('menuitemradio', { name: 'Opus' })).toHaveAttribute('aria-checked', 'true')
+    // Rows are 32 high (the author, 2026-11-08: a little roomier).
+    expect((await page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Codex' }).boundingBox())!.height).toBe(32)
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
@@ -465,8 +469,11 @@ test.describe('F23 GUI session (Claude)', () => {
     // 快速: Opus says it can answer faster.
     const fast = composer().getByRole('button', { name: '快速' })
     await expect(fast).toHaveAttribute('aria-pressed', 'false')
+    await expect(fast.locator('svg')).toHaveAttribute('fill', 'none')
     await fast.click()
     await expect(fast).toHaveAttribute('aria-pressed', 'true')
+    // On, the mark is filled (the author, 2026-11-08).
+    await expect(fast.locator('svg')).toHaveAttribute('fill', 'currentColor')
     await page.screenshot({ path: join(SHOTS, 'fast-on-light.png') })
     await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     // Saved with the session, and on the agent for its next session.

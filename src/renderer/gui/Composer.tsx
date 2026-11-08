@@ -190,7 +190,8 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
               >
-                <Zap {...SMALL} />
+                {/* Filled while on (the author, 2026-11-08: from outline to solid). */}
+                <Zap {...SMALL} fill={button.toggle.on ? 'currentColor' : 'none'} />
               </button>
             ) : (
               <button

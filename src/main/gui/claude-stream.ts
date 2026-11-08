@@ -257,16 +257,20 @@ export function markSkills(commands: readonly GuiCommand[], skills: ReadonlySet<
 
 /** The pickers from `initialize` (models, their effort levels, permission modes) and `get_settings`' effort. */
 export function claudeConfig(init: Rec, current: ClaudePickerState): GuiConfigOption[] {
-  const models = (Array.isArray(init.models) ? init.models : []).filter(isRec)
+  const all = (Array.isArray(init.models) ? init.models : []).filter(isRec)
+  // Figma 65 (the author, 2026-11-08): no 「Default (recommended)」 — it is listed as the model it resolves to (2.1.319:
+  // `default` → claude-opus-5-5, the same as `opus`). Kept only when no other entry is that model.
+  const fallback = all.find((m) => m.value === 'default')
+  const twin = fallback && all.find((m) => m.value !== 'default' && m.resolvedModel !== undefined && m.resolvedModel === fallback.resolvedModel)
+  const models = twin ? all.filter((m) => m !== fallback) : all
   const values = models.flatMap((m) => {
     const value = str(m.value)
     return value ? [{ value, label: str(m.displayName) ?? value }] : []
   })
-  // A resolved id (`claude-haiku-5-5`, as each turn's init reports it) maps back to its alias; `default` last, since
-  // it resolves to the same model as another alias.
-  const byResolved = current.model
-    ? (models.find((m) => m.value !== 'default' && m.resolvedModel === current.model) ?? models.find((m) => m.resolvedModel === current.model))
-    : undefined
+  // A resolved id (`claude-haiku-5-5`, as each turn's init reports it) maps back to its alias; no model chosen, or
+  // `default`, is the model `default` resolves to.
+  const wanted = !current.model || current.model === 'default' ? str(fallback?.resolvedModel) : current.model
+  const byResolved = wanted ? models.find((m) => m.value !== 'default' && m.resolvedModel === wanted) ?? models.find((m) => m.resolvedModel === wanted) : undefined
   const model =
     current.model && values.some((v) => v.value === current.model) ? current.model : (str(byResolved?.value) ?? values[0]?.value ?? 'default')
   const config: GuiConfigOption[] = [{ id: 'model', category: 'model', label: '模型', current: model, values }]
