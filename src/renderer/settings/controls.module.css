@@ -480,3 +480,90 @@
     transition: none;
   }
 }
+
+/* Page with a live preview: 外观 / 终端 / 对话 (Figma 66) ------------------------------------------------ */
+
+.page {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 48px;
+  row-gap: var(--space-32);
+  /* Titlebar height above, 40px on the other sides; the form and its preview sit in the middle (Figma 36E). */
+  justify-content: center;
+  padding: var(--titlebar-height) 40px 40px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 460px;
+  min-width: 360px;
+}
+
+.title {
+  margin: 0;
+  font: var(--text-title-l);
+  letter-spacing: var(--tracking-title-l);
+  color: var(--text-primary);
+}
+
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 320px;
+  min-width: 320px;
+  /* Aligns the 预览 label with the first section label (title 28 + gap 28). */
+  padding-top: 56px;
+  position: sticky;
+  top: 0;
+}
+
+.previewTitle {
+  margin: 0;
+  font: var(--text-caption-strong);
+  color: var(--text-tertiary);
+}
+
+.caption {
+  margin: 0;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 恢复默认 (B15): a quiet filled button at the end of the form. */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-32);
+}
+
+.reset {
+  flex: none;
+  height: 28px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-selected);
+  font: var(--text-body);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.reset:hover:not(:disabled) {
+  background: var(--border-default);
+}
+
+.reset:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.reset:disabled {
+  color: var(--text-disabled);
+}

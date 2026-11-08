@@ -472,6 +472,7 @@ test('Enter / Esc that end a composition in a settings search field do not pick 
   const openSettings = async () => {
     await page.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
     await expect(dialog).toBeVisible()
+    await dialog.getByRole('tab', { name: '终端', exact: true }).click()
   }
   const cjkFont = async () => (await page.evaluate(() => (globalThis as unknown as TrWindow).tr.settings.get())).appearance.cjkFont
   await openSettings()

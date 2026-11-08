@@ -1,5 +1,18 @@
-// Pure form ↔ settings mapping for the 外观 page.
-import { CHAT_WEIGHTS, LIMITS, type AppearanceSettings, type ChatAppearance, type ChatWeight, type ChatWidth, type ThemePreference, type WindowMaterial } from '@shared/settings'
+// Pure form ↔ settings mapping for the 外观, 终端 and 对话 pages (Figma 66).
+import {
+  CHAT_WEIGHTS,
+  DEFAULT_SETTINGS,
+  LIMITS,
+  type AppearancePatch,
+  type AppearanceSettings,
+  type ChatAppearance,
+  type ChatWeight,
+  type ChatWidth,
+  type ThemePreference,
+  type WindowMaterial
+} from '@shared/settings'
+import type { SelectOption } from './controls'
+import { CJK_SAMPLE, LATIN_SAMPLE, cssFamily, groupCjkFamilies, withCurrent } from './fonts'
 
 export const THEME_OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = [
   { value: 'system', label: '跟随系统' },
@@ -78,4 +91,48 @@ export const SYSTEM_UI_FONT = '跟随系统'
 
 export function chatPreviewCaption(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont' | 'fontSize' | 'fontWeight'>): string {
   return `${c.latinFont ? displayFamily(c.latinFont) : SYSTEM_UI_FONT} ${c.fontSize} · ${displayFamily(c.cjkFont)} · ${WEIGHT_NAMES[c.fontWeight]}`
+}
+
+// --- Three pages (Figma 66) ------------------------------------------------------------------------------------------
+
+/**
+ * What each page's 恢复默认 resets: that page's own settings. The theme and 全屏背景 are not reset anywhere; each is
+ * one click away on 外观.
+ */
+export const RESET_KEYS = {
+  appearance: ['windowMaterial', 'shellOpacity'],
+  terminal: ['latinFont', 'cjkFont', 'fontSize', 'lineHeight', 'ligatures', 'terminalBackground', 'terminalColors', 'terminalOpacity', 'screenReader'],
+  chat: ['chat']
+} as const satisfies Record<string, ReadonlyArray<keyof AppearanceSettings>>
+
+export type AppearancePage = keyof typeof RESET_KEYS
+
+export function pageDefaults(page: AppearancePage): AppearancePatch {
+  return Object.fromEntries(RESET_KEYS[page].map((key) => [key, DEFAULT_SETTINGS.appearance[key]]))
+}
+
+export function isPageDefault(a: AppearanceSettings, page: AppearancePage): boolean {
+  return RESET_KEYS[page].every((key) => sameAppearanceValue(a[key], DEFAULT_SETTINGS.appearance[key]))
+}
+
+/** 终端's English font menu: each family drawn in itself. */
+export function latinOption(family: string): SelectOption {
+  const face = { fontFamily: cssFamily(family, 'monospace') }
+  return { value: family, label: displayFamily(family), labelStyle: face, sample: LATIN_SAMPLE, sampleStyle: face }
+}
+
+/** 对话's English font menu: '' is the system UI font. */
+export function uiOption(family: string): SelectOption {
+  if (family === '') return { value: '', label: SYSTEM_UI_FONT, labelStyle: { fontFamily: 'var(--font-ui)' }, sample: LATIN_SAMPLE, sampleStyle: { fontFamily: 'var(--font-ui)' } }
+  const face = { fontFamily: cssFamily(family, 'sans-serif') }
+  return { value: family, label: displayFamily(family), labelStyle: face, sample: LATIN_SAMPLE, sampleStyle: face }
+}
+
+/** Both pages' Chinese font menu, grouped by language, with the current family kept even if it is not installed. */
+export function cjkOptions(installed: readonly string[], current: string): SelectOption[] {
+  return groupCjkFamilies(withCurrent(installed, current)).map(({ family, group }) => {
+    // PingFang SC stays in the stack so a missing glyph never falls back to a Japanese face.
+    const face = { fontFamily: cssFamily(family, '"PingFang SC", sans-serif') }
+    return { value: family, label: displayFamily(family), labelStyle: face, sample: CJK_SAMPLE, sampleStyle: face, group }
+  })
 }

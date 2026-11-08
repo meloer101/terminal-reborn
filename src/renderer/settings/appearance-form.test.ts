@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/settings'
-import { displayFamily, fontSizeOptions, formatPercent, materialOptions, previewCaption } from './appearance-form'
+import { DEFAULT_SETTINGS, type AppearanceSettings } from '@shared/settings'
+import { RESET_KEYS, displayFamily, fontSizeOptions, formatPercent, isPageDefault, materialOptions, pageDefaults, previewCaption } from './appearance-form'
 
 describe('previewCaption', () => {
   it('matches the Figma caption', () => {
@@ -34,5 +34,22 @@ describe('materialOptions (PRD v1.139, Figma 57C)', () => {
   it('offers Liquid Glass only where the window has it; 实色 everywhere', () => {
     expect(materialOptions(true).map((o) => o.label)).toEqual(['液态玻璃', '磨砂玻璃', '实色'])
     expect(materialOptions(false).map((o) => o.label)).toEqual(['磨砂玻璃', '实色'])
+  })
+})
+
+describe('恢复默认 per page (Figma 66)', () => {
+  it('every appearance setting belongs to exactly one page, except the theme and 全屏背景', () => {
+    const owned = Object.values(RESET_KEYS).flat()
+    expect(new Set(owned).size).toBe(owned.length)
+    expect([...owned, 'theme', 'fullscreenBackdrop'].sort()).toEqual(Object.keys(DEFAULT_SETTINGS.appearance).sort())
+  })
+
+  it('resets only its own page', () => {
+    const a = { ...DEFAULT_SETTINGS.appearance, theme: 'light' as const, fontSize: 18, windowMaterial: 'solid' as const, chat: { ...DEFAULT_SETTINGS.appearance.chat, fontSize: 16 } }
+    expect(isPageDefault(a, 'terminal')).toBe(false)
+    expect(pageDefaults('terminal')).toMatchObject({ fontSize: DEFAULT_SETTINGS.appearance.fontSize })
+    expect(pageDefaults('terminal')).not.toHaveProperty('chat')
+    expect(isPageDefault({ ...a, ...(pageDefaults('appearance') as Partial<AppearanceSettings>) }, 'appearance')).toBe(true)
+    expect(isPageDefault(a, 'chat')).toBe(false)
   })
 })

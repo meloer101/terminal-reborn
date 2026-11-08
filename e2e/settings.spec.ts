@@ -17,22 +17,32 @@ interface TrWindow {
   }
 }
 
-/** Opens the settings dialog in the main window and returns that page. */
-async function openSettings(app: ElectronApplication): Promise<Page> {
+/** 外观 / 终端 / 对话 (Figma 66): each page shows its own preview. */
+const PREVIEW = { 外观: 'window-preview', 终端: 'preview-terminal', 对话: 'chat-preview' } as const
+type AppearanceTab = keyof typeof PREVIEW
+
+/** Opens the settings dialog in the main window on one of the three appearance pages and returns that page. */
+async function openSettings(app: ElectronApplication, tab: AppearanceTab = '外观'): Promise<Page> {
   const settings = await app.firstWindow()
   await settings.waitForSelector('[data-region="sidebar"]')
   await settings.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
   await expect(settings.getByRole('dialog', { name: '设置' })).toBeVisible()
-  await expect(settings.getByRole('tab', { name: '外观' })).toBeVisible()
-  await expect(settings.getByTestId('preview-terminal')).toBeVisible()
+  await showTab(settings, tab)
   return settings
 }
+
+async function showTab(settings: Page, tab: AppearanceTab): Promise<void> {
+  await settings.getByRole('tab', { name: tab, exact: true }).click()
+  await expect(settings.getByTestId(PREVIEW[tab])).toBeVisible()
+}
+
+const TABS = ['外观', '终端', '对话', '智能体', '额度', 'Worktree', '自动化', '手机']
 
 const readSettings = (page: Page) => page.evaluate(() => (globalThis as unknown as TrWindow).tr.settings.get())
 
 test('settings window edits appearance live and the preview follows', async () => {
   const app = await launchApp()
-  const settings = await openSettings(app)
+  const settings = await openSettings(app, '终端')
   const preview = settings.getByTestId('preview-terminal')
 
   await expect(settings.getByTestId('preview-caption')).toHaveText('JetBrains Mono 13 · PingFang SC · 行高 1.00')
@@ -64,7 +74,8 @@ test('settings window edits appearance live and the preview follows', async () =
   // No background picker: the terminal always takes the theme's color (PRD v1.2).
   await expect(settings.getByRole('radio', { name: '渐变' })).toHaveCount(0)
 
-  // Theme: 浅色 flips the settings window itself.
+  // Theme (on 外观): 浅色 flips the settings window itself.
+  await showTab(settings, '外观')
   await settings.getByRole('radio', { name: '浅色' }).click()
   await expect.poll(async () => (await readSettings(settings)).appearance.theme).toBe('light')
   await expect(settings.locator('html')).toHaveAttribute('data-theme', 'light')
@@ -78,18 +89,26 @@ test('settings screenshots', async () => {
   test.skip(!shot, 'set TR_SCREENSHOT_DIR to capture screenshots')
   const app = await launchApp()
   const settings = await openSettings(app)
-  await settings.getByRole('radio', { name: '深色' }).click()
-  await expect(settings.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await settings.waitForTimeout(600)
-  await settings.screenshot({ path: `${shot}/settings-dark.png` })
+  // Every page in both themes (Figma 66A–66H), 外观 again under 实色 (66B / 66F).
+  for (const [theme, name] of [['dark', '深色'], ['light', '浅色']] as const) {
+    await showTab(settings, '外观')
+    await settings.getByRole('radio', { name }).click()
+    await expect(settings.locator('html')).toHaveAttribute('data-theme', theme)
+    for (const tab of ['外观', '终端', '对话'] as const) {
+      await showTab(settings, tab)
+      await settings.waitForTimeout(600)
+      await settings.screenshot({ path: `${shot}/settings-${theme}-${tab}.png` })
+    }
+    await showTab(settings, '外观')
+    await settings.getByRole('radio', { name: '实色' }).click()
+    await settings.waitForTimeout(600)
+    await settings.screenshot({ path: `${shot}/settings-${theme}-外观-实色.png` })
+    await settings.getByRole('radio', { name: '磨砂玻璃' }).click()
+  }
+  await showTab(settings, '终端')
   await settings.getByRole('combobox', { name: '中文字体', exact: true }).click()
   await settings.waitForTimeout(300)
-  await settings.screenshot({ path: `${shot}/settings-dark-cjk-menu.png` })
-  await settings.keyboard.press('Escape')
-  await settings.getByRole('radio', { name: '浅色' }).click()
-  await expect(settings.locator('html')).toHaveAttribute('data-theme', 'light')
-  await settings.waitForTimeout(600)
-  await settings.screenshot({ path: `${shot}/settings-light.png` })
+  await settings.screenshot({ path: `${shot}/settings-light-cjk-menu.png` })
   await app.close()
 })
 
@@ -166,7 +185,7 @@ test('the sidebar\'s 更新 shows the version and checks for updates; settings h
   const app = await launchApp()
   const settings = await openSettings(app)
   // Panes without content yet are not listed (B11): no 即将推出 dead ends.
-  await expect(settings.getByRole('tab')).toHaveText(['外观', '智能体', '额度', 'Worktree', '自动化', '手机'])
+  await expect(settings.getByRole('tab')).toHaveText(TABS)
   await settings.keyboard.press('Escape')
   await expect(settings.getByRole('dialog', { name: '设置' })).toHaveCount(0)
   const entry = settings.locator('[data-region="sidebar"]').getByRole('button', { name: '更新', exact: true })
@@ -228,16 +247,21 @@ test('settings is a dialog in the main window: sidebar, Esc, close button, and t
 
   // An open font menu takes Esc first; the dialog stays.
   await page.evaluate(() => (globalThis as unknown as TrWindow).tr.ui.openSettings())
+  await showTab(page, '终端')
   await dialog.getByRole('combobox', { name: '字号', exact: true }).click()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeVisible()
   await app.close()
 })
 
-test('Chinese fonts are grouped by language; 恢复默认 resets everything but the theme', async () => {
+test('Chinese fonts are grouped by language; 恢复默认 on 终端 resets that page only (Figma 66)', async () => {
   const app = await launchApp()
   const settings = await openSettings(app)
   await settings.getByRole('radio', { name: '浅色' }).click()
+  await showTab(settings, '对话')
+  await settings.getByRole('combobox', { name: '对话字号' }).click()
+  await settings.getByRole('option', { name: '16', exact: true }).click()
+  await showTab(settings, '终端')
   await settings.getByRole('combobox', { name: '字号', exact: true }).click()
   await settings.getByRole('option', { name: '16', exact: true }).click()
   await expect.poll(async () => (await readSettings(settings)).appearance.fontSize).toBe(16)
@@ -254,6 +278,7 @@ test('Chinese fonts are grouped by language; 恢复默认 resets everything but 
   await reset.click()
   await expect.poll(async () => (await readSettings(settings)).appearance.fontSize).toBe(13)
   expect((await readSettings(settings)).appearance.theme).toBe('light')
+  expect(((await readSettings(settings)).appearance as unknown as { chat: { fontSize: number } }).chat.fontSize).toBe(16)
   await expect(reset).toBeDisabled()
   await app.close()
 })
@@ -305,7 +330,7 @@ test('终端底色: 自定义 and an imported Ghostty theme set exactly the colo
   writeFileSync(notATheme, 'hello')
 
   const app = await launchApp()
-  const settings = await openSettings(app)
+  const settings = await openSettings(app, '终端')
   const hex = settings.getByRole('textbox', { name: '底色值', exact: true })
 
   // Follows the theme at first: the value shows the theme's color but cannot be edited.
@@ -364,55 +389,71 @@ test('终端底色: 自定义 and an imported Ghostty theme set exactly the colo
   rmSync(dir, { recursive: true, force: true })
 })
 
-test('设置 · 外观 · 对话 and 窗口 (PRD v1.127, Figma 51D)', async () => {
+test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD v1.127, Figma 51D / 66)', async () => {
   const app = await launchApp()
-  const settings = await openSettings(app)
+  const settings = await openSettings(app, '对话')
   type Chat = { width: string; fontWeight: number; fontSize: number; opacity: number; avatar: string }
-  type Look = { chat: Chat; windowMaterial: string; shellOpacity: { liquid: number; frosted: number } }
+  type Look = { chat: Chat; windowMaterial: string; shellOpacity: { liquid: number; frosted: number }; terminalOpacity: number }
   const look = async (): Promise<Look> => ((await readSettings(settings)).appearance as unknown as Look)
-  const section = settings.getByRole('region', { name: '对话' })
+  const chatBg = () => settings.evaluate(() => document.documentElement.style.getPropertyValue('--tr-chat-bg'))
 
-  // Clicking into 对话 shows the chat preview; another section brings the terminal back.
-  await section.getByRole('radio', { name: '中', exact: true }).click()
-  await expect(settings.getByTestId('chat-preview')).toBeVisible()
+  await settings.getByRole('region', { name: '版面' }).getByRole('radio', { name: '中', exact: true }).click()
   await expect.poll(async () => (await look()).chat.width).toBe('medium')
-  await section.getByRole('radio', { name: '中等' }).click()
+  await settings.getByRole('region', { name: '字体' }).getByRole('radio', { name: '中等' }).click()
   await settings.getByRole('combobox', { name: '对话字号' }).click()
   await settings.getByRole('option', { name: '16', exact: true }).click()
   await expect.poll(async () => (await look()).chat).toMatchObject({ fontWeight: 500, fontSize: 16 })
   await expect(settings.getByTestId('preview-caption')).toHaveText('跟随系统 16 · PingFang SC · 中等')
   // The preview is drawn with what GUI sessions get.
   expect(await settings.getByTestId('chat-preview').evaluate((el) => [getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight])).toEqual(['16px', '500'])
+  const opacity = settings.getByRole('slider', { name: '对话不透明度' })
+  await opacity.focus()
+  await settings.keyboard.press('Home')
+  await expect.poll(async () => (await look()).chat.opacity).toBe(0.5)
+  await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 50%, transparent)')
 
-  // 我的头像: a picked picture is kept as its centred 256² square.
+  // 我的头像: a picked picture is kept as its centred 256² square, beside its buttons on one line.
   const png = join(mkdtempSync(join(tmpdir(), 'tr-e2e-avatar-')), 'me.png')
   writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
   await settings.getByTestId('avatar-file').setInputFiles(png)
   await expect.poll(async () => (await look()).chat.avatar.slice(0, 23)).toBe('data:image/webp;base64,')
-  await expect(section.getByRole('img', { name: '我的头像' })).toBeVisible()
+  const avatar = settings.getByRole('img', { name: '我的头像' })
+  await expect(avatar).toBeVisible()
+  const [picture, remove] = await Promise.all([avatar.boundingBox(), settings.getByRole('button', { name: '移除' }).boundingBox()])
+  expect(Math.abs(picture!.y + picture!.height / 2 - (remove!.y + remove!.height / 2))).toBeLessThan(2)
   expect(await settings.getByTestId('chat-preview').evaluate((el) => getComputedStyle(el.querySelector('[aria-hidden]')!).backgroundImage.slice(0, 15))).toBe('url("data:image')
-  await section.getByRole('button', { name: '移除' }).click()
+  await settings.getByRole('button', { name: '移除' }).click()
   await expect.poll(async () => (await look()).chat.avatar).toBe('')
 
-  // 窗口: the material (macOS 26) and each material's own base-layer opacity.
+  // 外观 · 窗口: the material (macOS 26) and each material's own base-layer opacity.
+  await showTab(settings, '外观')
   const windowSection = settings.getByRole('region', { name: '窗口' })
   await windowSection.getByRole('radio', { name: '磨砂玻璃' }).click()
-  await expect(settings.getByTestId('preview-terminal')).toBeVisible()
   await expect.poll(async () => (await look()).windowMaterial).toBe('frosted')
   expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('color-mix(in srgb, var(--glass-shell-color) 60%, transparent)')
   await windowSection.getByRole('radio', { name: '液态玻璃' }).click()
   await expect.poll(() => settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('transparent')
   await expect.poll(async () => (await look()).shellOpacity).toEqual({ liquid: 0, frosted: 0.6 })
 
-  // 实色 (PRD v1.139, Figma 57C): opaque, so neither the base-layer opacity nor the full-screen field is offered.
+  // 实色 (PRD v1.139, Figma 57C / 66B): opaque, so neither the base-layer opacity nor the full-screen field is offered,
+  // and the chat and terminal cards are solid too: their opacities stay saved but are neither applied nor shown.
   await windowSection.getByRole('radio', { name: '实色' }).click()
   await expect.poll(async () => (await look()).windowMaterial).toBe('solid')
   await expect.poll(() => settings.evaluate(() => document.documentElement.dataset.material)).toBe('solid')
   expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('var(--glass-shell-color)')
   await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toHaveCount(0)
   await expect(settings.getByRole('region', { name: '全屏背景' })).toHaveCount(0)
+  await expect.poll(chatBg).toBe('var(--bg-app)')
+  expect((await look()).chat.opacity).toBe(0.5)
+  await showTab(settings, '对话')
+  await expect(settings.getByRole('slider', { name: '对话不透明度' })).toHaveCount(0)
+  await showTab(settings, '终端')
+  await expect(settings.getByRole('slider', { name: '终端不透明度' })).toHaveCount(0)
+
+  await showTab(settings, '外观')
   await windowSection.getByRole('radio', { name: '磨砂玻璃' }).click()
   await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toBeVisible()
   await expect(settings.getByRole('region', { name: '全屏背景' })).toBeVisible()
+  await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 50%, transparent)')
   await app.close()
 })
