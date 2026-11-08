@@ -139,6 +139,28 @@ function startSessionIn(
   return { data: { ...data, sessions: [...data.sessions, session], activeSessionId: session.id }, sessionId: session.id }
 }
 
+/**
+ * Figma 65: an empty GUI session gets another agent and / or folder (another project's main worktree) before anything
+ * is said. A title that is still the old agent's default follows the new agent, so the first message still names the
+ * session; the conversation id the old agent reported (its SessionStart hook runs before any message) is dropped, so
+ * the new agent starts fresh instead of resuming it. Anything else — a terminal session, a folder not in the
+ * workspace — is left as it was.
+ */
+export function retargetSession(data: WorkspaceData, sessionId: SessionId, change: { kind?: CliAgent; worktreeId?: WorktreeId }): WorkspaceData {
+  const session = data.sessions.find((s) => s.id === sessionId)
+  if (!session || session.ui !== 'gui' || session.kind === 'shell') return data
+  if (change.worktreeId !== undefined && !data.worktrees.some((w) => w.id === change.worktreeId && w.archived === undefined)) return data
+  const kind = change.kind ?? session.kind
+  const { agentSessionId: _dropped, ...rest } = session
+  const next: Session = {
+    ...rest,
+    kind,
+    worktreeId: change.worktreeId ?? session.worktreeId,
+    title: session.title === DEFAULT_SESSION_TITLE[session.kind] ? DEFAULT_SESSION_TITLE[kind] : session.title
+  }
+  return { ...data, sessions: data.sessions.map((s) => (s.id === sessionId ? next : s)) }
+}
+
 /** Removes a session; if it was selected, selects its neighbour (next, else previous). */
 export function closeSession(data: WorkspaceData, sessionId: SessionId): WorkspaceData {
   const at = data.sessions.findIndex((s) => s.id === sessionId)

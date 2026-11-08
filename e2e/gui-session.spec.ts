@@ -73,11 +73,26 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(page.locator('[data-region="terminal"] .xterm')).toHaveCount(0)
     // Nothing said yet (Figma 59G): the agent's mark and name over the composer, the two in the middle of the card.
     const welcome = page.getByTestId('gui-welcome')
-    await expect(welcome).toHaveText('Claude Code')
+    // Figma 65H: 「让我们在 <project> 中开工吧」, the project on its grey block.
+    await expect(welcome).toHaveText('让我们在demo中开工吧')
+    await expect(welcome.getByTestId('gui-project')).toHaveText('demo')
     const [hello, box, card] = await Promise.all([welcome.boundingBox(), page.getByTestId('gui-composer-box').boundingBox(), chat().boundingBox()])
     expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
     expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
     await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
+    // Figma 65B: nothing said yet — the model button lists the agents first, the current one's models beside them.
+    await composer().locator('[data-picker="model"]').click()
+    await expect(page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Claude Code' })).toBeVisible(WITHIN)
+    await expect(page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Codex' })).toBeVisible()
+    await expect(page.getByTestId('gui-agent-models').getByRole('menuitemradio')).toHaveText(['Opus', 'Haiku'])
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.screenshot({ path: join(SHOTS, `empty-agents-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('gui-agent-menu')).toHaveCount(0)
     await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[]; entrypoint: string | null }
     expect(launched.entrypoint).toBe('wavi')
@@ -325,29 +340,24 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(input().locator('ol')).toHaveCount(0)
   })
 
-  test('**x** typed inline stays text; the 格式 bar and ⌘I format a selection (Figma 50D)', async () => {
+  test('**x** typed inline stays text; ⌘I and ⌘⇧S format a selection, with no 格式 button (Figma 50D / 65)', async () => {
+    // Formats are always on (Figma 65): a selection gets the format buttons over it.
+    await expect(composer().getByRole('button', { name: '格式' })).toHaveCount(0)
     await input().click()
     await page.keyboard.type('**不是粗体** 和 斜体')
-    await composer().getByRole('button', { name: '格式' }).click()
-    const bar = composer().getByRole('toolbar', { name: '格式' })
-    await expect(bar).toBeVisible()
     for (let i = 0; i < 2; i++) await page.keyboard.press('Shift+ArrowLeft')
     await selectionSettles()
     await page.keyboard.press('Meta+i')
     await expect(input().locator('em')).toHaveText('斜体')
-    await expect(bar.getByRole('button', { name: /^斜体/ })).toHaveAttribute('aria-pressed', 'true')
     await page.keyboard.press('End')
     await selectionSettles()
     await page.keyboard.press('Shift+Home')
     await selectionSettles()
-    await bar.getByRole('button', { name: /^删除线/ }).click()
-    await page.screenshot({ path: join(SHOTS, 'format-bar-dark.png') })
+    await page.keyboard.press('Meta+Shift+s')
     await page.keyboard.press('Enter')
     // Sent as `~~**不是粗体** 和 *斜体*~~`: the typed asterisks are Markdown to the agent, so the bubble shows them bold.
     await expect(lastSent().locator('del em')).toHaveText('斜体', WITHIN)
     await expect(lastSent().locator('del strong')).toHaveText('不是粗体')
-    await composer().getByRole('button', { name: '格式' }).click()
-    await expect(bar).toHaveCount(0)
   })
 
   test('a selection shows the format buttons over it (Figma 50E); ⏎ in a code block is a newline', async () => {
@@ -373,14 +383,21 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(lastSent().locator('pre')).toHaveText('a()\n  b()')
   })
 
-  test('the box is one line (Figma 52F): + adds a file as an attachment, sent with the message', async () => {
+  test('the box is a line of text over the controls (Figma 65): + adds a file as an attachment, sent with the message', async () => {
     const readme = join(project, 'README.md')
     await app.evaluate(({ dialog }, files) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: files })) as typeof dialog.showOpenDialog
     }, [readme])
-    // + · text · send on one 28 line, 8 inside: 44 high.
+    // One line of text over + · pickers · … · send (28 each), 8 inside: 78 high (Figma 65D).
     const box = page.getByTestId('gui-composer-box')
-    expect((await box.boundingBox())!.height).toBe(44)
+    expect((await box.boundingBox())!.height).toBe(78)
+    const [addBox, sendBox, textBox] = await Promise.all([
+      composer().getByRole('button', { name: '添加附件' }).boundingBox(),
+      composer().getByRole('button', { name: '发送' }).boundingBox(),
+      input().boundingBox()
+    ])
+    expect(Math.round(addBox!.y)).toBe(Math.round(sendBox!.y))
+    expect(textBox!.y + textBox!.height).toBeLessThanOrEqual(addBox!.y)
     await composer().getByRole('button', { name: '添加附件' }).click()
     await expect(composer().getByRole('list', { name: '附件' }).getByText('README.md')).toBeVisible(WITHIN)
     await send('看说明')
@@ -406,11 +423,10 @@ test.describe('F23 GUI session (Claude)', () => {
     const header = page.locator('[data-region="session-header"]')
     await expect(header.getByTestId('context-chip')).toHaveCount(0)
     await expect(header.getByTestId('usage-chip-claude')).toHaveCount(0)
-    // The ring sits under the send button, 格式 under +.
+    // Figma 65: the ring sits just before send, on the controls' line.
     const [sendBox, ringBox] = await Promise.all([composer().getByRole('button', { name: '发送' }).boundingBox(), ring.boundingBox()])
-    expect(Math.round(ringBox!.x + ringBox!.width)).toBe(Math.round(sendBox!.x + sendBox!.width))
-    const [addBox, formatBox] = await Promise.all([composer().getByRole('button', { name: '添加附件' }).boundingBox(), composer().getByRole('button', { name: '格式' }).boundingBox()])
-    expect(Math.round(formatBox!.x)).toBe(Math.round(addBox!.x))
+    expect(Math.round(ringBox!.y + ringBox!.height / 2)).toBe(Math.round(sendBox!.y + sendBox!.height / 2))
+    expect(ringBox!.x + ringBox!.width).toBeLessThanOrEqual(sendBox!.x)
     await ring.click()
     const popover = page.getByTestId('gui-context-popover')
     await expect(popover.getByTestId('usage-context-row')).toHaveText('context48%96k / 200k')
@@ -429,32 +445,38 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('one set of pickers (Figma 56): 权限 with Claude’s three levels and the 计划 switch', async () => {
-    const permission = composer().getByRole('button', { name: '询问' })
-    await expect(permission).toBeVisible(WITHIN)
-    const plan = composer().getByRole('button', { name: '计划' })
-    await expect(plan).toHaveAttribute('aria-pressed', 'false')
-    await plan.click()
-    await expect(plan).toHaveAttribute('aria-pressed', 'true')
-    await permission.click()
-    const menu = page.getByRole('dialog', { name: '权限' })
-    await expect(menu.getByRole('menuitemradio')).toHaveText(['询问', '接受编辑', '自动'])
+  test('模式 lists 询问 / 接受编辑 / 自动 / 计划 in one menu; 快速 is a switch (Figma 65E / 65F)', async () => {
+    const mode = composer().locator('[data-picker="permission+plan"]')
+    await expect(mode).toHaveText('询问', WITHIN)
+    await mode.click()
+    const menu = page.getByRole('dialog', { name: '模式' })
+    await expect(menu.getByRole('menuitemradio')).toHaveText(['询问', '接受编辑', '自动', '计划'])
     for (const theme of ['dark', 'light'] as const) {
       await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-      await page.screenshot({ path: join(SHOTS, `pickers-${theme}.png`) })
+      await page.screenshot({ path: join(SHOTS, `mode-menu-${theme}.png`) })
     }
-    // While planning, a level is where 计划 off returns to: 计划 stays on.
-    await menu.getByRole('menuitemradio', { name: '接受编辑' }).click()
-    await expect(composer().getByRole('button', { name: '接受编辑' })).toBeVisible()
-    await expect(plan).toHaveAttribute('aria-pressed', 'true')
-    await plan.click()
-    await expect(plan).toHaveAttribute('aria-pressed', 'false')
-    await expect(composer().getByRole('button', { name: '接受编辑' })).toBeVisible()
-    // Saved with the session: a reattached or restarted agent starts with it.
-    const saved = () => (JSON.parse(readFileSync(join(profile, 'workspace.json'), 'utf8')) as { sessions: { id: string; guiPermission?: string; guiPlan?: boolean }[] }).sessions.find((x) => x.id === 's1')
-    await expect.poll(() => saved()?.guiPermission, WITHIN).toBe('accept-edits')
-    expect(saved()?.guiPlan).toBeUndefined()
+    await menu.getByRole('menuitemradio', { name: '计划' }).click()
+    await expect(mode).toHaveText('计划')
+    // Out of 计划 straight into a level.
+    await mode.click()
+    await page.getByRole('dialog', { name: '模式' }).getByRole('menuitemradio', { name: '接受编辑' }).click()
+    await expect(mode).toHaveText('接受编辑')
+    // 快速: Opus says it can answer faster.
+    const fast = composer().getByRole('button', { name: '快速' })
+    await expect(fast).toHaveAttribute('aria-pressed', 'false')
+    await fast.click()
+    await expect(fast).toHaveAttribute('aria-pressed', 'true')
+    await page.screenshot({ path: join(SHOTS, 'fast-on-light.png') })
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    // Saved with the session, and on the agent for its next session.
+    type Saved = { sessions: { id: string; guiPermission?: string; guiPlan?: boolean }[]; guiPicks?: Record<string, { permission?: string; fast?: boolean }> }
+    const saved = () => JSON.parse(readFileSync(join(profile, 'workspace.json'), 'utf8')) as Saved
+    await expect.poll(() => saved().sessions.find((x) => x.id === 's1')?.guiPermission, WITHIN).toBe('accept-edits')
+    expect(saved().sessions.find((x) => x.id === 's1')?.guiPlan).toBeFalsy()
+    await expect.poll(() => saved().guiPicks?.claude, WITHIN).toMatchObject({ permission: 'accept-edits', fast: true })
+    await fast.click()
+    await expect(fast).toHaveAttribute('aria-pressed', 'false')
   })
 
   test('hovering a message shows its actions; copy puts the reply on the clipboard (Figma 54A / 54B)', async () => {

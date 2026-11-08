@@ -173,7 +173,7 @@ function control(message) {
         { name: 'research', description: 'Research a topic and write a report (user)', argumentHint: '<topic>' }
       ],
       models: [
-        { value: 'opus', displayName: 'Opus', supportsEffort: true, supportedEffortLevels: ['low', 'high', 'max'] },
+        { value: 'opus', displayName: 'Opus', supportsEffort: true, supportedEffortLevels: ['low', 'high', 'max'], supportsFastMode: true },
         { value: 'haiku', displayName: 'Haiku' }
       ],
       current_permission_mode: 'default'

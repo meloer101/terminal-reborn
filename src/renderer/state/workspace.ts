@@ -52,6 +52,7 @@ import {
   removedSessionIds,
   removeProject,
   restoreWorkspace,
+  retargetSession,
   serializeWorkspace,
   type MakeId,
   type WorkspaceData
@@ -165,6 +166,8 @@ interface WorkspaceState extends WorkspaceData {
   rememberAgent(projectId: ProjectId, kind: AgentKind): void
   /** Remembers the new-session sheet's 界面 for a project; a CLI the agent forced is not remembered. */
   rememberUi(projectId: ProjectId, ui: SessionUi, forced: boolean): void
+  /** Figma 65: an empty GUI session gets another agent and / or folder (workspace-model retargetSession). */
+  retargetSession(id: SessionId, change: { kind?: CliAgent; worktreeId?: WorktreeId }): void
   /** Figma 65: the picks an agent's GUI session runs with now; a new session of that agent starts with them. */
   rememberGuiPicks(agent: CliAgent, picks: GuiPicks): void
   closeSession(id: SessionId): void
@@ -425,6 +428,11 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
     rememberWorkdir: (projectId, choice) => set((s) => ({ newSessionWorkdir: rememberWorkdir(s.newSessionWorkdir, projectId, choice, true) })),
     rememberAgent: (projectId, kind) => set((s) => (s.newSessionAgent[projectId] === kind ? {} : { newSessionAgent: { ...s.newSessionAgent, [projectId]: kind } })),
     rememberUi: (projectId, ui, forced) => set((s) => ({ newSessionUi: rememberUi(s.newSessionUi, projectId, ui, forced) })),
+    retargetSession: (id, change) =>
+      set((s) => {
+        const next = retargetSession(s, id, change)
+        return next === s ? {} : { sessions: next.sessions }
+      }),
     rememberGuiPicks: (agent, picks) =>
       set((s) => {
         const before = s.guiPicks[agent] ?? {}

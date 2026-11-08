@@ -12,7 +12,7 @@ const ws = vi.hoisted(() => ({
 }))
 vi.mock('../state/workspace', () => ({
   useWorkspace: {
-    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, guiPicks: ws.guiPicks, patchSession: (...args: unknown[]) => ws.patches.push(args) }),
+    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, guiPicks: ws.guiPicks, retargetSession: (...args: unknown[]) => ws.patches.push(['retarget', ...args]), patchSession: (...args: unknown[]) => ws.patches.push(args) }),
     subscribe: () => () => {}
   }
 }))
@@ -49,8 +49,8 @@ vi.stubGlobal('window', {
   }
 })
 
-const { adoptGuiSessions, guiLaunch, openGuiSession } = await import('./launch')
-const { guiStateOf, useGuiSessions } = await import('./store')
+const { adoptGuiSessions, guiLaunch, openGuiSession, retargetGuiSession } = await import('./launch')
+const { guiStateOf, setGuiState: setGuiStateForTest, useGuiSessions } = await import('./store')
 const { useLaunchIssues } = await import('../lifecycle/launch-issues')
 
 beforeEach(() => {
@@ -171,5 +171,19 @@ describe('adoptGuiSessions', () => {
     expect(ws.patches).toEqual([['g-new', { phase: 'ready' }]])
     // Closed or archived while the app was away (and an id that is not a GUI session): ended.
     expect(main.stopped).toEqual(['g-archived', 't-1', 'gone'])
+  })
+})
+
+describe('retargetGuiSession (Figma 65)', () => {
+  it('ends the agent, clears its pickers and gives the session the new agent, only while nothing is said', async () => {
+    setGuiStateForTest('s-1', { ...emptyGuiState(), config: [{ id: 'model', category: 'model', label: '模型', current: 'opus', values: [] }] })
+    await retargetGuiSession('s-1', { kind: 'codex' })
+    expect(main.stopped).toEqual(['s-1'])
+    expect(guiStateOf('s-1').config).toEqual([])
+    expect(ws.patches).toEqual([['retarget', 's-1', { kind: 'codex' }]])
+
+    setGuiStateForTest('s-1', { ...emptyGuiState(), items: [{ kind: 'user', id: 'u', at: 0, text: 'hi', images: 0 }] })
+    await retargetGuiSession('s-1', { kind: 'grok' })
+    expect(ws.patches).toHaveLength(1)
   })
 })

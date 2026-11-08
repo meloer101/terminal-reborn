@@ -307,7 +307,7 @@ function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void
         onCancel()
       }}
     >
-      <ComposerEditor draft={draft} onChange={setDraft} onKeyDown={onKeyDown} editorRef={editorRef} toolbarOpen={false} label="编辑消息" autoFocus />
+      <ComposerEditor draft={draft} onChange={setDraft} onKeyDown={onKeyDown} editorRef={editorRef} label="编辑消息" autoFocus />
       <div className={styles.editButtons}>
         <button type="button" className={styles.button} disabled={sending} onClick={onCancel}>
           取消

@@ -2,12 +2,13 @@
 // (terminal/session-terminal.ts), sent to `window.tr.gui.open` instead. Main starts the agent if it is not running and
 // answers with the conversation to draw; the session's phase moves like a started TUI's.
 import type { CliAgent } from '@shared/agents'
-import type { GuiLaunch, GuiPicks } from '@shared/gui-chat'
-import type { SessionId } from '@shared/types'
+import { emptyGuiState, type GuiLaunch, type GuiPicks } from '@shared/gui-chat'
+import type { SessionId, WorktreeId } from '@shared/types'
 import { takeDispatchLaunch } from '../dispatch/store'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
 import { useWorkspace } from '../state/workspace'
-import { applyGuiEvents, listenToGuiEvents, setGuiState } from './store'
+import { chatIsEmpty } from './model'
+import { applyGuiEvents, guiStateOf, listenToGuiEvents, setGuiState } from './store'
 
 export interface GuiLaunchInput {
   sessionId: SessionId
@@ -104,4 +105,16 @@ export async function openGuiSession(sessionId: SessionId, cwd: string, agent: C
   applyGuiEvents(sessionId, [{ type: 'failure', failure: reason }])
   reportLaunchIssue(sessionId, { kind: 'spawn-failed', message: reason })
   return false
+}
+
+/**
+ * Figma 65: an empty GUI session runs another agent, or in another project (its main worktree). The running agent is
+ * ended and its pickers cleared; the pane opens the new one (GuiPane re-runs on a new agent or folder) with that
+ * agent's last picks. Once anything is said the session keeps its agent and folder: ignored.
+ */
+export async function retargetGuiSession(sessionId: SessionId, change: { kind?: CliAgent; worktreeId?: WorktreeId }): Promise<void> {
+  if (!chatIsEmpty(guiStateOf(sessionId))) return
+  await window.tr.gui.stop(sessionId).catch(() => {})
+  setGuiState(sessionId, emptyGuiState())
+  useWorkspace.getState().retargetSession(sessionId, change)
 }

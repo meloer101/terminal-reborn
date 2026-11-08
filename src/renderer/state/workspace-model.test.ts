@@ -8,6 +8,7 @@ import {
   addSession,
   addSessionInWorktree,
   closeSession,
+  retargetSession,
   EMPTY_WORKSPACE,
   forgetWorktrees,
   archiveWorktrees,
@@ -300,6 +301,32 @@ describe('persistence', () => {
     const data = withSessions('codex')
     const replaced = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'second' })) }
     expect(serializeWorkspace(replaced, ui, {}).sessions[0]?.agentSessionId).toBe('second')
+  })
+})
+
+describe('retargetSession (Figma 65)', () => {
+  it('gives an empty GUI session another agent and folder, with the new agent’s default title', () => {
+    const makeId = ids()
+    const first = addProject(EMPTY_WORKSPACE, '/code/acme', makeId)
+    const second = addProject(first.data, '/code/web', makeId)
+    const { data, sessionId } = addSession(second.data, first.projectId, 'claude', 1, makeId, 'gui')!
+    const withId = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'from-hook' })) }
+    const webMain = withId.worktrees.find((w) => w.projectId === second.projectId)!.id
+    const next = retargetSession(withId, sessionId, { kind: 'codex', worktreeId: webMain })
+    expect(next.sessions[0]).toMatchObject({ kind: 'codex', worktreeId: webMain, title: 'Codex' })
+    // The new agent must not resume the old one's conversation.
+    expect(next.sessions[0]).not.toHaveProperty('agentSessionId')
+  })
+
+  it('keeps a title the user gave, and refuses a terminal session, a shell, or a folder that does not exist', () => {
+    const makeId = ids()
+    const { data: one, projectId } = addProject(EMPTY_WORKSPACE, '/code/acme', makeId)
+    const { data, sessionId } = addSession(one, projectId, 'claude', 1, makeId, 'gui')!
+    const named = { ...data, sessions: data.sessions.map((s) => ({ ...s, title: '修登录' })) }
+    expect(retargetSession(named, sessionId, { kind: 'grok' }).sessions[0]).toMatchObject({ kind: 'grok', title: '修登录' })
+    expect(retargetSession(data, sessionId, { worktreeId: 'nope' })).toBe(data)
+    const cli = addSession(one, projectId, 'claude', 1, makeId)!
+    expect(retargetSession(cli.data, cli.sessionId, { kind: 'codex' })).toBe(cli.data)
   })
 })
 

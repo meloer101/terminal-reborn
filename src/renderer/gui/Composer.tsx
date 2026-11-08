@@ -1,21 +1,45 @@
-// A GUI session's input (PRD F23, Figma 52F–H, 56; `/` menu 49′C, model menu 49′E; formats 50C–E): one line in the box —
-// + adds attachments, the formatted text (ComposerEditor), stop while a turn runs, send otherwise; it grows upward as
-// lines are added, + and send staying at its foot. ⏎ sends and ⇧⏎ is a newline — a new item in a list; in a code block
-// ⏎ is a newline too (an input method's Enter is left to it). Under the box: 格式 (the format buttons), the pickers
-// (Figma 56: model · reasoning effort, 权限, the 计划 switch, the agent's own mode) and the context ring (ContextButton).
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+// A GUI session's input (PRD F23, Figma 65; `/` menu 49′C / 59H; formats 50C–E): one box — the formatted text
+// (ComposerEditor) on top, under it + (attachments), the pickers (model, reasoning effort, 模式, 快速, the agent's own
+// mode), and at the right the context ring (ContextButton) and stop while a turn runs, send otherwise. ⏎ sends and ⇧⏎
+// is a newline — a new item in a list; in a code block ⏎ is a newline too (an input method's Enter is left to it).
+// Formats are always on: there is no 格式 button, a selection gets the format buttons over it (50E).
+// Before anything is said (`switchable`) the model menu lists the agents first, each with its models (Figma 65B).
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, Check, ChevronDown, Plus, Square, Type, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, X, Zap } from 'lucide-react'
+import { agentName, type CliAgent } from '@shared/agents'
 import { matchCommands, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
+import type { AgentAvailability } from '@shared/ipc'
 import type { AgentKind, SessionId } from '@shared/types'
-import { Segmented } from '../ui/Segmented'
+import { installedAgents } from '../new-session/sheet-store'
+import { openSettings } from '../settings/SettingsDialog'
+import { useWorkspace } from '../state/workspace'
+import { AgentIcon } from '../ui/AgentIcon'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { ContextButton } from './ContextButton'
-import { composerKey, pickCommand, pickerButtons, pickerSectionTitle, slashGroups, slashQuery, stepIndex, thumbnailUrl, type PickerButton, type SlashGroup } from './model'
+import {
+  composerKey,
+  guiAgentMenu,
+  modeChanges,
+  pickCommand,
+  pickerButtons,
+  pickerSectionTitle,
+  slashGroups,
+  slashQuery,
+  stepIndex,
+  thumbnailUrl,
+  type ModeChoice,
+  type PickerButton,
+  type SlashGroup
+} from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
+const SMALL = { size: 14, strokeWidth: 1.75, 'aria-hidden': true } as const
+
+/** Figma 65: each 模式 with its mark, on the button and in its list. */
+const MODE_ICON: Record<ModeChoice, typeof Shield> = { ask: Shield, 'accept-edits': Pencil, auto: ShieldCheck, plan: ListTodo }
 
 interface Props {
   sessionId: SessionId
@@ -30,15 +54,18 @@ interface Props {
   cardKey(event: KeyboardEvent): boolean
   send(text: string, attachments: readonly string[]): void
   interrupt(): void
-  setConfig(optionId: string, value: string): void
+  setConfig(optionId: string, value: string): Promise<unknown>
+  /** Figma 65: nothing said yet — the agent can still change (the model menu lists the agents). */
+  switchable: boolean
+  /** Figma 65B: run another agent (with one of its models, when it listed them before). */
+  switchAgent(agent: CliAgent, model: string | undefined): void
 }
 
-export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig }: Props) {
+export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, commands, config, cardWaiting, cardKey, send, interrupt, setConfig, switchable, switchAgent }: Props) {
   const draft = useGuiSessions((s) => s.drafts[sessionId]) ?? draftOf(sessionId)
   const attachments = useGuiSessions((s) => s.attachments[sessionId]) ?? []
   const focusRequest = useGuiSessions((s) => s.focus[sessionId] ?? 0)
   const editorRef = useRef<Editor | null>(null)
-  const [formatOpen, setFormatOpen] = useState(false)
   // The highlighted command, for the query it was moved in (a new query starts at the top).
   const [menuAt, setMenuAt] = useState<{ query: string | null; index: number }>({ query: null, index: 0 })
   const [menuDismissed, setMenuDismissed] = useState<string | null>(null)
@@ -53,6 +80,9 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
   const setMenuIndex = (update: number | ((at: number) => number)): void =>
     setMenuAt({ query, index: typeof update === 'function' ? update(menuIndex) : update })
   const empty = draft.trim() === '' && attachments.length === 0
+  const buttons = pickerButtons(config)
+  // Before the agent reported its pickers: the model button still names the agent, so it can be switched.
+  const shown: PickerButton[] = buttons.some((b) => b.key === 'model') || !switchable ? buttons : [{ key: 'model', label: '默认', options: [] }, ...buttons]
 
   // Asked to take the keyboard (selected, a file added, text inserted): never from a dialog in front.
   useEffect(() => {
@@ -110,6 +140,13 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
     void window.tr.ui.pickFiles(cwd).then((paths) => addAttachments(sessionId, paths))
   }
 
+  // 模式: the changes in order (leaving 计划 sends the level first, then plan off).
+  const pickMode = async (choice: ModeChoice, planning: boolean): Promise<void> => {
+    for (const [id, value] of modeChanges(choice, planning)) await setConfig(id, value)
+  }
+
+  const open = picker ? (shown.find((b) => b.key === picker.button.key) ?? picker.button) : null
+
   return (
     <div className={styles.composerWrap} data-testid="gui-composer">
       {menuOpen && <SlashMenu groups={groups} index={menuIndex} onHover={setMenuIndex} onPick={pick} />}
@@ -121,23 +158,59 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
             ))}
           </ul>
         )}
-        <div className={styles.composerLine}>
+        <div className={styles.composerText}>
+          <ComposerEditor
+            draft={draft}
+            onChange={(text) => {
+              setDraft(sessionId, text)
+              setMenuDismissed(null)
+            }}
+            onKeyDown={onKeyDown}
+            editorRef={editorRef}
+          />
+        </div>
+        <div className={styles.controls}>
           {/* The buttons leave the keyboard and the caret in the text. */}
           <button type="button" className={styles.barIcon} aria-label="添加附件" title="添加附件" onMouseDown={(e) => e.preventDefault()} onClick={attach}>
             <Plus {...ICON} />
           </button>
-          <div className={styles.composerText}>
-            <ComposerEditor
-              draft={draft}
-              onChange={(text) => {
-                setDraft(sessionId, text)
-                setMenuDismissed(null)
-              }}
-              onKeyDown={onKeyDown}
-              editorRef={editorRef}
-              toolbarOpen={formatOpen}
-            />
-          </div>
+          {shown.map((button) =>
+            button.toggle ? (
+              // 快速 (Figma 65): the mark only, pressed while on; the tooltip says why it is not taking effect.
+              <button
+                key={button.key}
+                type="button"
+                className={styles.pickerIcon}
+                aria-label={button.label}
+                title={button.hint ?? button.label}
+                aria-pressed={button.toggle.on}
+                data-hint={button.hint ? true : undefined}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
+              >
+                <Zap {...SMALL} />
+              </button>
+            ) : (
+              <button
+                key={button.key}
+                type="button"
+                className={styles.picker}
+                aria-haspopup="dialog"
+                aria-expanded={picker?.button.key === button.key}
+                data-picker={button.key}
+                onClick={(e) => {
+                  const anchor = e.currentTarget
+                  setPicker((at) => (at?.button.key === button.key ? null : { button, anchor }))
+                }}
+              >
+                {buttonMark(button, agent)}
+                <span>{button.label}</span>
+                <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
+              </button>
+            )
+          )}
+          <span className={styles.spacer} />
+          <ContextButton sessionId={sessionId} agent={agent} />
           {busy ? (
             <button type="button" className={styles.round} aria-label="停止" title="停止 ⎋" onClick={interrupt}>
               <Square {...ICON} />
@@ -149,56 +222,21 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
           )}
         </div>
       </div>
-      <div className={styles.under}>
-        <button
-          type="button"
-          className={styles.barIcon}
-          aria-label="格式"
-          title="格式"
-          aria-pressed={formatOpen}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setFormatOpen(!formatOpen)}
-        >
-          <Type {...ICON} />
-        </button>
-        <span className={styles.spacer} />
-        {pickerButtons(config).map((button) =>
-          button.toggle ? (
-            // 计划 (Figma 56): pressed while on.
-            <button
-              key={button.key}
-              type="button"
-              className={styles.picker}
-              aria-pressed={button.toggle.on}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
-            >
-              {button.label}
-            </button>
-          ) : (
-            <button
-              key={button.key}
-              type="button"
-              className={styles.picker}
-              aria-haspopup="dialog"
-              aria-expanded={picker?.button.key === button.key}
-              onClick={(e) => {
-                const anchor = e.currentTarget
-                setPicker((open) => (open?.button.key === button.key ? null : { button, anchor }))
-              }}
-            >
-              <span>{button.label}</span>
-              <ChevronDown size={12} strokeWidth={1.75} aria-hidden />
-            </button>
-          )
-        )}
-        <ContextButton sessionId={sessionId} agent={agent} />
-      </div>
-      {picker && (
+      {picker && open && (
         <PickerMenu
-          button={pickerButtons(config).find((b) => b.key === picker.button.key) ?? picker.button}
+          button={open}
           anchor={picker.anchor}
-          onPick={(optionId, value) => setConfig(optionId, value)}
+          below={switchable}
+          agent={agent}
+          switchable={switchable}
+          onPick={(optionId, value) => void setConfig(optionId, value)}
+          onMode={(choice) => void pickMode(choice, open.mode?.current === 'plan')}
+          onAgent={(next, model) => {
+            setPicker(null)
+            if (next === agent) {
+              if (model) void setConfig('model', model)
+            } else switchAgent(next, model)
+          }}
           onClose={() => {
             picker.anchor.focus()
             setPicker(null)
@@ -208,6 +246,17 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
     </div>
   )
 })
+
+/** What leads each picker button (Figma 65): the agent's mark on the model, a gauge on effort, the 模式's own mark. */
+function buttonMark(button: PickerButton, agent: AgentKind): ReactNode {
+  if (button.key === 'model') return <AgentIcon kind={agent} size={14} />
+  if (button.options[0]?.category === 'thought_level') return <Gauge {...SMALL} />
+  if (button.mode) {
+    const Mark = MODE_ICON[button.mode.current]
+    return <Mark {...SMALL} />
+  }
+  return null
+}
 
 /** 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name. */
 function Attachment({ path, remove }: { path: string; remove(): void }) {
@@ -279,13 +328,27 @@ function SlashMenu({ groups, index, onHover, onPick }: { groups: readonly SlashG
   )
 }
 
+interface PickerMenuProps {
+  button: PickerButton
+  anchor: HTMLElement
+  /** Open under the button (the composer stands in the middle of an empty session), else over it. */
+  below: boolean
+  agent: AgentKind
+  switchable: boolean
+  onPick(optionId: string, value: string): void
+  onMode(choice: ModeChoice): void
+  onAgent(agent: CliAgent, model: string | undefined): void
+  onClose(): void
+}
+
 /**
- * 49′E: a picker's choices above its button. Model and reasoning effort share one menu: models as a list (✓ on the
- * current one), effort as segments; any other option (mode) is a list.
+ * A picker's choices by its button, left-aligned with it. Model: before anything is said, the agents (Figma 65B) — the
+ * hovered one's models beside the list; afterwards the agent's models under its name (65C). 模式: one list, each with
+ * its mark (65E). Any other option is a list. ✓ on the current choice.
  */
-function PickerMenu({ button, anchor, onPick, onClose }: { button: PickerButton; anchor: HTMLElement; onPick(optionId: string, value: string): void; onClose(): void }) {
+function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, onAgent, onClose }: PickerMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const [place, setPlace] = useState<{ right: number; bottom: number } | null>(null)
+  const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number } | null>(null)
 
   useLayoutEffect(() => {
     const menu = ref.current
@@ -293,9 +356,9 @@ function PickerMenu({ button, anchor, onPick, onClose }: { button: PickerButton;
     if (!menu || !host) return
     const box = anchor.getBoundingClientRect()
     const frame = host.getBoundingClientRect()
-    setPlace({ right: frame.right - box.right, bottom: frame.bottom - box.top + 4 })
-    menu.querySelector<HTMLElement>('[aria-checked="true"], button')?.focus({ preventScroll: true })
-  }, [anchor])
+    setPlace(below ? { left: box.left - frame.left, top: box.bottom - frame.top + 4 } : { left: box.left - frame.left, bottom: frame.bottom - box.top + 4 })
+    menu.querySelector<HTMLElement>('[aria-checked="true"], [role="menuitemradio"], [role="menuitem"]')?.focus({ preventScroll: true })
+  }, [anchor, below])
 
   useEffect(() => {
     const doc = anchor.ownerDocument
@@ -303,65 +366,167 @@ function PickerMenu({ button, anchor, onPick, onClose }: { button: PickerButton;
       const target = e.target as Node
       if (!ref.current?.contains(target) && !anchor.contains(target)) onClose()
     }
+    // ⎋ closes it wherever the keyboard is (the menu may not have it: a theme change, a click on its gap).
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
     doc.addEventListener('mousedown', onDown, true)
-    return () => doc.removeEventListener('mousedown', onDown, true)
+    doc.addEventListener('keydown', onKey, true)
+    return () => {
+      doc.removeEventListener('mousedown', onDown, true)
+      doc.removeEventListener('keydown', onKey, true)
+    }
   }, [anchor, onClose])
+
+  const option = button.options[0]
+  const label = button.mode ? '模式' : option ? pickerSectionTitle(option) : '模型'
+  let body: ReactNode
+  // 65B: the agents and the hovered one's models, two menus side by side.
+  const pair = button.key === 'model' && switchable && agent !== 'shell'
+  if (pair) {
+    body = <AgentModels agent={agent} models={option?.values ?? []} current={option?.current} onAgent={onAgent} />
+  } else if (button.mode) {
+    const mode = button.mode
+    body = (
+      <div className={styles.pickerSection} role="menu" aria-label="模式">
+        {mode.choices.map((c) => {
+          const Mark = MODE_ICON[c.value]
+          return (
+            <PickerRow
+              key={c.value}
+              checked={c.value === mode.current}
+              mark={<Mark {...SMALL} />}
+              label={c.label}
+              onClick={() => {
+                onMode(c.value)
+                onClose()
+              }}
+            />
+          )
+        })}
+      </div>
+    )
+  } else if (option) {
+    body = (
+      <div className={styles.pickerSection} role="menu" aria-label={label}>
+        {/* 65C: the agent's models under its name. */}
+        {option.category === 'model' && agent !== 'shell' && (
+          <span className={`${styles.popoverTitle} ${styles.agentTitle}`}>
+            <AgentIcon kind={agent} size={14} />
+            {agentName(agent)}
+          </span>
+        )}
+        {option.values.map((v) => (
+          <PickerRow
+            key={v.value}
+            checked={v.value === option.current}
+            label={v.label}
+            onClick={() => {
+              onPick(option.id, v.value)
+              onClose()
+            }}
+          />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div
       ref={ref}
-      className={`${styles.popover} ${styles.pickerMenu}`}
+      className={pair ? styles.pickerPair : `${styles.popover} ${styles.pickerMenu}`}
+      data-below={below || undefined}
       role="dialog"
-      aria-label={button.options.map(pickerSectionTitle).join(' · ')}
-      style={place ? { right: place.right, bottom: place.bottom } : { visibility: 'hidden' }}
+      aria-label={label}
+      style={place ?? { visibility: 'hidden' }}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          e.stopPropagation()
-          onClose()
-        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          const rows = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])]
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          const rows = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
           const at = rows.indexOf(e.currentTarget.ownerDocument.activeElement as HTMLElement)
           rows[stepIndex(at, e.key === 'ArrowDown' ? 1 : -1, rows.length)]?.focus()
           e.preventDefault()
         }
       }}
     >
-      {button.options.map((option) =>
-        option.category === 'thought_level' ? (
-          <div key={option.id} className={styles.pickerSection}>
-            <span className={styles.popoverTitle}>{pickerSectionTitle(option)}</span>
-            <Segmented
-              label={pickerSectionTitle(option)}
-              value={option.current}
-              options={option.values.map((v) => ({ value: v.value, label: v.label }))}
-              onChange={(value) => onPick(option.id, value)}
-              className={styles.pickerSegments}
-            />
-          </div>
-        ) : (
-          <div key={option.id} className={styles.pickerSection} role="menu" aria-label={pickerSectionTitle(option)}>
-            <span className={styles.popoverTitle}>{pickerSectionTitle(option)}</span>
-            {option.values.map((v) => (
-              <button
-                key={v.value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={v.value === option.current}
-                className={styles.pickerRow}
-                onClick={() => {
-                  onPick(option.id, v.value)
-                  // A list with nothing else in the menu is done with one pick.
-                  if (button.options.length === 1) onClose()
-                }}
-              >
-                <span className={styles.pickerLabel}>{v.label}</span>
-                {v.value === option.current && <Check {...ICON} />}
+      {body}
+    </div>
+  )
+}
+
+function PickerRow({ checked, mark, label, onClick }: { checked: boolean; mark?: ReactNode; label: string; onClick(): void }) {
+  return (
+    <button type="button" role="menuitemradio" aria-checked={checked} className={styles.pickerRow} onClick={onClick}>
+      {mark}
+      <span className={styles.pickerLabel}>{label}</span>
+      {checked && <Check {...ICON} />}
+    </button>
+  )
+}
+
+/**
+ * Figma 65B: the agents an empty session can run — installed ones (✓ the current, › its models), then 没装 in grey
+ * (choosing one opens 设置 · 智能体, where its install command is). The hovered agent's models stand beside the list:
+ * the current agent's as it reports them, another's as it listed them last time (or just its default).
+ */
+function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; models: readonly { value: string; label: string }[]; current: string | undefined; onAgent(agent: CliAgent, model: string | undefined): void }) {
+  const [found, setFound] = useState<AgentAvailability | null>(null)
+  const [hovered, setHovered] = useState<CliAgent | null>(agent === 'shell' ? null : agent)
+  const picks = useWorkspace((s) => s.guiPicks)
+  useEffect(() => {
+    let live = true
+    void installedAgents().then((next) => live && setFound(next))
+    return () => {
+      live = false
+    }
+  }, [])
+  const { installed, missing } = guiAgentMenu(found)
+  const listed = hovered === agent ? models : (hovered ? picks[hovered]?.models : undefined) ?? []
+  const chosen = hovered === agent ? current : hovered ? picks[hovered]?.model : undefined
+  return (
+    <>
+      <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label="智能体" data-testid="gui-agent-menu">
+        {installed.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={hovered === id}
+            className={styles.pickerRow}
+            onMouseEnter={() => setHovered(id)}
+            onFocus={() => setHovered(id)}
+            onClick={() => setHovered(id)}
+          >
+            <AgentIcon kind={id} size={14} />
+            <span className={styles.pickerLabel}>{agentName(id)}</span>
+            <ChevronRight {...SMALL} />
+          </button>
+        ))}
+        {missing.length > 0 && (
+          <>
+            <span className={styles.menuDivider} role="separator" />
+            <span className={styles.popoverTitle}>没装</span>
+            {missing.map((id) => (
+              <button key={id} type="button" role="menuitem" className={styles.pickerRow} data-muted onMouseEnter={() => setHovered(null)} onClick={() => openSettings('agents', id)}>
+                <AgentIcon kind={id} size={14} />
+                <span className={styles.pickerLabel}>{agentName(id)}</span>
               </button>
             ))}
-          </div>
-        )
+          </>
+        )}
+      </div>
+      {hovered && (
+        <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label={`${agentName(hovered)} 的模型`} data-testid="gui-agent-models">
+          {listed.length === 0 ? (
+            <PickerRow checked={false} label="默认" onClick={() => onAgent(hovered, undefined)} />
+          ) : (
+            listed.map((v) => <PickerRow key={v.value} checked={v.value === chosen} label={v.label} onClick={() => onAgent(hovered, v.value)} />)
+          )}
+        </div>
       )}
-    </div>
+    </>
   )
 }
