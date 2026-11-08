@@ -35,6 +35,7 @@ In a fresh worktree run `npm install` first. While developing, run `npm run type
 | `src/main/hooks/`, `resources/hooks/`, `src/shared/agent-launch.ts` | Per-launch Claude hooks → `AgentEvent` / `PendingPrompt` (M2) | `hooks-bridge` |
 | `src/renderer/status/`, `src/shared/session-state-machine.ts`, `src/shared/current-action.ts` | Live status, notifications, Dock badge (M2) | `session-status` |
 | `src/renderer/prompt-bar/`, `src/shared/question-keys.ts` | Permission / question bar (M2) | `prompt-bar` |
+| `src/shared/session-settings.ts`, `src/shared/terminal-settings.ts`, `src/renderer/session-settings/` | The phone's 会话设置: model / effort / permission for one session (GUI pickers; Claude's TUI by keys) (F22 v1.144) | integrator |
 | `src/shared/gui-chat.ts`, `src/main/gui/`, `src/renderer/gui/` | GUI sessions: headless Claude / Codex / ACP agents drawn as a chat (F23) | `gui-sessions` |
 | `src/renderer/command-palette/` | ⌘K (M2) | `command-palette` |
 | `src/renderer/settings/` | Settings dialog UI (M3; a sheet over the main window) | `settings-ui` |

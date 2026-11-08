@@ -520,11 +520,9 @@ function windowSession(raw: unknown): RemoteSession | null {
   const notice = optText(s.shipNotice, 300)
   if (notice === null) return null
   if (notice) out.shipNotice = notice
-  if (s.settings !== undefined) {
-    const settings = parseSessionSettings(s.settings)
-    if (!settings) return null
-    out.settings = settings
-  }
+  // Settings that do not validate are left off; the session still shows.
+  const settings = s.settings === undefined ? null : parseSessionSettings(s.settings)
+  if (settings) out.settings = settings
   return out
 }
 

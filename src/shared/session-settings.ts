@@ -26,6 +26,7 @@ export interface SessionSettings {
 }
 
 const KINDS: readonly SettingKind[] = ['model', 'effort', 'permission']
+const MAX_VALUES = 40
 /** The plan switch shows on the permission page as one more choice (64C). */
 export const PLAN_VALUE = 'plan'
 
@@ -50,7 +51,7 @@ export function parseSessionSettings(raw: unknown): SessionSettings | null {
   for (const it of v.items) {
     const r = record(it)
     const current = text(r?.current, 100)
-    if (!r || !isSettingKind(r.kind) || current === null || !Array.isArray(r.values) || r.values.length > 40) return null
+    if (!r || !isSettingKind(r.kind) || current === null || !Array.isArray(r.values) || r.values.length > MAX_VALUES) return null
     const values: SettingValue[] = []
     for (const x of r.values) {
       const o = record(x)
@@ -69,7 +70,12 @@ export function parseSessionSettings(raw: unknown): SessionSettings | null {
   return out
 }
 
-const byCategory = (config: readonly GuiConfigOption[], category: GuiConfigOption['category']) => config.find((o) => o.category === category)
+/** A picker the phone can show: a current value, and no more choices than its list takes (an ACP model list can be long). */
+const byCategory = (config: readonly GuiConfigOption[], category: GuiConfigOption['category']): GuiConfigOption | undefined => {
+  const option = config.find((o) => o.category === category)
+  if (!option || !option.current || option.values.length === 0) return undefined
+  return { ...option, values: option.values.filter((v) => v.value && v.label).slice(0, MAX_VALUES).map((v) => ({ value: v.value.slice(0, 100), label: v.label.slice(0, 100) })) }
+}
 
 /** A GUI session's pickers as the phone's three rows (absent ones left out); undefined when it has none of them. */
 export function guiSettings(config: readonly GuiConfigOption[]): SessionSettings | undefined {

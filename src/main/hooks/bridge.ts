@@ -134,6 +134,7 @@ export class HookBridge {
     if (meta.todos.length > 0) this.emitMeta(sessionId, agent, at, { type: 'todos', items: meta.todos })
     if (!meta.plan) this.emitMeta(sessionId, agent, at, { type: 'billing', plan: false })
     if (hasChecks(meta.checks)) this.emitMeta(sessionId, agent, at, { type: 'checks', checks: meta.checks })
+    if (Object.keys(meta.settings).length > 0) this.emitMeta(sessionId, agent, at, { type: 'agent-settings', ...meta.settings })
   }
 
   /** False while the session's agent is off its vendor's plan (a third-party endpoint): its spend is not the account's. */

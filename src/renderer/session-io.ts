@@ -16,6 +16,11 @@ import { noteInserted } from './terminal/typing'
 // One serial queue per session: two sends to the same PTY must never interleave.
 const queue = createSendQueue()
 
+/** Runs `task` alone on the session's PTY: after every earlier send, before any later one (the phone's 会话设置). */
+export function exclusively<T>(sessionId: SessionId, task: () => Promise<T>): Promise<T> {
+  return queue.enqueue(sessionId, task)
+}
+
 /** The session's agent; for a plain terminal, the one started in it by hand, if one is running. */
 function agentIn(sessionId: SessionId): Exclude<AgentKind, 'shell'> | undefined {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)

@@ -45,13 +45,14 @@ describe('Claude terminal settings', () => {
     expect(claudePermissionOnScreen('❯ hello')).toBeNull()
   })
 
-  it('lists the three rows from what Claude reported, the footer first for the permission, locked mid-turn', () => {
-    const s = claudeTerminalSettings({ model: 'claude-sonnet-5-5', effort: 'high', permission: 'default' }, 'plan', true)
-    expect(s.items.map((i) => [i.kind, i.current])).toEqual([['model', 'sonnet'], ['effort', 'high'], ['permission', 'plan']])
-    expect(s.items[0]?.values.find((v) => v.value === 'sonnet')?.label).toBe('Sonnet 5.5')
-    expect(s.items[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '计划', '自动'])
-    expect(s.locked).toBe('running')
-    expect(claudeTerminalSettings({}, null, false).locked).toBeUndefined()
+  it('lists the rows Claude reported, locked mid-turn, and leaves out what it has not reported', () => {
+    const s = claudeTerminalSettings({ model: 'claude-sonnet-5-5', effort: 'high', permission: 'plan' }, true)
+    expect(s?.items.map((i) => [i.kind, i.current])).toEqual([['model', 'sonnet'], ['effort', 'high'], ['permission', 'plan']])
+    expect(s?.items[0]?.values.find((v) => v.value === 'sonnet')?.label).toBe('Sonnet 5.5')
+    expect(s?.items[2]?.values.map((v) => v.label)).toEqual(['询问', '接受编辑', '计划', '自动'])
+    expect(s?.locked).toBe('running')
+    expect(claudeTerminalSettings({ effort: 'low' }, false)?.items.map((i) => i.kind)).toEqual(['effort'])
+    expect(claudeTerminalSettings({}, false)).toBeUndefined()
   })
 
   it('moves the model picker from its cursor to the family', () => {

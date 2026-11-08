@@ -41,18 +41,19 @@ export function claudePermissionOnScreen(screen: string): string | null {
 }
 
 /** What Claude last reported (hooks, statusLine) and its footer: the three rows of the phone's 会话设置. */
-export function claudeTerminalSettings(reported: { model?: string; effort?: string; permission?: string }, footer: string | null, running: boolean): SessionSettings {
+/** A value Claude has not reported yet leaves its row out (never a guess). */
+export function claudeTerminalSettings(reported: { model?: string; effort?: string; permission?: string }, running: boolean): SessionSettings | undefined {
+  const items: SessionSettings['items'] = []
   const family = claudeFamily(reported.model)
-  const model = {
-    kind: 'model' as const,
-    current: family ?? 'opus',
-    values: CLAUDE_MODELS.map((f) => ({ value: f, label: f === family && reported.model ? claudeModelLabel(reported.model) : cap(f) }))
+  if (family && reported.model) {
+    items.push({ kind: 'model', current: family, values: CLAUDE_MODELS.map((f) => ({ value: f, label: f === family ? claudeModelLabel(reported.model ?? f) : cap(f) })) })
   }
-  const effortNow = CLAUDE_EFFORTS.find((e) => e === reported.effort) ?? 'medium'
-  const effort = { kind: 'effort' as const, current: effortNow, values: CLAUDE_EFFORTS.map((e) => ({ value: e, label: effortLabel(e) })) }
-  const permissionNow = footer ?? (CLAUDE_PERMISSIONS as readonly string[]).find((p) => p === reported.permission) ?? 'default'
-  const permission = { kind: 'permission' as const, current: permissionNow, values: CLAUDE_PERMISSIONS.map((p) => ({ value: p, label: PERMISSION_LABELS[p] ?? p })) }
-  return { items: [model, effort, permission], ...(running ? { locked: 'running' as const } : {}) }
+  const effort = CLAUDE_EFFORTS.find((e) => e === reported.effort)
+  if (effort) items.push({ kind: 'effort', current: effort, values: CLAUDE_EFFORTS.map((e) => ({ value: e, label: effortLabel(e) })) })
+  const permission = (CLAUDE_PERMISSIONS as readonly string[]).find((p) => p === reported.permission)
+  if (permission) items.push({ kind: 'permission', current: permission, values: CLAUDE_PERMISSIONS.map((p) => ({ value: p, label: PERMISSION_LABELS[p] ?? p })) })
+  if (items.length === 0) return undefined
+  return { items, ...(running ? { locked: 'running' as const } : {}) }
 }
 
 /** The `/model` picker's rows (`❯ 2. Opus  Opus 5.5 · …`): each row's first word, and which row the cursor is on. */

@@ -10,6 +10,7 @@ struct SessionsView: View {
   @State private var creating = false
   @State private var pickingAvatar = false
   @State private var avatarItem: PhotosPickerItem?
+  @State private var avatarFailed = false
 
   var body: some View {
     content
@@ -50,8 +51,13 @@ struct SessionsView: View {
       .onChange(of: avatarItem) { _, item in
         guard let item else { return }
         avatarItem = nil
-        Task { if let data = try? await item.loadTransferable(type: Data.self) { MyAvatar.shared.set(data) } }
+        Task {
+          let data = try? await item.loadTransferable(type: Data.self)
+          if let data, await MyAvatar.shared.set(data) { return }
+          avatarFailed = true
+        }
       }
+      .alert("这张照片没有设成头像", isPresented: $avatarFailed) { Button("好", role: .cancel) {} }
   }
 
   @ViewBuilder private var content: some View {

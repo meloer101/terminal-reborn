@@ -49,7 +49,9 @@ export function startRemoteBridge(): () => void {
   })
   const offStore = useWorkspace.subscribe(publish)
   // A GUI session's pickers change in its own store (the phone's 会话设置, Figma 64B).
-  const offGui = useGuiSessions.subscribe(publish)
+  const offGui = useGuiSessions.subscribe((state, before) => {
+    if (Object.keys(state.states).some((id) => state.states[id]?.config !== before.states[id]?.config)) publish()
+  })
   // What a terminal agent reports of its model, effort and permission (hooks, statusLine).
   const offMeta = useSessionMeta.subscribe((state, before) => {
     if (Object.keys(state.bySession).some((id) => state.bySession[id]?.settings !== before.bySession[id]?.settings)) publish()

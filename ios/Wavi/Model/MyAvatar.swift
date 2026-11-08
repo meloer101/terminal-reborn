@@ -12,7 +12,7 @@ func squareCrop(_ size: CGSize) -> CGRect {
 @MainActor @Observable
 final class MyAvatar {
   static let shared = MyAvatar()
-  static let side: CGFloat = 256
+  nonisolated static let side: CGFloat = 256
 
   private(set) var image: UIImage?
 
@@ -24,10 +24,14 @@ final class MyAvatar {
     image = (try? Data(contentsOf: Self.file)).flatMap(UIImage.init(data:))
   }
 
-  /// Keeps `data` (any picture the system reads) as the avatar; false when it is not a picture.
-  @discardableResult
-  func set(_ data: Data) -> Bool {
-    guard let source = UIImage(data: data), let jpeg = Self.square(source).jpegData(compressionQuality: 0.85) else { return false }
+  /// Keeps `data` (any picture the system reads) as the avatar; false when it is not a picture or cannot be kept.
+  /// Decoding and drawing a full-size photo happen off the main thread.
+  func set(_ data: Data) async -> Bool {
+    let jpeg = await Task.detached(priority: .userInitiated) { () -> Data? in
+      guard let source = UIImage(data: data) else { return nil }
+      return Self.square(source).jpegData(compressionQuality: 0.85)
+    }.value
+    guard let jpeg else { return false }
     do {
       try FileManager.default.createDirectory(at: Self.file.deletingLastPathComponent(), withIntermediateDirectories: true)
       try jpeg.write(to: Self.file, options: .atomic)
@@ -43,7 +47,7 @@ final class MyAvatar {
     image = nil
   }
 
-  private static func square(_ image: UIImage) -> UIImage {
+  nonisolated private static func square(_ image: UIImage) -> UIImage {
     let crop = squareCrop(image.size)
     let format = UIGraphicsImageRendererFormat()
     format.scale = 1

@@ -96,7 +96,8 @@ describe('window messages', () => {
     expect(parseWindowSessions(good)).toEqual(good)
     const settings = { items: [{ kind: 'effort', current: 'high', values: [{ value: 'high', label: '高' }] }], locked: 'running' }
     expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], settings }] })?.sessions[0]?.settings).toEqual(settings)
-    expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], settings: { items: 'x' } }] })?.sessions).toEqual([])
+    // Settings that do not validate are left off; the session itself stays on the list.
+    expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], settings: { items: 'x' } }] })?.sessions).toEqual(good.sessions)
     // A bad entry is left out, not the whole list.
     expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], status: 'busy' }] })?.sessions).toEqual([])
     expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], agent: 'rm' }] })?.sessions).toEqual([])
