@@ -10,6 +10,7 @@ function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
     emit: () => undefined,
     ready: () => undefined,
     agentSession: () => undefined,
+    title: () => undefined,
     turnEnd: () => undefined,
     fail: () => undefined,
     image,
@@ -29,6 +30,12 @@ describe('Claude driver · send', () => {
     expect(content.filter((b) => b.type === 'image')).toHaveLength(4)
     expect(content[0]).toEqual({ type: 'text', text: 'look\n\n/tmp/shot-4.png\n/tmp/shot-5.png' })
   })
+
+  it('marks every message as typed by a person, so Claude names a session that starts with a slash command', async () => {
+    const { driver, writes } = driverWith(() => Promise.resolve(null))
+    expect(await driver.send('/archify draw this project', [])).toBe(true)
+    expect(writes.at(-1)).toEqual({ type: 'user', message: { role: 'user', content: '/archify draw this project' }, origin: { kind: 'human' } })
+  })
 })
 
 describe('Claude driver · the / menu (Figma 59H)', () => {
@@ -39,6 +46,7 @@ describe('Claude driver · the / menu (Figma 59H)', () => {
       emit: (events) => void emitted.push(...events),
       ready: () => undefined,
       agentSession: () => undefined,
+      title: () => undefined,
       turnEnd: () => undefined,
       fail: () => undefined,
       image: () => Promise.resolve(null),

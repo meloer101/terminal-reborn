@@ -15,6 +15,9 @@ function startTurn(id, params) {
   out({ method: 'turn/started', params: { threadId, turn: { id: turnId } } })
   out({ method: 'item/completed', params: { item: { type: 'userMessage', id: `u${turnN}`, content: params.input } } })
   current = { turnId, model: params.model ?? null, effort: params.effort ?? null, approvalPolicy: params.approvalPolicy ?? null, approvalsReviewer: params.approvalsReviewer ?? null }
+  // Codex's app-server names no thread itself; a client's `thread/name/set` (or another thread's) does.
+  if (text.includes('name me')) out({ method: 'thread/name/updated', params: { threadId: 'thr-other', threadName: 'Not this one' } })
+  if (text.includes('name me')) out({ method: 'thread/name/updated', params: { threadId, threadName: 'Fake\nthread   name' } })
   out({ method: 'item/agentMessage/delta', params: { itemId: `m${turnN}`, delta: 'Work' } })
   out({ method: 'item/agentMessage/delta', params: { itemId: `m${turnN}`, delta: 'ing' } })
   if (text.includes('slow')) return
@@ -55,7 +58,7 @@ function request(m) {
       return out({ id: m.id, result: { thread: { id: threadId, cwd: m.params.cwd }, approvalPolicy: m.params.approvalPolicy, sandbox: m.params.sandbox } })
     case 'thread/resume':
       threadId = m.params.threadId
-      return out({ id: m.id, result: { thread: { id: threadId } } })
+      return out({ id: m.id, result: { thread: { id: threadId, name: threadId === 'thr-named' ? 'Named earlier' : null } } })
     case 'turn/start':
       return startTurn(m.id, m.params)
     case 'turn/interrupt':

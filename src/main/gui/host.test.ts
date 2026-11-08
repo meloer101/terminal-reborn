@@ -309,6 +309,20 @@ describe('GuiHost · Codex app-server', () => {
     expect(h.view('x1')).toEqual(stateOf(h, 'x1'))
   }, 30_000)
 
+  it('reports the thread’s name as the session title: a resumed thread’s, and each thread/name/updated for it (PRD F2)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x5', { resumeAgentSessionId: 'thr-named' }), h.owner)
+    await ready(h, 'x5')
+    expect(h.status).toContainEqual({ type: 'agent-title', title: 'Named earlier' })
+    await h.host.send('x5', { text: 'name me', attachments: [] })
+    await until(() => h.status.filter((e) => e.type === 'agent-title').length === 2)
+    // Another thread's name is not this session's; one line, spaces folded (cleanTitle).
+    expect(h.status.filter((e) => e.type === 'agent-title')).toEqual([
+      { type: 'agent-title', title: 'Named earlier' },
+      { type: 'agent-title', title: 'Fake thread name' }
+    ])
+  }, 30_000)
+
   it('starts with the saved 权限 level (Figma 56)', async () => {
     const h = harness()
     await h.host.open(launchOf('codex', 'x9', { permission: 'ask' }), h.owner)
@@ -366,6 +380,15 @@ describe('GuiHost · ACP', () => {
     await until(() => h.status.at(-1)?.type === 'stop-failure')
     expect(h.status.at(-1)).toEqual({ type: 'stop-failure', message: 'Grok 拒绝了这个请求' })
   })
+
+  it('reports the agent’s session_info_update title as the session title, ignoring a cleared one (PRD F2)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('gemini', 't1'), h.owner)
+    await ready(h, 't1')
+    await h.host.send('t1', { text: 'name me', attachments: [] })
+    await until(() => stateOf(h, 't1').prompts.length === 1)
+    expect(h.status.filter((e) => e.type === 'agent-title')).toEqual([{ type: 'agent-title', title: 'Fake ACP title' }])
+  }, 30_000)
 
   it('handshakes, refuses fs requests, answers a permission, sets a picker and cancels', async () => {
     const h = harness()

@@ -28,6 +28,10 @@ function runPrompt(id, params) {
   if (text.includes('refuse')) return out({ id, result: { stopReason: 'refusal' } })
   prompt = { id }
   const go = () => {
+    if (text.includes('name me')) {
+      update(sessionId, { sessionUpdate: 'session_info_update', title: null })
+      update(sessionId, { sessionUpdate: 'session_info_update', title: 'Fake ACP title', updatedAt: '2026-11-08T00:00:00Z' })
+    }
     update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi ' } })
     update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `there (${model}, ${picked.mode})` } })
     if (text.includes('slow')) return

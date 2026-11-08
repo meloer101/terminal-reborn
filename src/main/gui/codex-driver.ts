@@ -41,6 +41,9 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
     if (!id) return false
     threadId = id
     io.agentSession(id)
+    // A resumed thread keeps the name it was given (by the Codex TUI, or `thread/name/set` from another client).
+    const name = isRec(thread) ? str(thread.name) : undefined
+    if (name) io.title(name)
     return true
   }
 
@@ -117,6 +120,11 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
         }
         requestIds.set(id, message.id)
         io.emit(events)
+        return
+      }
+      if (method === 'thread/name/updated') {
+        const name = str(params.threadName)
+        if (name && (!threadId || params.threadId === threadId)) io.title(name)
         return
       }
       if (method === 'turn/started') {
