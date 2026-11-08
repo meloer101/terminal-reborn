@@ -8,7 +8,7 @@
 
 ## 当前位置
 
-- 2026-11-08：手机新建的会话一律是 GUI 会话（agent 有 GUI 时），手机打开的会话算看过、重启后没接上的会启动（PRD v1.161）：手机上的模型、思考程度、模式从建好起就能用按钮改。新建时在智能体下面选模型（Mac 端已做，手机界面等 Figma 第 67 节审过），进会话后改思考程度和模式。分支 claude/ios-model-effort-selection-48b92b。
+- 2026-11-08：手机新建的会话一律是 GUI 会话（agent 有 GUI 时），手机打开的会话算看过、重启后没接上的会启动（PRD v1.161）：手机上的模型、思考程度、模式从建好起就能用按钮改。新建时在智能体下面选模型（Figma 第 67 节），进会话后改思考程度和模式（会话设置里「权限」改叫「模式」）。分支 claude/ios-model-effort-selection-48b92b。
 - 2026-11-08：Pi 的 GUI 会话直接用 `pi --mode rpc`（PRD v1.158），不用装 pi-acp；模型和推理强度换了就在同一会话上重启 Pi，不写 Pi 的全局配置；模式只有询问 / 接受编辑。分支 claude/pi-rpc-driver-74ad0b（基于 jacoy/gui-composer-65）。
 - 2026-11-07：手机会话页加两边头像、Markdown 表格和会话设置（PRD v1.144）：在手机上改模型、思考程度、权限，只改这个会话；GUI 会话全部 agent 都能改，终端里目前是 Claude。
 - 2026-11-07：iPhone App 按 Figma「手机 · iOS」第 59–63 节改完（PRD v1.143）：新的设计 token 和 Dynamic Type，连接失败时写清原因（Mac 睡了、Wavi 没开、Tailscale 没开、版本不配），对话里工具调用合成一句、一轮结束有改动汇总、回答过的留回执，Live Activity 加汇总行和「已过期」。
@@ -308,7 +308,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [x] 第 64 节和实现（2026-11-07，PRD v1.144）：两边头像、Markdown 表格、头像在手机上选、输入框按钮居中、会话设置（GUI 会话全部 agent；终端里的 Claude）。测试 `session-settings.test.ts`、`terminal-settings.test.ts`、`claude-terminal.test.ts`、`normalize.test.ts`、`remote.test.ts`、`model.test.ts`、WaviTests `MarkdownTests`；Claude 终端的按键用真 TUI 在隔离目录里跑过；iOS 模拟器对替身 Mac 截了深色、浅色、字号特大。真机没试
   - [x] 手机新建的会话一律是 GUI 会话、手机打开的会话算看过（2026-11-08，PRD v1.161）：建好就能改模型、思考程度、模式。测试 `e2e/remote-gui.spec.ts`
   - [x] Mac 端：手机按 agent 拿模型清单、新建时带上选中的模型（2026-11-08，PRD v1.161 ③）。测试 `remote.test.ts`、`remote/model.test.ts`、`e2e/remote-gui.spec.ts`
-  - [ ] 手机端：新建会话「智能体」下面的「模型」行和菜单、会话设置「权限」改名「模式」（Figma 第 67 节，等作者看过稿再写）
+  - [x] 手机端：新建会话「智能体」下面的「模型」行和菜单、会话设置「权限」改名「模式」（Figma 第 67 节）；agent 列不出模型时不显示这一行。会话里改的模型和思考程度不会成为这家下次新建的默认值（只有新建表单里选的会）
   - [ ] 终端里的 Codex 会话设置（读 rollout 的 `thread_settings_applied` 拿当前值和模型清单）
   - [ ] Figma 里删掉被取代的 45A、45D、46′G、46′C（等作者确认）
   - [ ] 离线时显示上次的对话（现在离线进会话是空的）；重连的退避让 Mac 恢复后要等几秒才连上
