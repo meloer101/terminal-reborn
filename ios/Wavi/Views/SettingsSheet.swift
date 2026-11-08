@@ -36,8 +36,8 @@ struct SettingsPill: View {
       .padding(.leading, 12)
       .padding(.trailing, 10)
       .frame(minHeight: 32)
-      .background(Color.fillSubtle, in: Capsule())
-      .overlay(Capsule().strokeBorder(Color.hairline))
+      // Glass like the composer under it: the conversation scrolls beneath both.
+      .glass(16, interactive: true)
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)
