@@ -456,6 +456,8 @@ export type RemoteWindowCommand =
   | { type: 'ship'; session: string; action: RemoteShipAction }
   | { type: 'archive'; session: string }
   | { type: 'set-setting'; session: string; kind: SettingKind; value: string }
+  /** The phone opened the session: it counts as shown, so a restored one starts (its 会话设置 come from the agent). */
+  | { type: 'open'; session: string }
 
 export interface RemoteWindowRequest {
   callId: string

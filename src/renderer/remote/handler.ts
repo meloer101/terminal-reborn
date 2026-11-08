@@ -5,9 +5,10 @@ import { generateBranchName } from '@shared/new-session'
 import { remoteFail, type RemoteResult, type RemoteWindowCommand } from '@shared/remote'
 import { setLaunch } from '../dispatch/store'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
-import { branchProblemText, planCreate } from '../new-session/model'
+import { binaryInstalled, branchProblemText, planCreate, uiRow } from '../new-session/model'
 import { insertPaths, interruptAgent, submitInputLine, submitPrompt, whenAgentReady } from '../session-io'
 import { setSessionSetting } from '../session-settings'
+import { startSession } from '../state/session-start'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
 import { remoteArchive, remoteExits, remoteShipAction } from './exits'
@@ -40,9 +41,12 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
   if (!project) return remoteFail('项目不存在')
   const [installed, info] = await Promise.all([window.tr.app.detectAgents(), window.tr.gitWorktrees.newSessionInfo(project.rootPath)])
   if (!installed[command.agent]) return remoteFail('Mac 上没有安装这个智能体')
+  // A GUI session whenever the agent has one (PRD F22 v1.161): its model, effort and 模式 are then the agent's own
+  // pickers, changed from the phone by button. The window's remembered 界面 is the window's, so it is left alone.
+  const ui = uiRow(command.agent, 'gui', binaryInstalled(installed))?.value ?? 'cli'
   let id: string | null
   if (command.workdir === 'current' || !info.repo) {
-    id = workspace.addSession(project.id, command.agent)
+    id = workspace.addSession(project.id, command.agent, ui)
   } else {
     const branch = command.branch ?? generateBranchName(info.prefix, new Set(info.branches.map((b) => b.name)))
     const planned = planCreate(project.rootPath, info, { workdir: 'worktree', base: command.base ?? info.defaultBranch, branch, prepare: info.includeCount > 0 || info.hasSetup })
@@ -53,11 +57,11 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
     }
     const plan = planned.plan
     if (plan.type === 'current') {
-      id = workspace.addSession(project.id, command.agent)
+      id = workspace.addSession(project.id, command.agent, ui)
     } else if (plan.type === 'existing') {
-      id = workspace.addBackgroundSession(project.id, { path: plan.path, branch: plan.branch }, command.agent)
+      id = workspace.addBackgroundSession(project.id, { path: plan.path, branch: plan.branch }, command.agent, undefined, ui)
     } else {
-      id = workspace.addBackgroundSession(project.id, { path: plan.path, branch: plan.request.branch, baseBranch: plan.request.base }, command.agent, randomId('s'))
+      id = workspace.addBackgroundSession(project.id, { path: plan.path, branch: plan.request.branch, baseBranch: plan.request.base }, command.agent, randomId('s'), ui)
       if (id) {
         holdForWorktree(id)
         void createWorktreeFor(id, command.agent, plan.request)
@@ -68,6 +72,17 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
   if (command.prompt) setLaunch(id, { initialPrompt: command.prompt })
   startEagerly(id)
   return { ok: true, data: { session: id } }
+}
+
+/** The phone shows the session, as a window would: a restored one that nothing started yet starts, resuming. */
+function open(sessionId: string): RemoteResult {
+  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  if (!session || session.kind === 'shell') return remoteFail('会话不存在')
+  if (session.phase === 'not-started') {
+    startEagerly(sessionId)
+    void startSession(sessionId, { resume: true })
+  }
+  return { ok: true }
 }
 
 export async function handleRemoteCommand(command: RemoteWindowCommand): Promise<RemoteResult> {
@@ -88,6 +103,8 @@ export async function handleRemoteCommand(command: RemoteWindowCommand): Promise
         return await remoteArchive(command.session)
       case 'set-setting':
         return await setSessionSetting(command.session, command.kind, command.value)
+      case 'open':
+        return open(command.session)
     }
   } catch (error) {
     return failure(error)
