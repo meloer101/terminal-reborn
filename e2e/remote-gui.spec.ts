@@ -127,6 +127,20 @@ test.describe('手机远程 · GUI sessions', () => {
     await expect.poll(() => current(created, 'permission'), WITHIN).toBe('plan')
   })
 
+  test('新建会话 lists the agent\'s models and the session starts with the one picked (Figma 67A / 67B)', async () => {
+    const listed = await phone.request({ type: 'agent-models', agent: 'claude' }, 30_000)
+    expect(listed).toMatchObject({ ok: true })
+    const models = (listed as { data: { models: { value: string }[] } }).data.models.map((m) => m.value)
+    expect(models).toEqual(expect.arrayContaining(['opus', 'haiku']))
+    const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'phone-haiku', model: 'haiku' }, 30_000)
+    expect(answer).toMatchObject({ ok: true })
+    const id = (answer as { data: { session: string } }).data.session
+    await expect.poll(() => current(id, 'model'), WITHIN).toBe('haiku')
+    expect(launchedArgs()).toEqual(expect.arrayContaining(['--model', 'haiku']))
+    // The agent's next session starts with it too, as a pick in the desktop's menu does.
+    expect((await phone.request({ type: 'agent-models', agent: 'claude' })) as unknown).toMatchObject({ ok: true, data: { current: 'haiku' } })
+  })
+
   test('a first message typed in 新建会话 reaches the GUI agent', async () => {
     const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'phone-first', prompt: 'from the phone' }, 30_000)
     expect(answer).toMatchObject({ ok: true })
@@ -139,6 +153,8 @@ test.describe('手机远程 · GUI sessions', () => {
   test('a restored GUI session nobody has shown starts when the phone opens it', async () => {
     expect(await kinds('s1')).toEqual([])
     expect(await phone.request({ type: 'watch', session: 's1' })).toMatchObject({ ok: true })
-    await expect.poll(() => kinds('s1'), WITHIN).toEqual(['model', 'effort', 'permission'])
+    // It starts with the agent's last pick (Haiku, from 新建会话 above), which has no effort levels: no effort row.
+    await expect.poll(() => kinds('s1'), WITHIN).toEqual(['model', 'permission'])
+    expect(await current('s1', 'model')).toBe('haiku')
   })
 })

@@ -3,6 +3,7 @@
 // (src/main/remote); the phone app speaks the same messages inside them.
 import { isCliAgent, type CliAgent } from './agents'
 import type { PendingPrompt } from './agent-events'
+import { GUI_MODEL_ID } from './gui-chat'
 import { isSettingKind, parseSessionSettings, settingValue, type SessionSettings, type SettingKind } from './session-settings'
 import type { ChatItem } from './transcript-chat'
 import type { AgentKind, SessionStatus } from './types'
@@ -183,6 +184,16 @@ export type RemoteShipAction =
   | { do: 'submit' | 'retry' | 'cancel' | 'conflicts' | 'switch-pr' }
 
 /** One row of the phone's session list (Figma 45B). */
+/**
+ * 新建会话's 模型 row (PRD F22 v1.161, Figma 67A / 67B): the models the agent lists, as the desktop's empty-session menu
+ * has them (Figma 65), and the one a new session of it starts with. `models` is empty when the session will not be GUI
+ * (the row is left out) or the agent only lists its models inside a session (the row says 默认).
+ */
+export interface RemoteAgentModels {
+  models: { value: string; label: string }[]
+  current?: string
+}
+
 export interface RemoteSession {
   id: string
   projectId: string
@@ -247,7 +258,10 @@ export type PhoneCommand =
   /** AskUserQuestion: question text → the chosen label (or what the user wrote). */
   | { type: 'answer'; prompt: string; answers: Record<string, string> }
   | { type: 'new-session-info'; project: string }
-  | { type: 'new-session'; project: string; workdir: 'worktree' | 'current'; agent: CliAgent; base?: string; branch?: string; prompt?: string }
+  /** The agent's models for 新建会话's 模型 row (RemoteAgentModels; none for an agent that runs only in a terminal). */
+  | { type: 'agent-models'; agent: CliAgent }
+  /** `model`: picked under the agent (PRD F22 v1.161); the agent's own id, used when the session runs as GUI. */
+  | { type: 'new-session'; project: string; workdir: 'worktree' | 'current'; agent: CliAgent; base?: string; branch?: string; prompt?: string; model?: string }
   | { type: 'changes'; session: string }
   /** One file of `changes`: its unified diff (Git · 变更's own groups, PRD F5). */
   | { type: 'diff'; session: string; path: string; scope: 'uncommitted' | 'committed'; oldPath?: string; untracked?: boolean }
@@ -373,8 +387,11 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
     }
     case 'new-session-info':
       return isId(v.project) ? { id, type: 'new-session-info', project: v.project } : null
+    case 'agent-models':
+      return isCliAgent(v.agent) ? { id, type: 'agent-models', agent: v.agent } : null
     case 'new-session': {
       if (!isId(v.project) || (v.workdir !== 'worktree' && v.workdir !== 'current') || !isCliAgent(v.agent)) return null
+      if (v.model !== undefined && (typeof v.model !== 'string' || !GUI_MODEL_ID.test(v.model))) return null
       if (v.base !== undefined && (typeof v.base !== 'string' || !BRANCH.test(v.base))) return null
       if (v.branch !== undefined && (typeof v.branch !== 'string' || !BRANCH.test(v.branch))) return null
       const prompt = v.prompt === undefined ? undefined : cleanText(v.prompt, REMOTE_LIMITS.textChars)
@@ -387,7 +404,8 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
         agent: v.agent,
         ...(typeof v.base === 'string' ? { base: v.base } : {}),
         ...(typeof v.branch === 'string' ? { branch: v.branch } : {}),
-        ...(prompt && prompt.trim() ? { prompt } : {})
+        ...(prompt && prompt.trim() ? { prompt } : {}),
+        ...(typeof v.model === 'string' ? { model: v.model } : {})
       }
     }
     case 'changes':
@@ -451,7 +469,8 @@ export type RemoteWindowCommand =
   /** Photos are files main already wrote (HEIC turned into JPEG). */
   | { type: 'send'; session: string; text: string; paths: string[] }
   | { type: 'interrupt'; session: string }
-  | { type: 'new-session'; project: string; workdir: 'worktree' | 'current'; agent: CliAgent; base?: string; branch?: string; prompt?: string }
+  | { type: 'new-session'; project: string; workdir: 'worktree' | 'current'; agent: CliAgent; base?: string; branch?: string; prompt?: string; model?: string }
+  | { type: 'agent-models'; agent: CliAgent }
   | { type: 'exits'; session: string }
   | { type: 'ship'; session: string; action: RemoteShipAction }
   | { type: 'archive'; session: string }

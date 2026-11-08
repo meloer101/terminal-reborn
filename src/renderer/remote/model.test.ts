@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Project, Session, Worktree } from '@shared/types'
 import { EMPTY_TEXTS, fail, startState, toGlance } from '../pull-requests/ship-flow'
-import { remoteSessions, remoteShip } from './model'
+import { agentModels, remoteSessions, remoteShip } from './model'
 
 const project: Project = { id: 'p1', name: 'acme-web', rootPath: '/code/acme' }
 const main: Worktree = { id: 'w0', projectId: 'p1', branch: 'main', path: '/code/acme', isMain: true }
@@ -67,3 +67,21 @@ describe('remoteShip', () => {
   })
 })
 
+
+describe('agentModels (新建会话 · 模型, Figma 67A)', () => {
+  const opus = { value: 'opus', label: 'Opus 5.5' }
+  const haiku = { value: 'haiku', label: 'Haiku 5.5' }
+
+  it('lists what a session of the agent listed before, starting from its last pick', () => {
+    expect(agentModels(true, { models: [opus, haiku], model: 'haiku' }, { models: [opus], current: 'opus' })).toEqual({ models: [opus, haiku], current: 'haiku' })
+  })
+
+  it('falls back to what main asked the agent, and to its default when it names none it lists', () => {
+    expect(agentModels(true, undefined, { models: [opus, haiku], current: 'opus' })).toEqual({ models: [opus, haiku], current: 'opus' })
+    expect(agentModels(true, { model: 'gone' }, { models: [opus] })).toEqual({ models: [opus] })
+  })
+
+  it('has no row for a session that will run in a terminal', () => {
+    expect(agentModels(false, { models: [opus], model: 'opus' }, undefined)).toEqual({ models: [] })
+  })
+})

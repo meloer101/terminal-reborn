@@ -1,8 +1,11 @@
 // What the phone asks the window to do (PRD F22): type a prompt (photos first, as F19 does with dropped files), press
 // Esc, start a session, or take Git · 变更's exits and 归档 (exits.ts). Everything goes through the same code as the desktop's own buttons: the send protocol
 // (§6.9), the new-session sheet's plan (F4) and the first-message launch dispatch uses (F21).
+import type { CliAgent } from '@shared/agents'
+import type { AgentAvailability } from '@shared/ipc'
 import { generateBranchName } from '@shared/new-session'
 import { remoteFail, type RemoteResult, type RemoteWindowCommand } from '@shared/remote'
+import type { SessionUi } from '@shared/types'
 import { setLaunch } from '../dispatch/store'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
 import { binaryInstalled, branchProblemText, planCreate, uiRow } from '../new-session/model'
@@ -12,6 +15,7 @@ import { startSession } from '../state/session-start'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
 import { remoteArchive, remoteExits, remoteShipAction } from './exits'
+import { agentModels } from './model'
 
 const failure = (error: unknown): RemoteResult => remoteFail(error instanceof Error ? error.message : String(error))
 
@@ -35,15 +39,37 @@ async function send(sessionId: string, text: string, paths: string[]): Promise<R
   return { ok: true }
 }
 
+/**
+ * The phone's sessions are GUI whenever the agent has one (PRD F22 v1.161): their model, effort and 模式 are then the
+ * agent's own pickers, changed from the phone by button. The window's remembered 界面 is the window's, left alone.
+ */
+const phoneUi = (agent: CliAgent, installed: AgentAvailability): SessionUi => uiRow(agent, 'gui', binaryInstalled(installed))?.value ?? 'cli'
+
+/** 新建会话's 模型 row: as the desktop's empty-session menu (Figma 65), asking the agent when no session listed them. */
+async function modelsOf(agent: CliAgent): Promise<RemoteResult> {
+  const gui = phoneUi(agent, await window.tr.app.detectAgents()) === 'gui'
+  const picks = useWorkspace.getState().guiPicks[agent]
+  if (!gui || picks?.models?.length) return { ok: true, data: agentModels(gui, picks, undefined) }
+  const result = await window.tr.gui.models(agent)
+  if (!result.ok && !('unsupported' in result)) return remoteFail(result.reason)
+  // Kept as the desktop's menu keeps it, unless a session of the agent listed its own ids since.
+  if (result.ok && useWorkspace.getState().guiPicks[agent]?.modelsFrom !== 'live') {
+    useWorkspace.getState().rememberGuiPicks(agent, { models: result.catalog.models, modelsFrom: 'probe' })
+  }
+  return { ok: true, data: agentModels(true, picks, result.ok ? result.catalog : undefined) }
+}
+
 async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-session' }>): Promise<RemoteResult> {
   const workspace = useWorkspace.getState()
   const project = workspace.projects.find((p) => p.id === command.project)
   if (!project) return remoteFail('项目不存在')
   const [installed, info] = await Promise.all([window.tr.app.detectAgents(), window.tr.gitWorktrees.newSessionInfo(project.rootPath)])
   if (!installed[command.agent]) return remoteFail('Mac 上没有安装这个智能体')
-  // A GUI session whenever the agent has one (PRD F22 v1.161): its model, effort and 模式 are then the agent's own
-  // pickers, changed from the phone by button. The window's remembered 界面 is the window's, so it is left alone.
-  const ui = uiRow(command.agent, 'gui', binaryInstalled(installed))?.value ?? 'cli'
+  const ui = phoneUi(command.agent, installed)
+  // The model picked under the agent is the user's pick, as one in the desktop's menu (Figma 65): the new session
+  // starts with it, and so does the agent's next one.
+  const model = ui === 'gui' ? command.model : undefined
+  if (model) workspace.rememberGuiPicks(command.agent, { model })
   let id: string | null
   if (command.workdir === 'current' || !info.repo) {
     id = workspace.addSession(project.id, command.agent, ui)
@@ -69,7 +95,8 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
     }
   }
   if (!id) return remoteFail('没能新建会话')
-  if (command.prompt) setLaunch(id, { initialPrompt: command.prompt })
+  // A first message starts the session as a dispatch does, which takes its model from the launch, not the picks.
+  if (command.prompt) setLaunch(id, { initialPrompt: command.prompt, ...(model ? { model } : {}) })
   startEagerly(id)
   return { ok: true, data: { session: id } }
 }
@@ -105,6 +132,8 @@ export async function handleRemoteCommand(command: RemoteWindowCommand): Promise
         return await setSessionSetting(command.session, command.kind, command.value)
       case 'open':
         return open(command.session)
+      case 'agent-models':
+        return await modelsOf(command.agent)
     }
   } catch (error) {
     return failure(error)
