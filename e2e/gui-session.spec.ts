@@ -90,6 +90,31 @@ test.describe('F23 GUI session (Claude)', () => {
     return Math.round((bubble?.y ?? NaN) - (region?.y ?? NaN))
   }
 
+  test('the chat card takes the corners of its placement: the window-corner ones are square in full screen', async () => {
+    const card = page.locator('[data-region="terminal"] > [data-session-id="s1"]')
+    const corners = () =>
+      card.evaluate((el) => {
+        const s = getComputedStyle(el)
+        return [s.borderTopLeftRadius, s.borderTopRightRadius, s.borderBottomRightRadius, s.borderBottomLeftRadius]
+      })
+    // Sidebar open: the left corners face it (--radius-window), the right ones sit in the window's (--radius-edge).
+    await expect.poll(corners).toEqual(['10px', '16px', '16px', '10px'])
+    const fullScreen = (on: boolean) => app.evaluate(({ BrowserWindow }, on) => BrowserWindow.getAllWindows()[0]!.webContents.send('ui:full-screen', on), on)
+    await fullScreen(true)
+    await expect.poll(corners).toEqual(['10px', '0px', '0px', '10px'])
+    await page.screenshot({ path: join(SHOTS, 'full-screen-corners.png') })
+    // Sidebar hidden: every corner is in a corner of the window, so all four are square in full screen.
+    await page.getByRole('button', { name: '隐藏侧栏' }).click()
+    await expect.poll(corners).toEqual(['0px', '0px', '0px', '0px'])
+    // Once the drawer has closed, the card fills the window.
+    await expect.poll(() => card.evaluate((el) => window.innerWidth - el.getBoundingClientRect().right)).toBeLessThan(1)
+    await page.screenshot({ path: join(SHOTS, 'full-screen-corners-no-sidebar.png') })
+    await fullScreen(false)
+    await expect.poll(corners).toEqual(['16px', '16px', '16px', '16px'])
+    await page.getByRole('button', { name: '显示侧栏' }).click()
+    await expect.poll(corners).toEqual(['10px', '16px', '16px', '10px'])
+  })
+
   test('sends a message and shows the reply, top down (Figma 50A)', async () => {
     await send('你好')
     await expect(feed().getByText('你好', { exact: true })).toBeVisible(WITHIN)
