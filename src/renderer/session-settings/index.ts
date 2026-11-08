@@ -1,15 +1,24 @@
 // The phone's 会话设置 in the window (PRD F22 v1.144, Figma 64B–64F): what a session's model, effort and permission are
 // and what they can be, and setting one for this session only. A GUI session goes through its composer pickers (the
-// same call the desktop's pickers make, PRD F23).
-import { guiSettingChanges, guiSettings, type SessionSettings, type SettingKind } from '@shared/session-settings'
+// same call the desktop's pickers make, PRD F23); Claude in a terminal by typing into its TUI (claude-terminal.ts).
+// Other agents' terminals offer nothing yet (shared/terminal-settings.ts says why).
 import { remoteFail, type RemoteResult } from '@shared/remote'
+import { guiSettingChanges, guiSettings, type SessionSettings, type SettingKind } from '@shared/session-settings'
+import { claudePermissionOnScreen, claudeTerminalSettings } from '@shared/terminal-settings'
 import type { Session } from '@shared/types'
 import { guiStateOf } from '../gui/store'
+import { useSessionMeta } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
+import { readViewport } from '../terminal/registry'
+import { setClaudeInTerminal } from './claude-terminal'
 
 /** What the phone shows for `session`; undefined when it can change nothing there. */
 export function sessionSettings(session: Session): SessionSettings | undefined {
   if (session.ui === 'gui') return guiSettings(guiStateOf(session.id).config)
+  if (session.kind === 'claude' && session.phase === 'ready') {
+    const reported = useSessionMeta.getState().bySession[session.id]?.settings ?? {}
+    return claudeTerminalSettings(reported, claudePermissionOnScreen(readViewport(session.id)), session.status === 'running' || session.status === 'needs_you')
+  }
   return undefined
 }
 
@@ -24,5 +33,6 @@ export async function setSessionSetting(sessionId: string, kind: SettingKind, va
     }
     return { ok: true }
   }
+  if (session.kind === 'claude') return setClaudeInTerminal(session, kind, value)
   return remoteFail('这个会话不能在手机上改')
 }

@@ -20,6 +20,8 @@ export interface SessionMetrics {
   plan?: false
   /** Subagents running inside the session (PRD F21 v1.109, Figma 44B); absent when none. */
   subagents?: SubagentInfo[]
+  /** What the agent last reported of its model, effort and permission mode (the phone's 会话设置, PRD F22 v1.144). */
+  settings?: { model?: string; effort?: string; permission?: string }
 }
 
 interface SessionMetaState {
@@ -39,6 +41,8 @@ interface SessionMetaState {
   setAccount(account: UsageAccount): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
   setPlan(sessionId: SessionId, plan: boolean): void
+  /** Merges what one payload said into what is known. */
+  setSettings(sessionId: SessionId, settings: { model?: string; effort?: string; permission?: string }): void
   /** The hand-started agent of a plain terminal ended: everything it reported goes. */
   clearSession(sessionId: SessionId): void
   /** Drops sessions that are gone. */
@@ -86,6 +90,12 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
             return next
           })
     ),
+  setSettings: (sessionId, settings) =>
+    set((s) => {
+      const current = s.bySession[sessionId]?.settings ?? {}
+      const next = { ...current, ...settings }
+      return Object.entries(next).every(([k, v]) => current[k as keyof typeof current] === v) ? s : patchSession(s, sessionId, (m) => ({ ...m, settings: next }))
+    }),
   setAgent: (sessionId, agent) =>
     set((s) => (s.bySession[sessionId]?.agent === agent ? s : patchSession(s, sessionId, (current) => ({ ...current, agent })))),
   setPlan: (sessionId, plan) =>
@@ -136,6 +146,10 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
   else if (event.type === 'checks') state.setChecks(sessionId, event.checks)
   else if (event.type === 'billing') state.setPlan(sessionId, event.plan)
   else if (event.type === 'subagents') state.setSubagents(sessionId, event.items)
+  else if (event.type === 'agent-settings') {
+    const { type: _type, ...settings } = event
+    state.setSettings(sessionId, settings)
+  }
 }
 
 /** Clicking a usage notification lands here: the overview, with its usage popover open. */

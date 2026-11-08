@@ -37,7 +37,13 @@ describe('HookBridge', () => {
   it('stamps events with session, agent and receive time', async () => {
     const { bridge, events, req } = setup()
     expect(await bridge.handle(req('UserPromptSubmit', fx.UserPromptSubmit))).toBe('')
-    expect(events).toEqual([{ sessionId: 's1', agent: 'claude', at: 1000, event: { type: 'prompt-submit', prompt: 'Reply with only the word OK.' } }])
+    expect(events).toEqual([
+      { sessionId: 's1', agent: 'claude', at: 1000, event: { type: 'prompt-submit', prompt: 'Reply with only the word OK.' } },
+      // The payload's permission mode, for the phone's 会话设置 (sent once; the same value again is not).
+      { sessionId: 's1', agent: 'claude', at: 1000, event: { type: 'agent-settings', permission: 'auto' } }
+    ])
+    await bridge.handle(req('UserPromptSubmit', fx.UserPromptSubmit))
+    expect(events.filter((e) => e.event.type === 'agent-settings')).toHaveLength(1)
   })
 
   it('rejects sessions the app did not spawn', async () => {

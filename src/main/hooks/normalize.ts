@@ -418,6 +418,28 @@ function normalizeCodex(event: string, payload: Rec): NormalizedHook {
  * Unknown events and non-object payloads normalize to nothing; they are never an error. The payload is clipped first
  * (the daemon already did for relayed hooks), so no event, prompt or todo call carries a whole file to the renderer.
  */
+const SETTING = /^[\w.:\-[\]]{1,80}$/
+const setting = (v: unknown): string | undefined => (typeof v === 'string' && SETTING.test(v) ? v : undefined)
+
+/** What this payload says about the agent's model, effort and permission mode (PRD F22 v1.144, measured in §6.16). */
+export function agentSettings(agent: HookAgent, event: string, raw: unknown): Extract<AgentEvent, { type: 'agent-settings' }> | null {
+  const payload = trimHookPayload(raw)
+  if (!isRec(payload)) return null
+  let model: string | undefined
+  let effort: string | undefined
+  let permission: string | undefined
+  if (agent === 'claude') {
+    model = event === 'StatusLine' ? setting(isRec(payload.model) ? payload.model.id : undefined) : event === 'SessionStart' ? setting(payload.model) : undefined
+    effort = setting(isRec(payload.effort) ? payload.effort.level : undefined)
+    permission = setting(payload.permission_mode)
+  } else if (agent === 'codex') {
+    // Codex's `permission_mode` stays "default" whatever /permissions says (measured), so only the model is read.
+    model = setting(payload.model)
+  }
+  if (!model && !effort && !permission) return null
+  return { type: 'agent-settings', ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(permission ? { permission } : {}) }
+}
+
 export function normalizeHook(agent: HookAgent, event: string, raw: unknown, at = Date.now()): NormalizedHook {
   const payload = trimHookPayload(raw)
   if (!isRec(payload)) return NONE

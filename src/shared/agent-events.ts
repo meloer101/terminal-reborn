@@ -61,6 +61,12 @@ export type AgentEvent =
    * hooks; the whole list each time it changes, [] when none (PRD F21 v1.109, Figma 44B). Display only. Not activity.
    */
   | { type: 'subagents'; items: SubagentInfo[] }
+  /**
+   * The model, effort and permission mode the agent reports (Claude statusLine `model.id` / `effort.level`, SessionStart
+   * `model`, `permission_mode` on prompt and stop hooks; Codex `model`), for the phone's 会话设置 (PRD F22 v1.144). Only
+   * what this payload carried. Not activity.
+   */
+  | { type: 'agent-settings'; model?: string; effort?: string; permission?: string }
 
 /** A subagent the agent started inside its session: never a Wavi session (PRD F21 v1.109). */
 export interface SubagentInfo {
