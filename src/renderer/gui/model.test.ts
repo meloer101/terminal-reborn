@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchCommands, permissionOption, planOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
+import { fastOption, matchCommands, permissionOption, planOption, type GuiConfigOption, type GuiPermissionOption, type GuiQuestion } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import {
   appendToDraft,
@@ -15,6 +15,11 @@ import {
   pickChoice,
   pickCommand,
   pickerButtons,
+  modeChanges,
+  chatIsEmpty,
+  guiAgentMenu,
+  projectChoices,
+  wheelSteps,
   planParts,
   questionAnswers,
   slashQuery,
@@ -461,14 +466,71 @@ describe('composer', () => {
       option('model', 'model', 'Sonnet 5', ['Sonnet 5', 'Opus 5.5']),
       option('only', 'other', 'x', ['x'])
     ])
-    // Figma 56: model · effort, 权限, 计划 (a switch), then the agent's own mode; a single choice is not a picker.
+    // Figma 65: model, effort, 权限 and 计划 as one 模式 button (planning: 计划), then the agent's own mode; a single
+    // choice is not a picker.
     expect(buttons.map((b) => [b.key, b.label, b.toggle?.on])).toEqual([
-      ['model+effort', 'Sonnet 5 · 高', undefined],
-      ['permission', '接受编辑', undefined],
-      ['plan', '计划', true],
+      ['model', 'Sonnet 5', undefined],
+      ['effort', '高', undefined],
+      ['permission+plan', '计划', undefined],
       ['mode', 'agent', undefined]
     ])
     expect(pickerButtons([permissionOption(['ask'], 'ask')])).toEqual([])
+  })
+
+  it('lists 询问 / 接受编辑 / 自动 / 计划 on one 模式 button, and 快速 is a switch (Figma 65)', () => {
+    const levels = permissionOption(['ask', 'accept-edits', 'auto'], 'auto')
+    const [mode, fast] = pickerButtons([levels, planOption(false), fastOption(true, '快速没有生效：x')])
+    expect(mode).toMatchObject({ key: 'permission+plan', label: '自动', mode: { current: 'auto' } })
+    expect(mode?.mode?.choices.map((c) => `${c.value}:${c.label}`)).toEqual(['ask:询问', 'accept-edits:接受编辑', 'auto:自动', 'plan:计划'])
+    expect(fast).toMatchObject({ key: 'fast', label: '快速', toggle: { on: true }, hint: '快速没有生效：x' })
+    // An agent without a plan mode: three levels; one level and a plan mode (an ACP agent that only asks): two.
+    expect(pickerButtons([levels])[0]?.mode?.choices).toHaveLength(3)
+    expect(pickerButtons([permissionOption(['ask'], 'ask'), planOption(true)])[0]).toMatchObject({ label: '计划', mode: { current: 'plan', choices: [{ value: 'ask' }, { value: 'plan' }] } })
+  })
+
+  it('counts a session as empty until anything is said, runs or waits (Figma 59G / 65)', () => {
+    const none = { items: [], live: null, busy: false, queued: [] }
+    expect(chatIsEmpty(none)).toBe(true)
+    expect(chatIsEmpty({ ...none, busy: true })).toBe(false)
+    expect(chatIsEmpty({ ...none, items: [user('u')] })).toBe(false)
+    expect(chatIsEmpty({ ...none, queued: [{ id: 'q', text: 'x' }] })).toBe(false)
+  })
+
+  it('lists the agents an empty session can switch to: installed with a GUI first, the others to install (Figma 65)', () => {
+    const menu = guiAgentMenu({ claude: true, codex: false, grok: true, cursor: false, crush: true })
+    // Claude Code and Codex are always there (as in 新建会话); Crush has no GUI at all.
+    expect(menu.installed).toEqual(expect.arrayContaining(['claude', 'codex', 'grok']))
+    expect(menu.installed).not.toContain('cursor')
+    expect(menu.missing).toContain('cursor')
+    expect([...menu.installed, ...menu.missing]).not.toContain('crush')
+  })
+
+  it('offers each project once, by its main worktree, in the sidebar’s order (Figma 65)', () => {
+    const projects = [{ id: 'p1', name: 'acme' }, { id: 'p2', name: 'web' }, { id: 'p3', name: 'gone' }]
+    const worktrees = [
+      { id: 'w1', projectId: 'p1', isMain: true },
+      { id: 'w1b', projectId: 'p1', isMain: false },
+      { id: 'w2', projectId: 'p2', isMain: true },
+      { id: 'w3', projectId: 'p3', isMain: true, archived: {} }
+    ]
+    expect(projectChoices(projects, worktrees)).toEqual([
+      { projectId: 'p1', name: 'acme', worktreeId: 'w1' },
+      { projectId: 'p2', name: 'web', worktreeId: 'w2' }
+    ])
+  })
+
+  it('turns wheel deltas into whole steps, keeping the rest', () => {
+    expect(wheelSteps(0, 30)).toEqual({ steps: 0, rest: 30 })
+    expect(wheelSteps(30, 30)).toEqual({ steps: 1, rest: 20 })
+    expect(wheelSteps(0, -100)).toEqual({ steps: -2, rest: -20 })
+  })
+
+  it('turns a 模式 choice into the picker changes to send, in order', () => {
+    expect(modeChanges('plan', false)).toEqual([['plan', 'on']])
+    expect(modeChanges('plan', true)).toEqual([])
+    expect(modeChanges('ask', false)).toEqual([['permission', 'ask']])
+    // Leaving 计划: the level first (Claude and Grok keep it as where plan off returns), then plan off.
+    expect(modeChanges('auto', true)).toEqual([['permission', 'auto'], ['plan', 'off']])
   })
 
   it('steps through a list, wrapping', () => {

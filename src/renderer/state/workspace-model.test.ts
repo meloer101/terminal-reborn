@@ -288,6 +288,14 @@ describe('persistence', () => {
     expect(serializeWorkspace(withSessions('claude'), ui, {})).not.toHaveProperty('newSessionUi')
   })
 
+  it('keeps each agent’s last picks across a restart (Figma 65)', () => {
+    const data = withSessions('claude')
+    const file = serializeWorkspace(data, { ...ui, guiPicks: { claude: { model: 'opus', fast: true }, codex: {} } }, {})
+    expect(file.guiPicks).toEqual({ claude: { model: 'opus', fast: true } })
+    expect(sanitizeWorkspaceFile(JSON.parse(JSON.stringify(file)), 0)?.guiPicks).toEqual({ claude: { model: 'opus', fast: true } })
+    expect(serializeWorkspace(data, ui, {})).not.toHaveProperty('guiPicks')
+  })
+
   it('a conversation id replaced later (after /clear) is what gets saved', () => {
     const data = withSessions('codex')
     const replaced = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'second' })) }
@@ -321,6 +329,9 @@ describe('persistedStateChanged', () => {
     expect(persistedStateChanged({ ...base, newSessionWorkdir: { 'p-1': 'current' } }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, newSessionUi: { 'p-1': 'cli' } }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, sessions: [{ ...first, ui: 'gui' }] }, base)).toBe(true)
+    // Figma 65: an empty GUI session's agent can change.
+    expect(persistedStateChanged({ ...base, sessions: [{ ...first, kind: 'codex' }] }, base)).toBe(true)
+    expect(persistedStateChanged({ ...base, guiPicks: { claude: { model: 'opus' } } }, base)).toBe(true)
     expect(persistedStateChanged({ ...base, projects: [...base.projects] }, base)).toBe(true)
   })
 })

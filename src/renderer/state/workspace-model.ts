@@ -1,6 +1,7 @@
 // Pure workspace mutations and persistence format. The zustand store in ./workspace applies these.
 // M1 has no git integration: a project is a folder with a single "main" worktree.
-import { AGENT_SPECS, CLI_AGENTS } from '@shared/agents'
+import { AGENT_SPECS, CLI_AGENTS, type CliAgent } from '@shared/agents'
+import type { GuiPicks } from '@shared/gui-chat'
 import type { WorktreeArchive } from '@shared/archive'
 import { pruneAttemptGroups, type AttemptGroup } from '@shared/attempt-groups'
 import type { Workdir } from '@shared/new-session'
@@ -288,6 +289,8 @@ export interface WorkspaceUi {
   newSessionAgent?: Readonly<Record<ProjectId, AgentKind>>
   /** 界面 last chosen in the new-session sheet, by project (PRD F23). */
   newSessionUi?: Readonly<Record<ProjectId, SessionUi>>
+  /** Figma 65: what each agent last ran with in a GUI session. */
+  guiPicks?: Readonly<Partial<Record<CliAgent, GuiPicks>>>
   /** Secondary windows (F20 · 多窗口); `data` holds the main window's panes. */
   secondaryWindows?: readonly PersistedWindow[]
   /** 一题多解 groups; members are kept only while their session exists. */
@@ -354,6 +357,9 @@ export function serializeWorkspace(
       : {}),
     ...(ui.newSessionUi && Object.keys(ui.newSessionUi).length > 0
       ? { newSessionUi: Object.fromEntries(Object.entries(ui.newSessionUi).filter(([id]) => data.projects.some((p) => p.id === id))) }
+      : {}),
+    ...(ui.guiPicks && Object.values(ui.guiPicks).some((p) => p && Object.keys(p).length > 0)
+      ? { guiPicks: Object.fromEntries(Object.entries(ui.guiPicks).filter(([, p]) => p && Object.keys(p).length > 0)) as Record<string, GuiPicks> }
       : {}),
     drafts: Object.fromEntries(
       Object.entries(drafts).filter(([id, text]) => text.length > 0 && data.sessions.some((s) => s.id === id))
@@ -428,6 +434,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     next.newSessionWorkdir !== prev.newSessionWorkdir ||
     next.newSessionAgent !== prev.newSessionAgent ||
     next.newSessionUi !== prev.newSessionUi ||
+    next.guiPicks !== prev.guiPicks ||
     next.sessions.length !== prev.sessions.length
   ) {
     return true
@@ -437,6 +444,7 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
     return (
       !before ||
       s.id !== before.id ||
+      s.kind !== before.kind ||
       s.ui !== before.ui ||
       s.guiPermission !== before.guiPermission ||
       s.guiPlan !== before.guiPlan ||

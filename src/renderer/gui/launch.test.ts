@@ -7,11 +7,12 @@ const ONE = [{ id: 's-1', kind: 'claude', ui: 'gui', dispatchedBy: 's-0' }]
 const ws = vi.hoisted(() => ({
   sessions: [] as Array<Record<string, unknown>>,
   worktrees: [] as Array<Record<string, unknown>>,
-  patches: [] as unknown[][]
+  patches: [] as unknown[][],
+  guiPicks: {} as Record<string, Record<string, unknown>>
 }))
 vi.mock('../state/workspace', () => ({
   useWorkspace: {
-    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, patchSession: (...args: unknown[]) => ws.patches.push(args) }),
+    getState: () => ({ sessions: ws.sessions, worktrees: ws.worktrees, guiPicks: ws.guiPicks, patchSession: (...args: unknown[]) => ws.patches.push(args) }),
     subscribe: () => () => {}
   }
 }))
@@ -60,6 +61,7 @@ beforeEach(() => {
   ws.sessions = ONE.map((s) => ({ ...s }))
   ws.worktrees = []
   ws.patches = []
+  ws.guiPicks = {}
   dispatch.launch = undefined
   useGuiSessions.setState({ states: {} })
   useLaunchIssues.setState({ issues: {} })
@@ -105,6 +107,18 @@ describe('openGuiSession', () => {
       { type: 'busy', busy: false }
     ])
     expect(guiStateOf('s-1')).toMatchObject({ busy: false, live: null, items: [{ id: 'a' }] })
+  })
+
+  it('starts a new session with what its agent last ran with; the session’s own 权限 / 计划 win (Figma 65)', async () => {
+    main.result = { ok: true, state: emptyGuiState() }
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui' }]
+    ws.guiPicks = { claude: { model: 'opus', effort: 'max', permission: 'auto', plan: true, fast: true } }
+    await openGuiSession('s-1', '/w', 'claude', undefined)
+    expect(main.opened[0]).toEqual({ sessionId: 's-1', cwd: '/w', agent: 'claude', permission: 'auto', plan: true, model: 'opus', effort: 'max', fast: true })
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui', guiPermission: 'ask' }]
+    await openGuiSession('s-1', '/w', 'claude', undefined)
+    expect(main.opened[1]).toMatchObject({ permission: 'ask' })
+    expect(main.opened[1]).not.toHaveProperty('plan')
   })
 
   it('shows why it could not start and leaves the session exited (a launch issue)', async () => {

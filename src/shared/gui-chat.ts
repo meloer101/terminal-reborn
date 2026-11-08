@@ -114,6 +114,67 @@ export const fastOption = (on: boolean, hint?: string): GuiConfigOption => ({
   ...(hint ? { hint } : {})
 })
 
+/**
+ * Figma 65: what the user last chose with an agent, so a new session of it (or the agent picked in an empty one)
+ * starts with them. Kept per agent in the workspace file (`guiPicks`).
+ */
+export interface GuiPicks {
+  model?: string
+  /** The models it offered last time: an empty session lists them under the agent before switching to it. */
+  models?: { value: string; label: string }[]
+  effort?: string
+  permission?: GuiPermission
+  plan?: boolean
+  fast?: boolean
+}
+
+/** The picks a session runs with now, from its pickers. */
+export function picksOf(config: readonly GuiConfigOption[]): GuiPicks {
+  const now = (category: GuiConfigOption['category']) => config.find((o) => o.category === category)?.current
+  const [model, effort, permission, plan, fast] = [now('model'), now('thought_level'), now('permission'), now('plan'), now('fast')]
+  const models = config.find((o) => o.category === 'model')?.values.slice(0, MAX_PICK_MODELS)
+  return {
+    ...(model ? { model } : {}),
+    ...(models && models.length > 0 ? { models: models.map(({ value, label }) => ({ value, label })) } : {}),
+    ...(effort ? { effort } : {}),
+    ...(permission && isPermission(permission) ? { permission } : {}),
+    ...(plan !== undefined ? { plan: plan === 'on' } : {}),
+    ...(fast !== undefined ? { fast: fast === 'on' } : {})
+  }
+}
+
+const MAX_PICK_MODELS = 60
+const PICK_VALUE = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
+const isPermission = (value: unknown): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
+
+const modelsOf = (raw: unknown[]): { value: string; label: string }[] =>
+  raw
+    .flatMap((m) => {
+      if (typeof m !== 'object' || m === null) return []
+      const { value, label } = m as Record<string, unknown>
+      return typeof value === 'string' && PICK_VALUE.test(value) && typeof label === 'string' && label.length <= 80 ? [{ value, label }] : []
+    })
+    .slice(0, MAX_PICK_MODELS)
+
+/** `guiPicks` read back from disk: known agents only, each value checked. */
+export function sanitizeGuiPicks(raw: unknown, agents: ReadonlySet<string>): Record<string, GuiPicks> {
+  const out: Record<string, GuiPicks> = {}
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return out
+  for (const [agent, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!agents.has(agent) || typeof value !== 'object' || value === null) continue
+    const v = value as Record<string, unknown>
+    out[agent] = {
+      ...(typeof v.model === 'string' && PICK_VALUE.test(v.model) ? { model: v.model } : {}),
+      ...(Array.isArray(v.models) ? { models: modelsOf(v.models) } : {}),
+      ...(typeof v.effort === 'string' && PICK_VALUE.test(v.effort) ? { effort: v.effort } : {}),
+      ...(isPermission(v.permission) ? { permission: v.permission } : {}),
+      ...(typeof v.plan === 'boolean' ? { plan: v.plan } : {}),
+      ...(typeof v.fast === 'boolean' ? { fast: v.fast } : {})
+    }
+  }
+  return out
+}
+
 /** Figma 56: reasoning effort in the same words for every agent; a level not listed keeps the agent's own name. */
 const EFFORT_LABELS: Readonly<Record<string, string>> = { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高' }
 export const effortLabel = (value: string, own?: string): string => EFFORT_LABELS[value.toLowerCase()] ?? own ?? value

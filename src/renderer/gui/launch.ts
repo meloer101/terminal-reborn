@@ -2,7 +2,7 @@
 // (terminal/session-terminal.ts), sent to `window.tr.gui.open` instead. Main starts the agent if it is not running and
 // answers with the conversation to draw; the session's phase moves like a started TUI's.
 import type { CliAgent } from '@shared/agents'
-import type { GuiLaunch } from '@shared/gui-chat'
+import type { GuiLaunch, GuiPicks } from '@shared/gui-chat'
 import type { SessionId } from '@shared/types'
 import { takeDispatchLaunch } from '../dispatch/store'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
@@ -21,6 +21,8 @@ export interface GuiLaunchInput {
   /** The 权限 and 计划 last chosen (Figma 56), so the agent starts — or is shown — with them. */
   permission?: GuiLaunch['permission']
   plan?: boolean
+  /** Figma 65: the model, effort and 快速 the agent last ran with (a dispatch's model wins). */
+  picks?: Pick<GuiPicks, 'model' | 'effort' | 'fast'>
 }
 
 export function guiLaunch(input: GuiLaunchInput): GuiLaunch {
@@ -33,6 +35,9 @@ export function guiLaunch(input: GuiLaunchInput): GuiLaunch {
     ...(input.dispatched ? { dispatched: true } : {}),
     ...(input.permission ? { permission: input.permission } : {}),
     ...(input.plan ? { plan: true } : {}),
+    ...(input.picks?.model ? { model: input.picks.model } : {}),
+    ...(input.picks?.effort ? { effort: input.picks.effort } : {}),
+    ...(input.picks?.fast !== undefined ? { fast: input.picks.fast } : {}),
     ...(dispatch ? { initialPrompt: dispatch.initialPrompt, ...(dispatch.model ? { model: dispatch.model } : {}) } : {})
   }
 }
@@ -64,8 +69,10 @@ export async function adoptGuiSessions(): Promise<void> {
 /** Opens the session's agent; resolves to whether it is up. A failure shows in the chat and ends the session's phase. */
 export async function openGuiSession(sessionId: SessionId, cwd: string, agent: CliAgent, resumeAgentSessionId: string | undefined): Promise<boolean> {
   listenToGuiEvents()
-  const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+  const { sessions, guiPicks } = useWorkspace.getState()
+  const session = sessions.find((s) => s.id === sessionId)
   if (!session) return false
+  const picks = guiPicks[agent] ?? {}
   const launch = guiLaunch({
     sessionId,
     cwd,
@@ -73,8 +80,10 @@ export async function openGuiSession(sessionId: SessionId, cwd: string, agent: C
     resumeAgentSessionId,
     dispatched: session.dispatchedBy !== undefined,
     dispatch: resumeAgentSessionId ? undefined : takeDispatchLaunch(sessionId),
-    ...(session.guiPermission ? { permission: session.guiPermission } : {}),
-    ...(session.guiPlan ? { plan: true } : {})
+    // The session's own 权限 / 计划 once it has run; a new one starts with what its agent last ran with (Figma 65).
+    ...(session.guiPermission ? { permission: session.guiPermission } : picks.permission ? { permission: picks.permission } : {}),
+    ...((session.guiPermission ? session.guiPlan : picks.plan) ? { plan: true } : {}),
+    picks
   })
   let reason: string
   try {

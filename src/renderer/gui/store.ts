@@ -3,7 +3,7 @@
 // select their own session's slice, and applyGuiEvent keeps unchanged parts by identity, so a streamed delta re-renders
 // only what it touched.
 import { create } from 'zustand'
-import { applyGuiEvent, emptyGuiState, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, picksOf, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
 import type { Session, SessionId } from '@shared/types'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
 import { drafts as savedDrafts } from '../state/persistence'
@@ -59,6 +59,8 @@ export function rememberPicks(sessionId: SessionId, config: readonly GuiConfigOp
   if ((permission === 'ask' || permission === 'accept-edits' || permission === 'auto') && permission !== session.guiPermission) patch.guiPermission = permission
   if (plan !== undefined && (plan === 'on') !== (session.guiPlan === true)) patch.guiPlan = plan === 'on'
   if (Object.keys(patch).length > 0) useWorkspace.getState().patchSession(sessionId, patch)
+  // Figma 65: and on the agent, so its next session (or an empty one switched to it) starts with them.
+  if (session.kind !== 'shell') useWorkspace.getState().rememberGuiPicks(session.kind, picksOf(config))
 }
 
 let listening: (() => void) | null = null
