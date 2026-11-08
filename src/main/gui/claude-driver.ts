@@ -212,7 +212,9 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       const images = split.images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } }))
       const body = withPaths(text, split.paths)
       const content = images.length === 0 ? body : [...(body ? [{ type: 'text', text: body }] : []), ...images]
-      return io.write({ type: 'user', message: { role: 'user', content } })
+      // `origin` says a person typed it, as the TUI's keyboard does (PRD §6.17): without it Claude does not name the
+      // session from a first message that is a slash command or skill.
+      return io.write({ type: 'user', message: { role: 'user', content }, origin: { kind: 'human' } })
     },
 
     answer(answer: GuiAnswer) {

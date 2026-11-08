@@ -15,6 +15,7 @@ import { createAcpDriver } from './acp-driver'
 import { createClaudeDriver } from './claude-driver'
 import { createCodexDriver } from './codex-driver'
 import { isRec, type DriverIO, type GuiDriver, type ImageBlock } from './driver'
+import { cleanTitle } from '../hooks/agent-title'
 import { exitReason } from './launch'
 import { createGuiStatusTracker, toolInputOf, type GuiStatusTracker } from './status'
 
@@ -50,7 +51,8 @@ export interface GuiHostDeps<O extends GuiOwner> {
   resumePoint(agent: CliAgent, cwd: string, agentSessionId: string, messageId: string): Promise<string | null | undefined>
   /**
    * Status for the session's owner: everything for the agents without hooks (and a Claude whose hooks do not reach the
-   * app, PreparedLaunch.synthStatus), start and exit for Claude (PRD §3.1).
+   * app, PreparedLaunch.synthStatus), start and exit for Claude (PRD §3.1); the agent's own title (`agent-title`) for
+   * the agents that report one over their protocol (Codex, ACP; Claude's is read from its transcript after hooks).
    */
   status(sessionId: string, agent: CliAgent, events: AgentEvent[], owner: O | null): void
   /**
@@ -96,6 +98,8 @@ class GuiSession<O extends GuiOwner> {
   private binary: string
   /** A Claude process whose hooks do not reach the app (PreparedLaunch.synthStatus). */
   private hookless = false
+  /** The agent's latest name for the conversation; sent again after a replay, which mutes status. */
+  private title: string | undefined
 
   constructor(
     readonly launch: GuiLaunch,
@@ -136,6 +140,7 @@ class GuiSession<O extends GuiOwner> {
         if (!this.exited && this.synthStatus) this.status(this.tracker.turnEnd(outcome))
       },
       fail: (reason) => this.fail(reason),
+      title: (raw) => this.named(raw),
       image: (path) => this.deps.image(path),
       relaunch: (change) => this.onRelaunch(change)
     }
@@ -272,7 +277,16 @@ class GuiSession<O extends GuiOwner> {
       for (const item of this.state.items) if (item.kind === 'tool' && item.state === 'running') out.push({ type: 'tool-start', tool: item.name, input: toolInputOf(item.name, item.arg) })
     }
     out.push(...tracker.events(this.state.prompts.map((prompt) => ({ type: 'prompt' as const, prompt }))))
+    if (this.title) out.push({ type: 'agent-title', title: this.title })
     this.status(out)
+  }
+
+  /** The agent named the conversation: the session's title (PRD F2), as a hook-read title is for a TUI. */
+  private named(raw: string): void {
+    const title = cleanTitle(raw)
+    if (!title || title === this.title) return
+    this.title = title
+    this.status([{ type: 'agent-title', title }])
   }
 
   private started(): void {
@@ -365,6 +379,8 @@ class GuiSession<O extends GuiOwner> {
 
   claim(owner: O): GuiState {
     this.owner = owner
+    // A title that came while no window owned the session (reload, window closed) went nowhere: the new owner gets it.
+    if (this.title) this.status([{ type: 'agent-title', title: this.title }])
     return this.snapshot()
   }
 

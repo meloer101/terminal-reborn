@@ -22,6 +22,8 @@ export interface DriverIO {
   ready(): void
   /** The agent's conversation id (Claude session id, Codex thread id, ACP session id): the session's agentSessionId. */
   agentSession(id: string): void
+  /** The agent named the conversation (Codex `thread/name/updated` or a thread's `name`, ACP `session_info_update`). */
+  title(title: string): void
   /** A turn ended (status: Stop / StopFailure for the agents without hooks). */
   turnEnd(outcome: { failed: boolean; message?: string }): void
   /** The handshake failed; shown above the composer. */

@@ -149,6 +149,12 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
       takeConfig({ configOptions: update.configOptions })
       return
     }
+    // The agent's own name for the session (ACP `session_info_update`; `title: null` clears it, which Wavi ignores).
+    if (update.sessionUpdate === 'session_info_update') {
+      const title = str(update.title)
+      if (title) io.title(title)
+      return
+    }
     if (update.sessionUpdate === 'current_mode_update') {
       const mode = str(update.currentModeId)
       if (mode) {

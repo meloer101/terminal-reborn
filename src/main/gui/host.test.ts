@@ -309,6 +309,20 @@ describe('GuiHost · Codex app-server', () => {
     expect(h.view('x1')).toEqual(stateOf(h, 'x1'))
   }, 30_000)
 
+  it('reports the thread’s name as the session title: a resumed thread’s, and each thread/name/updated for it (PRD F2)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x5', { resumeAgentSessionId: 'thr-named' }), h.owner)
+    await ready(h, 'x5')
+    expect(h.status).toContainEqual({ type: 'agent-title', title: 'Named earlier' })
+    await h.host.send('x5', { text: 'name me', attachments: [] })
+    await until(() => h.status.filter((e) => e.type === 'agent-title').length === 2)
+    // Another thread's name is not this session's; one line, spaces folded (cleanTitle).
+    expect(h.status.filter((e) => e.type === 'agent-title')).toEqual([
+      { type: 'agent-title', title: 'Named earlier' },
+      { type: 'agent-title', title: 'Fake thread name' }
+    ])
+  }, 30_000)
+
   it('starts with the saved 权限 level (Figma 56)', async () => {
     const h = harness()
     await h.host.open(launchOf('codex', 'x9', { permission: 'ask' }), h.owner)
@@ -366,6 +380,15 @@ describe('GuiHost · ACP', () => {
     await until(() => h.status.at(-1)?.type === 'stop-failure')
     expect(h.status.at(-1)).toEqual({ type: 'stop-failure', message: 'Grok 拒绝了这个请求' })
   })
+
+  it('reports the agent’s session_info_update title as the session title, ignoring a cleared one (PRD F2)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('gemini', 't1'), h.owner)
+    await ready(h, 't1')
+    await h.host.send('t1', { text: 'name me', attachments: [] })
+    await until(() => stateOf(h, 't1').prompts.length === 1)
+    expect(h.status.filter((e) => e.type === 'agent-title')).toEqual([{ type: 'agent-title', title: 'Fake ACP title' }])
+  }, 30_000)
 
   it('handshakes, refuses fs requests, answers a permission, sets a picker and cancels', async () => {
     const h = harness()
@@ -526,6 +549,7 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
   function stubHost(attach: PipeAttach, history: ChatItem[] | null) {
     const writes: string[] = []
     const adopted: string[] = []
+    const status: AgentEvent[] = []
     const link: PipeLink = {
       durable: true,
       spawn: () => Promise.resolve({ ok: false, message: 'not in this test' }),
@@ -543,15 +567,31 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
       prepare: () => Promise.reject(new Error('not in this test')),
       history: () => Promise.resolve(history),
       resumePoint: () => Promise.resolve(undefined),
-      status: () => undefined,
+      status: (_id, _agent, events) => void status.push(...events),
       adopted: (id) => adopted.push(id),
       ended: () => undefined,
       image: () => Promise.resolve(null),
       clientVersion: '0',
       batchMs: 5
     })
-    return { host, writes, adopted }
+    return { host, writes, adopted, status }
   }
+
+  it('a title among the kept lines is sent once, after the replay, and again to a window that claims the session (Codex)', async () => {
+    const started = JSON.stringify({ id: 7, result: { thread: { id: 'thr-1', name: null } } })
+    const named = (threadId: string, threadName: string) => JSON.stringify({ method: 'thread/name/updated', params: { threadId, threadName } })
+    const { host, status } = stubHost({ pid: 1, seq: 3, lines: [started, named('thr-other', 'Not ours'), named('thr-1', 'Ours')], truncated: false }, null)
+    const opened = await host.open(launchOf('codex', 'r1'), new FakeOwner())
+    expect(opened.ok).toBe(true)
+    expect(status.filter((e) => e.type === 'agent-title')).toEqual([{ type: 'agent-title', title: 'Ours' }])
+    // A reloaded window opens the running session again.
+    expect((await host.open(launchOf('codex', 'r1'), new FakeOwner())).ok).toBe(true)
+    expect(status.filter((e) => e.type === 'agent-title')).toEqual([
+      { type: 'agent-title', title: 'Ours' },
+      { type: 'agent-title', title: 'Ours' }
+    ])
+    host.stop('r1')
+  })
 
   it('a truncated replay takes the history from the transcript and lines its newest items up with the kept ones', async () => {
     const history: ChatItem[] = [
