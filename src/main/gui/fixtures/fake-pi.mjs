@@ -4,7 +4,12 @@
 // user's message and streams `Hello: <text> (<model>, <thinking>)`; "bash" runs `ls`, "edit" edits a.txt, "read"
 // reads it (never asked); "slow" streams until `abort`; "refuse" fails the prompt's preflight. Launch arguments come as
 // FAKE_PI_MODEL / FAKE_PI_THINKING / FAKE_PI_SESSION (the tests' prepare) or as `--model` / `--thinking` /
-// `--session-id` (the e2e runs it with guiArgv's arguments).
+// `--session-id` (the e2e runs it with guiArgv's arguments). With FAKE_PI_LOG set, each launch's arguments and each
+// command's type are appended to that file, one JSON line each.
+import { appendFileSync } from 'node:fs'
+
+const log = (entry) => process.env.FAKE_PI_LOG && appendFileSync(process.env.FAKE_PI_LOG, `${JSON.stringify(entry)}\n`)
+log({ args: process.argv.slice(2) })
 const arg = (flag) => {
   const at = process.argv.indexOf(flag)
   return at > 0 ? process.argv[at + 1] : undefined
@@ -82,6 +87,7 @@ process.stdin.on('data', (chunk) => {
     } catch {
       continue
     }
+    log({ command: m.type })
     switch (m.type) {
       case 'get_state':
         respond(m.id, 'get_state', { model, thinkingLevel: thinking, isStreaming: turn !== null, sessionId, sessionFile: `/tmp/fake-pi/${sessionId}.jsonl`, messageCount: 0 })
