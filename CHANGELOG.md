@@ -4,6 +4,33 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-07
+
+The iPhone app, redesigned: it says why it cannot reach the Mac, folds tool calls, shows avatars and tables, and changes a session's model, effort and permission for that session only. On the Mac: a solid window material, work under way survives a reload, and auto-fix for every agent that reports its turn.
+iPhone App 重新设计：连不上 Mac 时说清原因，工具调用合成一句，有头像和表格，能只为这个会话改模型、思考程度和权限。Mac 上：窗口材质加回「实色」，重新加载窗口不丢进行中的事，所有能报告「这一轮结束」的 agent 都能自动修复。
+
+### iPhone / 手机
+- A new design system (black and white, Dynamic Type, Reduce Transparency and Reduce Motion) and every screen and state redrawn: pairing, the session list, the conversation, permissions and questions, Git · 变更 and its exits, new sessions.
+  新的设计体系（黑白、跟随 Dynamic Type、降低透明度、减弱动态效果），配对、会话列表、对话、权限和提问、Git · 变更和出口、新建会话的所有画面和状态重画。
+- When the Mac cannot be reached the phone says why: the Mac is asleep, Wavi is not open, Tailscale is off on the phone, no network, or one side needs an update; the last list stays, dimmed.
+  连不上 Mac 时写清原因：Mac 睡眠、Wavi 没打开、手机的 Tailscale 没开、没网，或哪一端需要更新；上次的列表留着并置灰。
+- The conversation folds consecutive tool calls into one line, ends a turn that changed files with its totals, leaves a line where a prompt was answered, shows avatars on both sides (yours chosen on the phone) and renders Markdown tables.
+  对话里连续的工具调用合成一句，改了文件的一轮末尾有改动汇总，回答过的权限和提问留一行回执，两边有头像（自己的在手机上选），Markdown 表格正常显示。
+- 会话设置: the model, effort and permission of one session, from the phone — every agent in a GUI session, Claude in a terminal session (its own pickers, kept to that session); never the agent's defaults.
+  会话设置：在手机上改一个会话的模型、思考程度和权限——GUI 会话里所有 agent，终端会话里的 Claude（用它自己的选择框，只改这个会话），从不改 agent 的默认设置。
+- The Live Activity adds a line for what else waits or runs, and says 已过期 when the phone stopped updating it.
+  Live Activity 加一行「另有 N 个等你处理 · N 个运行中」，手机停止更新后显示「已过期」。
+
+### Mac
+- 实色 window material: an opaque window with a softer palette in dark and light.
+  窗口材质加回「实色」：不透明的窗口，深浅两色都压低对比。
+- Reloading the window keeps what is under way (exits, fixes, runs); auto-fix works for every agent that reports the end of its turn.
+  重新加载窗口不丢进行中的事（出口、修复、运行）；自动修复交给每一个能报告「这一轮结束」的 agent。
+- 在此新建会话 lists every agent; thinking rows appear only with text and 思考中 pulses; a PTY daemon that can no longer start a terminal is retired instead of adopted.
+  「在此新建会话」列出全部 agent；思考行只在有文字时出现，「思考中」闪烁；不能再新建终端的 PTY 守护进程被淘汰，不再接管。
+- Fixes from an architecture review: GUI 总是允许 no longer writes ~/.claude/settings.json, restarted terminals take input after reattach, one way to run git, dependency rules checked in `npm run check`.
+  架构审阅的修复：GUI 的「总是允许」不再写 ~/.claude/settings.json，重新接上后重启的终端能输入，git 只有一种调用方式，依赖规则进了 `npm run check`。
+
 ## [0.14.0] - 2026-11-05
 
 GUI sessions: any agent as a chat instead of a terminal, with one set of pickers for every agent. Plus status grouping in the sidebar, cards that reach the window edges, and agents that use the system proxy.
@@ -511,7 +538,10 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.12.3...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/meloer101/terminal-reborn/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/meloer101/terminal-reborn/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/meloer101/terminal-reborn/compare/v0.12.3...v0.13.0
 [0.12.3]: https://github.com/meloer101/terminal-reborn/compare/v0.12.0...v0.12.3
 [0.12.0]: https://github.com/meloer101/terminal-reborn/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/meloer101/terminal-reborn/compare/v0.10.0...v0.11.0
