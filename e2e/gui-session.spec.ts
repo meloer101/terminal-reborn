@@ -165,6 +165,12 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(bash).toBeVisible(WITHIN)
     await expect(feed().getByRole('button', { name: /读取\s*src\/auth\/session\.ts/ })).toBeVisible()
     await expect(feed().getByRole('heading', { name: '测试结果' })).toBeVisible()
+    // PRD v1.155: no line under a heading, none for `---`, and a table keeps only the line under its header.
+    const lines = await feed().evaluate((el) => {
+      const width = (sel: string, side: 'Top' | 'Bottom'): string => getComputedStyle(el.querySelector(sel)!)[`border${side}Width`]
+      return { h2: width('h2', 'Bottom'), hr: width('hr', 'Top'), th: width('th', 'Bottom'), td: width('td', 'Bottom') }
+    })
+    expect(lines).toEqual({ h2: '0px', hr: '0px', th: '1px', td: '0px' })
     await bash.click()
     const output = feed().locator('pre').filter({ hasText: 'rotates the token' })
     const failed = output.locator('[data-fg="red"]').first()

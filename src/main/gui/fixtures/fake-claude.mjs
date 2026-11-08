@@ -81,7 +81,7 @@ function reply(text) {
     out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu3', name: 'Bash', input: { command: 'pnpm vitest run server/auth' } }] }, session_id: SESSION, parent_tool_use_id: null })
     const colored = '\x1b[32m✓\x1b[39m server/auth/login.test.ts \x1b[2m(8 tests)\x1b[22m\n\x1b[31m✗ server/auth/refresh.test.ts > rotates the token\x1b[39m\n\x1b[1mTests\x1b[22m  \x1b[91m1 failed\x1b[39m | \x1b[92m8 passed\x1b[39m'
     out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu3', content: colored, is_error: true }] }, session_id: SESSION, parent_tool_use_id: null })
-    const markdown = '## 测试结果\n\n1 个失败：刷新接口还在读 `localStorage`。\n\n- 登录改成 Set-Cookie\n- 删掉 `session.ts` 里的 localStorage\n\n```ts\nres.cookie(\'session\', token, { httpOnly: true })\n```\n\n| 文件 | 结果 |\n| --- | --- |\n| login.test.ts | 通过 |\n| refresh.test.ts | 失败 |'
+    const markdown = '## 测试结果\n\n1 个失败：刷新接口还在读 `localStorage`。\n\n- 登录改成 Set-Cookie\n- 删掉 `session.ts` 里的 localStorage\n\n```ts\nres.cookie(\'session\', token, { httpOnly: true })\n```\n\n---\n\n| 文件 | 结果 |\n| --- | --- |\n| login.test.ts | 通过 |\n| refresh.test.ts | 失败 |'
     return finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: markdown }] }, session_id: SESSION, parent_tool_use_id: null })
   }
   if (text.includes('subagent')) {
