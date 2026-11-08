@@ -379,6 +379,8 @@ class GuiSession<O extends GuiOwner> {
 
   claim(owner: O): GuiState {
     this.owner = owner
+    // A title that came while no window owned the session (reload, window closed) went nowhere: the new owner gets it.
+    if (this.title) this.status([{ type: 'agent-title', title: this.title }])
     return this.snapshot()
   }
 

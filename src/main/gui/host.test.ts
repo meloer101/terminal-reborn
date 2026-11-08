@@ -549,6 +549,7 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
   function stubHost(attach: PipeAttach, history: ChatItem[] | null) {
     const writes: string[] = []
     const adopted: string[] = []
+    const status: AgentEvent[] = []
     const link: PipeLink = {
       durable: true,
       spawn: () => Promise.resolve({ ok: false, message: 'not in this test' }),
@@ -566,15 +567,31 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
       prepare: () => Promise.reject(new Error('not in this test')),
       history: () => Promise.resolve(history),
       resumePoint: () => Promise.resolve(undefined),
-      status: () => undefined,
+      status: (_id, _agent, events) => void status.push(...events),
       adopted: (id) => adopted.push(id),
       ended: () => undefined,
       image: () => Promise.resolve(null),
       clientVersion: '0',
       batchMs: 5
     })
-    return { host, writes, adopted }
+    return { host, writes, adopted, status }
   }
+
+  it('a title among the kept lines is sent once, after the replay, and again to a window that claims the session (Codex)', async () => {
+    const started = JSON.stringify({ id: 7, result: { thread: { id: 'thr-1', name: null } } })
+    const named = (threadId: string, threadName: string) => JSON.stringify({ method: 'thread/name/updated', params: { threadId, threadName } })
+    const { host, status } = stubHost({ pid: 1, seq: 3, lines: [started, named('thr-other', 'Not ours'), named('thr-1', 'Ours')], truncated: false }, null)
+    const opened = await host.open(launchOf('codex', 'r1'), new FakeOwner())
+    expect(opened.ok).toBe(true)
+    expect(status.filter((e) => e.type === 'agent-title')).toEqual([{ type: 'agent-title', title: 'Ours' }])
+    // A reloaded window opens the running session again.
+    expect((await host.open(launchOf('codex', 'r1'), new FakeOwner())).ok).toBe(true)
+    expect(status.filter((e) => e.type === 'agent-title')).toEqual([
+      { type: 'agent-title', title: 'Ours' },
+      { type: 'agent-title', title: 'Ours' }
+    ])
+    host.stop('r1')
+  })
 
   it('a truncated replay takes the history from the transcript and lines its newest items up with the kept ones', async () => {
     const history: ChatItem[] = [

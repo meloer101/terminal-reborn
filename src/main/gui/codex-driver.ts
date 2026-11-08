@@ -124,7 +124,8 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
       }
       if (method === 'thread/name/updated') {
         const name = str(params.threadName)
-        if (name && (!threadId || params.threadId === threadId)) io.title(name)
+        // Not knowing our thread yet (a truncated replay), it could be another one's: `thread/resume` brings ours.
+        if (name && threadId && params.threadId === threadId) io.title(name)
         return
       }
       if (method === 'turn/started') {
