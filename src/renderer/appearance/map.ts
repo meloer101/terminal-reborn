@@ -6,13 +6,21 @@ import type { AppearanceSettings, ChatAppearance, ChatWidth, WindowMaterial } fr
 import { buildCustomTheme } from '../terminal/appearance'
 import type { TerminalAppearance } from '../terminal/surface'
 
+/** What the card opacities read: 实色 (Figma 66) makes the terminal and chat cards opaque too; the saved values stay. */
+type CardOpacity = Pick<AppearanceSettings, 'terminalOpacity' | 'windowMaterial'>
+
 /** Alpha of the terminal's default cell background: the user's terminal opacity over the theme color. */
-export function terminalBackgroundAlpha(a: Pick<AppearanceSettings, 'terminalOpacity'>): number {
-  return a.terminalOpacity
+export function terminalBackgroundAlpha(a: CardOpacity): number {
+  return a.windowMaterial === 'solid' ? 1 : a.terminalOpacity
+}
+
+/** Opacity of the GUI chat card over the window; 1 under 实色, like the terminal. */
+export function chatOpacity(a: Pick<AppearanceSettings, 'chat' | 'windowMaterial'>): number {
+  return a.windowMaterial === 'solid' ? 1 : a.chat.opacity
 }
 
 /** True when xterm needs `allowTransparency` (it costs subpixel text AA and WebGL, so only then). */
-export function needsTransparency(a: Pick<AppearanceSettings, 'terminalOpacity'>): boolean {
+export function needsTransparency(a: CardOpacity): boolean {
   return terminalBackgroundAlpha(a) < 1
 }
 
@@ -34,18 +42,19 @@ export function hasCustomBackground(a: Pick<AppearanceSettings, 'terminalBackgro
 }
 
 /** CSS `background` of the terminal region: the theme color, or nothing when the cells are translucent. */
-export function backdropCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): string {
+export function backdropCss(a: CardOpacity): string {
   // Translucent terminal cells blend with what is behind the region, not with a second opaque fill.
-  return a.terminalOpacity < 1 ? 'transparent' : 'var(--term-bg)'
+  return needsTransparency(a) ? 'transparent' : 'var(--term-bg)'
 }
 
 /**
  * CSS color of the band around xterm's canvas (its padding and the sub-cell remainder of the fit). Translucent cells are
  * drawn inside the canvas only, so the band repeats the same color at the same alpha to keep the card one flat tone.
  */
-export function ringCss(a: Pick<AppearanceSettings, 'terminalOpacity'>): string {
-  if (a.terminalOpacity >= 1) return 'transparent'
-  return `color-mix(in srgb, var(--term-bg) ${+(a.terminalOpacity * 100).toFixed(2)}%, transparent)`
+export function ringCss(a: CardOpacity): string {
+  const alpha = terminalBackgroundAlpha(a)
+  if (alpha >= 1) return 'transparent'
+  return `color-mix(in srgb, var(--term-bg) ${+(alpha * 100).toFixed(2)}%, transparent)`
 }
 
 export interface AppearanceDom {
@@ -90,7 +99,7 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
       '--chat-size': `${chat.fontSize}px`,
       // 14 / 22 today: the same leading at every size.
       '--chat-leading': `${Math.round(chat.fontSize * (22 / 14))}px`,
-      '--tr-chat-bg': over('var(--bg-app)', chat.opacity),
+      '--tr-chat-bg': over('var(--bg-app)', chatOpacity(a)),
       // The user's picture beside their messages (Figma 51A); none hides it (data-chat-avatar).
       '--chat-avatar': chat.avatar ? `url("${chat.avatar}")` : null,
       // Only the terminal layers read --term-bg; --term-fg stays the theme's (the diff view uses it on app surfaces).

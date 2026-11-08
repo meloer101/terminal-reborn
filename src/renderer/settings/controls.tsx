@@ -47,6 +47,57 @@ export function Row({ label, children, id }: { label: string; children: ReactNod
   )
 }
 
+/** A quiet filled button, 28 high. */
+export function Button({ children, disabled = false, onClick }: { children: ReactNode; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={styles.button} disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  )
+}
+
+/**
+ * 外观 / 终端 / 对话 (Figma 66): the form, 恢复默认 at its end for this page's settings, and the page's live preview beside it.
+ */
+export function PreviewPage({
+  title,
+  children,
+  preview,
+  caption,
+  isDefault,
+  onReset
+}: {
+  title: string
+  children: ReactNode
+  preview: ReactNode
+  caption?: string
+  isDefault: boolean
+  onReset: () => void
+}) {
+  return (
+    <div className={styles.page}>
+      <div className={styles.form}>
+        <h1 className={styles.title}>{title}</h1>
+        {children}
+        <div className={styles.footer}>
+          <Button disabled={isDefault} onClick={onReset}>
+            恢复默认
+          </Button>
+        </div>
+      </div>
+      <div className={styles.previewColumn}>
+        <h2 className={styles.previewTitle}>预览</h2>
+        {preview}
+        {caption !== undefined && (
+          <p className={styles.caption} data-testid="preview-caption">
+            {caption}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ---------- Toggle ---------- */
 
 export function Toggle({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (checked: boolean) => void; label: string; disabled?: boolean }) {

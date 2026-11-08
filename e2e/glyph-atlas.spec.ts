@@ -75,6 +75,8 @@ test('opening Settings leaves the session terminal glyphs intact', async () => {
 
   const sidebar = page.locator('[data-region="sidebar"]')
   await sidebar.getByRole('button', { name: /设置/ }).click()
+  // The terminal preview is on 终端 (Figma 66).
+  await page.getByRole('dialog', { name: '设置' }).getByRole('tab', { name: '终端', exact: true }).click()
   await expect(page.getByRole('img', { name: '终端预览' })).toBeVisible()
   await page.waitForTimeout(500) // the preview loads fonts and draws its sample
   await page.keyboard.press('Escape')
