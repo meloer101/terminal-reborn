@@ -2,6 +2,7 @@
 // in one), the agent sessions of worktrees that are not archived with what the phone list shows, and for main only each
 // session's folder and each project's root. Pure.
 import type { RemoteSession, RemoteShip, RemoteShipField, RemoteWindowSessions } from '@shared/remote'
+import type { SessionSettings } from '@shared/session-settings'
 import type { Project, Session, Worktree } from '@shared/types'
 import { glanceFields, submitBlocker, submitLabel, type ShipState } from '../pull-requests/ship-flow'
 
@@ -57,7 +58,8 @@ export interface RemoteShipping {
 
 export function remoteSessions(
   data: { projects: readonly Project[]; worktrees: readonly Worktree[]; sessions: readonly Session[] },
-  shipping: RemoteShipping = { ships: {}, endings: {} }
+  shipping: RemoteShipping = { ships: {}, endings: {} },
+  settings: (session: Session) => SessionSettings | undefined = () => undefined
 ): RemoteWindowSessions {
   const worktrees = new Map(data.worktrees.map((w) => [w.id, w]))
   const out: RemoteWindowSessions = { projects: [], sessions: [], folders: {}, roots: {} }
@@ -70,6 +72,8 @@ export function remoteSessions(
     if (w.branch) row.branch = w.branch
     if (s.dispatchModel) row.model = s.dispatchModel
     if (s.lastReply) row.reply = s.lastReply
+    const own = settings(s)
+    if (own) row.settings = own
     const ship = shipping.ships[w.path]
     const root = data.projects.find((p) => p.id === w.projectId)?.rootPath ?? ''
     if (ship) row.ship = remoteShip(ship, [w.path, root])

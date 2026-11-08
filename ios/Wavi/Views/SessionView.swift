@@ -109,6 +109,9 @@ struct SessionView: View {
     .safeAreaBar(edge: .bottom) {
       VStack(spacing: 8) {
         PromptBar(prompts: prompts)
+        if let settings = session.settings, !settings.items.isEmpty {
+          SettingsPill(session: session, settings: settings).padding(.horizontal, Metric.margin)
+        }
         Composer(session: id, running: session.status == .running)
       }
     }

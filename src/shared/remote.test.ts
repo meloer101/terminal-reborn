@@ -45,6 +45,13 @@ describe('parsePhoneRequest', () => {
     })
     expect(parsePhoneRequest({ id: 8, type: 'diff', session: 's1', path: 'src/a.ts', scope: 'committed' })).toEqual({ id: 8, type: 'diff', session: 's1', path: 'src/a.ts', scope: 'committed' })
     expect(parsePhoneRequest({ id: 9, type: 'diff', session: 's1', path: 'b.ts', oldPath: 'a.ts', scope: 'uncommitted', untracked: false })).toEqual({ id: 9, type: 'diff', session: 's1', path: 'b.ts', oldPath: 'a.ts', scope: 'uncommitted' })
+    expect(parsePhoneRequest({ id: 10, type: 'set-setting', session: 's1', kind: 'permission', value: 'plan' })).toEqual({ id: 10, type: 'set-setting', session: 's1', kind: 'permission', value: 'plan' })
+  })
+
+  it('refuses a setting it does not know or a value that is not one short line', () => {
+    expect(parsePhoneRequest({ id: 1, type: 'set-setting', session: 's1', kind: 'speed', value: 'x' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'set-setting', session: 's1', kind: 'model', value: 'opus\r' })).toBeNull()
+    expect(parsePhoneRequest({ id: 1, type: 'set-setting', session: '../x', kind: 'model', value: 'opus' })).toBeNull()
   })
 
   it('refuses anything off: unknown types, bad ids, empty sends, paths out of the worktree, too many photos', () => {
@@ -87,6 +94,9 @@ describe('window messages', () => {
       roots: { p1: '/Users/me/acme' }
     }
     expect(parseWindowSessions(good)).toEqual(good)
+    const settings = { items: [{ kind: 'effort', current: 'high', values: [{ value: 'high', label: '高' }] }], locked: 'running' }
+    expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], settings }] })?.sessions[0]?.settings).toEqual(settings)
+    expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], settings: { items: 'x' } }] })?.sessions).toEqual([])
     // A bad entry is left out, not the whole list.
     expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], status: 'busy' }] })?.sessions).toEqual([])
     expect(parseWindowSessions({ ...good, sessions: [{ ...good.sessions[0], agent: 'rm' }] })?.sessions).toEqual([])

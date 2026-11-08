@@ -25,6 +25,8 @@ const LUCIDE: Record<string, keyof typeof lucide> = {
   bot: 'Bot',
   camera: 'Camera',
   check: 'Check',
+  'chevron-down': 'ChevronDown',
+  'chevron-left': 'ChevronLeft',
   'chevron-right': 'ChevronRight',
   file: 'File',
   'git-branch': 'GitBranch',
@@ -35,6 +37,7 @@ const LUCIDE: Record<string, keyof typeof lucide> = {
   square: 'Square',
   'square-check': 'SquareCheck',
   'square-terminal': 'SquareTerminal',
+  'triangle-alert': 'TriangleAlert',
   x: 'X'
 }
 const WRITE = process.env.WAVI_WRITE_PHONE_ASSETS === '1'
