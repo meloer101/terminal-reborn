@@ -6,6 +6,7 @@
 import { app, ipcMain, type WebContents } from 'electron'
 import { realpathSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { HookAgent } from '@shared/agent-events'
 import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
@@ -13,14 +14,14 @@ import { GUI_IPC, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, ty
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
-import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
+import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hookScriptPath, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
 import { defaultAgentDataDirs } from '../hooks/agent-title'
 import { pipeLink } from '../pty/pipes'
 import { sniffPhoto } from '../remote/photos'
 import { portFor } from '../repo-scripts'
 import type { ImageBlock } from './driver'
 import { agentModels } from './catalog'
-import { claudeResumePoint, claudeTranscriptFor, codexRolloutFor, readTranscript } from './history'
+import { claudeResumePoint, claudeTranscriptFor, codexRolloutFor, piSessionFileFor, piSessionsDir, readPiHistory, readTranscript } from './history'
 import { GuiHost, type PreparedLaunch } from './host'
 import { guiArgv, guiCommand, guiEnv, takesSystemPromptArgs } from './launch'
 import { parseGuiAnswer, parseGuiLaunch, parseGuiMessage, parseGuiSessionId, parseGuiText, parseGuiValue } from './validate'
@@ -71,6 +72,8 @@ async function prepare(launch: GuiLaunch, owner: WebContents, resume: string | u
     ...(resume ? { resume } : {}),
     ...(hooks?.settingsPath ? { claudeSettingsPath: hooks.settingsPath } : {}),
     ...(claudeVersion ? { claudeVersion } : {}),
+    // Pi's permission extension sits next to the hook relay, like its TUI one (resources/hooks).
+    ...(driver.protocol === 'pi-rpc' ? { piExtensionPath: join(dirname(hookScriptPath()), 'wavi-pi-gui.js') } : {}),
     extraArgs: dispatch && takesSystemPromptArgs(driver.protocol) ? dispatch.extraArgs : []
   })
   if (!argv) throw new Error('这个智能体只能用 CLI')
@@ -100,6 +103,10 @@ async function history(agent: CliAgent, cwd: string, agentSessionId: string) {
   if (agent === 'codex') {
     const path = await codexRolloutFor(agentSessionId, dirs.codexHome)
     return path ? readTranscript({ agent: 'codex', path }) : null
+  }
+  if (agent === 'pi') {
+    const path = await piSessionFileFor(agentSessionId, piSessionsDir())
+    return path ? readPiHistory(path, cwd) : null
   }
   return null
 }

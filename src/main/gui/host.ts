@@ -14,6 +14,7 @@ import type { PipeExit } from '../../pty-host/pipe-host'
 import { createAcpDriver } from './acp-driver'
 import { createClaudeDriver } from './claude-driver'
 import { createCodexDriver } from './codex-driver'
+import { createPiDriver } from './pi-driver'
 import { isRec, type DriverIO, type GuiDriver, type ImageBlock } from './driver'
 import { exitReason } from './launch'
 import { createGuiStatusTracker, toolInputOf, type GuiStatusTracker } from './status'
@@ -152,6 +153,7 @@ class GuiSession<O extends GuiOwner> {
     }
     if (this.protocol === 'claude-stream') return createClaudeDriver(io, options)
     if (this.protocol === 'codex-app-server') return createCodexDriver(io, options)
+    if (this.protocol === 'pi-rpc') return createPiDriver(io, options)
     return createAcpDriver(io, { ...options, label: agentName(this.launch.agent) })
   }
 
@@ -599,8 +601,9 @@ export class GuiHost<O extends GuiOwner> {
   }
 
   /**
-   * Restarts the agent on its conversation with another launch-argument permission or 计划 (Figma 56, Grok): not while
-   * a turn runs or something waits. The new process replays the conversation (ACP `session/load`).
+   * Restarts the agent on its conversation with another launch-argument permission or 计划 (Figma 56, Grok), or another
+   * model or thinking level (Pi): not while a turn runs or something waits. An ACP agent replays the conversation
+   * (`session/load`); Pi does not, so what is drawn stays.
    */
   private async relaunch(sessionId: string, change: { permission: GuiPermission; plan: boolean }): Promise<boolean> {
     const session = this.sessions.get(sessionId)
@@ -614,12 +617,13 @@ export class GuiHost<O extends GuiOwner> {
     delete next.resumeAt
     this.sessions.delete(sessionId)
     session.stop()
-    const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), [])
+    const kept = AGENT_GUI[launch.agent]?.protocol === 'pi-rpc' ? state.items.slice() : []
+    const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), kept)
     this.sessions.set(sessionId, replacement)
     const result = await replacement.begin(agentSessionId)
     if (!result.ok) {
       if (this.sessions.get(sessionId) === replacement) this.sessions.delete(sessionId)
-      // The chat was cleared for the replay: say why it stays empty.
+      // The chat was cleared for the replay (or kept, Pi): say why nothing more comes.
       if (!owner.isDestroyed()) owner.send(GUI_IPC.events, { sessionId, events: [{ type: 'failure', failure: result.reason }] })
     }
     return result.ok

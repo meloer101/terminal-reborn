@@ -156,7 +156,7 @@ describe('a conversation read back', () => {
     ])
   })
 
-  it('reads nothing from a file without its session header', () => {
-    expect(piBranchMessages(file.slice(1))).toEqual([])
+  it('reads a file cut at the start (its newest part) up to where the read began', () => {
+    expect(piHistoryItems(piBranchMessages(file.slice(6)), '/w').map((i) => i.kind)).toEqual(['text'])
   })
 })

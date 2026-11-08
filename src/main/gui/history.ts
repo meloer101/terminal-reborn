@@ -1,13 +1,16 @@
 // A GUI session's earlier conversation, rebuilt from the agent's own transcript (PRD F23 历史) with the phone's parser
 // (@shared/transcript-chat): when it is resumed, and when a reattached process kept too few lines to replay. Claude's
-// JSONL under ~/.claude/projects, Codex's rollout under ~/.codex/sessions. Electron-free.
+// JSONL under ~/.claude/projects, Codex's rollout under ~/.codex/sessions, Pi's session file under
+// ~/.pi/agent/sessions (read with pi-rpc.ts). Electron-free.
 
 import { existsSync, realpathSync } from 'node:fs'
 import { open, readdir, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { isAbsolute, join } from 'node:path'
 import { createChatParser, type ChatItem } from '@shared/transcript-chat'
 import { claudeTranscriptPath, type AgentDataDirs } from '../hooks/agent-title'
 import { currentBranch, resumePointOf } from './claude-rewind'
+import { piBranchMessages, piHistoryItems } from './pi-rpc'
 
 /** Like the phone's first read (remote/feed.ts): the newest part of a long transcript. */
 const READ_BYTES = 32 * 1024 * 1024
@@ -67,6 +70,42 @@ export async function codexRolloutFor(threadId: string, codexHome: string): Prom
     }
   }
   return null
+}
+
+/** Pi's sessions folder: `$PI_CODING_AGENT_DIR/sessions` or ~/.pi/agent/sessions (Paseo session-descriptor.ts). */
+export function piSessionsDir(env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
+  const agentDir = env.PI_CODING_AGENT_DIR && isAbsolute(env.PI_CODING_AGENT_DIR) ? env.PI_CODING_AGENT_DIR : join(home, '.pi', 'agent')
+  return join(agentDir, 'sessions')
+}
+
+/** Folders of Pi's sessions folder looked at (one per working folder). */
+const MAX_PI_DIRS = 2_000
+
+/** Pi's session file of a conversation: `<sessions>/--<cwd>--/<time>_<id>.jsonl`, in whichever folder holds it. */
+export async function piSessionFileFor(sessionId: string, sessionsDir: string): Promise<string | null> {
+  let folders: string[]
+  try {
+    folders = (await readdir(sessionsDir, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name)
+  } catch {
+    return null
+  }
+  for (const folder of folders.slice(0, MAX_PI_DIRS)) {
+    let names: string[]
+    try {
+      names = await readdir(join(sessionsDir, folder))
+    } catch {
+      continue
+    }
+    const name = names.find((n) => n.endsWith(`_${sessionId}.jsonl`))
+    if (name) return join(sessionsDir, folder, name)
+  }
+  return null
+}
+
+/** A Pi session file's conversation (its active branch). */
+export async function readPiHistory(path: string, cwd: string): Promise<ChatItem[] | null> {
+  const lines = await readLines(path)
+  return lines ? piHistoryItems(piBranchMessages(lines), cwd) : null
 }
 
 /** A transcript's lines (its newest READ_BYTES); null when it cannot be read. */

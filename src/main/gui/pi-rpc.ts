@@ -370,7 +370,8 @@ export function createPiNormalizer(cwd: string, now: () => number = Date.now): P
 /**
  * Pi's session file (`~/.pi/agent/sessions/--<cwd>--/<time>_<id>.jsonl`, version 3) → the messages of its active
  * branch: the entries from the last one up its `parentId`s (Paseo transcript.ts `readPiTranscript`; version 1 files are
- * one line of entries). Rows that do not parse are skipped.
+ * a flat list). Rows that do not parse are skipped; a file read from the middle (its newest part, without the header)
+ * is a tree whose walk stops where the read began.
  */
 export function piBranchMessages(lines: readonly string[]): Rec[] {
   const rows = lines.flatMap((line) => {
@@ -382,10 +383,9 @@ export function piBranchMessages(lines: readonly string[]): Rec[] {
       return []
     }
   })
-  const header = rows.shift()
-  if (header?.type !== 'session') return []
+  const header = rows[0]?.type === 'session' ? rows.shift() : undefined
   let branch = rows
-  if (header.version !== 1) {
+  if (header?.version !== 1) {
     const byId = new Map(rows.flatMap((r) => (typeof r.id === 'string' ? [[r.id, r] as const] : [])))
     branch = []
     const seen = new Set<string>()
