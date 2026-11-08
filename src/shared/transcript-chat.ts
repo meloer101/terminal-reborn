@@ -12,22 +12,56 @@ export interface DiffHunk {
 
 export type ToolState = 'running' | 'ok' | 'error'
 
+/** One task of an agent's task list (Claude TodoWrite, Codex's plan, an ACP plan). */
+export interface ChatTodo {
+  text: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+/** One file's change as the chat draws it: its hunks (capped), and the counts of the whole change. */
+export interface FileDiff {
+  path: string
+  hunks: DiffHunk[]
+  added: number
+  removed: number
+  truncated: boolean
+}
+
 export type ChatItem =
   | { kind: 'user'; id: string; at: number; text: string; images: number }
-  | { kind: 'text'; id: string; at: number; text: string }
-  | { kind: 'thinking'; id: string; at: number; text: string; ms?: number }
+  | {
+      kind: 'text'
+      id: string
+      at: number
+      text: string
+      /** A subagent's words: the id of the Agent / Task call that started it (Figma 59J; the live Claude stream only). */
+      parent?: string
+    }
+  | { kind: 'thinking'; id: string; at: number; text: string; ms?: number; parent?: string }
   | {
       kind: 'tool'
       id: string
       at: number
+      /** A subagent's call: the id of the Agent / Task call that started it (the live Claude stream only). */
+      parent?: string
       name: string
       /** The one thing worth showing after the name: a command, a path, a pattern. */
       arg: string
       state: ToolState
       /** Output (its end, when long). */
       output?: string
-      /** Edit / Write. */
-      diff?: { path: string; hunks: DiffHunk[]; added: number; removed: number; truncated: boolean }
+      /** A shell call's whole command, line breaks kept (clipped at CHAT_LIMITS.input); `arg` is its one-line form. */
+      input?: string
+      /** A shell call's exit code, when the agent reports one (Codex; Claude does not). */
+      exit?: number
+      /** Edit / Write; of a change to several files, the first file. */
+      diff?: FileDiff
+      /** A change to more than one file (Codex fileChange, ACP): every file, `diff` being the first. */
+      files?: FileDiff[]
+      /** A task list (Claude TodoWrite, Codex / ACP `Plan`): every task, as the agent last wrote it. */
+      todos?: ChatTodo[]
+      /** How long a subagent ran (Claude Agent / Task `totalDurationMs`, a Codex collab call's start to end). */
+      ms?: number
     }
   | { kind: 'system'; id: string; at: number; text: string }
   | { kind: 'unknown'; id: string; at: number; type: string }
@@ -36,6 +70,7 @@ export const CHAT_LIMITS = {
   text: 20_000,
   thinking: 4_000,
   output: 2_000,
+  input: 2_000,
   arg: 300,
   diffLines: 400
 } as const
@@ -89,7 +124,7 @@ function timeOf(line: Rec, fallback: number): number {
 }
 
 /** A path under the session's folder, shown relative to it. */
-function rel(path: string, cwd: string | undefined): string {
+export function rel(path: string, cwd: string | undefined): string {
   if (cwd && path.startsWith(cwd.endsWith('/') ? cwd : `${cwd}/`)) return path.slice(cwd.length + (cwd.endsWith('/') ? 0 : 1))
   return path
 }
@@ -133,6 +168,22 @@ export function toolArg(name: string, input: unknown, cwd?: string): string {
   return clip((arg ?? '').replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg)
 }
 
+/**
+ * A task list as each agent writes it → tasks: Claude's `{ content, status }`, Codex's `{ step, status }` (`inProgress`
+ * from the app-server, `in_progress` in a rollout), ACP's `{ content, status }`. Entries without text are left out.
+ */
+export function todosOf(raw: unknown): ChatTodo[] {
+  return (Array.isArray(raw) ? raw : []).filter(isRec).flatMap((t): ChatTodo[] => {
+    const text = str(t.content) ?? str(t.step)
+    if (!text?.trim()) return []
+    const status = t.status === 'completed' ? 'completed' : t.status === 'in_progress' || t.status === 'inProgress' ? 'in_progress' : 'pending'
+    return [{ text: clip(text, CHAT_LIMITS.arg), status }]
+  })
+}
+
+/** A task list's row target: 「N 项」. */
+export const todosArg = (todos: readonly ChatTodo[]): string => `${todos.length} 项`
+
 /** `mcp__server__tool` → `tool`; everything else as it is. */
 export function toolLabel(name: string): string {
   const m = /^mcp__.+?__(.+)$/.exec(name)
@@ -162,37 +213,98 @@ function hunksOf(raw: unknown): DiffHunk[] {
   return out
 }
 
+/**
+ * Files' hunks → the diffs the chat draws: each file's counts, their lines capped at `budget` all together (a long
+ * first file leaves the later ones their names and counts only).
+ */
+export function fileDiffs(files: readonly { path: string; hunks: readonly DiffHunk[] }[], budget: number = CHAT_LIMITS.diffLines): FileDiff[] {
+  let left = budget
+  return files.map(({ path, hunks }) => {
+    let added = 0
+    let removed = 0
+    let truncated = false
+    const kept: DiffHunk[] = []
+    for (const h of hunks) {
+      for (const l of h.lines) {
+        if (l.startsWith('+')) added++
+        else if (l.startsWith('-')) removed++
+      }
+      if (left <= 0) {
+        truncated = true
+        continue
+      }
+      const lines = h.lines.slice(0, left)
+      if (lines.length < h.lines.length) truncated = true
+      left -= lines.length
+      kept.push({ ...h, lines })
+    }
+    return { path, hunks: kept, added, removed, truncated }
+  })
+}
+
+/** A new file's whole text as one hunk of additions. */
+export const addedFile = (text: string): DiffHunk => ({ oldStart: 0, newStart: 1, lines: text.replace(/\n$/, '').split('\n').map((l) => `+${l}`) })
+
+const DIFF_CONTEXT = 3
+/** Above this many line pairs the diff is shown as a whole replacement (the table would be too big). */
+const DIFF_MAX_PAIRS = 4_000_000
+
+/** Old / new text → hunks with three lines of context (longest common subsequence of lines). */
+export function lineDiff(oldText: string, newText: string): DiffHunk[] {
+  const a = oldText === '' ? [] : oldText.replace(/\n$/, '').split('\n')
+  const b = newText === '' ? [] : newText.replace(/\n$/, '').split('\n')
+  type Op = { op: ' ' | '-' | '+'; line: string; oldNo: number; newNo: number }
+  const ops: Op[] = []
+  if (a.length * b.length > DIFF_MAX_PAIRS) {
+    a.forEach((line, i) => ops.push({ op: '-', line, oldNo: i + 1, newNo: 1 }))
+    b.forEach((line, i) => ops.push({ op: '+', line, oldNo: a.length + 1, newNo: i + 1 }))
+  } else {
+    const w = b.length + 1
+    const lcs = new Uint32Array((a.length + 1) * w)
+    for (let i = a.length - 1; i >= 0; i--) {
+      for (let j = b.length - 1; j >= 0; j--) {
+        lcs[i * w + j] = a[i] === b[j] ? lcs[(i + 1) * w + j + 1]! + 1 : Math.max(lcs[(i + 1) * w + j]!, lcs[i * w + j + 1]!)
+      }
+    }
+    let i = 0
+    let j = 0
+    while (i < a.length || j < b.length) {
+      if (i < a.length && j < b.length && a[i] === b[j]) ops.push({ op: ' ', line: a[i++]!, oldNo: i, newNo: ++j })
+      // Removals before additions, as git prints them.
+      else if (i < a.length && (j >= b.length || lcs[(i + 1) * w + j]! >= lcs[i * w + j + 1]!)) ops.push({ op: '-', line: a[i++]!, oldNo: i, newNo: j + 1 })
+      else ops.push({ op: '+', line: b[j++]!, oldNo: i + 1, newNo: j })
+    }
+  }
+  const hunks: DiffHunk[] = []
+  let k = 0
+  while (k < ops.length) {
+    if (ops[k]!.op === ' ') {
+      k++
+      continue
+    }
+    const from = Math.max(0, k - DIFF_CONTEXT)
+    let to = k
+    let quiet = 0
+    while (to < ops.length && quiet <= DIFF_CONTEXT * 2) {
+      quiet = ops[to]!.op === ' ' ? quiet + 1 : 0
+      to++
+    }
+    const end = Math.min(ops.length, to - Math.max(0, quiet - DIFF_CONTEXT))
+    const slice = ops.slice(from, end)
+    hunks.push({ oldStart: slice[0]!.oldNo, newStart: slice[0]!.newNo, lines: slice.map((o) => `${o.op}${o.line}`) })
+    k = end
+  }
+  return hunks
+}
+
 /** Edit / Write results → a diff the phone can draw, capped at CHAT_LIMITS.diffLines lines. */
-export function diffOf(result: unknown, cwd?: string): Extract<ChatItem, { kind: 'tool' }>['diff'] | undefined {
+export function diffOf(result: unknown, cwd?: string): FileDiff | undefined {
   if (!isRec(result)) return undefined
   const path = str(result.filePath)
   if (!path) return undefined
   let hunks = hunksOf(result.structuredPatch)
-  if (hunks.length === 0 && result.type === 'create' && typeof result.content === 'string') {
-    hunks = [{ oldStart: 0, newStart: 1, lines: result.content.replace(/\n$/, '').split('\n').map((l) => `+${l}`) }]
-  }
-  let added = 0
-  let removed = 0
-  for (const h of hunks) {
-    for (const l of h.lines) {
-      if (l.startsWith('+')) added++
-      else if (l.startsWith('-')) removed++
-    }
-  }
-  let budget: number = CHAT_LIMITS.diffLines
-  let truncated = false
-  const kept: DiffHunk[] = []
-  for (const h of hunks) {
-    if (budget <= 0) {
-      truncated = true
-      break
-    }
-    const lines = h.lines.slice(0, budget)
-    if (lines.length < h.lines.length) truncated = true
-    budget -= lines.length
-    kept.push({ ...h, lines })
-  }
-  return { path: rel(path, cwd), hunks: kept, added, removed, truncated }
+  if (hunks.length === 0 && result.type === 'create' && typeof result.content === 'string') hunks = [addedFile(result.content)]
+  return fileDiffs([{ path: rel(path, cwd), hunks }])[0]
 }
 
 function outputOf(result: Rec | undefined, block: Rec): string | undefined {
@@ -206,7 +318,7 @@ function outputOf(result: Rec | undefined, block: Rec): string | undefined {
 
 /**
  * Claude records a slash command as a message of tags (a user line for skills and prompt commands, a `local_command`
- * system line for `/model`, `/login` …); show `/clear`, not the markup. Its printed result is left out.
+ * system line for `/model`, `/login` …); show `/clear`, not the markup. What it printed is `localOutput`'s.
  */
 function commandText(text: string): string | null {
   const name = /<command-name>([^<]*)<\/command-name>/.exec(text)?.[1]
@@ -216,6 +328,16 @@ function commandText(text: string): string | null {
   }
   if (/^<local-command-(stdout|stderr|caveat)>/.test(text)) return ''
   return null
+}
+
+/**
+ * What a local command (/cost, /context, /model …) printed, as the transcript records it. The live stream sends the
+ * same output as an assistant message of text, so history shows it as a reply too. `null`: not a local command's output.
+ */
+function localOutput(text: string): string | null {
+  if (!/^<local-command-(stdout|stderr)>/.test(text)) return null
+  const parts = [...text.matchAll(/<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-(?:stdout|stderr)>/g)].map((m) => m[1]!.trim())
+  return parts.filter((p) => p !== '').join('\n')
 }
 
 export interface ChatParser {
@@ -250,8 +372,12 @@ function claudeParser(now: () => number): ChatParser {
     if (!isRec(line) || typeof line.type !== 'string') return []
     const type = line.type
     if (CLAUDE_SKIP.has(type)) return []
-    // Subagents' own lines: their work shows as the Agent call that started them.
-    if (line.isSidechain === true) return []
+    // A subagent's own lines. The live stream names the Agent / Task call they belong to (`parentToolUseId`, from
+    // claude-stream.ts): its calls, thinking and words go under that row. A transcript file does not: they stay out,
+    // the work showing as the Agent call that started it.
+    const parent = line.isSidechain === true ? str(line.parentToolUseId) : undefined
+    if (line.isSidechain === true && !parent) return []
+    const under = parent ? { parent } : {}
     const at = timeOf(line, now())
     const cwd = str(line.cwd)
     const message = isRec(line.message) ? line.message : undefined
@@ -262,14 +388,26 @@ function claudeParser(now: () => number): ChatParser {
       for (const block of content) {
         if (!isRec(block)) continue
         if (block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') {
-          changed.push(add({ kind: 'text', id: nextId('t'), at, text: clip(block.text, CHAT_LIMITS.text) }))
+          changed.push(add({ kind: 'text', id: nextId('t'), at, text: clip(block.text, CHAT_LIMITS.text), ...under }))
         } else if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim() !== '') {
           // A signature-only block (display omitted, the default on current models) has nothing to show.
           const ms = typeof line.thinkingDurationMs === 'number' ? line.thinkingDurationMs : undefined
-          changed.push(add({ kind: 'thinking', id: nextId('k'), at, text: clip(block.thinking, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}) }))
+          changed.push(add({ kind: 'thinking', id: nextId('k'), at, text: clip(block.thinking, CHAT_LIMITS.thinking), ...(ms !== undefined ? { ms } : {}), ...under }))
         } else if (block.type === 'tool_use' && typeof block.name === 'string') {
           const id = str(block.id) ?? nextId('u')
-          const index = add({ kind: 'tool', id, at, name: toolLabel(block.name), arg: toolArg(block.name, block.input, cwd), state: 'running' })
+          const command = block.name === 'Bash' && isRec(block.input) ? str(block.input.command) : undefined
+          const todos = block.name === 'TodoWrite' && isRec(block.input) ? todosOf(block.input.todos) : undefined
+          const index = add({
+            kind: 'tool',
+            id,
+            at,
+            ...under,
+            name: toolLabel(block.name),
+            arg: todos ? todosArg(todos) : toolArg(block.name, block.input, cwd),
+            state: 'running',
+            ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}),
+            ...(todos ? { todos } : {})
+          })
           tools.set(id, index)
           changed.push(index)
         }
@@ -289,13 +427,24 @@ function claudeParser(now: () => number): ChatParser {
           if (!item || item.kind !== 'tool') continue
           const output = outputOf(result, block)
           const diff = item.name === 'Edit' || item.name === 'MultiEdit' || item.name === 'Write' ? diffOf(result, cwd) : undefined
-          items[index!] = { ...item, state: block.is_error === true ? 'error' : 'ok', ...(output ? { output } : {}), ...(diff ? { diff } : {}) }
+          const ms = (item.name === 'Agent' || item.name === 'Task') && typeof result?.totalDurationMs === 'number' ? result.totalDurationMs : undefined
+          items[index!] = {
+            ...item,
+            state: block.is_error === true ? 'error' : 'ok',
+            ...(output ? { output } : {}),
+            ...(diff ? { diff } : {}),
+            ...(ms !== undefined ? { ms } : {})
+          }
           changed.push(index!)
         }
         return changed
       }
+      // The prompt a subagent gets: its Agent call says it already.
+      if (parent) return []
       const text = textOfContent(content).trim()
       const images = Array.isArray(content) ? content.filter((b) => isRec(b) && b.type === 'image').length : 0
+      const output = localOutput(text)
+      if (output !== null) return output ? [add({ kind: 'text', id: nextId('t'), at, text: clip(output, CHAT_LIMITS.text) })] : []
       const command = commandText(text)
       // The user typed it: it is their message, like any other prompt.
       if (command !== null) return command ? [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(command, CHAT_LIMITS.text), images: 0 })] : []
@@ -304,6 +453,9 @@ function claudeParser(now: () => number): ChatParser {
       return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images })]
     }
 
+    // Nothing else of a subagent's shows.
+    if (parent) return []
+
     if (type === 'system') {
       const subtype = str(line.subtype) ?? ''
       if (SYSTEM_SKIP.has(subtype)) return []
@@ -311,6 +463,8 @@ function claudeParser(now: () => number): ChatParser {
       const content = str(line.content)
       if (subtype === 'api_error') return [add({ kind: 'system', id: nextId('s'), at, text: content ? clip(content, 300) : 'API 出错' })]
       if (content && (subtype === 'local_command' || subtype === 'informational' || subtype === 'away_summary')) {
+        const output = localOutput(content)
+        if (output !== null) return output ? [add({ kind: 'text', id: nextId('t'), at, text: clip(output, CHAT_LIMITS.text) })] : []
         const command = commandText(content)
         if (command === '') return []
         if (command !== null) return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(command, CHAT_LIMITS.text), images: 0 })]
@@ -323,6 +477,20 @@ function claudeParser(now: () => number): ChatParser {
   }
 
   return { push, items }
+}
+
+/**
+ * Whether a Codex tool output reports a failure, and the exit code when it gives one. A shell call's header (before
+ * `Output:`) carries its exit code (`Exit code: N`, `Process exited with code N`) or `Script failed`; only without one
+ * is the start of the text read.
+ */
+function codexOutcome(out: string): { failed: boolean; exit?: number } {
+  const head = out.split(/^Output:$/m, 1)[0]!
+  const code = /^(?:Exit code: |Process exited with code )(-?\d+)$/m.exec(head)?.[1]
+  if (code !== undefined) return { failed: code !== '0', exit: Number(code) }
+  if (/^Script failed$/m.test(head)) return { failed: true }
+  if (/^Process running with session ID /m.test(head)) return { failed: false }
+  return { failed: /aborted|error|failed/i.test(out.slice(0, 80)) }
 }
 
 /** Codex's own context it puts in user messages: not something the user typed. */
@@ -393,10 +561,12 @@ function codexParser(now: () => number): ChatParser {
         const args = p.type === 'function_call' ? codexArgs(p.arguments) : { input: str(p.input) ?? '' }
         const isShell = name === 'exec_command' || name === 'shell' || name === 'local_shell'
         const command = isShell ? (Array.isArray(args.command) ? args.command.join(' ') : (str(args.cmd) ?? str(args.command))) : undefined
-        const label = isShell ? 'Bash' : name === 'apply_patch' ? 'Edit' : toolLabel(name)
-        const arg = command !== undefined ? clip(command, CHAT_LIMITS.arg) : toolArg(label, args, cwd)
+        // update_plan: the task list, as the live session's `turn/plan/updated` shows it (codex-app-server.ts).
+        const todos = name === 'update_plan' ? todosOf(args.plan) : undefined
+        const label = isShell ? 'Bash' : name === 'apply_patch' ? 'Edit' : todos ? 'Plan' : toolLabel(name)
+        const arg = command !== undefined ? clip(command, CHAT_LIMITS.arg) : todos ? todosArg(todos) : toolArg(label, args, cwd)
         const id = str(p.call_id) ?? nextId('u')
-        const index = add({ kind: 'tool', id, at, name: label, arg, state: 'running' })
+        const index = add({ kind: 'tool', id, at, name: label, arg, state: 'running', ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}), ...(todos ? { todos } : {}) })
         calls.set(id, index)
         return [index]
       }
@@ -406,7 +576,8 @@ function codexParser(now: () => number): ChatParser {
         const item = index === undefined ? undefined : items[index]
         if (!item || item.kind !== 'tool') return []
         const out = typeof p.output === 'string' ? p.output : textOfOutput(p.output)
-        items[index!] = { ...item, state: /aborted|error|failed/i.test(out.slice(0, 80)) ? 'error' : 'ok', ...(out ? { output: tail(out, CHAT_LIMITS.output) } : {}) }
+        const { failed, exit } = codexOutcome(out)
+        items[index!] = { ...item, state: failed ? 'error' : 'ok', ...(out ? { output: tail(out, CHAT_LIMITS.output) } : {}), ...(exit !== undefined ? { exit } : {}) }
         return [index!]
       }
       default:

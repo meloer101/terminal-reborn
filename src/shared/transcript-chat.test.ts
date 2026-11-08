@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAT_LIMITS, createChatParser, toolArg, toolLabel, type ChatItem } from './transcript-chat'
+import { CHAT_LIMITS, createChatParser, fileDiffs, lineDiff, toolArg, toolLabel, type ChatItem } from './transcript-chat'
 
 const CWD = '/Users/me/.tr/worktrees/acme/session-refresh'
 const T = '2026-11-01T10:00:00.000Z'
@@ -36,6 +36,36 @@ describe('Claude transcript → chat', () => {
     expect(items[0]).toMatchObject({ kind: 'user', id: 'u1', text: 'token 过期前 5 分钟续期', images: 0, at: Date.parse(T) })
     expect(items[1]).toMatchObject({ kind: 'thinking', ms: 6200 })
     expect(items[2]).toMatchObject({ kind: 'tool', id: 'tu1', name: 'Bash', arg: 'pnpm vitest run auth', state: 'ok', output: '✓ 12 passed' })
+  })
+
+  it('keeps a shell call’s whole command, line breaks and all, beside the one-line row text', () => {
+    const command = 'cd server &&\n  pnpm vitest run auth'
+    const items = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command } }] } })])
+    expect(items[0]).toMatchObject({ arg: 'cd server && pnpm vitest run auth', input: command })
+    expect(items[0]).not.toHaveProperty('exit')
+    const long = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'x'.repeat(5000) } }] } })])
+    expect(toolAt(long, 0).input).toHaveLength(CHAT_LIMITS.input + 1)
+    const read = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'r', name: 'Read', input: { file_path: 'a.ts' } }] } })])
+    expect(read[0]).not.toHaveProperty('input')
+  })
+
+  it('keeps TodoWrite’s tasks with their status', () => {
+    const todos = [
+      { content: '改成 Set-Cookie', status: 'completed', activeForm: '改' },
+      { content: '跑测试', status: 'in_progress', activeForm: '跑' },
+      { content: '查 Safari', status: 'pending', activeForm: '查' },
+      { content: 7, status: 'pending' }
+    ]
+    const items = parse([line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 't', name: 'TodoWrite', input: { todos } }] } })])
+    expect(items[0]).toMatchObject({
+      name: 'TodoWrite',
+      arg: '3 项',
+      todos: [
+        { text: '改成 Set-Cookie', status: 'completed' },
+        { text: '跑测试', status: 'in_progress' },
+        { text: '查 Safari', status: 'pending' }
+      ]
+    })
   })
 
   it('reports which items a line added or changed, so main can push just those', () => {
@@ -105,7 +135,41 @@ describe('Claude transcript → chat', () => {
     expect(items).toEqual([{ kind: 'unknown', id: 'x0', at: Date.parse(T), type: 'brand-new-thing' }])
   })
 
-  it('shows slash commands as the user’s own messages, without their markup or printed result', () => {
+  it('parses a subagent’s lines that name the Agent call they belong to, under it (Figma 59J)', () => {
+    const sub = { isSidechain: true, parentToolUseId: 'ag' }
+    const items = parse([
+      line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'ag', name: 'Agent', input: { description: '查 SameSite', prompt: 'look it up' } }] } }),
+      // The prompt the subagent gets: the Agent call says it already.
+      line({ ...sub, type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'look it up' }] } }),
+      line({ ...sub, type: 'assistant', message: { id: 's1', content: [{ type: 'thinking', thinking: 'search first' }, { type: 'tool_use', id: 'g', name: 'Grep', input: { pattern: 'SameSite' } }] } }),
+      line({ ...sub, type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'g', content: '3 matches' }] } }),
+      line({ ...sub, type: 'assistant', message: { id: 's2', content: [{ type: 'text', text: 'Safari 17 起不带 Lax cookie' }] } }),
+      line({ ...sub, type: 'system', subtype: 'informational', content: 'inner note' }),
+      line({
+        type: 'user',
+        toolUseResult: { status: 'completed', totalDurationMs: 42_000, totalTokens: 900, content: [{ type: 'text', text: 'done' }] },
+        message: { content: [{ type: 'tool_result', tool_use_id: 'ag', content: [{ type: 'text', text: 'done' }] }] }
+      })
+    ])
+    expect(items.map((i) => [i.kind, 'parent' in i ? i.parent : undefined])).toEqual([
+      ['tool', undefined],
+      ['thinking', 'ag'],
+      ['tool', 'ag'],
+      ['text', 'ag']
+    ])
+    expect(items[0]).toMatchObject({ name: 'Agent', arg: '查 SameSite', state: 'ok', ms: 42_000, output: 'done' })
+    expect(items[2]).toMatchObject({ name: 'Grep', state: 'ok', output: '3 matches' })
+    // Transcript files (the phone, history) mark subagent lines without a parent: still left out.
+    expect(parse([line({ type: 'assistant', isSidechain: true, message: { id: 'z', content: [{ type: 'text', text: 'x' }] } })])).toEqual([])
+    // Only Agent / Task carry a duration.
+    const bash = parse([
+      line({ type: 'assistant', message: { id: 'm', content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'ls' } }] } }),
+      line({ type: 'user', toolUseResult: { stdout: 'a', stderr: '', totalDurationMs: 5 }, message: { content: [{ type: 'tool_result', tool_use_id: 'b', content: 'a' }] } })
+    ])
+    expect(bash[0]).not.toHaveProperty('ms')
+  })
+
+  it('shows slash commands as the user’s own messages, without their markup', () => {
     const items = parse([
       line({ type: 'user', uuid: 'c1', message: { content: '<command-message>archify</command-message>\n<command-name>/archify</command-name>\n<command-args>画一下这个项目</command-args>' } }),
       line({ type: 'user', isMeta: true, message: { content: [{ type: 'text', text: 'Base directory for this skill: …' }] } }),
@@ -117,7 +181,8 @@ describe('Claude transcript → chat', () => {
     expect(items.map((i) => (i.kind === 'user' ? [i.id, i.text] : i.kind))).toEqual([
       ['c1', '/archify 画一下这个项目'],
       ['c2', '/model'],
-      ['m0', '/clear']
+      'text',
+      ['m1', '/clear']
     ])
   })
 
@@ -128,6 +193,26 @@ describe('Claude transcript → chat', () => {
       line({ type: 'system', subtype: 'api_error', content: 'Overloaded' })
     ])
     expect(items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['已中断', '对话已压缩', 'Overloaded'])
+  })
+
+  it('shows what a local command printed (/cost, /context) as a reply, as the live stream does', () => {
+    const items = parse([
+      line({ type: 'user', message: { content: '<local-command-caveat>The command below was run directly in Claude Code</local-command-caveat>' } }),
+      line({ type: 'user', message: { content: '<command-name>/usage</command-name>\n<command-message>usage</command-message>\n<command-args></command-args>' } }),
+      line({ type: 'system', subtype: 'local_command', content: '<local-command-stdout>Current session: 23% used\n\nCurrent week: 36% used</local-command-stdout>' }),
+      line({ type: 'user', message: { content: '<local-command-stdout>Set model to `Opus`</local-command-stdout>' } }),
+      line({
+        type: 'system',
+        subtype: 'local_command',
+        content: '<local-command-stdout>Running in the background as @code-review</local-command-stdout>\n<forked-skill-launch>{"agentId":"a"}</forked-skill-launch>'
+      })
+    ])
+    expect(items.map((i) => [i.kind, i.kind === 'system' || i.kind === 'text' ? i.text : ''])).toEqual([
+      ['user', ''],
+      ['text', 'Current session: 23% used\n\nCurrent week: 36% used'],
+      ['text', 'Set model to `Opus`'],
+      ['text', 'Running in the background as @code-review']
+    ])
   })
 
   it('counts the photos sent with a prompt', () => {
@@ -145,6 +230,20 @@ describe('Claude transcript → chat', () => {
     ])
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'thinking', text: 'Checking divisors', ms: 3204 })
+  })
+})
+
+describe('fileDiffs', () => {
+  it('counts each file and caps all of them together at CHAT_LIMITS.diffLines lines', () => {
+    const big = { oldStart: 1, newStart: 1, lines: Array.from({ length: CHAT_LIMITS.diffLines - 1 }, (_, i) => `+${i}`) }
+    const [a, b, c] = fileDiffs([
+      { path: 'a.ts', hunks: [big] },
+      { path: 'b.ts', hunks: [{ oldStart: 3, newStart: 3, lines: [' x', '-y', '+z'] }] },
+      { path: 'c.ts', hunks: [{ oldStart: 1, newStart: 1, lines: ['-gone'] }] }
+    ])
+    expect(a).toMatchObject({ path: 'a.ts', added: CHAT_LIMITS.diffLines - 1, removed: 0, truncated: false })
+    expect(b).toMatchObject({ path: 'b.ts', added: 1, removed: 1, truncated: true, hunks: [{ lines: [' x'] }] })
+    expect(c).toMatchObject({ path: 'c.ts', added: 0, removed: 1, truncated: true, hunks: [] })
   })
 })
 
@@ -169,6 +268,41 @@ describe('Codex rollout → chat', () => {
     expect(items[1]).toMatchObject({ name: 'Bash', arg: 'npm test', state: 'ok', output: 'ok 3 passed' })
   })
 
+  it('reads a shell call’s exit code before guessing from its output', () => {
+    const call = (id: string): string => r('response_item', { type: 'function_call', name: 'exec_command', call_id: id, arguments: JSON.stringify({ cmd: 'rg error' }) })
+    const out = (id: string, output: string): string => r('response_item', { type: 'function_call_output', call_id: id, output })
+    const items = parse(
+      [
+        call('a'),
+        out('a', 'Exit code: 0\nWall time: 0.1 seconds\nOutput:\nerror.ts: export class AuthError'),
+        call('b'),
+        out('b', 'Chunk ID: dff8d5\nWall time: 0.0006 seconds\nProcess exited with code 2\nOriginal token count: 0\nOutput:\n'),
+        call('c'),
+        out('c', 'Chunk ID: 232234\nWall time: 1.0 seconds\nProcess running with session ID 50328\nOutput:\nfailed to bind, retrying'),
+        call('d'),
+        out('d', 'aborted by user after 5.6s')
+      ],
+      'codex'
+    )
+    expect(items.map((i) => (i.kind === 'tool' ? i.state : i.kind))).toEqual(['ok', 'error', 'ok', 'error'])
+    expect(items.map((i) => (i.kind === 'tool' ? i.exit : undefined))).toEqual([0, 2, undefined, undefined])
+    expect(items[0]).toMatchObject({ input: 'rg error' })
+  })
+
+  it('reads update_plan as the task list, like the live session’s plan', () => {
+    const plan = { explanation: null, plan: [{ step: 'Read', status: 'completed' }, { step: 'Edit', status: 'in_progress' }] }
+    const items = parse([r('response_item', { type: 'function_call', name: 'update_plan', call_id: 'p1', arguments: JSON.stringify(plan) })], 'codex')
+    expect(items[0]).toMatchObject({
+      kind: 'tool',
+      name: 'Plan',
+      arg: '2 项',
+      todos: [
+        { text: 'Read', status: 'completed' },
+        { text: 'Edit', status: 'in_progress' }
+      ]
+    })
+  })
+
   it('leaves out reasoning with an empty summary', () => {
     const items = parse(
       [
@@ -191,5 +325,22 @@ describe('tool rows', () => {
     expect(toolArg('mcp__figma__use_figma', { fileKey: 'abc', code: 'x' })).toBe('abc')
     expect(toolLabel('mcp__599cb545__use_figma')).toBe('use_figma')
     expect(toolLabel('Bash')).toBe('Bash')
+  })
+})
+
+describe('lineDiff', () => {
+  it('keeps three lines of context and splits distant changes into hunks', () => {
+    const before = Array.from({ length: 20 }, (_, i) => `l${i + 1}`).join('\n')
+    const after = before.replace('l2', 'L2').replace('l18', 'L18')
+    const hunks = lineDiff(before, after)
+    expect(hunks.map((h) => [h.oldStart, h.lines[0]])).toEqual([
+      [1, ' l1'],
+      [15, ' l15']
+    ])
+    expect(hunks[0]?.lines).toEqual([' l1', '-l2', '+L2', ' l3', ' l4', ' l5'])
+  })
+
+  it('treats a new file as all additions', () => {
+    expect(lineDiff('', 'a\nb\n')).toEqual([{ oldStart: 1, newStart: 1, lines: ['+a', '+b'] }])
   })
 })

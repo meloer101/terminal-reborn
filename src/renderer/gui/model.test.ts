@@ -6,6 +6,7 @@ import {
   cardKey,
   composerKey,
   feedBlocks,
+  permissionBody,
   permissionButtons,
   permissionPrimary,
   permissionTitle,
@@ -27,7 +28,14 @@ import {
   turnEnds,
   turnStarts,
   liveStartsTurn,
-  waitingToolId
+  waitingToolId,
+  currentTodos,
+  todoProgress,
+  todoStatus,
+  slashGroups,
+  elapsedLabel,
+  subagentElapsed,
+  blockHas
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -51,6 +59,61 @@ describe('feedBlocks (Figma 49″C)', () => {
 
   it('keys a run by its first item, so a growing run keeps its rows', () => {
     expect(feedBlocks([tool('a')])[0]?.key).toBe(feedBlocks([tool('a'), tool('b')])[0]?.key)
+  })
+})
+
+describe('subagents in place (Figma 59J)', () => {
+  const agent = (id: string, patch: Partial<Extract<ChatItem, { kind: 'tool' }>> = {}) => tool(id, { name: 'Agent', arg: '查 SameSite', state: 'running', ...patch })
+  const shape = (blocks: ReturnType<typeof feedBlocks>) =>
+    blocks.map((b) => (b.kind === 'steps' ? { steps: b.items.map((i) => i.id), nested: Object.fromEntries([...b.nested].map(([k, v]) => [k, v.map((i) => i.id)])) } : b.item.id))
+
+  it('puts a subagent’s rows and words under its Agent row, not at the top level', () => {
+    const items: ChatItem[] = [
+      user('u'),
+      agent('ag'),
+      tool('g', { name: 'Grep', parent: 'ag' }),
+      { kind: 'thinking', id: 'k', at: 0, text: '…', parent: 'ag' },
+      { kind: 'text', id: 'x', at: 0, text: 'found it', parent: 'ag' },
+      tool('b', { name: 'Bash' })
+    ]
+    expect(shape(feedBlocks(items))).toEqual(['u', { steps: ['ag', 'b'], nested: { ag: ['g', 'k', 'x'] } }])
+    // Codex's collab call is a 子 agent row with nothing under it.
+    expect(toolView(tool('c', { name: 'Subagent', arg: 'spawn' }), false)).toMatchObject({ icon: 'bot', verb: '子 agent' })
+  })
+
+  it('keeps rows whose Agent row is not there yet aside, and shows them at the top level if it never comes', () => {
+    const orphan = tool('g', { name: 'Grep', parent: 'ag' })
+    const words: ChatItem = { kind: 'text', id: 'x', at: 0, text: 'found it', parent: 'ag' }
+    expect(shape(feedBlocks([user('u'), orphan, words]))).toEqual(['u', { steps: ['g'], nested: {} }, 'x'])
+    // Once it arrives (later in the list), they move under it.
+    expect(shape(feedBlocks([user('u'), orphan, words, agent('ag')]))).toEqual(['u', { steps: ['ag'], nested: { ag: ['g', 'x'] } }])
+  })
+
+  it('finds a row anywhere in a block, nested ones too', () => {
+    const [block] = feedBlocks([agent('ag'), tool('g', { name: 'Bash', parent: 'ag', state: 'running' })])
+    expect(blockHas(block!, 'ag')).toBe(true)
+    expect(blockHas(block!, 'g')).toBe(true)
+    expect(blockHas(block!, 'zz')).toBe(false)
+  })
+
+  it('marks a subagent’s own tool as waiting on you, not its Agent row', () => {
+    const items = [agent('ag'), tool('g', { name: 'Grep', parent: 'ag' }), tool('b', { name: 'Bash', parent: 'ag', state: 'running' })]
+    const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm lint', options: [] }
+    expect(waitingToolId(items, [permission])).toBe('b')
+  })
+
+  it('times a running subagent from its start, a finished one by its own duration (m:ss)', () => {
+    expect(subagentElapsed(agent('a', { at: 1_000 }), 43_500)).toBe('0:42')
+    expect(subagentElapsed(agent('a', { at: 1_000, state: 'ok', ms: 125_000 }), 999_999)).toBe('2:05')
+    expect(subagentElapsed(agent('a', { state: 'ok' }), 5_000)).toBeNull()
+    expect(subagentElapsed(agent('a', { at: 0 }), 5_000)).toBeNull()
+    expect([0, 999, 59_999, 60_000, 3_725_000, -5].map(elapsedLabel)).toEqual(['0:00', '0:00', '0:59', '1:00', '1:02:05', '0:00'])
+  })
+
+  it('leaves a subagent’s own task list out of the card above the composer', () => {
+    const main = tool('t', { name: 'TodoWrite', todos: [{ text: 'main', status: 'pending' }] })
+    const inner = tool('i', { name: 'TodoWrite', parent: 'ag', todos: [{ text: 'inner', status: 'pending' }] })
+    expect(currentTodos([main, agent('ag'), inner])).toBe(main.todos)
   })
 })
 
@@ -122,12 +185,112 @@ describe('rows', () => {
     expect(toolView(tool('w', { state: 'running', name: 'Bash' }), true)).toMatchObject({ status: 'needs_you', waiting: true })
   })
 
+  it('reads a tool row as icon · verb · target, for every agent’s tool names (Figma 59J)', () => {
+    const cases: [string, unknown, string][] = [
+      // Claude Code (and Codex, whose shell, patch and search calls come as Bash / Edit / WebSearch)
+      ['Read', 'file-text', '读取'],
+      ['Edit', 'pencil', '编辑'],
+      ['MultiEdit', 'pencil', '编辑'],
+      ['Write', 'file-plus', '写入'],
+      ['NotebookEdit', 'pencil', '编辑'],
+      ['Bash', 'terminal', '运行'],
+      ['BashOutput', 'terminal', '读取输出'],
+      ['KillShell', 'square', '停止'],
+      ['Grep', 'search', '搜索'],
+      ['Glob', 'folder-search', '查找文件'],
+      ['WebFetch', 'globe', '读取'],
+      ['WebSearch', 'globe', '搜索网页'],
+      ['Agent', 'bot', '子 agent'],
+      ['Task', 'bot', '子 agent'],
+      ['TodoWrite', 'list-todo', '任务'],
+      ['Skill', 'sparkles', 'Skill'],
+      ['ExitPlanMode', 'clipboard-list', '计划'],
+      // ACP tool kinds (acp.ts KIND_NAMES)
+      ['Delete', 'trash', '删除'],
+      ['Move', 'move-right', '移动'],
+      ['Search', 'search', '搜索'],
+      ['Think', 'brain', '思考'],
+      ['Fetch', 'globe', '读取'],
+      ['Mode', 'toggle', '切换模式'],
+      ['Tool', 'wrench', '工具'],
+      // MCP tools and anything unknown: the tool's own name
+      ['query_docs', 'wrench', 'query_docs'],
+      ['update_plan', 'wrench', 'update_plan'],
+      ['constructor', 'wrench', 'constructor']
+    ]
+    for (const [name, icon, verb] of cases) {
+      const view = toolView(tool('t', { name, arg: 'src/a.ts' }), false)
+      expect({ name, icon: view.icon, verb: view.verb, arg: view.arg }).toEqual({ name, icon, verb, arg: 'src/a.ts' })
+    }
+  })
+
+  it('shows a command’s output without its terminal escape codes (colors, cursor moves, titles)', () => {
+    const output = '\x1b]0;vitest\x07\x1b[1m\x1b[32m✓\x1b[39m\x1b[22m 12 passed\n\x1b[2K\x1b[1Gdone\x1b(B'
+    const view = toolView(tool('b', { name: 'Bash', arg: 'npm test', output }), false)
+    expect(view.summary).toBe('✓ 12 passed')
+    expect(view.output).toBe('✓ 12 passed\ndone')
+    // A sequence cut in two by the kept tail of a long output loses its visible half too.
+    expect(toolView(tool('t', { name: 'Bash', output: '…[0m tail' }), false).output).toBe('… tail')
+  })
+
+  it('keeps a command’s whole text for its output, and shows exit N only when it failed with a code (Figma 59J)', () => {
+    const failed = tool('b', { name: 'Bash', arg: 'pnpm vitest run', input: 'pnpm vitest run', state: 'error', exit: 1, output: 'FAIL' })
+    expect(toolView(failed, false)).toMatchObject({ status: 'error', exit: 1, command: 'pnpm vitest run' })
+    expect(toolView(tool('b', { name: 'Bash', state: 'ok', exit: 0, input: 'true', output: 'x' }), false)).not.toHaveProperty('exit')
+    expect(toolView(tool('b', { name: 'Bash', state: 'error', exit: 0, input: 'x' }), false)).not.toHaveProperty('exit')
+    // Claude reports no exit code: a failed call has none to show.
+    expect(toolView(tool('b', { name: 'Bash', state: 'error', input: 'x', output: 'boom' }), false)).not.toHaveProperty('exit')
+    // Nothing printed: it opens only when the row hides part of the command (lines, length).
+    expect(toolView(tool('b', { name: 'Bash', arg: 'true', input: 'true' }), false).expandable).toBe(false)
+    expect(toolView(tool('b', { name: 'Bash', arg: 'cd a && make', input: 'cd a &&\n  make' }), false)).toMatchObject({ expandable: true, command: 'cd a &&\n  make' })
+  })
+
+  it('counts +N −M over every file a tool changed', () => {
+    const file = (path: string, added: number, removed: number) => ({ path, hunks: [], added, removed, truncated: false })
+    const edit = tool('e', { name: 'Edit', diff: file('a.ts', 1, 1), files: [file('a.ts', 1, 1), file('b.ts', 4, 0)] })
+    expect(toolView(edit, false)).toMatchObject({ added: 5, removed: 1, expandable: true })
+  })
+
+  it('reads a task list row as 任务 · N 项 that opens to its tasks', () => {
+    const todos = [{ text: 'a', status: 'completed' as const }]
+    for (const name of ['TodoWrite', 'Plan']) {
+      const view = toolView(tool('t', { name, arg: '1 项', todos, output: 'Todos have been modified successfully' }), false)
+      expect(view).toMatchObject({ verb: '任务', icon: 'list-todo', arg: '1 项', expandable: true })
+      expect(view).not.toHaveProperty('summary')
+    }
+  })
+
   it('marks the running tool a permission is about', () => {
     const items = [tool('a'), tool('b', { state: 'running' }), text('x')]
     const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }
     expect(waitingToolId(items, [permission])).toBe('b')
     expect(waitingToolId(items, [])).toBeNull()
     expect(waitingToolId([tool('a')], [permission])).toBeNull()
+  })
+
+  it('finds the asking tool past a task list row', () => {
+    const permission = { kind: 'permission' as const, id: 'p', tool: 'Bash', detail: 'pnpm test', options: [] }
+    const plan = tool('plan:t', { name: 'Plan', arg: '1 项', todos: [{ text: 'a', status: 'in_progress' }] })
+    expect(waitingToolId([tool('b', { name: 'Bash', state: 'running' }), plan], [permission])).toBe('b')
+    expect(waitingToolId([tool('b', { name: 'Bash' }), plan], [permission])).toBeNull()
+  })
+})
+
+describe('task list card (Figma 59J)', () => {
+  const todo = (text: string, status: 'pending' | 'in_progress' | 'completed') => ({ text, status })
+  it('shows the latest list in the conversation while something in it is left', () => {
+    const older = tool('a', { name: 'TodoWrite', todos: [todo('old', 'pending')] })
+    const latest = tool('b', { name: 'TodoWrite', todos: [todo('x', 'completed'), todo('y', 'in_progress')] })
+    expect(currentTodos([older, text('t'), latest, user('u'), tool('c')])).toBe(latest.todos)
+    expect(currentTodos([older])).toEqual([todo('old', 'pending')])
+    expect(currentTodos([older, tool('d', { name: 'Plan', todos: [todo('x', 'completed')] })])).toBeNull()
+    expect(currentTodos([older, tool('e', { name: 'TodoWrite', todos: [] })])).toBeNull()
+    expect(currentTodos([text('t')])).toBeNull()
+  })
+
+  it('counts what is done and draws each task’s status', () => {
+    expect(todoProgress([todo('a', 'completed'), todo('b', 'in_progress'), todo('c', 'pending')])).toEqual({ done: 1, total: 3 })
+    expect(['completed', 'in_progress', 'pending'].map((s) => todoStatus(s as 'pending'))).toEqual(['done_unread', 'running', 'idle'])
   })
 })
 
@@ -153,6 +316,22 @@ describe('permission card (49″E)', () => {
     expect(shortAgentName('Claude Code')).toBe('Claude')
     expect(shortAgentName('Gemini CLI')).toBe('Gemini')
     expect(shortAgentName('Codex')).toBe('Codex')
+  })
+
+  it('shows every file a change asks about, and the detail when it says more than the path', () => {
+    const file = (path: string) => ({ path, hunks: [], added: 1, removed: 0, truncated: false })
+    const base = { kind: 'permission' as const, id: 'p', tool: 'Edit', options: [] }
+    // Claude's Edit: the detail is the path the diff's header already shows.
+    expect(permissionBody({ ...base, detail: 'src/a.ts', diff: file('src/a.ts') })).toEqual({ files: [file('src/a.ts')], detail: null })
+    // Codex's reason shows above the change.
+    expect(permissionBody({ ...base, detail: 'needs write access', diff: file('src/a.ts') })).toEqual({ files: [file('src/a.ts')], detail: 'needs write access' })
+    // Several files: each one, the reason too.
+    const files = [file('src/a.ts'), file('src/b.ts')]
+    expect(permissionBody({ ...base, detail: 'refactor', diff: files[0]!, files })).toEqual({ files, detail: 'refactor' })
+    expect(permissionBody({ ...base, detail: 'src/a.ts', diff: files[0]!, files })).toEqual({ files, detail: null })
+    // No change: the detail alone.
+    expect(permissionBody({ ...base, tool: 'Bash', detail: 'pnpm test' })).toEqual({ files: [], detail: 'pnpm test' })
+    expect(permissionBody({ ...base, tool: 'Bash', detail: '' })).toEqual({ files: [], detail: null })
   })
 })
 
@@ -241,6 +420,23 @@ describe('composer', () => {
     const commands = [{ name: 'review', description: '审阅' }, { name: 'rewind', description: '回到之前' }, { name: 'compare', description: 'x' }]
     expect(matchCommands(commands, slashQuery('/re')!).map((c) => c.name)).toEqual(['review', 'rewind', 'compare'])
     expect(pickCommand(commands[0]!)).toBe('/review ')
+  })
+
+  it('splits the / menu into 命令 then Skills, the keys going down the same order (Figma 59H)', () => {
+    const matches = [
+      { name: 'research', description: 'r', kind: 'skill' as const },
+      { name: 'review', description: 'v', kind: 'command' as const },
+      { name: 'release-notes', description: 'n' },
+      { name: 'remotion-render', description: 'm', kind: 'skill' as const }
+    ]
+    const groups = slashGroups(matches)
+    expect(groups.map((g) => [g.title, g.commands.map((c) => c.name)])).toEqual([
+      ['命令', ['review', 'release-notes']],
+      ['Skills', ['research', 'remotion-render']]
+    ])
+    expect(groups.map((g) => g.start)).toEqual([0, 2])
+    expect(slashGroups(matches.filter((c) => c.kind === 'skill')).map((g) => g.title)).toEqual(['Skills'])
+    expect(slashGroups([])).toEqual([])
   })
 
   it('adds inserted text after what is typed', () => {

@@ -1,5 +1,6 @@
 // What a GUI session's agent waits on (PRD F23, Figma 49″D–F): a card above the composer, its own block (bg/section),
-// magenta only on the status glyph. Permission: 拒绝 ⎋ · 总是允许 · 允许 ↵. Question: numbered options + 其他…,
+// magenta only on the status glyph. Permission: 拒绝 ⎋ · 总是允许 · 允许 ↵, a change to a file drawn between the title and
+// the buttons (Figma 59I). Question: numbered options + 其他…,
 // 跳过 ⎋ · 提交 ↵. Plan: 继续规划 · 批准，编辑时问我 · 批准并自动接受编辑 ↵. Each card answers keys through `bindKeys`
 // (the chat routes them, see ChatPane).
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -7,7 +8,8 @@ import type { GuiAnswer, GuiPrompt } from '@shared/gui-chat'
 import type { SessionId } from '@shared/types'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ChatMarkdown } from './ChatMarkdown'
-import { permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
+import { DiffBlock } from './DiffBlock'
+import { permissionBody, permissionButtons, permissionPrimary, permissionTitle, pickChoice, planParts, questionAnswers, stepIndex, type CardKey, type QuestionChoice } from './model'
 import styles from './Chat.module.css'
 
 /** A card's key handler; true when the key did something. */
@@ -58,6 +60,7 @@ function Button({ label, shortcut, primary = false, disabled, onClick, title }: 
 
 function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardProps<Extract<GuiPrompt, { kind: 'permission' }>>) {
   const buttons = permissionButtons(prompt.options)
+  const body = permissionBody(prompt)
   const primary = permissionPrimary(buttons)
   const choose = (optionId: string | undefined): boolean => {
     if (!optionId || pending) return false
@@ -71,7 +74,15 @@ function PermissionCard({ prompt, agentLabel, answer, pending, bindKeys }: CardP
   })
   return (
     <Card label="等你确认" title={permissionTitle(agentLabel, prompt.tool)} testId="gui-permission">
-      {prompt.detail && <pre className={styles.cardDetail}>{prompt.detail}</pre>}
+      {body.detail && <pre className={styles.cardDetail}>{body.detail}</pre>}
+      {/* Figma 59I: a change shows each file, its path on the block's header; several scroll together. */}
+      {body.files.length > 0 && (
+        <div className={styles.cardDiffs} data-several={body.files.length > 1}>
+          {body.files.map((file, i) => (
+            <DiffBlock key={i} diff={file} header className={styles.cardDiff} />
+          ))}
+        </div>
+      )}
       <div className={styles.cardActions}>
         {buttons.reject && <Button label="拒绝" shortcut="⎋" disabled={pending} onClick={() => choose(buttons.reject?.id)} />}
         {buttons.always && buttons.always !== primary && <Button label="总是允许" title={buttons.always.label} disabled={pending} onClick={() => choose(buttons.always?.id)} />}

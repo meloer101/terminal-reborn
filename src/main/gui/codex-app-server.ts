@@ -3,7 +3,7 @@
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
 import { effortLabel, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { CHAT_LIMITS, type ChatItem, type DiffHunk } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, rel, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -44,39 +44,16 @@ export function hunksOfUnifiedDiff(diff: string): DiffHunk[] {
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
-function diffOfChanges(changes: unknown, cwd: string): ToolItem['diff'] | undefined {
+/** `fileChange.changes` → one diff per file (a new file's text is all additions). */
+function diffsOfChanges(changes: unknown, cwd: string): FileDiff[] {
   const list = Array.isArray(changes) ? changes.filter(isRec) : []
-  if (list.length === 0) return undefined
-  const rel = (p: string) => (p.startsWith(`${cwd}/`) ? p.slice(cwd.length + 1) : p)
-  let added = 0
-  let removed = 0
-  const hunks: DiffHunk[] = []
-  for (const change of list) {
-    const diff = str(change.diff) ?? ''
-    const kind = isRec(change.kind) ? change.kind.type : undefined
-    const parsed = kind === 'add' && !diff.includes('@@') ? [{ oldStart: 0, newStart: 1, lines: diff.replace(/\n$/, '').split('\n').map((l) => `+${l}`) }] : hunksOfUnifiedDiff(diff)
-    for (const h of parsed) {
-      for (const l of h.lines) {
-        if (l.startsWith('+')) added++
-        else if (l.startsWith('-')) removed++
-      }
-    }
-    hunks.push(...parsed)
-  }
-  const path = rel(str(list[0]!.path) ?? '')
-  let budget: number = CHAT_LIMITS.diffLines
-  let truncated = false
-  const kept = hunks.flatMap((h) => {
-    if (budget <= 0) {
-      truncated = true
-      return []
-    }
-    const lines = h.lines.slice(0, budget)
-    if (lines.length < h.lines.length) truncated = true
-    budget -= lines.length
-    return [{ ...h, lines }]
-  })
-  return { path: list.length > 1 ? `${path} 等 ${list.length} 个文件` : path, hunks: kept, added, removed, truncated }
+  return fileDiffs(
+    list.map((change) => {
+      const diff = str(change.diff) ?? ''
+      const kind = isRec(change.kind) ? change.kind.type : undefined
+      return { path: rel(str(change.path) ?? '', cwd), hunks: kind === 'add' && !diff.includes('@@') ? [addedFile(diff)] : hunksOfUnifiedDiff(diff) }
+    })
+  )
 }
 
 function userText(content: unknown): { text: string; images: number } {
@@ -100,12 +77,29 @@ export interface CodexNormalizer {
   request(id: string, method: string, params: Rec): GuiEvent[]
   pending(id: string): CodexPending | undefined
   settle(id: string): GuiEvent[]
+  /** A turn that failed outside a notification (`turn/start` refused): why, as a line in the conversation. */
+  failed(message: string): GuiEvent[]
+}
+
+/** The text an MCP call (`result.content`, MCP content blocks) or a dynamic tool (`contentItems`) returned, or its error. */
+function toolCallOutput(item: Rec): string {
+  const error = isRec(item.error) ? str(item.error.message) : undefined
+  if (error) return error
+  const blocks = isRec(item.result) && Array.isArray(item.result.content) ? item.result.content : Array.isArray(item.contentItems) ? item.contentItems : []
+  return blocks
+    .filter(isRec)
+    .map((b) => (b.type === 'text' || b.type === 'inputText' ? (str(b.text) ?? '') : ''))
+    .filter((t) => t.trim() !== '')
+    .join('\n')
 }
 
 export function createCodexNormalizer(cwd: string, now: () => number = Date.now): CodexNormalizer {
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
   const waiting = new Map<string, CodexPending>()
+  // Each fileChange item's files while it runs, so its approval can show the change (dropped once it is done or its
+  // approval is resolved: the prompt already holds them).
+  const fileChanges = new Map<string, FileDiff[]>()
   let live: { kind: 'text' | 'thinking'; text: string; itemId: string } | null = null
 
   const put = (key: string, item: ChatItem): GuiEvent => {
@@ -118,6 +112,14 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     return { type: 'items', changes: [{ index, item }] }
   }
   const system = (text: string): GuiEvent => put(`s${items.length}`, { kind: 'system', id: `s${items.length}`, at: now(), text })
+  // The error already shown this turn: a failed turn/completed repeats the final `error` notification.
+  let shownError: string | null = null
+  const errorLine = (message: string): GuiEvent[] => {
+    const text = clip(message, 300)
+    if (text === shownError) return []
+    shownError = text
+    return [system(text)]
+  }
   const endLive = (itemId?: string): GuiEvent[] => {
     if (!live || (itemId && live.itemId !== itemId)) return []
     live = null
@@ -150,19 +152,48 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : exit === 0 || status === 'completed' ? 'ok' : 'error'
         const output = str(item.aggregatedOutput)
-        return [put(id, { kind: 'tool', id, at, name: 'Bash', arg: clip((str(item.command) ?? '').replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg), state, ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}) })]
+        const command = str(item.command) ?? ''
+        return [
+          put(id, {
+            kind: 'tool',
+            id,
+            at,
+            name: 'Bash',
+            arg: clip(command.replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg),
+            state,
+            ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}),
+            ...(command ? { input: clip(command, CHAT_LIMITS.input) } : {}),
+            ...(exit !== null ? { exit } : {})
+          })
+        ]
       }
       case 'fileChange': {
-        const diff = diffOfChanges(item.changes, cwd)
+        const files = diffsOfChanges(item.changes, cwd)
+        if (done) fileChanges.delete(id)
+        else if (files.length > 0) fileChanges.set(id, files)
+        const diff = files[0]
         const status = str(item.status)
         const state: ToolItem['state'] = !done ? 'running' : status === 'declined' || status === 'failed' ? 'error' : 'ok'
-        return [put(id, { kind: 'tool', id, at, name: 'Edit', arg: diff?.path ?? '', state, ...(diff && done ? { diff } : {}) })]
+        const arg = diff ? (files.length > 1 ? `${diff.path} 等 ${files.length} 个文件` : diff.path) : ''
+        return [put(id, { kind: 'tool', id, at, name: 'Edit', arg, state, ...(diff && done ? { diff } : {}), ...(files.length > 1 && done ? { files } : {}) })]
       }
       case 'mcpToolCall':
       case 'dynamicToolCall': {
         const name = str(item.tool) ?? str(item.name) ?? 'Tool'
-        const state: ToolItem['state'] = !done ? 'running' : str(item.status) === 'failed' ? 'error' : 'ok'
-        return [put(id, { kind: 'tool', id, at, name, arg: clip(str(item.server) ?? '', CHAT_LIMITS.arg), state })]
+        const failed = str(item.status) === 'failed' || item.success === false
+        const state: ToolItem['state'] = !done ? 'running' : failed ? 'error' : 'ok'
+        const output = done ? toolCallOutput(item) : ''
+        return [put(id, { kind: 'tool', id, at, name, arg: clip(str(item.server) ?? '', CHAT_LIMITS.arg), state, ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}) })]
+      }
+      case 'collabAgentToolCall': {
+        // Figma 59J: a call to another agent (spawnAgent, sendInput, wait …) is one 子 agent row; that agent works in
+        // its own thread, so nothing goes under it. Fields from the generated types (`codex app-server generate-ts`,
+        // 0.166.0, v2/ThreadItem.ts); not yet seen from a real Codex.
+        const status = str(item.status)
+        const state: ToolItem['state'] = !done || status === 'inProgress' ? 'running' : status === 'completed' ? 'ok' : 'error'
+        const prompt = str(item.prompt)?.replace(/\s+/g, ' ').trim()
+        const ms = done && typeof item.completedAtMs === 'number' && typeof item.startedAtMs === 'number' ? item.completedAtMs - item.startedAtMs : undefined
+        return [put(id, { kind: 'tool', id, at, name: 'Subagent', arg: clip(prompt || (str(item.tool) ?? ''), CHAT_LIMITS.arg), state, ...(ms !== undefined ? { ms } : {}) })]
       }
       case 'webSearch':
         return [put(id, { kind: 'tool', id, at, name: 'WebSearch', arg: clip(str(item.query) ?? '', CHAT_LIMITS.arg), state: done ? 'ok' : 'running' })]
@@ -177,13 +208,18 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     notification(method, params) {
       switch (method) {
         case 'turn/started':
+          shownError = null
           return [{ type: 'busy', busy: true }]
         case 'turn/completed': {
           const turn = isRec(params.turn) ? params.turn : {}
           const events: GuiEvent[] = [...endLive()]
           if (turn.status === 'interrupted') events.push(system('已中断'))
+          if (turn.status === 'failed') events.push(...errorLine((isRec(turn.error) ? str(turn.error.message) : undefined) ?? 'Codex 出错'))
+          shownError = null
           for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
           waiting.clear()
+          // A change the turn never completed (interrupted, failed) is not asked about any more.
+          fileChanges.clear()
           events.push({ type: 'busy', busy: false })
           return events
         }
@@ -199,22 +235,30 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
           live = { ...live, text: live.text + delta }
           return [{ type: 'live', live: { kind, text: live.text } }]
         }
+        case 'turn/plan/updated': {
+          // The turn's task list: one row per turn, rewritten by each update.
+          const todos = todosOf(params.plan)
+          const id = `plan:${str(params.turnId) ?? ''}`
+          return [put(id, { kind: 'tool', id, at: now(), name: 'Plan', arg: todosArg(todos), state: 'ok', todos })]
+        }
         case 'serverRequest/resolved': {
           const id = String(params.requestId ?? '')
+          const itemId = str(waiting.get(id)?.params.itemId)
+          if (itemId) fileChanges.delete(itemId)
           return waiting.delete(id) ? [{ type: 'prompt-done', id }] : []
         }
         case 'error': {
           const error = isRec(params.error) ? params.error : {}
           // Retries report here too ("Reconnecting… 1/5"); only a final error is the conversation's.
           if (params.willRetry === true) return []
-          return [system(clip(str(error.message) ?? 'Codex 出错', 300))]
+          return errorLine(str(error.message) ?? 'Codex 出错')
         }
         default:
           return []
       }
     },
     request(id, method, params) {
-      const prompt = promptOfCodex(id, method, params)
+      const prompt = promptOfCodex(id, method, params, fileChanges.get(str(params.itemId) ?? ''))
       if (!prompt) return []
       waiting.set(id, { id, method, params })
       return [{ type: 'prompt', prompt }]
@@ -222,7 +266,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     pending: (id) => waiting.get(id),
     settle(id) {
       return waiting.delete(id) ? [{ type: 'prompt-done', id }] : []
-    }
+    },
+    failed: (message) => errorLine(message)
   }
 }
 
@@ -232,7 +277,8 @@ const DECISIONS: Record<string, GuiPermissionOption> = {
   accept: { id: 'accept', label: '允许', kind: 'allow_once' }
 }
 
-export function promptOfCodex(id: string, method: string, params: Rec): GuiPrompt | null {
+/** A server request as a prompt; `files`: the change a file approval is about (its item's files). */
+export function promptOfCodex(id: string, method: string, params: Rec, files: readonly FileDiff[] = []): GuiPrompt | null {
   if (method === 'item/commandExecution/requestApproval') {
     const offered = (Array.isArray(params.availableDecisions) ? params.availableDecisions : []).filter((d): d is string => typeof d === 'string')
     const keys = (offered.length > 0 ? offered : ['decline', 'accept']).filter((d) => d in DECISIONS)
@@ -240,7 +286,10 @@ export function promptOfCodex(id: string, method: string, params: Rec): GuiPromp
     return { kind: 'permission', id, tool: 'Bash', detail: str(params.command) ?? str(params.reason) ?? '运行命令', options }
   }
   if (method === 'item/fileChange/requestApproval' || method === 'applyPatchApproval') {
-    return { kind: 'permission', id, tool: 'Edit', detail: str(params.reason) ?? '修改文件', options: [DECISIONS.decline!, DECISIONS.accept!] }
+    const diff = files[0]
+    // No reason given: the file, as Claude's Edit names it (the card then shows it once, on the diff's header).
+    const detail = str(params.reason) ?? diff?.path ?? '修改文件'
+    return { kind: 'permission', id, tool: 'Edit', detail, options: [DECISIONS.decline!, DECISIONS.accept!], ...(diff ? { diff } : {}), ...(files.length > 1 ? { files: [...files] } : {}) }
   }
   if (method === 'item/tool/requestUserInput') {
     const questions = (Array.isArray(params.questions) ? params.questions : []).filter(isRec).map((q) => ({

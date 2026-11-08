@@ -5,7 +5,7 @@
 // the window (last: a reload shows the boot screen's dots for up to 8 s). Screenshots in both themes go to test-results/gui-session/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { outerClaudeEnv } from './fake-claude'
@@ -19,7 +19,8 @@ test.describe.configure({ mode: 'serial' })
 test.setTimeout(90_000)
 
 test.describe('F23 GUI session (Claude)', () => {
-  const root = mkdtempSync(join(tmpdir(), 'tr-e2e-gui-'))
+  // Resolved (/private/var/…): the agent names files under its real working folder, shown relative to the session's.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tr-e2e-gui-')))
   const bin = join(root, 'bin')
   const zdot = join(root, 'zdot')
   const project = join(root, 'demo')
@@ -70,6 +71,13 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(chat()).toBeVisible(WITHIN)
     await expect(composer()).toBeVisible()
     await expect(page.locator('[data-region="terminal"] .xterm')).toHaveCount(0)
+    // Nothing said yet (Figma 59G): the agent's mark and name over the composer, the two in the middle of the card.
+    const welcome = page.getByTestId('gui-welcome')
+    await expect(welcome).toHaveText('Claude Code')
+    const [hello, box, card] = await Promise.all([welcome.boundingBox(), page.getByTestId('gui-composer-box').boundingBox(), chat().boundingBox()])
+    expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
+    expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
+    await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
     await expect.poll(() => existsSync(argsFile), WITHIN).toBe(true)
     const launched = JSON.parse(readFileSync(argsFile, 'utf8')) as { args: string[]; entrypoint: string | null }
     expect(launched.entrypoint).toBe('wavi')
@@ -87,6 +95,7 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(feed().getByText('你好', { exact: true })).toBeVisible(WITHIN)
     await expect(feed().getByText('Hello: 你好')).toBeVisible(WITHIN)
     expect(await offsetFromTop('你好')).toBe(24)
+    await expect(page.getByTestId('gui-welcome')).toHaveCount(0)
   })
 
   test('a sent message shows at once, before the agent echoes it, and only once after', async () => {
@@ -127,6 +136,131 @@ test.describe('F23 GUI session (Claude)', () => {
     await page.screenshot({ path: join(SHOTS, 'permission-dark.png') })
     await card.getByRole('button', { name: /^允许/ }).click()
     await expect(card).toHaveCount(0, WITHIN)
+  })
+
+  test('a permission to edit a file shows the change (Figma 59I)', async () => {
+    await send('patch file')
+    const card = page.getByTestId('gui-permission')
+    await expect(card).toBeVisible(WITHIN)
+    const diff = card.getByTestId('gui-diff')
+    await expect(diff.locator('[class*="fileHeader"]')).toHaveText('src/auth/refresh.ts+2−1')
+    await expect(diff.locator('[data-kind="del"]')).toHaveText("-  const token = localStorage.getItem('token')\n")
+    await expect(diff.locator('[data-kind="add"]')).toHaveCount(2)
+    // The path is on the block's header, not repeated as the detail line.
+    await expect(card.locator('pre').filter({ hasText: /^src\/auth\/refresh\.ts$/ })).toHaveCount(0)
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `permission-diff-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await card.getByRole('button', { name: /^允许/ }).click()
+    await expect(card).toHaveCount(0, WITHIN)
+  })
+
+  test('tool rows read as icon · verb · target; a command’s output keeps its colors (Figma 59J)', async () => {
+    await send('show colors')
+    const bash = feed().getByRole('button', { name: /运行\s*pnpm vitest run server\/auth/ })
+    await expect(bash).toBeVisible(WITHIN)
+    await expect(feed().getByRole('button', { name: /读取\s*src\/auth\/session\.ts/ })).toBeVisible()
+    await expect(feed().getByRole('heading', { name: '测试结果' })).toBeVisible()
+    await bash.click()
+    const output = feed().locator('pre').filter({ hasText: 'rotates the token' })
+    const failed = output.locator('[data-fg="red"]').first()
+    await expect(failed).toHaveText('✗ server/auth/refresh.test.ts > rotates the token')
+    expect(await output.textContent()).not.toContain('\x1b')
+    // Figma 59J: the output starts with the command it came from.
+    await expect(output.getByTestId('gui-output-command')).toHaveText('$ pnpm vitest run server/auth\n')
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const red = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--term-red').trim())
+      expect(await failed.evaluate((el) => getComputedStyle(el).color)).toBe(await page.evaluate((hex) => {
+        const probe = document.createElement('span')
+        probe.style.color = hex
+        document.body.append(probe)
+        const color = getComputedStyle(probe).color
+        probe.remove()
+        return color
+      }, red))
+      await page.screenshot({ path: join(SHOTS, `tools-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await bash.click()
+  })
+
+  test('the current task list sits above the composer and its row opens to it (Figma 59J)', async () => {
+    await send('make tasks')
+    const card = page.getByTestId('gui-todos')
+    await expect(card).toBeVisible(WITHIN)
+    await expect(card.locator('header')).toHaveText('任务1 / 3')
+    await expect(card.locator('li')).toHaveText(['登录接口改成 Set-Cookie', '跑 auth 测试并修失败', '确认 Safari 的 SameSite 行为'])
+    await expect(card.locator('li[data-status="in_progress"]')).toHaveText('跑 auth 测试并修失败')
+    // Directly above the composer.
+    const [cardBox, box] = await Promise.all([card.boundingBox(), page.getByTestId('gui-composer-box').boundingBox()])
+    expect(cardBox!.y + cardBox!.height).toBeLessThanOrEqual(box!.y)
+    const row = feed().getByRole('button', { name: /任务\s*3 项/ }).last()
+    await row.click()
+    await expect(feed().locator('li').filter({ hasText: '确认 Safari 的 SameSite 行为' })).toBeVisible()
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `tasks-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await row.click()
+    // Every task done: the card goes.
+    await send('tasks done')
+    await expect(card).toHaveCount(0, WITHIN)
+  })
+
+  test('a subagent’s work shows under its row, open while it runs, closed once done (Figma 59J)', async () => {
+    await send('run a subagent')
+    const agent = feed().locator('[data-subagent]').last()
+    const row = agent.locator('button').first()
+    const steps = agent.getByTestId('gui-subagent-steps')
+    await expect(row).toContainText('子 agent查 SameSite 在 Safari 的行为', WITHIN)
+    // Running: open, counting up from its start.
+    await expect(steps).toBeVisible()
+    await expect(agent.getByTestId('gui-subagent-time')).toHaveText(/^0:0\d$/)
+    const grep = steps.getByRole('button', { name: /搜索\s*SameSite=Lax/ })
+    await expect(grep).toBeVisible()
+    await expect(steps.getByText('Safari 17 起跨站 POST 不带 Lax cookie，和 Chrome 一致。')).toBeVisible()
+    // Under the row, not at the top level; the subagent's prompt and stream are not the conversation's.
+    await expect(feed().getByText('SameSite=Lax', { exact: true })).toHaveCount(1)
+    await expect(feed().getByText('Check how Safari treats SameSite=Lax')).toHaveCount(0)
+    await expect(feed().getByText('inner stream')).toHaveCount(0)
+    // Done: its own duration, closed.
+    await expect(feed().getByText('子 agent 查完了。')).toBeVisible(WITHIN)
+    await expect(agent.getByTestId('gui-subagent-time')).toHaveText('0:42')
+    await expect(steps).toHaveCount(0)
+    await row.click()
+    await expect(steps).toBeVisible()
+    // The line runs down from the row icon's centre (8), the nested rows 16 right of it.
+    // Measured in one frame: opening the row grows the feed, which follows its end, so separate reads can straddle a scroll.
+    const box = await agent.evaluate((el) => {
+      const rect = (node: Element | null | undefined) => node!.getBoundingClientRect()
+      const stepsEl = el.querySelector('[data-testid="gui-subagent-steps"]')
+      const grepEl = [...(stepsEl?.querySelectorAll('button') ?? [])].find((b) => /搜索\s*SameSite=Lax/.test(b.textContent ?? ''))
+      const [r, s, g] = [rect(el.querySelector('button')), rect(stepsEl), rect(grepEl)]
+      return { rowX: r.x, rowBottom: r.bottom, stepsX: s.x, grepX: g.x, grepY: g.y }
+    })
+    expect(box.stepsX - box.rowX).toBeCloseTo(7, 0)
+    expect(box.grepX - box.rowX).toBeCloseTo(24, 0)
+    expect(box.grepY).toBeGreaterThan(box.rowBottom)
+    expect(await steps.evaluate((el) => [getComputedStyle(el).borderLeftWidth, getComputedStyle(el).borderLeftStyle])).toEqual(['1px', 'solid'])
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `subagent-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+    await row.click()
+    await expect(steps).toHaveCount(0)
+    await expect(grep).toHaveCount(0)
   })
 
   test('queues a message sent while a turn runs, then stops the turn', async () => {
@@ -437,7 +571,22 @@ test.describe('F23 GUI session (Claude)', () => {
     const bubble = feed().locator('[data-item]').last()
     await expect.poll(() => bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontSize)).toBe('16px')
     expect(await bubble.evaluate((el) => getComputedStyle(el.querySelector('p, li')!).fontWeight)).toBe('500')
-    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('992px')
+    // The column is the composer's (960 for 中) with 40 each side for the pictures (Figma 59J).
+    expect(await feed().locator('> div').first().evaluate((el) => getComputedStyle(el).maxWidth)).toBe('1040px')
+    // The agent's words start at the composer's left edge, its mark 12 outside; the bubble ends at its right edge, the
+    // picture 8 outside.
+    await feed().evaluate((el) => el.scrollTo(0, 0))
+    const [boxEdge, words, mark, sent, picture] = await Promise.all([
+      page.getByTestId('gui-composer-box').boundingBox(),
+      feed().getByText('Hello: 你好').boundingBox(),
+      feed().locator('[data-agent-mark]').first().boundingBox(),
+      bubble.locator('> div > div').first().boundingBox(),
+      userAvatar.boundingBox()
+    ])
+    expect(Math.round(words!.x)).toBe(Math.round(boxEdge!.x))
+    expect(Math.round(mark!.x + mark!.width + 12)).toBe(Math.round(boxEdge!.x))
+    expect(Math.round(sent!.x + sent!.width)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
+    expect(Math.round(picture!.x - 8)).toBe(Math.round(boxEdge!.x + boxEdge!.width))
     expect(await chat().evaluate((el) => getComputedStyle(el.parentElement!).backgroundColor)).toMatch(/0\.85\)$|color\(srgb .* \/ 0\.85\)$/)
     await feed().evaluate((el) => el.scrollTo(0, 0))
     await page.screenshot({ path: join(SHOTS, 'chat-avatars.png') })
@@ -449,9 +598,26 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(userAvatar).toBeHidden()
   })
 
-  test('lists the agent’s commands under /', async () => {
+  test('lists the agent’s commands under /: 命令, then Skills (Figma 59H)', async () => {
     await input().fill('/re')
-    await expect(page.getByTestId('gui-slash-menu')).toContainText('review', WITHIN)
+    const menu = page.getByTestId('gui-slash-menu')
+    await expect(menu).toContainText('review', WITHIN)
+    // Turns have run, so system/init has said which entries are skills.
+    const groups = menu.getByTestId('gui-slash-group')
+    await expect(groups).toHaveCount(2)
+    await expect(groups.nth(0).getByRole('option')).toHaveText(['/review[path]Review the diff'])
+    await expect(groups.nth(1).getByRole('option')).toHaveText(['/research<topic>Research a topic and write a report'])
+    await expect(groups.locator('[class*="popoverTitle"]')).toHaveText(['命令', 'Skills'])
+    // The keys go down in the order shown.
+    await input().press('ArrowDown')
+    await expect(menu.locator('[aria-selected="true"]')).toContainText('research')
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `slash-menu-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
     await input().fill('')
   })
 

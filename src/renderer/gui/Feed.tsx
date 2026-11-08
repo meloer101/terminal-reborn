@@ -1,27 +1,34 @@
-// The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`, 51A): user bubbles on the right with the
-// user's picture beside them, the agent's part of each turn after its mark — its Markdown, runs of tool and thinking
-// rows grouped 8 apart — 16 between blocks, and the block being streamed. Each
+// The conversation column of a GUI session (PRD F23, Figma 49″C `Feed`, 51A, 59J): the composer's width, user bubbles
+// ending at its right edge with the user's picture outside it, the agent's part of each turn from its left edge with
+// the mark outside it — its Markdown, runs of tool and thinking rows grouped 8 apart (a subagent's under its row) — 12 between blocks, 24 between
+// turns, and the block being streamed. Each
 // block is memoised on its items (applyGuiEvent keeps unchanged items by identity), so a streamed delta re-renders
 // the live block only; blocks scrolled far out of view skip layout and paint (`content-visibility`).
 // Figma 54: hovering a message shows its actions — yours: time · copy · edit; the agent's, after a finished turn: copy ·
 // time. 编辑 turns your message into a text box in place and fades what came after it until it is sent or cancelled.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
+import { Bot, Brain, ChevronDown, ChevronRight, ClipboardList, FilePlus, FileText, FolderSearch, Globe, ListTodo, MoveRight, Pencil, Search, Sparkles, Square, Terminal, ToggleLeft, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import type { GuiLive } from '@shared/gui-chat'
 import { formatClock } from '@shared/session-meta'
-import type { ChatItem } from '@shared/transcript-chat'
+import type { ChatItem, FileDiff } from '@shared/transcript-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
+import { ansiSpans } from './ansi'
 import { ChatMarkdown } from './ChatMarkdown'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
+import { DiffBlock, diffText } from './DiffBlock'
+import { TodoList } from './Todos'
 import {
+  blockHas,
   composerKey,
   feedBlocks,
+  isSubagentTool,
   liveStartsTurn,
   sentMessage,
+  subagentElapsed,
   thinkingLabel,
   toolView,
   turnEnds,
@@ -29,11 +36,35 @@ import {
   userBubble,
   userMarkdown,
   type FeedBlock,
-  type StepItem
+  type NestedItem,
+  type StepItem,
+  type ToolIcon,
+  type ToolView
 } from './model'
 import styles from './Chat.module.css'
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
+
+/** A tool row's icon key (model.ts `toolView`) → its lucide icon. */
+const TOOL_ICONS: Readonly<Record<ToolIcon, LucideIcon>> = {
+  'file-text': FileText,
+  'file-plus': FilePlus,
+  pencil: Pencil,
+  terminal: Terminal,
+  square: Square,
+  search: Search,
+  'folder-search': FolderSearch,
+  globe: Globe,
+  bot: Bot,
+  'list-todo': ListTodo,
+  sparkles: Sparkles,
+  'clipboard-list': ClipboardList,
+  trash: Trash2,
+  'move-right': MoveRight,
+  brain: Brain,
+  toggle: ToggleLeft,
+  wrench: Wrench
+}
 
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
@@ -116,7 +147,7 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
             />
           ) : (
             <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)} faded={editingAt >= 0 && i > editingAt} end={ends.get(block.key)}>
-              <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && block.items.some((i) => i.id === waitingTool) ? waitingTool : null} />
+              <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && waitingTool !== null && blockHas(block, waitingTool) ? waitingTool : null} />
             </AgentTurn>
           )
         )}
@@ -135,7 +166,9 @@ const Block = memo(
     if (block.kind === 'steps') {
       return (
         <div className={styles.steps}>
-          {block.items.map((item) => (item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} waiting={item.id === waitingTool} />))}
+          {block.items.map((item) =>
+            item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={block.nested} waitingTool={waitingTool} />
+          )}
         </div>
       )
     }
@@ -154,10 +187,12 @@ const Block = memo(
   (a, b) => a.sessionId === b.sessionId && a.waitingTool === b.waitingTool && sameBlock(a.block, b.block)
 )
 
-/** Same block: the same items, by identity (a grown run of steps is a new block). */
+const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean => !!b && a.length === b.length && a.every((item, i) => item === b[i])
+
+/** Same block: the same items, by identity, and the same under each subagent row (a grown run of steps is a new block). */
 function sameBlock(a: FeedBlock, b: FeedBlock): boolean {
   if (a.kind === 'item' || b.kind === 'item') return a.kind === b.kind && a.kind === 'item' && b.kind === 'item' && a.item === b.item
-  return a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i])
+  return sameList(a.items, b.items) && a.nested.size === b.nested.size && [...a.nested].every(([id, list]) => sameList(list, b.nested.get(id)))
 }
 
 /** When a message was sent or a turn ended: `15:04`, with the date on another day. */
@@ -285,11 +320,24 @@ function InlineEdit({ text, onCancel, onSave }: { text: string; onCancel(): void
   )
 }
 
+function ToolIconMark({ icon }: { icon: ToolIcon }) {
+  const Icon = TOOL_ICONS[icon]
+  return <Icon {...ICON} />
+}
+
+/** A step row's mark (Figma 59J): the tool's icon, or its status while it runs, waits on you or failed. */
+function StepMark({ children }: { children: ReactNode }) {
+  return <span className={styles.stepMark}>{children}</span>
+}
+
 function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
   const [open, setOpen] = useState(false)
   return (
     <div className={styles.thinking}>
       <button type="button" className={styles.thinkingRow} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <StepMark>
+          <Brain {...ICON} />
+        </StepMark>
         <span>{thinkingLabel(item.ms)}</span>
         {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
       </button>
@@ -298,44 +346,156 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
   )
 }
 
-function Tool({ item, waiting }: { item: Extract<StepItem, { kind: 'tool' }>; waiting: boolean }) {
-  const [open, setOpen] = useState(false)
-  const view = toolView(item, waiting)
+const NO_NESTED: ReadonlyMap<string, readonly NestedItem[]> = new Map()
+const NO_CHILDREN: readonly NestedItem[] = []
+
+/**
+ * A tool row. Figma 59J: a subagent's row (Agent / Task, a Codex collab call) reads 子 agent · its task · ⌄ with how long
+ * it ran at the end; what the subagent did is listed under it, after a line — open while it runs, closed once done.
+ */
+function Tool({
+  item,
+  waitingTool,
+  nested = NO_NESTED
+}: {
+  item: Extract<ChatItem, { kind: 'tool' }>
+  waitingTool: string | null
+  nested?: ReadonlyMap<string, readonly NestedItem[]>
+}) {
+  const subagent = isSubagentTool(item.name)
+  const children = (subagent && nested.get(item.id)) || NO_CHILDREN
+  // null: as the row's state says (a subagent's open while it runs); a click decides from then on.
+  const [chosen, setOpen] = useState<boolean | null>(null)
+  const open = chosen ?? (subagent && item.state === 'running')
+  const view = toolView(item, item.id === waitingTool)
+  // Figma 59J: one block per file; a single file's path is on the row already.
+  const files = item.files ?? (item.diff ? [item.diff] : [])
+  const hasChildren = children.length > 0
+  const expandable = view.expandable || hasChildren
   return (
-    <div className={styles.tool}>
-      <button type="button" className={styles.toolRow} aria-expanded={view.expandable ? open : undefined} disabled={!view.expandable} onClick={() => setOpen(!open)}>
-        <StatusGlyph status={view.status} />
-        <span className={styles.toolName}>{view.name}</span>
-        <span className={styles.toolArg}>{view.arg}</span>
+    <div className={styles.tool} data-subagent={subagent || undefined}>
+      <button type="button" className={styles.toolRow} aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(!open)}>
+        <StepMark>{view.status === 'done_unread' ? <ToolIconMark icon={view.icon} /> : <StatusGlyph status={view.status} />}</StepMark>
+        <span className={styles.toolVerb} title={view.name}>
+          {view.verb}
+        </span>
+        <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
+        {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>等你确认</span>}
+        {view.exit !== undefined && <span className={styles.exit}>exit {view.exit}</span>}
+        {subagent && <Elapsed item={item} />}
       </button>
-      {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
-      {open && (item.diff || item.output) && (
-        <div className={styles.codeWrap}>
-          {item.diff ? <Diff diff={item.diff} /> : <pre className={styles.output}>{item.output}</pre>}
-          <CopyButton text={() => (item.diff ? item.diff.hunks.flatMap((h) => h.lines).join('\n') : (item.output ?? ''))} label="复制输出" className={styles.cornerCopy} />
-        </div>
+      {hasChildren ? (
+        open && (
+          <div className={styles.subagentSteps} data-testid="gui-subagent-steps">
+            {children.map((child) =>
+              child.kind === 'text' ? (
+                <p key={child.id} className={styles.subagentText}>
+                  {child.text}
+                </p>
+              ) : child.kind === 'thinking' ? (
+                <Thinking key={child.id} item={child} />
+              ) : (
+                <Tool key={child.id} item={child} nested={nested} waitingTool={waitingTool} />
+              )
+            )}
+          </div>
+        )
+      ) : (
+        <ToolBody item={item} open={open} files={files} view={view} />
       )}
     </div>
   )
 }
 
-function Diff({ diff }: { diff: NonNullable<Extract<ChatItem, { kind: 'tool' }>['diff']> }) {
+/** Under a row: its summary while closed; open, its task list, its files' changes or its output. */
+function ToolBody({ item, open, files, view }: { item: Extract<ChatItem, { kind: 'tool' }>; open: boolean; files: FileDiff[]; view: ToolView }) {
+  return (
+    <>
+      {view.summary && !open && <p className={styles.toolSummary}>{view.summary}</p>}
+      {open && item.todos && item.todos.length > 0 && <TodoList todos={item.todos} className={styles.todosInFeed} />}
+      {open && !item.todos && (files.length > 0 || view.output || view.command) && (
+        <div className={styles.codeWrap}>
+          {files.length > 0 ? (
+            <div className={styles.fileBlocks}>
+              {files.map((file, i) => (
+                <DiffBlock key={i} diff={file} header={files.length > 1} />
+              ))}
+            </div>
+          ) : (
+            <Output raw={item.output ?? ''} command={view.command} />
+          )}
+          <CopyButton
+            text={() => (files.length > 0 ? diffText(files) : view.output?.trim() ? view.output : (view.command ?? ''))}
+            label="复制输出"
+            className={styles.cornerCopy}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * A subagent row's time at its end: since it started while it runs (counted each second, only while the row is on
+ * screen), its own duration once done.
+ */
+function Elapsed({ item }: { item: Extract<ChatItem, { kind: 'tool' }> }) {
+  const running = item.state === 'running'
+  const ref = useRef<HTMLSpanElement>(null)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const el = ref.current
+    if (!running || !el) return
+    let timer: number | undefined
+    const stop = (): void => {
+      window.clearInterval(timer)
+      timer = undefined
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return stop()
+      setNow(Date.now())
+      timer ??= window.setInterval(() => setNow(Date.now()), 1000)
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      stop()
+    }
+  }, [running])
+  const label = subagentElapsed(item, now)
+  return (
+    <span ref={ref} className={styles.elapsed} data-testid="gui-subagent-time">
+      {label}
+    </span>
+  )
+}
+
+/**
+ * What a command printed, in its colors (the --term-* ones), under `$ <command>` when the agent gave its whole text
+ * (Figma 59J); the copy button copies the text alone.
+ */
+function Output({ raw, command }: { raw: string; command?: string }) {
+  const spans = useMemo(() => ansiSpans(raw), [raw])
   return (
     <pre className={styles.output}>
-      {diff.hunks.map((hunk, h) => (
-        <span key={h} className={styles.hunk}>
-          {hunk.lines.map((line, i) => (
-            <span key={i} className={styles.diffLine} data-kind={line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}>
-              {line}
-              {'\n'}
-            </span>
-          ))}
+      {command !== undefined && (
+        <span className={styles.outputCommand} data-testid="gui-output-command">
+          $ {command}
+          {raw ? '\n' : ''}
         </span>
-      ))}
-      {diff.truncated && <span className={styles.diffLine}>…</span>}
+      )}
+      {spans.map((span, i) =>
+        span.fg || span.bold || span.dim ? (
+          <span key={i} className={styles.ansi} data-fg={span.fg} data-bold={span.bold} data-dim={span.dim}>
+            {span.text}
+          </span>
+        ) : (
+          span.text
+        )
+      )}
     </pre>
   )
 }
@@ -345,7 +505,12 @@ function Live({ sessionId, live }: { sessionId: SessionId; live: GuiLive }) {
   if (live.kind === 'thinking') {
     return (
       <div className={styles.steps}>
-        <p className={styles.thinkingLive}>思考中</p>
+        <div className={styles.thinkingRow}>
+          <StepMark>
+            <Brain {...ICON} />
+          </StepMark>
+          <p className={styles.thinkingLive}>思考中</p>
+        </div>
       </div>
     )
   }

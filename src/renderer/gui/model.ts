@@ -4,34 +4,93 @@
 import { looksLikeReport } from '@shared/dispatch'
 import type { GuiCommand, GuiConfigOption, GuiPermissionOption, GuiPrompt, GuiQuestion } from '@shared/gui-chat'
 import { composerPickers } from '@shared/gui-chat'
-import type { ChatItem } from '@shared/transcript-chat'
+import type { ChatItem, ChatTodo, FileDiff } from '@shared/transcript-chat'
 import type { SessionStatus } from '@shared/types'
+import { CUT_ESCAPE, ESCAPES } from './ansi'
 
 // --- the feed (Figma 49″C) ----------------------------------------------------------------------------------------
 
 export type StepItem = Extract<ChatItem, { kind: 'tool' | 'thinking' }>
 
+/** What a subagent did, under its Agent row (Figma 59J): its calls, its thinking and its words. */
+export type NestedItem = Extract<ChatItem, { kind: 'tool' | 'thinking' | 'text' }>
+
 /**
  * One block of the feed: a run of tool and thinking rows (8 apart inside, Figma `Steps`), or any other single item.
- * Blocks are 16 apart. `key` stays the same while a block grows, so React keeps its rows.
+ * Blocks are 16 apart. `key` stays the same while a block grows, so React keeps its rows. `nested`: what each subagent
+ * row of the run (Agent / Task, by id) has under it, its own subagents' too.
  */
-export type FeedBlock = { kind: 'steps'; key: string; items: StepItem[] } | { kind: 'item'; key: string; item: Exclude<ChatItem, StepItem> }
+export type FeedBlock =
+  | { kind: 'steps'; key: string; items: StepItem[]; nested: ReadonlyMap<string, readonly NestedItem[]> }
+  | { kind: 'item'; key: string; item: Exclude<ChatItem, StepItem> }
 
 const isStep = (item: ChatItem): item is StepItem => item.kind === 'tool' || item.kind === 'thinking'
 
+/** Tools that run a subagent: Claude's Agent / Task, a Codex collab call (codex-app-server.ts). */
+export const isSubagentTool = (name: string): boolean => name === 'Agent' || name === 'Task' || name === 'Subagent'
+
+/**
+ * The feed's blocks. A subagent's items (`parent`) go under their Agent row wherever that row is in the list (it may
+ * come after them); without it in the list they show at the top level.
+ */
 export function feedBlocks(items: readonly ChatItem[]): FeedBlock[] {
-  const blocks: FeedBlock[] = []
+  const tools = new Set<string>()
+  for (const item of items) if (item.kind === 'tool') tools.add(item.id)
+  const children = new Map<string, NestedItem[]>()
+  const top: ChatItem[] = []
   for (const item of items) {
+    const parent = 'parent' in item ? item.parent : undefined
+    if (parent !== undefined && parent !== item.id && tools.has(parent) && item.kind !== 'user' && item.kind !== 'system' && item.kind !== 'unknown') {
+      const list = children.get(parent)
+      if (list) list.push(item)
+      else children.set(parent, [item])
+    } else top.push(item)
+  }
+  const blocks: FeedBlock[] = []
+  let run: { items: StepItem[]; nested: Map<string, readonly NestedItem[]> } | null = null
+  for (const item of top) {
     if (item.kind === 'unknown') continue
-    const last = blocks[blocks.length - 1]
-    if (isStep(item)) {
-      if (last?.kind === 'steps') last.items.push(item)
-      else blocks.push({ kind: 'steps', key: item.id, items: [item] })
-    } else {
+    if (!isStep(item)) {
+      run = null
       blocks.push({ kind: 'item', key: item.id, item })
+      continue
+    }
+    if (run) run.items.push(item)
+    else {
+      run = { items: [item], nested: new Map() }
+      blocks.push({ kind: 'steps', key: item.id, ...run })
+    }
+    // This row's subtree: its children, theirs, … (each id once).
+    const stack = [item.id]
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      const list = children.get(id)
+      if (!list || run.nested.has(id)) continue
+      run.nested.set(id, list)
+      for (const child of list) if (child.kind === 'tool') stack.push(child.id)
     }
   }
   return blocks
+}
+
+/** Whether a block holds the row `id`, at the top of its run or under a subagent row. */
+export function blockHas(block: FeedBlock, id: string): boolean {
+  if (block.kind === 'item') return block.item.id === id
+  return block.items.some((i) => i.id === id) || [...block.nested.values()].some((list) => list.some((i) => i.id === id))
+}
+
+/** 0:42, 2:05, 1:02:05 — how long a subagent ran (Figma 59J). */
+export function elapsedLabel(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const s = String(total % 60).padStart(2, '0')
+  const m = Math.floor(total / 60)
+  return m < 60 ? `${m}:${s}` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${s}`
+}
+
+/** A subagent row's time: since it started while it runs, its own duration once done; null when unknown. */
+export function subagentElapsed(item: Extract<ChatItem, { kind: 'tool' }>, now: number): string | null {
+  if (item.state === 'running') return item.at > 0 ? elapsedLabel(now - item.at) : null
+  return item.ms !== undefined ? elapsedLabel(item.ms) : null
 }
 
 const lastUserKey = (blocks: readonly FeedBlock[]): string | null => {
@@ -162,11 +221,53 @@ export function thinkingLabel(ms: number | undefined): string {
 }
 
 /** Tools whose result line is worth a summary under the row (Figma: Grep's 「14 处 · 6 个文件」, Bash's last words). */
-const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite'])
+const SUMMARY_SKIP: ReadonlySet<string> = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'TodoWrite', 'Plan'])
+
+/** A tool row's icon, by name; Feed draws it (the model stays free of React). */
+export type ToolIcon = 'file-text' | 'file-plus' | 'pencil' | 'terminal' | 'square' | 'search' | 'folder-search' | 'globe' | 'bot' | 'list-todo' | 'sparkles' | 'clipboard-list' | 'trash' | 'move-right' | 'brain' | 'toggle' | 'wrench'
+
+/**
+ * Figma 59J: what a tool row says — its icon and a Chinese verb, by the tool's name. Claude's tools; Codex's shell,
+ * patch and search calls (named Bash / Edit / WebSearch by its parsers); the ACP tool kinds (acp.ts). Any other tool
+ * (MCP, an agent's own) is a wrench with its own name.
+ */
+const TOOL_WORDS: Readonly<Record<string, readonly [ToolIcon, string]>> = {
+  Read: ['file-text', '读取'],
+  Edit: ['pencil', '编辑'],
+  MultiEdit: ['pencil', '编辑'],
+  Write: ['file-plus', '写入'],
+  NotebookEdit: ['pencil', '编辑'],
+  Bash: ['terminal', '运行'],
+  BashOutput: ['terminal', '读取输出'],
+  KillShell: ['square', '停止'],
+  Grep: ['search', '搜索'],
+  Glob: ['folder-search', '查找文件'],
+  WebFetch: ['globe', '读取'],
+  WebSearch: ['globe', '搜索网页'],
+  Agent: ['bot', '子 agent'],
+  Task: ['bot', '子 agent'],
+  // Codex's collab agent call (codex-app-server.ts).
+  Subagent: ['bot', '子 agent'],
+  TodoWrite: ['list-todo', '任务'],
+  // Codex's and ACP agents' plan (codex-app-server.ts, acp.ts).
+  Plan: ['list-todo', '任务'],
+  Skill: ['sparkles', 'Skill'],
+  ExitPlanMode: ['clipboard-list', '计划'],
+  Delete: ['trash', '删除'],
+  Move: ['move-right', '移动'],
+  Search: ['search', '搜索'],
+  Think: ['brain', '思考'],
+  Fetch: ['globe', '读取'],
+  Mode: ['toggle', '切换模式'],
+  Tool: ['wrench', '工具']
+}
 
 export interface ToolView {
   status: SessionStatus
   name: string
+  /** Figma 59J: icon · verb · target (`arg`). */
+  icon: ToolIcon
+  verb: string
   arg: string
   /** Edit / Write: `+N −M` (each part only when non-zero). */
   added?: number
@@ -177,32 +278,81 @@ export interface ToolView {
   summary?: string
   /** It has something to open: output or a diff. */
   expandable: boolean
+  /** What it printed, as shown and copied: without terminal escape codes. */
+  output?: string
+  /** A shell call's whole command: the expanded output starts with `$ <command>` (Figma 59J). */
+  command?: string
+  /** `exit N` at the row's end: only a failed call with a non-zero code the agent reported (Codex). */
+  exit?: number
 }
+
+// A command's output as text alone: shown in the summary and copied. The model keeps the escape codes; the expanded
+// output draws their colors (ansi.ts).
+export const plainOutput = (text: string): string => text.replace(ESCAPES, '').replace(CUT_ESCAPE, '…')
 
 export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boolean): ToolView {
   const status: SessionStatus = waiting ? 'needs_you' : item.state === 'running' ? 'running' : item.state === 'error' ? 'error' : 'done_unread'
-  const firstLine = item.output
+  const output = item.output === undefined ? undefined : plainOutput(item.output)
+  const firstLine = output
     ?.split('\n')
     .map((line) => line.trim())
     .find((line) => line !== '')
+  // Own keys only: a tool named `constructor` is not Object's.
+  const [icon, verb] = (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name] : undefined) ?? ['wrench', item.name]
+  // Without output a command is worth opening only when the row shows less of it (its lines, its length).
+  const hidden = item.input !== undefined && item.input.trim() !== item.arg
+  // A change to several files counts all of them.
+  const files = item.files ?? (item.diff ? [item.diff] : [])
+  const added = files.reduce((n, f) => n + f.added, 0)
+  const removed = files.reduce((n, f) => n + f.removed, 0)
   return {
     status,
     name: item.name,
+    icon,
+    verb,
     arg: item.arg,
-    ...(item.diff && item.diff.added > 0 ? { added: item.diff.added } : {}),
-    ...(item.diff && item.diff.removed > 0 ? { removed: item.diff.removed } : {}),
+    ...(added > 0 ? { added } : {}),
+    ...(removed > 0 ? { removed } : {}),
     waiting,
     ...(item.state !== 'running' && firstLine && !SUMMARY_SKIP.has(item.name) ? { summary: firstLine } : {}),
-    expandable: !!item.diff || !!item.output?.trim()
+    expandable: !!item.diff || !!output?.trim() || hidden || !!item.todos?.length,
+    ...(output !== undefined ? { output } : {}),
+    ...(item.input ? { command: item.input } : {}),
+    ...(item.state === 'error' && item.exit !== undefined && item.exit !== 0 ? { exit: item.exit } : {})
   }
 }
 
-/** The tool row a pending permission belongs to: the last tool still running, while one is asked about. */
+/**
+ * Figma 59J: the task list shown above the composer — the conversation's latest one, while something in it is left
+ * (hidden once every task is done, or when it is empty). A subagent's own list is not the conversation's.
+ */
+export function currentTodos(items: readonly ChatItem[]): readonly ChatTodo[] | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]!
+    if (item.kind !== 'tool' || !item.todos || item.parent !== undefined) continue
+    return item.todos.some((t) => t.status !== 'completed') ? item.todos : null
+  }
+  return null
+}
+
+/** The card's 「2 / 4」. */
+export function todoProgress(todos: readonly ChatTodo[]): { done: number; total: number } {
+  return { done: todos.filter((t) => t.status === 'completed').length, total: todos.length }
+}
+
+/** A task's mark: done ✓, the one in progress turning, the rest a ring. */
+export const todoStatus = (status: ChatTodo['status']): SessionStatus => (status === 'completed' ? 'done_unread' : status === 'in_progress' ? 'running' : 'idle')
+
+/**
+ * The tool row a pending permission belongs to: the last tool still running, while one is asked about. A subagent's
+ * call is in the list after its Agent row, so a subagent asking marks its own row; the Agent row stays running. A task
+ * list row (TodoWrite, Plan) can come after the asking tool and is passed over.
+ */
 export function waitingToolId(items: readonly ChatItem[], prompts: readonly GuiPrompt[]): string | null {
   if (!prompts.some((p) => p.kind === 'permission')) return null
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i]!
-    if (item.kind === 'tool') return item.state === 'running' ? item.id : null
+    if (item.kind === 'tool' && !item.todos) return item.state === 'running' ? item.id : null
   }
   return null
 }
@@ -229,6 +379,16 @@ export const permissionPrimary = (buttons: PermissionButtons): GuiPermissionOpti
 
 /** The agent as a card names it (Figma 49″E 「Claude 要运行一条命令」): the product name without its CLI suffix. */
 export const shortAgentName = (label: string): string => label.replace(/\s+(Code|CLI)$/i, '')
+
+/**
+ * What a permission card shows between its title and buttons (Figma 59I): each file the change touches (with its
+ * header), and the detail line above them unless it only names one of those files (Claude's Edit: the path).
+ */
+export function permissionBody(prompt: Extract<GuiPrompt, { kind: 'permission' }>): { files: FileDiff[]; detail: string | null } {
+  const files = prompt.files ?? (prompt.diff ? [prompt.diff] : [])
+  const detail = prompt.detail && !files.some((f) => f.path === prompt.detail) ? prompt.detail : null
+  return { files, detail }
+}
 
 /** The permission card's title (「Claude 要运行一条命令」): what the tool does, by its name. */
 export function permissionTitle(agentLabel: string, tool: string): string {
@@ -354,6 +514,23 @@ export function composerKey(
 export function slashQuery(draft: string): string | null {
   const match = /^\/(\S*)$/.exec(draft)
   return match ? match[1]! : null
+}
+
+/** Figma 59H: the `/` menu's groups — 命令, then Skills — each with where it starts in the keys' order. */
+export interface SlashGroup {
+  title: '命令' | 'Skills'
+  commands: GuiCommand[]
+  /** The index of its first entry in the menu's order (commands, then skills). */
+  start: number
+}
+
+export function slashGroups(matches: readonly GuiCommand[]): SlashGroup[] {
+  const commands = matches.filter((c) => c.kind !== 'skill')
+  const skills = matches.filter((c) => c.kind === 'skill')
+  const groups: SlashGroup[] = []
+  if (commands.length > 0) groups.push({ title: '命令', commands, start: 0 })
+  if (skills.length > 0) groups.push({ title: 'Skills', commands: skills, start: commands.length })
+  return groups
 }
 
 /** The draft once a command is picked: `/name ` (its argument follows). */

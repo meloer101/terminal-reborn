@@ -109,7 +109,8 @@ describe('GuiHost · Claude stream-json', () => {
     expect(opened.ok).toBe(true)
     await ready(h, 'c1')
     const state = stateOf(h, 'c1')
-    expect(state.commands).toEqual([{ name: 'review', description: 'Review the diff', argumentHint: '[path]' }])
+    expect(state.commands[0]).toEqual({ name: 'review', description: 'Review the diff', argumentHint: '[path]', kind: 'command' })
+    expect(state.commands.map((c) => c.name)).toEqual(['review', 'research'])
     expect(state.config.find((c) => c.id === 'effort')?.current).toBe('max')
 
     expect(await h.host.send('c1', { text: 'hello', attachments: [] })).toEqual({ ok: true, queued: false })
@@ -258,7 +259,7 @@ describe('GuiHost · Claude stream-json', () => {
     const opened = await b.host.open(launchOf('claude', 'c4'), b.owner)
     expect(opened.ok && texts(opened.state)).toEqual(['user:hello', 'text:Hello: hello'])
     expect(b.adopted).toEqual(['c4'])
-    expect(opened.ok && opened.state.commands.length).toBe(1)
+    expect(opened.ok && opened.state.commands.length).toBe(2)
     await until(() => b.status.some((e) => e.type === 'session-start'))
     await b.host.send('c4', { text: 'again', attachments: [] })
     await until(() => texts(stateOf(b, 'c4')).includes('text:Hello: again') && !stateOf(b, 'c4').busy)
@@ -370,7 +371,7 @@ describe('GuiHost · ACP', () => {
     const h = harness()
     await h.host.open(launchOf('grok', 'a1'), h.owner)
     await ready(h, 'a1')
-    expect(stateOf(h, 'a1').commands).toEqual([{ name: 'plan', description: 'Make a plan', argumentHint: 'what' }])
+    expect(stateOf(h, 'a1').commands).toEqual([{ name: 'plan', description: 'Make a plan', argumentHint: 'what', kind: 'command' }])
     expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'acp-session-1' })
 
     await h.host.send('a1', { text: 'fs please', attachments: ['/tmp/a.png'] })
