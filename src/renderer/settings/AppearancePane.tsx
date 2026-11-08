@@ -1,9 +1,9 @@
 // 设置 · 外观 (Figma 66A / 66B): what the whole window looks like — theme, material, 全屏背景. The terminal's and the
 // chat's own settings are on 终端 and 对话.
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
-import { needsTransparency, ringCss, shownMaterial } from '../appearance/map'
+import { shownMaterial } from '../appearance/map'
 import { PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
 import { THEME_OPTIONS, formatPercent, isPageDefault, materialOptions, pageDefaults } from './appearance-form'
 import styles from './AppearancePane.module.css'
@@ -42,8 +42,7 @@ const BACKDROP_OPTIONS: ReadonlyArray<{ value: FullscreenBackdrop; label: string
  * A small window over a desktop field, drawn with the variables the app applies on <html> (appearance/map.ts): the
  * sidebar is the shell over the base layer, the cards are the terminal and the chat at their opacities.
  */
-function WindowPreview({ appearance }: { appearance: AppearanceSettings }) {
-  const terminal: CSSProperties = { background: needsTransparency(appearance) ? ringCss(appearance) : 'var(--term-bg)' }
+function WindowPreview() {
   return (
     <div className={styles.windowPreview} data-testid="window-preview" aria-hidden>
       <div className={styles.miniWindow}>
@@ -52,7 +51,7 @@ function WindowPreview({ appearance }: { appearance: AppearanceSettings }) {
           <span />
           <span />
         </div>
-        <div className={`${styles.miniCard} ${styles.miniTerminal}`} style={terminal}>
+        <div className={`${styles.miniCard} ${styles.miniTerminal}`}>
           <span />
           <span />
         </div>
@@ -70,7 +69,7 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
   return (
     <PreviewPage
       title="外观"
-      preview={<WindowPreview appearance={appearance} />}
+      preview={<WindowPreview />}
       isDefault={isPageDefault(appearance, 'appearance')}
       onReset={() => update(pageDefaults('appearance'))}
     >

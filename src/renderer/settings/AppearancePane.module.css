@@ -152,26 +152,6 @@
   gap: var(--space-8);
 }
 
-.smallButton {
-  height: 28px;
-  padding: 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--bg-selected);
-  font: var(--text-body);
-  color: var(--text-primary);
-  cursor: default;
-}
-
-.smallButton:hover {
-  background: var(--border-default);
-}
-
-.smallButton:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
 /*
  * 外观's preview (Figma 66A): a small window over the desktop field. The sidebar column is the shell over a blurred
  * base layer (--glass-shell, as the real window); the cards are the terminal and the chat at their own opacities.
@@ -221,6 +201,12 @@
   border-radius: var(--radius-sm);
 }
 
+/* The same variables the real cards read (appearance/map.ts): one of backdrop / ring is always transparent. */
+.miniTerminal {
+  background-color: var(--tr-terminal-backdrop, var(--term-bg));
+  background-image: linear-gradient(var(--tr-term-ring, transparent), var(--tr-term-ring, transparent));
+}
+
 .miniChat {
   background: var(--tr-chat-bg, var(--bg-app));
 }
@@ -228,7 +214,7 @@
 .miniSidebar > span,
 .miniCard > span {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--text-tertiary);
   opacity: 0.5;
 }

@@ -2,7 +2,7 @@
 import { useMemo, useRef } from 'react'
 import { LIMITS, type AppearancePatch, type AppearanceSettings, type ChatAppearance, type ChatWeight } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
-import { PreviewPage, Row, Section, Select, Slider } from './controls'
+import { Button, PreviewPage, Row, Section, Select, Slider } from './controls'
 import {
   CHAT_SIZE_OPTIONS,
   CHAT_WEIGHT_OPTIONS,
@@ -40,14 +40,8 @@ export function ChatPane({ appearance, update }: { appearance: AppearanceSetting
         <Row label="我的头像" id="chatAvatar">
           <div className={styles.avatarControl}>
             {chat.avatar && <img className={styles.avatar} src={chat.avatar} alt="我的头像" />}
-            <button type="button" className={styles.smallButton} onClick={() => picker.current?.click()}>
-              {chat.avatar ? '更换…' : '选择图片…'}
-            </button>
-            {chat.avatar && (
-              <button type="button" className={styles.smallButton} onClick={() => updateChat({ avatar: '' })}>
-                移除
-              </button>
-            )}
+            <Button onClick={() => picker.current?.click()}>{chat.avatar ? '更换…' : '选择图片…'}</Button>
+            {chat.avatar && <Button onClick={() => updateChat({ avatar: '' })}>移除</Button>}
           </div>
           <input
             ref={picker}

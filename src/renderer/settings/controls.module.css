@@ -487,11 +487,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  column-gap: 48px;
+  column-gap: calc(var(--space-24) * 2);
   row-gap: var(--space-32);
   /* Titlebar height above, 40px on the other sides; the form and its preview sit in the middle (Figma 36E). */
   justify-content: center;
-  padding: var(--titlebar-height) 40px 40px;
+  padding: var(--titlebar-height) var(--space-40) var(--space-40);
 }
 
 .form {
@@ -511,11 +511,11 @@
 .previewColumn {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: calc(var(--space-4) + var(--space-6));
   flex: 1 1 320px;
   min-width: 320px;
   /* Aligns the 预览 label with the first section label (title 28 + gap 28). */
-  padding-top: 56px;
+  padding-top: calc(var(--space-24) + var(--space-32));
   position: sticky;
   top: 0;
 }
@@ -535,7 +535,7 @@
   text-overflow: ellipsis;
 }
 
-/* 恢复默认 (B15): a quiet filled button at the end of the form. */
+/* 恢复默认 (B15) at the end of the form. */
 .footer {
   display: flex;
   align-items: center;
@@ -543,7 +543,8 @@
   margin-top: var(--space-32);
 }
 
-.reset {
+/* A quiet filled button, 28 high: 恢复默认, 我的头像's 更换… / 移除. */
+.button {
   flex: none;
   height: 28px;
   padding: 0 var(--space-12);
@@ -555,15 +556,15 @@
   cursor: default;
 }
 
-.reset:hover:not(:disabled) {
+.button:hover:not(:disabled) {
   background: var(--border-default);
 }
 
-.reset:focus-visible {
+.button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
-.reset:disabled {
+.button:disabled {
   color: var(--text-disabled);
 }

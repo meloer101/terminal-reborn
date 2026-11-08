@@ -47,6 +47,15 @@ export function Row({ label, children, id }: { label: string; children: ReactNod
   )
 }
 
+/** A quiet filled button, 28 high. */
+export function Button({ children, disabled = false, onClick }: { children: ReactNode; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={styles.button} disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  )
+}
+
 /**
  * 外观 / 终端 / 对话 (Figma 66): the form, 恢复默认 at its end for this page's settings, and the page's live preview beside it.
  */
@@ -71,9 +80,9 @@ export function PreviewPage({
         <h1 className={styles.title}>{title}</h1>
         {children}
         <div className={styles.footer}>
-          <button type="button" className={styles.reset} disabled={isDefault} onClick={onReset}>
+          <Button disabled={isDefault} onClick={onReset}>
             恢复默认
-          </button>
+          </Button>
         </div>
       </div>
       <div className={styles.previewColumn}>
