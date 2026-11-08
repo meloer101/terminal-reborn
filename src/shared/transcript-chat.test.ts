@@ -105,15 +105,29 @@ describe('Claude transcript → chat', () => {
     expect(items).toEqual([{ kind: 'unknown', id: 'x0', at: Date.parse(T), type: 'brand-new-thing' }])
   })
 
-  it('shows slash commands, interruptions, compaction and API errors as one line each', () => {
+  it('shows slash commands as the user’s own messages, without their markup or printed result', () => {
     const items = parse([
+      line({ type: 'user', uuid: 'c1', message: { content: '<command-message>archify</command-message>\n<command-name>/archify</command-name>\n<command-args>画一下这个项目</command-args>' } }),
+      line({ type: 'user', isMeta: true, message: { content: [{ type: 'text', text: 'Base directory for this skill: …' }] } }),
+      line({ type: 'system', subtype: 'local_command', uuid: 'c2', content: '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>' }),
+      line({ type: 'system', subtype: 'local_command', content: '<local-command-stdout>Kept model as `Opus 5.5`</local-command-stdout>' }),
       line({ type: 'user', message: { content: '<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>' } }),
-      line({ type: 'user', message: { content: '<local-command-stdout></local-command-stdout>' } }),
+      line({ type: 'user', message: { content: '<local-command-stdout></local-command-stdout>' } })
+    ])
+    expect(items.map((i) => (i.kind === 'user' ? [i.id, i.text] : i.kind))).toEqual([
+      ['c1', '/archify 画一下这个项目'],
+      ['c2', '/model'],
+      ['m0', '/clear']
+    ])
+  })
+
+  it('shows interruptions, compaction and API errors as one line each', () => {
+    const items = parse([
       line({ type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] } }),
       line({ type: 'system', subtype: 'compact_boundary', compactMetadata: { preTokens: 1 } }),
       line({ type: 'system', subtype: 'api_error', content: 'Overloaded' })
     ])
-    expect(items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['/clear', '已中断', '对话已压缩', 'Overloaded'])
+    expect(items.map((i) => (i.kind === 'system' ? i.text : i.kind))).toEqual(['已中断', '对话已压缩', 'Overloaded'])
   })
 
   it('counts the photos sent with a prompt', () => {

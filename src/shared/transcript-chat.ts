@@ -204,7 +204,10 @@ function outputOf(result: Rec | undefined, block: Rec): string | undefined {
   return text ? tail(text, CHAT_LIMITS.output) : undefined
 }
 
-/** Claude records a slash command as a user message of tags; show `/clear`, not the markup. */
+/**
+ * Claude records a slash command as a message of tags (a user line for skills and prompt commands, a `local_command`
+ * system line for `/model`, `/login` …); show `/clear`, not the markup. Its printed result is left out.
+ */
 function commandText(text: string): string | null {
   const name = /<command-name>([^<]*)<\/command-name>/.exec(text)?.[1]
   if (name) {
@@ -294,7 +297,8 @@ function claudeParser(now: () => number): ChatParser {
       const text = textOfContent(content).trim()
       const images = Array.isArray(content) ? content.filter((b) => isRec(b) && b.type === 'image').length : 0
       const command = commandText(text)
-      if (command !== null) return command ? [add({ kind: 'system', id: nextId('s'), at, text: command })] : []
+      // The user typed it: it is their message, like any other prompt.
+      if (command !== null) return command ? [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(command, CHAT_LIMITS.text), images: 0 })] : []
       if (/^\[Request interrupted by user/.test(text)) return [add({ kind: 'system', id: nextId('s'), at, text: '已中断' })]
       if (!text && images === 0) return []
       return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images })]
@@ -309,7 +313,8 @@ function claudeParser(now: () => number): ChatParser {
       if (content && (subtype === 'local_command' || subtype === 'informational' || subtype === 'away_summary')) {
         const command = commandText(content)
         if (command === '') return []
-        return [add({ kind: 'system', id: nextId('s'), at, text: clip(command ?? content, 500) })]
+        if (command !== null) return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(command, CHAT_LIMITS.text), images: 0 })]
+        return [add({ kind: 'system', id: nextId('s'), at, text: clip(content, 500) })]
       }
       return []
     }
