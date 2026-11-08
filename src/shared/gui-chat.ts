@@ -74,6 +74,10 @@ export interface GuiConfigOption {
  * agent that can. There is no level that never asks.
  */
 export type GuiPermission = 'ask' | 'accept-edits' | 'auto'
+export const isGuiPermission = (value: unknown): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
+
+/** A model (or effort) id as an agent names it, safe to pass on a command line and to keep in the workspace file. */
+export const GUI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
 export const GUI_PERMISSION_LABELS: Readonly<Record<GuiPermission, string>> = { ask: '询问', 'accept-edits': '接受编辑', auto: '自动' }
 
 export function permissionOption(levels: readonly GuiPermission[], current: GuiPermission): GuiConfigOption {
@@ -137,22 +141,20 @@ export function picksOf(config: readonly GuiConfigOption[]): GuiPicks {
     ...(model ? { model } : {}),
     ...(models && models.length > 0 ? { models: models.map(({ value, label }) => ({ value, label })) } : {}),
     ...(effort ? { effort } : {}),
-    ...(permission && isPermission(permission) ? { permission } : {}),
+    ...(permission && isGuiPermission(permission) ? { permission } : {}),
     ...(plan !== undefined ? { plan: plan === 'on' } : {}),
     ...(fast !== undefined ? { fast: fast === 'on' } : {})
   }
 }
 
 const MAX_PICK_MODELS = 60
-const PICK_VALUE = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/
-const isPermission = (value: unknown): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
 
 const modelsOf = (raw: unknown[]): { value: string; label: string }[] =>
   raw
     .flatMap((m) => {
       if (typeof m !== 'object' || m === null) return []
       const { value, label } = m as Record<string, unknown>
-      return typeof value === 'string' && PICK_VALUE.test(value) && typeof label === 'string' && label.length <= 80 ? [{ value, label }] : []
+      return typeof value === 'string' && GUI_MODEL_ID.test(value) && typeof label === 'string' && label.length <= 80 ? [{ value, label }] : []
     })
     .slice(0, MAX_PICK_MODELS)
 
@@ -164,10 +166,10 @@ export function sanitizeGuiPicks(raw: unknown, agents: ReadonlySet<string>): Rec
     if (!agents.has(agent) || typeof value !== 'object' || value === null) continue
     const v = value as Record<string, unknown>
     out[agent] = {
-      ...(typeof v.model === 'string' && PICK_VALUE.test(v.model) ? { model: v.model } : {}),
+      ...(typeof v.model === 'string' && GUI_MODEL_ID.test(v.model) ? { model: v.model } : {}),
       ...(Array.isArray(v.models) ? { models: modelsOf(v.models) } : {}),
-      ...(typeof v.effort === 'string' && PICK_VALUE.test(v.effort) ? { effort: v.effort } : {}),
-      ...(isPermission(v.permission) ? { permission: v.permission } : {}),
+      ...(typeof v.effort === 'string' && GUI_MODEL_ID.test(v.effort) ? { effort: v.effort } : {}),
+      ...(isGuiPermission(v.permission) ? { permission: v.permission } : {}),
       ...(typeof v.plan === 'boolean' ? { plan: v.plan } : {}),
       ...(typeof v.fast === 'boolean' ? { fast: v.fast } : {})
     }

@@ -285,7 +285,13 @@ class GuiSession<O extends GuiOwner> {
     if (this.ready || this.exited) return
     this.ready = true
     this.started()
-    if (!this.reattached) void this.applyPicks()
+    // The agent's last picks go first, so the first message already runs with them.
+    if (this.reattached) this.sendInitial()
+    else void this.applyPicks().finally(() => this.sendInitial())
+  }
+
+  private sendInitial(): void {
+    if (this.exited) return
     if (this.launch.initialPrompt && !this.initialSent && !this.reattached) {
       this.initialSent = true
       if (!this.state.busy && this.state.queued.length === 0) void this.sendNow(this.launch.initialPrompt, [])
@@ -295,8 +301,8 @@ class GuiSession<O extends GuiOwner> {
   }
 
   /**
-   * Figma 65: the effort and 快速 last used with this agent (the launch carries them). Applied once its pickers are in;
-   * a value the current model does not offer is left alone. Each request is written before the first message is.
+   * Figma 65: the effort and 快速 last used with this agent (the launch carries them). Applied once its pickers are in,
+   * before the first message is sent; a value the current model does not offer is left alone.
    */
   private async applyPicks(): Promise<void> {
     const { effort, fast } = this.launch

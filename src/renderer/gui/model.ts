@@ -5,7 +5,7 @@ import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import { looksLikeReport } from '@shared/dispatch'
 import { AGENT_GUI, guiAvailability } from '@shared/gui-agents'
 import type { GuiCommand, GuiConfigOption, GuiPermission, GuiPermissionOption, GuiPrompt, GuiQuestion, GuiState } from '@shared/gui-chat'
-import { composerPickers } from '@shared/gui-chat'
+import { composerPickers, isGuiPermission } from '@shared/gui-chat'
 import type { ChatItem, ChatTodo, FileDiff } from '@shared/transcript-chat'
 import type { SessionStatus } from '@shared/types'
 import type { AgentAvailability } from '@shared/ipc'
@@ -584,10 +584,10 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   const plan = pickers.find((o) => o.category === 'plan')
   const buttons: PickerButton[] = []
   for (const option of [model, effort]) if (option) buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
-  const levels = (permission?.values ?? []).filter((v): v is { value: GuiPermission; label: string } => isLevel(v.value))
+  const levels = (permission?.values ?? []).filter((v): v is { value: GuiPermission; label: string } => isGuiPermission(v.value))
   if (levels.length + (plan ? 1 : 0) > 1) {
     const planning = plan?.current === 'on'
-    const current: ModeChoice = planning ? 'plan' : isLevel(permission?.current) ? permission.current : (levels[0]?.value ?? 'ask')
+    const current: ModeChoice = planning ? 'plan' : isGuiPermission(permission?.current) ? permission.current : (levels[0]?.value ?? 'ask')
     const choices = [...levels, ...(plan ? [{ value: 'plan' as const, label: plan.label }] : [])]
     buttons.push({
       key: [permission, plan].flatMap((o) => (o ? [o.id] : [])).join('+'),
@@ -604,7 +604,6 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   return buttons
 }
 
-const isLevel = (value: string | undefined): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
 
 /**
  * Figma 65: the picker changes a 模式 choice sends, in order. Leaving 计划 sends the level first — Claude and Grok keep

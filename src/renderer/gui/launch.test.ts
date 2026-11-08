@@ -121,6 +121,27 @@ describe('openGuiSession', () => {
     expect(main.opened[1]).not.toHaveProperty('plan')
   })
 
+  it('resumes a conversation, or starts a dispatched task, without the agent’s last picks (Figma 65)', async () => {
+    main.result = { ok: true, state: emptyGuiState() }
+    ws.guiPicks = { claude: { model: 'opus', permission: 'auto', plan: true, fast: true } }
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui' }]
+    await openGuiSession('s-1', '/w', 'claude', 'conv')
+    expect(main.opened[0]).toEqual({ sessionId: 's-1', cwd: '/w', agent: 'claude', resumeAgentSessionId: 'conv' })
+    dispatch.launch = { initialPrompt: '写测试' }
+    await openGuiSession('s-1', '/w', 'claude', undefined)
+    expect(main.opened[1]).toEqual({ sessionId: 's-1', cwd: '/w', agent: 'claude', initialPrompt: '写测试' })
+  })
+
+  it('drops an answer that comes after the session moved to another agent (Figma 65)', async () => {
+    main.result = { ok: false, reason: '会话已关闭' }
+    ws.sessions = [{ id: 's-1', kind: 'claude', ui: 'gui' }]
+    const opening = openGuiSession('s-1', '/w', 'claude', undefined)
+    ws.sessions = [{ id: 's-1', kind: 'codex', ui: 'gui' }]
+    expect(await opening).toBe(false)
+    expect(guiStateOf('s-1').failure).toBeNull()
+    expect(useLaunchIssues.getState().issues['s-1']).toBeUndefined()
+  })
+
   it('shows why it could not start and leaves the session exited (a launch issue)', async () => {
     main.result = { ok: false, reason: '没有找到 grok 命令' }
     expect(await openGuiSession('s-1', '/w', 'grok', 'conv')).toBe(false)

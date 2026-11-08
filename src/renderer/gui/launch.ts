@@ -73,22 +73,32 @@ export async function openGuiSession(sessionId: SessionId, cwd: string, agent: C
   const { sessions, guiPicks } = useWorkspace.getState()
   const session = sessions.find((s) => s.id === sessionId)
   if (!session) return false
-  const picks = guiPicks[agent] ?? {}
+  const dispatch = resumeAgentSessionId ? undefined : takeDispatchLaunch(sessionId)
+  // Figma 65: only a new session the user starts takes what its agent last ran with. A conversation resumed keeps its
+  // own model; a dispatched one (its task is the first message) starts as the agent does by default.
+  const fresh = !resumeAgentSessionId && !dispatch && session.dispatchedBy === undefined
+  const picks = fresh ? (guiPicks[agent] ?? {}) : {}
   const launch = guiLaunch({
     sessionId,
     cwd,
     agent,
     resumeAgentSessionId,
     dispatched: session.dispatchedBy !== undefined,
-    dispatch: resumeAgentSessionId ? undefined : takeDispatchLaunch(sessionId),
+    dispatch,
     // The session's own 权限 / 计划 once it has run; a new one starts with what its agent last ran with (Figma 65).
     ...(session.guiPermission ? { permission: session.guiPermission } : picks.permission ? { permission: picks.permission } : {}),
     ...((session.guiPermission ? session.guiPlan : picks.plan) ? { plan: true } : {}),
     picks
   })
+  // Switched to another agent or folder while this one was still starting (retargetGuiSession): its answer is stale.
+  const stale = (): boolean => {
+    const now = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
+    return !now || now.kind !== session.kind || now.worktreeId !== session.worktreeId
+  }
   let reason: string
   try {
     const result = await window.tr.gui.open(launch)
+    if (stale()) return false
     if (result.ok) {
       setGuiState(sessionId, result.state)
       // Up: the status machine takes it from here (controller.sync sees the phase; status comes with agent events). A
@@ -102,6 +112,7 @@ export async function openGuiSession(sessionId: SessionId, cwd: string, agent: C
   } catch (error) {
     reason = error instanceof Error ? error.message : String(error)
   }
+  if (stale()) return false
   applyGuiEvents(sessionId, [{ type: 'failure', failure: reason }])
   reportLaunchIssue(sessionId, { kind: 'spawn-failed', message: reason })
   return false

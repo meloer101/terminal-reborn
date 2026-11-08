@@ -3,7 +3,7 @@
 // select their own session's slice, and applyGuiEvent keeps unchanged parts by identity, so a streamed delta re-renders
 // only what it touched.
 import { create } from 'zustand'
-import { applyGuiEvent, emptyGuiState, picksOf, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, isGuiPermission, picksOf, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
 import type { Session, SessionId } from '@shared/types'
 import { reportLaunchIssue } from '../lifecycle/launch-issues'
 import { drafts as savedDrafts } from '../state/persistence'
@@ -50,17 +50,31 @@ export function applyGuiEvents(sessionId: SessionId, events: readonly GuiEvent[]
  * Figma 56: the 权限 and 计划 the agent reports are saved on the session, so a reattached or restarted agent starts —
  * and is shown — with them (gui/launch.ts passes them back).
  */
+/** When the user last changed a picker in each session (ChatPane): that session's next config is a choice to keep. */
+const pickedAt = new Map<SessionId, number>()
+const PICK_WINDOW_MS = 10_000
+
+/** Figma 65: the user changed a picker here; what the agent reports next is what it should start with next time. */
+export function notePick(sessionId: SessionId): void {
+  pickedAt.set(sessionId, Date.now())
+}
+
 export function rememberPicks(sessionId: SessionId, config: readonly GuiConfigOption[]): void {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session || session.ui !== 'gui') return
   const permission = config.find((o) => o.category === 'permission')?.current
   const plan = config.find((o) => o.category === 'plan')?.current
   const patch: Pick<Session, 'guiPermission' | 'guiPlan'> = {}
-  if ((permission === 'ask' || permission === 'accept-edits' || permission === 'auto') && permission !== session.guiPermission) patch.guiPermission = permission
+  if (isGuiPermission(permission) && permission !== session.guiPermission) patch.guiPermission = permission
   if (plan !== undefined && (plan === 'on') !== (session.guiPlan === true)) patch.guiPlan = plan === 'on'
   if (Object.keys(patch).length > 0) useWorkspace.getState().patchSession(sessionId, patch)
-  // Figma 65: and on the agent, so its next session (or an empty one switched to it) starts with them.
-  if (session.kind !== 'shell') useWorkspace.getState().rememberGuiPicks(session.kind, picksOf(config))
+  // Figma 65: on the agent, so its next session (or an empty one switched to it) starts with them — only what the user
+  // chose (an agent's defaults, a resumed conversation's own choices are not); its model list always.
+  if (session.kind === 'shell') return
+  const picks = picksOf(config)
+  const at = pickedAt.get(sessionId)
+  const chosen = at !== undefined && Date.now() - at < PICK_WINDOW_MS
+  useWorkspace.getState().rememberGuiPicks(session.kind, chosen ? picks : picks.models ? { models: picks.models } : {})
 }
 
 let listening: (() => void) | null = null

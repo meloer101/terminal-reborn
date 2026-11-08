@@ -359,8 +359,8 @@ export function codexTurnParams(threadId: string, text: string, config: readonly
     input: [{ type: 'text', text, text_elements: [] }, ...images.map((path) => ({ type: 'localImage', path }))],
     ...(value('model') ? { model: value('model') } : {}),
     ...(value('effort') ? { effort: value('effort') } : {}),
-    // A tier holds for later turns too: off is sent as null.
-    ...(value('fast') !== undefined ? { serviceTier: value('fast') === 'on' ? CODEX_FAST_TIER : null } : {}),
+    // A tier holds for later turns too: anything but 快速 on (off, or a model without the tier) is sent as null.
+    serviceTier: value('fast') === 'on' ? CODEX_FAST_TIER : null,
     ...CODEX_APPROVAL[isCodexLevel(value('permission') ?? '') ? (value('permission') as GuiPermission) : 'accept-edits']
   }
 }

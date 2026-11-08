@@ -238,6 +238,7 @@ describe('codexConfig / codexTurnParams', () => {
       input: [{ type: 'text', text: 'hi', text_elements: [] }, { type: 'localImage', path: '/a.png' }],
       model: 'gpt-6.1-sol',
       effort: 'high',
+      serviceTier: null,
       approvalPolicy: 'on-request'
     })
     // 自动 is Codex's own reviewer; 询问 asks before anything it is not sure is safe.
@@ -254,7 +255,8 @@ describe('codexConfig / codexTurnParams', () => {
     expect(codexTurnParams('th', 'hi', codexConfig(tiered, { fast: true }))).toMatchObject({ serviceTier: 'priority' })
     // Off goes as null: a tier set on an earlier turn would otherwise hold.
     expect(codexTurnParams('th', 'hi', codexConfig(tiered, {}))).toMatchObject({ serviceTier: null })
-    expect(codexTurnParams('th', 'hi', codexConfig(tiered, { model: 'gpt-mini' }))).not.toHaveProperty('serviceTier')
+    // A model without the tier after 快速 was on: null, so the earlier tier does not hold.
+    expect(codexTurnParams('th', 'hi', codexConfig(tiered, { model: 'gpt-mini', fast: true }))).toMatchObject({ serviceTier: null })
   })
 })
 

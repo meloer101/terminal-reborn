@@ -310,12 +310,16 @@ describe('retargetSession (Figma 65)', () => {
     const first = addProject(EMPTY_WORKSPACE, '/code/acme', makeId)
     const second = addProject(first.data, '/code/web', makeId)
     const { data, sessionId } = addSession(second.data, first.projectId, 'claude', 1, makeId, 'gui')!
-    const withId = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'from-hook' })) }
+    const withId = { ...data, sessions: data.sessions.map((s) => ({ ...s, agentSessionId: 'from-hook', guiPermission: 'auto' as const, guiPlan: true })) }
     const webMain = withId.worktrees.find((w) => w.projectId === second.projectId)!.id
     const next = retargetSession(withId, sessionId, { kind: 'codex', worktreeId: webMain })
     expect(next.sessions[0]).toMatchObject({ kind: 'codex', worktreeId: webMain, title: 'Codex' })
     // The new agent must not resume the old one's conversation.
     expect(next.sessions[0]).not.toHaveProperty('agentSessionId')
+    // Codex starts with its own last 权限 / 计划, not Claude's; another folder keeps the session's.
+    expect(next.sessions[0]).not.toHaveProperty('guiPermission')
+    expect(next.sessions[0]).not.toHaveProperty('guiPlan')
+    expect(retargetSession(withId, sessionId, { worktreeId: webMain }).sessions[0]).toMatchObject({ guiPermission: 'auto', guiPlan: true })
   })
 
   it('keeps a title the user gave, and refuses a terminal session, a shell, or a folder that does not exist', () => {

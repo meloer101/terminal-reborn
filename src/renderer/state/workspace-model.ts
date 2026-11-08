@@ -151,9 +151,13 @@ export function retargetSession(data: WorkspaceData, sessionId: SessionId, chang
   if (!session || session.ui !== 'gui' || session.kind === 'shell') return data
   if (change.worktreeId !== undefined && !data.worktrees.some((w) => w.id === change.worktreeId && w.archived === undefined)) return data
   const kind = change.kind ?? session.kind
-  const { agentSessionId: _dropped, ...rest } = session
+  // Another agent starts with its own last 权限 / 计划 (gui/launch.ts), not the one it replaces.
+  const { agentSessionId: _dropped, guiPermission, guiPlan, ...rest } = session
+  const sameAgent = kind === session.kind
   const next: Session = {
     ...rest,
+    ...(sameAgent && guiPermission !== undefined ? { guiPermission } : {}),
+    ...(sameAgent && guiPlan !== undefined ? { guiPlan } : {}),
     kind,
     worktreeId: change.worktreeId ?? session.worktreeId,
     title: session.title === DEFAULT_SESSION_TITLE[session.kind] ? DEFAULT_SESSION_TITLE[kind] : session.title

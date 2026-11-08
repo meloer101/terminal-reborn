@@ -10,6 +10,7 @@ import { agentName, type CliAgent } from '@shared/agents'
 import { emptyGuiState, guiCanEdit, type GuiAnswer } from '@shared/gui-chat'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
+import { useSecondaryWindow } from '../state/window-scope'
 import { attachFileInput } from '../terminal/file-input'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
@@ -20,7 +21,7 @@ import { TodoCard } from './Todos'
 import { retargetGuiSession } from './launch'
 import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { ProjectChip } from './ProjectChip'
-import { addAttachments, clearComposer, setDraft, setGuiState, useGuiSessions } from './store'
+import { addAttachments, clearComposer, notePick, setDraft, setGuiState, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
 const EMPTY = emptyGuiState()
@@ -71,7 +72,9 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   const worktreeId = useWorkspace((s) => s.sessions.find((x) => x.id === sessionId)?.worktreeId)
   const projects = useWorkspace((s) => s.projects)
   const worktrees = useWorkspace((s) => s.worktrees)
-  const choices = useMemo(() => projectChoices(projects, worktrees), [projects, worktrees])
+  // A project's own window (F20) shows only that project: the session stays in it.
+  const scope = useSecondaryWindow()?.projectId ?? null
+  const choices = useMemo(() => projectChoices(scope ? projects.filter((p) => p.id === scope) : projects, worktrees), [scope, projects, worktrees])
   const projectId = worktrees.find((w) => w.id === worktreeId)?.projectId
   // Figma 59J: the agent's current task list, above the composer.
   const todos = useMemo(() => currentTodos(state.items), [state.items])
@@ -119,7 +122,13 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
     },
     [sessionId]
   )
-  const setConfig = useCallback((optionId: string, value: string) => window.tr.gui.setConfig(sessionId, optionId, value).catch(() => false), [sessionId])
+  const setConfig = useCallback(
+    (optionId: string, value: string) => {
+      notePick(sessionId)
+      return window.tr.gui.setConfig(sessionId, optionId, value).catch(() => false)
+    },
+    [sessionId]
+  )
   // Figma 65B: another agent, with one of its models when it listed them before (its last picks hold the rest).
   const switchAgent = useCallback(
     (next: CliAgent, model: string | undefined) => {

@@ -82,7 +82,9 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
   const empty = draft.trim() === '' && attachments.length === 0
   const buttons = pickerButtons(config)
   // Before the agent reported its pickers: the model button still names the agent, so it can be switched.
-  const shown: PickerButton[] = buttons.some((b) => b.key === 'model') || !switchable ? buttons : [{ key: 'model', label: '默认', options: [] }, ...buttons]
+  const shown: PickerButton[] = buttons.some(isModelButton) || !switchable ? buttons : [{ key: 'model', label: '默认', options: [] }, ...buttons]
+  // The model option's own id (an ACP agent names it in its configOptions).
+  const modelId = config.find((o) => o.category === 'model')?.id
 
   // Asked to take the keyboard (selected, a file added, text inserted): never from a dialog in front.
   useEffect(() => {
@@ -234,7 +236,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
           onAgent={(next, model) => {
             setPicker(null)
             if (next === agent) {
-              if (model) void setConfig('model', model)
+              if (model && modelId) void setConfig(modelId, model)
             } else switchAgent(next, model)
           }}
           onClose={() => {
@@ -247,9 +249,12 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
   )
 })
 
+/** The model's button: its option, or the stand-in shown before the agent reported its pickers. */
+const isModelButton = (button: PickerButton): boolean => (button.options.length === 0 ? button.key === 'model' : button.options[0]?.category === 'model')
+
 /** What leads each picker button (Figma 65): the agent's mark on the model, a gauge on effort, the 模式's own mark. */
 function buttonMark(button: PickerButton, agent: AgentKind): ReactNode {
-  if (button.key === 'model') return <AgentIcon kind={agent} size={14} />
+  if (isModelButton(button)) return <AgentIcon kind={agent} size={14} />
   if (button.options[0]?.category === 'thought_level') return <Gauge {...SMALL} />
   if (button.mode) {
     const Mark = MODE_ICON[button.mode.current]
@@ -385,7 +390,7 @@ function PickerMenu({ button, anchor, below, agent, switchable, onPick, onMode, 
   const label = button.mode ? '模式' : option ? pickerSectionTitle(option) : '模型'
   let body: ReactNode
   // 65B: the agents and the hovered one's models, two menus side by side.
-  const pair = button.key === 'model' && switchable && agent !== 'shell'
+  const pair = isModelButton(button) && switchable && agent !== 'shell'
   if (pair) {
     body = <AgentModels agent={agent} models={option?.values ?? []} current={option?.current} onAgent={onAgent} />
   } else if (button.mode) {
