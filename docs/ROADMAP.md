@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-08：Pi 的 GUI 会话直接用 `pi --mode rpc`（PRD v1.158），不用装 pi-acp；模型和推理强度换了就在同一会话上重启 Pi，不写 Pi 的全局配置；模式只有询问 / 接受编辑。分支 claude/pi-rpc-driver-74ad0b（基于 jacoy/gui-composer-65）。
 - 2026-11-07：手机会话页加两边头像、Markdown 表格和会话设置（PRD v1.144）：在手机上改模型、思考程度、权限，只改这个会话；GUI 会话全部 agent 都能改，终端里目前是 Claude。
 - 2026-11-07：iPhone App 按 Figma「手机 · iOS」第 59–63 节改完（PRD v1.143）：新的设计 token 和 Dynamic Type，连接失败时写清原因（Mac 睡了、Wavi 没开、Tailscale 没开、版本不配），对话里工具调用合成一句、一轮结束有改动汇总、回答过的留回执，Live Activity 加汇总行和「已过期」。
 - 2026-11-07：窗口材质加回「实色」（PRD v1.139，Figma 57）：不透明的窗口，深色、浅色都不再是纯黑 / 纯白，对比从 17–19:1 降到 11–13:1。
@@ -237,7 +238,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 三种协议到对话的转换（`src/main/gui/claude-stream.ts`、`codex-app-server.ts`、`acp.ts`，共享 `src/shared/gui-chat.ts`）
 - [x] 守护进程托管 GUI 会话进程（`welcome.pipes`，协议版本不升；旧守护进程时由主进程托管）：`src/pty-host/pipe-host.ts`、`pipe-sessions.ts`，`src/main/pty/pipes.ts`
 - [x] 主进程 GUI 会话宿主：三个驱动、重新接上 / 续上 / 排队 / 归属、IPC 校验、Codex / ACP 的状态事件、派活报告送进 GUI 会话（`src/main/gui/`）
-- [x] renderer：`Session.ui` / `newSessionUi`、新建会话面板「界面」一行（含 pi-acp / amp-acp 检测）、聊天视图（`src/renderer/gui/`）、`session-io` 对 GUI 会话的路由
+- [x] renderer：`Session.ui` / `newSessionUi`、新建会话面板「界面」一行（含 amp-acp 检测；Pi 自 v1.158 不要适配器）、聊天视图（`src/renderer/gui/`）、`session-io` 对 GUI 会话的路由
 - [x] e2e `gui-session.spec.ts`（真实 app + 假的 headless Claude，7 个）；`more-agents`、`no-dead-ends` 两个 TUI 用例在面板里选 CLI
 - [x] 独立 code review 的 8 个问题（中 5、低 3）都已修：孤儿进程、重启后接上没看过的 GUI 会话、旧守护进程下 Claude 的状态、超长行不再断开守护进程连接、重新接上时不再重复弹已回答的确认、JSON-RPC id 撞号、已退出的进程不再标成就绪、流式只发最后一段
 - [x] 真 Claude 冒烟（Haiku，作者 2026-11-05 同意）：回复、权限卡片允许后写入文件、侧栏 1 s 内变「等你确认：编辑 a.txt」、总览计数、标题由 Claude 起名、transcript 全部 `entrypoint: wavi`；顺带修了选择器把实际模型 id 显示成 Default、权限卡片显示绝对路径
@@ -262,7 +263,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 后台任务通知和分割线（PRD v1.154 / v1.155，作者 2026-11-08 报告）：`<task-notification>` 用户行解析成一行系统文字「后台任务「名字」已完成」（`transcript-chat.ts` `taskNotice`）；对话 Markdown 的 `---` 只留空白、表格只留表头一条线
 - [x] Figma 65 输入框和空会话（PRD v1.156，分支 jacoy/gui-composer-65）：选择器进框、去掉「格式」按钮；模式一个列表（询问 / 接受编辑 / 自动 / 计划）；快速（Claude `supportsFastMode` + `apply_flag_settings`，Codex `priority` service tier）；空会话欢迎语「让我们在 <项目> 中开工吧」、滚轮换项目、模型菜单先选 agent；每个 agent 记住上次的选择（workspace.json `guiPicks`）；e2e `gui-session.spec.ts` 25 个、新 `gui-switch.spec.ts` 3 个；独立 review 9 条（Major 4、Minor 5）全部属实已修
 - [x] 空会话的 agent 菜单列出每家的模型（PRD v1.157）：`src/main/gui/catalog.ts` 只握手不开对话（Claude `initialize`、Codex `model/list`、Grok ACP `initialize`、`cursor-agent models`、Pi `--mode rpc --no-session`），`gui.models` IPC；加载中 / 失败重试；Pi 列为已装（要 pi-acp）；本机五家实测、会话文件数不变
-- [ ] Pi 直接用 `pi --mode rpc` 做 GUI 会话（照 Paseo / T3 Code，不再要 pi-acp）
+- [x] Pi 直接用 `pi --mode rpc` 做 GUI 会话（PRD v1.158，照 Paseo / T3 Code，不再要 pi-acp）：`src/main/gui/pi-rpc.ts`（事件、对话框、选择器、会话文件历史）、`pi-driver.ts`，权限扩展 `resources/hooks/wavi-pi-gui.js`；换模型 / 推理强度在同一会话上重启（rpc 的 `set_model` 会写 `~/.pi/agent/settings.json`）；pty-host 认得 Pi 的 `extension_ui_response`（重开不再问已答的）。测试 `pi-rpc.test.ts`、`host.test.ts`（假 Pi `fixtures/fake-pi.mjs`）、e2e `gui-pi.spec.ts` 5 个；真 Pi 0.84.1 + DeepSeek 在 app 里跑过一轮工具、换模型、停止、重开
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
 - [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`
