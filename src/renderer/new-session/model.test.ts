@@ -100,9 +100,10 @@ describe('uiRow (PRD F23, Figma 49″A / B)', () => {
     expect(uiRow('claude', 'cli', none)).toEqual({ value: 'cli', guiDisabled: false, forced: false })
   })
 
-  it('turns GUI off until the adapter is installed, with its install command (Pi, Amp)', () => {
-    expect(uiRow('pi', 'gui', none)).toEqual({ value: 'cli', guiDisabled: true, adapter: { binary: 'pi-acp', install: 'npm install -g pi-acp' }, forced: true })
-    expect(uiRow('pi', 'gui', (b) => b === 'pi-acp')).toEqual({ value: 'gui', guiDisabled: false, forced: false })
+  it('turns GUI off until the adapter is installed, with its install command (Amp); Pi needs none', () => {
+    expect(uiRow('amp', 'gui', none)).toEqual({ value: 'cli', guiDisabled: true, adapter: { binary: 'amp-acp', install: 'npm install -g amp-acp' }, forced: true })
+    expect(uiRow('amp', 'gui', (b) => b === 'amp-acp')).toEqual({ value: 'gui', guiDisabled: false, forced: false })
+    expect(uiRow('pi', 'gui', none)).toEqual({ value: 'gui', guiDisabled: false, forced: false })
   })
 
   it('says why on hover for a CLI-only agent; a CLI chosen there is not forced', () => {
@@ -115,12 +116,11 @@ describe('uiRow (PRD F23, Figma 49″A / B)', () => {
   })
 
   it('reads agent binaries and ACP adapters from the detection result', () => {
-    const installed = binaryInstalled({ claude: true, pi: true, adapters: { 'pi-acp': true, 'amp-acp': false } })
+    const installed = binaryInstalled({ claude: true, amp: true, adapters: { 'amp-acp': true } })
     expect(installed('claude')).toBe(true)
-    expect(installed('pi')).toBe(true)
-    expect(installed('pi-acp')).toBe(true)
-    expect(installed('amp-acp')).toBe(false)
-    expect(binaryInstalled({ pi: true })('pi-acp')).toBe(false)
+    expect(installed('amp')).toBe(true)
+    expect(installed('amp-acp')).toBe(true)
+    expect(binaryInstalled({ amp: true })('amp-acp')).toBe(false)
     expect(binaryInstalled(null)('claude')).toBe(false)
   })
 })

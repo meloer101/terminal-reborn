@@ -135,7 +135,7 @@ export interface UiRow {
   guiDisabled: boolean
   /** Hover text of the disabled GUI segment (CLI only, Figma 49″B). */
   guiTitle?: string
-  /** The adapter to install first (Figma 49″B: 「GUI 要先装 pi-acp」 + 复制安装命令). */
+  /** The adapter to install first (Figma 49″B: 「GUI 要先装 amp-acp」 + 复制安装命令). */
   adapter?: { binary: string; install: string }
   /** The value is CLI because GUI was not possible, not because it was chosen: it is not remembered. */
   forced: boolean

@@ -57,9 +57,21 @@ describe('guiArgv', () => {
     expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: { permission: 'auto' } })).toEqual(['grok', '--permission-mode', 'auto', 'agent', 'stdio'])
     expect(guiArgv({ agent: 'grok', realCwd: '/r', launch: { permission: 'auto', plan: true } })).toEqual(['grok', '--permission-mode', 'plan', 'agent', 'stdio'])
     expect(guiArgv({ agent: 'gemini', realCwd: '/r', launch: { permission: 'auto' } })).toEqual(['gemini', '--acp'])
-    expect(guiArgv({ agent: 'pi', realCwd: '/r', launch: {} })).toEqual(['pi-acp'])
+    expect(guiArgv({ agent: 'amp', realCwd: '/r', launch: {} })).toEqual(['amp-acp'])
     expect(guiArgv({ agent: 'crush', realCwd: '/r', launch: {} })).toBeNull()
     expect(guiEnv('droid')).toMatchObject({ DROID_DISABLE_AUTO_UPDATE: 'true' })
+  })
+})
+
+describe('guiArgv · Pi (PRD F23 v1.158)', () => {
+  it('rpc mode with model, thinking and conversation as launch arguments (set_model would write ~/.pi), and Wavi’s permission extension', () => {
+    expect(
+      guiArgv({ agent: 'pi', realCwd: '/r', launch: { model: 'deepseek/deepseek-v4-pro', effort: 'max' }, resume: 'f28af68b-1686-4294-b931-7230490b6222', piExtensionPath: '/res/hooks/wavi-pi-gui.js', extraArgs: ['--append-system-prompt', 'x'] })
+    ).toEqual(['pi', '--mode', 'rpc', '--model', 'deepseek/deepseek-v4-pro', '--thinking', 'max', '--session-id', 'f28af68b-1686-4294-b931-7230490b6222', '-e', '/res/hooks/wavi-pi-gui.js', '--append-system-prompt', 'x'])
+  })
+
+  it('leaves out what is unknown or unsafe', () => {
+    expect(guiArgv({ agent: 'pi', realCwd: '/r', launch: { model: '-x', effort: 'turbo' }, resume: '../a' })).toEqual(['pi', '--mode', 'rpc'])
   })
 })
 

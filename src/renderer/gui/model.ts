@@ -650,7 +650,7 @@ export function guiAgentMenu(found: AgentAvailability | null): { installed: CliA
   const listed = new Set<string>(listedAgents(found))
   const gui = CLI_AGENTS.filter((id) => AGENT_GUI[id] !== null)
   const kind = (id: CliAgent) => (listed.has(id) ? guiAvailability(id, binaryInstalled(found)).kind : 'missing')
-  // Installed, but its GUI needs an adapter (Pi without pi-acp): still the user's agent, with its models.
+  // Installed, but its GUI needs an adapter (Amp without amp-acp): still the user's agent, with its models.
   return { installed: gui.filter((id) => kind(id) === 'available'), adapter: gui.filter((id) => kind(id) === 'needs-adapter'), missing: gui.filter((id) => kind(id) === 'missing' || kind(id) === 'cli-only') }
 }
 

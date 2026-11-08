@@ -580,7 +580,7 @@ function AgentModels({ agent, models, current, onAgent }: { agent: AgentKind; mo
       </div>
       {hovered && (
         <div className={`${styles.popover} ${styles.pickerColumn}`} role="menu" aria-label={`${agentName(hovered)} 的模型`} data-testid="gui-agent-models">
-          {/* Pi without pi-acp: its models, and a pick opens 设置 · 智能体 where the adapter's install command is. */}
+          {/* Amp without amp-acp: its models, and a pick opens 设置 · 智能体 where the adapter's install command is. */}
           {adapterName && <span className={styles.popoverTitle}>装 {adapterName} 后可用</span>}
           {body}
         </div>

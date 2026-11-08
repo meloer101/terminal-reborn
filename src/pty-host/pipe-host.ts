@@ -22,12 +22,15 @@ export const PIPE_MAX_LINE_CHARS = 30 * 1024 * 1024
 const ANSWERED_KEEP = 256
 
 /**
- * The request a stdin line answers, if it is a response: Claude's `control_response` (its `request_id`) or a JSON-RPC
- * response (Codex app-server, ACP: its `id`). Read by its prefix, as main's drivers write them (key order of
+ * The request a stdin line answers, if it is a response: Claude's `control_response` (its `request_id`), a JSON-RPC
+ * response (Codex app-server, ACP: its `id`) or Pi rpc's `extension_ui_response` (its `id`). Read by its prefix, as main's drivers write them (key order of
  * JSON.stringify), so only those lines are parsed, and only the id.
  */
 export function answeredRequestId(line: string): string | null {
-  const match = /^\{"type":"control_response","response":\{"subtype":"[a-z]+","request_id":("(?:[^"\\]|\\.)*")/.exec(line) ?? /^\{(?:"jsonrpc":"2\.0",)?"id":(-?\d+|"(?:[^"\\]|\\.)*"),"(?:result|error)":/.exec(line)
+  const match =
+    /^\{"type":"control_response","response":\{"subtype":"[a-z]+","request_id":("(?:[^"\\]|\\.)*")/.exec(line) ??
+    /^\{(?:"jsonrpc":"2\.0",)?"id":(-?\d+|"(?:[^"\\]|\\.)*"),"(?:result|error)":/.exec(line) ??
+    /^\{"type":"extension_ui_response","id":("(?:[^"\\]|\\.)*")/.exec(line)
   if (!match) return null
   try {
     return String(JSON.parse(match[1]!) as string | number)

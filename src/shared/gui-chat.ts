@@ -1,5 +1,5 @@
 // A GUI session's conversation (PRD F23, Figma 49″): what main sends the renderer and how the renderer folds it.
-// Main runs the agent headless (Claude `-p` stream-json, `codex app-server`, ACP) and turns its messages into
+// Main runs the agent headless (Claude `-p` stream-json, `codex app-server`, Pi `--mode rpc`, ACP) and turns its messages into
 // `GuiEvent`s; `applyGuiEvent` folds them into a `GuiState` the chat view draws. Finished conversation items reuse
 // the phone's `ChatItem` (@shared/transcript-chat), so history read back from a transcript and a live session look
 // the same. Pure: no Electron, no Node.
@@ -7,7 +7,7 @@
 import type { CliAgent } from './agents'
 import type { ChatItem, FileDiff } from './transcript-chat'
 
-export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'acp'
+export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'pi-rpc' | 'acp'
 
 /** The block being streamed right now; replaced by a finished `ChatItem` when the agent completes it. */
 export interface GuiLive {

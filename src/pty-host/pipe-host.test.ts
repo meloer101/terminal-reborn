@@ -14,6 +14,9 @@ describe('answeredRequestId', () => {
     expect(answeredRequestId(line({ jsonrpc: '2.0', id: 4, method: 'session/prompt', params: {} }))).toBeNull()
     expect(answeredRequestId(line({ type: 'control_request', request_id: 'w1', request: { subtype: 'interrupt' } }))).toBeNull()
     expect(answeredRequestId(line({ type: 'user', message: { role: 'user', content: '{"id":1,"result":2}' } }))).toBeNull()
+    // Pi rpc (PRD F23 v1.158): an answer to an extension dialog.
+    expect(answeredRequestId(line({ type: 'extension_ui_response', id: '4980-a', confirmed: true }))).toBe('4980-a')
+    expect(answeredRequestId(line({ type: 'prompt', id: 'w1', message: 'hi' }))).toBeNull()
   })
 })
 

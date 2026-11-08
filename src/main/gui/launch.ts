@@ -29,9 +29,11 @@ export interface GuiArgvInput {
   agent: CliAgent
   /** The folder the agent runs in, resolved (Codex's per-launch trust names it). */
   realCwd: string
-  launch: Pick<GuiLaunch, 'model' | 'resumeAt' | 'permission' | 'plan'>
-  /** Continue this conversation (Claude `--resume`; Codex and ACP resume over their protocol). */
+  launch: Pick<GuiLaunch, 'model' | 'resumeAt' | 'permission' | 'plan' | 'effort'>
+  /** Continue this conversation (Claude `--resume`, Pi `--session-id`; Codex and ACP resume over their protocol). */
   resume?: string
+  /** Wavi's permission extension for Pi (resources/hooks/wavi-pi-gui.js), loaded with `-e`. */
+  piExtensionPath?: string
   /** Claude's per-launch hooks file (src/main/hooks). */
   claudeSettingsPath?: string
   /** `claude --version`, when known: from 2.1.94 on it is asked for thinking summaries. */
@@ -53,6 +55,9 @@ function thinkingDisplayArgs(version: string | null | undefined): string[] {
   const parsed = version ? parseSemver(version) : null
   return parsed && compareSemver(parsed, THINKING_DISPLAY_SINCE) >= 0 ? ['--thinking-display', 'summarized'] : []
 }
+
+/** Pi's `--thinking` levels (`pi --help`, 0.84.1). */
+const PI_THINKING = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
 /** `[binary, ...args]` for the agent's GUI protocol; null for an agent without one. */
 export function guiArgv(input: GuiArgvInput): string[] | null {
@@ -79,6 +84,15 @@ export function guiArgv(input: GuiArgvInput): string[] | null {
       ...(input.extraArgs ?? []),
       'app-server'
     ]
+  }
+  if (driver.protocol === 'pi-rpc') {
+    // Model and thinking go on the command line: rpc `set_model` / `set_thinking_level` save them as Pi's defaults in
+    // ~/.pi/agent/settings.json (agent-session.js, 0.84.1), these flags do not. A change restarts Pi (pi-driver.ts).
+    const model = input.launch.model && MODEL.test(input.launch.model) ? ['--model', input.launch.model] : []
+    const thinking = input.launch.effort && PI_THINKING.has(input.launch.effort) ? ['--thinking', input.launch.effort] : []
+    const session = isSafeAgentSessionId(input.resume) ? ['--session-id', input.resume] : []
+    const extension = input.piExtensionPath ? ['-e', input.piExtensionPath] : []
+    return [binary, '--mode', 'rpc', ...model, ...thinking, ...session, ...extension, ...(input.extraArgs ?? [])]
   }
   // A permission mode set at launch goes before the agent's ACP arguments (`grok --permission-mode auto agent stdio`).
   return [binary, ...launchPermissionArgs(input.agent, input.launch.permission, input.launch.plan), ...('adapter' in driver ? driver.adapter.args : driver.args)]
