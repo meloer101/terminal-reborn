@@ -4,6 +4,29 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-08
+
+GUI sessions, round two: a quieter chat with tool rows that read as icon · verb · target, a Paseo-style composer where you pick the agent and project before the first message, subagents and task lists in place, and Pi driven directly over `pi --mode rpc`. Settings split 外观 into 外观 / 终端 / 对话.
+GUI 会话第二轮：对话更安静，工具行读作「图标 · 动词 · 目标」；输入框按 Paseo 重排，发第一条消息前能换 agent 和项目；子 agent 和任务清单在原处显示；Pi 直接走 `pi --mode rpc`。设置里的外观拆成 外观 / 终端 / 对话。
+
+### GUI sessions / GUI 会话
+- A chat type scale tied to 对话 · 字号; the message column lines up with the composer; Markdown draws no lines under headings, for `---` or between table rows.
+  对话字号体系跟随「对话 · 字号」，消息列和输入框对齐；Markdown 标题、`---` 和表格行之间不再画线。
+- Tool rows read as icon · verb · target; a command keeps its full text, exit code and output colors; edits to several files show one diff per file; a permission to edit a file shows its diff.
+  工具行读作「图标 · 动词 · 目标」；命令保留整条命令、退出码和输出颜色；一次改多个文件时每个文件一块 diff；改文件的确认卡片显示 diff。
+- Subagents unfold under their own row; the current task list sits above the composer; the / menu splits 命令 and Skills; slash commands show as your own messages; background task notices are no longer your bubbles.
+  子 agent 在自己那一行下展开；当前任务清单显示在输入框上方；「/」菜单分「命令」和「Skills」；斜杠命令显示成你发的消息；后台任务的通知不再显示成你的气泡。
+- The composer follows Figma 65: one box with + · model · 模式 · 快速 underneath; before the first message you can switch agent and project, and the agent menu lists every installed agent's models without opening a conversation there. 计划 joins 模式; 快速 for Claude and Codex.
+  输入框按 Figma 65：一个框，下面一行「+」· 模型 · 模式 · 快速；发第一条消息前能换 agent 和项目，agent 菜单不开对话就能列出每家装了的 agent 的模型。「计划」并进模式；Claude 和 Codex 有「快速」。
+- Session titles come from the agent for Claude (also after a slash command), Codex and ACP agents; Pi runs over `pi --mode rpc` instead of pi-acp.
+  会话标题取 agent 自己的名字：Claude（斜杠命令开头也有）、Codex 和 ACP agent；Pi 改用 `pi --mode rpc`，不再要 pi-acp。
+- Fixes: Codex and ACP turns that fail say why, Codex history keeps exit codes and MCP results, replayed ACP messages are one bubble, tool output without escape codes, the chat card takes its placement's corners.
+  修复：Codex 和 ACP 一轮失败时写出原因，Codex 历史保留退出码和 MCP 结果，ACP 回放的消息是一个气泡，工具输出不带转义码，对话卡片的圆角跟随位置。
+
+### Settings / 设置
+- 外观 splits into 外观 (theme, window, full-screen background), 终端 (colors, font, accessibility) and 对话 (avatars, font, layout); under 实色 the terminal and chat cards are solid too.
+  外观拆成三页：外观（主题、窗口、全屏背景）、终端（配色、字体、辅助功能）、对话（头像、字体、版面）；「实色」时终端和对话卡片也不透明。
+
 ## [0.15.0] - 2026-11-07
 
 The iPhone app, redesigned: it says why it cannot reach the Mac, folds tool calls, shows avatars and tables, and changes a session's model, effort and permission for that session only. On the Mac: a solid window material, work under way survives a reload, and auto-fix for every agent that reports its turn.
@@ -538,7 +561,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/meloer101/terminal-reborn/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/meloer101/terminal-reborn/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/meloer101/terminal-reborn/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/meloer101/terminal-reborn/compare/v0.12.3...v0.13.0
