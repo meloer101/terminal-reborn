@@ -7,7 +7,7 @@
 import type { AgentEvent } from '@shared/agent-events'
 import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
-import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
+import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
@@ -285,12 +285,28 @@ class GuiSession<O extends GuiOwner> {
     if (this.ready || this.exited) return
     this.ready = true
     this.started()
+    if (!this.reattached) void this.applyPicks()
     if (this.launch.initialPrompt && !this.initialSent && !this.reattached) {
       this.initialSent = true
       if (!this.state.busy && this.state.queued.length === 0) void this.sendNow(this.launch.initialPrompt, [])
       else this.enqueue(this.launch.initialPrompt, [])
     }
     this.pump()
+  }
+
+  /**
+   * Figma 65: the effort and 快速 last used with this agent (the launch carries them). Applied once its pickers are in;
+   * a value the current model does not offer is left alone. Each request is written before the first message is.
+   */
+  private async applyPicks(): Promise<void> {
+    const { effort, fast } = this.launch
+    const effortOption = this.state.config.find((o) => o.category === 'thought_level')
+    if (effort && effortOption && effortOption.current !== effort && effortOption.values.some((v) => v.value === effort)) {
+      await this.setConfig(effortOption.id, effort)
+    }
+    const fastOption = this.state.config.find((o) => o.category === 'fast')
+    const wanted = fast ? 'on' : 'off'
+    if (fast !== undefined && fastOption && fastOption.current !== wanted) await this.setConfig(fastOption.id, wanted)
   }
 
   private status(events: AgentEvent[]): void {
@@ -482,10 +498,13 @@ function parseLine(line: string): Record<string, unknown> | null {
   }
 }
 
-/** The model chosen in the session now (it may differ from the one it was launched with): a restart keeps it. */
-function currentModel(state: GuiState): { model?: string } {
-  const model = state.config.find((o) => o.category === 'model')?.current
-  return model ? { model } : {}
+/** The model, effort and 快速 chosen in the session now (they may differ from the launch's): a restart keeps them. */
+function currentModel(state: GuiState): Pick<GuiLaunch, 'model' | 'effort' | 'fast'> {
+  const now = (category: GuiConfigOption['category']) => state.config.find((o) => o.category === category)?.current
+  const model = now('model')
+  const effort = now('thought_level')
+  const fast = now('fast')
+  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(fast ? { fast: fast === 'on' } : {}) }
 }
 
 export class GuiHost<O extends GuiOwner> {

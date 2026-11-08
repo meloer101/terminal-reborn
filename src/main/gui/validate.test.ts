@@ -19,6 +19,10 @@ describe('parseGuiLaunch', () => {
     expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', plan: false })).not.toHaveProperty('plan')
     expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', permission: 'bypassPermissions' })).toBeNull()
     expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'codex', plan: 'on' })).toBeNull()
+    // Figma 65: the effort and 快速 last used with the agent.
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'claude', effort: 'xhigh', fast: true })).toMatchObject({ effort: 'xhigh', fast: true })
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'claude', effort: 'x y' })).toBeNull()
+    expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'claude', fast: 'on' })).toBeNull()
     // Main-only fields never come from a renderer.
     expect(parseGuiLaunch({ sessionId: 's', cwd: '/r', agent: 'claude', resumeAt: 'x' })).not.toHaveProperty('resumeAt')
   })

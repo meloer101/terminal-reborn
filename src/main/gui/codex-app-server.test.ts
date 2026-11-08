@@ -246,6 +246,16 @@ describe('codexConfig / codexTurnParams', () => {
     expect(at('ask')).toEqual(expect.objectContaining({ approvalPolicy: 'untrusted' }))
     expect(at('ask')).not.toHaveProperty('approvalsReviewer')
   })
+
+  it('offers 快速 on a model with the priority service tier and sends it per turn (Figma 65)', () => {
+    const tiered = [{ id: 'gpt-6.1-sol', isDefault: true, serviceTiers: [{ id: 'priority', name: 'Fast' }] }, { id: 'gpt-mini', serviceTiers: [] }]
+    expect(codexConfig(tiered, {}).find((c) => c.id === 'fast')).toMatchObject({ current: 'off' })
+    expect(codexConfig(tiered, { model: 'gpt-mini' }).find((c) => c.id === 'fast')).toBeUndefined()
+    expect(codexTurnParams('th', 'hi', codexConfig(tiered, { fast: true }))).toMatchObject({ serviceTier: 'priority' })
+    // Off goes as null: a tier set on an earlier turn would otherwise hold.
+    expect(codexTurnParams('th', 'hi', codexConfig(tiered, {}))).toMatchObject({ serviceTier: null })
+    expect(codexTurnParams('th', 'hi', codexConfig(tiered, { model: 'gpt-mini' }))).not.toHaveProperty('serviceTier')
+  })
 })
 
 describe('hunksOfUnifiedDiff', () => {

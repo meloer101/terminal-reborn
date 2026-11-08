@@ -56,6 +56,14 @@ export function parseGuiLaunch(raw: unknown): GuiLaunch | null {
     if (typeof raw.plan !== 'boolean') return null
     if (raw.plan) launch.plan = true
   }
+  if (raw.effort !== undefined) {
+    if (typeof raw.effort !== 'string' || !MODEL.test(raw.effort)) return null
+    launch.effort = raw.effort
+  }
+  if (raw.fast !== undefined) {
+    if (typeof raw.fast !== 'boolean') return null
+    launch.fast = raw.fast
+  }
   if (raw.dispatched !== undefined) {
     if (typeof raw.dispatched !== 'boolean') return null
     if (raw.dispatched) launch.dispatched = true

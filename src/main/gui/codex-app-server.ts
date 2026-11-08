@@ -2,7 +2,7 @@
 // item/started → deltas → item/completed; approvals and questions are JSON-RPC requests from the server that wait
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
-import { effortLabel, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
+import { effortLabel, fastOption, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
 import { addedFile, CHAT_LIMITS, fileDiffs, rel, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
@@ -321,7 +321,7 @@ export function codexAnswerResult(pending: CodexPending, answer: GuiAnswer): Rec
 }
 
 /** Pickers from `model/list` and the thread's settings; model and effort go with the next `turn/start`. */
-export function codexConfig(models: unknown[], current: { model?: string; effort?: string; permission?: GuiPermission }): GuiConfigOption[] {
+export function codexConfig(models: unknown[], current: { model?: string; effort?: string; permission?: GuiPermission; fast?: boolean }): GuiConfigOption[] {
   const list = models.filter(isRec).filter((m) => m.hidden !== true)
   const values = list.flatMap((m) => {
     const value = str(m.id) ?? str(m.model)
@@ -342,8 +342,14 @@ export function codexConfig(models: unknown[], current: { model?: string; effort
     })
   }
   config.push(permissionOption(CODEX_LEVELS, current.permission ?? 'accept-edits'))
+  // 快速 (Figma 65): the model's `priority` service tier (codex 0.167 `model/list`; `additionalSpeedTiers: ['fast']` is
+  // its deprecated name).
+  const tiers = (Array.isArray(chosen?.serviceTiers) ? chosen.serviceTiers : []).filter(isRec)
+  if (tiers.some((t) => t.id === CODEX_FAST_TIER)) config.push(fastOption(current.fast === true))
   return config
 }
+
+const CODEX_FAST_TIER = 'priority'
 
 /** `turn/start` params with the current pickers applied (they hold for this turn and after). */
 export function codexTurnParams(threadId: string, text: string, config: readonly GuiConfigOption[], images: string[] = []): Rec {
@@ -353,6 +359,8 @@ export function codexTurnParams(threadId: string, text: string, config: readonly
     input: [{ type: 'text', text, text_elements: [] }, ...images.map((path) => ({ type: 'localImage', path }))],
     ...(value('model') ? { model: value('model') } : {}),
     ...(value('effort') ? { effort: value('effort') } : {}),
+    // A tier holds for later turns too: off is sent as null.
+    ...(value('fast') !== undefined ? { serviceTier: value('fast') === 'on' ? CODEX_FAST_TIER : null } : {}),
     ...CODEX_APPROVAL[isCodexLevel(value('permission') ?? '') ? (value('permission') as GuiPermission) : 'accept-edits']
   }
 }

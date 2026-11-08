@@ -272,7 +272,8 @@ describe('GuiHost · Codex app-server', () => {
     const h = harness()
     await h.host.open(launchOf('codex', 'x1'), h.owner)
     await ready(h, 'x1')
-    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-a', 'effort=low', 'permission=accept-edits'])
+    // gpt-a has the priority tier: 快速 (Figma 65).
+    expect(stateOf(h, 'x1').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=gpt-a', 'effort=low', 'permission=accept-edits', 'fast=off'])
     expect(h.status[0]).toEqual({ type: 'session-start', agentSessionId: 'thr-new' })
 
     await h.host.send('x1', { text: 'go', attachments: [] })
@@ -321,6 +322,20 @@ describe('GuiHost · Codex app-server', () => {
     expect(texts(stateOf(h, 'x9')).at(-1)).toContain('"approvalPolicy":"untrusted"')
   }, 30_000)
 
+  it('applies the effort and 快速 last used with the agent once it is ready (Figma 65)', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'x8', { effort: 'high', fast: true }), h.owner)
+    await ready(h, 'x8')
+    await until(() => stateOf(h, 'x8').config.find((c) => c.id === 'fast')?.current === 'on')
+    expect(stateOf(h, 'x8').config.find((c) => c.id === 'effort')?.current).toBe('high')
+    // One the model does not offer is left alone.
+    const h2 = harness()
+    await h2.host.open(launchOf('codex', 'x7', { effort: 'max' }), h2.owner)
+    await ready(h2, 'x7')
+    await settle()
+    expect(stateOf(h2, 'x7').config.find((c) => c.id === 'effort')?.current).toBe('low')
+  }, 30_000)
+
   it('resumes a thread with its history from the transcript', async () => {
     const history: ChatItem[] = [
       { kind: 'user', id: 'h0', at: 1, text: 'old question', images: 0 },
@@ -348,7 +363,7 @@ describe('GuiHost · Codex app-server', () => {
     const opened = await b.host.open(launchOf('codex', 'x3'), b.owner)
     expect(opened.ok && opened.state.busy).toBe(true)
     expect(opened.ok && opened.state.prompts.map((p) => p.kind)).toEqual(['permission'])
-    expect(opened.ok && opened.state.config.length).toBe(3)
+    expect(opened.ok && opened.state.config.length).toBe(4)
     await until(() => b.status.some((e) => e.type === 'permission-request'))
     expect(b.status.map((e) => e.type)).toEqual(['prompt-submit', 'tool-start', 'permission-request', 'session-start'])
     expect(b.host.answer('x3', { kind: 'permission', id: stateOf(b, 'x3').prompts[0]!.id, optionId: 'accept' })).toBe(true)

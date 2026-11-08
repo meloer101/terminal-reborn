@@ -179,6 +179,19 @@ describe('claudeConfig', () => {
     expect(claudeConfig(models, { model: 'default' })[0]?.current).toBe('default')
   })
 
+  it('offers 快速 only on a model with supportsFastMode, with why it is not taking effect (Figma 65)', () => {
+    const fast = { models: [
+      { value: 'opus', displayName: 'Opus 5.5', supportsFastMode: true },
+      { value: 'sonnet', displayName: 'Sonnet 5.5' }
+    ] }
+    const option = (state: Parameters<typeof claudeConfig>[1]) => claudeConfig(fast, state).find((c) => c.id === 'fast')
+    expect(option({ model: 'opus' })).toMatchObject({ category: 'fast', current: 'off' })
+    expect(option({ model: 'opus', fast: true, fastBlocked: 'extra_usage_disabled' })).toMatchObject({ current: 'on', hint: expect.stringContaining('额外用量') })
+    expect(option({ model: 'sonnet', fast: true })).toBeUndefined()
+    expect(claudeConfigRequest('fast', 'on')).toEqual({ subtype: 'apply_flag_settings', settings: { fastMode: true } })
+    expect(claudeConfigRequest('fast', 'off')).toEqual({ subtype: 'apply_flag_settings', settings: { fastMode: false } })
+  })
+
   it('drops the effort picker for a model without effort', () => {
     expect(claudeConfig(init, { model: 'haiku' }).map((c) => c.id)).toEqual(['model', 'permission', 'plan'])
   })

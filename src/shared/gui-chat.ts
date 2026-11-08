@@ -60,10 +60,12 @@ export type GuiAnswer =
  */
 export interface GuiConfigOption {
   id: string
-  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'other'
+  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'fast' | 'other'
   label: string
   current: string
   values: { value: string; label: string }[]
+  /** Figma 65: why the option, though chosen, does not take effect (the agent said so), for the button's tooltip. */
+  hint?: string
 }
 
 /**
@@ -94,6 +96,22 @@ export const planOption = (on: boolean): GuiConfigOption => ({
     { value: 'off', label: '关' },
     { value: 'on', label: '开' }
   ]
+})
+
+/**
+ * Figma 65: 快速, for an agent whose current model can answer faster (Claude `fastMode` on a model with
+ * `supportsFastMode`, Codex's `priority` service tier). `hint`: why it is on but not taking effect.
+ */
+export const fastOption = (on: boolean, hint?: string): GuiConfigOption => ({
+  id: 'fast',
+  category: 'fast',
+  label: '快速',
+  current: on ? 'on' : 'off',
+  values: [
+    { value: 'off', label: '关' },
+    { value: 'on', label: '开' }
+  ],
+  ...(hint ? { hint } : {})
 })
 
 /** Figma 56: reasoning effort in the same words for every agent; a level not listed keeps the agent's own name. */
@@ -159,6 +177,9 @@ export interface GuiLaunch {
    */
   permission?: GuiPermission
   plan?: boolean
+  /** Figma 65: the reasoning effort and 快速 last used with this agent, applied once it is ready. Absent = its default. */
+  effort?: string
+  fast?: boolean
 }
 
 export type GuiOpenResult =
@@ -256,8 +277,8 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
 
 /** The pickers shown under the composer, in a fixed order whatever order the agent lists them in. */
 export function composerPickers(config: readonly GuiConfigOption[]): GuiConfigOption[] {
-  // Figma 56: model · effort, 权限, 计划, then the agent's own mode and anything else.
-  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'mode', 'other']
+  // Figma 56 / 65: model · effort, 权限 and 计划 (one 模式 button), 快速, then the agent's own mode and anything else.
+  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'fast', 'mode', 'other']
   return config.filter((o) => o.values.length > 1).sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
 }
 
