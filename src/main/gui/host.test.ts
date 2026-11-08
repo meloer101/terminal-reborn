@@ -617,6 +617,19 @@ describe('GuiHost · Pi rpc (PRD F23 v1.158)', () => {
     await until(() => !stateOf(h, 'p2').busy)
   }, 30_000)
 
+  it('choosing 接受编辑 while an edit waits lets it through', async () => {
+    const h = harness()
+    await h.host.open(launchOf('pi', 'p4'), h.owner)
+    await ready(h, 'p4')
+    await h.host.send('p4', { text: 'edit it', attachments: [] })
+    await until(() => stateOf(h, 'p4').prompts.length === 1)
+    expect(stateOf(h, 'p4').prompts[0]).toMatchObject({ kind: 'permission', tool: 'Edit', detail: 'a.txt', diff: { added: 1, removed: 1 } })
+    expect(await h.host.setConfig('p4', 'permission', 'accept-edits')).toBe(true)
+    await until(() => !stateOf(h, 'p4').busy)
+    expect(stateOf(h, 'p4').prompts).toEqual([])
+    expect(stateOf(h, 'p4').items.filter((i) => i.kind === 'tool').at(-1)).toMatchObject({ name: 'Edit', state: 'ok' })
+  }, 30_000)
+
   it('a refused prompt ends the turn as failed; a resumed conversation comes from its session file', async () => {
     const history: ChatItem[] = [{ kind: 'user', id: 'h0', at: 1, text: 'earlier question', images: 0 }, { kind: 'text', id: 'h1', at: 2, text: 'earlier answer' }]
     const h = harness(new LocalPipeLink(), history)
@@ -718,6 +731,16 @@ describe('GuiHost · reattach edge cases (a stub link)', () => {
     expect(piAsked.ok && piAsked.state.prompts.length).toBe(1)
     const piAnswered = await pi(['ui-1']).open(launchOf('pi', 'r1'), new FakeOwner())
     expect(piAnswered.ok && piAnswered.state.prompts).toEqual([])
+  })
+
+  it('Pi: an edit asked while no app was attached goes through on reattach under 接受编辑; a command is still asked', async () => {
+    const confirm = (id: string, tool: string, input: unknown) => JSON.stringify({ type: 'extension_ui_request', id, method: 'confirm', title: `Allow ${tool}?`, message: JSON.stringify({ wavi: 1, tool, input }) })
+    const state = JSON.stringify({ id: 'w1-0', type: 'response', command: 'get_state', success: true, data: { sessionId: 'pi-1', model: { provider: 'deepseek', id: 'deepseek-v4-flash' }, thinkingLevel: 'high' } })
+    const { host, writes } = stubHost({ pid: 1, seq: 3, lines: [state, confirm('ui-1', 'edit', { path: 'a.txt', edits: [] }), confirm('ui-2', 'bash', { command: 'ls' })], truncated: false }, null)
+    const opened = await host.open(launchOf('pi', 'r1', { permission: 'accept-edits' }), new FakeOwner())
+    expect(opened.ok && opened.state.prompts.map((p) => p.id)).toEqual(['ui-2'])
+    expect(writes.map((w) => JSON.parse(w) as unknown)).toContainEqual({ type: 'extension_ui_response', id: 'ui-1', confirmed: true })
+    host.stop('r1')
   })
 
   it('a process that ended while no app was attached shows why, with the stderr attach brought', async () => {

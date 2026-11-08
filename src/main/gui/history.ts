@@ -81,8 +81,35 @@ export function piSessionsDir(env: NodeJS.ProcessEnv = process.env, home = homed
 /** Folders of Pi's sessions folder looked at (one per working folder). */
 const MAX_PI_DIRS = 2_000
 
-/** Pi's session file of a conversation: `<sessions>/--<cwd>--/<time>_<id>.jsonl`, in whichever folder holds it. */
-export async function piSessionFileFor(sessionId: string, sessionsDir: string): Promise<string | null> {
+/** Pi's folder name for a working folder (session-manager.js `getDefaultSessionDirPath`, 0.84.1). */
+export const piSessionFolder = (cwd: string): string => `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
+
+/**
+ * Pi's session file of a conversation: `<sessions>/--<cwd>--/<time>_<id>.jsonl` — in the folder of `cwd` (as given or
+ * resolved; Pi names it after its process's folder), else whichever folder holds it.
+ */
+export async function piSessionFileFor(sessionId: string, sessionsDir: string, cwd?: string): Promise<string | null> {
+  const find = async (folder: string): Promise<string | null> => {
+    try {
+      const name = (await readdir(join(sessionsDir, folder))).find((n) => n.endsWith(`_${sessionId}.jsonl`))
+      return name ? join(sessionsDir, folder, name) : null
+    } catch {
+      return null
+    }
+  }
+  const cwds = new Set<string>()
+  if (cwd) {
+    cwds.add(cwd)
+    try {
+      cwds.add(realpathSync(cwd))
+    } catch {
+      // Gone: only the name as given.
+    }
+  }
+  for (const folder of cwds) {
+    const hit = await find(piSessionFolder(folder))
+    if (hit) return hit
+  }
   let folders: string[]
   try {
     folders = (await readdir(sessionsDir, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name)
@@ -90,14 +117,8 @@ export async function piSessionFileFor(sessionId: string, sessionsDir: string): 
     return null
   }
   for (const folder of folders.slice(0, MAX_PI_DIRS)) {
-    let names: string[]
-    try {
-      names = await readdir(join(sessionsDir, folder))
-    } catch {
-      continue
-    }
-    const name = names.find((n) => n.endsWith(`_${sessionId}.jsonl`))
-    if (name) return join(sessionsDir, folder, name)
+    const hit = await find(folder)
+    if (hit) return hit
   }
   return null
 }

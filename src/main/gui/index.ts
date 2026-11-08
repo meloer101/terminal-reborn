@@ -105,7 +105,7 @@ async function history(agent: CliAgent, cwd: string, agentSessionId: string) {
     return path ? readTranscript({ agent: 'codex', path }) : null
   }
   if (agent === 'pi') {
-    const path = await piSessionFileFor(agentSessionId, piSessionsDir())
+    const path = await piSessionFileFor(agentSessionId, piSessionsDir(), cwd)
     return path ? readPiHistory(path, cwd) : null
   }
   return null

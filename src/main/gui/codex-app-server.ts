@@ -3,7 +3,7 @@
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
 import { effortLabel, fastOption, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { addedFile, CHAT_LIMITS, fileDiffs, rel, todosArg, todosOf, type ChatItem, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -25,22 +25,8 @@ export const CODEX_APPROVAL: Readonly<Record<GuiPermission, { approvalPolicy: st
 const CODEX_LEVELS: readonly GuiPermission[] = ['ask', 'accept-edits', 'auto']
 export const isCodexLevel = (value: string): value is GuiPermission => (CODEX_LEVELS as readonly string[]).includes(value)
 
-/** A unified diff (as `fileChange.changes[].diff` carries it) → hunks with ` ` / `+` / `-` lines. */
-export function hunksOfUnifiedDiff(diff: string): DiffHunk[] {
-  const hunks: DiffHunk[] = []
-  let current: DiffHunk | null = null
-  for (const line of diff.split('\n')) {
-    const head = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line)
-    if (head) {
-      current = { oldStart: Number(head[1]), newStart: Number(head[2]), lines: [] }
-      hunks.push(current)
-      continue
-    }
-    if (!current || line.startsWith('\\')) continue
-    if (line.startsWith('+') || line.startsWith('-') || line.startsWith(' ')) current.lines.push(line)
-  }
-  return hunks
-}
+/** Moved to @shared/transcript-chat (Pi's edit patches use it too); kept here for this module's callers. */
+export { hunksOfUnifiedDiff }
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 

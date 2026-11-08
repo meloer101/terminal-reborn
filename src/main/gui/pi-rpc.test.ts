@@ -22,6 +22,10 @@ describe('pickers', () => {
     expect(config[2]!.values.map((v) => v.label)).toEqual(['询问', '接受编辑'])
   })
 
+  it('takes the levels Pi reports for the running model over the model’s map', () => {
+    expect(piConfig([flash], { effort: 'medium', permission: 'ask' }, ['off', 'medium'])[1]).toMatchObject({ current: 'medium', values: [{ value: 'off' }, { value: 'medium' }] })
+  })
+
   it('falls back to high, then the first level; a model without reasoning has no 推理强度', () => {
     expect(piConfig([flash], { effort: 'xhigh', permission: 'ask' })[1]!.current).toBe('high')
     expect(piConfig([plain], { model: 'x/chat', permission: 'ask' }).map((o) => o.id)).toEqual(['model', 'permission'])
@@ -121,6 +125,13 @@ describe('what Pi waits on', () => {
     expect(piAnswerResponse(n.pending('c')!, { kind: 'question', id: 'c', answers: { 'Trust?\n\nLoad .pi/ext.ts': '是' } })).toEqual({ confirmed: true })
     expect(piAnswerResponse(n.pending('s')!, { kind: 'question', id: 's', answers: { 'Pick one': 'B' } })).toEqual({ value: 'B' })
     expect(piAnswerResponse(n.pending('s')!, { kind: 'question', id: 's', answers: {} })).toEqual({ cancelled: true })
+    // A long option is shown clipped; the extension gets it back as it wrote it.
+    const long = 'x'.repeat(400)
+    const card = fold(n.request({ type: 'extension_ui_request', id: 'l', method: 'select', title: 'Long', options: [long] })).prompts[0]
+    const shownLabel = card?.kind === 'question' ? card.questions[0]!.options[0]!.label : ''
+    expect(shownLabel).toHaveLength(301)
+    expect(piAnswerResponse(n.pending('l')!, { kind: 'question', id: 'l', answers: { Long: shownLabel } })).toEqual({ value: long })
+    expect(n.waitingCalls()).toEqual([])
   })
 
   it('the end of the turn takes its prompts with it', () => {
@@ -158,5 +169,23 @@ describe('a conversation read back', () => {
 
   it('reads a file cut at the start (its newest part) up to where the read began', () => {
     expect(piHistoryItems(piBranchMessages(file.slice(6)), '/w').map((i) => i.kind)).toEqual(['text'])
+  })
+})
+
+describe('finding the session file', () => {
+  it('looks in the folder Pi names after the working folder first, then in every folder', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { piSessionFileFor, piSessionFolder } = await import('./history')
+    const root = mkdtempSync(join(tmpdir(), 'pi-sessions-'))
+    expect(piSessionFolder('/Users/m/a:b')).toBe('--Users-m-a-b--')
+    mkdirSync(join(root, piSessionFolder('/w/p')))
+    writeFileSync(join(root, piSessionFolder('/w/p'), '2026-11-08T14-14-42-627Z_abc.jsonl'), '')
+    mkdirSync(join(root, '--elsewhere--'))
+    writeFileSync(join(root, '--elsewhere--', '2026-11-08T00-00-00-000Z_def.jsonl'), '')
+    expect(await piSessionFileFor('abc', root, '/w/p')).toBe(join(root, piSessionFolder('/w/p'), '2026-11-08T14-14-42-627Z_abc.jsonl'))
+    expect(await piSessionFileFor('def', root, '/w/p')).toBe(join(root, '--elsewhere--', '2026-11-08T00-00-00-000Z_def.jsonl'))
+    expect(await piSessionFileFor('nope', root)).toBeNull()
   })
 })

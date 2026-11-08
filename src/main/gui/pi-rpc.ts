@@ -6,14 +6,8 @@
 // and a conversation read back from Pi's session file. Pure: pi-driver.ts owns the process.
 
 import { effortLabel, permissionOption, type GuiAnswer, type GuiCommand, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { addedFile, CHAT_LIMITS, fileDiffs, lineDiff, rel, toolArg, type ChatItem, type FileDiff } from '@shared/transcript-chat'
-import { hunksOfUnifiedDiff } from './codex-app-server'
-
-type Rec = Record<string, unknown>
-const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
-const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text)
-const tail = (text: string, max: number): string => (text.length > max ? `…${text.slice(text.length - max)}` : text)
+import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, lineDiff, rel, toolArg, type ChatItem, type FileDiff } from '@shared/transcript-chat'
+import { clip, isRec, str, tail, type Rec } from './driver'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
@@ -60,8 +54,11 @@ export interface PiPicks {
   permission: GuiPermission
 }
 
-/** The pickers: 模型, 推理强度 (the chosen model's levels; `off` is 关), 权限. */
-export function piConfig(models: readonly unknown[], picks: PiPicks): GuiConfigOption[] {
+/**
+ * The pickers: 模型, 推理强度 (`off` is 关), 权限. `levels`: what Pi says the running model takes
+ * (`get_available_thinking_levels`); otherwise the chosen model's own (piThinkingLevels).
+ */
+export function piConfig(models: readonly unknown[], picks: PiPicks, levels?: readonly string[]): GuiConfigOption[] {
   const list = models.filter(isRec)
   const values = list.flatMap((m) => {
     const value = piModelValue(m)
@@ -70,14 +67,14 @@ export function piConfig(models: readonly unknown[], picks: PiPicks): GuiConfigO
   const config: GuiConfigOption[] = []
   const model = picks.model && values.some((v) => v.value === picks.model) ? picks.model : values[0]?.value
   if (model) config.push({ id: 'model', category: 'model', label: '模型', current: model, values })
-  const levels = piThinkingLevels(list.find((m) => piModelValue(m) === model))
-  if (levels.length > 0) {
+  const offered = levels ?? piThinkingLevels(list.find((m) => piModelValue(m) === model))
+  if (offered.length > 0) {
     config.push({
       id: 'effort',
       category: 'thought_level',
       label: '推理强度',
-      current: picks.effort && levels.includes(picks.effort) ? picks.effort : levels.includes('high') ? 'high' : levels[0]!,
-      values: levels.map((l) => ({ value: l, label: effortLabel(l, l === 'off' ? '关' : undefined) }))
+      current: picks.effort && offered.includes(picks.effort) ? picks.effort : offered.includes('high') ? 'high' : offered[0]!,
+      values: offered.map((l) => ({ value: l, label: effortLabel(l, l === 'off' ? '关' : undefined) }))
     })
   }
   config.push(permissionOption(PI_LEVELS, picks.permission))
@@ -160,6 +157,7 @@ export function waviConfirm(request: Rec): { tool: string; input: unknown } | nu
 const DIALOGS: ReadonlySet<string> = new Set(['confirm', 'select', 'input', 'editor'])
 const YES = '是'
 const NO = '否'
+const OPTION_MAX = 300
 
 const PERMISSION_OPTIONS: GuiPermissionOption[] = [
   { id: 'reject', label: '拒绝', kind: 'reject_once' },
@@ -177,6 +175,8 @@ export interface PiPending {
   call?: { tool: string; input: unknown }
   /** The question asked (answers come back under it). */
   question?: string
+  /** A select's options as the extension gave them (the card shows them clipped). */
+  options?: string[]
 }
 
 /** The `extension_ui_response` fields for an answer (undefined: not an answer to this request). */
@@ -189,7 +189,8 @@ export function piAnswerResponse(pending: PiPending, answer: GuiAnswer): Rec | u
   const value = pending.question !== undefined ? answer.answers[pending.question] : undefined
   if (value === undefined) return { cancelled: true }
   if (pending.method === 'confirm') return { confirmed: value === YES }
-  return { value }
+  // The option whose clipped label was picked, as the extension wrote it; free text as typed.
+  return { value: pending.options?.find((o) => clip(o, OPTION_MAX) === value) ?? value }
 }
 
 // --- the stream ---------------------------------------------------------------------------------------------------
@@ -201,6 +202,8 @@ export interface PiNormalizer {
   request(request: Rec): GuiEvent[]
   /** What a shown prompt asks (to answer it). */
   pending(id: string): PiPending | undefined
+  /** Wavi's own confirms still shown (a change of 权限 or a reattach may answer them). */
+  waitingCalls(): PiPending[]
   settle(id: string): GuiEvent[]
   /** The turn ended without `agent_end` (the prompt was refused). */
   failed(message: string): GuiEvent[]
@@ -340,13 +343,15 @@ export function createPiNormalizer(cwd: string, now: () => number = Date.now): P
         const title = str(r.title) ?? ''
         const question = clip([title, method === 'confirm' ? (str(r.message) ?? '') : ''].filter(Boolean).join('\n\n') || 'Pi 在等你回答', 2_000)
         const options = method === 'confirm' ? [YES, NO] : method === 'select' && Array.isArray(r.options) ? r.options.filter((o): o is string => typeof o === 'string') : []
-        prompt = { kind: 'question', id, questions: [{ question, options: options.map((label) => ({ label: clip(label, 300) })), multiSelect: false }] }
-        waiting.set(id, { id, method, question })
+        prompt = { kind: 'question', id, questions: [{ question, options: options.map((label) => ({ label: clip(label, OPTION_MAX) })), multiSelect: false }] }
+        waiting.set(id, { id, method, question, ...(method === 'select' ? { options } : {}) })
       }
       return [...flush(), { type: 'prompt', prompt }]
     },
 
     pending: (id) => waiting.get(id),
+
+    waitingCalls: () => [...waiting.values()].filter((p) => p.call !== undefined),
 
     settle(id) {
       if (!waiting.delete(id)) return []

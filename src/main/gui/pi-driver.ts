@@ -12,6 +12,7 @@ import { splitAttachments, withPaths } from './launch'
 import { callKey, createPiNormalizer, PI_FILE_CHANGE_TOOLS, PI_LEVELS, piAnswerResponse, piCommands, piConfig, piModelValue, waviConfirm, type PiPicks } from './pi-rpc'
 
 const HANDSHAKE_TIMEOUT_MS = 60_000
+const ABORT_TIMEOUT_MS = 15_000
 
 type Outcome = { ok: true; data: unknown } | { ok: false; message: string }
 
@@ -22,6 +23,8 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
   let next = 0
   const waiting = new Map<string, (outcome: Outcome) => void>()
   let models: unknown[] = []
+  /** The levels Pi says the running model takes; unknown for a model chosen but not yet running. */
+  let levels: string[] | undefined
   const picks: PiPicks = { ...(options.model ? { model: options.model } : {}), permission: options.permission === 'accept-edits' ? 'accept-edits' : 'ask' }
   let config: GuiConfigOption[] = []
   /** 总是允许: the same call again goes through for the rest of this process. */
@@ -47,7 +50,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
   }
 
   const emitConfig = () => {
-    config = piConfig(models, picks)
+    config = piConfig(models, picks, levels)
     // What piConfig settled on (the first model, the model's default level) is what Pi runs with.
     for (const option of config) {
       if (option.id === 'model') picks.model = option.current
@@ -70,18 +73,27 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
   const takeModels = (data: unknown) => {
     if (isRec(data) && Array.isArray(data.models)) models = data.models
   }
+  const takeLevels = (data: unknown) => {
+    if (isRec(data) && Array.isArray(data.levels)) levels = data.levels.filter((l): l is string => typeof l === 'string')
+  }
   const takeCommands = (data: unknown) => {
     if (isRec(data)) io.emit([{ type: 'commands', commands: piCommands(data.commands) }])
   }
 
   async function handshake(): Promise<void> {
-    const [state, list, commands] = await Promise.all([request('get_state', {}, HANDSHAKE_TIMEOUT_MS), request('get_available_models', {}, HANDSHAKE_TIMEOUT_MS), request('get_commands', {}, HANDSHAKE_TIMEOUT_MS)])
+    const [state, list, thinking, commands] = await Promise.all([
+      request('get_state', {}, HANDSHAKE_TIMEOUT_MS),
+      request('get_available_models', {}, HANDSHAKE_TIMEOUT_MS),
+      request('get_available_thinking_levels', {}, HANDSHAKE_TIMEOUT_MS),
+      request('get_commands', {}, HANDSHAKE_TIMEOUT_MS)
+    ])
     if (!state.ok) {
       io.fail(`Pi 没有回应：${state.message}`)
       return
     }
     takeState(state.data)
     if (list.ok) takeModels(list.data)
+    if (thinking.ok) takeLevels(thinking.data)
     if (commands.ok) takeCommands(commands.data)
     emitConfig()
     if (!sessionId) {
@@ -97,13 +109,28 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
 
   const respond = (id: string, fields: Rec): boolean => io.write({ type: 'extension_ui_response', id, ...fields })
 
+  /**
+   * Shown confirms the level now lets through (接受编辑 chosen while an edit waits; a reattach found one asked while no
+   * app was attached) are answered. While no app is attached, an edit under 接受编辑 waits, as with ACP agents.
+   */
+  const releaseAllowed = () => {
+    for (const pending of normalizer.waitingCalls()) {
+      if (!pending.call || !allowedNow(pending.call) || !respond(pending.id, { confirmed: true })) continue
+      io.emit(normalizer.settle(pending.id))
+    }
+  }
+
   /** A model or thinking level is a launch argument: shown at once, then Pi restarts with it (reverted if it cannot). */
   async function relaunchWith(change: Partial<PiPicks>): Promise<boolean> {
     const before = { ...picks }
+    const levelsBefore = levels
     Object.assign(picks, change)
+    // Another model's levels are its own until Pi runs it.
+    if (change.model) levels = undefined
     emitConfig()
     if (await io.relaunch({ permission: picks.permission, plan: false })) return true
     Object.assign(picks, before)
+    levels = levelsBefore
     emitConfig()
     return false
   }
@@ -130,6 +157,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
         if (replay && message.success === true) {
           if (message.command === 'get_state') takeState(message.data)
           if (message.command === 'get_available_models') takeModels(message.data)
+          if (message.command === 'get_available_thinking_levels') takeLevels(message.data)
           if (message.command === 'get_commands') takeCommands(message.data)
         }
         return
@@ -160,6 +188,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
     replayed() {
       if (sessionId) {
         if (models.length > 0) emitConfig()
+        releaseAllowed()
         isReady = true
         io.ready()
       } else void handshake()
@@ -195,7 +224,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
       const dropped = normalizer.dropPrompts()
       for (const event of dropped) if (event.type === 'prompt-done') respond(event.id, { cancelled: true })
       if (dropped.length > 0) io.emit(dropped)
-      void request('abort')
+      void request('abort', {}, ABORT_TIMEOUT_MS)
       return true
     },
 
@@ -208,6 +237,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
         if (!level) return false
         picks.permission = level
         emitConfig()
+        releaseAllowed()
         return true
       }
       // Another model has its own levels: piConfig keeps the level when the new model takes it.

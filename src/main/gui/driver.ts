@@ -7,6 +7,8 @@ import type { GuiAnswer, GuiEvent, GuiPermission } from '@shared/gui-chat'
 export type Rec = Record<string, unknown>
 export const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
 export const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+export const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text)
+export const tail = (text: string, max: number): string => (text.length > max ? `…${text.slice(text.length - max)}` : text)
 
 export interface ImageBlock {
   mediaType: string
