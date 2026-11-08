@@ -186,6 +186,24 @@ describe('Claude transcript → chat', () => {
     ])
   })
 
+  it('shows a background task’s notification as a system line, not as the user’s message', () => {
+    const notice = (status: string, summary: string): string =>
+      `<task-notification>\n<task-id>ac69</task-id>\n<output-file>/private/tmp/x/tasks/ac69.output</output-file>\n<status>${status}</status>\n<summary>${summary}</summary>\n<note>…</note>\n</task-notification>`
+    const sys = { origin: { kind: 'task-notification' }, promptSource: 'system' }
+    const items = parse([
+      line({ ...sys, type: 'user', message: { content: notice('completed', 'Agent "Audit GUI composer" finished') } }),
+      line({ ...sys, type: 'user', message: { content: notice('stopped', 'Background agent "Research chat UI" didn\'t finish before the previous session ended') } }),
+      line({ ...sys, type: 'user', message: { content: [{ type: 'text', text: notice('failed', 'Background command "npm test" failed with exit code 1') }] } }),
+      line({ ...sys, type: 'user', message: { content: notice('weird', 'no name here') } })
+    ])
+    expect(items.map((i) => [i.kind, i.kind === 'system' ? i.text : ''])).toEqual([
+      ['system', '后台任务「Audit GUI composer」已完成'],
+      ['system', '后台任务「Research chat UI」已停止'],
+      ['system', '后台任务「npm test」失败'],
+      ['system', '后台任务已结束']
+    ])
+  })
+
   it('shows interruptions, compaction and API errors as one line each', () => {
     const items = parse([
       line({ type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] } }),

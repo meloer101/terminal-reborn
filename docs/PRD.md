@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.153 · 2026-11-08 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.155 · 2026-11-08 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,8 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.155 | 2026-11-08 | **对话里的 Markdown 少画线**（F23，作者 2026-11-08：分割线太多、观感难受，选「只留表头一条」）：标题不画下划线（v1.146 起）；`---` 不画线，只留一段空白（前后块间距相加为 24，等于轮与轮之间）；表格只在表头下画一条 1 px `border/default`，行与行之间不画线，靠上下各 4 的内边距分开。只改桌面对话（agent 的回复和你的气泡）；文件预览的 Markdown 和手机端的表格（v1.144 行间分隔线）不变。回复里「★ Insight ─────」这类横线是模型输出的字符，不是渲染画的，不处理。 |
+| v1.154 | 2026-11-08 | **后台任务的通知不再显示成你发的消息**（F23 / F22，作者 2026-11-08 报告：GUI 会话里出现一条自己没发过的气泡，内容是任务 id、输出文件路径和 stopped）：Claude Code 在后台任务（后台 subagent、后台命令）结束时，或重开会话时发现上次的后台任务没结束，会往对话里插一条 `user` 行，内容是 `<task-notification>`（`origin.kind: task-notification`、`promptSource: system`，2.1.318–2.1.319 实测），并据此开始新的一轮。以前按普通提示解析成用户消息，气泡里的标签被 Markdown 吃掉、只剩 id 和路径。现在解析成一行系统文字「后台任务「名字」已完成 / 已停止 / 失败」（名字取 `<summary>` 里引号中的部分，没有时只写「后台任务已结束」这一类），桌面 GUI 会话、手机会话页和历史一致。本机近 10 天的 Claude transcript 里 `promptSource: system` 的用户行只有这一种；Codex 注入的上下文是 `developer` 角色，不受影响。 |
 | v1.153 | 2026-11-07 | **子 agent 在原处展开**（F23，Figma 59J `902:41559`）：① 文字、思考、工具项新增可选字段 `parent`（启动它的 Agent / Task 调用的 tool_use id），工具项新增可选字段 `ms`（Claude Agent / Task 结果里的 `totalDurationMs`；Codex 协作调用的开始到结束）。Claude `-p` 实时流里 `parent_tool_use_id` 是字符串的消息（子 agent 自己的）不再丢弃：它的工具调用和结果、思考、文字按这个 id 挂到对应的 Agent 行下；它收到的提示（user 文字）和其他行仍不显示，流式增量仍不进实时块。transcript 文件里的子 agent 行只有 `isSidechain`、没有父 id，照旧丢弃，所以手机和历史不变；手机端忽略新字段。② Agent 行：运行中是状态图标、完成后是 Bot 图标 · 子 agent · 任务描述（步骤字号，一级字色）· 展开箭头，行尾是用时（代码字号，三级字色，m:ss）：运行中按开始时间每秒走（只在这一行在屏幕上时计时），完成后用 `ms`。运行中默认展开、完成后默认收起，点过之后按用户的选择。展开后子 agent 的步骤行（同一种 图标 · 动词 · 目标）和它的文字（步骤字号，二级字色）列在下面：一条 1 px `border/subtle` 竖线从行图标中线往下，内容在竖线右 16。父行还没到时先放着，到了再挂上；一直没到就显示在顶层。③ 子 agent 的工具在等确认时，「等你确认」标在它自己那一行，Agent 行保持运行中；子 agent 自己的任务清单不进输入框上方的卡片。④ Codex app-server 的 `collabAgentToolCall`（spawnAgent、sendInput、wait 等）显示成一行「子 agent」，目标是 `prompt`（没有时是工具名），`inProgress` 运行中、`completed` 完成、`failed` / `interrupted` 出错；子 agent 在另一个 thread 里跑，下面不挂内容。字段按 0.166 生成的类型（`v2/ThreadItem.ts`）写，未用真实 Codex 实测。 |
 | v1.152 | 2026-11-07 | **「/」菜单分「命令」和「Skills」**（F23，Figma 59H `888:45043`）：① `GuiCommand` 新增可选字段 `kind`（command / skill）。Claude：每轮的 `system/init` 有 `skills`（字符串数组，2.1.319 实测，和 `slash_commands` 并列），列表里同名的项标为 skill；命令列表仍来自 `initialize` 和 `system/commands_changed`，每次发出命令列表都按最近一次的 skills 标记。`initialize` 的命令项只有 `name` / `description` / `argumentHint` / `builtin` / `aliases`，不标 skill，所以第一轮开始前全部算命令。ACP 的命令都是 command；Codex 仍没有菜单。② 菜单分两组，组名「命令」「Skills」（12 号三级字色），先命令后 Skills，↑↓ 按显示顺序走；每项：名字（代码字号，一级字色）· 参数提示（代码字号，三级字色，有才显示）· 说明（步骤字号，二级字色，一行，超出省略）。 |
 | v1.151 | 2026-11-07 | **改文件的确认卡片显示 diff**（F23，Figma 59I `888:45479`）：① `GuiPrompt` 的权限请求新增可选字段 `diff`（一个文件，形状同工具项的 `diff`）。Claude：Edit 用 `old_string` → `new_string` 逐行比较，MultiEdit 是全部修改，Write 按新文件全部算新增；路径相对会话文件夹；旧文字加新文字超过 200 行时不带 diff。Codex：`item/fileChange/requestApproval` 按 `itemId` 找到已开始的 fileChange，带它的第一个文件。ACP 的改文件请求本来就在工具行上显示 diff，不变。② 卡片在标题和按钮之间画 diff 块（和对话流的同一种块，带「路径 · +N −M」标题行），最高 200，超出滚动；有 diff 时不再单独显示路径那一行。标题仍是「Claude 要修改文件」（59I 的「要编辑 <路径>」未采用，按原标题规则）。 |

@@ -655,9 +655,9 @@
   font: var(--type-step);
 }
 
+/* One line, under the header: rows read apart by their spacing (no line between rows). */
 .markdown :is(th, td) {
   padding: var(--space-4) var(--space-12) var(--space-4) 0;
-  border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   vertical-align: top;
   overflow-wrap: normal;
@@ -665,7 +665,7 @@
 
 .markdown th {
   font-weight: 500;
-  border-bottom-color: var(--border-default);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .markdown a {
@@ -680,10 +680,10 @@
   text-decoration-color: currentColor;
 }
 
+/* A `---` is a pause, not a line: it adds one block gap (12 + 12 = 24, a turn's spacing). */
 .markdown hr {
   height: 0;
   border: 0;
-  border-top: 1px solid var(--border-subtle);
 }
 
 .markdown img {
