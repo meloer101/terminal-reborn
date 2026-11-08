@@ -45,6 +45,12 @@ describe('remoteShip', () => {
     expect(ended.sessions[0]!.shipNotice).toBe('已合并到 main 并推送 · a41c9e2')
   })
 
+  it('carries each session\'s 会话设置 when it has any (Figma 64B)', () => {
+    const settings = { items: [{ kind: 'model' as const, current: 'opus', values: [{ value: 'opus', label: 'Opus 5.5' }] }] }
+    const list = remoteSessions({ projects: [project], worktrees: [tree], sessions: [session({ id: 'a' }), session({ id: 'b' })] }, undefined, (s) => (s.id === 'a' ? settings : undefined))
+    expect(list.sessions.map((s) => s.settings)).toEqual([settings, undefined])
+  })
+
   it('cuts long text to what main accepts and keeps local folders out of messages', () => {
     const empty = toGlance(startState(input, '合并到 main 并推送'), EMPTY_TEXTS)
     const failed = fail(empty, { step: 'merge', message: 'x'.repeat(3000), output: 'error in /wt/refresh/src/a.ts and /code/acme' })

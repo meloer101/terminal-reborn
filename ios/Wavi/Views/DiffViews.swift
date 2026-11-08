@@ -1,38 +1,47 @@
-// Diffs as Figma 45 draws them: the full numbered view of 45D (old / new gutters, sign, code; hunk rows), the few-line
-// MiniDiff under an Edit row in the conversation (45C), the tool detail (45D) and one file of Git · 变更.
+// Diffs (Figma 63C7 / 63C8): the full numbered view (old / new gutters, sign, code; hunk rows), the few-line MiniDiff
+// under an Edit row in the conversation (61B), the tool detail (an Edit's diff, or another tool's 输入 and 输出) and one
+// file of Git · 变更.
 import SwiftUI
 
 struct DiffView: View {
   let rows: [DiffRow]
+  /// The line-number and sign columns grow with the code's text size.
+  @ScaledMetric(relativeTo: .caption) private var gutter: CGFloat = 36
+  @ScaledMetric(relativeTo: .caption) private var signWidth: CGFloat = 20
 
+  // Lines never wrap: the view scrolls both ways, every row as wide as the widest line (and at least the screen), from
+  // the top left. A VStack, not lazy, so it knows the widest line (a diff comes cut at 400 lines).
   var body: some View {
-    ScrollView([.horizontal, .vertical]) {
-      LazyVStack(alignment: .leading, spacing: 0) {
-        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-          switch row {
-          case .hunk(let text):
-            HStack(spacing: 0) {
-              Color.clear.frame(width: 92)
-              Text(text).foregroundStyle(Color.textTertiary)
+    GeometryReader { geo in
+      ScrollView([.horizontal, .vertical]) {
+        VStack(alignment: .leading, spacing: 0) {
+          ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            switch row {
+            case .hunk(let text):
+              HStack(spacing: 0) {
+                Color.clear.frame(width: gutter * 2 + signWidth, height: 0)
+                Text(text).foregroundStyle(Color.textSecondary).fixedSize()
+              }
+              .frame(minWidth: geo.size.width, maxWidth: .infinity, minHeight: 20, alignment: .leading)
+              .background(Color.fillSubtle)
+            case .line(let sign, let old, let new, let code):
+              HStack(spacing: 0) {
+                Text(old.map(String.init) ?? "").frame(width: gutter, alignment: .trailing).foregroundStyle(Color.textSecondary)
+                Text(new.map(String.init) ?? "").frame(width: gutter, alignment: .trailing).foregroundStyle(Color.textSecondary)
+                Text(sign == "-" ? "−" : String(sign)).frame(width: signWidth).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textSecondary)
+                Text(code).foregroundStyle(Color.textPrimary).fixedSize().padding(.trailing, 16)
+              }
+              .frame(minWidth: geo.size.width, maxWidth: .infinity, minHeight: 20, alignment: .leading)
+              .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
             }
-            .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-            .background(Color.bgHover)
-          case .line(let sign, let old, let new, let code):
-            HStack(spacing: 0) {
-              Text(old.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textTertiary)
-              Text(new.map(String.init) ?? "").frame(width: 36, alignment: .trailing).foregroundStyle(Color.textTertiary)
-              Text(sign == "-" ? "−" : String(sign)).frame(width: 20).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textTertiary)
-              Text(code).foregroundStyle(Color.termFg).padding(.trailing, 16)
-            }
-            .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-            .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
           }
         }
+        .font(.mono(.caption))
+        .fixedSize()
+        .frame(minHeight: geo.size.height, alignment: .top)
       }
-      .font(.mono(12))
-      .fixedSize(horizontal: true, vertical: false)
     }
-    .background(Color.bgInset)
+    .background(Color.bgGrouped)
   }
 }
 
@@ -45,7 +54,7 @@ struct MiniDiff: View {
       ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
         let sign = line.first == "+" || line.first == "-" ? line.first! : " "
         HStack(spacing: 8) {
-          Text(sign == "-" ? "−" : String(sign)).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textTertiary)
+          Text(sign == "-" ? "−" : String(sign)).foregroundStyle(sign == "+" ? Color.diffAddFg : sign == "-" ? Color.diffDelFg : Color.textSecondary)
           Text(String(line.dropFirst())).foregroundStyle(sign == " " ? Color.textSecondary : Color.textPrimary).lineLimit(1)
           Spacer(minLength: 0)
         }
@@ -54,9 +63,9 @@ struct MiniDiff: View {
         .background(sign == "+" ? Color.diffAddBg : sign == "-" ? Color.diffDelBg : .clear)
       }
     }
-    .font(.mono(12))
+    .font(.mono(.caption))
     .padding(.vertical, 8)
-    .background(Color.bgInset, in: RoundedRectangle(cornerRadius: 8))
+    .background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
   }
 }
 
@@ -66,8 +75,8 @@ private struct NavTitle: View {
 
   var body: some View {
     VStack(spacing: 2) {
-      Text(title).font(.ui(16, 500)).foregroundStyle(Color.textPrimary).lineLimit(1)
-      Text(subtitle).font(.mono(12)).foregroundStyle(Color.textTertiary).lineLimit(1)
+      Text(title).font(.ui(.headline)).foregroundStyle(Color.textPrimary).lineLimit(1)
+      Text(subtitle).font(.ui(.footnote)).foregroundStyle(Color.textSecondary).lineLimit(1)
     }
   }
 }
@@ -84,7 +93,7 @@ struct ToolView: View {
       if let tool, let diff = tool.diff {
         VStack(spacing: 0) {
           DiffView(rows: hunkRows(diff.hunks))
-          if diff.truncated { Text("只显示了前 400 行").font(.ui(13)).foregroundStyle(Color.textTertiary).frame(maxWidth: .infinity).padding(12).background(Color.bgInset) }
+          if diff.truncated { Text("只显示了前 400 行").font(.ui(.footnote)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity).padding(12).background(Color.bgGrouped) }
         }
         .toolbar {
           ToolbarItem(placement: .principal) {
@@ -95,25 +104,81 @@ struct ToolView: View {
         }
       } else if let tool {
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
-            Text(tool.arg ?? "").font(.mono(13)).lineSpacing(6).foregroundStyle(Color.textPrimary).textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+          VStack(alignment: .leading, spacing: 8) {
+            Text("输入").font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary)
+            Text(tool.arg ?? "").font(.mono()).lineSpacing(4).foregroundStyle(Color.textPrimary).textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
             if let output = tool.output, !output.isEmpty {
-              Text(output).font(.mono(12)).lineSpacing(5).foregroundStyle(tool.state == "error" ? Color.statusError : Color.termFg).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.bgInset, in: RoundedRectangle(cornerRadius: 10))
+              Text("输出").font(.ui(.footnote, medium: true)).foregroundStyle(Color.textSecondary).padding(.top, 16)
+              Text(output).font(.mono(.caption)).lineSpacing(4).foregroundStyle(tool.state == "error" ? Color.statusError : Color.textPrimary).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Color.bgGrouped, in: RoundedRectangle(cornerRadius: Metric.radiusControl))
             }
           }
-          .padding(20)
+          .padding(Metric.margin)
         }
         .toolbar {
           ToolbarItem(placement: .principal) { NavTitle(title: tool.name ?? "工具", subtitle: tool.state == "running" ? "运行中" : tool.state == "error" ? "出错" : "完成") }
         }
       } else {
-        Color.clear
+        EmptyState(title: "这次工具调用不在当前的对话里")
       }
     }
     .background(Color.bgApp)
     .navigationBarTitleDisplayMode(.inline)
+  }
+}
+
+/// The files one turn changed (Figma 62E 这一轮改了 N 个文件): each opens its tool call's diff.
+struct TurnView: View {
+  let session: String
+  let tools: [String]
+  @Environment(AppModel.self) private var model
+
+  var body: some View {
+    let ids = Set(tools)
+    let calls = model.watching == session ? (model.conversation?.feed.items ?? []).filter { ids.contains($0.id) } : []
+    // One row per file (a file edited three times is one row with its lines added up), opening its last edit.
+    let items = Dictionary(grouping: calls) { $0.diff?.path ?? $0.arg ?? $0.id }.values
+      .compactMap { group -> (ChatItem, Int, Int)? in
+        guard let last = group.last else { return nil }
+        return (last, group.reduce(0) { $0 + ($1.diff?.added ?? 0) }, group.reduce(0) { $0 + ($1.diff?.removed ?? 0) })
+      }
+      .sorted { $0.0.at < $1.0.at }
+    Group {
+      if items.isEmpty {
+        EmptyState(title: "这一轮的改动不在当前的对话里")
+      } else {
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(items, id: \.0.id) { entry in
+              let (item, added, removed) = entry
+              let (name, dir) = splitPath(item.diff?.path ?? item.arg ?? "")
+              NavigationLink(value: Route.tool(session: session, item: item.id)) {
+                HStack(spacing: 12) {
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(name).font(.ui(.callout)).foregroundStyle(Color.textPrimary).lineLimit(1)
+                    if !dir.isEmpty { Text(dir).font(.mono(.caption)).foregroundStyle(Color.textSecondary).lineLimit(1) }
+                  }
+                  Spacer(minLength: 0)
+                  Counts(added: added, removed: removed)
+                  Icon("chevron-right", size: 14).foregroundStyle(Color.textSecondary)
+                }
+                .padding(.horizontal, Metric.margin)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+              }
+              .buttonStyle(RowStyle())
+            }
+          }
+          .padding(.vertical, 8)
+        }
+      }
+    }
+    .background(Color.bgApp)
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .principal) { NavTitle(title: "这一轮的改动", subtitle: "\(items.count) 个文件") }
+    }
   }
 }
 
@@ -134,11 +199,11 @@ struct FileDiffView: View {
     let (name, dir) = splitPath(path)
     Group {
       if let rows {
-        if rows.isEmpty { message("没有可显示的文本改动") } else { DiffView(rows: rows) }
+        if rows.isEmpty { EmptyState(title: "没有可显示的文本改动") } else { DiffView(rows: rows) }
       } else if let error {
-        message(error)
+        EmptyState(title: error)
       } else {
-        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).padding(20)
+        Spinner(color: .textSecondary).frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityLabel("正在读取改动")
       }
     }
     .background(Color.bgApp)
@@ -150,9 +215,5 @@ struct FileDiffView: View {
       let result = await model.call(.diff(session: session, path: path, scope: scope, oldPath: oldPath, untracked: untracked))
       if let data = result.decode(Text_.self) { rows = unifiedRows(data.text ?? "") } else { error = result.error ?? "没有读到改动" }
     }
-  }
-
-  private func message(_ text: String) -> some View {
-    Text(text).font(.ui(15)).foregroundStyle(Color.textTertiary).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(20)
   }
 }

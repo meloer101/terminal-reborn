@@ -5,7 +5,7 @@
 import { randomBytes } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import { WebSocketServer, type RawData, type WebSocket } from 'ws'
-import { PAIRING_ALPHABET, PAIRING_CODE_LENGTH, parsePhoneRequest, REMOTE_LIMITS, type PhoneEvent, type PhoneRequest, type PhoneResponse, type RemoteResult } from '@shared/remote'
+import { PAIRING_ALPHABET, PAIRING_CODE_LENGTH, parsePhoneRequest, REMOTE_LIMITS, REMOTE_PROTOCOL, type PhoneEvent, type PhoneRequest, type PhoneResponse, type RemoteResult } from '@shared/remote'
 import { authProof, b64u, FrameCipher, fromB64u, open, pairingKey, pakeReply, proofMatches, seal, sessionKeys, type Identity } from './crypto'
 import type { DeviceStore } from './devices'
 
@@ -325,7 +325,7 @@ export class RemoteServer {
         stage = { kind: 'open', cipher, connection }
         this.sockets.set(connection.id, { socket, connection, end })
         this.options.devices.touch(device.id)
-        connection.send({ event: 'hello', data: { name: this.options.name(), version: this.options.version, ...(this.options.urls ? { urls: this.options.urls() } : {}) } })
+        connection.send({ event: 'hello', data: { name: this.options.name(), version: this.options.version, protocol: REMOTE_PROTOCOL, ...(this.options.urls ? { urls: this.options.urls() } : {}) } })
         this.options.onOpen?.(connection)
         this.options.onChange?.()
         return

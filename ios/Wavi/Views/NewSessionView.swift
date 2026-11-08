@@ -1,4 +1,4 @@
-// 新建会话 (Figma 45H): the fields of the desktop's sheet (PRD F4) — project, 工作目录 (new worktree / current folder),
+// 新建会话 (Figma 61F, states 63F1–63F5; the system Form, v1.119): the fields of the desktop's sheet (PRD F4) — project, 工作目录 (new worktree / current folder),
 // the branch it starts from and its name, the agent — plus an optional first message. The Mac's window creates it the
 // same way its own sheet does (src/renderer/remote/handler.ts); the phone then opens it.
 import SwiftUI
@@ -30,7 +30,8 @@ struct NewSessionView: View {
         Picker("项目", selection: $project) {
           ForEach(model.sessions.projects) { Text($0.name).tag(Optional($0.id)) }
         }
-        if let loadError { Text(loadError).foregroundStyle(Color.statusError) }
+        if let error { Notice(tone: .danger, message: "没有建成：\(error)").listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
+        if let loadError { Text(loadError).foregroundStyle(Color.noticeDanger) }
         if let data {
           Section {
             Picker("工作目录", selection: $workdir) {
@@ -39,22 +40,23 @@ struct NewSessionView: View {
             }
             .pickerStyle(.segmented)
             .disabled(!data.info.repo)
+            if !data.info.repo { LabeledContent("工作目录", value: "不是 git 仓库，只能在当前目录") }
             if workdir == "worktree" {
               Picker("基于", selection: $base) {
                 let local = data.info.branches.filter { !$0.remote }
                 let remote = data.info.branches.filter(\.remote)
-                Section("本地分支") { ForEach(local, id: \.name) { Text($0.name).font(.mono(14)).tag(Optional($0.name)) } }
-                if !remote.isEmpty { Section("远程分支") { ForEach(remote, id: \.name) { Text($0.name).font(.mono(14)).tag(Optional($0.name)) } } }
+                Section("本地分支") { ForEach(local, id: \.name) { Text($0.name).font(.mono()).tag(Optional($0.name)) } }
+                if !remote.isEmpty { Section("远程分支") { ForEach(remote, id: \.name) { Text($0.name).font(.mono()).tag(Optional($0.name)) } } }
               }
               LabeledContent("分支名") {
-                TextField("", text: $branch).font(.mono(14)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never)
+                TextField("", text: $branch).font(.mono()).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never)
               }
-              if let problem = branchProblem(data) { Text(problem).foregroundStyle(Color.statusError) }
+              if let problem = branchProblem(data) { Text(problem).font(.ui(.footnote)).foregroundStyle(Color.noticeDanger) }
             }
           }
           Section {
             if data.agents.isEmpty {
-              LabeledContent("智能体", value: "Mac 上没有安装智能体")
+              LabeledContent("智能体") { Text("Mac 上没有安装").foregroundStyle(Color.noticeDanger) }
             } else {
               // A menu of our own: the system picker draws the chosen agent's mark flush against its name.
               LabeledContent("智能体") {
@@ -68,7 +70,7 @@ struct NewSessionView: View {
                   HStack(spacing: 8) {
                     AgentMark(agent: agent, size: 16)
                     Text(Shared.agent(agent).name)
-                    Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)).foregroundStyle(Color.textTertiary)
+                    Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.medium)).foregroundStyle(Color.textSecondary)
                   }
                   .foregroundStyle(Color.textPrimary)
                 }
@@ -79,16 +81,17 @@ struct NewSessionView: View {
             TextField("", text: $prompt, axis: .vertical).lineLimit(4...8)
           }
         } else if loadError == nil {
-          ProgressView().frame(maxWidth: .infinity)
+          Spinner(color: .textSecondary).frame(maxWidth: .infinity).accessibilityLabel("正在读取项目")
         }
-        if let error { Text(error).foregroundStyle(Color.statusError) }
       }
+      .scrollContentBackground(.hidden)
+      .background(Color.bgApp)
       .navigationTitle("新建会话")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button { Task { await create() } } label: { if busy { ProgressView() } else { Text("创建") } }
+          Button { Task { await create() } } label: { if busy { Spinner(color: .textPrimary) } else { Text("创建") } }
             .disabled(!ready || busy)
         }
       }

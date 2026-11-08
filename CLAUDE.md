@@ -35,6 +35,7 @@ In a fresh worktree run `npm install` first. While developing, run `npm run type
 | `src/main/hooks/`, `resources/hooks/`, `src/shared/agent-launch.ts` | Per-launch Claude hooks → `AgentEvent` / `PendingPrompt` (M2) | `hooks-bridge` |
 | `src/renderer/status/`, `src/shared/session-state-machine.ts`, `src/shared/current-action.ts` | Live status, notifications, Dock badge (M2) | `session-status` |
 | `src/renderer/prompt-bar/`, `src/shared/question-keys.ts` | Permission / question bar (M2) | `prompt-bar` |
+| `src/shared/session-settings.ts`, `src/shared/terminal-settings.ts`, `src/renderer/session-settings/` | The phone's 会话设置: model / effort / permission for one session (GUI pickers; Claude's TUI by keys) (F22 v1.144) | integrator |
 | `src/shared/gui-chat.ts`, `src/main/gui/`, `src/renderer/gui/` | GUI sessions: headless Claude / Codex / ACP agents drawn as a chat (F23) | `gui-sessions` |
 | `src/renderer/command-palette/` | ⌘K (M2) | `command-palette` |
 | `src/renderer/settings/` | Settings dialog UI (M3; a sheet over the main window) | `settings-ui` |
@@ -53,6 +54,7 @@ Stay inside the directories your task owns. If you truly need a change elsewhere
 - TypeScript strict; no `any`. Pure logic goes in `src/shared/` or a feature's `*.ts` file with a colocated `*.test.ts` (Vitest).
 - Styling: CSS Modules (`*.module.css`). Colors, spacing, radii and type **only** via variables in `src/renderer/styles/tokens.css`. Verify both themes (`<html data-theme="dark|light">`).
 - Design taste: quiet and systematic — chroma-0 neutrals, color only for status, hierarchy from type/alignment/hairlines, small radii, no cards/gradients/decorative captions. Status is never color-only (StatusGlyph shape + text).
+- Figma hand-off: screenshot and look at every changed screen before reporting, not a sample; a component edit counts as changing every screen that uses it. Render with `get_screenshot` in a separate call (CJK in text set during the same `use_figma` call can render blank).
 - Icons: `lucide-react`, `size={16} strokeWidth={1.75}`.
 - CJK: always keep a CJK family in font stacks; CJK occupies 2 terminal cells.
 - UI copy in Chinese; code, comments, commit messages in English. Conventional Commits (`feat(composer): …`).

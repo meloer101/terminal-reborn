@@ -8,6 +8,8 @@
 
 ## 当前位置
 
+- 2026-11-07：手机会话页加两边头像、Markdown 表格和会话设置（PRD v1.144）：在手机上改模型、思考程度、权限，只改这个会话；GUI 会话全部 agent 都能改，终端里目前是 Claude。
+- 2026-11-07：iPhone App 按 Figma「手机 · iOS」第 59–63 节改完（PRD v1.143）：新的设计 token 和 Dynamic Type，连接失败时写清原因（Mac 睡了、Wavi 没开、Tailscale 没开、版本不配），对话里工具调用合成一句、一轮结束有改动汇总、回答过的留回执，Live Activity 加汇总行和「已过期」。
 - 2026-11-07：窗口材质加回「实色」（PRD v1.139，Figma 57）：不透明的窗口，深色、浅色都不再是纯黑 / 纯白，对比从 17–19:1 降到 11–13:1。
 - 2026-11-06：架构审阅（4 个分片 review + 1 次独立核实，30 条里 21 条属实、9 条部分属实），按 8 批修复，见「进行中：架构审阅修复」。批次 1 合进 main：GUI「总是允许」不再写 `~/.claude/settings.json`、不再切换模式；reattach 之后重启的终端有输出、能输入；6 s 空闲标题自愈只对 Claude；关掉合并面板能停下正在跑的测试脚本，测试和归档脚本互不打断；rc 文件里有后台任务时登录 shell 的 PATH 照样读得到；后台审阅能认出中文文件名。每条都有修复前失败的回归测试。
 - 2026-11-05：主区贴边（PRD v1.135，Figma 55）：卡片贴住窗口的上、右、下边，会话头进卡片，终端超过一屏后滚到会话头下面并渐进模糊。
@@ -277,6 +279,16 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [x] 液态玻璃（2026-11-01，PRD v1.117，Figma 46′）：`mobile/src/ui/atoms.tsx` 的 `Glass`（iOS 26 `GlassView`，更早退回实色）和 `ScrollEdge`，标题栏、输入框、Git · 变更 的出口浮在内容上，面板和附件菜单是着色更重的玻璃。iOS 26.3 模拟器里对替身 Mac 深浅两种主题看过会话列表、会话页、附件菜单、出口面板、Git · 变更；iOS 26 以下的退回样式没在模拟器里看过
   - [x] 46″ 细节（2026-11-01，PRD v1.118）：「总是允许」改成整宽按钮，面板底角 54 和屏幕圆角同心；模拟器里浅色看过权限面板
   - [ ] 45G 的「文件」
+- [ ] 手机端生产级设计（2026-11-07 定，PRD v1.141）：Figma「手机 · iOS」页
+  - [x] 第 0 轮（2026-11-07，作者已确认）：第 59 节 `888:43993`，OpenAI Style 的 variables、17 个文字样式、22 个组件，深浅两版总览；会话列表标题定为 60C（第 60 节 `899:2079`）；被取代的旧稿已删
+  - [x] 第 1 轮出稿（2026-11-07）：第 61 节 `906:1776`，会话列表、会话页、权限、提问、Git · 变更、新建会话，深浅各一套；作者已看过并要求开始第 2 轮
+  - [x] 第 2 轮（2026-11-07，作者已确认）：第 62 节 `913:2662`，连接状态 4 屏、会话页升级、断线时的会话页（深浅），Live Activity 汇总行和已过期 3 张
+  - [x] 第 3 轮（2026-11-07，作者已确认）：第 63 节 `919:3843`，36 屏状态矩阵（配对 6、会话列表 3、会话页 8、权限和提问 5、Git 和出口 6、新建会话 5、无障碍 3），深浅各一
+  - [x] 按第 59–63 节改 `ios/`（2026-11-07，PRD v1.143）：token、Dynamic Type、降低透明度、减弱动态效果；全部画面和状态；连接失败原因（手机判断，`hello` 加协议号）；工具调用合成一句、这一轮的改动、回执；Live Activity 汇总行和已过期。测试 `WaviTests` 38 个（`TranscriptGroupsTests`、`FormatTests`、`LinkTests`、`ActivityStateTests`）、`server.test.ts`、`phone-assets.test.ts`；iOS 26.3 模拟器对替身 Mac 截了深色、浅色全部改过的画面，字号特大（AX XL）截了主画面，降低透明度只截了深色。真机没试：Tailscale 下的失败原因、锁屏「已过期」（要 10 分钟不更新）
+  - [x] 第 64 节和实现（2026-11-07，PRD v1.144）：两边头像、Markdown 表格、头像在手机上选、输入框按钮居中、会话设置（GUI 会话全部 agent；终端里的 Claude）。测试 `session-settings.test.ts`、`terminal-settings.test.ts`、`claude-terminal.test.ts`、`normalize.test.ts`、`remote.test.ts`、`model.test.ts`、WaviTests `MarkdownTests`；Claude 终端的按键用真 TUI 在隔离目录里跑过；iOS 模拟器对替身 Mac 截了深色、浅色、字号特大。真机没试
+  - [ ] 终端里的 Codex 会话设置（读 rollout 的 `thread_settings_applied` 拿当前值和模型清单）
+  - [ ] Figma 里删掉被取代的 45A、45D、46′G、46′C（等作者确认）
+  - [ ] 离线时显示上次的对话（现在离线进会话是空的）；重连的退避让 Mac 恢复后要等几秒才连上
 - [x] S2 灵动岛和锁屏卡片（2026-11-01，PRD v1.122，Figma 47）：WidgetKit 扩展 `ios/WaviActivity`，App 前台和刚退后台时更新，按钮走 `LiveActivityIntent`（允许 / 拒绝 / 提问选项，「更多」进 App）。测试 `ActivityStateTests`；iOS 26.3 模拟器对替身 Mac 点过提问选项和锁屏上的「允许」。作者手机上没试
 - [x] 手机提问修复（2026-11-01，PRD v1.123）：接管旧守护进程时不为手机挂起（它 10 s 就答空，回答会白发）；窗口重新接上同一进程时保留待回答的提问和权限。测试 `bridge.test.ts`、`daemon-endpoint.test.ts`，`e2e/remote.spec.ts` 新增 AskUserQuestion 端到端
 - [x] S2 空闲态（2026-11-01，PRD v1.124，Figma 47′）：没有要显示的会话时不立刻结束，换成「空闲」，安静 30 分钟后结束；只接着已有的卡片。测试 `ActivityStateTests`；模拟器对替身 Mac 看过紧凑和展开态，锁屏没截图。App 挂起时到点结束要等 S4

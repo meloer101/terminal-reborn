@@ -175,7 +175,7 @@ const calls = new Map<string, { owner: WebContents; resolve: (result: RemoteResu
  * 归档 runs the repository's archive script and records the worktree; an exit's preflight may ask GitHub; a send to a
  * session that has not started waits for its agent to come up.
  */
-const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { archive: 120_000, exits: 30_000, ship: 30_000, send: 30_000 }
+const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { archive: 120_000, exits: 30_000, ship: 30_000, send: 30_000, 'set-setting': 30_000 }
 
 function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Promise<RemoteResult> {
   if (!owner || owner.isDestroyed()) return Promise.resolve(remoteFail('Mac 上没有窗口打开这个会话'))
@@ -259,6 +259,10 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
     }
     case 'interrupt':
       return knownSession(request.session) ? askWindow(ownerOf(request.session), { type: 'interrupt', session: request.session }) : notFound
+    case 'set-setting':
+      return knownSession(request.session)
+        ? askWindow(ownerOf(request.session), { type: 'set-setting', session: request.session, kind: request.kind, value: request.value })
+        : notFound
     case 'permission': {
       const prompt = prompts.get(request.prompt)
       if (!prompt || prompt.kind !== 'permission') return remoteFail('已经在终端里处理了')

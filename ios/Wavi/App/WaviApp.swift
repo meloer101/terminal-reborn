@@ -24,6 +24,8 @@ enum Route: Hashable {
   case session(String)
   case changes(String)
   case tool(session: String, item: String)
+  /// The files one turn changed (its TurnChange's tool calls).
+  case turn(session: String, tools: [String])
   case diff(session: String, path: String, scope: String, oldPath: String?, untracked: Bool)
 }
 
@@ -46,6 +48,7 @@ struct RootView: View {
               case .session(let id): SessionView(id: id)
               case .changes(let id): ChangesView(id: id)
               case .tool(let session, let item): ToolView(session: session, item: item)
+              case .turn(let session, let tools): TurnView(session: session, tools: tools)
               case .diff(let session, let file, let scope, let oldPath, let untracked):
                 FileDiffView(session: session, path: file, scope: scope, oldPath: oldPath, untracked: untracked)
               }

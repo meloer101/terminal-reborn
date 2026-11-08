@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { claudeFixtures as fx } from './fixtures'
 import { CLI_AGENTS, hasHooks } from '@shared/agents'
 import type { HookAgent } from '@shared/agent-events'
-import { normalizeHook, parseQuestions, summarizeToolUse } from './normalize'
+import { agentSettings, normalizeHook, parseQuestions, summarizeToolUse } from './normalize'
 import { classifyNotification } from './notification'
 
 const claude = (event: string, payload: unknown) => normalizeHook('claude', event, payload)
@@ -359,5 +359,28 @@ describe('every agent the hook socket takes', () => {
       expect(normalizeHook(agent as HookAgent, turnEnd, { session_id: 's', last_assistant_message: 'done' }), agent).toBeDefined()
       expect(normalizeHook(agent as HookAgent, turnEnd, { session_id: 's', last_assistant_message: 'done' }).events.length, agent).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('agent settings for the phone (PRD F22 v1.144)', () => {
+  const settingsOf = (agent: HookAgent, event: string, payload: unknown) => agentSettings(agent, event, payload) ?? undefined
+
+  it('reads Claude model and effort from its statusLine, model from SessionStart, permission and effort from stop', () => {
+    expect(settingsOf('claude', 'StatusLine', { session_id: 's', model: { id: 'claude-opus-5-5', display_name: 'Opus 5.5' }, effort: { level: 'high' } })).toEqual({
+      type: 'agent-settings',
+      model: 'claude-opus-5-5',
+      effort: 'high'
+    })
+    expect(settingsOf('claude', 'SessionStart', fx.SessionStart)).toEqual({ type: 'agent-settings', model: 'claude-opus-5-5' })
+    expect(settingsOf('claude', 'Stop', fx.Stop)).toEqual({ type: 'agent-settings', effort: 'medium', permission: 'auto' })
+  })
+
+  it('reads only the model from Codex, and nothing from a payload without these fields', () => {
+    expect(settingsOf('codex', 'UserPromptSubmit', { session_id: 's', prompt: 'x', model: 'gpt-6-sol', permission_mode: 'default' })).toEqual({ type: 'agent-settings', model: 'gpt-6-sol' })
+    expect(settingsOf('claude', 'PreToolUse', { session_id: 's', tool_name: 'Read', tool_input: {} })).toBeUndefined()
+  })
+
+  it('ignores values that are not short names', () => {
+    expect(settingsOf('claude', 'Stop', { ...fx.Stop, permission_mode: 'auto; rm -rf', effort: { level: 'x'.repeat(200) } })).toBeUndefined()
   })
 })

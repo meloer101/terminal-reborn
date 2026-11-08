@@ -32,4 +32,31 @@ import Testing
     #expect(Link.mergeURLs(["not a url", "ws://a b"], current: nil, known: ["ws://x:1"]) == ["ws://x:1"])
     #expect(Link.mergeURLs((0..<20).map { "ws://10.0.0.\($0):7429" }, current: nil, known: []).count == 8)
   }
+
+  @Test func saysWhyTheMacCannotBeReached() {
+    let lan = "ws://192.168.1.5:7429", ts = "ws://100.101.1.2:7429"
+    // Refused at once: the Mac answered, nothing listens on the port.
+    #expect(Link.offlineReason([lan: .portClosed, ts: .timeout], tailscaleUp: true) == .waviNotRunning)
+    // Every address timed out: the Mac sleeps or is off the network.
+    #expect(Link.offlineReason([lan: .timeout, ts: .timeout], tailscaleUp: true) == .macAsleep)
+    // Only Tailscale addresses, and this phone has no Tailscale address: Tailscale is off here.
+    #expect(Link.offlineReason([ts: .timeout], tailscaleUp: false) == .tailscaleOff)
+    #expect(Link.offlineReason([ts: .timeout], tailscaleUp: true) == .macAsleep)
+    #expect(Link.offlineReason([lan: .noNetwork], tailscaleUp: false) == .noNetwork)
+    #expect(Link.offlineReason([:], tailscaleUp: true) == .unknown)
+    #expect(Link.offlineReason([lan: .other], tailscaleUp: true) == .unknown)
+  }
+
+  @Test func readsTailscaleAddressesAndProtocols() {
+    #expect(Link.isTailscale("ws://100.101.1.2:7429"))
+    #expect(Link.isTailscale("ws://mac.tail1234.ts.net:7429"))
+    #expect(!Link.isTailscale("ws://100.128.0.1:7429"))
+    #expect(!Link.isTailscale("ws://192.168.1.5:7429"))
+    #expect(Link.isTailscaleIPv4("100.64.0.1") && Link.isTailscaleIPv4("100.127.255.255") && !Link.isTailscaleIPv4("100.63.0.1"))
+    #expect(Link.protocolMismatch(mac: nil, phone: 1) == nil)
+    #expect(Link.protocolMismatch(mac: 1, phone: 1) == nil)
+    #expect(Link.protocolMismatch(mac: 1, phone: 2) == .macOutdated)
+    #expect(Link.protocolMismatch(mac: 3, phone: 2) == .phoneOutdated)
+  }
 }
+

@@ -18,6 +18,27 @@ private func session(_ id: String = "s", project: String = "p1", status: Session
     #expect(feed == Feed(start: 50, items: [text(50), text(51), text(52, "changed"), text(53)]))
   }
 
+  @Test func staleNoticeSaysHowOldTheListIs() {
+    let now = 10_000_000.0
+    #expect(staleNotice(heardAt: now - 20_000, now: now) == "显示的是 1 分钟内的状态")
+    #expect(staleNotice(heardAt: now - 12 * 60_000, now: now) == "显示的是 12 分钟前的状态")
+    #expect(staleNotice(heardAt: now - 125 * 60_000, now: now) == "显示的是 2 小时前的状态")
+    #expect(staleNotice(heardAt: nil, now: now) == "显示的不是最新的状态")
+  }
+
+  @Test func connectionLineSaysWhatIsWrong() {
+    let mac = "MacBook Pro"
+    #expect(connectionWords(.open(url: "ws://100.101.1.2:7429"), mac: mac, dropped: false) == ConnectionWords(text: "MacBook Pro · Tailscale", tone: .quiet))
+    #expect(connectionWords(.connecting, mac: mac, dropped: false).text == "正在连接 MacBook Pro")
+    #expect(connectionWords(.connecting, mac: mac, dropped: true).text == "连接断了，正在重连")
+    #expect(connectionWords(.offline(.macAsleep), mac: mac, dropped: true) == ConnectionWords(text: "MacBook Pro 已睡眠或离线", tone: .warning))
+    #expect(connectionWords(.offline(.waviNotRunning), mac: mac, dropped: true).text == "Mac 上的 Wavi 没有打开")
+    #expect(connectionWords(.offline(.tailscaleOff), mac: mac, dropped: true).text == "连不上 · 检查这台手机的 Tailscale")
+    #expect(connectionWords(.offline(.macOutdated), mac: mac, dropped: true).text == "Mac 上的 Wavi 需要更新")
+    #expect(connectionWords(.offline(.phoneOutdated), mac: mac, dropped: true).text == "这台手机上的 Wavi 需要更新")
+    #expect(connectionWords(.refused, mac: mac, dropped: false) == ConnectionWords(text: "MacBook Pro 不认识这台手机", tone: .danger))
+  }
+
   @Test func feedResetsOnResetOrGap() {
     let feed = Feed(start: 0, items: [text(0)])
     #expect(applyFeed(feed, start: 0, items: [], reset: true) == Feed(start: 0, items: []))

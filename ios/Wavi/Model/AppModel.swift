@@ -18,9 +18,13 @@ final class AppModel {
   }
 
   private(set) var pairing: Pairing?
-  private(set) var link: LinkState = .offline
+  private(set) var link: LinkState = .offline(.unknown)
+  /// A link that was open went away (the line says 连接断了，正在重连 rather than 正在连接).
+  private(set) var dropped = false
   private(set) var macName = ""
   private(set) var sessions = RemoteSessionList.empty
+  /// When the Mac last told this phone its sessions (ms): how old the list is once the link drops.
+  private(set) var heardAt: Double?
   private(set) var prompts: [RemotePrompt] = []
   /// The session on screen and its conversation.
   private(set) var watching: String?
@@ -28,6 +32,44 @@ final class AppModel {
   /// Messages sent from this phone that the session's transcript has not shown yet (the agent writes a message there
   /// only once it takes it): drawn at the end of the conversation at once, gone when the transcript has them.
   private(set) var sending: [String: [ChatItem]] = [:]
+  /// Answers given while this phone was connected, per session: left in the conversation where they happened.
+  private(set) var receipts: [String: [Receipt]] = [:]
+  /// The prompts as last listed, and the ones this phone answered (so a prompt that leaves without it was answered on the
+  /// Mac).
+  @ObservationIgnored private var listed: [String: RemotePrompt] = [:]
+  @ObservationIgnored private var answeredHere: Set<String> = []
+
+  /// Answers `prompt` from this phone (the app or the Live Activity). Marked as answered here before the request: the Mac
+  /// lists the prompts again as soon as it takes the answer, and that list may arrive before the reply.
+  func answer(_ prompt: RemotePrompt, _ command: PhoneCommand) async -> RemoteResult {
+    answeredHere.insert(prompt.id)
+    let result = await call(command)
+    if result.error != nil { answeredHere.remove(prompt.id) } else { answered(prompt, decision: command.decision) }
+    return result
+  }
+
+  private func answered(_ prompt: RemotePrompt, decision: String?) {
+    addReceipt(prompt, onPhone: true, decision: decision)
+  }
+
+  /// One receipt per prompt: a later one replaces it.
+  private func addReceipt(_ prompt: RemotePrompt, onPhone: Bool, decision: String?) {
+    let receipt = Receipt(id: "receipt-\(prompt.id)", at: Date().timeIntervalSince1970 * 1000, onPhone: onPhone,
+      text: receiptText(prompt, decision: decision, onPhone: onPhone))
+    receipts[prompt.sessionId, default: []].removeAll { $0.id == receipt.id }
+    receipts[prompt.sessionId, default: []].append(receipt)
+  }
+
+  /// A new list of prompts: the ones that left without an answer from here were answered on the Mac.
+  private func promptsListed(_ list: [RemotePrompt]) {
+    let ids = Set(list.map(\.id))
+    for (id, prompt) in listed where !ids.contains(id) && !answeredHere.contains(id) {
+      addReceipt(prompt, onPhone: false, decision: nil)
+    }
+    answeredHere.formIntersection(ids)
+    listed = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    prompts = list
+  }
 
   /// Sent from the composer: on screen now, before the Mac answers.
   func willSend(_ session: String, text: String, photos: Int) -> String {
@@ -91,6 +133,10 @@ final class AppModel {
 
   var isOpen: Bool { if case .open = link { return true } else { return false } }
 
+  /// What the connection line under the titles says.
+  var connection: ConnectionWords { connectionWords(link, mac: macName, dropped: dropped) }
+
+
   func session(_ id: String) -> RemoteSession? { sessions.sessions.first { $0.id == id } }
 
   /// Just paired.
@@ -108,9 +154,14 @@ final class AppModel {
     clientToken = UUID()
     PairingStore.clear()
     pairing = nil
-    link = .offline
+    link = .offline(.unknown)
+    dropped = false
     sessions = .empty
+    heardAt = nil
     prompts = []
+    receipts = [:]
+    listed = [:]
+    answeredHere = []
     watching = nil
     conversation = nil
     loaded = false
@@ -127,6 +178,8 @@ final class AppModel {
 
   /// The app came back to the foreground: check the link, and start the Live Activity if the background could not.
   func wake() {
+    // 重试 says it is trying (the retries in between keep the reason on screen).
+    if case .offline = link { link = .connecting }
     client?.wake()
     syncActivity()
   }
@@ -167,16 +220,24 @@ final class AppModel {
   /// sent; the prompt goes at once (Wavi's list follows), or the card says why it did not.
   func answerFromActivity(prompt: String, command: PhoneCommand) async {
     var result = RemoteResult.failed("没有连上 Mac")
+    var target: RemotePrompt?
     if await whenOpen() {
       if !(await refresh(timeout: 4)) {
         client?.networkChanged()
         if await whenOpen() { await refresh(timeout: 4) }
       }
-      if isOpen { result = await client?.request(command, timeout: 10) ?? result }
+      if isOpen {
+        // Taken before the request: the Mac's next list (it may come before the reply) no longer has it.
+        target = prompts.first { $0.id == prompt }
+        answeredHere.insert(prompt)
+        result = await client?.request(command, timeout: 10) ?? result
+      }
     }
     if let failure = result.error {
+      answeredHere.remove(prompt)
       activityFailure = (prompt, String(failure.prefix(80)))
     } else {
+      if let target { answered(target, decision: command.decision) }
       prompts.removeAll { $0.id == prompt }
       knownPrompts.remove(prompt)
     }
@@ -226,7 +287,8 @@ final class AppModel {
   func refresh(timeout: Double = Link.requestSeconds) async -> Bool {
     guard let snapshot = await client?.request(.snapshot, timeout: timeout).decode(Snapshot.self) else { return false }
     sessions = RemoteSessionList(projects: snapshot.projects, sessions: snapshot.sessions)
-    prompts = snapshot.prompts ?? []
+    heardAt = Date().timeIntervalSince1970 * 1000
+    promptsListed(snapshot.prompts ?? [])
     knownPrompts = Set(prompts.map(\.id))
     loaded = true
     syncActivity()
@@ -262,9 +324,10 @@ final class AppModel {
       }
     case .sessions(let list):
       sessions = list
+      heardAt = Date().timeIntervalSince1970 * 1000
       syncActivity()
     case .prompts(let list):
-      prompts = list
+      promptsListed(list)
       let ids = Set(list.map(\.id))
       let fresh = !ids.subtracting(knownPrompts).isEmpty
       knownPrompts = ids
@@ -277,7 +340,31 @@ final class AppModel {
     }
   }
 
+  /// A drop shows only after this: a link back within it never flashes a notice.
+  @ObservationIgnored private var grace: Task<Void, Never>?
+  @ObservationIgnored private var pendingLink: LinkState?
+
   private func changed(_ state: LinkState) {
+    if case .open = state {
+      grace?.cancel()
+      grace = nil
+      dropped = false
+    } else {
+      // While it cannot connect, a retry does not flash 正在连接 over the reason.
+      if case .connecting = state, case .offline = link { return }
+      if grace != nil || isOpen {
+        pendingLink = state
+        guard grace == nil else { return }
+        grace = Task {
+          try? await Task.sleep(for: .seconds(2))
+          guard !Task.isCancelled, let pending = pendingLink else { return }
+          dropped = true
+          link = pending
+          grace = nil
+        }
+        return
+      }
+    }
     link = state
     guard case .open = state else { return }
     Task {

@@ -10,7 +10,7 @@ import { applyTodoTool, sameTodos, type TodoItem } from '@shared/todo-progress'
 import { isWaviPrompt } from '@shared/ship-handoff'
 import { beginTurn, emptyTurnChecks, recordEdit, recordRuns, sameTurnChecks, type TurnChecks } from '@shared/turn-checks'
 import type { AgentTitleWatcher } from './agent-title'
-import { normalizeHook } from './normalize'
+import { agentSettings, normalizeHook } from './normalize'
 import { PERMISSION_TIMEOUT_MS, PermissionRegistry, type Scheduler } from './permission-registry'
 import { UnknownSessionError, type HookRequest } from './server'
 
@@ -34,6 +34,8 @@ interface SessionMeta {
   plan: boolean
   /** The checks of the current turn (PRD F9 / F4 “这一轮跑过哪些检查”). */
   checks: TurnChecks
+  /** The model, effort and permission mode last reported (the phone's 会话设置). */
+  settings: { model?: string; effort?: string; permission?: string }
 }
 
 /** Tools whose success means the agent changed files (Codex apply_patch arrives as Edit / Write). */
@@ -132,6 +134,7 @@ export class HookBridge {
     if (meta.todos.length > 0) this.emitMeta(sessionId, agent, at, { type: 'todos', items: meta.todos })
     if (!meta.plan) this.emitMeta(sessionId, agent, at, { type: 'billing', plan: false })
     if (hasChecks(meta.checks)) this.emitMeta(sessionId, agent, at, { type: 'checks', checks: meta.checks })
+    if (Object.keys(meta.settings).length > 0) this.emitMeta(sessionId, agent, at, { type: 'agent-settings', ...meta.settings })
   }
 
   /** False while the session's agent is off its vendor's plan (a third-party endpoint): its spend is not the account's. */
@@ -173,7 +176,7 @@ export class HookBridge {
   private metaOf(sessionId: string): SessionMeta {
     let meta = this.meta.get(sessionId)
     if (!meta) {
-      meta = { context: null, todos: [], plan: true, checks: emptyTurnChecks() }
+      meta = { context: null, todos: [], plan: true, checks: emptyTurnChecks(), settings: {} }
       this.meta.set(sessionId, meta)
     }
     return meta
@@ -181,6 +184,16 @@ export class HookBridge {
 
   private emitMeta(sessionId: string, agent: HookAgent, at: number, event: AgentEvent): void {
     this.emitter.event({ sessionId, agent, at, event })
+  }
+
+  /** Only a change crosses IPC: the statusLine carries the same model and effort every second or two. */
+  private setSettings(sessionId: string, agent: HookAgent, at: number, event: Extract<AgentEvent, { type: 'agent-settings' }> | null): void {
+    if (!event) return
+    const meta = this.metaOf(sessionId)
+    const { type: _type, ...reported } = event
+    if (Object.entries(reported).every(([k, v]) => meta.settings[k as keyof typeof meta.settings] === v)) return
+    meta.settings = { ...meta.settings, ...reported }
+    this.emitMeta(sessionId, agent, at, event)
   }
 
   /** The statusLine runs every second or two while a turn runs: only a different reading crosses IPC. */
@@ -312,6 +325,7 @@ export class HookBridge {
       if (e.type === 'context') this.setContext(sessionId, agent, at, e.context)
       else this.emitter.event({ sessionId, agent, at, event: e })
     }
+    this.setSettings(sessionId, agent, at, agentSettings(agent, event, request.payload))
     if (normalized.cleared) {
       this.setTodos(sessionId, agent, at, [])
       this.setContext(sessionId, agent, at, null)

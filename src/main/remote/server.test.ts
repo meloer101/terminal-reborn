@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import { ristretto255_hasher } from '@noble/curves/ed25519.js'
-import { REMOTE_LIMITS, type PhoneRequest, type RemoteResult } from '@shared/remote'
+import { REMOTE_LIMITS, REMOTE_PROTOCOL, type PhoneRequest, type RemoteResult } from '@shared/remote'
 import { b64u, newIdentity } from './crypto'
 import { DeviceStore, type StoredDevice } from './devices'
 import { RemoteServer, type RemoteConnection } from './server'
@@ -99,7 +99,7 @@ describe('an authenticated phone', () => {
     })
     const paired = await pairPhone(url, identity.publicKey, server.pairing()!.code)
     const phone = await TestPhone.connect(url, paired)
-    expect(phone.events[0]).toEqual({ event: 'hello', data: { name: 'Test Mac', version: '0.0.0' } })
+    expect(phone.events[0]).toEqual({ event: 'hello', data: { name: 'Test Mac', version: '0.0.0', protocol: REMOTE_PROTOCOL } })
     expect(await phone.request({ type: 'snapshot' })).toEqual({ re: 1, ok: true, data: { sessions: 0 } })
     expect(seen).toEqual([{ id: 1, type: 'snapshot' }])
     expect(server.online().has(paired.device)).toBe(true)

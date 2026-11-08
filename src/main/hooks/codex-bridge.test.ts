@@ -31,7 +31,9 @@ describe('HookBridge · codex', () => {
   it('stamps events with the codex agent', async () => {
     const { bridge, events, req } = setup()
     await bridge.handle(req('UserPromptSubmit', fx.UserPromptSubmit))
-    expect(events).toEqual([{ sessionId: 's1', agent: 'codex', at: 1000, event: { type: 'prompt-submit', prompt: 'Reply with only the word OK.' } }])
+    expect(events[0]).toEqual({ sessionId: 's1', agent: 'codex', at: 1000, event: { type: 'prompt-submit', prompt: 'Reply with only the word OK.' } })
+    // Then the model it reported, for the phone's 会话设置 (the fixture's envelope carries `model`).
+    expect(events.slice(1)).toEqual([{ sessionId: 's1', agent: 'codex', at: 1000, event: { type: 'agent-settings', model: 'gpt-5.5' } }])
   })
 
   it('holds a PermissionRequest and answers with a Codex-shaped decision (no interrupt / updatedPermissions)', async () => {

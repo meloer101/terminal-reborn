@@ -3,6 +3,7 @@
 // (src/main/remote); the phone app speaks the same messages inside them.
 import { isCliAgent, type CliAgent } from './agents'
 import type { PendingPrompt } from './agent-events'
+import { isSettingKind, parseSessionSettings, settingValue, type SessionSettings, type SettingKind } from './session-settings'
 import type { ChatItem } from './transcript-chat'
 import type { AgentKind, SessionStatus } from './types'
 
@@ -27,6 +28,11 @@ export const REMOTE_IPC = {
 
 /** Default port of the phone server (设置 · 手机); one per Mac, the dev profile included. */
 export const DEFAULT_REMOTE_PORT = 7429
+/**
+ * What the phone and the Mac speak: bumped when a change would break the other side, so a phone can say which of the
+ * two needs updating (Figma 62, 「需要更新」) instead of failing in odd ways. A Mac without it in hello speaks 1.
+ */
+export const REMOTE_PROTOCOL = 1
 
 export const REMOTE_LIMITS = {
   /** A pairing code is good for this long and this many wrong tries. */
@@ -196,6 +202,8 @@ export interface RemoteSession {
   ship?: RemoteShip
   /** How the last exit ended (`已合并到 main 并推送 · a41c9e2`). */
   shipNotice?: string
+  /** Model, effort and permission for this session (Figma 64B–64F). */
+  settings?: SessionSettings
 }
 
 export interface RemoteSessionList {
@@ -248,6 +256,8 @@ export type PhoneCommand =
   | { type: 'ship'; session: string; action: RemoteShipAction }
   /** 归档 the session's worktree (PRD F15). */
   | { type: 'archive'; session: string }
+  /** Set the session's model, effort or permission, for this session only (Figma 64B–64D). */
+  | { type: 'set-setting'; session: string; kind: SettingKind; value: string }
 
 export type PhoneRequest = PhoneCommand & { id: number }
 
@@ -350,6 +360,10 @@ export function parsePhoneRequest(raw: unknown): PhoneRequest | null {
     }
     case 'interrupt':
       return isId(v.session) ? { id, type: 'interrupt', session: v.session } : null
+    case 'set-setting': {
+      const value = settingValue(v.value)
+      return isId(v.session) && isSettingKind(v.kind) && value !== null ? { id, type: 'set-setting', session: v.session, kind: v.kind, value } : null
+    }
     case 'permission':
       if (!isId(v.prompt) || (v.decision !== 'allow-once' && v.decision !== 'allow-always' && v.decision !== 'deny')) return null
       return { id, type: 'permission', prompt: v.prompt, decision: v.decision }
@@ -411,7 +425,7 @@ export type RemotePrompt = PendingPrompt & { answerable: boolean }
 
 export type PhoneEvent =
   /** `urls`: where this Mac can be reached now (its LAN address may have changed since pairing). */
-  | { event: 'hello'; data: { name: string; version: string; urls?: string[] } }
+  | { event: 'hello'; data: { name: string; version: string; protocol: number; urls?: string[] } }
   | { event: 'sessions'; data: RemoteSessionList }
   | { event: 'prompts'; data: RemotePrompt[] }
   /** New or changed items at the end of a watched session's feed; `reset` replaces what the phone has. */
@@ -441,6 +455,7 @@ export type RemoteWindowCommand =
   | { type: 'exits'; session: string }
   | { type: 'ship'; session: string; action: RemoteShipAction }
   | { type: 'archive'; session: string }
+  | { type: 'set-setting'; session: string; kind: SettingKind; value: string }
 
 export interface RemoteWindowRequest {
   callId: string
@@ -505,6 +520,9 @@ function windowSession(raw: unknown): RemoteSession | null {
   const notice = optText(s.shipNotice, 300)
   if (notice === null) return null
   if (notice) out.shipNotice = notice
+  // Settings that do not validate are left off; the session still shows.
+  const settings = s.settings === undefined ? null : parseSessionSettings(s.settings)
+  if (settings) out.settings = settings
   return out
 }
 

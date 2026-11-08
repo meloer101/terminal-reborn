@@ -1,8 +1,11 @@
 // 手机远程 in the window (PRD F22): while 允许手机连接 is on, tells main about its sessions whenever they change, and
 // carries out what main forwards from the phone. Started once by the shell.
 import { DEFAULT_SETTINGS } from '@shared/settings'
+import { useGuiSessions } from '../gui/store'
 import { useShips } from '../pull-requests/ship-runner'
 import { usePullRequests } from '../pull-requests/store'
+import { useSessionMeta } from '../session-meta/store'
+import { sessionSettings } from '../session-settings'
 import { useWorkspace } from '../state/workspace'
 import { handleRemoteCommand } from './handler'
 import { remoteSessions } from './model'
@@ -28,7 +31,7 @@ export function startRemoteBridge(): () => void {
     if (!enabled || timer !== null) return
     timer = window.setTimeout(() => {
       timer = null
-      const list = remoteSessions(useWorkspace.getState(), { ships: useShips.getState().byWorktree, endings })
+      const list = remoteSessions(useWorkspace.getState(), { ships: useShips.getState().byWorktree, endings }, sessionSettings)
       const text = JSON.stringify(list)
       if (text === last) return
       last = text
@@ -45,6 +48,14 @@ export function startRemoteBridge(): () => void {
     if (s.remote.enabled !== enabled) setEnabled(s.remote.enabled)
   })
   const offStore = useWorkspace.subscribe(publish)
+  // A GUI session's pickers change in its own store (the phone's 会话设置, Figma 64B).
+  const offGui = useGuiSessions.subscribe((state, before) => {
+    if (Object.keys(state.states).some((id) => state.states[id]?.config !== before.states[id]?.config)) publish()
+  })
+  // What a terminal agent reports of its model, effort and permission (hooks, statusLine).
+  const offMeta = useSessionMeta.subscribe((state, before) => {
+    if (Object.keys(state.bySession).some((id) => state.bySession[id]?.settings !== before.bySession[id]?.settings)) publish()
+  })
   // An exit's steps and how it ended show on the phone (Figma 45J).
   const offShips = useShips.subscribe((state, before) => {
     for (const path of Object.keys(state.byWorktree)) if (!before.byWorktree[path]) delete endings[path]
@@ -66,6 +77,8 @@ export function startRemoteBridge(): () => void {
     if (timer !== null) window.clearTimeout(timer)
     offSettings()
     offStore()
+    offGui()
+    offMeta()
     offShips()
     offNotices()
     offRequests()

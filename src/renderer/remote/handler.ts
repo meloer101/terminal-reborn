@@ -7,6 +7,7 @@ import { setLaunch } from '../dispatch/store'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
 import { branchProblemText, planCreate } from '../new-session/model'
 import { insertPaths, interruptAgent, submitInputLine, submitPrompt, whenAgentReady } from '../session-io'
+import { setSessionSetting } from '../session-settings'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
 import { remoteArchive, remoteExits, remoteShipAction } from './exits'
@@ -85,6 +86,8 @@ export async function handleRemoteCommand(command: RemoteWindowCommand): Promise
         return await remoteShipAction(command.session, command.action)
       case 'archive':
         return await remoteArchive(command.session)
+      case 'set-setting':
+        return await setSessionSetting(command.session, command.kind, command.value)
     }
   } catch (error) {
     return failure(error)

@@ -68,6 +68,29 @@ struct RemoteSession: Codable, Hashable, Sendable, Identifiable {
   let reply: String?
   let ship: RemoteShip?
   let shipNotice: String?
+  /// Model, effort and permission for this session (src/shared/session-settings.ts, Figma 64B–64F).
+  var settings: SessionSettings? = nil
+}
+
+struct SessionSettings: Codable, Hashable, Sendable {
+  struct Value: Codable, Hashable, Sendable {
+    let value: String
+    let label: String
+  }
+
+  struct Item: Codable, Hashable, Sendable {
+    /// model / effort / permission
+    let kind: String
+    let current: String
+    let values: [Value]
+    var currentLabel: String { values.first { $0.value == current }?.label ?? current }
+  }
+
+  let items: [Item]
+  /// "running": the agent is mid-turn in its terminal, nothing changes until it stops (64E).
+  let locked: String?
+  /// Shown, never changed (64F).
+  let readOnly: Bool?
 }
 
 struct RemoteSessionList: Codable, Hashable, Sendable {
@@ -205,6 +228,8 @@ struct NewSessionInfo: Codable, Hashable, Sendable {
 struct Hello: Codable, Sendable {
   let name: String
   let version: String
+  /// REMOTE_PROTOCOL; absent from a Mac before it (that Mac speaks 1).
+  let `protocol`: Int?
   let urls: [String]?
 }
 
@@ -257,6 +282,10 @@ enum PhoneCommand: Sendable {
   case exits(session: String)
   case ship(session: String, action: ShipAction)
   case archive(session: String)
+  case setSetting(session: String, kind: String, value: String)
+
+  /// A permission answer's decision (for the receipt it leaves).
+  var decision: String? { if case .permission(_, let d) = self { return d } else { return nil } }
 
   var fields: [String: JSONValue] {
     switch self {
@@ -283,6 +312,7 @@ enum PhoneCommand: Sendable {
     case .exits(let s): return ["type": .string("exits"), "session": .string(s)]
     case .ship(let s, let action): return ["type": .string("ship"), "session": .string(s), "action": action.json]
     case .archive(let s): return ["type": .string("archive"), "session": .string(s)]
+    case .setSetting(let s, let kind, let value): return ["type": .string("set-setting"), "session": .string(s), "kind": .string(kind), "value": .string(value)]
     }
   }
 }

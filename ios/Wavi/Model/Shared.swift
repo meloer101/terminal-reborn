@@ -25,11 +25,19 @@ struct Shared: Decodable, Sendable {
     let length: Int
     let defaultPort: Int
   }
+  /// A colour that means something (status, diff) in both themes, `#rrggbb` or `#rrggbbaa`, from the desktop's tokens.css.
+  struct ThemedColor: Decodable, Sendable {
+    let dark: String
+    let light: String
+  }
+  let colors: [String: ThemedColor]
   let statusLabel: [String: String]
   let agents: [Agent]
   let branchWords: Words
   let limits: Limits
   let pairing: Pairing
+  /// What this app speaks to the Mac (REMOTE_PROTOCOL).
+  let `protocol`: Int
 
   static let data: Shared = {
     guard let url = Bundle.main.url(forResource: "Shared", withExtension: "json"), let bytes = try? Data(contentsOf: url),
