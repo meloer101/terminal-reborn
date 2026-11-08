@@ -50,7 +50,7 @@ const BASELINE: Record<string, number> = {
   'review/ReviewBlock.module.css': 1,
   'session-header/SessionHeader.module.css': 1,
   'session-meta/SessionMeta.module.css': 10,
-  'settings/AppearancePane.module.css': 6,
+  'settings/AppearancePane.module.css': 1,
   'settings/PhonePane.module.css': 2,
   'settings/PreviewTerminal.module.css': 2,
   'settings/UsagePane.module.css': 3,

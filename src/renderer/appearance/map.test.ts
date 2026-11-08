@@ -105,6 +105,22 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     expect(toAppearanceDom({ ...a, windowMaterial: 'liquid' }, false).attrs['data-material']).toBe('frosted')
   })
 
+  it('实色 makes everything solid (Figma 66): the terminal and chat cards ignore their opacity, which stays saved', () => {
+    const a = { ...base, windowMaterial: 'solid' as const, terminalOpacity: 0.6, chat: { ...base.chat, opacity: 0.7 } }
+    expect(terminalBackgroundAlpha(a)).toBe(1)
+    expect(needsTransparency(a)).toBe(false)
+    expect(toTerminalAppearance(a).backgroundAlpha).toBe(1)
+    const vars = toAppearanceDom(a, true).vars
+    expect(vars['--tr-chat-bg']).toBe('var(--bg-app)')
+    expect(vars['--tr-terminal-backdrop']).toBe('var(--term-bg)')
+    expect(vars['--tr-term-surface']).toBe('var(--term-bg)')
+    expect(vars['--tr-term-ring']).toBe('transparent')
+    // Back on glass, the saved values apply again.
+    const glass = toAppearanceDom({ ...a, windowMaterial: 'frosted' }, true).vars
+    expect(glass['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 70%, transparent)')
+    expect(glass['--tr-term-ring']).toBe('color-mix(in srgb, var(--term-bg) 60%, transparent)')
+  })
+
   it('shows the user’s picture only when there is one', () => {
     const avatar = 'data:image/webp;base64,UklGRg=='
     const dom = toAppearanceDom({ ...base, chat: { ...base.chat, avatar } }, true)
