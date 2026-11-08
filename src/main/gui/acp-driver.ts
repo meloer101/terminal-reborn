@@ -139,9 +139,9 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
   }
 
   function turnDone(stopReason: string | undefined, error?: string): void {
-    io.emit(normalizer.promptDone(stopReason))
-    if (error) io.turnEnd({ failed: true, message: error })
-    else io.turnEnd({ failed: stopReason === 'refusal', ...(stopReason === 'refusal' ? { message: `${options.label} 拒绝了这个请求` } : {}) })
+    const failure = error ?? (stopReason === 'refusal' ? `${options.label} 拒绝了这个请求` : undefined)
+    io.emit(normalizer.promptDone(stopReason, failure))
+    io.turnEnd({ failed: failure !== undefined, ...(failure !== undefined ? { message: failure } : {}) })
   }
 
   function update(update: Rec, replay: boolean): void {

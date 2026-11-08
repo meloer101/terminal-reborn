@@ -16,65 +16,13 @@ import {
   type GuiPermissionOption,
   type GuiPrompt
 } from '@shared/gui-chat'
-import { CHAT_LIMITS, type ChatItem, type DiffHunk } from '@shared/transcript-chat'
+import { CHAT_LIMITS, fileDiffs, lineDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text)
 const tail = (text: string, max: number): string => (text.length > max ? `…${text.slice(text.length - max)}` : text)
-
-const CONTEXT = 3
-/** Above this many line pairs the diff is shown as a whole replacement (the table would be too big). */
-const MAX_PAIRS = 4_000_000
-
-/** Old / new text → hunks with three lines of context (longest common subsequence of lines). */
-export function lineDiff(oldText: string, newText: string): DiffHunk[] {
-  const a = oldText === '' ? [] : oldText.replace(/\n$/, '').split('\n')
-  const b = newText === '' ? [] : newText.replace(/\n$/, '').split('\n')
-  type Op = { op: ' ' | '-' | '+'; line: string; oldNo: number; newNo: number }
-  const ops: Op[] = []
-  if (a.length * b.length > MAX_PAIRS) {
-    a.forEach((line, i) => ops.push({ op: '-', line, oldNo: i + 1, newNo: 1 }))
-    b.forEach((line, i) => ops.push({ op: '+', line, oldNo: a.length + 1, newNo: i + 1 }))
-  } else {
-    const w = b.length + 1
-    const lcs = new Uint32Array((a.length + 1) * w)
-    for (let i = a.length - 1; i >= 0; i--) {
-      for (let j = b.length - 1; j >= 0; j--) {
-        lcs[i * w + j] = a[i] === b[j] ? lcs[(i + 1) * w + j + 1]! + 1 : Math.max(lcs[(i + 1) * w + j]!, lcs[i * w + j + 1]!)
-      }
-    }
-    let i = 0
-    let j = 0
-    while (i < a.length || j < b.length) {
-      if (i < a.length && j < b.length && a[i] === b[j]) ops.push({ op: ' ', line: a[i++]!, oldNo: i, newNo: ++j })
-      // Removals before additions, as git prints them.
-      else if (i < a.length && (j >= b.length || lcs[(i + 1) * w + j]! >= lcs[i * w + j + 1]!)) ops.push({ op: '-', line: a[i++]!, oldNo: i, newNo: j + 1 })
-      else ops.push({ op: '+', line: b[j++]!, oldNo: i + 1, newNo: j })
-    }
-  }
-  const hunks: DiffHunk[] = []
-  let k = 0
-  while (k < ops.length) {
-    if (ops[k]!.op === ' ') {
-      k++
-      continue
-    }
-    const from = Math.max(0, k - CONTEXT)
-    let to = k
-    let quiet = 0
-    while (to < ops.length && quiet <= CONTEXT * 2) {
-      quiet = ops[to]!.op === ' ' ? quiet + 1 : 0
-      to++
-    }
-    const end = Math.min(ops.length, to - Math.max(0, quiet - CONTEXT))
-    const slice = ops.slice(from, end)
-    hunks.push({ oldStart: slice[0]!.oldNo, newStart: slice[0]!.newNo, lines: slice.map((o) => `${o.op}${o.line}`) })
-    k = end
-  }
-  return hunks
-}
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
@@ -96,36 +44,10 @@ function textOfBlock(block: unknown): string {
   return isRec(block) && block.type === 'text' ? (str(block.text) ?? '') : ''
 }
 
-function rel(path: string, cwd: string): string {
-  return path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path
-}
-
-function diffOfContent(content: unknown, cwd: string): ToolItem['diff'] | undefined {
+/** The diff blocks of a tool call's content, one per file. */
+function diffsOfContent(content: unknown, cwd: string): FileDiff[] {
   const diffs = (Array.isArray(content) ? content : []).filter((c): c is Rec => isRec(c) && c.type === 'diff')
-  if (diffs.length === 0) return undefined
-  let added = 0
-  let removed = 0
-  let budget: number = CHAT_LIMITS.diffLines
-  let truncated = false
-  const hunks: DiffHunk[] = []
-  for (const d of diffs) {
-    for (const h of lineDiff(str(d.oldText) ?? '', str(d.newText) ?? '')) {
-      for (const l of h.lines) {
-        if (l.startsWith('+')) added++
-        else if (l.startsWith('-')) removed++
-      }
-      if (budget <= 0) {
-        truncated = true
-        continue
-      }
-      const lines = h.lines.slice(0, budget)
-      if (lines.length < h.lines.length) truncated = true
-      budget -= lines.length
-      hunks.push({ ...h, lines })
-    }
-  }
-  const path = rel(str(diffs[0]!.path) ?? '', cwd)
-  return { path: diffs.length > 1 ? `${path} 等 ${diffs.length} 个文件` : path, hunks, added, removed, truncated }
+  return fileDiffs(diffs.map((d) => ({ path: rel(str(d.path) ?? '', cwd), hunks: lineDiff(str(d.oldText) ?? '', str(d.newText) ?? '') })))
 }
 
 function outputOfContent(content: unknown): string | undefined {
@@ -146,8 +68,8 @@ export interface AcpPending {
 
 export interface AcpNormalizer {
   update(update: Rec): GuiEvent[]
-  /** `session/prompt` returned: the turn is over. */
-  promptDone(stopReason: string | undefined): GuiEvent[]
+  /** `session/prompt` returned: the turn is over. `failure`: why it failed (an error, a refusal), shown as a line. */
+  promptDone(stopReason: string | undefined, failure?: string): GuiEvent[]
   /** The user's own message, shown at once (ACP does not echo it back). */
   sent(id: string, text: string, images: number): GuiEvent[]
   request(id: string, params: Rec): GuiEvent[]
@@ -164,6 +86,10 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
   const waiting = new Map<string, AcpPending>()
   let seq = 0
   let live: { kind: 'text' | 'thinking'; text: string } | null = null
+  // The plan row of this turn: updates rewrite it; a message from the user starts the next one.
+  let planId: string | null = null
+  // The replayed user message still being received: its chunks arrive back to back.
+  let replayed: { key: string; item: Extract<ChatItem, { kind: 'user' }> } | null = null
 
   const put = (key: string, item: ChatItem): GuiEvent => {
     let index = indexOf.get(key)
@@ -195,7 +121,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
     const locations = (Array.isArray(update.locations) ? update.locations : []).filter(isRec)
     const path = str(locations[0]?.path)
     const status = str(update.status)
-    const diff = 'content' in update ? diffOfContent(update.content, cwd) : before?.diff
+    const files = 'content' in update ? diffsOfContent(update.content, cwd) : (before?.files ?? (before?.diff ? [before.diff] : []))
+    const diff = files[0]
     const output = 'content' in update ? outputOfContent(update.content) : before?.output
     const item: ToolItem = {
       kind: 'tool',
@@ -205,7 +132,8 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
       arg: clip(((path ? rel(path, cwd) : undefined) ?? title ?? before?.arg ?? '').replace(/\s+/g, ' ').trim(), CHAT_LIMITS.arg),
       state: status ? (STATE[status] ?? 'running') : (before?.state ?? 'running'),
       ...(output ? { output } : {}),
-      ...(diff ? { diff } : {})
+      ...(diff ? { diff } : {}),
+      ...(files.length > 1 ? { files } : {})
     }
     tools.set(id, item)
     return [...flush(), put(id, item)]
@@ -213,6 +141,7 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
 
   return {
     update(update) {
+      if (update.sessionUpdate !== 'user_message_chunk') replayed = null
       switch (update.sessionUpdate) {
         case 'agent_message_chunk':
         case 'agent_thought_chunk': {
@@ -222,16 +151,26 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
           live = { kind, text: (live?.text ?? '') + piece }
           return [...events, { type: 'live', live: { ...live } }]
         }
-        case 'user_message_chunk':
+        case 'user_message_chunk': {
           // Replayed history (session/load); a live session shows the user's message from `sent`.
-          return [...flush(), put(`u${seq}`, { kind: 'user', id: `u${seq++}`, at: now(), text: clip(textOfBlock(update.content), CHAT_LIMITS.text), images: 0 })]
+          planId = null
+          const piece = textOfBlock(update.content)
+          if (replayed) {
+            replayed = { ...replayed, item: { ...replayed.item, text: clip(replayed.item.text + piece, CHAT_LIMITS.text) } }
+            return [put(replayed.key, replayed.item)]
+          }
+          const key = `u${seq}`
+          replayed = { key, item: { kind: 'user', id: `u${seq++}`, at: now(), text: clip(piece, CHAT_LIMITS.text), images: 0 } }
+          return [...flush(), put(key, replayed.item)]
+        }
         case 'tool_call':
         case 'tool_call_update':
           return tool(update)
         case 'plan': {
-          const entries = (Array.isArray(update.entries) ? update.entries : []).filter(isRec)
-          const text = entries.map((e) => `${e.status === 'completed' ? '✓' : e.status === 'in_progress' ? '◌' : '○'} ${str(e.content) ?? ''}`).join('\n')
-          return [...flush(), put('plan', { kind: 'system', id: 'plan', at: now(), text })]
+          // A task row (the list above the composer shows the latest), rewritten by each update within a turn.
+          const todos = todosOf(update.entries)
+          planId ??= `plan${seq++}`
+          return [...flush(), put(planId, { kind: 'tool', id: planId, at: now(), name: 'Plan', arg: todosArg(todos), state: 'ok', todos })]
         }
         case 'available_commands_update':
           return [{ type: 'commands', commands: acpCommands(update.availableCommands) }]
@@ -239,15 +178,19 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
           return []
       }
     },
-    promptDone(stopReason) {
+    promptDone(stopReason, failure) {
+      replayed = null
       const events = flush()
       if (stopReason === 'cancelled') events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: '已中断' }))
+      else if (failure) events.push(put(`s${seq}`, { kind: 'system', id: `s${seq++}`, at: now(), text: clip(failure, 300) }))
       for (const id of waiting.keys()) events.push({ type: 'prompt-done', id })
       waiting.clear()
       events.push({ type: 'busy', busy: false })
       return events
     },
     sent(id, text, images) {
+      planId = null
+      replayed = null
       return [...flush(), put(id, { kind: 'user', id, at: now(), text: clip(text, CHAT_LIMITS.text), images }), { type: 'busy', busy: true }]
     },
     request(id, params) {
@@ -297,7 +240,7 @@ export function acpCommands(raw: unknown): GuiCommand[] {
     const name = str(c.name)
     if (!name) return []
     const hint = isRec(c.input) ? str(c.input.hint) : undefined
-    return [{ name, description: str(c.description) ?? '', ...(hint ? { argumentHint: hint } : {}) }]
+    return [{ name, description: str(c.description) ?? '', ...(hint ? { argumentHint: hint } : {}), kind: 'command' as const }]
   })
 }
 

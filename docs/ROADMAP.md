@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-07
+> 最后更新：2026-11-08
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -249,11 +249,23 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Figma 56 和实现（PRD v1.133）：所有 agent 的选择器用同一套名字——权限（询问 / 接受编辑 / 自动）、「计划」开关、推理强度（低 … 最高）；Claude `permissionMode`、Codex `approvalPolicy` + `approvalsReviewer`、Grok 启动参数（换档重开进程）、其余 ACP agent 由 Wavi 替你回答改文件的请求；ACP 的推理强度按 `thought_level` 和常见 id 认、分组选项展开、agent 的 plan 模式归到「计划」；e2e `gui-session.spec.ts` 20 个，host 测试加通用 ACP 和 Grok 重开；权限和计划随会话存进 workspace.json，重新接上或重开时 agent 从这一档开始（Claude `--permission-mode`、Codex 每轮的审批设置、ACP 由 Wavi 回答、Grok 启动参数），界面显示的就是它在跑的档
 - [x] Wavi 启动的终端和 agent 用 macOS 系统代理（PRD v1.134 / §6.18）：环境里没有代理变量时读 `scutil --proxy`（PAC 用 Electron 解析），每分钟刷新；去掉代理变量启动后真 Grok GUI 会话能回复
 - [x] 思考行只在有文字时出现（PRD v1.136 / §6.17）：所有 agent 空的思考不生成（手机远程同一个解析器）；Claude ≥ 2.1.94 启动时加 `--thinking-display summarized`；进行中的「思考中」透明度往复；e2e `gui-session.spec.ts` 21 个
+- [x] 数据丢失和显示 bug（2026-11-07，作者看过审查后定「先修 bug 和数据丢失」，只用现有样式）：重开 Claude 会话后 `/cost` `/context` 等本地命令的输出不再消失（实测 `-p` 实时是 synthetic 文字、transcript 是 `<local-command-stdout>`）；Codex `turn/start` 被拒、ACP prompt 出错或被拒时对话流写出原因（Codex 的最终 `error` 不重复）；Codex MCP / dynamic 工具的结果和错误进输出；ACP 计划一项一行、每轮一行；ACP 载入历史时一条消息不再拆成多个气泡；Codex 历史按 `Exit code` / `Process exited with code` 判工具成败；工具输出去掉终端转义码（模型里保留）；回复、气泡、计划卡片的 Markdown 跟随「对话 · 字号」（文件预览的同权重规则在打包后排在后面、一直盖住了它们，main 上 e2e「reads like a chat」原本就失败）
+- [x] 第二阶段 · 字号体系、输入框、列对齐、空会话（PRD v1.146，Figma 59J / 59J′ / 59G）：标题、代码、工具行、思考行、表格、卡片明细和排队消息都按「对话 · 字号」的比例；对话自己的 Markdown 样式（不再借文件预览的）；输入框和编辑框一圈细线、输入时加深；消息列等于输入框宽度，头像挂在列外；新会话 agent 图标和名字在输入框上方、一起居中；e2e `gui-session.spec.ts` 加空会话和列对齐的检查
+- [x] 第二阶段 · 工具行和命令输出的颜色（PRD v1.147，Figma 59J）：工具行是「图标 · 中文动词 · 目标」，Claude 的工具、Codex（Bash / Edit / WebSearch）和 ACP 的工具类别一张表（`model.ts` `TOOL_WORDS`），其余工具（MCP、agent 自己的）是扳手加工具原名；状态图标只在运行、等你确认、出错时代替工具图标；思考行同样式；展开的输出按 SGR 着色（`ansi.ts`，`--term-*`），复制仍是纯文字；e2e `gui-session.spec.ts` 22 个
+- [x] 第二阶段 · 命令的整条文字和退出码（PRD v1.148，Figma 59J）：工具项加 `input` / `exit`（Claude Bash、Codex app-server 和 rollout）；失败的命令行尾 `exit N`；展开的输出从 `$ 命令` 开始；e2e `gui-session.spec.ts` 检查 `$ 命令` 一行
+- [x] 第二阶段 · 多文件 diff（PRD v1.149，Figma 59J）：工具项加 `files`（Codex `fileChange`、ACP 多个 diff），`diff` 保留为第一个文件；共用的 `fileDiffs`（`transcript-chat.ts`）替换三处各自的计数和截断；展开后每个文件一块（`DiffBlock.tsx`），行尾是合计
+- [x] 第二阶段 · 任务清单（PRD v1.150，Figma 59J）：工具项加 `todos`（Claude TodoWrite、Codex `turn/plan/updated` 和 rollout `update_plan`、ACP `plan`，ACP 的计划从系统行改为 `Plan` 工具行）；最新一份未完成的清单在输入框上方成卡片（`Todos.tsx`，选取逻辑 `model.ts` `currentTodos`）；对话流里「任务 · N 项」展开同一份清单；e2e `gui-session.spec.ts` 加任务卡片（23 个）
+- [x] 第二阶段 · 确认卡片的 diff（PRD v1.151，Figma 59I）：权限请求加 `diff`（Claude Edit / MultiEdit / Write，超过 200 行不带；Codex 文件审批按 `itemId` 找 fileChange）；卡片里用 `DiffBlock`，最高 200；e2e `gui-session.spec.ts` 加 Edit 确认卡片（24 个）
+- [x] 第二阶段 · 「/」菜单分组（PRD v1.152，Figma 59H）：`GuiCommand.kind`；Claude 读每轮 `system/init` 的 `skills` 标记命令（第一轮前没有这份名单，全部算命令）；ACP 都是命令；菜单「命令」「Skills」两组，显示参数提示；e2e `gui-session.spec.ts` 检查两组和按键顺序
+- [x] 第二阶段 · 子 agent 原处展开（PRD v1.153，Figma 59J）：文字 / 思考 / 工具项加 `parent`，工具项加 `ms`；Claude 实时流里带 `parent_tool_use_id` 的消息挂到 Agent 行下（transcript 里没有父 id 的照旧丢弃）；`feedBlocks` 按 `parent` 分组，Agent 行运行中展开、完成后收起，行尾用时；Codex `collabAgentToolCall` 成一行「子 agent」（按生成的类型，未实测）；e2e `gui-session.spec.ts` 加子 agent（25 个）
+- [x] 第二阶段 · 独立 review（architecture-reviewer，7 条全部属实已修）：Codex 一次改多个文件的确认卡片列出每个文件并保留理由（权限请求加 `files`）；`lineDiff`、`rel` 移到 `transcript-chat.ts`，Claude 转换器不再依赖 ACP 模块；计划行之后仍能找到「等你确认」的工具行；Codex 的改动缓存在改完、确认后和一轮结束时清掉；`model.ts` 只给图标名；发给手机的条目去掉整条命令。作者 2026-11-07 定：两轮之间保持 52（悬停操作行留位，v1.132）；Codex rollout 的 `update_plan` 读成任务清单、Codex 审批没有理由时显示文件路径，两处都保留
+- [x] 后台任务通知和分割线（PRD v1.154 / v1.155，作者 2026-11-08 报告）：`<task-notification>` 用户行解析成一行系统文字「后台任务「名字」已完成」（`transcript-chat.ts` `taskNotice`）；对话 Markdown 的 `---` 只留空白、表格只留表头一条线
+- [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
 - [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`
 - [ ] Codex 的「计划」（实验性 `collaborationMode`，要 `experimentalApi`，先实测）；用真 Grok 跑一轮「自动」「计划」；Kiro 和 Gemini、Qwen、OpenCode、Copilot、Kimi、Droid、Amp、Goose、Cline、Auggie、CodeBuddy、Pi 装上后握手实测它们上报的选项、会不会发权限请求
 - [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
-- [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；`/` 菜单不分「命令 / Skills」；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
+- [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
 - [ ] 没做：总览浮层里 GUI 会话不显示聊天；`wavi run` 派出的子会话仍是 CLI；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上；ACP agent 的状态事件 agent 字段暂报 `opencode`
 
 ## 进行中：F22 手机远程（2026-11-01 定）

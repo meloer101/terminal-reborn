@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, emptyGuiState, type GuiConfigOption, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { acpAnswerResult, acpAutoAllow, acpCommands, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer, lineDiff } from './acp'
+import { acpAnswerResult, acpAutoAllow, acpCommands, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer } from './acp'
 
 // Shapes per the Agent Client Protocol (protocolVersion 1), as Grok `agent stdio` and Cursor `agent acp` send them (PRD §6.17).
 const fold = (events: GuiEvent[], state: GuiState = emptyGuiState()) => events.reduce(applyGuiEvent, state)
@@ -45,6 +45,29 @@ describe('createAcpNormalizer', () => {
     expect(s.items[0]).toMatchObject({ name: 'Edit', arg: 'src/a.ts', diff: { path: 'src/a.ts', added: 1, removed: 1, hunks: [{ lines: [' a', '-b', '+B', ' c'] }] } })
   })
 
+  it('keeps each file of a several-file edit apart', () => {
+    const n = createAcpNormalizer('/repo', () => 0)
+    const s = fold(
+      n.update({
+        sessionUpdate: 'tool_call',
+        toolCallId: 'e2',
+        kind: 'edit',
+        status: 'completed',
+        locations: [{ path: '/repo/src/a.ts' }, { path: '/repo/src/b.ts' }],
+        content: [
+          { type: 'diff', path: '/repo/src/a.ts', oldText: 'a\n', newText: 'A\n' },
+          { type: 'diff', path: '/repo/src/b.ts', oldText: null, newText: 'b\nc\n' }
+        ]
+      })
+    )
+    expect(s.items[0]).toMatchObject({ diff: { path: 'src/a.ts', added: 1, removed: 1 } })
+    const item = s.items[0]
+    expect(item?.kind === 'tool' && item.files?.map((f) => [f.path, f.added, f.removed])).toEqual([
+      ['src/a.ts', 1, 1],
+      ['src/b.ts', 2, 0]
+    ])
+  })
+
   it('turns a permission request into a prompt with the agent’s options and marks a cancelled turn', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(
@@ -70,11 +93,50 @@ describe('createAcpNormalizer', () => {
     expect(s.items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
   })
 
-  it('shows the plan as one row that updates in place', () => {
+  it('joins the chunks of one replayed message into one bubble (session/load)', () => {
+    const n = createAcpNormalizer('/repo', () => 0)
+    let s = fold(n.update(chunk('user_message_chunk', 'Fix the ')))
+    s = fold(n.update(chunk('user_message_chunk', 'login bug')), s)
+    s = fold(n.update(chunk('agent_message_chunk', 'Done.')), s)
+    s = fold(n.update(chunk('user_message_chunk', 'Thanks')), s)
+    s = fold(n.promptDone('end_turn'), s)
+    expect(s.items.map((i) => (i.kind === 'user' || i.kind === 'text' ? [i.kind, i.text] : [i.kind]))).toEqual([
+      ['user', 'Fix the login bug'],
+      ['text', 'Done.'],
+      ['user', 'Thanks']
+    ])
+  })
+
+  it('shows why a prompt failed', () => {
+    const n = createAcpNormalizer('/repo', () => 0)
+    const s = fold(n.promptDone(undefined, 'Internal error: quota exceeded'))
+    expect(s.items).toEqual([{ kind: 'system', id: 's0', at: 0, text: 'Internal error: quota exceeded' }])
+    expect(s.busy).toBe(false)
+  })
+
+  it('shows the plan as one row that updates in place within a turn, and a new row after the next message', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'in_progress' }] }))
     s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Read', status: 'completed' }, { content: 'Edit', status: 'completed' }] }), s)
-    expect(s.items).toEqual([{ kind: 'system', id: 'plan', at: 0, text: '✓ Read\n✓ Edit' }])
+    expect(s.items).toEqual([
+      {
+        kind: 'tool',
+        id: 'plan0',
+        at: 0,
+        name: 'Plan',
+        arg: '2 项',
+        state: 'ok',
+        todos: [
+          { text: 'Read', status: 'completed' },
+          { text: 'Edit', status: 'completed' }
+        ]
+      }
+    ])
+    s = fold(n.sent('m1', 'and the tests', 0), s)
+    s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Test', status: 'pending' }] }), s)
+    s = fold(n.update(chunk('user_message_chunk', 'replayed')), s)
+    s = fold(n.update({ sessionUpdate: 'plan', entries: [{ content: 'Lint', status: 'pending' }] }), s)
+    expect(s.items.map((i) => (i.kind === 'tool' ? i.todos?.map((t) => t.text).join(',') : i.kind))).toEqual(['Read,Edit', 'user', 'Test', 'user', 'Lint'])
   })
 })
 
@@ -104,24 +166,7 @@ describe('acpConfig / acpConfigRequest / acpCommands', () => {
   })
 
   it('lists commands with their input hint', () => {
-    expect(acpCommands([{ name: 'compact', description: 'Compact', input: { hint: '[focus]' } }, { description: 'x' }])).toEqual([{ name: 'compact', description: 'Compact', argumentHint: '[focus]' }])
-  })
-})
-
-describe('lineDiff', () => {
-  it('keeps three lines of context and splits distant changes into hunks', () => {
-    const before = Array.from({ length: 20 }, (_, i) => `l${i + 1}`).join('\n')
-    const after = before.replace('l2', 'L2').replace('l18', 'L18')
-    const hunks = lineDiff(before, after)
-    expect(hunks.map((h) => [h.oldStart, h.lines[0]])).toEqual([
-      [1, ' l1'],
-      [15, ' l15']
-    ])
-    expect(hunks[0]?.lines).toEqual([' l1', '-l2', '+L2', ' l3', ' l4', ' l5'])
-  })
-
-  it('treats a new file as all additions', () => {
-    expect(lineDiff('', 'a\nb\n')).toEqual([{ oldStart: 1, newStart: 1, lines: ['+a', '+b'] }])
+    expect(acpCommands([{ name: 'compact', description: 'Compact', input: { hint: '[focus]' } }, { description: 'x' }])).toEqual([{ name: 'compact', description: 'Compact', argumentHint: '[focus]', kind: 'command' }])
   })
 })
 

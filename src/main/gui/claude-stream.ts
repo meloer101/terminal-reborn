@@ -15,7 +15,7 @@ import {
   type GuiPrompt,
   type GuiQuestion
 } from '@shared/gui-chat'
-import { createChatParser, type ChatParser } from '@shared/transcript-chat'
+import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
 
 type Rec = Record<string, unknown>
@@ -58,13 +58,18 @@ export interface ClaudeStreamNormalizer {
   settle(id: string): GuiEvent[]
 }
 
-/** The transcript parser reads camelCase fields and `isSidechain`; stream-json has their snake_case twins. */
+/**
+ * The transcript parser reads camelCase fields and `isSidechain`; stream-json has their snake_case twins. A subagent's
+ * messages keep the id of the Agent / Task call they belong to (`parentToolUseId`): they show under its row (Figma 59J).
+ */
 export function asTranscriptLine(message: Rec, cwd: string): Rec {
   const line: Rec = { ...message, cwd }
   if ('tool_use_result' in message) line.toolUseResult = message.tool_use_result
   if (typeof message.thinking_duration_ms === 'number') line.thinkingDurationMs = message.thinking_duration_ms
-  // A subagent's own messages: the phone shows them as the Agent call that started them.
-  if (typeof message.parent_tool_use_id === 'string') line.isSidechain = true
+  if (typeof message.parent_tool_use_id === 'string') {
+    line.isSidechain = true
+    line.parentToolUseId = message.parent_tool_use_id
+  }
   return line
 }
 
@@ -92,8 +97,27 @@ function detailOf(tool: string, input: Rec, description: string | undefined, cwd
   if (tool === 'Bash' && command) return command
   const path = str(input.file_path)
   // Relative to the session's folder, as the tool row shows it.
-  if (path && cwd && path.startsWith(`${cwd}/`)) return path.slice(cwd.length + 1)
-  return path ?? str(input.url) ?? str(input.pattern) ?? description ?? tool
+  if (path) return rel(path, cwd)
+  return str(input.url) ?? str(input.pattern) ?? description ?? tool
+}
+
+/** Above this many lines of old + new text a permission card shows no diff (the card stays small and quick). */
+const PROMPT_DIFF_LINES = 200
+
+/** Figma 59I: the change an Edit / MultiEdit / Write asks to make (Write as a new file: all additions). */
+export function permissionDiff(tool: string, input: Rec, cwd?: string): FileDiff | undefined {
+  const path = str(input.file_path)
+  if (!path) return undefined
+  let pairs: [string, string][]
+  if (tool === 'Edit') pairs = [[str(input.old_string) ?? '', str(input.new_string) ?? '']]
+  else if (tool === 'MultiEdit') pairs = (Array.isArray(input.edits) ? input.edits : []).filter(isRec).map((e) => [str(e.old_string) ?? '', str(e.new_string) ?? ''])
+  else if (tool === 'Write') pairs = [['', str(input.content) ?? '']]
+  else return undefined
+  const count = (text: string): number => (text === '' ? 0 : text.split('\n').length)
+  const lines = pairs.reduce((n, [a, b]) => n + count(a) + count(b), 0)
+  if (pairs.length === 0 || lines > PROMPT_DIFF_LINES) return undefined
+  const hunks: DiffHunk[] = tool === 'Write' ? [addedFile(pairs[0]![1])] : pairs.flatMap(([a, b]) => lineDiff(a, b))
+  return fileDiffs([{ path: rel(path, cwd), hunks }])[0]
 }
 
 export function promptOf(pending: ClaudePending, description?: string, cwd?: string): GuiPrompt {
@@ -101,7 +125,8 @@ export function promptOf(pending: ClaudePending, description?: string, cwd?: str
   if (pending.tool === 'AskUserQuestion') return { kind: 'question', id, questions: questionsOf(pending.input) }
   if (pending.tool === 'ExitPlanMode') return { kind: 'plan', id, plan: str(pending.input.plan) ?? '' }
   const options = pending.suggestions.length > 0 ? ANSWER_OPTIONS : ANSWER_OPTIONS.filter((o) => o.kind !== 'allow_always')
-  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options }
+  const diff = permissionDiff(pending.tool, pending.input, cwd)
+  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options, ...(diff ? { diff } : {}) }
 }
 
 export function createClaudeStreamNormalizer(cwd: string, now: () => number = Date.now): ClaudeStreamNormalizer {
@@ -121,7 +146,7 @@ export function createClaudeStreamNormalizer(cwd: string, now: () => number = Da
   }
 
   function streamEvent(message: Rec): GuiEvent[] {
-    // A subagent streams too; its text is not the conversation's.
+    // A subagent streams too; its text is not the conversation's (its finished messages show under its Agent row).
     if (typeof message.parent_tool_use_id === 'string') return []
     const event = isRec(message.event) ? message.event : {}
     if (event.type === 'content_block_start') {
@@ -199,8 +224,16 @@ export function commandsOf(raw: unknown[]): GuiCommand[] {
     if (!name) return []
     const description = (str(c.description) ?? '').replace(/\s*\((user|project|plugin[^)]*)\)\s*$/, '')
     const hint = str(c.argumentHint)
-    return [{ name, description, ...(hint ? { argumentHint: hint } : {}) }]
+    return [{ name, description, ...(hint ? { argumentHint: hint } : {}), kind: 'command' as const }]
   })
+}
+
+/**
+ * Figma 59H: the commands Claude's `system/init` lists under `skills` are skills. `initialize` and `commands_changed`
+ * do not say which commands are skills, and init comes only with a turn: until the first one, every entry is a command.
+ */
+export function markSkills(commands: readonly GuiCommand[], skills: ReadonlySet<string>): GuiCommand[] {
+  return commands.map((c) => ({ ...c, kind: skills.has(c.name) ? 'skill' : 'command' }))
 }
 
 /** The pickers from `initialize` (models, their effort levels, permission modes) and `get_settings`' effort. */

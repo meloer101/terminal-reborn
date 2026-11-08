@@ -6,7 +6,28 @@
    设置 · 外观 · 对话 (appearance/map.ts sets the --chat-* variables on <html>). */
 .pane {
   --column: var(--chat-column, 720px);
-  --text-composer: var(--chat-weight, 400) var(--chat-size, 14px) / var(--chat-leading, 22px) var(--chat-font, var(--font-ui));
+  /* The chat's type scale (Figma 59J), every step a ratio of 对话 · 字号 (14 by default): body 14 / 22, headings 18 / 26,
+     16 / 24, 15 / 22, step rows (tools, thinking) 13 / 20, code 12 / 20; 24 between turns, 12 between the blocks of a
+     turn, 8 between step rows. */
+  --chat-px: var(--chat-size, 14px);
+  --chat-line: var(--chat-leading, 22px);
+  --chat-family: var(--chat-font, var(--font-ui));
+  --text-composer: var(--chat-weight, 400) var(--chat-px) / var(--chat-line) var(--chat-family);
+  --type-h1: 500 calc(var(--chat-px) * 18 / 14) / calc(var(--chat-px) * 26 / 14) var(--chat-family);
+  --type-h2: 500 calc(var(--chat-px) * 16 / 14) / calc(var(--chat-px) * 24 / 14) var(--chat-family);
+  --type-h3: 500 calc(var(--chat-px) * 15 / 14) / calc(var(--chat-px) * 22 / 14) var(--chat-family);
+  --type-h4: 500 var(--chat-px) / var(--chat-line) var(--chat-family);
+  --size-step: calc(var(--chat-px) * 13 / 14);
+  --line-step: calc(var(--chat-px) * 20 / 14);
+  --type-step: 400 var(--size-step) / var(--line-step) var(--chat-family);
+  --size-code: calc(var(--chat-px) * 12 / 14);
+  --line-code: calc(var(--chat-px) * 20 / 14);
+  --type-code: 400 var(--size-code) / var(--line-code) var(--font-mono);
+  --gap-turn: calc(var(--chat-px) * 24 / 14);
+  --gap-block: calc(var(--chat-px) * 12 / 14);
+  --gap-step: calc(var(--chat-px) * 8 / 14);
+  /* The agent's mark and the user's picture, outside the column. */
+  --avatar: 28px;
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -31,8 +52,13 @@
 }
 
 .chat {
-  /* A status glyph (14) and its gap (8): summaries and plan steps start at the text after it. */
+  /* A status glyph (14) and its gap (8): plan steps start at the text after it. */
   --glyph-indent: calc(14px + var(--space-8));
+  /* A step row's mark (16) and its gap (8): a tool's summary and output, the thinking text start at its verb. */
+  --step-indent: calc(16px + var(--space-8));
+  /* Figma 59J: where a subagent's 1px line starts, so it runs down the middle of the row's mark (16); its rows start
+     16 right of it, at --step-indent. */
+  --subagent-rail: calc(var(--space-8) - 1px);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -48,9 +74,10 @@
   color: var(--text-primary);
 }
 
-/* --- feed (Figma `Feed`: 16 between blocks, 24 above the first, top down like any chat (50A); the view follows the
-   end, Feed.tsx). 120 under the last block, as in Claude's desktop app: at the end the last message sits clear of the
-   composer instead of on the scroller's edge. --- */
+/* --- feed (Figma `Feed`: 24 above the first block, top down like any chat (50A); the view follows the end, Feed.tsx).
+   120 under the last block, as in Claude's desktop app: at the end the last message sits clear of the composer instead
+   of on the scroller's edge. Figma 59J: the column is the composer's width — the agent's words start at its left edge,
+   the user's bubble ends at its right edge — and the pictures hang outside it, in the 40 at each side. --- */
 
 .scroller {
   flex: 1;
@@ -64,11 +91,11 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-16);
+  gap: var(--gap-block);
   box-sizing: border-box;
-  max-width: calc(var(--column) + 2 * var(--space-16));
+  max-width: calc(var(--column) + 2 * var(--space-40));
   margin: 0 auto;
-  padding: var(--space-24) var(--space-16) calc(3 * var(--space-40));
+  padding: var(--space-24) var(--space-40) calc(3 * var(--space-40));
   user-select: text;
 }
 
@@ -78,18 +105,26 @@
   contain-intrinsic-size: auto 40px;
 }
 
+/* 24 where the turn passes from the user to the agent or back; 12 between the blocks of one side. */
+.feed > :is(.userRow, [data-start]):not(:first-child) {
+  margin-top: calc(var(--gap-turn) - var(--gap-block));
+}
+
+/* The row reaches out over the picture's place (28 + 8), so the bubble ends at the column's edge and the picture,
+   inside the row, is not cut by its paint containment. */
 .userRow {
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
   gap: var(--space-8);
+  margin-right: calc(-1 * (var(--avatar) + var(--space-8)));
 }
 
 /* Figma 51A: the user's picture (设置 · 外观 · 对话 · 我的头像), top-aligned beside the bubble; none, none drawn. */
 .userAvatar {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: var(--avatar);
+  height: var(--avatar);
   border-radius: 50%;
   background: var(--chat-avatar) center / cover no-repeat;
 }
@@ -98,30 +133,44 @@
   display: none;
 }
 
-/* Figma 51A: the agent's part of a turn starts 40 in (mark 28 + 12); the mark sits beside its first line. Each block
-   paints only inside itself (content-visibility), so the first one is at least the mark's height and starts 3 lower,
-   the first line's middle on the mark's. */
+:global(:root[data-chat-avatar='off']) .userRow {
+  margin-right: 0;
+}
+
+/* Figma 51A / 59J: the agent's mark 12 left of the column, beside the first line of its part of a turn. The block
+   reaches out over the mark's place (28 + 12) and keeps it as padding: its words start at the column's edge and the
+   mark, inside the block, is not cut by its paint containment. The first block is at least the mark's height, its
+   first line's middle on the mark's. */
 .agentTurn {
   position: relative;
   min-width: 0;
-  padding-left: calc(28px + var(--space-12));
+  margin-left: calc(-1 * (var(--avatar) + var(--space-12)));
+  padding-left: calc(var(--avatar) + var(--space-12));
 }
 
 .agentTurn[data-start] {
-  min-height: 28px;
-  padding-top: 3px;
+  min-height: var(--avatar);
+  padding-top: max(0px, (var(--avatar) - var(--chat-line)) / 2);
+}
+
+.agentTurn[data-start]:has(> .steps) {
+  padding-top: max(0px, (var(--avatar) - var(--line-step)) / 2);
+}
+
+.agentTurn > .agentAvatar {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 /* The agent's icon in a solid circle (the author, 2026-11-05: black around the icon; it inverts in dark like the send
    button). */
 .agentAvatar {
-  position: absolute;
-  top: 0;
-  left: 0;
+  flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--avatar);
+  height: var(--avatar);
   border-radius: 50%;
   background: var(--fill-primary);
   color: var(--text-inverse);
@@ -162,11 +211,6 @@
   overflow-wrap: anywhere;
 }
 
-/* What the user sent, as Markdown (Figma 51A): blocks 8 apart inside the bubble. */
-.bubbleText :is(p, ul, ol, blockquote, pre) {
-  margin: 0 0 var(--space-8);
-}
-
 .block {
   min-width: 0;
 }
@@ -175,13 +219,15 @@
   margin: 0;
   font: var(--text-caption);
   color: var(--text-tertiary);
+  /* An agent's plan is one entry per line. */
+  white-space: pre-wrap;
 }
 
 /* Tool and thinking rows: 8 apart inside a run. */
 .steps {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--gap-step);
   min-width: 0;
 }
 
@@ -196,22 +242,23 @@
 .thinkingRow {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-8);
   align-self: flex-start;
   padding: 0;
   border: 0;
   background: none;
-  font: var(--text-body);
+  font: var(--type-step);
   color: var(--text-tertiary);
 }
 
-.thinkingRow svg {
+.thinkingRow > svg {
   color: var(--text-primary);
 }
 
 .thinkingText {
   margin: 0;
-  font: var(--text-body);
+  padding-left: var(--step-indent);
+  font: var(--type-step);
   color: var(--text-tertiary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -221,7 +268,7 @@
    motion. Two spinner turns per breath, on purpose: the app's waiting signs keep one tempo. */
 .thinkingLive {
   margin: 0;
-  font: var(--text-body);
+  font: var(--type-step);
   color: var(--text-tertiary);
   animation: thinking-pulse calc(2 * var(--duration-spin)) var(--ease-in-out) infinite alternate;
 }
@@ -262,17 +309,28 @@
   flex-shrink: 0;
 }
 
-.toolName {
+/* Figma 59J: a step row is icon · verb · target, the status in the icon's place only while it runs, waits on you or
+   failed. */
+.stepMark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+}
+
+.toolVerb {
   flex-shrink: 0;
-  font: 500 13px/18px var(--font-mono);
-  color: var(--text-primary);
+  font: var(--type-step);
+  color: var(--text-tertiary);
 }
 
 .toolArg {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font: 400 13px/18px var(--font-mono);
+  font: var(--type-code);
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -281,8 +339,7 @@
 .added,
 .removed {
   flex-shrink: 0;
-  font: var(--text-mono-s);
-  line-height: 18px;
+  font: var(--type-code);
 }
 
 .added {
@@ -295,57 +352,374 @@
 
 .waiting {
   flex-shrink: 0;
-  font: var(--text-caption);
-  line-height: 18px;
+  font: var(--type-step);
   color: var(--status-attention);
+}
+
+/* Figma 59J: a subagent's row — 子 agent · its task (step size, primary) · ⌄ … elapsed (code size, tertiary) at the end —
+   and what it did under it: the same step rows and its words (step size, secondary), 16 right of a 1px line that runs
+   down from the row icon's centre, 8 below the row. */
+.subagentArg {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.elapsed {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-8);
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.subagentSteps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-step);
+  min-width: 0;
+  margin: calc(var(--gap-step) - var(--space-6)) 0 0 var(--subagent-rail);
+  padding-left: var(--space-16);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.subagentText {
+  margin: 0;
+  font: var(--type-step);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Figma 59J: a failed command's exit code at the row's end. */
+.exit {
+  flex-shrink: 0;
+  font: var(--type-code);
+  color: var(--status-error);
 }
 
 .toolSummary {
   margin: 0;
-  padding-left: var(--glyph-indent);
+  padding-left: var(--step-indent);
   overflow: hidden;
-  font: var(--text-mono-s);
-  line-height: 18px;
+  font: var(--type-code);
   color: var(--text-tertiary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .output {
-  margin: 0 0 0 var(--glyph-indent);
+  margin: 0 0 0 var(--step-indent);
   max-height: 320px;
   padding: var(--space-8) var(--space-12);
   overflow: auto;
   border-radius: var(--radius-md);
   background: var(--bg-inset);
-  font: var(--text-mono-s);
-  line-height: 18px;
+  font: var(--type-code);
   color: var(--text-secondary);
   white-space: pre;
 }
 
-.hunk + .hunk::before {
-  content: '⋯\A';
+/* Figma 59J: the command the output came from, as its first line. */
+.outputCommand {
   color: var(--text-tertiary);
 }
 
+/* A command's colors (ansi.ts), the terminal's; black and white stay the output's own colour. */
+.ansi[data-fg='red'] {
+  color: var(--term-red);
+}
+
+.ansi[data-fg='green'] {
+  color: var(--term-green);
+}
+
+.ansi[data-fg='yellow'] {
+  color: var(--term-yellow);
+}
+
+.ansi[data-fg='blue'] {
+  color: var(--term-blue);
+}
+
+.ansi[data-fg='magenta'] {
+  color: var(--term-violet);
+}
+
+.ansi[data-fg='cyan'] {
+  color: var(--term-cyan);
+}
+
+.ansi[data-fg='black'],
+.ansi[data-fg='white'] {
+  color: var(--text-secondary);
+}
+
+.ansi[data-bold] {
+  font-weight: 600;
+}
+
+.ansi[data-dim] {
+  opacity: 0.6;
+}
+
+.fileBlocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+  margin-left: var(--step-indent);
+}
+
+/* Figma 59J / 59I: one file's change (DiffBlock) — a 1px border/subtle frame; the path · +N −M on a header row when
+   the file is not named next to it; added and removed lines tinted across the block's width. */
+.fileBlock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.fileHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--space-12);
+  font: var(--type-code);
+}
+
+.fileHeader:not(:last-child) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.filePath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileLines {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--space-4) 0;
+  overflow: auto;
+  font: var(--type-code);
+  color: var(--text-secondary);
+}
+
+/* As wide as the longest line, at least the block's: a tinted line reaches the frame however far it scrolls. */
+.fileRows {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+.diffLine,
+.hunkGap {
+  display: block;
+  padding: 0 var(--space-12);
+  white-space: pre;
+}
+
+.hunkGap {
+  color: var(--text-tertiary);
+}
+
+.diffSign {
+  display: inline-block;
+  width: 3ch;
+}
+
 .diffLine[data-kind='add'] {
+  background: var(--diff-add-bg);
   color: var(--diff-add-fg);
 }
 
 .diffLine[data-kind='del'] {
+  background: var(--diff-del-bg);
   color: var(--diff-del-fg);
 }
 
-/* --- the agent's Markdown, the files preview's element styles at 14 / 22 --- */
+/* --- Markdown (the agent's words, the user's bubble, a plan) on the chat's type scale (Figma 59J); blocks 12 apart.
+   A code block is drawn in a .codeWrap (ChatMarkdown), which carries the block's margin. --- */
 
 .markdown {
-  composes: markdown from '../panels/files/MarkdownView.module.css';
-  padding: 0;
   font: var(--text-composer);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.markdown :is(p, ul, ol, blockquote, table, details, hr, .codeWrap) {
+  margin: 0 0 var(--gap-block);
+}
+
+.markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: calc(var(--chat-px) * 16 / 14) 0 var(--gap-block);
+}
+
+.markdown h1 {
+  font: var(--type-h1);
+}
+
+.markdown h2 {
+  font: var(--type-h2);
+}
+
+.markdown h3 {
+  font: var(--type-h3);
+}
+
+.markdown :is(h4, h5, h6) {
+  font: var(--type-h4);
+}
+
+.markdown :is(ul, ol) {
+  padding-left: calc(var(--chat-px) * 22 / 14);
+}
+
+.markdown li + li,
+.markdown li > :is(ul, ol) {
+  margin-top: calc(var(--chat-px) * 4 / 14);
+}
+
+.markdown li > :is(ul, ol) {
+  margin-bottom: 0;
+}
+
+/* GFM task lists. */
+.markdown li:has(> input[type='checkbox']) {
+  list-style: none;
+}
+
+.markdown li > input[type='checkbox'] {
+  margin: 0 var(--space-6) 0 calc(-1 * var(--space-20));
+  vertical-align: -2px;
+}
+
+.markdown blockquote {
+  padding: 0 0 0 var(--gap-block);
+  border-left: 2px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown code {
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  font: var(--type-code);
+}
+
+.markdown pre {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+/* Diagrams drawn in box characters keep their shape; they scroll instead of wrapping. */
+.markdown pre code {
+  padding: 0;
+  background: none;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font: var(--type-step);
+}
+
+/* One line, under the header: rows read apart by their spacing (no line between rows). */
+.markdown :is(th, td) {
+  padding: var(--space-4) var(--space-12) var(--space-4) 0;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+.markdown th {
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.markdown a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.markdown a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* A `---` is a pause, not a line: it adds one block gap (12 + 12 = 24, a turn's spacing). */
+.markdown hr {
+  height: 0;
+  border: 0;
+}
+
+.markdown img {
+  max-width: 100%;
+}
+
+.markdown strong {
+  font-weight: 600;
+}
+
+.markdown em {
+  font-style: italic;
+}
+
+.markdown del {
+  text-decoration: line-through;
+}
+
+.markdown summary {
+  cursor: pointer;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
 }
 
 .markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* What the user sent (Figma 51A): blocks 8 apart inside the bubble. */
+.bubbleText :is(p, ul, ol, blockquote, table, details, hr, .codeWrap) {
+  margin-bottom: var(--gap-step);
+}
+
+.bubbleText > :last-child {
   margin-bottom: 0;
 }
 
@@ -363,8 +737,26 @@
   gap: var(--space-8);
   box-sizing: border-box;
   width: 100%;
-  max-width: calc(var(--column) + 2 * var(--space-16));
-  padding: 0 var(--space-16);
+  max-width: calc(var(--column) + 2 * var(--space-40));
+  padding: 0 var(--space-40);
+}
+
+/* Figma 59G: a session with nothing in it yet — the agent's mark and name over the composer, the two in the middle of
+   the card. */
+.chat[data-empty] {
+  justify-content: center;
+}
+
+.welcome {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-16);
+}
+
+.welcomeName {
+  font: var(--type-h2);
+  color: var(--text-primary);
 }
 
 .card {
@@ -401,10 +793,40 @@
   overflow: auto;
   border-radius: var(--radius-md);
   background: var(--bg-inset);
-  font: 400 13px/18px var(--font-mono);
+  font: var(--type-code);
   color: var(--text-primary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Figma 59I: the change a permission is about, at most 200 high, then it scrolls. */
+.cardDiff {
+  background: var(--bg-inset);
+}
+
+.cardDiff .fileLines {
+  max-height: 200px;
+}
+
+.cardDiffs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+/* A change to several files: one scroll for all of them, each file at its full height. */
+.cardDiffs[data-several='true'] {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.cardDiffs[data-several='true'] .cardDiff {
+  flex-shrink: 0;
+}
+
+.cardDiffs[data-several='true'] .cardDiff .fileLines {
+  max-height: none;
 }
 
 .cardActions {
@@ -419,17 +841,85 @@
   padding-top: var(--space-4);
 }
 
-/* Plan (49″D): the steps under the title, from the title's text line. */
+/* Plan (49″D): the steps under the title, from the title's text line, on the chat's scale. */
 .planBody {
   max-height: 240px;
   overflow-y: auto;
   padding-left: var(--glyph-indent);
-  font: 400 14px/20px var(--font-ui);
   color: var(--text-secondary);
 }
 
 .card:has(.planBody) {
   gap: var(--space-8);
+}
+
+/* Figma 59J: the agent's task list above the composer (Todos.tsx) — a 1px border/subtle frame, the header 任务 ·
+   done / total, then a row per task; in the feed, a task row opens to the same rows. */
+.todoCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-window);
+}
+
+.todoHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font: var(--type-step);
+  color: var(--text-tertiary);
+}
+
+.todoHeader > svg {
+  flex-shrink: 0;
+}
+
+.todoCount {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.todos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.todosInFeed {
+  padding-left: var(--step-indent);
+}
+
+.todo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  font: var(--type-step);
+  color: var(--text-secondary);
+}
+
+/* The glyph (14) in the header icon's 16 column, so the text lines up under 任务. */
+.todo > svg {
+  flex-shrink: 0;
+  margin: 0 calc(var(--space-2) / 2);
+}
+
+.todo[data-status='in_progress'] {
+  color: var(--text-primary);
+}
+
+.todo[data-status='completed'] {
+  color: var(--text-tertiary);
+}
+
+.todoText {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Button (Figma 9:33): Secondary has a hairline, Primary is filled; the shortcut sits inline. */
@@ -556,7 +1046,7 @@
   padding: 0;
   border: 0;
   background: none;
-  font: var(--text-body);
+  font: var(--type-step);
   color: var(--text-secondary);
   text-align: left;
 }
@@ -611,6 +1101,7 @@
   gap: var(--space-4);
 }
 
+/* Figma 59J (as Paseo): a hairline round the box, drawn inside it so it takes no room; stronger while typing. */
 .composer {
   display: flex;
   flex-direction: column;
@@ -618,6 +1109,12 @@
   padding: var(--space-8);
   border-radius: var(--radius-window);
   background: var(--bg-section);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.composer:focus-within,
+.editBox:focus-within {
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
 .composerLine {
@@ -1017,6 +1514,7 @@
   padding: var(--space-8) var(--space-8) var(--space-8) var(--space-12);
   border-radius: var(--radius-window);
   background: var(--bg-section);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
 
 .editButtons {
@@ -1115,14 +1613,20 @@
   color: var(--text-tertiary);
 }
 
+.slashGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Figma 59H: name (code, primary) · argument hint (code, tertiary) · description (step, secondary, one line). */
 .command {
   display: flex;
   flex: none;
-  align-items: center;
-  gap: var(--space-12);
+  align-items: baseline;
+  gap: var(--space-8);
   padding: 5px 10px;
   border-radius: 6px;
-  font: var(--text-body);
+  font: var(--type-step);
 }
 
 .command[aria-selected='true'] {
@@ -1131,8 +1635,18 @@
 
 .commandName {
   flex-shrink: 0;
-  font: 400 13px/18px var(--font-mono);
+  font: var(--type-code);
   color: var(--text-primary);
+}
+
+.commandHint {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .commandText {

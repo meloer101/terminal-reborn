@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, emptyGuiState, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer } from './claude-stream'
+import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, markSkills, promptOf, type ClaudePending } from './claude-stream'
 
 // Shapes as `claude -p --output-format stream-json --include-partial-messages` 2.1.317 prints them (PRD §6.17).
 const at = '2026-11-05T15:54:30.000Z'
@@ -55,10 +55,30 @@ describe('createClaudeStreamNormalizer', () => {
     expect(state.items[1]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'notes.txt', state: 'ok', diff: { path: 'notes.txt', added: 1, removed: 1 } })
   })
 
-  it("leaves a subagent's own stream and messages out of the conversation", () => {
-    const { state } = run([start('text'), delta('inner', 'toolu_agent'), assistant([{ type: 'text', text: 'inner' }], 'toolu_agent')])
-    expect(state.items).toEqual([])
+  it("keeps a subagent's stream out of the live block and its messages under the Agent call (Figma 59J)", () => {
+    const { state } = run([
+      assistant([{ type: 'tool_use', id: 'toolu_agent', name: 'Agent', input: { description: '查 SameSite', prompt: 'look' } }]),
+      start('text'),
+      delta('inner', 'toolu_agent'),
+      { type: 'user', timestamp: at, parent_tool_use_id: 'toolu_agent', message: { role: 'user', content: [{ type: 'text', text: 'look' }] } },
+      assistant([{ type: 'tool_use', id: 'toolu_grep', name: 'Grep', input: { pattern: 'SameSite' } }], 'toolu_agent'),
+      { type: 'user', timestamp: at, parent_tool_use_id: 'toolu_agent', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_grep', content: '3 matches' }] } },
+      assistant([{ type: 'text', text: 'inner' }], 'toolu_agent'),
+      {
+        type: 'user',
+        timestamp: at,
+        parent_tool_use_id: null,
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_agent', content: [{ type: 'text', text: 'inner' }] }] },
+        tool_use_result: { status: 'completed', totalDurationMs: 42_000 }
+      }
+    ])
+    // The subagent's message does not end the main conversation's live block.
     expect(state.live).toEqual({ kind: 'text', text: '' })
+    expect(state.items).toEqual([
+      { kind: 'tool', id: 'toolu_agent', at: Date.parse(at), name: 'Agent', arg: '查 SameSite', state: 'ok', output: 'inner', ms: 42_000 },
+      { kind: 'tool', id: 'toolu_grep', at: Date.parse(at), name: 'Grep', arg: 'SameSite', state: 'ok', output: '3 matches', parent: 'toolu_agent' },
+      { kind: 'text', id: 't0', at: Date.parse(at), text: 'inner', parent: 'toolu_agent' }
+    ])
   })
 
   it('turns can_use_tool into permission, question and plan prompts', () => {
@@ -115,7 +135,7 @@ describe('createClaudeStreamNormalizer', () => {
       { type: 'system', subtype: 'status', status: 'requesting' },
       { type: 'system', subtype: 'commands_changed', commands: [{ name: 'review', description: 'Review the branch (user)', argumentHint: '' }] }
     ])
-    expect(events).toEqual([{ type: 'commands', commands: [{ name: 'review', description: 'Review the branch' }] }])
+    expect(events).toEqual([{ type: 'commands', commands: [{ name: 'review', description: 'Review the branch', kind: 'command' }] }])
   })
 })
 
@@ -207,10 +227,56 @@ describe('claudeAnswerResponse', () => {
   })
 })
 
+describe('promptOf · a permission to change a file shows the change (Figma 59I)', () => {
+  const ask = (tool: string, input: Record<string, unknown>): ClaudePending => ({ requestId: 'r', tool, input, suggestions: [] })
+  const diffOf = (tool: string, input: Record<string, unknown>) => {
+    const prompt = promptOf(ask(tool, input), undefined, '/repo')
+    return prompt.kind === 'permission' ? prompt.diff : undefined
+  }
+
+  it('Edit: old_string → new_string, the path relative to the session', () => {
+    expect(diffOf('Edit', { file_path: '/repo/src/refresh.ts', old_string: 'a\nb\nc', new_string: 'a\nB\nc' })).toEqual({
+      path: 'src/refresh.ts',
+      hunks: [{ oldStart: 1, newStart: 1, lines: [' a', '-b', '+B', ' c'] }],
+      added: 1,
+      removed: 1,
+      truncated: false
+    })
+  })
+
+  it('MultiEdit: every edit; Write: the whole file as additions', () => {
+    const multi = diffOf('MultiEdit', { file_path: '/repo/a.ts', edits: [{ old_string: 'x', new_string: 'y' }, { old_string: 'p', new_string: 'q\nr' }] })
+    expect(multi).toMatchObject({ path: 'a.ts', added: 3, removed: 2 })
+    expect(multi?.hunks).toHaveLength(2)
+    expect(diffOf('Write', { file_path: '/elsewhere/new.md', content: '# hi\nthere\n' })).toMatchObject({
+      path: '/elsewhere/new.md',
+      added: 2,
+      removed: 0,
+      hunks: [{ lines: ['+# hi', '+there'] }]
+    })
+  })
+
+  it('leaves the diff out for a change over 200 lines and for tools that change no file', () => {
+    const long = Array.from({ length: 201 }, (_, i) => `l${i}`).join('\n')
+    expect(diffOf('Write', { file_path: '/repo/big.txt', content: long })).toBeUndefined()
+    expect(diffOf('Edit', { file_path: '/repo/a.ts', old_string: long, new_string: 'x' })).toBeUndefined()
+    expect(diffOf('Bash', { command: 'rm -rf build' })).toBeUndefined()
+    expect(diffOf('Edit', { old_string: 'a', new_string: 'b' })).toBeUndefined()
+  })
+})
+
 describe('commandsOf', () => {
   it('keeps name, description and argument hint, without the source suffix', () => {
     expect(commandsOf([{ name: 'tdd', description: 'Test first (plugin:mattpocock)', argumentHint: '<file>' }, { description: 'nameless' }])).toEqual([
-      { name: 'tdd', description: 'Test first', argumentHint: '<file>' }
+      { name: 'tdd', description: 'Test first', argumentHint: '<file>', kind: 'command' }
     ])
+  })
+})
+
+describe('markSkills (Figma 59H)', () => {
+  it('marks the commands system/init lists as skills; the rest stay commands', () => {
+    const commands = commandsOf([{ name: 'compact', description: 'Compact' }, { name: 'research', description: 'Research (user)', argumentHint: '<topic>' }, { name: 'figma:figma-use', description: 'x' }])
+    expect(markSkills(commands, new Set(['research', 'figma:figma-use'])).map((c) => `${c.name}:${c.kind}`)).toEqual(['compact:command', 'research:skill', 'figma:figma-use:skill'])
+    expect(markSkills(commands, new Set()).every((c) => c.kind === 'command')).toBe(true)
   })
 })

@@ -11,7 +11,7 @@ import type { AgentKind, SessionId } from '@shared/types'
 import { Segmented } from '../ui/Segmented'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { ContextButton } from './ContextButton'
-import { composerKey, pickCommand, pickerButtons, pickerSectionTitle, slashQuery, stepIndex, thumbnailUrl, type PickerButton } from './model'
+import { composerKey, pickCommand, pickerButtons, pickerSectionTitle, slashGroups, slashQuery, stepIndex, thumbnailUrl, type PickerButton, type SlashGroup } from './model'
 import { addAttachments, draftOf, removeAttachment, setDraft, useGuiSessions } from './store'
 import styles from './Chat.module.css'
 
@@ -45,7 +45,9 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
   const [picker, setPicker] = useState<{ button: PickerButton; anchor: HTMLElement } | null>(null)
 
   const query = slashQuery(draft)
-  const matches = query !== null && query !== menuDismissed ? matchCommands(commands, query) : []
+  // Figma 59H: 命令, then Skills; ↑↓ go down the menu in that order.
+  const groups = query !== null && query !== menuDismissed ? slashGroups(matchCommands(commands, query)) : []
+  const matches = groups.flatMap((g) => g.commands)
   const menuOpen = matches.length > 0
   const menuIndex = menuAt.query === query ? menuAt.index : 0
   const setMenuIndex = (update: number | ((at: number) => number)): void =>
@@ -110,7 +112,7 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
 
   return (
     <div className={styles.composerWrap} data-testid="gui-composer">
-      {menuOpen && <SlashMenu matches={matches} index={menuIndex} onHover={setMenuIndex} onPick={pick} />}
+      {menuOpen && <SlashMenu groups={groups} index={menuIndex} onHover={setMenuIndex} onPick={pick} />}
       <div className={styles.composer} data-testid="gui-composer-box">
         {attachments.length > 0 && (
           <ul className={styles.attachments} aria-label="附件">
@@ -233,31 +235,44 @@ function Attachment({ path, remove }: { path: string; remove(): void }) {
   )
 }
 
-/** 49′C: the agent's commands matching what follows `/`; ↑↓ move, ⏎ / ⇥ pick. */
-function SlashMenu({ matches, index, onHover, onPick }: { matches: readonly GuiCommand[]; index: number; onHover(index: number): void; onPick(command: GuiCommand): void }) {
+/**
+ * 49′C / 59H: the agent's commands matching what follows `/`, under 命令 and Skills; each entry its name · argument
+ * hint · description. ↑↓ move, ⏎ / ⇥ pick.
+ */
+function SlashMenu({ groups, index, onHover, onPick }: { groups: readonly SlashGroup[]; index: number; onHover(index: number): void; onPick(command: GuiCommand): void }) {
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     listRef.current?.querySelector(`[data-index="${index}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [index])
   return (
     <div ref={listRef} className={`${styles.popover} ${styles.slashMenu}`} role="listbox" aria-label="命令" data-testid="gui-slash-menu">
-      <span className={styles.popoverTitle}>命令</span>
-      {matches.map((command, i) => (
-        <div
-          key={command.name}
-          role="option"
-          aria-selected={i === index}
-          data-index={i}
-          className={styles.command}
-          onMouseEnter={() => onHover(i)}
-          // Down, not click: the text area keeps the keyboard.
-          onMouseDown={(e) => {
-            e.preventDefault()
-            onPick(command)
-          }}
-        >
-          <span className={styles.commandName}>/{command.name}</span>
-          <span className={styles.commandText}>{command.description}</span>
+      {groups.map((group) => (
+        <div key={group.title} role="group" aria-label={group.title} className={styles.slashGroup} data-testid="gui-slash-group">
+          <span className={styles.popoverTitle} aria-hidden>
+            {group.title}
+          </span>
+          {group.commands.map((command, j) => {
+            const i = group.start + j
+            return (
+              <div
+                key={command.name}
+                role="option"
+                aria-selected={i === index}
+                data-index={i}
+                className={styles.command}
+                onMouseEnter={() => onHover(i)}
+                // Down, not click: the text area keeps the keyboard.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onPick(command)
+                }}
+              >
+                <span className={styles.commandName}>/{command.name}</span>
+                {command.argumentHint && <span className={styles.commandHint}>{command.argumentHint}</span>}
+                <span className={styles.commandText}>{command.description}</span>
+              </div>
+            )
+          })}
         </div>
       ))}
     </div>
