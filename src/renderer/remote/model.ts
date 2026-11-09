@@ -1,7 +1,8 @@
 // What the window tells main about its sessions for the phone (PRD F22, Figma 45B): every project (new sessions start
 // in one), the agent sessions of worktrees that are not archived with what the phone list shows, and for main only each
 // session's folder and each project's root. Pure.
-import type { RemoteSession, RemoteShip, RemoteShipField, RemoteWindowSessions } from '@shared/remote'
+import type { GuiModelCatalog, GuiPicks } from '@shared/gui-chat'
+import type { RemoteAgentModels, RemoteSession, RemoteShip, RemoteShipField, RemoteWindowSessions } from '@shared/remote'
 import type { SessionSettings } from '@shared/session-settings'
 import type { Project, Session, Worktree } from '@shared/types'
 import { glanceFields, submitBlocker, submitLabel, type ShipState } from '../pull-requests/ship-flow'
@@ -87,4 +88,16 @@ export function remoteSessions(
     out.projects.push({ id: p.id, name: p.name })
   }
   return out
+}
+
+/**
+ * 新建会话's 模型 row (PRD F22 v1.161, Figma 67A): the agent's models as the desktop's empty-session menu lists them
+ * (Figma 65) — what a session of it listed before, else what main asked it — and the one a new session starts with,
+ * its last pick (left out when the list does not have it: the agent's default). None when it will not run as GUI.
+ */
+export function agentModels(gui: boolean, picks: GuiPicks | undefined, catalog: GuiModelCatalog | undefined): RemoteAgentModels {
+  if (!gui) return { gui, models: [] }
+  const models = picks?.models?.length ? picks.models : (catalog?.models ?? [])
+  const current = picks?.model ?? catalog?.current
+  return { gui, models: [...models], ...(current !== undefined && models.some((m) => m.value === current) ? { current } : {}) }
 }

@@ -8,7 +8,8 @@
 
 ## 当前位置
 
-- 2026-11-08：F17 新端口自动打开浏览器（PRD v1.161）：当前 worktree 出现新的监听端口时，右侧栏切到浏览器并打开它；其他 worktree 的端口标签变亮，切过去再开；设置 · Worktree 可关，默认开。
+- 2026-11-08：F17 新端口自动打开浏览器（PRD v1.162）：当前 worktree 出现新的监听端口时，右侧栏切到浏览器并打开它；其他 worktree 的端口标签变亮，切过去再开；设置 · Worktree 可关，默认开。
+- 2026-11-08：手机新建的会话一律是 GUI 会话（agent 有 GUI 时），手机打开的会话算看过、重启后没接上的会启动（PRD v1.161）：手机上的模型、思考程度、模式从建好起就能用按钮改。新建时在智能体下面选模型（Figma 第 67 节），进会话后改思考程度和模式（会话设置里「权限」改叫「模式」）。分支 claude/ios-model-effort-selection-48b92b。
 - 2026-11-08：Pi 的 GUI 会话直接用 `pi --mode rpc`（PRD v1.158），不用装 pi-acp；模型和推理强度换了就在同一会话上重启 Pi，不写 Pi 的全局配置；模式只有询问 / 接受编辑。分支 claude/pi-rpc-driver-74ad0b（基于 jacoy/gui-composer-65）。
 - 2026-11-07：手机会话页加两边头像、Markdown 表格和会话设置（PRD v1.144）：在手机上改模型、思考程度、权限，只改这个会话；GUI 会话全部 agent 都能改，终端里目前是 Claude。
 - 2026-11-07：iPhone App 按 Figma「手机 · iOS」第 59–63 节改完（PRD v1.143）：新的设计 token 和 Dynamic Type，连接失败时写清原因（Mac 睡了、Wavi 没开、Tailscale 没开、版本不配），对话里工具调用合成一句、一轮结束有改动汇总、回答过的留回执，Live Activity 加汇总行和「已过期」。
@@ -274,7 +275,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [ ] Codex 会话的「编辑」（`thread/fork` 到这一轮之前，换 thread id，先实测）；编辑时带上原消息的图片附件；回滚 agent 改过的文件（Claude `rewind_files`，可选）
 - [ ] 没测：Codex、ACP 的真 agent（作者选只测 Claude）；Claude `--resume` 后的会话 id；真实中文输入法下按 ⏎ 选词不发送（只有单测和 ProseMirror 自己的组字保护）
 - [ ] 和 49″ 的差别（实现时定的，待作者看）：「总是允许」不带命令后缀；没有 @ 补全（v1.130 起 @ 按钮也去掉，文件走「+」）；多题提问一次一题、非最后一题按钮叫「下一个」
-- [ ] 没做：总览浮层里 GUI 会话不显示聊天；`wavi run` 派出的子会话仍是 CLI；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上；ACP agent 的状态事件 agent 字段暂报 `opencode`
+- [ ] 没做：总览浮层里 GUI 会话不显示聊天；`wavi run` 派出的子会话仍是 CLI；手机远程回答 GUI 会话的权限、给它发消息；app 重启后没看过的 GUI 会话要等看到时才接上（手机打开也算看到，v1.161）；ACP agent 的状态事件 agent 字段暂报 `opencode`
 
 ## 进行中：F22 手机远程（2026-11-01 定）
 
@@ -306,6 +307,9 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [x] 第 3 轮（2026-11-07，作者已确认）：第 63 节 `919:3843`，36 屏状态矩阵（配对 6、会话列表 3、会话页 8、权限和提问 5、Git 和出口 6、新建会话 5、无障碍 3），深浅各一
   - [x] 按第 59–63 节改 `ios/`（2026-11-07，PRD v1.143）：token、Dynamic Type、降低透明度、减弱动态效果；全部画面和状态；连接失败原因（手机判断，`hello` 加协议号）；工具调用合成一句、这一轮的改动、回执；Live Activity 汇总行和已过期。测试 `WaviTests` 38 个（`TranscriptGroupsTests`、`FormatTests`、`LinkTests`、`ActivityStateTests`）、`server.test.ts`、`phone-assets.test.ts`；iOS 26.3 模拟器对替身 Mac 截了深色、浅色全部改过的画面，字号特大（AX XL）截了主画面，降低透明度只截了深色。真机没试：Tailscale 下的失败原因、锁屏「已过期」（要 10 分钟不更新）
   - [x] 第 64 节和实现（2026-11-07，PRD v1.144）：两边头像、Markdown 表格、头像在手机上选、输入框按钮居中、会话设置（GUI 会话全部 agent；终端里的 Claude）。测试 `session-settings.test.ts`、`terminal-settings.test.ts`、`claude-terminal.test.ts`、`normalize.test.ts`、`remote.test.ts`、`model.test.ts`、WaviTests `MarkdownTests`；Claude 终端的按键用真 TUI 在隔离目录里跑过；iOS 模拟器对替身 Mac 截了深色、浅色、字号特大。真机没试
+  - [x] 手机新建的会话一律是 GUI 会话、手机打开的会话算看过（2026-11-08，PRD v1.161）：建好就能改模型、思考程度、模式。测试 `e2e/remote-gui.spec.ts`
+  - [x] Mac 端：手机按 agent 拿模型清单、新建时带上选中的模型（2026-11-08，PRD v1.161 ③）。测试 `remote.test.ts`、`remote/model.test.ts`、`e2e/remote-gui.spec.ts`
+  - [x] 手机端：新建会话「智能体」下面的「模型」行和菜单、会话设置「权限」改名「模式」（Figma 第 67 节）；只能建终端会话的 agent 不显示这一行，GUI agent 列不出模型或 Mac 没读到时只有「默认」。会话里改的模型和思考程度不会成为这家下次新建的默认值（只有新建表单里选的会）
   - [ ] 终端里的 Codex 会话设置（读 rollout 的 `thread_settings_applied` 拿当前值和模型清单）
   - [ ] Figma 里删掉被取代的 45A、45D、46′G、46′C（等作者确认）
   - [ ] 离线时显示上次的对话（现在离线进会话是空的）；重连的退避让 Mac 恢复后要等几秒才连上
@@ -418,7 +422,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
   - [x] 普通终端里手动敲的 `claude` / `codex` 也有 context / todo / 额度（2026-10-19，PRD v1.33）：终端会话 PATH 最前放 shim（`resources/hooks/agent-shim.sh` + `src/main/hooks/shell-agents.ts`），交互式运行时补 `--settings` / Codex `-c`，结束时报告 `AgentExit`；zsh 用 ZDOTDIR 交接、fish 用 vendor_conf.d 保证 shim 在用户 rc 之后仍在最前；不写全局配置。测试 `shell-agents.test.ts`（真 sh 跑 shim）、`bridge.test.ts`，e2e `session-meta.spec.ts`（终端里敲 claude 出现 context 和额度，退出后消失）。以后：终端里手动启动的 agent 也驱动会话状态和通知；`alias` 到绝对路径时的被动识别
   - [x] F12 todo 进度（2026-10-19，Figma 17）：PostToolUse 的 TodoWrite / TaskCreate / TaskUpdate 在主进程里合成列表（/clear 清空，窗口重载时补发）；会话头 `3/7 · 当前项` + 只读 TodoPopover，侧栏 1px 进度线，总览 `3/7` 列。注意 Claude 2.1.303 对 Claude 5 模型默认不开 todo 工具（PRD §6.6），Wavi 不替用户打开
   - [x] F14 端口检测（2026-10-19）：有会话时主进程仍用 `src/main/browser/ports.ts` 的 `ps` + `lsof`，大约每 3 秒扫每个 PTY 进程树（不再只在浏览器页签打开时扫）；窗口订阅每个会话的最近一次结果，所以侧栏会话行和总览在重载后也能显示 `:5173`，不必先打开浏览器页签；点击在右侧栏浏览器打开，⌥ 点击用系统浏览器打开，右键结束进程。主进程只结束该会话最近一次扫描里的 pid（`sessionListener`），没有通用的杀进程 IPC。同一会话超过 2 个端口时其余收成 `+N`；e2e 在 `browser-panel.spec.ts`（关着浏览器页签时侧栏和总览出现标签、⌥ 点击、右键确认后结束）。agent CLI 自己的监听（Claude Code 的本地 socket）不列（2026-10-28，PRD v1.85，`isAgentCli` 单测）
-  - [x] F17 新端口自动打开浏览器（2026-11-08，PRD v1.161）：`src/renderer/panels/browser/auto-open.ts` 跟着端口扫描，每个端口一次、重启后刷新，其他 worktree 等切过去；设置 · Worktree · 端口的开关；e2e `browser-panel.spec.ts`「opens the panel by itself」。以后再做：agent 写出的 `.html` 预览（限定在 worktree 内的协议）
+  - [x] F17 新端口自动打开浏览器（2026-11-08，PRD v1.162）：`src/renderer/panels/browser/auto-open.ts` 跟着端口扫描，每个端口一次、重启后刷新，其他 worktree 等切过去；设置 · Worktree · 端口的开关；e2e `browser-panel.spec.ts`「opens the panel by itself」。以后再做：agent 写出的 `.html` 预览（限定在 worktree 内的协议）
   - [x] F17 浏览器页签（2026-10-17）：`WebContentsView`（每个 worktree 一个 `persist:tr-browser:<哈希>` 分区、无 preload、只允许 http(s)、新窗口要有用户操作）、每个 worktree 一个页面并记住 URL、地址框（纯数字 = localhost 端口）、worktree 内所有会话的端口条、375 手机视口、控制台错误 / 警告计数和“发给 Claude”（只放进输入行，不按回车）、页面里的应用快捷键和右键菜单、空状态 13E；菜单和对话框打开时用截图代替页面；e2e `browser-panel.spec.ts`。以后再做：截图闪烁 / MutationObserver 范围、本机自签名证书、缩放后的坐标、隐藏时暂停端口扫描、闲置页面回收、触摸和移动端 UA、按 cwd 找后台服务的端口
   - [x] 终端里的链接优先在内置浏览器打开（2026-10-18，PRD v1.16）：单击 = 右侧栏浏览器、导航到会话所在 worktree 的页面；⌘ 单击 = 系统浏览器；右键链接 = 在内置浏览器打开 · 用系统浏览器打开 · 复制链接；OSC 8 超链接同样处理，悬停显示真实地址；e2e 在 `browser-panel.spec.ts`。以后再做：设置里改默认打开方式
   - [x] 内置浏览器能登录外部网站（2026-10-18，PRD v1.18）：外部网站共用一个分区（本机 / 局域网仍按 worktree 隔离，跨类跳转换视图）；登录弹窗开成 Wavi 里的小窗口并保留 `window.opener`，⌘W 只关弹窗；页面 UA 去掉 `Electron/…` 和应用名；e2e 用 `--host-resolver-rules` 把 `site.example` 指到本机。真实 Google 登录已验证（第一次弹窗报 Google 400，第二次成功，原因未查明）

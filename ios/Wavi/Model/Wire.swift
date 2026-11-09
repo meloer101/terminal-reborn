@@ -276,7 +276,8 @@ enum PhoneCommand: Sendable {
   case permission(prompt: String, decision: String)
   case answer(prompt: String, answers: [String: String])
   case newSessionInfo(project: String)
-  case newSession(project: String, workdir: String, agent: String, base: String?, branch: String?, prompt: String?)
+  case newSession(project: String, workdir: String, agent: String, base: String?, branch: String?, prompt: String?, model: String?)
+  case agentModels(agent: String)
   case changes(session: String)
   case diff(session: String, path: String, scope: String, oldPath: String?, untracked: Bool)
   case exits(session: String)
@@ -297,12 +298,14 @@ enum PhoneCommand: Sendable {
     case .permission(let p, let d): return ["type": .string("permission"), "prompt": .string(p), "decision": .string(d)]
     case .answer(let p, let a): return ["type": .string("answer"), "prompt": .string(p), "answers": .object(a.mapValues { .string($0) })]
     case .newSessionInfo(let p): return ["type": .string("new-session-info"), "project": .string(p)]
-    case .newSession(let project, let workdir, let agent, let base, let branch, let prompt):
+    case .newSession(let project, let workdir, let agent, let base, let branch, let prompt, let model):
       var f: [String: JSONValue] = ["type": .string("new-session"), "project": .string(project), "workdir": .string(workdir), "agent": .string(agent)]
       if let base { f["base"] = .string(base) }
       if let branch { f["branch"] = .string(branch) }
       if let prompt { f["prompt"] = .string(prompt) }
+      if let model { f["model"] = .string(model) }
       return f
+    case .agentModels(let agent): return ["type": .string("agent-models"), "agent": .string(agent)]
     case .changes(let s): return ["type": .string("changes"), "session": .string(s)]
     case .diff(let s, let path, let scope, let oldPath, let untracked):
       var f: [String: JSONValue] = ["type": .string("diff"), "session": .string(s), "path": .string(path), "scope": .string(scope)]
