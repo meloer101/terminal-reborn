@@ -58,6 +58,14 @@ module.exports = {
       to: { path: '^src/(renderer|preload)/' }
     },
     {
+      name: 'usage-stats-stands-alone',
+      severity: 'error',
+      comment:
+        'The 额度 statistics scanner runs in a worker thread: it reads only through its own sources and src/shared. index.ts is its one Electron glue file.',
+      from: { path: '^src/main/usage-stats/', pathNot: '^src/main/usage-stats/index\\.ts$' },
+      to: { path: ['^src/(?!shared/|main/usage-stats/)', '(^|/)node_modules/electron/'] }
+    },
+    {
       name: 'pty-host-stands-alone',
       severity: 'error',
       comment: 'The pty-host runs as its own process (utilityProcess / inside the daemon): no Electron main code.',
