@@ -127,6 +127,22 @@ export function waviMessage(text: string): WaviMessage | null {
   return notice ? { kind: 'notice', notice } : null
 }
 
+/** The children whose report reached this chat. */
+export function reportedChildren(items: readonly ChatItem[]): ReadonlySet<SessionId> {
+  const out = new Set<SessionId>()
+  for (const item of items) if (item.kind === 'user') for (const r of parseReportText(item.text) ?? []) out.add(r.childId)
+  return out
+}
+
+/** When the user last wrote here themselves (Wavi's messages are not theirs); null before that. */
+export function lastUserAt(items: readonly ChatItem[]): number | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    if (item?.kind === 'user' && !looksLikeReport(item.text)) return item.at
+  }
+  return null
+}
+
 /** Whether a block holds the row `id`, at the top of its run or under a subagent row. */
 export function blockHas(block: FeedBlock, id: string): boolean {
   if (block.kind === 'item') return block.item.id === id

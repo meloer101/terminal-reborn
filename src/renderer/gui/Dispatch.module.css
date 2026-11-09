@@ -1,0 +1,589 @@
+/* Dispatch in a GUI dispatcher's chat (Figma 68′): the fan-out graph, the strip above the composer, Wavi's report
+   cards and notices. Inside the chat pane: its type scale (--type-step, --line-step) and --avatar apply. Colour only on
+   status, and every state has its shape and its word too. */
+
+.dispatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  font: var(--type-step);
+}
+
+.head,
+.line,
+.stripHead,
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.head {
+  gap: var(--space-8);
+}
+
+.headIcon {
+  flex: none;
+  color: var(--text-primary);
+}
+
+.headTitle,
+.stripTitle,
+.reportAgent {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.stripTitle[data-quiet] {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.muted {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mono {
+  flex: none;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer {
+  flex: 1;
+  min-width: var(--space-8);
+}
+
+.counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+}
+
+.changes {
+  font: var(--text-mono-s);
+  color: var(--text-secondary);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.add {
+  color: var(--diff-add-fg);
+}
+
+.del {
+  color: var(--diff-del-fg);
+}
+
+[data-tone='attention'] {
+  color: var(--status-attention);
+}
+
+[data-tone='error'] {
+  color: var(--status-error);
+}
+
+[data-tone='working'],
+[data-tone='done'],
+[data-tone='exited'] {
+  color: var(--text-secondary);
+}
+
+.action {
+  min-width: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- the graph: SVG wires and rings under, marks and labels over, in the same px box --- */
+
+.graph {
+  position: relative;
+  min-width: 0;
+}
+
+.wires {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.wire {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke: var(--border-strong);
+}
+
+[data-state='working'] > .wire {
+  stroke: var(--border-subtle);
+}
+
+[data-state='attention'] > .wire {
+  stroke: var(--status-attention);
+}
+
+[data-state='error'] > .wire {
+  stroke: var(--status-error);
+}
+
+[data-state='pending'] > .wire,
+[data-state='exited'] > .wire {
+  stroke: var(--border-default);
+  stroke-dasharray: 3 4;
+}
+
+/* A running session's wire: dashes flowing out to it. */
+.flow {
+  fill: none;
+  stroke: var(--status-working);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 2 7;
+  animation: flow 0.9s linear infinite;
+}
+
+@keyframes flow {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.node {
+  fill: var(--tr-chat-bg, var(--bg-app));
+  stroke-width: 1.5;
+  stroke: var(--border-strong);
+}
+
+[data-state='working'] > .node {
+  stroke: var(--border-subtle);
+}
+
+[data-state='attention'] > .node {
+  stroke: var(--status-attention);
+}
+
+[data-state='error'] > .node {
+  stroke: var(--status-error);
+}
+
+[data-state='done'] > .node {
+  stroke: var(--status-done);
+}
+
+[data-state='pending'] > .node {
+  stroke: var(--border-default);
+  stroke-dasharray: 3 3;
+}
+
+.halo {
+  opacity: 0.14;
+  fill: var(--status-attention);
+}
+
+[data-state='error'] > .halo {
+  fill: var(--status-error);
+}
+
+/* The ring of a running node turns, like StatusGlyph's arc. */
+.arc {
+  fill: none;
+  stroke: var(--status-working);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: turn var(--duration-spin) linear infinite;
+}
+
+@keyframes turn {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+.parent {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.parent > :first-child {
+  color: inherit;
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 16px;
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--status-done);
+  color: var(--text-inverse);
+  font: var(--text-mono-s-medium);
+  text-align: center;
+}
+
+.parentLabel {
+  position: absolute;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.mark {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.mark[data-state='pending'] {
+  opacity: 0.45;
+}
+
+/* A report on its way back to the dispatcher, once. */
+.back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--status-done);
+  offset-rotate: 0deg;
+  opacity: 0;
+  animation: back 1.1s ease-in 1 both;
+}
+
+@keyframes back {
+  0% {
+    offset-distance: 0%;
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+.label {
+  position: absolute;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transform: translateY(-50%);
+}
+
+.title {
+  flex: none;
+  max-width: 60%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.title[data-strong] {
+  font-weight: 500;
+}
+
+.title:disabled {
+  cursor: default;
+}
+
+.title:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.button,
+.primary {
+  flex: none;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font: var(--text-caption);
+  line-height: 20px;
+}
+
+.button:hover {
+  background: var(--bg-selected);
+}
+
+.primary {
+  padding: 0 var(--space-12);
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+  font: var(--text-body);
+  line-height: 26px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+.actions > .button {
+  font: var(--text-body);
+  line-height: 26px;
+  padding: 0 var(--space-12);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+}
+
+.link:hover {
+  color: var(--text-primary);
+}
+
+/* --- the strip above the composer --- */
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--space-12);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+  font: var(--type-step);
+}
+
+.avatars {
+  display: inline-flex;
+  flex: none;
+}
+
+.ring {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--tr-chat-bg, var(--bg-app));
+}
+
+.ring + .ring {
+  margin-left: -6px;
+}
+
+.ring[data-state='working'] {
+  border-color: var(--status-working);
+  border-left-color: var(--border-subtle);
+}
+
+.ring[data-state='attention'] {
+  border-color: var(--status-attention);
+}
+
+.ring[data-state='error'] {
+  border-color: var(--status-error);
+}
+
+.ring[data-state='done'] {
+  border-color: var(--status-done);
+}
+
+.urgent {
+  min-width: 0;
+  font: var(--text-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--space-4);
+}
+
+.row {
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+}
+
+.row[data-nested] {
+  padding-left: var(--space-20);
+}
+
+.rowTitle {
+  flex: none;
+  max-width: 40%;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Wavi's own messages --- */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.reports {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* Like an agent's turn: the mark outside the column, on the left — the child's agent, never the user's picture. */
+.report {
+  position: relative;
+  margin-left: calc(-1 * (var(--avatar) + var(--space-12)));
+  padding-left: calc(var(--avatar) + var(--space-12));
+}
+
+.reportAvatar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--avatar);
+  height: var(--avatar);
+  box-sizing: border-box;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+.dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--tr-chat-bg, var(--bg-app));
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.dot[data-state='done'] {
+  background: var(--status-done);
+}
+
+.dot[data-state='error'] {
+  background: var(--status-error);
+}
+
+.reportCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-window);
+  font: var(--type-step);
+}
+
+.reportCard > .line {
+  align-self: stretch;
+}
+
+.reportTitle {
+  min-width: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excerpt {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow,
+  .arc,
+  .back {
+    animation: none;
+  }
+
+  .back {
+    display: none;
+  }
+}

@@ -19,11 +19,15 @@ import { ansiSpans } from './ansi'
 import { ChatMarkdown } from './ChatMarkdown'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
+import { DispatchGraph, WaviMessageView } from './Dispatch'
 import { DiffBlock, diffText } from './DiffBlock'
 import { TodoList } from './Todos'
 import {
   blockHas,
   composerKey,
+  dispatchKey,
+  dispatchRows,
+  waviMessage,
   feedBlocks,
   isSubagentTool,
   liveStartsTurn,
@@ -35,11 +39,13 @@ import {
   turnStarts,
   userBubble,
   userMarkdown,
+  type DispatchRow,
   type FeedBlock,
   type NestedItem,
   type StepItem,
   type ToolIcon,
-  type ToolView
+  type ToolView,
+  type WaviMessage
 } from './model'
 import styles from './Chat.module.css'
 
@@ -66,6 +72,14 @@ const TOOL_ICONS: Readonly<Record<ToolIcon, LucideIcon>> = {
   wrench: Wrench
 }
 
+/** Wavi's own message (a dispatch report or notice) in a user item, read once per item. */
+const waviCache = new WeakMap<ChatItem, WaviMessage | null>()
+function waviOf(item: Extract<ChatItem, { kind: 'user' }>): WaviMessage | null {
+  let found = waviCache.get(item)
+  if (found === undefined) waviCache.set(item, (found = waviMessage(item.text)))
+  return found
+}
+
 /** Within this many px of the end the feed follows new content down. */
 const STICK_PX = 48
 
@@ -87,6 +101,8 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
   const blocks = useMemo(() => feedBlocks(items), [items])
   const starts = useMemo(() => turnStarts(blocks), [blocks])
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
+  // Figma 68′: the turn's wavi run calls as one graph.
+  const dispatch = useMemo(() => dispatchRows(items), [items])
   const [editingId, setEditingId] = useState<string | null>(null)
   // The message being edited, while it is still there (an edit sent replaces the conversation after it).
   const editingAt = editingId === null ? -1 : blocks.findIndex((b) => b.kind === 'item' && b.item.id === editingId)
@@ -133,7 +149,9 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
     <div ref={scrollerRef} className={styles.scroller} data-region="gui-feed">
       <div ref={contentRef} className={styles.feed}>
         {blocks.map((block, i) =>
-          block.kind === 'item' && block.item.kind === 'user' ? (
+          block.kind === 'item' && block.item.kind === 'user' && waviOf(block.item) ? (
+            <WaviMessageView key={block.key} message={waviOf(block.item)!} time={timeOf(block.item.at)} />
+          ) : block.kind === 'item' && block.item.kind === 'user' ? (
             <UserMessage
               key={block.key}
               sessionId={sessionId}
@@ -147,7 +165,13 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
             />
           ) : (
             <AgentTurn key={block.key} agent={agent} start={starts.has(block.key)} faded={editingAt >= 0 && i > editingAt} end={ends.get(block.key)}>
-              <Block sessionId={sessionId} block={block} waitingTool={block.kind === 'steps' && waitingTool !== null && blockHas(block, waitingTool) ? waitingTool : null} />
+              <Block
+                sessionId={sessionId}
+                block={block}
+                waitingTool={block.kind === 'steps' && waitingTool !== null && blockHas(block, waitingTool) ? waitingTool : null}
+                dispatch={dispatch}
+                dispatchShape={dispatchKey(block, dispatch)}
+              />
             </AgentTurn>
           )
         )}
@@ -162,13 +186,28 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
 }
 
 const Block = memo(
-  function Block({ sessionId, block, waitingTool }: { sessionId: SessionId; block: FeedBlock; waitingTool: string | null }) {
+  function Block({
+    sessionId,
+    block,
+    waitingTool,
+    dispatch
+  }: {
+    sessionId: SessionId
+    block: FeedBlock
+    waitingTool: string | null
+    dispatch: ReadonlyMap<string, DispatchRow>
+    /** What the block draws of `dispatch` (dispatchKey): the memo compares this, not the map. */
+    dispatchShape: string
+  }) {
     if (block.kind === 'steps') {
       return (
         <div className={styles.steps}>
-          {block.items.map((item) =>
-            item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={block.nested} waitingTool={waitingTool} />
-          )}
+          {block.items.map((item) => {
+            const row = dispatch.get(item.id)
+            if (row?.kind === 'graph') return <DispatchGraph key={item.id} parentId={sessionId} ids={row.ids} />
+            if (row?.kind === 'merged') return null
+            return item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={block.nested} waitingTool={waitingTool} />
+          })}
         </div>
       )
     }
@@ -184,7 +223,7 @@ const Block = memo(
         return null
     }
   },
-  (a, b) => a.sessionId === b.sessionId && a.waitingTool === b.waitingTool && sameBlock(a.block, b.block)
+  (a, b) => a.sessionId === b.sessionId && a.waitingTool === b.waitingTool && a.dispatchShape === b.dispatchShape && sameBlock(a.block, b.block)
 )
 
 const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean => !!b && a.length === b.length && a.every((item, i) => item === b[i])

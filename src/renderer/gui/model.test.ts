@@ -43,7 +43,9 @@ import {
   blockHas,
   dispatchRows,
   dispatchKey,
-  waviMessage
+  waviMessage,
+  reportedChildren,
+  lastUserAt
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -97,6 +99,14 @@ describe('dispatch in the feed (Figma 68′)', () => {
     expect(waviMessage('[Wavi 派活] 用户同意了，下面的会话已经开始：\n- id s-1 · codex · 「T」 · 快照')?.kind).toBe('notice')
     expect(waviMessage('[Wavi 同任务多解汇报] …')).toBeNull()
     expect(waviMessage('hello')).toBeNull()
+  })
+
+  it('knows which children reported here, and when the user last wrote themselves', () => {
+    const report: ChatItem = { kind: 'user', id: 'r', at: 9, text: '[Wavi 派活报告] x\n\n— 「T」 · Codex · 一轮结束 · 快照 · id s-1', images: 0 }
+    const items: ChatItem[] = [{ ...user('u'), at: 5 }, report]
+    expect([...reportedChildren(items)]).toEqual(['s-1'])
+    expect(lastUserAt(items)).toBe(5)
+    expect(lastUserAt([report])).toBeNull()
   })
 })
 
