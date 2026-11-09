@@ -7,6 +7,7 @@
 
 import { randomInt } from 'node:crypto'
 import type { GuiAnswer, GuiConfigOption } from '@shared/gui-chat'
+import { parsePiContextUsage } from '@shared/session-meta'
 import { isRec, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
 import { callKey, createPiNormalizer, PI_FILE_CHANGE_TOOLS, PI_LEVELS, piAnswerResponse, piCommands, piConfig, piModelValue, waviConfirm, type PiPicks } from './pi-rpc'
@@ -102,6 +103,15 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
     }
     isReady = true
     io.ready()
+    readContext()
+  }
+
+  /** How full the window is (Figma 52G): Pi says it only when asked; a failed ask leaves the last reading. */
+  function readContext(): void {
+    void request('get_session_stats', {}, HANDSHAKE_TIMEOUT_MS).then((outcome) => {
+      const context = outcome.ok ? parsePiContextUsage(outcome.data) : undefined
+      if (context !== undefined) io.context(context)
+    })
   }
 
   /** 接受编辑 lets file changes through; 总是允许 the same call. */
@@ -183,6 +193,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
         if (!replay) io.turnEnd({ failed: turnError !== undefined, ...(turnError !== undefined ? { message: turnError } : {}) })
         turnError = undefined
       }
+      if (!replay && ((message.type === 'agent_end' && message.willRetry !== true) || message.type === 'compaction_end')) readContext()
     },
 
     replayed() {
@@ -191,6 +202,7 @@ export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver 
         releaseAllowed()
         isReady = true
         io.ready()
+        readContext()
       } else void handshake()
     },
 

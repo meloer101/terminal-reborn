@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createClaudeDriver } from './claude-driver'
 import type { GuiEvent } from '@shared/gui-chat'
+import type { ContextUsage } from '@shared/session-meta'
 import type { DriverIO, ImageBlock, Rec } from './driver'
 
 function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
@@ -11,6 +12,7 @@ function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
     ready: () => undefined,
     agentSession: () => undefined,
     title: () => undefined,
+    context: () => undefined,
     turnEnd: () => undefined,
     fail: () => undefined,
     image,
@@ -47,6 +49,7 @@ describe('Claude driver · the / menu (Figma 59H)', () => {
       ready: () => undefined,
       agentSession: () => undefined,
       title: () => undefined,
+      context: () => undefined,
       turnEnd: () => undefined,
       fail: () => undefined,
       image: () => Promise.resolve(null),
@@ -65,5 +68,38 @@ describe('Claude driver · the / menu (Figma 59H)', () => {
     expect(kinds()).toEqual(['compact:command', 'research:skill'])
     driver.line({ type: 'system', subtype: 'commands_changed', commands: [{ name: 'research', description: '' }, { name: 'review', description: '' }] }, false)
     expect(kinds()).toEqual(['research:skill', 'review:command'])
+  })
+})
+
+describe('Claude driver · context (Figma 52G)', () => {
+  it('reports the window once a result names its size, then each main-thread reply; null after a compaction', () => {
+    const readings: (ContextUsage | null)[] = []
+    const io: DriverIO = {
+      write: () => true,
+      emit: () => undefined,
+      ready: () => undefined,
+      agentSession: () => undefined,
+      title: () => undefined,
+      context: (context) => void readings.push(context),
+      turnEnd: () => undefined,
+      fail: () => undefined,
+      image: () => Promise.resolve(null),
+      relaunch: () => Promise.resolve(false)
+    }
+    const driver = createClaudeDriver(io, { cwd: '/w', clientVersion: '0' })
+    const reply = (used: number, parent: string | null = null) => ({
+      type: 'assistant',
+      parent_tool_use_id: parent,
+      message: { id: `m${used}`, role: 'assistant', model: 'claude-opus-5-5', content: [], usage: { input_tokens: used, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 1 } }
+    })
+    driver.line(reply(20_000), false)
+    expect(readings).toEqual([])
+    driver.line({ type: 'result', subtype: 'success', session_id: 's', modelUsage: { 'claude-opus-5-5': { contextWindow: 200_000 } } }, false)
+    expect(readings.at(-1)).toMatchObject({ percent: 10, usedTokens: 20_000, windowTokens: 200_000 })
+    driver.line(reply(5_000, 'toolu_1'), false)
+    driver.line(reply(50_000), false)
+    expect(readings.map((r) => r?.usedTokens)).toEqual([20_000, 50_000])
+    driver.line({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'manual', pre_tokens: 50_000 } }, false)
+    expect(readings.at(-1)).toBeNull()
   })
 })

@@ -20,6 +20,11 @@ function startTurn(id, params) {
   if (text.includes('name me')) out({ method: 'thread/name/updated', params: { threadId, threadName: 'Fake\nthread   name' } })
   out({ method: 'item/agentMessage/delta', params: { itemId: `m${turnN}`, delta: 'Work' } })
   out({ method: 'item/agentMessage/delta', params: { itemId: `m${turnN}`, delta: 'ing' } })
+  if (text.includes('measure')) {
+    const breakdown = (totalTokens) => ({ totalTokens, inputTokens: totalTokens, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 })
+    out({ method: 'thread/tokenUsage/updated', params: { threadId: 'thr-other', turnId, tokenUsage: { total: breakdown(1), last: breakdown(1), modelContextWindow: 258400 } } })
+    out({ method: 'thread/tokenUsage/updated', params: { threadId, turnId, tokenUsage: { total: breakdown(135200), last: breakdown(135200), modelContextWindow: 258400 } } })
+  }
   if (text.includes('slow')) return
   if (text.includes('fail')) {
     out({ method: 'turn/completed', params: { turn: { id: turnId, status: 'failed', error: { message: 'quota exceeded' } } } })

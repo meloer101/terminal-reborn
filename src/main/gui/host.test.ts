@@ -667,6 +667,37 @@ describe('GuiHost · Pi rpc (PRD F23 v1.160)', () => {
   }, 30_000)
 })
 
+describe('GuiHost · context (Figma 52G)', () => {
+  const contexts = (h: Harness) => h.status.flatMap((e) => (e.type === 'context' ? [e.context] : []))
+
+  it('Codex: its own thread’s thread/tokenUsage/updated', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'k1'), h.owner)
+    await ready(h, 'k1')
+    await h.host.send('k1', { text: 'measure slow', attachments: [] })
+    await until(() => contexts(h).length > 0)
+    expect(contexts(h)).toEqual([expect.objectContaining({ percent: 50, usedTokens: 135200, windowTokens: 258400 })])
+  })
+
+  it('ACP: usage_update', async () => {
+    const h = harness()
+    await h.host.open(launchOf('grok', 'k2'), h.owner)
+    await ready(h, 'k2')
+    await h.host.send('k2', { text: 'measure slow', attachments: [] })
+    await until(() => contexts(h).length > 0)
+    expect(contexts(h)).toEqual([{ percent: 27, usedTokens: 53000, windowTokens: 200000 }])
+  })
+
+  it('Pi: get_session_stats after a turn', async () => {
+    const h = harness()
+    await h.host.open(launchOf('pi', 'k3'), h.owner)
+    await ready(h, 'k3')
+    await h.host.send('k3', { text: 'measure', attachments: [] })
+    await until(() => contexts(h).length > 0)
+    expect(contexts(h)).toEqual([{ percent: 30, usedTokens: 60000, windowTokens: 200000 }])
+  })
+})
+
 describe('GuiHost · reattach edge cases (a stub link)', () => {
   const user = JSON.stringify({ type: 'user', message: { role: 'user', content: 'hello' }, session_id: 's-1' })
   const reply = JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Hello: hello' }] }, session_id: 's-1', parent_tool_use_id: null })

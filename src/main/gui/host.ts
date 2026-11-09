@@ -7,6 +7,7 @@
 import type { AgentEvent } from '@shared/agent-events'
 import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
+import { sameContext, type ContextUsage } from '@shared/session-meta'
 import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem } from '@shared/transcript-chat'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
@@ -101,6 +102,8 @@ class GuiSession<O extends GuiOwner> {
   private hookless = false
   /** The agent's latest name for the conversation; sent again after a replay, which mutes status. */
   private title: string | undefined
+  /** The latest context reading (undefined: none yet); sent again after a replay and to a new owner, as the title is. */
+  private context: ContextUsage | null | undefined
 
   constructor(
     readonly launch: GuiLaunch,
@@ -142,6 +145,7 @@ class GuiSession<O extends GuiOwner> {
       },
       fail: (reason) => this.fail(reason),
       title: (raw) => this.named(raw),
+      context: (context) => this.measured(context),
       image: (path) => this.deps.image(path),
       relaunch: (change) => this.onRelaunch(change)
     }
@@ -271,6 +275,8 @@ class GuiSession<O extends GuiOwner> {
     const tracker = createGuiStatusTracker()
     tracker.events([{ type: 'items', changes: this.state.items.map((item, index) => ({ index, item })) }])
     this.tracker = tracker
+    // Claude's hooks carry no context under -p: it comes from here for every protocol.
+    if (this.context !== undefined) this.status([{ type: 'context', context: this.context }])
     if (!this.synthStatus) return
     const out: AgentEvent[] = []
     if (this.state.busy) {
@@ -289,6 +295,12 @@ class GuiSession<O extends GuiOwner> {
     if (!title || title === this.title) return
     this.title = title
     this.status([{ type: 'agent-title', title }])
+  }
+
+  private measured(context: ContextUsage | null): void {
+    if (this.context !== undefined && (context === null ? this.context === null : this.context !== null && sameContext(this.context, context))) return
+    this.context = context
+    this.status([{ type: 'context', context }])
   }
 
   private started(): void {
@@ -405,6 +417,7 @@ class GuiSession<O extends GuiOwner> {
     this.owner = owner
     // A title that came while no window owned the session (reload, window closed) went nowhere: the new owner gets it.
     if (this.title) this.status([{ type: 'agent-title', title: this.title }])
+    if (this.context !== undefined) this.status([{ type: 'context', context: this.context }])
     return this.snapshot()
   }
 
