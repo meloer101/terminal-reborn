@@ -4,17 +4,17 @@
 // wait for 开始 the graph is the confirm (dashed nodes, 拒绝 / 开始 N 个): a GUI dispatcher has no terminal strip.
 // Above the composer, the strip keeps every session in view after the graph scrolled away. Wavi's own messages — a
 // report, the notice of what the user decided — are drawn as such, never as the user's bubble.
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Split } from 'lucide-react'
-import { agentLabel } from '@shared/dispatch'
+import { agentLabel, DISPATCH_LIMITS, type PendingStart } from '@shared/dispatch'
 import type { AgentKind, SessionId, SessionStatus } from '@shared/types'
-import { decideConfirms } from '../dispatch/handler'
+import { decideCalls } from '../dispatch/handler'
 import { useDispatch } from '../dispatch/store'
-import { dispatchView, stripShown, type DispatchNode, type DispatchView, type NodeState } from '../dispatch/view'
+import { dispatcherChildIds, dispatchView, stripShown, undrawnWaiting, type DispatchNode, type DispatchView, type NodeState } from '../dispatch/view'
 import { useWorkspace } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { dispatchOutcomes, elapsedLabel, lastUserAt, reportedChildren, type WaviMessage } from './model'
+import { dispatchOutcomes, dispatchRows, elapsedLabel, lastUserAt, reportedChildren, type WaviMessage } from './model'
 import { useGuiSessions } from './store'
 import styles from './Dispatch.module.css'
 
@@ -196,10 +196,10 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
       </div>
       {waiting > 0 && (
         <div className={styles.actions}>
-          <button type="button" className={styles.button} onClick={() => decideConfirms(parentId, false)}>
+          <button type="button" className={styles.button} onClick={() => decideCalls(view.waiting.map((c) => c.callId), false)}>
             拒绝
           </button>
-          <button type="button" className={styles.primary} onClick={() => decideConfirms(parentId, true)} data-testid="dispatch-graph-start">
+          <button type="button" className={styles.primary} onClick={() => decideCalls(view.waiting.map((c) => c.callId), true)} data-testid="dispatch-graph-start">
             开始 {waiting} 个
           </button>
         </div>
@@ -255,23 +255,31 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
   const sessions = useWorkspace((s) => s.sessions)
   const confirms = useDispatch((s) => s.confirms)
   const ids = useMemo(() => {
-    const own = sessions.filter((s) => s.dispatchedBy === parentId).sort((a, b) => a.startedAt - b.startedAt)
-    const list = [...own.map((s) => s.id), ...confirms.filter((c) => c.parentId === parentId && !own.some((s) => s.id === c.childId)).map((c) => c.childId)]
+    const list = dispatcherChildIds(parentId, sessions, confirms)
     return list.length > 0 ? list : NO_IDS
   }, [sessions, confirms, parentId])
   const view = useDispatchView(parentId, ids)
   const items = useGuiSessions((s) => s.states[parentId]?.items) ?? NO_ITEMS
   const since = useMemo(() => lastUserAt(items), [items])
+  // Requests no graph draws (the feed could not read the call): answered here, or nowhere — GUI has no terminal strip.
+  const drawn = useMemo(() => new Set([...dispatchRows(items).values()].flatMap((row) => (row.kind === 'graph' ? row.ids : []))), [items])
+  const orphans = useMemo(() => undrawnWaiting(parentId, confirms, drawn), [parentId, confirms, drawn])
   const now = useNow(ticking(view))
   const [expanded, setExpanded] = useState(false)
-  if (!stripShown(view, since) || view.nodes.every((n) => n.state === 'pending')) return null
+  const crew = stripShown(view, since) && view.nodes.some((n) => n.state !== 'pending')
+  if (!crew && orphans.length === 0) return null
+  if (!crew) return <WaitingStrip waiting={orphans} />
   const all = view.nodes.flatMap((n) => [n, ...n.children.map((c) => ({ ...c, nested: true }))]) as (DispatchNode & { nested?: true })[]
   const urgent = view.urgent
-  const showGraph = (): void => {
-    const graphs = document.querySelectorAll('[data-dispatch-graph]')
-    graphs[graphs.length - 1]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  // The graph of this chat (a split shows more than one), its latest.
+  const showGraph = (event: MouseEvent<HTMLElement>): void => {
+    const graphs = event.currentTarget.closest('[data-gui-chat]')?.querySelectorAll('[data-dispatch-graph]')
+    graphs?.[graphs.length - 1]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
   return (
+    <>
+    {orphans.length > 0 && <WaitingStrip waiting={orphans} />}
+
     <div className={styles.strip} data-settled={view.settled || undefined} data-testid="dispatch-crew">
       <div className={styles.stripHead}>
         <span className={styles.avatars}>
@@ -340,6 +348,36 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
         </div>
       )}
     </div>
+    </>
+  )
+}
+
+/** Requests waiting for 开始 that no graph shows: the same answer as the graph's, for exactly these. */
+function WaitingStrip({ waiting }: { waiting: readonly PendingStart[] }) {
+  const calls = waiting.map((c) => c.callId)
+  return (
+    <div className={styles.strip} data-testid="dispatch-waiting">
+      <div className={styles.stripHead}>
+        <StatusGlyph status="needs_you" />
+        <span className={styles.stripTitle}>想开 {waiting.length} 个会话</span>
+        <span className={styles.spacer} />
+        <button type="button" className={styles.button} onClick={() => decideCalls(calls, false)}>
+          拒绝
+        </button>
+        <button type="button" className={styles.primary} onClick={() => decideCalls(calls, true)}>
+          开始 {waiting.length} 个
+        </button>
+      </div>
+      <div className={styles.rows}>
+        {waiting.map((c) => (
+          <div key={c.callId} className={styles.row}>
+            <AgentIcon kind={c.plan.item.agent} size={14} />
+            <span className={styles.rowTitle}>{c.plan.item.title}</span>
+            <span className={styles.action}>{c.plan.item.task.split('\n', 1)[0]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -349,8 +387,7 @@ const EVENT_STATE = { report: 'done', done: 'done', error: 'error', exited: 'exi
 const EVENT_WORD = { report: '发来报告', done: '一轮结束', error: '出错', exited: 'agent 已退出' } as const
 
 /** A dispatch report: one card per child, its agent's mark beside it; a notice: one quiet line. */
-export function WaviMessageView({ message, time }: { message: WaviMessage; time: string }) {
-  const sessions = useWorkspace((s) => s.sessions)
+export const WaviMessageView = memo(function WaviMessageView({ message, time }: { message: WaviMessage; time: string }) {
   if (message.kind === 'notice') {
     const { outcome, titles } = message.notice
     const text =
@@ -358,7 +395,7 @@ export function WaviMessageView({ message, time }: { message: WaviMessage; time:
         ? `已开始 ${titles.length} 个会话：${titles.join('、')}`
         : outcome === 'declined'
           ? `你拒绝了 ${titles.length} 个会话`
-          : `10 分钟没有回答，没有开 ${titles.length} 个会话`
+          : `${Math.round(DISPATCH_LIMITS.confirmMs / 60_000)} 分钟没有回答，没有开 ${titles.length} 个会话`
     return (
       <p className={styles.notice} data-testid="dispatch-notice">
         <Split {...ICON} size={14} />
@@ -368,41 +405,46 @@ export function WaviMessageView({ message, time }: { message: WaviMessage; time:
   }
   return (
     <div className={styles.reports}>
-      {message.reports.map((r) => {
-        const kind: AgentKind | undefined = sessions.find((s) => s.id === r.childId)?.kind
-        const state = r.event ? EVENT_STATE[r.event] : 'done'
-        return (
-          <article key={r.childId} className={styles.report} data-testid="dispatch-report">
-            <span className={styles.reportAvatar} aria-hidden>
-              {kind && <AgentIcon kind={kind} size={16} />}
-              <span className={styles.dot} data-state={state} />
-            </span>
-            <div className={styles.reportCard}>
-              <div className={styles.line}>
-                <span className={styles.reportAgent}>{r.agent}</span>
-                <span className={styles.muted}>报告</span>
-                <span className={styles.reportTitle}>{r.title}</span>
-                <StatusGlyph status={GLYPH[state]} />
-                <span className={styles.muted}>{r.event ? EVENT_WORD[r.event] : ''}</span>
-                <span className={styles.spacer} />
-                <span className={styles.muted}>{time}</span>
-              </div>
-              {r.facts.length > 0 && (
-                <div className={styles.line}>
-                  <Changes text={r.facts.join(' · ')} />
-                </div>
-              )}
-              {r.excerpt && <p className={styles.excerpt}>{r.excerpt}</p>}
-              {kind && (
-                <button type="button" className={styles.link} onClick={() => open(r.childId)}>
-                  打开会话
-                  <ChevronRight {...ICON} size={14} />
-                </button>
-              )}
-            </div>
-          </article>
-        )
-      })}
+      {message.reports.map((r) => (
+        <ReportCard key={r.childId} report={r} time={time} />
+      ))}
     </div>
+  )
+})
+
+function ReportCard({ report: r, time }: { report: Extract<WaviMessage, { kind: 'report' }>['reports'][number]; time: string }) {
+  // Only this child's kind: a card does not redraw when any other session changes.
+  const kind: AgentKind | undefined = useWorkspace((s) => s.sessions.find((x) => x.id === r.childId)?.kind)
+  const state = r.event ? EVENT_STATE[r.event] : 'done'
+  return (
+    <article className={styles.report} data-testid="dispatch-report">
+      <span className={styles.reportAvatar} aria-hidden>
+        {kind && <AgentIcon kind={kind} size={16} />}
+        <span className={styles.dot} data-state={state} />
+      </span>
+      <div className={styles.reportCard}>
+        <div className={styles.line}>
+          <span className={styles.reportAgent}>{r.agent}</span>
+          <span className={styles.muted}>报告</span>
+          <span className={styles.reportTitle}>{r.title}</span>
+          <StatusGlyph status={GLYPH[state]} />
+          <span className={styles.muted}>{r.event ? EVENT_WORD[r.event] : ''}</span>
+          <span className={styles.spacer} />
+          <span className={styles.muted}>{time}</span>
+        </div>
+        {r.facts.length > 0 && (
+          <div className={styles.line}>
+            <Changes text={r.facts.join(' · ')} />
+          </div>
+        )}
+        {r.excerpt && <p className={styles.excerpt}>{r.excerpt}</p>}
+        {kind && (
+          <button type="button" className={styles.link} onClick={() => open(r.childId)}>
+            打开会话
+            <ChevronRight {...ICON} size={14} />
+          </button>
+        )}
+      </div>
+    </article>
   )
 }

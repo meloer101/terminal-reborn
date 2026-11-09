@@ -162,6 +162,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
       ref={rootRef}
       className={styles.chat}
       data-testid="gui-chat"
+      data-gui-chat
       data-empty={empty || undefined}
       onKeyDown={(event) => {
         // A waiting card answers from the keyboard. The composer routes its own keys (Composer); typing elsewhere

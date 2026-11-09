@@ -549,9 +549,9 @@ export function noticeText(outcome: 'started' | 'declined' | 'timeout', children
 /** A shell command that runs `wavi run` (also after `cd … &&`, `;`, in a pipeline); not `wavi report`, nor an argument. */
 export const isWaviRun = (command: string): boolean => /(?:^|[;&|(\n])\s*wavi\s+run\s/.test(`${command} `)
 
-/** The sessions a `wavi run` answer (handler.ts) opened or holds for 开始, in order. */
+/** The sessions a `wavi run` answer (handler.ts) opened or holds for 开始, in order: only lines wavi starts itself. */
 export function waviRunIds(output: string): SessionId[] {
-  return [...output.matchAll(/\b(?:Started session|Session) (\S+) \(/g)].map((m) => m[1] ?? '').filter(Boolean)
+  return [...output.matchAll(/^(?:Started session|Session) (\S+) \(/gm)].map((m) => m[1] ?? '').filter(Boolean)
 }
 
 export interface ParsedReport {

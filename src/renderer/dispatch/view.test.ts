@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PendingStart } from '@shared/dispatch'
 import type { Session } from '@shared/types'
-import { dispatchView, stripShown, type DispatchInput } from './view'
+import { dispatcherChildIds, dispatchView, stripShown, undrawnWaiting, type DispatchInput } from './view'
 
 const T0 = 1_000_000
 
@@ -89,5 +89,15 @@ describe('stripShown', () => {
     expect(stripShown(done, T0)).toBe(true)
     expect(stripShown(done, T0 + 20)).toBe(false)
     expect(stripShown(dispatchView(input({})), null)).toBe(false)
+  })
+})
+
+describe('the strip’s sessions', () => {
+  it('lists a dispatcher’s children by start, then its requests still waiting', () => {
+    const sessions = [session({ id: 'b', startedAt: 2 }), session({ id: 'a', startedAt: 1 }), session({ id: 'x', dispatchedBy: 'other' })]
+    expect(dispatcherChildIds('p', sessions, [pending('w'), { ...pending('z'), parentId: 'other' }])).toEqual(['a', 'b', 'w'])
+  })
+  it('finds the waiting requests no graph in the chat draws, so they can still be answered', () => {
+    expect(undrawnWaiting('p', [pending('w'), pending('v'), { ...pending('z'), parentId: 'other' }], new Set(['w'])).map((c) => c.childId)).toEqual(['v'])
   })
 })

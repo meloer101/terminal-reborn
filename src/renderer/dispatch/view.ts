@@ -117,6 +117,22 @@ export function dispatchView(input: DispatchInput): DispatchView {
   }
 }
 
+/** Everything a dispatcher started, by when, then its requests still waiting for 开始 (the strip's sessions). */
+export function dispatcherChildIds(parentId: SessionId, sessions: readonly Session[], confirms: readonly PendingStart[]): SessionId[] {
+  const own = sessions.filter((s) => s.dispatchedBy === parentId).sort((a, b) => a.startedAt - b.startedAt)
+  const ids = own.map((s) => s.id)
+  for (const c of confirms) if (c.parentId === parentId && !ids.includes(c.childId)) ids.push(c.childId)
+  return ids
+}
+
+/**
+ * A dispatcher's requests waiting for 开始 that no graph in its chat draws (a call the feed could not read — a
+ * subagent's, an agent whose tool rows do not carry the command): the strip asks for them instead.
+ */
+export function undrawnWaiting(parentId: SessionId, confirms: readonly PendingStart[], drawn: ReadonlySet<SessionId>): PendingStart[] {
+  return confirms.filter((c) => c.parentId === parentId && !drawn.has(c.childId))
+}
+
 /** The strip shows while anything is under way, and after everything ended until the dispatcher's next message. */
 export function stripShown(view: DispatchView, lastUserAt: number | null): boolean {
   if (view.nodes.length === 0) return false

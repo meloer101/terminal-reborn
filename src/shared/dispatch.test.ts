@@ -264,6 +264,8 @@ describe('reading Wavi’s own words back (the GUI draws them, Figma 68′)', ()
     ].join('\n')
     expect(waviRunIds(out)).toEqual(['s-1a2b3c4d', 's-99aa00bb'])
     expect(waviRunIds('[limit] You already have 8 sessions.')).toEqual([])
+    // Only wavi's own lines: another program's words in the same command are not a session.
+    expect(waviRunIds('npm: Session cache (warm)\nSession s-1 (codex, a new branch) waits')).toEqual(['s-1'])
   })
   it('reads a report back: one entry per child, facts without the agent and event, the excerpt without hints', () => {
     const text = reportText([

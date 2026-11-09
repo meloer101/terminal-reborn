@@ -240,6 +240,11 @@ export function decideConfirms(parentId: SessionId, go: boolean): void {
   )
 }
 
+/** The user answered these requests only (a GUI dispatcher's graph, Figma 68′): what the button counted is what starts. */
+export function decideCalls(callIds: readonly string[], go: boolean): void {
+  decide(callIds, go ? 'started' : 'declined')
+}
+
 /** The dispatcher's agent went away (PRD F21 确认): what it asked for goes too, with nobody to tell. */
 export function dropConfirmsOf(parentId: SessionId): void {
   for (const c of takeConfirms(useDispatch.getState().confirms.filter((p) => p.parentId === parentId).map((p) => p.callId))) {
