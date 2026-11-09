@@ -495,23 +495,25 @@
   color: var(--text-tertiary);
 }
 
+/* Like an agent's turn: the mark outside the column, on the left — the child's agent, never the user's picture. The
+   feed's block (this list) reaches out over the mark's place, as .agentTurn does, so its paint containment keeps it. */
 .reports {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-}
-
-/* Like an agent's turn: the mark outside the column, on the left — the child's agent, never the user's picture. */
-.report {
-  position: relative;
+  min-width: 0;
   margin-left: calc(-1 * (var(--avatar) + var(--space-12)));
   padding-left: calc(var(--avatar) + var(--space-12));
+}
+
+.report {
+  position: relative;
 }
 
 .reportAvatar {
   position: absolute;
   top: 0;
-  left: 0;
+  left: calc(-1 * (var(--avatar) + var(--space-12)));
   display: grid;
   place-items: center;
   width: var(--avatar);

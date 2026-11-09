@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-09：GUI 派活方的对话里画出派活（PRD v1.164，Figma 68′）：`wavi run` 的位置是扇出图（也是确认），输入框上方是派活条，派活报告是报告卡、不再是用户气泡。
 - 2026-11-09：`wavi run` 派出的子会话也能开成 GUI（PRD v1.163）：派活方是 GUI、子会话的 agent 能跑 GUI 时默认开 GUI，`--ui gui|cli` 指定。
 - 2026-11-08：F17 新端口自动打开浏览器（PRD v1.162）：当前 worktree 出现新的监听端口时，右侧栏切到浏览器并打开它；其他 worktree 的端口标签变亮，切过去再开；设置 · Worktree 可关，默认开。
 - 2026-11-08：手机新建的会话一律是 GUI 会话（agent 有 GUI 时），手机打开的会话算看过、重启后没接上的会启动（PRD v1.161）：手机上的模型、思考程度、模式从建好起就能用按钮改。新建时在智能体下面选模型（Figma 第 67 节），进会话后改思考程度和模式（会话设置里「权限」改叫「模式」）。分支 claude/ios-model-effort-selection-48b92b。
@@ -270,6 +271,8 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 空会话的 agent 菜单列出每家的模型（PRD v1.159）：`src/main/gui/catalog.ts` 只握手不开对话（Claude `initialize`、Codex `model/list`、Grok ACP `initialize`、`cursor-agent models`、Pi `--mode rpc --no-session`），`gui.models` IPC；加载中 / 失败重试；Pi 列为已装（要 pi-acp）；本机五家实测、会话文件数不变
 - [x] Pi 直接用 `pi --mode rpc` 做 GUI 会话（PRD v1.160，照 Paseo / T3 Code，不再要 pi-acp）：`src/main/gui/pi-rpc.ts`（事件、对话框、选择器、会话文件历史）、`pi-driver.ts`，权限扩展 `resources/hooks/wavi-pi-gui.js`；换模型 / 推理强度在同一会话上重启（rpc 的 `set_model` 会写 `~/.pi/agent/settings.json`）；pty-host 认得 Pi 的 `extension_ui_response`（重开不再问已答的）。测试 `pi-rpc.test.ts`、`host.test.ts`（假 Pi `fixtures/fake-pi.mjs`）、e2e `gui-pi.spec.ts` 5 个；真 Pi 0.84.1 + DeepSeek 在 app 里跑过一轮工具、换模型、停止、重开；独立 review 8 条（高 1、中 2、低 5）已修。没做：app 关着时接受编辑下的 edit 要等重新打开（同 ACP agent）
 - [x] 派活的子会话开成 GUI（PRD v1.163）：`childUi`（`src/shared/dispatch.ts`）、`wavi run --ui`、`addBackgroundSession` 带界面、等「开始」的请求存界面；单测覆盖规则和存盘
+- [x] GUI 派活可视化（PRD v1.164，Figma 68′）：`src/renderer/gui/Dispatch.tsx`（扇出图、派活条、报告卡和通知），`src/renderer/dispatch/view.ts`（两处共用的视图），`src/shared/dispatch.ts` 读回 `wavi run` 的回答、报告和通知；e2e `gui-dispatch.spec.ts`（假 Claude 真跑 `wavi run`，两种主题截图在 `test-results/gui-dispatch/`）
+- [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流

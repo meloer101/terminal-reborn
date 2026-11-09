@@ -27,6 +27,8 @@ export interface DispatchNode {
   /** A report of it reached this chat. */
   reported: boolean
   gone?: true
+  /** A request the user turned down, or left unanswered: never a session. */
+  declined?: 'declined' | 'timeout'
   children: DispatchNode[]
 }
 
@@ -37,6 +39,8 @@ export interface DispatchInput {
   confirms: readonly PendingStart[]
   changes: Readonly<Record<SessionId, string | undefined>>
   reported: ReadonlySet<SessionId>
+  /** What became of requests that never became sessions, from Wavi's notices in the chat. */
+  outcomes?: ReadonlyMap<SessionId, { outcome: 'declined' | 'timeout'; title: string }>
 }
 
 export interface DispatchView {
@@ -93,6 +97,8 @@ export function dispatchView(input: DispatchInput): DispatchView {
       const { item } = confirm.plan
       return { id, agent: item.agent, title: item.title, ...(item.model ? { model: item.model } : {}), task: item.task.split('\n', 1)[0], state: 'pending', children: [], reported: false }
     }
+    const outcome = input.outcomes?.get(id)
+    if (outcome) return { id, agent: null, title: outcome.title, state: 'exited', reported: false, declined: outcome.outcome, children: [] }
     return { id, agent: null, title: '', state: 'exited', reported: false, gone: true, children: [] }
   })
   const all = nodes.flatMap((n) => [n, ...n.children])

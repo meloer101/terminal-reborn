@@ -134,6 +134,18 @@ export function reportedChildren(items: readonly ChatItem[]): ReadonlySet<Sessio
   return out
 }
 
+/** Requests that never became sessions — turned down, or not answered in time — by Wavi's notices in the chat. */
+export function dispatchOutcomes(items: readonly ChatItem[]): ReadonlyMap<SessionId, { outcome: 'declined' | 'timeout'; title: string }> {
+  const out = new Map<SessionId, { outcome: 'declined' | 'timeout'; title: string }>()
+  for (const item of items) {
+    if (item.kind !== 'user') continue
+    const notice = parseNoticeText(item.text)
+    if (!notice || notice.outcome === 'started') continue
+    notice.ids.forEach((id, i) => out.set(id, { outcome: notice.outcome as 'declined' | 'timeout', title: notice.titles[i] ?? '' }))
+  }
+  return out
+}
+
 /** When the user last wrote here themselves (Wavi's messages are not theirs); null before that. */
 export function lastUserAt(items: readonly ChatItem[]): number | null {
   for (let i = items.length - 1; i >= 0; i--) {

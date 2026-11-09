@@ -14,7 +14,7 @@ import { dispatchView, stripShown, type DispatchNode, type DispatchView, type No
 import { useWorkspace } from '../state/workspace'
 import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
-import { elapsedLabel, lastUserAt, reportedChildren, type WaviMessage } from './model'
+import { dispatchOutcomes, elapsedLabel, lastUserAt, reportedChildren, type WaviMessage } from './model'
 import { useGuiSessions } from './store'
 import styles from './Dispatch.module.css'
 
@@ -33,7 +33,8 @@ function useDispatchView(parentId: SessionId, ids: readonly SessionId[]): Dispat
   const changes = useDispatch((s) => s.changes)
   const items = useGuiSessions((s) => s.states[parentId]?.items) ?? NO_ITEMS
   const reported = useMemo(() => reportedChildren(items), [items])
-  return useMemo(() => dispatchView({ ids, sessions, confirms, changes, reported }), [ids, sessions, confirms, changes, reported])
+  const outcomes = useMemo(() => dispatchOutcomes(items), [items])
+  return useMemo(() => dispatchView({ ids, sessions, confirms, changes, reported, outcomes }), [ids, sessions, confirms, changes, reported, outcomes])
 }
 
 /** Now, a second at a time while a clock on screen runs. */
@@ -144,7 +145,9 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
     <section className={styles.dispatch} data-dispatch-graph data-testid="dispatch-graph" aria-label="派活">
       <div className={styles.head}>
         {waiting > 0 ? <StatusGlyph status="needs_you" /> : <Split {...ICON} className={styles.headIcon} />}
-        <span className={styles.headTitle}>{waiting > 0 ? `想开 ${waiting} 个会话` : `派出 ${view.nodes.length} 个会话`}</span>
+        <span className={styles.headTitle}>
+          {waiting > 0 ? `想开 ${waiting} 个会话` : view.nodes.every((n) => n.declined) ? `没有开 ${view.nodes.length} 个会话` : `派出 ${view.nodes.length} 个会话`}
+        </span>
         {waiting > 0 ? (
           <span className={styles.muted}>基于 {view.waiting[0]?.plan.item.base === 'snapshot' ? '当前改动的快照' : view.waiting[0]?.base}</span>
         ) : (
@@ -196,7 +199,7 @@ export function DispatchGraph({ parentId, ids }: { parentId: SessionId; ids: rea
           <button type="button" className={styles.button} onClick={() => decideConfirms(parentId, false)}>
             拒绝
           </button>
-          <button type="button" className={styles.primary} onClick={() => decideConfirms(parentId, true)} data-testid="dispatch-start">
+          <button type="button" className={styles.primary} onClick={() => decideConfirms(parentId, true)} data-testid="dispatch-graph-start">
             开始 {waiting} 个
           </button>
         </div>
@@ -214,7 +217,7 @@ function NodeLabel({ node, now, left, top, small }: { node: DispatchNode; now: n
       <span className={styles.muted}>{node.task}</span>
     ) : (
       <>
-        <span data-tone={node.state}>{WORD[node.state]}</span>
+        <span data-tone={node.state}>{node.declined === 'declined' ? '你拒绝了' : node.declined === 'timeout' ? '没有回答，没开' : WORD[node.state]}</span>
         {node.action && <span className={styles.action}>· {node.action}</span>}
         {node.state === 'done' && node.reported && <span className={styles.muted}>· 报告已送回</span>}
         {(node.state === 'attention' || node.state === 'error') && !node.gone && (
@@ -227,7 +230,7 @@ function NodeLabel({ node, now, left, top, small }: { node: DispatchNode; now: n
   return (
     <span className={styles.label} style={{ left, top }} data-small={small || undefined} data-testid="dispatch-node" data-state={node.state}>
       <span className={styles.line}>
-        <button type="button" className={styles.title} data-strong={strong || undefined} disabled={node.gone || node.state === 'pending'} onClick={() => open(node.id)}>
+        <button type="button" className={styles.title} data-strong={strong || undefined} disabled={node.gone || node.declined !== undefined || node.state === 'pending'} onClick={() => open(node.id)}>
           {node.gone ? '已不在工作区的会话' : node.title}
         </button>
         {who && <span className={styles.muted}>{who}</span>}
@@ -269,7 +272,7 @@ export function DispatchStripGui({ parentId }: { parentId: SessionId }) {
     graphs[graphs.length - 1]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
   return (
-    <div className={styles.strip} data-settled={view.settled || undefined} data-testid="dispatch-strip">
+    <div className={styles.strip} data-settled={view.settled || undefined} data-testid="dispatch-crew">
       <div className={styles.stripHead}>
         <span className={styles.avatars}>
           {all.slice(0, 6).map((n) => (

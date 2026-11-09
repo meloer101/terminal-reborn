@@ -67,6 +67,12 @@ describe('dispatchView (Figma 68′)', () => {
     expect(view.settled).toBe(false)
   })
 
+  it('names a request the user turned down by what the notice said, not as a session gone', () => {
+    const view = dispatchView(input({ ids: ['d'], outcomes: new Map([['d', { outcome: 'declined' as const, title: 'Drop' }]]) }))
+    expect(view.nodes[0]).toMatchObject({ title: 'Drop', state: 'exited', declined: 'declined' })
+    expect(view.nodes[0]?.gone).toBeUndefined()
+  })
+
   it('is settled once every session finished or went away, at the last finish', () => {
     const view = dispatchView(
       input({ ids: ['a', 'b'], sessions: [session({ id: 'a', status: 'idle', finishedAt: T0 + 10 }), session({ id: 'b', status: 'exited', finishedAt: T0 + 30 })] })

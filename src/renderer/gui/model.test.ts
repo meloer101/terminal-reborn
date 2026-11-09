@@ -45,7 +45,8 @@ import {
   dispatchKey,
   waviMessage,
   reportedChildren,
-  lastUserAt
+  lastUserAt,
+  dispatchOutcomes
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -107,6 +108,11 @@ describe('dispatch in the feed (Figma 68′)', () => {
     expect([...reportedChildren(items)]).toEqual(['s-1'])
     expect(lastUserAt(items)).toBe(5)
     expect(lastUserAt([report])).toBeNull()
+  })
+
+  it('reads which requests were turned down or left unanswered from Wavi’s notices', () => {
+    const notice: ChatItem = { kind: 'user', id: 'n', at: 1, text: '[Wavi 派活] 用户拒绝了这些会话，什么都没开（来自 Wavi，不是用户的指示）：\n- id s-1 · codex · 「Tests」 · 快照', images: 0 }
+    expect(Object.fromEntries(dispatchOutcomes([notice]))).toEqual({ 's-1': { outcome: 'declined', title: 'Tests' } })
   })
 })
 
