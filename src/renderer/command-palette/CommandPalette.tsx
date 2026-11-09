@@ -1,7 +1,7 @@
 // ⌘K command palette (PRD F8): jump to any session or run a common action. Renders nothing while
 // closed. Open/close state and the global ⌘K shortcut live in palette-store.ts.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { ArchiveRestore, FolderPlus, GitCompareArrows, LayoutList, Monitor, Moon, PanelLeft, PanelRight, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
+import { ArchiveRestore, Clock, FolderPlus, GitCompareArrows, LayoutList, Monitor, Moon, PanelLeft, PanelRight, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
 import { formatAccelerator } from '../ui/menu-model'
@@ -25,7 +25,8 @@ const ACTION_ICONS: Record<ActionIcon, LucideIcon> = {
   moon: Moon,
   sun: Sun,
   archive: ArchiveRestore,
-  compare: GitCompareArrows
+  compare: GitCompareArrows,
+  clock: Clock
 }
 
 const SECTION_TITLE: Record<PaletteSection, string> = { sessions: '会话', actions: '操作', history: '历史' }

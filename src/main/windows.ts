@@ -34,8 +34,20 @@ function baseOptions(): BrowserWindowConstructorOptions {
   }
 }
 
+/**
+ * PRD F24: opened by the pty daemon for a scheduled task (`--wavi-scheduled`) or as a login item — the first window
+ * stays hidden (no focus taken); the Dock icon or a second launch shows it.
+ */
+let firstWindowLoaded = false
+const launchedInBackground = (): boolean =>
+  process.argv.includes('--wavi-scheduled') || (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin)
+
 function load(win: BrowserWindow): void {
-  win.once('ready-to-show', () => win.show())
+  const hidden = !firstWindowLoaded && launchedInBackground()
+  firstWindowLoaded = true
+  win.once('ready-to-show', () => {
+    if (!hidden) win.show()
+  })
   // Links open in the default browser; app windows never navigate away.
   // …except the page's own secondary windows (F20 · 多窗口), which it draws itself.
   win.webContents.setWindowOpenHandler((details) => {
@@ -162,6 +174,7 @@ export function installAppMenu(): void {
         { type: 'separator' },
         { label: '设置…', accelerator: SHORTCUTS.settings, click: (_item, window) => showSettings(window instanceof BrowserWindow ? window : null) },
         { label: '额度…', accelerator: SHORTCUTS['open-usage'], ...command('open-usage') },
+        { label: '定时任务…', accelerator: SHORTCUTS['open-schedules'], ...command('open-schedules') },
         { type: 'separator' },
         { role: 'services', label: '服务' },
         { type: 'separator' },

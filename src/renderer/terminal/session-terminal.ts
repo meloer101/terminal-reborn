@@ -220,7 +220,9 @@ export class SessionTerminal {
         ...(resumeAgentSessionId ? { resumeAgentSessionId } : {}),
         ...(script ? { script } : {}),
         ...(child ? { dispatched: true } : {}),
-        ...(dispatched ? { initialPrompt: dispatched.initialPrompt, ...(dispatched.model ? { model: dispatched.model } : {}) } : {})
+        ...(dispatched
+          ? { initialPrompt: dispatched.initialPrompt, ...(dispatched.model ? { model: dispatched.model } : {}), ...(dispatched.permission ? { permission: dispatched.permission } : {}) }
+          : {})
       })
     } catch (error) {
       if (script === 'setup') forgetSetup(id)

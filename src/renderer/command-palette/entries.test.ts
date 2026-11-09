@@ -86,6 +86,7 @@ describe('buildEntries', () => {
     const none = buildActionEntries(input({ projects: [], worktrees: [], sessions: [], activeSessionId: null }))
     expect(none.map((e) => e.id)).toEqual([
       'action:open-project',
+      'action:schedules',
       'action:toggle-overview',
       'action:toggle-sidebar',
       'action:toggle-right-panel',

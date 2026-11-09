@@ -6,6 +6,7 @@ import { MAIN_WINDOW, type WindowKey } from '@shared/window-layout'
 import { openSameTaskForActive } from '../attempts/same-task-store'
 import { toggleCommandPalette } from '../command-palette/palette-store'
 import { toggleOverview } from '../overview/store'
+import { openSchedules } from '../schedules/store'
 import { jumpToNextAttention } from '../sidebar/shortcuts-runtime'
 import { isKeyEcho, noteKeyCommand } from '../state/key-commands'
 import { closeActiveSession, openProjectInNewWindowInteractive, openProjectInteractive, quickNewSession } from '../state/session-actions'
@@ -51,7 +52,8 @@ const RUN: Record<MenuCommand, () => void> = {
   'focus-pane-down': () => focusPaneToward('down'),
   'open-project-in-window': () => void openProjectInNewWindowInteractive(),
   'pane-to-window': moveFocusedPaneToNewWindow,
-  'open-usage': () => openSettings('usage')
+  'open-usage': () => openSettings('usage'),
+  'open-schedules': () => openSchedules()
 }
 
 /** `windowKey`: the secondary window the command was picked in (it has the keyboard); absent for the main window. */

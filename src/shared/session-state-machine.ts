@@ -378,6 +378,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     case 'billing':
     case 'subagents':
     case 'agent-settings':
+    case 'crons':
       // A name or a metric, not activity: it can arrive well after the turn ended (and statusLine runs on its own).
       return state
   }

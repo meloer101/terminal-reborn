@@ -2,7 +2,7 @@
 // plan usage per vendor. Main sends only changes (and replays them to a reloaded window); usage comes from every
 // session of a vendor and is kept by main across runs, so a fresh window asks for it once.
 import { create } from 'zustand'
-import type { AgentEvent, HookAgent, SubagentInfo } from '@shared/agent-events'
+import type { AgentEvent, HookAgent, SessionCron, SubagentInfo } from '@shared/agent-events'
 import { usageAlertText, type ContextUsage, type UsageAccount, type UsageVendor, type VendorUsage } from '@shared/session-meta'
 import type { TodoItem } from '@shared/todo-progress'
 import type { TurnChecks } from '@shared/turn-checks'
@@ -22,6 +22,8 @@ export interface SessionMetrics {
   subagents?: SubagentInfo[]
   /** What the agent last reported of its model, effort and permission mode (the phone's 会话设置, PRD F22 v1.144). */
   settings?: { model?: string; effort?: string; permission?: string }
+  /** Claude's own session timers (`/loop`, PRD F24); absent when none. */
+  crons?: SessionCron[]
 }
 
 interface SessionMetaState {
@@ -37,6 +39,7 @@ interface SessionMetaState {
   setTodos(sessionId: SessionId, items: TodoItem[]): void
   setChecks(sessionId: SessionId, checks: TurnChecks): void
   setSubagents(sessionId: SessionId, items: SubagentInfo[]): void
+  setCrons(sessionId: SessionId, items: SessionCron[]): void
   setUsage(usage: VendorUsage): void
   setAccount(account: UsageAccount): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
@@ -89,6 +92,13 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
             else delete next.subagents
             return next
           })
+    ),
+  setCrons: (sessionId, items) =>
+    set((s) =>
+      patchSession(s, sessionId, (m) => {
+        const { crons: _crons, ...rest } = m
+        return items.length > 0 ? { ...rest, crons: items } : rest
+      })
     ),
   setSettings: (sessionId, settings) =>
     set((s) => {
@@ -146,6 +156,7 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
   else if (event.type === 'checks') state.setChecks(sessionId, event.checks)
   else if (event.type === 'billing') state.setPlan(sessionId, event.plan)
   else if (event.type === 'subagents') state.setSubagents(sessionId, event.items)
+  else if (event.type === 'crons') state.setCrons(sessionId, event.items)
   else if (event.type === 'agent-settings') {
     const { type: _type, ...settings } = event
     state.setSettings(sessionId, settings)

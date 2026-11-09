@@ -37,7 +37,18 @@ describe('normalizeHook · lifecycle events (real payloads)', () => {
   })
 
   it('Stop carries the last reply', () => {
-    expect(claude('Stop', fx.Stop)).toEqual({ events: [{ type: 'stop', message: 'OK' }], clears: 'all' })
+    // `session_crons` (2.1.304+) comes along: [] clears the session's /loop mark (PRD F24).
+    expect(claude('Stop', fx.Stop)).toEqual({ events: [{ type: 'stop', message: 'OK' }, { type: 'crons', items: [] }], clears: 'all' })
+    const looping = { ...fx.Stop, session_crons: [{ id: 'c1', schedule: '*/10 * * * *', recurring: true, prompt: 'check CI' }, { id: 'c2', cron: '0 17 * * *', recurring: false }, 'junk'] }
+    expect(claude('Stop', looping).events[1]).toEqual({
+      type: 'crons',
+      items: [
+        { schedule: '*/10 * * * *', recurring: true, prompt: 'check CI' },
+        { schedule: '0 17 * * *', recurring: false, prompt: '' }
+      ]
+    })
+    const { session_crons: _crons, ...older } = fx.Stop
+    expect(claude('Stop', older).events).toEqual([{ type: 'stop', message: 'OK' }])
   })
 
   it('Stop without a reply, and only the tail of a long one', () => {

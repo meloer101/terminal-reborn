@@ -11,6 +11,7 @@
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
 import { guiAvailability } from './gui-agents'
+import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
 import type { SessionId, SessionStatus, SessionUi } from './types'
 
@@ -83,6 +84,24 @@ export type WaviCommand =
   | { name: 'ls' }
   | { name: 'read'; id: string; offset: number }
   | { name: 'stop'; id: string }
+  /** PRD F24: a 定时任务 the user confirms; to this session unless `agent` asks for a new session each time. */
+  | { name: 'schedule'; text: string; when: WaviWhen; title?: string; agent?: CliAgent }
+  | { name: 'schedules' }
+  | { name: 'unschedule'; id: string }
+
+/** `--every 30m|2h` · `--daily 09:00` · `--weekdays 09:00` · `--at 14:30|2026-11-12T09:00` (once). */
+export type WaviWhen = { every: number } | { daily: string } | { weekdays: string } | { at: string }
+
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
+const AT = /^(\d{4}-\d{2}-\d{2}T)?([01]\d|2[0-3]):[0-5]\d$/
+
+/** `30m` / `2h` → minutes; null when it is not one, or under 10 minutes. */
+export function parseEvery(raw: unknown): number | null {
+  const m = typeof raw === 'string' ? /^(\d{1,4})(m|h)$/.exec(raw.trim()) : null
+  if (!m) return null
+  const minutes = Number(m[1]) * (m[2] === 'h' ? 60 : 1)
+  return minutes >= 10 && minutes <= 7 * 24 * 60 ? minutes : null
+}
 
 export type WaviCommandName = WaviCommand['name']
 
@@ -180,6 +199,36 @@ export function parseWaviCommand(raw: unknown): Parsed {
       const to = id()
       return to ? { ok: true, command: { name: 'stop', id: to } } : bad('Pass the id of a session you started (wavi ls shows them).')
     }
+    case 'schedule': {
+      const message = text('text', DISPATCH_LIMITS.message)
+      if (!message) return bad(`The message is empty or longer than ${DISPATCH_LIMITS.message} characters.`)
+      const w = record(v.when) ?? {}
+      const set = ['every', 'daily', 'weekdays', 'at'].filter((k) => w[k] !== undefined)
+      if (set.length !== 1) return bad('Give exactly one of --every 30m, --daily 09:00, --weekdays 09:00 or --at 14:30.')
+      let when: WaviWhen
+      if (w.every !== undefined) {
+        const minutes = typeof w.every === 'number' ? (Number.isInteger(w.every) && w.every >= 10 && w.every <= 7 * 24 * 60 ? w.every : null) : parseEvery(w.every)
+        if (minutes === null) return bad('--every is a number of minutes or hours, 10m at least (e.g. 30m, 2h).')
+        when = { every: minutes }
+      } else if (w.daily !== undefined || w.weekdays !== undefined) {
+        const time = w.daily ?? w.weekdays
+        if (typeof time !== 'string' || !CLOCK.test(time)) return bad('The time is HH:MM, 24-hour (e.g. 09:00).')
+        when = w.daily !== undefined ? { daily: time } : { weekdays: time }
+      } else {
+        if (typeof w.at !== 'string' || !AT.test(w.at)) return bad('--at is HH:MM (the next time it comes) or YYYY-MM-DDTHH:MM.')
+        when = { at: w.at }
+      }
+      if (v.title !== undefined && typeof v.title !== 'string') return bad('--title must be text.')
+      if (v.agent !== undefined && !isCliAgent(v.agent)) return bad(`Unknown agent ${JSON.stringify(v.agent)}. One of: ${AGENT_IDS}.`)
+      const title = typeof v.title === 'string' && v.title.trim() !== '' ? titleFor(message, v.title) : undefined
+      return { ok: true, command: { name: 'schedule', text: message, when, ...(title ? { title } : {}), ...(isCliAgent(v.agent) ? { agent: v.agent } : {}) } }
+    }
+    case 'schedules':
+      return { ok: true, command: { name: 'schedules' } }
+    case 'unschedule': {
+      const to = isScheduleId(v.id) ? v.id : null
+      return to ? { ok: true, command: { name: 'unschedule', id: to } } : bad('Pass the id of a scheduled task you made (wavi schedules shows them).')
+    }
     default:
       return bad(`Unknown command ${JSON.stringify(v.name)}. Run wavi --skill.`)
   }
@@ -193,7 +242,7 @@ export type WaviArgv =
   | { kind: 'help' }
   | { kind: 'error'; error: string }
 
-const FLAGS: Record<string, readonly string[]> = { run: ['model', 'title', 'base', 'ui'], read: ['offset'] }
+const FLAGS: Record<string, readonly string[]> = { run: ['model', 'title', 'base', 'ui'], read: ['offset'], schedule: ['every', 'daily', 'weekdays', 'at', 'title', 'new'] }
 
 /** `wavi <command> …` → the command object `parseWaviCommand` checks (main checks it again). */
 export function parseWaviArgv(argv: readonly string[]): WaviArgv {
@@ -241,6 +290,14 @@ export function parseWaviArgv(argv: readonly string[]): WaviArgv {
       return { kind: 'command', command: { name, id: rest[0], ...(flags.offset !== undefined ? { offset: Number(flags.offset) } : {}) }, json }
     case 'stop':
       return { kind: 'command', command: { name, id: rest[0] }, json }
+    case 'schedule': {
+      const when = Object.fromEntries((['every', 'daily', 'weekdays', 'at'] as const).filter((k) => flags[k] !== undefined).map((k) => [k, flags[k]]))
+      return withText({ name, when, ...(flags.title !== undefined ? { title: flags.title } : {}), ...(flags.new !== undefined ? { agent: flags.new } : {}) }, 'text', rest)
+    }
+    case 'schedules':
+      return { kind: 'command', command: { name }, json }
+    case 'unschedule':
+      return { kind: 'command', command: { name, id: rest[0] }, json }
     default:
       return { kind: 'error', error: `Unknown command ${JSON.stringify(name)}. Run wavi --skill.` }
   }
@@ -255,6 +312,9 @@ export const WAVI_HELP = [
   '  wavi ls',
   '  wavi read <id> [--offset <n>]',
   '  wavi stop <id>',
+  '  wavi schedule "<message>" --every 30m|--daily 09:00|--weekdays 09:00|--at 14:30 [--title <name>] [--new <agent>]',
+  '  wavi schedules',
+  '  wavi unschedule <id>',
   '  wavi --skill        how and when to use these (read this first)',
   '',
   'Add --json for JSON output. Pass - as the task or message to read it from stdin.'
@@ -277,6 +337,7 @@ export const WAVI_SKILL = [
   '- `wavi read <id> [--offset <n>]` reads one session\'s last message in full, with its changed files. Reading it means its pending report is not sent to you again.',
   '- `wavi stop <id>` interrupts its current turn (like Esc). It does not close it.',
   '- `wavi report "<result>"` is for a session that was dispatched: it reports to the session that started it.',
+  '- `wavi schedule "<message>" --every 30m` (or `--daily 09:00`, `--weekdays 09:00`, `--at 14:30`) asks the user to schedule a message: Wavi sends it to this session when it is idle, at each time, even after you exit and after Wavi restarts. `--new <agent>` opens a new session (its own worktree) each time instead. 10 minutes at least; it lasts 7 days unless the user keeps it. Use it instead of sleeping or polling in a loop. `wavi schedules` lists yours, `wavi unschedule <id>` removes one.',
   '',
   '## Writing a task',
   'The new agent sees nothing of this conversation. Each task must stand alone: the goal, the files in scope, how to check the result, and what ends the task.',

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
-import { Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Clock, Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
 import { shownEverywhere, useWorkspace, windowEffects } from '../state/workspace'
@@ -15,6 +15,7 @@ import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { toggleOverview } from '../overview/store'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { openSettings } from '../settings/SettingsDialog'
+import { openSchedules } from '../schedules/store'
 import { ProjectHeader } from './ProjectHeader'
 import { SelectionDrops } from './SelectionDrop'
 import { SessionRow } from './SessionRow'
@@ -218,6 +219,7 @@ export function Sidebar() {
       </div>
       <div className={styles.footer}>
         <UpdateEntry />
+        <NavItem icon={<Clock {...ICON} />} label="定时任务" shortcut={formatAccelerator(SHORTCUTS['open-schedules'])} onClick={() => openSchedules()} />
         <NavItem icon={<Gauge {...ICON} />} label="额度" shortcut={formatAccelerator(SHORTCUTS['open-usage'])} onClick={() => openSettings('usage')} />
         <NavItem icon={<SlidersHorizontal {...ICON} />} label="设置" shortcut={formatAccelerator(SHORTCUTS.settings)} onClick={() => openSettings()} />
       </div>

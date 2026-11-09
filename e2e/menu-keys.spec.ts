@@ -47,6 +47,7 @@ const SHORTCUTS: { key: string; accelerator: string; item: Owner }[] = [
   { key: 'Meta+Digit0', accelerator: 'CmdOrCtrl+0', item: ['显示', '实际大小'] },
   { key: 'Meta+Comma', accelerator: 'CmdOrCtrl+,', item: ['app', '设置…'] },
   { key: 'Meta+Shift+KeyU', accelerator: 'Shift+CmdOrCtrl+U', item: ['app', '额度…'] },
+  { key: 'Meta+Shift+KeyT', accelerator: 'Shift+CmdOrCtrl+T', item: ['app', '定时任务…'] },
   { key: 'Alt+Meta+KeyQ', accelerator: 'Alt+CmdOrCtrl+Q', item: ['app', '退出并结束所有会话…'] },
   { key: 'Meta+KeyQ', accelerator: 'CmdOrCtrl+Q', item: 'quit' }
 ]
@@ -292,6 +293,13 @@ test.describe('with the keyboard in the terminal', () => {
     await expect(settings().getByRole('tab', { name: '额度' })).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('Escape')
     await expect(settings()).toHaveCount(0)
+  })
+
+  test('⇧⌘T is left to the menu and opens 定时任务 (PRD F24)', async () => {
+    expect(await press('Meta+Shift+KeyT')).toBe('menu')
+    await expect(page.getByTestId('schedules-dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('schedules-dialog')).toHaveCount(0)
   })
 
   test('⌘Q and ⌥⌘Q are left to the menu and ask once', async () => {

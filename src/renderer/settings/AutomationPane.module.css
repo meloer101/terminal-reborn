@@ -49,3 +49,9 @@
 .model::placeholder {
   color: var(--text-tertiary);
 }
+
+/* 打开定时任务… ⇧⌘T: the shortcut quieter than the label. */
+.shortcut {
+  margin-left: var(--space-8);
+  color: var(--text-secondary);
+}

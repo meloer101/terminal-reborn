@@ -6,6 +6,7 @@ import { SHIP_IPC } from '@shared/ship'
 import { RADAR_IPC } from '@shared/conflict-radar'
 import { DISPATCH_IPC } from '@shared/dispatch'
 import { REMOTE_IPC } from '@shared/remote'
+import { SCHEDULE_IPC } from '@shared/schedule'
 import { GUI_IPC, type GuiEvent } from '@shared/gui-chat'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
@@ -180,6 +181,19 @@ const api: TrApi = {
     merge: (request) => ipcRenderer.invoke(IPC.gitWorktreesMerge, request)
   },
   browser: browserApi,
+  schedules: {
+    list: () => ipcRenderer.invoke(SCHEDULE_IPC.list),
+    create: (draft, createdBy) => ipcRenderer.invoke(SCHEDULE_IPC.create, draft, createdBy),
+    update: (id, draft) => ipcRenderer.invoke(SCHEDULE_IPC.update, id, draft),
+    setEnabled: (id, enabled) => ipcRenderer.invoke(SCHEDULE_IPC.setEnabled, id, enabled),
+    keep: (id) => ipcRenderer.invoke(SCHEDULE_IPC.keep, id),
+    remove: (id) => ipcRenderer.invoke(SCHEDULE_IPC.remove, id),
+    runNow: (id) => ipcRenderer.invoke(SCHEDULE_IPC.runNow, id),
+    report: (id, run) => ipcRenderer.invoke(SCHEDULE_IPC.report, id, run),
+    ready: () => ipcRenderer.send(SCHEDULE_IPC.ready),
+    onChanged: (listener) => listen(SCHEDULE_IPC.changed, listener),
+    onFire: (listener) => listen(SCHEDULE_IPC.fire, listener)
+  },
   repoScripts: {
     get: (dir) => ipcRenderer.invoke(IPC.repoScriptsGet, dir),
     approve: (dir, name) => ipcRenderer.invoke(IPC.repoScriptsApprove, dir, name),

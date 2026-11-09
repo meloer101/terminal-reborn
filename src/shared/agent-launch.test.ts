@@ -9,6 +9,12 @@ describe('shellQuote', () => {
 })
 
 describe('agentArgv', () => {
+  it('gives claude the 定时任务 permission mode, but not when resuming or to another CLI (PRD F24)', () => {
+    expect(agentArgv('claude', '/r', { permission: 'accept-edits', initialPrompt: 'go' })).toEqual(['claude', '--permission-mode', 'acceptEdits', '--', 'go'])
+    expect(agentArgv('claude', '/r', { permission: 'auto', resumeAgentSessionId: 'abc' })).not.toContain('--permission-mode')
+    expect(agentArgv('codex', '/r', { permission: 'auto' })).not.toContain('--permission-mode')
+  })
+
   it('starts claude with no extra flags', () => {
     expect(agentArgv('claude', '/tmp/x')).toEqual(['claude'])
   })

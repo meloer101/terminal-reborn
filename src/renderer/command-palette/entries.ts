@@ -18,6 +18,7 @@ export type ActionId =
   | 'new-shell'
   | 'open-project'
   | 'same-task'
+  | 'schedules'
   | 'toggle-sidebar'
   | 'toggle-overview'
   | 'toggle-right-panel'
@@ -25,7 +26,7 @@ export type ActionId =
   | 'theme-dark'
   | 'theme-light'
 
-export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun' | 'archive' | 'compare'
+export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun' | 'archive' | 'compare' | 'clock'
 
 export type PaletteTarget =
   | { type: 'session'; sessionId: SessionId }
@@ -167,6 +168,7 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
   }
   entries.push(
     action('open-project', '打开项目…', 'folder-plus', 'open add project folder'),
+    action('schedules', '定时任务', 'clock', 'schedule scheduled task cron loop automation 定时 dingshi renwu'),
     action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
     action('toggle-right-panel', input.rightPanel ? '关闭右侧栏' : '打开右侧栏', 'panel', 'right panel files git browser worktree 文件 youcelan'),
