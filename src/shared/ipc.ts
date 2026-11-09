@@ -7,6 +7,7 @@ import type { CliAgent } from './agents'
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
 import type { ScheduleApi } from './schedule'
+import type { CliPermission } from './gui-chat'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { PullRequestApi } from './pull-requests'
@@ -56,7 +57,7 @@ export interface PtySpawnOptions {
   /** The model for this launch (PRD F21). */
   model?: string
   /** A 定时任务's 权限 (PRD F24): Claude's `--permission-mode`; other CLIs have no such flag and start with their default. */
-  permission?: 'accept-edits' | 'auto'
+  permission?: CliPermission
   /** The session was started by another session's `wavi run` (PRD F21): its brief, not a system prompt, tells it about `wavi`. */
   dispatched?: boolean
   cols: number

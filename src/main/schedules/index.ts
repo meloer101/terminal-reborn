@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { app, ipcMain, powerMonitor, type IpcMainInvokeEvent, type WebContents } from 'electron'
-import { parseDraft, parseRun, SCHEDULE_IPC, type Schedule, type ScheduleFire } from '@shared/schedule'
+import { isScheduleId, parseDraft, parseRun, SCHEDULE_IPC, type Schedule, type ScheduleFire } from '@shared/schedule'
 import { setDaemonWake } from '../pty'
 import { startCapturedScript, cancelCapturedScript } from '../script-run'
 import { getSettings, onSettingsChange } from '../settings'
@@ -68,7 +68,7 @@ function fire(payload: ScheduleFire): boolean {
 
 const isMainPage = (event: IpcMainInvokeEvent | Electron.IpcMainEvent): boolean => event.sender === getMainWindow()?.webContents
 const parseId = (raw: unknown): string => {
-  if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(raw)) throw new Error('bad schedule id')
+  if (!isScheduleId(raw)) throw new Error('bad schedule id')
   return raw
 }
 
@@ -98,7 +98,10 @@ export function registerScheduleHandlers(): void {
   handle(SCHEDULE_IPC.create, (raw, by) => {
     const draft = parseDraft(raw)
     if (!draft) return null
-    return by === undefined ? current.create(draft) : current.create(draft, { sessionId: parseId(by) })
+    if (by === undefined) return current.create(draft)
+    // 让 agent 建定时任务 is checked here too, not only in the window that asked.
+    if (!getSettings().schedules.agents) return null
+    return current.create(draft, { sessionId: parseId(by) })
   })
   handle(SCHEDULE_IPC.update, (id, raw) => {
     const draft = parseDraft(raw)
@@ -121,6 +124,7 @@ export function registerScheduleHandlers(): void {
     event.sender.once('did-start-navigation', () => {
       if (readyPage === event.sender) readyPage = null
     })
+    current.windowReloaded()
     current.tick()
   })
 

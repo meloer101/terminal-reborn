@@ -1,6 +1,7 @@
 // How a session's agent is started inside the user's login shell (PRD §6.2).
 // Pure: the pty-host supplies the shell and the real cwd.
 import { AGENT_SPECS } from './agents'
+import type { CliPermission } from './gui-chat'
 import type { AgentKind } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
 
@@ -48,7 +49,7 @@ export interface AgentLaunchOptions {
   /** A model for this launch (`claude --model` / `codex -m`), e.g. what a dispatching agent asked for (PRD F21). */
   model?: string
   /** A 定时任务's 权限 (PRD F24): only Claude has a launch flag for it (`--permission-mode`); ignored when resuming. */
-  permission?: 'accept-edits' | 'auto'
+  permission?: CliPermission
   /**
    * The first message, passed after `--` so the CLI submits it itself (PRD F21: nothing is typed into a starting TUI).
    * Ignored when resuming.

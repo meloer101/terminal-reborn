@@ -260,7 +260,7 @@ export function keepSchedule(schedule: Schedule): Schedule {
 // ── labels (Figma 67′) ────────────────────────────────────────────────────────
 
 const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'] as const
-const pad = (n: number): string => String(n).padStart(2, '0')
+export const pad = (n: number): string => String(n).padStart(2, '0')
 export const clock = (t: number): string => `${pad(new Date(t).getHours())}:${pad(new Date(t).getMinutes())}`
 export const monthDay = (t: number): string => `${pad(new Date(t).getMonth() + 1)}-${pad(new Date(t).getDate())}`
 
@@ -329,7 +329,9 @@ const controls = (s: string, allowNewlines: boolean): boolean => [...s].some((c)
   return (code < 32 && !(allowNewlines && (c === '\n' || c === '\t'))) || code === 127
 })
 const line = (raw: unknown, max: number): string | null => (typeof raw === 'string' && raw.trim().length > 0 && raw.length <= max && !controls(raw, false) ? raw : null)
-const id = (raw: unknown): string | null => (typeof raw === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(raw) ? raw : null)
+/** A task's or session's id as the file, IPC and `wavi unschedule` take it. */
+export const isScheduleId = (raw: unknown): raw is string => typeof raw === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(raw)
+const id = (raw: unknown): string | null => (isScheduleId(raw) ? raw : null)
 const time = (raw: unknown): number | null => (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : null)
 
 export function parseTiming(raw: unknown): ScheduleTiming | null {

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -112,6 +112,42 @@ describe('Scheduler', () => {
     t.scheduler.tick()
     expect(t.fires).toHaveLength(0)
     expect(t.scheduler.get(s.id)?.runs).toEqual([])
+  })
+
+  it('a broken file is moved aside, not written over', () => {
+    const t = setup()
+    const path = join(dirs.at(-1)!, 'schedules.json')
+    writeFileSync(path, '{ not json')
+    expect(new SchedulesFile(path).load()).toEqual([])
+    expect(existsSync(path)).toBe(false)
+    expect(readdirSync(dirs.at(-1)!).some((f) => f.startsWith('schedules.json.bad-'))).toBe(true)
+    expect(t.scheduler.list()).toEqual([])
+  })
+
+  it('a precheck that throws fails the run and frees the task for its next time', async () => {
+    const t = setup(async () => {
+      throw new Error('spawn ENOENT')
+    })
+    const s = t.scheduler.create(draft({ action: { kind: 'new', projectId: 'p1', base: 'main', agent: 'claude', ui: 'cli', autoArchive: true, precheck: 'x' } }))
+    t.clock.now = at(9, 9)
+    t.scheduler.tick()
+    await settle()
+    expect(t.scheduler.get(s.id)?.runs[0]).toMatchObject({ outcome: 'failed' })
+    expect(t.scheduler.get(s.id)?.runs[0]?.reason).toContain('spawn ENOENT')
+    t.clock.now = at(10, 9)
+    t.scheduler.tick()
+    await settle()
+    expect(t.scheduler.get(s.id)?.runs).toHaveLength(2)
+  })
+
+  it('a send still waiting when the window reloads is recorded as not sent', () => {
+    const t = setup()
+    const s = t.scheduler.create(draft({ action: { kind: 'send', sessionId: 'x1' } }))
+    t.clock.now = at(9, 9)
+    t.scheduler.tick()
+    t.scheduler.report(s.id, { planned: at(9, 9), at: at(9, 9), outcome: 'running', reason: '等这一轮结束再发' })
+    t.scheduler.windowReloaded()
+    expect(t.scheduler.get(s.id)?.runs[0]).toMatchObject({ outcome: 'skipped', reason: '窗口重新打开，没发出' })
   })
 
   it('立即运行 fires now without moving the schedule', () => {

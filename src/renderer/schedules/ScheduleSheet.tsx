@@ -8,7 +8,9 @@ import { GUI_PERMISSION_LABELS, type GuiPermission } from '@shared/gui-chat'
 import type { AgentAvailability } from '@shared/ipc'
 import { defaultBase, groupBranches, type NewSessionInfo } from '@shared/new-session'
 import {
+  clock,
   MIN_INTERVAL_MINUTES,
+  pad,
   nextOccurrence,
   whenLabel,
   type Schedule,
@@ -69,12 +71,10 @@ const WEEK: ReadonlyArray<{ value: Weekday; label: string }> = [
   { value: 0, label: '日' }
 ]
 
-const pad = (n: number): string => String(n).padStart(2, '0')
 const dayOf = (t: number): string => {
   const d = new Date(t)
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
-const clockOf = (t: number): string => `${pad(new Date(t).getHours())}:${pad(new Date(t).getMinutes())}`
 const atDayClock = (day: string, time: string): number | null => {
   const [y, m, d] = day.split('-').map(Number)
   const [h, min] = time.split(':').map(Number)
@@ -149,7 +149,7 @@ function initialForm(source: Schedule | undefined, copy: boolean, projectId: Pro
     ...(t.kind === 'interval' ? (t.minutes % 60 === 0 ? { every: t.minutes / 60, unit: 'hours' as const } : { every: t.minutes, unit: 'minutes' as const }) : {}),
     ...(t.kind === 'daily' || t.kind === 'weekdays' || t.kind === 'weekly' ? { time: t.time } : {}),
     ...(t.kind === 'weekly' ? { days: t.days } : {}),
-    ...(t.kind === 'once' ? { onceDay: dayOf(t.at), time: clockOf(t.at) } : {})
+    ...(t.kind === 'once' ? { onceDay: dayOf(t.at), time: clock(t.at) } : {})
   }
 }
 

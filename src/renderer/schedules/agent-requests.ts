@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { agentName } from '@shared/agents'
 import { waviFail, waviOk, type DispatchRequest, type WaviCommand, type WaviResult } from '@shared/dispatch'
-import { AGENT_SCHEDULE_TTL_MS, monthDay, runLabel, timingLabel, type ScheduleDraft, type ScheduleTiming } from '@shared/schedule'
+import { AGENT_SCHEDULE_TTL_MS, monthDay, parseDraft, runLabel, timingLabel, type ScheduleDraft, type ScheduleTiming } from '@shared/schedule'
 import type { SessionId } from '@shared/types'
 import type { Place } from '../dispatch/places'
 import { deliverMessage } from '../dispatch/reports'
@@ -56,7 +56,9 @@ async function request(caller: Place, call: DispatchRequest, command: Extract<Wa
   } else {
     action = { kind: 'send', sessionId: caller.session.id }
   }
-  const draft: ScheduleDraft = { name, enabled: true, action, prompt: command.text, timing, missed: 'skip' }
+  // Checked as main will check it when the user says 开始, so the agent hears now what would not be kept.
+  const draft = parseDraft({ name: name.replace(/\s+/g, ' '), enabled: true, action, prompt: command.text, timing, missed: 'skip' } satisfies ScheduleDraft)
+  if (!draft) return waviFail('invalid_request', 'Wavi cannot keep that task: the message is at most 8000 characters, --every a whole number of minutes from 10m to 7 days.')
   useScheduleRequests.setState((s) => ({ pending: [...s.pending, { callId: call.callId, sessionId: caller.session.id, draft, expiresAt: now + AGENT_SCHEDULE_TTL_MS }] }))
   if (!document.hasFocus()) window.tr.ui.notify({ title: `「${caller.session.title}」想建 1 个定时任务`, body: '在 Wavi 里确认要不要开始。', tag: caller.session.id })
   return waviOk(`The task "${name}" (${timingLabel(timing)}) waits for the user's 开始 in Wavi. wavi does not wait: end your turn now. Wavi sends you a message when the user decides.`)
@@ -102,15 +104,19 @@ export async function decideScheduleRequests(sessionId: SessionId, go: boolean, 
   if (taken.length === 0) return
   useScheduleRequests.setState((s) => ({ pending: s.pending.filter((r) => r.sessionId !== sessionId) }))
   const made: string[] = []
+  const refused: string[] = []
   if (go) {
     for (const r of taken) {
-      const task = await window.tr.schedules.create(r.draft, sessionId)
+      const task = await window.tr.schedules.create(r.draft, sessionId).catch(() => null)
       if (task) made.push(`${task.id} "${task.name}" (${timingLabel(task.timing)})`)
+      else refused.push(`"${r.draft.name}"`)
     }
   }
   if (!session) return
+  const started = made.length > 0 ? `The user started ${made.length === 1 ? 'your scheduled task' : 'your scheduled tasks'}: ${made.join('; ')}. It lasts 7 days unless the user keeps it.` : ''
+  const failed = refused.length > 0 ? ` Wavi could not keep ${refused.join(', ')} (设置 · 自动化 · 让 agent 建定时任务 may be off).` : ''
   const text = go
-    ? `[Wavi] The user started ${made.length === 1 ? 'your scheduled task' : 'your scheduled tasks'}: ${made.join('; ')}. It lasts 7 days unless the user keeps it. End your turn: Wavi sends the message at each time.`
+    ? `[Wavi] ${started}${failed} End your turn: Wavi sends the message at each time.`.replace('[Wavi]  ', '[Wavi] ')
     : `[Wavi] The user declined your scheduled task${taken.length > 1 ? 's' : ''}. Do not ask again unless the user asks.`
   void deliverMessage(session, text, { key: `schedule:${taken[0]!.callId}`, title: '定时任务' })
 }

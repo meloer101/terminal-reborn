@@ -68,11 +68,12 @@ export class WorkspaceFileStore {
     this.timer ??= setTimeout(() => this.flush(), this.debounceMs)
   }
 
-  /** Root folders of the workspace's projects (git IPC only acts on these). */
+  /** One project's root folder (定时任务's 前置检查 runs there, PRD F24). */
   projectRootOf(projectId: string): string | undefined {
     return this.latest?.projects.find((p) => p.id === projectId)?.rootPath
   }
 
+  /** Root folders of the workspace's projects (git IPC only acts on these). */
   projectRoots(): string[] {
     return this.latest?.projects.map((p) => p.rootPath) ?? []
   }

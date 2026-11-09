@@ -8,7 +8,8 @@ import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
-import type { AgentKind, Project, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
+import type { AgentKind, Project, ScheduledBy, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
+import { isScheduleId } from './schedule'
 import { sanitizeWindows, shownIn, type PersistedWindow } from './window-layout'
 import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedDispatch, type SavedFixRun, type SavedShipRun } from './saved-runs'
 
@@ -74,14 +75,14 @@ export interface PersistedSession {
   /** The model `wavi run --model` asked for. */
   dispatchModel?: string
   /** The 定时任务 run that opened it (PRD F24). */
-  scheduledBy?: { id: string; name: string; planned: number }
+  scheduledBy?: ScheduledBy
 }
 
 /** A saved 定时任务 origin (PRD F24), or null. */
 function scheduledBy(value: unknown): PersistedSession['scheduledBy'] | null {
   if (!isRecord(value)) return null
   const { id, name, planned } = value
-  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(id) || !isText(name, 60) || name === '' || !isTime(planned)) return null
+  if (!isScheduleId(id) || !isText(name, 60) || name === '' || !isTime(planned)) return null
   return { id, name, planned }
 }
 

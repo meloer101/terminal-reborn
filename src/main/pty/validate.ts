@@ -1,5 +1,6 @@
 // Validation for every pty IPC payload. The renderer is not trusted to send well-formed data.
 import { CLI_AGENTS } from '@shared/agents'
+import { isCliPermission } from '@shared/gui-chat'
 import type { PtySpawnOptions } from '@shared/ipc'
 import type { AgentKind } from '@shared/types'
 import { isSafeAgentSessionId } from '@shared/workspace-file'
@@ -107,7 +108,7 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     result.model = model
   }
   if (o.permission !== undefined) {
-    if (o.permission !== 'accept-edits' && o.permission !== 'auto') throw new Error('invalid permission')
+    if (!isCliPermission(o.permission)) throw new Error('invalid permission')
     result.permission = o.permission
   }
   if (o.dispatched !== undefined) {

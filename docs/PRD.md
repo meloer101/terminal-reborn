@@ -683,7 +683,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
   - 去重：同一个任务的同一个预定时刻只跑一次（任务 id + 预定时刻）。
   - 「立即运行」不看前置检查，不改下次时间。
 - **定时开出的会话**（67H′）：普通会话。侧栏第三行「定时 · 分支」，会话头「由定时任务「…」开出」，点它打开定时任务弹窗并展开这一行。删除任务不影响已经开出的会话。
-- **Wavi 关着时**：⌘Q 时 main 把下一次到点时间交给 PTY 守护进程（新的 `wake` 消息，旧守护进程忽略）；守护进程在有待到点的任务时不因空闲退出，到点没有 app 连着就 `open -g -j` 后台打开 Wavi（带 `--wavi-scheduled`，不显示窗口、不抢焦点），app 起来后照常执行。Mac 睡着时不运行，醒来后（powerMonitor `resume`）按「错过了」处理。重启电脑后守护进程不在：设置里「登录时在后台打开 Wavi」（`app.setLoginItemSettings`，默认关）。`npm run dev` 的 Wavi Dev 不被守护进程打开，下次启动时按「错过了」补。
+- **Wavi 关着时**：⌘Q 时 main 把下一次到点时间交给 PTY 守护进程（新的 `wake` 消息，旧守护进程忽略）；守护进程在有待到点的任务时不因空闲退出，到点没有 app 连着就 `open -g -j` 后台打开 Wavi（带 `--wavi-scheduled`，不显示窗口、不抢焦点），app 起来后照常执行。Mac 睡着时不运行，醒来后（powerMonitor `resume`）按「错过了」处理。重启电脑后守护进程不在：设置里「登录时在后台打开 Wavi」（`app.setLoginItemSettings`，默认关）。`npm run dev` 的 Wavi Dev 不被守护进程打开，下次启动时按「错过了」补。「退出并结束所有会话」（⌥⌘Q）会让守护进程一起退出，守护进程不可用、改用应用内的 PTY 进程时也没有守护进程：这两种情况下关着期间都不运行，下次打开 Wavi 时按「错过了」处理。
 - **agent 建任务**（67J′）：设置 · 自动化「让 agent 建定时任务」开着时，`wavi schedule "消息" --every 30m|--daily 09:00|--weekdays 09:00|--at 14:30 [--title <名称>] [--new <agent>]`（默认发给自己这个会话；`--new` 每次在项目默认分支上开一个新会话）走同 40B 的确认条：名称、时间、发给谁、消息、`agent 建的 · MM-DD 到期`。点「开始」才建；7 天后到期（到期后自动删除），在列表里点「保留」才长期有效。agent 只能看、删自己建的（`wavi schedules` / `wavi unschedule <id>`）；agent 建的任务「错过了」是跳过。
 - **Claude 自己的 `/loop`**（67I′）：Stop hook 里的 `session_crons` 有内容时，会话头显示「每 10 分钟 · Claude 的 /loop」，悬停列出每一条（时间 · prompt）。只显示，不接管；其他 agent 没有这个信号，不显示。
 - **设置 · 自动化 · 定时任务**（67K′，在「派活」后面）：全部暂停 · Wavi 关着时也运行（默认开）· 登录时在后台打开 Wavi（默认关）· 让 agent 建定时任务（默认开）· 所有定时任务「打开定时任务… ⇧⌘T」。

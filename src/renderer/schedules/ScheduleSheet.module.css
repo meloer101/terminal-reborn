@@ -102,7 +102,7 @@
 /* 每周: seven toggles in one group, like a segment that takes several. */
 .days {
   display: flex;
-  padding: 2px;
+  padding: var(--space-2);
   border-radius: var(--radius-md);
   background: var(--bg-selected);
 }

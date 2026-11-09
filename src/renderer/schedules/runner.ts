@@ -3,6 +3,7 @@
 // (F21's launch); a 发给已有会话 task writes into the session through the send protocol (§6.9) once it is idle. A run's
 // session that ends its turn with nothing changed is archived (F15) when the task says so. Every outcome goes back to main.
 import { AGENT_SPECS } from '@shared/agents'
+import { isCliPermission } from '@shared/gui-chat'
 import { runBranch, runSessionTitle, type Schedule, type ScheduleFire, type ScheduleRun } from '@shared/schedule'
 import type { SessionId, SessionStatus } from '@shared/types'
 import { archiveTargetFor, archiveWorktree, blockerFor } from '../archive/actions'
@@ -68,7 +69,7 @@ async function openSession(schedule: Schedule, planned: number): Promise<Outcome
     ...(ui === 'gui' && action.permission ? { guiPermission: action.permission } : {})
   })
   // A terminal session takes the 权限 as a launch flag where its CLI has one (Claude); 询问 is every agent's default.
-  const cliPermission = ui === 'cli' && action.agent === 'claude' && action.permission && action.permission !== 'ask' ? action.permission : undefined
+  const cliPermission = ui === 'cli' && action.agent === 'claude' && isCliPermission(action.permission) ? action.permission : undefined
   setLaunch(id, { initialPrompt: schedule.prompt, ...(action.model ? { model: action.model } : {}), ...(cliPermission ? { permission: cliPermission } : {}) })
   holdForWorktree(id)
   void createWorktreeFor(id, action.agent, plan.request)

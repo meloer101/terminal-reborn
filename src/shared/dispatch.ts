@@ -10,6 +10,7 @@
 // waits for the user, a loop guard on report text and a wake budget (Nimbalyst); no resend when delivery is unsure
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
+import { isScheduleId } from './schedule'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
 import type { SessionId, SessionStatus } from './types'
 
@@ -202,7 +203,7 @@ export function parseWaviCommand(raw: unknown): Parsed {
       if (set.length !== 1) return bad('Give exactly one of --every 30m, --daily 09:00, --weekdays 09:00 or --at 14:30.')
       let when: WaviWhen
       if (w.every !== undefined) {
-        const minutes = typeof w.every === 'number' ? (w.every >= 10 ? w.every : null) : parseEvery(w.every)
+        const minutes = typeof w.every === 'number' ? (Number.isInteger(w.every) && w.every >= 10 && w.every <= 7 * 24 * 60 ? w.every : null) : parseEvery(w.every)
         if (minutes === null) return bad('--every is a number of minutes or hours, 10m at least (e.g. 30m, 2h).')
         when = { every: minutes }
       } else if (w.daily !== undefined || w.weekdays !== undefined) {
@@ -221,7 +222,7 @@ export function parseWaviCommand(raw: unknown): Parsed {
     case 'schedules':
       return { ok: true, command: { name: 'schedules' } }
     case 'unschedule': {
-      const to = typeof v.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(v.id) ? v.id : null
+      const to = isScheduleId(v.id) ? v.id : null
       return to ? { ok: true, command: { name: 'unschedule', id: to } } : bad('Pass the id of a scheduled task you made (wavi schedules shows them).')
     }
     default:

@@ -22,6 +22,8 @@ import {
 /** A window that took a fire answers within this, or the run fails. */
 export const FIRE_TIMEOUT_MS = 2 * 60 * 1000
 export const PRECHECK_TIMEOUT_MS = 60 * 1000
+/** A send still waiting for its session's turn to end (`running`) is given up after this (the window's own wait). */
+export const RUNNING_TIMEOUT_MS = 6 * 60 * 60 * 1000
 
 export interface SchedulerDeps {
   now(): number
@@ -39,12 +41,35 @@ export interface SchedulerDeps {
 export class SchedulesFile {
   constructor(private readonly path: string) {}
 
+  /**
+   * The tasks on disk. Only a missing file is an empty list: one that cannot be read or parsed is moved aside (and
+   * logged) before anything is written over it, and tasks this version cannot read are logged, not silently lost.
+   */
   load(): Schedule[] {
+    let raw: string
     try {
-      return parseSchedules(JSON.parse(readFileSync(this.path, 'utf8')))
-    } catch {
+      raw = readFileSync(this.path, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('[schedules] could not read schedules.json', error)
       return []
     }
+    let value: unknown
+    try {
+      value = JSON.parse(raw)
+    } catch (error) {
+      const aside = `${this.path}.bad-${Date.now()}`
+      console.error('[schedules] schedules.json is not JSON; moved to', aside, error)
+      try {
+        renameSync(this.path, aside)
+      } catch (renameError) {
+        console.error('[schedules] could not move schedules.json aside', renameError)
+      }
+      return []
+    }
+    const schedules = parseSchedules(value)
+    const listed = Array.isArray((value as { schedules?: unknown } | null)?.schedules) ? (value as { schedules: unknown[] }).schedules.length : 0
+    if (listed !== schedules.length) console.error(`[schedules] dropped ${listed - schedules.length} task(s) this version cannot read`)
+    return schedules
   }
 
   save(schedules: readonly Schedule[]): void {
@@ -129,6 +154,19 @@ export class Scheduler {
     this.hand(schedule, { planned: now, caughtUp: false, manual: true })
   }
 
+  /**
+   * A new page said it is ready (launch, reload): a send that waited in the page before it (`running`) is gone with
+   * that page, so it is recorded as not sent.
+   */
+  windowReloaded(): void {
+    this.batch(() => {
+      for (const s of this.schedules) {
+        const waiting = s.runs.filter((r) => r.outcome === 'running')
+        for (const r of waiting) this.replace(recordRun(this.get(s.id) ?? s, { ...r, at: this.deps.now(), outcome: 'skipped', reason: '窗口重新打开，没发出' }))
+      }
+    })
+  }
+
   /** The window's outcome of a run, or a later change to it (opened → archived). */
   report(id: string, run: ScheduleRun): void {
     const current = this.get(id)
@@ -139,9 +177,17 @@ export class Scheduler {
     this.replace(recordRun(current, run))
   }
 
-  /** Looks at every task: expired ones go, due ones start, fires no window answered fail. */
+  /** Looks at every task: expired ones go, due ones start, fires no window answered fail. One write for the lot. */
   tick(): void {
+    this.batch(() => this.tickNow())
+  }
+
+  private tickNow(): void {
     const now = this.deps.now()
+    for (const s of this.schedules) {
+      const stale = s.runs.find((r) => r.outcome === 'running' && now - r.at > RUNNING_TIMEOUT_MS)
+      if (stale) this.replace(recordRun(s, { ...stale, at: now, outcome: 'skipped', reason: '这一轮一直没结束' }))
+    }
     const live = this.schedules.filter((s) => !expired(s, now))
     if (live.length !== this.schedules.length) this.commit(live)
     for (const schedule of this.schedules) {
@@ -176,8 +222,14 @@ export class Scheduler {
     const action = schedule.action
     if (action.kind === 'new' && action.precheck) {
       this.pendingPrecheck.add(schedule.id)
-      const result = await this.deps.precheck(action.projectId, action.precheck, `schedule:${schedule.id}`)
-      this.pendingPrecheck.delete(schedule.id)
+      let result: { passed: boolean } | { error: string }
+      try {
+        result = await this.deps.precheck(action.projectId, action.precheck, `schedule:${schedule.id}`)
+      } catch (error) {
+        result = { error: `前置检查没能运行：${error instanceof Error ? error.message : String(error)}`.slice(0, 200) }
+      } finally {
+        this.pendingPrecheck.delete(schedule.id)
+      }
       const current = this.get(schedule.id)
       if (!current || this.inFlight.get(schedule.id)?.planned !== planned) return
       if ('error' in result || !result.passed) {
@@ -205,8 +257,31 @@ export class Scheduler {
     this.commit(this.schedules.map((s) => (s.id === next.id ? next : s)))
   }
 
+  /** Inside a batch (a tick), changes are written and announced once, at its end. */
+  private batching = false
+  private dirty = false
+
+  private batch(work: () => void): void {
+    if (this.batching) return work()
+    this.batching = true
+    try {
+      work()
+    } finally {
+      this.batching = false
+      if (this.dirty) {
+        this.dirty = false
+        this.file.save(this.schedules)
+        this.deps.changed(this.schedules)
+      }
+    }
+  }
+
   private commit(schedules: Schedule[]): void {
     this.schedules = schedules
+    if (this.batching) {
+      this.dirty = true
+      return
+    }
     this.file.save(schedules)
     this.deps.changed(schedules)
   }

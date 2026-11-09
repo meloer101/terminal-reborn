@@ -3,6 +3,7 @@
 // way to each dispatcher, and messages held for 送进去 — when the session has no channel, nobody should be typed over,
 // delivery failed, or the hourly budget is used. The waits, the queues and the held messages are saved with the
 // workspace (saved-runs.ts), so a reload does not drop what an agent was promised.
+import type { CliPermission } from '@shared/gui-chat'
 import { create } from 'zustand'
 import { emptyQueue, type ChildReport, type HeldItem, type PendingStart, type ReportQueue } from '@shared/dispatch'
 
@@ -61,7 +62,7 @@ export function takeConfirms(callIds: readonly string[]): PendingStart[] {
 export interface DispatchLaunch {
   initialPrompt: string
   model?: string
-  permission?: 'accept-edits' | 'auto'
+  permission?: CliPermission
 }
 
 export function setLaunch(id: SessionId, launch: DispatchLaunch): void {
