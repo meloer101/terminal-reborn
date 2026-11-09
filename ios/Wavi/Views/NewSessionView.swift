@@ -13,7 +13,7 @@ struct NewSessionView: View {
   @State private var base: String?
   @State private var branch = ""
   @State private var agent = "claude"
-  /// The agent's models (empty: nothing to pick, the row is hidden) and the one picked (nil: the agent's default).
+  /// The agent's models (not GUI: no row; none listed: only 默认) and the one picked (nil: the agent's default).
   @State private var models: AgentModels?
   @State private var pickedModel: String?
   @State private var prompt = ""
@@ -29,6 +29,8 @@ struct NewSessionView: View {
 
   private struct AgentModels: Decodable {
     struct Model: Decodable { let value: String; let label: String }
+    /// nil from a Mac older than v1.161's row: an empty list then means no row.
+    let gui: Bool?
     let models: [Model]
     let current: String?
   }
@@ -113,11 +115,13 @@ struct NewSessionView: View {
     .task(id: agent) { await loadModels() }
   }
 
-  /// 模型 under 智能体 (67A); a menu like the agent's (67B). Hidden when the agent lists none (a terminal-only agent,
-  /// or one that names its models only once a session runs).
+  /// 模型 under 智能体 (67A); a menu like the agent's (67B). Only 默认 when a GUI agent lists none (one that names its
+  /// models only once a session runs, or the Mac could not ask it); no row for an agent that runs only in a terminal.
   @ViewBuilder private var modelRow: some View {
     if models == nil {
       LabeledContent("模型") { Spinner(color: .textSecondary) }.accessibilityLabel("正在读取模型")
+    } else if let models, models.models.isEmpty, models.gui == true {
+      LabeledContent("模型", value: "默认")
     } else if let models, !models.models.isEmpty {
       LabeledContent("模型") {
         Menu {
@@ -170,7 +174,8 @@ struct NewSessionView: View {
     pickedModel = nil
     let result = await model.call(.agentModels(agent: asked))
     guard asked == agent else { return }
-    let next = result.decode(AgentModels.self) ?? AgentModels(models: [], current: nil)
+    // Not read: the agent starts with its default, so the row says so.
+    let next = result.decode(AgentModels.self) ?? AgentModels(gui: true, models: [], current: nil)
     models = next
     pickedModel = next.current
   }

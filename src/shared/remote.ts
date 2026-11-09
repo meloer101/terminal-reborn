@@ -183,17 +183,18 @@ export type RemoteShipAction =
   | { do: 'edit'; texts: Partial<RemoteShip['texts']> }
   | { do: 'submit' | 'retry' | 'cancel' | 'conflicts' | 'switch-pr' }
 
-/** One row of the phone's session list (Figma 45B). */
 /**
  * 新建会话's 模型 row (PRD F22 v1.161, Figma 67A / 67B): the models the agent lists, as the desktop's empty-session menu
- * has them (Figma 65), and the one a new session of it starts with. `models` is empty when the session will not be GUI
- * (the row is left out) or the agent only lists its models inside a session (the row says 默认).
+ * has them (Figma 65), and the one a new session of it starts with. `gui` false: the session will run in a terminal and
+ * the row is left out; `models` empty while `gui`: the agent lists its models only inside a session (the row says 默认).
  */
 export interface RemoteAgentModels {
+  gui: boolean
   models: { value: string; label: string }[]
   current?: string
 }
 
+/** One row of the phone's session list (Figma 45B). */
 export interface RemoteSession {
   id: string
   projectId: string

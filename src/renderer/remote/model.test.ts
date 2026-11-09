@@ -73,15 +73,16 @@ describe('agentModels (新建会话 · 模型, Figma 67A)', () => {
   const haiku = { value: 'haiku', label: 'Haiku 5.5' }
 
   it('lists what a session of the agent listed before, starting from its last pick', () => {
-    expect(agentModels(true, { models: [opus, haiku], model: 'haiku' }, { models: [opus], current: 'opus' })).toEqual({ models: [opus, haiku], current: 'haiku' })
+    expect(agentModels(true, { models: [opus, haiku], model: 'haiku' }, { models: [opus], current: 'opus' })).toEqual({ gui: true, models: [opus, haiku], current: 'haiku' })
   })
 
   it('falls back to what main asked the agent, and to its default when it names none it lists', () => {
-    expect(agentModels(true, undefined, { models: [opus, haiku], current: 'opus' })).toEqual({ models: [opus, haiku], current: 'opus' })
-    expect(agentModels(true, { model: 'gone' }, { models: [opus] })).toEqual({ models: [opus] })
+    expect(agentModels(true, undefined, { models: [opus, haiku], current: 'opus' })).toEqual({ gui: true, models: [opus, haiku], current: 'opus' })
+    expect(agentModels(true, { model: 'gone' }, { models: [opus] })).toEqual({ gui: true, models: [opus] })
   })
 
-  it('has no row for a session that will run in a terminal', () => {
-    expect(agentModels(false, { models: [opus], model: 'opus' }, undefined)).toEqual({ models: [] })
+  it('has no row for a session that will run in a terminal, and only 默认 for an agent that lists none', () => {
+    expect(agentModels(false, { models: [opus], model: 'opus' }, undefined)).toEqual({ gui: false, models: [] })
+    expect(agentModels(true, undefined, undefined)).toEqual({ gui: true, models: [] })
   })
 })

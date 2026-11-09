@@ -96,8 +96,8 @@ export function remoteSessions(
  * its last pick (left out when the list does not have it: the agent's default). None when it will not run as GUI.
  */
 export function agentModels(gui: boolean, picks: GuiPicks | undefined, catalog: GuiModelCatalog | undefined): RemoteAgentModels {
-  if (!gui) return { models: [] }
+  if (!gui) return { gui, models: [] }
   const models = picks?.models?.length ? picks.models : (catalog?.models ?? [])
   const current = picks?.model ?? catalog?.current
-  return { models: [...models], ...(current !== undefined && models.some((m) => m.value === current) ? { current } : {}) }
+  return { gui, models: [...models], ...(current !== undefined && models.some((m) => m.value === current) ? { current } : {}) }
 }

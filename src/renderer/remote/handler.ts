@@ -12,8 +12,10 @@ import { binaryInstalled, branchProblemText, planCreate, uiRow } from '../new-se
 import { insertPaths, interruptAgent, submitInputLine, submitPrompt, whenAgentReady } from '../session-io'
 import { setSessionSetting } from '../session-settings'
 import { startSession } from '../state/session-start'
+import { shouldAutoStart } from '../state/session-start-plan'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
+import { useLiveSessions } from '../terminal/live-sessions'
 import { remoteArchive, remoteExits, remoteShipAction } from './exits'
 import { agentModels } from './model'
 
@@ -69,7 +71,6 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
   // The model picked under the agent is the user's pick, as one in the desktop's menu (Figma 65): the new session
   // starts with it, and so does the agent's next one.
   const model = ui === 'gui' ? command.model : undefined
-  if (model) workspace.rememberGuiPicks(command.agent, { model })
   let id: string | null
   if (command.workdir === 'current' || !info.repo) {
     id = workspace.addSession(project.id, command.agent, ui)
@@ -95,17 +96,22 @@ async function newSession(command: Extract<RemoteWindowCommand, { type: 'new-ses
     }
   }
   if (!id) return remoteFail('没能新建会话')
+  if (model) workspace.rememberGuiPicks(command.agent, { model })
   // A first message starts the session as a dispatch does, which takes its model from the launch, not the picks.
   if (command.prompt) setLaunch(id, { initialPrompt: command.prompt, ...(model ? { model } : {}) })
   startEagerly(id)
   return { ok: true, data: { session: id } }
 }
 
-/** The phone shows the session, as a window would: a restored one that nothing started yet starts, resuming. */
+/**
+ * The phone shows the session, as a window would (useSessionStartup): a restored one that nothing started yet starts,
+ * resuming — once the pty daemon has said which still run, which are reattached instead, never started again.
+ */
 function open(sessionId: string): RemoteResult {
   const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
   if (!session || session.kind === 'shell') return remoteFail('会话不存在')
-  if (session.phase === 'not-started') {
+  const { loaded, live } = useLiveSessions.getState()
+  if (shouldAutoStart(session) && loaded && !live[sessionId]) {
     startEagerly(sessionId)
     void startSession(sessionId, { resume: true })
   }

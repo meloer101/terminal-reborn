@@ -238,7 +238,9 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       feed.watch(connection.id, request.session)
       if (!request.session) return { ok: true }
       // Not awaited: the conversation does not wait for the agent; its 会话设置 arrive with the session list.
-      void askWindow(ownerOf(request.session) ?? mainWindow(), { type: 'open', session: request.session })
+      void askWindow(ownerOf(request.session) ?? mainWindow(), { type: 'open', session: request.session }).then((r) => {
+        if (!r.ok) console.error('[remote] the window did not open a session for the phone:', r.error)
+      })
       // The newest page is the phone's starting point: what is pushed from now on continues it.
       const page = await feed.page(request.session)
       return { ok: true, data: page ?? { items: [], start: 0, total: 0 } }

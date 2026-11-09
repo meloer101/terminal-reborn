@@ -129,7 +129,7 @@ test.describe('手机远程 · GUI sessions', () => {
 
   test('新建会话 lists the agent\'s models and the session starts with the one picked (Figma 67A / 67B)', async () => {
     const listed = await phone.request({ type: 'agent-models', agent: 'claude' }, 30_000)
-    expect(listed).toMatchObject({ ok: true })
+    expect(listed).toMatchObject({ ok: true, data: { gui: true } })
     const models = (listed as { data: { models: { value: string }[] } }).data.models.map((m) => m.value)
     expect(models).toEqual(expect.arrayContaining(['opus', 'haiku']))
     const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'phone-haiku', model: 'haiku' }, 30_000)
@@ -141,13 +141,14 @@ test.describe('手机远程 · GUI sessions', () => {
     expect((await phone.request({ type: 'agent-models', agent: 'claude' })) as unknown).toMatchObject({ ok: true, data: { current: 'haiku' } })
   })
 
-  test('a first message typed in 新建会话 reaches the GUI agent', async () => {
-    const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'phone-first', prompt: 'from the phone' }, 30_000)
+  test('a first message typed in 新建会话 reaches the GUI agent, started with the model picked', async () => {
+    const answer = await phone.request({ type: 'new-session', project: 'p1', workdir: 'worktree', agent: 'claude', base: 'main', branch: 'phone-first', prompt: 'from the phone', model: 'haiku' }, 30_000)
     expect(answer).toMatchObject({ ok: true })
     const id = (answer as { data: { session: string } }).data.session
     // The agent got it as the conversation's first message: the Mac's chat shows its answer.
     await page.locator(`[data-region="sidebar"] [data-session-id="${id}"]`).click()
     await expect(page.locator('[data-region="gui-feed"]')).toContainText('Hello: from the phone', WITHIN)
+    expect(launchedArgs()).toEqual(expect.arrayContaining(['--model', 'haiku']))
   })
 
   test('a restored GUI session nobody has shown starts when the phone opens it', async () => {
