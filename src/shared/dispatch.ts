@@ -551,7 +551,7 @@ export const isWaviRun = (command: string): boolean => /(?:^|[\s;&|(])wavi\s+run
 
 /** The sessions a `wavi run` answer (handler.ts) opened or holds for 开始, in order. */
 export function waviRunIds(output: string): SessionId[] {
-  return [...output.matchAll(/\b(?:Started session|Session) (\S+) \(/g)].map((m) => m[1])
+  return [...output.matchAll(/\b(?:Started session|Session) (\S+) \(/g)].map((m) => m[1] ?? '').filter(Boolean)
 }
 
 export interface ParsedReport {
@@ -581,10 +581,10 @@ export function parseReportText(text: string): ParsedReport[] | null {
     const head = /^— 「(.+?)」 · (.+) · id (\S+)$/.exec(line)
     if (head) {
       flush()
-      const [agent = '', ...rest] = head[2].split(' · ')
+      const [agent = '', ...rest] = (head[2] ?? '').split(' · ')
       const at = rest.findIndex((f) => f in EVENT_OF)
-      const event = at >= 0 ? EVENT_OF[rest[at]] : null
-      current = { entry: { childId: head[3], title: head[1], agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
+      const event = EVENT_OF[rest[at] ?? ''] ?? null
+      current = { entry: { childId: head[3] ?? '', title: head[1] ?? '', agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
     } else if (current && line.startsWith('  ')) {
       const body = line.slice(2)
       if (!/^（.*）$/.test(body.trim())) current.lines.push(body)
@@ -596,11 +596,11 @@ export function parseReportText(text: string): ParsedReport[] | null {
 
 /** A `noticeText` message read back; null for any other text. */
 export function parseNoticeText(text: string): { outcome: 'started' | 'declined' | 'timeout'; ids: SessionId[]; titles: string[] } | null {
-  const first = text.trimStart().split('\n', 1)[0]
+  const first = text.trimStart().split('\n', 1)[0] ?? ''
   if (!first.startsWith(`${NOTICE_HEADER} `)) return null
   const outcome = first.includes('已经开始') ? 'started' : first.includes('拒绝') ? 'declined' : 'timeout'
   const rows = [...text.matchAll(/^- id (\S+) · [^·]+ · 「(.+?)」/gm)]
-  return { outcome, ids: rows.map((m) => m[1]), titles: rows.map((m) => m[2]) }
+  return { outcome, ids: rows.map((m) => m[1] ?? ''), titles: rows.map((m) => m[2] ?? '') }
 }
 
 // --- the queue between a child's event and the dispatcher -----------------------------------------------------------
