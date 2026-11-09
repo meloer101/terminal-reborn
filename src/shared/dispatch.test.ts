@@ -4,6 +4,7 @@ import {
   ackReport,
   childBrief,
   childEvent,
+  childUi,
   confirmLabels,
   DISPATCH_LIMITS,
   emptyQueue,
@@ -72,6 +73,8 @@ describe('parseWaviArgv → parseWaviCommand', () => {
       command: { name: 'run', agent: 'grok', task: 'Review src/auth', base: 'snapshot', title: 'Auth review', model: 'grok-4.7' }
     })
     expect(command('run', 'codex', 'Fix it')).toEqual({ ok: true, command: { name: 'run', agent: 'codex', task: 'Fix it', base: 'head' } })
+    expect(command('run', 'codex', 'Fix it', '--ui', 'gui')).toEqual({ ok: true, command: { name: 'run', agent: 'codex', task: 'Fix it', base: 'head', ui: 'gui' } })
+    expect(command('run', 'codex', 'Fix it', '--ui=cli')).toEqual({ ok: true, command: { name: 'run', agent: 'codex', task: 'Fix it', base: 'head', ui: 'cli' } })
     expect(command('send', 's-1', 'one more thing')).toEqual({ ok: true, command: { name: 'send', id: 's-1', text: 'one more thing' } })
     expect(command('report', 'Done.', 'Tests pass.')).toEqual({ ok: true, command: { name: 'report', text: 'Done. Tests pass.' } })
     expect(command('read', 's-1', '--offset', '16000')).toEqual({ ok: true, command: { name: 'read', id: 's-1', offset: 16000 } })
@@ -96,12 +99,38 @@ describe('parseWaviArgv → parseWaviCommand', () => {
     expect(command('run', 'claude', '[Wavi 派活报告] …')).toMatchObject({ ok: false })
     expect(command('read', 's-1', '--offset', '-3')).toMatchObject({ ok: false })
     expect(command('send', 'a/b', 'x')).toMatchObject({ ok: false })
+    expect(command('run', 'claude', 'x', '--ui', 'tui')).toMatchObject({ ok: false, error: '--ui is gui or cli.' })
+    expect(parseWaviArgv(['ls', '--ui', 'gui'])).toMatchObject({ kind: 'error' })
   })
 
   it('reads results back and nothing else', () => {
     expect(parseWaviResult({ ok: false, failure: 'limit', text: 'no' })).toEqual({ ok: false, failure: 'limit', text: 'no' })
     expect(parseWaviResult({ ok: false, failure: 'nope', text: 'no' })).toBeNull()
     expect(titleFor('a'.repeat(200)).length).toBe(DISPATCH_LIMITS.title)
+  })
+})
+
+describe('childUi (PRD F21 v1.163)', () => {
+  const all = (): boolean => true
+  const none = (): boolean => false
+
+  it('opens a child as its dispatcher is, GUI only for an agent that can run as one here', () => {
+    expect(childUi({ agent: 'codex', parentUi: 'gui', installed: all })).toEqual({ ui: 'gui' })
+    expect(childUi({ agent: 'grok', parentUi: 'gui', installed: all })).toEqual({ ui: 'gui' })
+    expect(childUi({ agent: 'codex', parentUi: 'cli', installed: all })).toEqual({ ui: 'cli' })
+    // Inherited, not asked for: a terminal without a word.
+    expect(childUi({ agent: 'crush', parentUi: 'gui', installed: all })).toEqual({ ui: 'cli' })
+    expect(childUi({ agent: 'amp', parentUi: 'gui', installed: none })).toEqual({ ui: 'cli' })
+  })
+
+  it('follows --ui, and says why a GUI it asked for opens in a terminal', () => {
+    expect(childUi({ agent: 'claude', requested: 'gui', parentUi: 'cli', installed: all })).toEqual({ ui: 'gui' })
+    expect(childUi({ agent: 'claude', requested: 'cli', parentUi: 'gui', installed: all })).toEqual({ ui: 'cli' })
+    expect(childUi({ agent: 'antigravity', requested: 'gui', parentUi: 'gui', installed: all })).toEqual({ ui: 'cli', note: 'Antigravity opens in a terminal: it has no chat mode.' })
+    const amp = childUi({ agent: 'amp', requested: 'gui', parentUi: 'cli', installed: none })
+    expect(amp.ui).toBe('cli')
+    expect(amp.note).toContain('amp-acp')
+    expect(childUi({ agent: 'amp', requested: 'gui', parentUi: 'cli', installed: (b) => b === 'amp-acp' })).toEqual({ ui: 'gui' })
   })
 })
 

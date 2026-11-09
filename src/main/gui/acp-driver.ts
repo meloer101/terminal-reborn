@@ -6,6 +6,7 @@
 // the agent's own plan mode. Electron-free.
 
 import type { GuiAnswer, GuiConfigOption, GuiPermission } from '@shared/gui-chat'
+import { parseAcpUsageUpdate } from '@shared/session-meta'
 import { acpAnswerResult, acpAutoAllow, acpConfig, acpConfigRequest, acpPickers, acpPlanValue, createAcpNormalizer, type AcpPickerState } from './acp'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { splitAttachments, withPaths } from './launch'
@@ -153,6 +154,12 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
     if (update.sessionUpdate === 'session_info_update') {
       const title = str(update.title)
       if (title) io.title(title)
+      return
+    }
+    // How full the window is (ACP v1 `usage_update`); agents that do not send it show only the plan rows.
+    if (update.sessionUpdate === 'usage_update') {
+      const context = parseAcpUsageUpdate(update)
+      if (context) io.context(context)
       return
     }
     if (update.sessionUpdate === 'current_mode_update') {

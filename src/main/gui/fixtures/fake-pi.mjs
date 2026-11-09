@@ -23,6 +23,8 @@ const model = models.find((m) => `${m.provider}/${m.id}` === wanted) ?? flash
 const thinking = process.env.FAKE_PI_THINKING || arg('--thinking') || 'high'
 const sessionId = process.env.FAKE_PI_SESSION || arg('--session-id') || 'fake-pi-session'
 let turn = null
+/** A prompt with "measure" makes get_session_stats answer with contextUsage (Pi 0.84 docs/rpc.md). */
+let measured = false
 let n = 0
 const dialogs = new Map()
 
@@ -59,6 +61,7 @@ function tool(name, args, result, then) {
 function prompt(id, message) {
   if (message.includes('refuse')) return out({ id, type: 'response', command: 'prompt', success: false, error: 'No API key for deepseek' })
   respond(id, 'prompt')
+  if (message.includes('measure')) measured = true
   turn = { message }
   out({ type: 'agent_start' })
   out({ type: 'message_end', message: { role: 'user', content: [{ type: 'text', text: message }], timestamp: Date.now() } })
@@ -100,6 +103,10 @@ process.stdin.on('data', (chunk) => {
         break
       case 'prompt':
         prompt(m.id, m.message + (m.images?.length ? ` [${m.images.length} image]` : ''))
+        break
+      case 'get_session_stats':
+        if (measured) respond(m.id, 'get_session_stats', { sessionId, tokens: { total: 70000 }, cost: 0, contextUsage: { tokens: 60000, contextWindow: 200000, percent: 30 } })
+        else out({ id: m.id, type: 'response', command: m.type, success: false, error: `Unknown command: ${m.type}` })
         break
       case 'abort':
         respond(m.id, 'abort')
