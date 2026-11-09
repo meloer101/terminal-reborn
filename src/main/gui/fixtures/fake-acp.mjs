@@ -34,6 +34,7 @@ function runPrompt(id, params) {
     }
     update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi ' } })
     update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `there (${model}, ${picked.mode})` } })
+    if (text.includes('measure')) update(sessionId, { sessionUpdate: 'usage_update', used: 53000, size: 200000, cost: { amount: 0.045, currency: 'USD' } })
     if (text.includes('slow')) return
     const call = text.includes('edit') ? { toolCallId: 'call1', title: 'Edit a.txt', kind: 'edit' } : { toolCallId: 'call1', title: 'ls', kind: 'execute' }
     update(sessionId, { sessionUpdate: 'tool_call', ...call, status: 'pending' })

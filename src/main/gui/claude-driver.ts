@@ -5,6 +5,7 @@
 // from here. Electron-free.
 
 import type { GuiAnswer, GuiCommand, GuiConfigOption, GuiEvent } from '@shared/gui-chat'
+import { autoCompactRuleFromEnv, claudeStreamContext, claudeStreamTokens, claudeStreamWindow, type ClaudeStreamTokens } from '@shared/session-meta'
 import {
   claudeAnswerResponse,
   claudeConfig,
@@ -23,11 +24,25 @@ type ControlOutcome = { ok: true; response: Rec } | { ok: false; error: string }
 
 const INIT_TIMEOUT_MS = 60_000
 
+/** Where Claude compacts by itself, as for a TUI (hooks/normalize.ts): the agent inherits this environment. */
+const COMPACT_RULE = autoCompactRuleFromEnv(process.env)
+
 export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDriver {
   const normalizer: ClaudeStreamNormalizer = createClaudeStreamNormalizer(options.cwd)
   const pending = new Map<string, (outcome: ControlOutcome) => void>()
   /** `tool_use_id` → the `can_use_tool` request asking for it: a tool result answers it (seen on replay). */
   const asks = new Map<string, string>()
+  /**
+   * Context (Figma 52G): the last main-thread reply's tokens, and the window its model ran with — only a turn's result
+   * names that, so the first turn's figure comes at its end.
+   */
+  let reply: ClaudeStreamTokens | undefined
+  let contextWindow: { model: string | undefined; size: number } | undefined
+  const reportContext = () => {
+    if (reply && contextWindow && contextWindow.model === reply.model) {
+      io.context(claudeStreamContext(reply, contextWindow.size, COMPACT_RULE))
+    }
+  }
   let n = 0
   let init: Rec | null = null
   let isReady = false
@@ -163,7 +178,20 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
           if (toolUseId && requestId) asks.set(toolUseId, requestId)
           break
         }
+        case 'assistant': {
+          const tokens = claudeStreamTokens(message)
+          if (tokens) {
+            reply = tokens
+            reportContext()
+          }
+          break
+        }
         case 'system':
+          if (message.subtype === 'compact_boundary') {
+            // Not known again until the next reply (as the statusLine says after /compact).
+            reply = undefined
+            io.context(null)
+          }
           if (message.subtype === 'init') {
             noteSession(message)
             if (Array.isArray(message.skills)) {
@@ -184,8 +212,14 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
             }
           }
           break
-        case 'result':
+        case 'result': {
           noteSession(message)
+          // A turn with no reply since the last compaction (the /compact turn) says nothing about the reply's window.
+          const size = reply ? claudeStreamWindow(message, reply.model) : undefined
+          if (reply && size !== undefined) {
+            contextWindow = { model: reply.model, size }
+            reportContext()
+          }
           // 快速 on but not serving: the turn's result says why (Figma 65 tooltip).
           if (current.fast && !replay) {
             const blocked = message.fast_mode_state === 'on' ? undefined : str(message.fast_mode_disabled_reason)
@@ -200,6 +234,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
             io.turnEnd({ failed, ...(failed && str(message.result) ? { message: str(message.result)! } : {}) })
           }
           break
+        }
         case 'user':
           settleAnswered(message)
           if (replay && isUserTurn(message)) io.emit([{ type: 'busy', busy: true }])
