@@ -175,7 +175,7 @@ const calls = new Map<string, { owner: WebContents; resolve: (result: RemoteResu
  * 归档 runs the repository's archive script and records the worktree; an exit's preflight may ask GitHub; a send to a
  * session that has not started waits for its agent to come up.
  */
-const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { archive: 120_000, exits: 30_000, ship: 30_000, send: 30_000, 'set-setting': 30_000 }
+const SLOW_WINDOW_MS: Partial<Record<RemoteWindowCommand['type'], number>> = { 'agent-models': 30_000, archive: 120_000, exits: 30_000, ship: 30_000, send: 30_000, 'set-setting': 30_000 }
 
 function askWindow(owner: WebContents | null, command: RemoteWindowCommand): Promise<RemoteResult> {
   if (!owner || owner.isDestroyed()) return Promise.resolve(remoteFail('Mac 上没有窗口打开这个会话'))
@@ -237,6 +237,10 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       if (request.session && !knownSession(request.session)) return notFound
       feed.watch(connection.id, request.session)
       if (!request.session) return { ok: true }
+      // Not awaited: the conversation does not wait for the agent; its 会话设置 arrive with the session list.
+      void askWindow(ownerOf(request.session) ?? mainWindow(), { type: 'open', session: request.session }).then((r) => {
+        if (!r.ok) console.error('[remote] the window did not open a session for the phone:', r.error)
+      })
       // The newest page is the phone's starting point: what is pushed from now on continues it.
       const page = await feed.page(request.session)
       return { ok: true, data: page ?? { items: [], start: 0, total: 0 } }
@@ -279,6 +283,8 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
       const [info, installed] = await Promise.all([newSessionInfo(root), detectAgents()])
       return { ok: true, data: { info, agents: Object.entries(installed).filter(([id, on]) => on && isCliAgent(id)).map(([id]) => id) } }
     }
+    case 'agent-models':
+      return askWindow(mainWindow(), { type: 'agent-models', agent: request.agent })
     case 'new-session':
       if (!windowSessions.roots[request.project]) return remoteFail('项目不存在')
       return askWindow(mainWindow(), { type: 'new-session', project: request.project, workdir: request.workdir, agent: request.agent, ...pick(request) })
@@ -310,11 +316,12 @@ async function handle(connection: RemoteConnection, request: PhoneRequest): Prom
   }
 }
 
-function pick(request: Extract<PhoneRequest, { type: 'new-session' }>): { base?: string; branch?: string; prompt?: string } {
+function pick(request: Extract<PhoneRequest, { type: 'new-session' }>): { base?: string; branch?: string; prompt?: string; model?: string } {
   return {
     ...(request.base ? { base: request.base } : {}),
     ...(request.branch ? { branch: request.branch } : {}),
-    ...(request.prompt ? { prompt: request.prompt } : {})
+    ...(request.prompt ? { prompt: request.prompt } : {}),
+    ...(request.model ? { model: request.model } : {})
   }
 }
 

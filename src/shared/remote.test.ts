@@ -74,6 +74,20 @@ describe('parsePhoneRequest', () => {
     expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'worktree', agent: 'claude', branch: 'a b' })).toBeNull()
   })
 
+  it('takes the model picked in 新建会话 and asks for an agent\'s models (PRD F22 v1.161)', () => {
+    expect(parsePhoneRequest({ id: 1, type: 'new-session', project: 'p', workdir: 'current', agent: 'codex', model: 'gpt-5.5-codex' })).toEqual({
+      id: 1,
+      type: 'new-session',
+      project: 'p',
+      workdir: 'current',
+      agent: 'codex',
+      model: 'gpt-5.5-codex'
+    })
+    expect(parsePhoneRequest({ id: 2, type: 'new-session', project: 'p', workdir: 'current', agent: 'claude', model: '--dangerously-skip-permissions' })).toBeNull()
+    expect(parsePhoneRequest({ id: 3, type: 'agent-models', agent: 'pi' })).toEqual({ id: 3, type: 'agent-models', agent: 'pi' })
+    expect(parsePhoneRequest({ id: 4, type: 'agent-models', agent: 'shell' })).toBeNull()
+  })
+
   it('takes a photo-only send', () => {
     expect(parsePhoneRequest({ id: 1, type: 'send', session: 's1', text: '', photos: [{ name: 'a.jpg', data: 'AAAA' }] })).toMatchObject({ text: '', photos: [{ name: 'a.jpg' }] })
   })

@@ -1,4 +1,4 @@
-// 会话设置 (Figma 64A–64F): a pill over the composer says the session's model · effort · permission; tapping it opens
+// 会话设置 (Figma 64A–64F, 模式 per 67C / 67D): a pill over the composer says the session's model · effort · 模式 (permission); tapping it opens
 // a sheet with one row each, and a page per row to pick from. Only this session changes, never the agent's defaults.
 // A terminal session mid-turn is locked until the turn ends (64E); an agent whose terminal has no way to change them
 // for one session only shows them (64F).
@@ -11,7 +11,7 @@ private func kindLabel(_ kind: String) -> String {
   switch kind {
   case "model": "模型"
   case "effort": "思考程度"
-  default: "权限"
+  default: "模式"
   }
 }
 
