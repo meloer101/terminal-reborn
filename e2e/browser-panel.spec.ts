@@ -119,6 +119,12 @@ test.describe('F17 right panel · 浏览器', () => {
     )
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme)
   }
+  /** 设置 · Worktree · 新端口自动打开浏览器. */
+  const setAutoOpen = (on: boolean) =>
+    page.evaluate(
+      (o) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ ports: { autoOpen: o } }),
+      on
+    )
   const shoot = async (name: string) => {
     for (const theme of ['dark', 'light'] as const) {
       await setTheme(theme)
@@ -309,6 +315,23 @@ test.describe('F17 right panel · 浏览器', () => {
     await expect.poll(async () => (await views())[0]?.bounds.width).toBeGreaterThan(375)
   })
 
+  test('a port that starts listening in the session on screen opens the panel by itself (自动打开)', async () => {
+    const browserToggle = page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '浏览器' })
+    await browserToggle.click()
+    await expect(panel()).toHaveCount(0)
+    const own = await freePort()
+    const script = `require('http').createServer((q,r)=>{r.setHeader('content-type','text/html');r.end('<title>auto</title>')}).listen(${own})`
+    await page.locator('[data-region="terminal"] .xterm').first().click()
+    await page.keyboard.type(`"${process.execPath}" -e "${script}"`)
+    await page.keyboard.press('Enter')
+    await expect(panel()).toBeVisible({ timeout: 15_000 })
+    await expect.poll(() => inPage(`http://localhost:${own}`, 'document.title'), { timeout: 15_000 }).toBe('auto')
+    await shoot('F17-auto-open')
+    await page.locator('[data-region="terminal"] .xterm').first().click()
+    await page.keyboard.press('Control+C')
+    await expect(panel().getByRole('group', { name: '端口' }).getByRole('button', { name: `:${own}` })).toHaveCount(0, { timeout: 15_000 })
+  })
+
   test("lists a port the session's own process listens on, and opens it on click", async () => {
     const own = await freePort()
     const script = `require('http').createServer((q,r)=>{r.setHeader('content-type','text/html');r.end('<title>from pty</title>')}).listen(${own})`
@@ -327,7 +350,9 @@ test.describe('F17 right panel · 浏览器', () => {
   })
 
   test('the sidebar row and the overview show the port; ⌥-click opens it outside, right-click ends the process', async () => {
-    // With the 浏览器 view closed: the scan runs for every session, not only a watched tab.
+    // With the 浏览器 view closed: the scan runs for every session, not only a watched tab. 自动打开 is off here, so
+    // the new port leaves the panel closed.
+    await setAutoOpen(false)
     const browserToggle = page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '浏览器' })
     await browserToggle.click()
     await expect(panel()).toHaveCount(0)
@@ -359,6 +384,7 @@ test.describe('F17 right panel · 浏览器', () => {
     await expect(tag).toHaveCount(0, { timeout: 15_000 })
     await browserToggle.click()
     await expect(panel()).toBeVisible()
+    await setAutoOpen(true)
   })
 
   test('refuses non-http addresses with a reason', async () => {
