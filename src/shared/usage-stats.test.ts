@@ -82,10 +82,12 @@ describe('usageView', () => {
 
   it('finds the most sessions at once and the unpriced share', () => {
     const data = dataset([bucket('claude', at(11, 9), 30, { unpriced: 10 })], { claude: at(11, 1) }, [
-      { agent: 'claude', start: at(11, 9, 9), end: at(11, 9, 12) },
-      { agent: 'codex', start: at(11, 9, 11), end: at(11, 9, 13) },
-      { agent: 'claude', start: at(11, 9, 12), end: at(11, 9, 14) },
-      { agent: 'claude', start: at(11, 9, 14, ), end: at(11, 9, 14) }
+      { agent: 'claude', id: 'a', start: at(11, 9, 9), end: at(11, 9, 12) },
+      { agent: 'codex', id: 'b', start: at(11, 9, 11), end: at(11, 9, 13) },
+      { agent: 'claude', id: 'c', start: at(11, 9, 12), end: at(11, 9, 14) },
+      { agent: 'claude', id: 'd', start: at(11, 9, 14), end: at(11, 9, 14) },
+      // A second stretch of `a`: one more stretch, not one more session.
+      { agent: 'claude', id: 'a', start: at(11, 9, 20), end: at(11, 9, 21) }
     ])
     const v = usageView(data, 'week', NOW)
     expect(v.maxConcurrent).toBe(3)

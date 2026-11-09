@@ -3,6 +3,7 @@
 // hourly buckets, and the views here are computed from them. Each agent counts from its own oldest log line (logs
 // the CLI already deleted are gone), so every view says where each agent starts and never extrapolates.
 import type { CliAgent } from './agents'
+import { WAVI_WORKTREES_DIR } from './git-worktrees'
 
 /** Agents whose logs carry per-message token counts and that Wavi reads (others show 暂不支持). */
 export const STATS_AGENTS = ['claude', 'codex', 'opencode', 'pi', 'grok'] as const satisfies readonly CliAgent[]
@@ -33,9 +34,11 @@ export interface UsageBucket extends TokenSplit {
   unpriced: number
 }
 
-/** One conversation: first and last line with usage. */
+/** One stretch of a conversation: its usage lines with no gap over half an hour. A conversation may have several. */
 export interface SessionSpan {
   agent: StatsAgent
+  /** The conversation's id: stretches with one id are one session. */
+  id: string
   start: number
   end: number
 }
@@ -141,7 +144,7 @@ export function projectOf(cwd: string, home: string): string {
   const parts = cwd.replace(/\/+$/, '').split('/')
   const claudeAt = parts.lastIndexOf('worktrees')
   if (claudeAt > 1 && parts[claudeAt - 1] === '.claude') return parts[claudeAt - 2] ?? cwd
-  const tr = `${home.replace(/\/+$/, '')}/.tr/worktrees/`
+  const tr = `${home.replace(/\/+$/, '')}/${WAVI_WORKTREES_DIR.join('/')}/`
   if (cwd.startsWith(tr)) return cwd.slice(tr.length).split('/')[0] || cwd
   return parts[parts.length - 1] || cwd
 }
@@ -279,7 +282,7 @@ export function usageView(data: UsageDataset, period: StatsPeriod, now: number):
     return at !== undefined && at >= start && at <= end ? [{ agent, at }] : []
   }).sort((a, b) => a.at - b.at)
   const byAgent = shareRows(agents, tokens).map((r) => ({ ...r, agent: r.key as StatsAgent, firstAt: data.firstAt[r.key as StatsAgent] ?? start }))
-  const sessions = data.sessions.filter((s) => s.end >= start && s.start <= end).length
+  const sessions = new Set(data.sessions.filter((s) => s.end >= start && s.start <= end).map((s) => `${s.agent}\0${s.id}`)).size
   return {
     period,
     start,

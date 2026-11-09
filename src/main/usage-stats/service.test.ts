@@ -29,13 +29,16 @@ describe('UsageStatsService', () => {
     service.dispose()
   })
 
-  it('rejects a scan that takes too long and starts a fresh worker next time', async () => {
-    const path = await workerFile("parentPort.on('message', () => {})")
+  it('rejects a scan that takes too long, and the worker keeps going so the next call gets the figures', async () => {
+    // Like the real worker: a call while a scan runs joins it; once done, answers come from the cache at once.
+    const path = await workerFile(
+      "let running = null; let done = false; parentPort.on('message', (m) => { const reply = () => parentPort.postMessage({ id: m.id, data: { buckets: [], sessions: [], firstAt: {}, skipped: 0, scannedAt: 7 } }); if (done) return reply(); running ??= new Promise((r) => setTimeout(() => { done = true; r() }, 150)); running.then(reply) })"
+    )
     const logs: string[] = []
-    const service = new UsageStatsService(path, (m) => logs.push(m), 50)
+    const service = new UsageStatsService(path, (m) => logs.push(m), 100)
     await expect(service.scan()).rejects.toThrow('timed out')
-    expect(logs[0]).toContain('longer than 50 ms')
-    await expect(service.scan()).rejects.toThrow('timed out')
+    expect(logs[0]).toContain('longer than 100 ms')
+    expect((await service.scan()).scannedAt).toBe(7)
     service.dispose()
   })
 

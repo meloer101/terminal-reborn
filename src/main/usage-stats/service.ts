@@ -1,6 +1,6 @@
-// Main's handle on the usage-stats worker (PRD F11 · 额度页). One scan at a time (callers share it); a scan that takes
-// longer than the limit, or a worker that dies, rejects and the next call starts a fresh worker (its cache is lost,
-// nothing else).
+// Main's handle on the usage-stats worker (PRD F11 · 额度页). One scan at a time (callers share it). A scan that takes
+// longer than the limit rejects this call only: the worker finishes it and keeps its cache, so the next call (which joins
+// a scan still running) gets the figures. A worker that dies rejects and the next call starts a fresh one.
 import { Worker } from 'node:worker_threads'
 import type { UsageDataset } from '@shared/usage-stats'
 
@@ -57,8 +57,7 @@ export class UsageStatsService {
       }
       const timer = setTimeout(() => {
         done()
-        this.log(`scan took longer than ${this.timeoutMs} ms; worker restarted`)
-        this.dispose()
+        this.log(`scan took longer than ${this.timeoutMs} ms; the worker goes on with it`)
         reject(new Error('scan timed out'))
       }, this.timeoutMs)
       worker.on('message', onMessage)

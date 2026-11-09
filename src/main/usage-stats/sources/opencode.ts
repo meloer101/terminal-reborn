@@ -1,8 +1,8 @@
 // OpenCode: its SQLite database (~/.local/share/opencode/opencode.db), opened read-only. Each assistant message's
 // `data` JSON has tokens (input excludes cache; reasoning is separate output), the model, times, cwd and its own cost.
+// node:sqlite is loaded only here, so a runtime without it costs OpenCode's figures alone; rows are read one at a time.
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { isRec, tokenCount } from '@shared/usage-records'
 import type { UsageSource } from './source'
 
@@ -26,9 +26,10 @@ export const opencodeSource: UsageSource = {
     return sig ? [{ path, signature: sig }] : []
   },
   async read(path, acc) {
+    const { DatabaseSync } = await import('node:sqlite')
     const db = new DatabaseSync(path, { readOnly: true })
     try {
-      const rows = db.prepare('SELECT m.session_id AS session, m.data AS data, s.directory AS directory FROM message m LEFT JOIN session s ON s.id = m.session_id').all()
+      const rows = db.prepare('SELECT m.session_id AS session, m.data AS data, s.directory AS directory FROM message m LEFT JOIN session s ON s.id = m.session_id').iterate()
       for (const row of rows) {
         let data: unknown
         try {

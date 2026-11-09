@@ -24,7 +24,8 @@ export function defaultStatsDirs(env: NodeJS.ProcessEnv = process.env, realHome 
     claudeProjects: [...claude],
     codexHome: abs(env.CODEX_HOME) ?? join(home, '.codex'),
     opencodeData: join(abs(env.XDG_DATA_HOME) ?? join(home, '.local', 'share'), 'opencode'),
-    piSessions: join(home, '.pi', 'agent', 'sessions'),
+    // As src/main/gui/history.ts piSessionsDir.
+    piSessions: join(abs(env.PI_CODING_AGENT_DIR) ?? join(home, '.pi', 'agent'), 'sessions'),
     grokSessions: join(home, '.grok', 'sessions')
   }
 }

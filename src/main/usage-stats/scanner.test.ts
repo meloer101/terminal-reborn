@@ -114,6 +114,18 @@ describe('UsageScanner', () => {
     expect(Object.keys(data.firstAt).sort()).toEqual(['grok', 'opencode', 'pi'])
   })
 
+  it('counts a message repeated in a resumed conversation’s file once, and splits a conversation idle over half an hour', async () => {
+    const dir = join(dirs.claudeProjects[0]!, 'p')
+    await mkdir(dir, { recursive: true })
+    const later = new Date(Date.parse(T) + 3 * 60 * 60_000).toISOString()
+    await writeFile(join(dir, 'old.jsonl'), jsonl([claudeLine('m1', 5)]))
+    await writeFile(join(dir, 'resumed.jsonl'), jsonl([claudeLine('m1', 5), claudeLine('m2', 7, { timestamp: later })]))
+    const data = await new UsageScanner(dirs).scan()
+    expect(data.buckets.reduce((s, b) => s + b.output, 0)).toBe(12)
+    expect(data.sessions.map((s) => s.id)).toEqual(['s1', 's1'])
+    expect(data.sessions[1]!.start).toBe(Date.parse(later))
+  })
+
   it('rereads only changed files and forgets deleted ones', async () => {
     const dir = join(dirs.claudeProjects[0]!, 'p')
     await mkdir(dir, { recursive: true })
