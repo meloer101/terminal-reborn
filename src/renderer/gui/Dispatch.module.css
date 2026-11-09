@@ -245,7 +245,8 @@
   min-width: 16px;
   padding: 0 var(--space-4);
   box-sizing: border-box;
-  border-radius: 8px;
+  /* A pill whatever the count's width. */
+  border-radius: 100vmax;
   background: var(--status-done);
   color: var(--text-inverse);
   font: var(--text-mono-s-medium);
@@ -276,7 +277,7 @@
   left: 0;
   width: 6px;
   height: 6px;
-  margin: -3px 0 0 -3px;
+  /* Its centre rides the path (offset-anchor follows transform-origin, the centre). */
   border-radius: 50%;
   background: var(--status-done);
   offset-rotate: 0deg;
@@ -414,7 +415,7 @@
 }
 
 .ring + .ring {
-  margin-left: -6px;
+  margin-left: calc(-1 * var(--space-6));
 }
 
 .ring[data-state='working'] {
