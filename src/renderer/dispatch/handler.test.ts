@@ -6,7 +6,7 @@ import { decideConfirms, dropConfirmsOf, handleWaviRequest, resumeConfirmTimers,
 import { restoreDispatch, savedDispatch, useDispatch } from './store'
 
 let sessions: Session[] = []
-const addBackgroundSession = vi.fn((_project: string, _target: unknown, _kind: string, id?: string): string | null => id ?? 'child')
+const addBackgroundSession = vi.fn((_project: string, _target: unknown, _kind: string, id?: string, _ui?: string): string | null => id ?? 'child')
 const deliverMessage = vi.fn(async (): Promise<'delivered' | 'held'> => 'delivered')
 const queueReport = vi.fn()
 
@@ -166,6 +166,35 @@ describe('wavi in a window (PRD F21)', () => {
   it('answers send at once and delivers behind it', async () => {
     expect(await call('top', { name: 'send', id: 'child', text: 'one more thing' })).toMatchObject({ ok: true, text: expect.stringContaining('putting it in') })
     expect((deliverMessage.mock.calls[0] as unknown[])[1]).toContain('one more thing')
+  })
+
+  it('opens a GUI dispatcher’s children as GUI when their agent can (PRD F21 v1.161)', async () => {
+    sessions[0] = { ...sessions[0]!, ui: 'gui' }
+    sessions[1] = { ...sessions[1]!, ui: 'gui' }
+    // A dispatched session's child starts at once.
+    const started = await call('child', runCmd('Check the types', { agent: 'codex' }))
+    expect(started).toMatchObject({ ok: true, text: expect.stringContaining('shown as a chat') })
+    expect(addBackgroundSession.mock.calls[0]?.[4]).toBe('gui')
+    // The user's own session's child waits for 开始 with its 界面 decided, and keeps it.
+    await call('top', runCmd('Fix the login form', { agent: 'claude' }))
+    expect(useDispatch.getState().confirms[0]!.plan.item.ui).toBe('gui')
+    decideConfirms('top', true)
+    expect(addBackgroundSession.mock.calls[1]?.[4]).toBe('gui')
+  })
+
+  it('follows --ui, and tells the dispatcher when the GUI it asked for cannot be', async () => {
+    const tr = (window as unknown as { tr: { app: { detectAgents: () => Promise<unknown> } } }).tr
+    tr.app.detectAgents = async () => ({ claude: true, codex: true, crush: true })
+    sessions[1] = { ...sessions[1]!, ui: 'gui' }
+    await call('child', runCmd('As a terminal', { agent: 'codex', ui: 'cli' }))
+    expect(addBackgroundSession.mock.calls[0]?.[4]).toBe('cli')
+    const crush = await call('child', runCmd('Crush in a chat', { agent: 'crush', ui: 'gui' }))
+    expect(crush).toMatchObject({ ok: true, text: expect.stringContaining('Crush opens in a terminal: it has no chat mode.') })
+    expect(addBackgroundSession.mock.calls[1]?.[4]).toBe('cli')
+    // A CLI dispatcher can ask for a chat too; without asking its children stay terminals.
+    expect(await call('top', runCmd('Claude in a chat', { agent: 'claude', ui: 'gui' }))).toMatchObject({ ok: true, text: expect.stringContaining('shown as a chat') })
+    await call('top', runCmd('Claude in a terminal', { agent: 'claude' }))
+    expect(useDispatch.getState().confirms.map((c) => c.plan.item.ui)).toEqual(['gui', undefined])
   })
 
   it('acts only on the caller’s own sessions', async () => {

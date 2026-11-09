@@ -9,6 +9,7 @@ import {
   ackReport,
   agentLabel,
   childBrief,
+  childUi,
   DISPATCH_LIMITS,
   messagePage,
   noticeText,
@@ -26,6 +27,7 @@ import {
 import { DEFAULT_SETTINGS, type DispatchSettings } from '@shared/settings'
 import type { Session, SessionId } from '@shared/types'
 import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session/creation'
+import { binaryInstalled } from '../new-session/model'
 import { interruptAgent } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
@@ -123,7 +125,8 @@ async function hasUncommitted(place: Place): Promise<boolean> {
   }
 }
 
-const where = (plan: ChildPlan): string => (plan.branch ? `branch ${plan.branch}` : 'a read-only snapshot of your working tree')
+const where = (plan: ChildPlan): string =>
+  `${plan.branch ? `branch ${plan.branch}` : 'a read-only snapshot of your working tree'}${plan.item.ui === 'gui' ? ', shown as a chat' : ''}`
 
 /** Timers of requests waiting for 开始 (10 minutes, then they count as unanswered). */
 const timers = new Map<string, number>()
@@ -165,8 +168,18 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
   if (command.base === 'head' && !base) {
     return waviFail('failed', "Your checkout is not on a branch (detached HEAD), so there is nothing to branch from. Use --base snapshot, or ask the user.")
   }
+  // A GUI dispatcher's children open as GUI too, when their agent can (PRD F21 v1.161); `--ui` decides otherwise.
+  const ui = childUi({ agent: command.agent, ...(command.ui ? { requested: command.ui } : {}), parentUi: caller.session.ui ?? 'cli', installed: binaryInstalled(installed) })
+  const note = ui.note ? ` ${ui.note}` : ''
   const plan = planChild({
-    item: { agent: command.agent, task: command.task, title: titleFor(command.task, command.title), base: command.base, ...(command.model ? { model: command.model } : {}) },
+    item: {
+      agent: command.agent,
+      task: command.task,
+      title: titleFor(command.task, command.title),
+      base: command.base,
+      ...(command.model ? { model: command.model } : {}),
+      ...(ui.ui === 'gui' ? { ui: 'gui' as const } : {})
+    },
     root: caller.project.rootPath,
     base: base ?? 'HEAD',
     from: caller.worktree.path,
@@ -185,7 +198,7 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
     const started = launch(caller, plan, childId, base ?? 'HEAD', depth + 1)
     if (!started) return waviFail('failed', 'Wavi could not add the session.')
     return waviOk(
-      `Started session ${started.id} (${command.agent}${model}, ${where(plan)}). It works on its own: Wavi sends you its report when it finishes a turn, fails or exits. End your turn now instead of waiting.`
+      `Started session ${started.id} (${command.agent}${model}, ${where(plan)}).${note} It works on its own: Wavi sends you its report when it finishes a turn, fails or exits. End your turn now instead of waiting.`
     )
   }
   addConfirm({ callId, parentId: caller.session.id, childId, plan, base: base ?? 'HEAD', uncommitted })
@@ -199,7 +212,7 @@ async function start(caller: Place, request: DispatchRequest, command: Extract<W
   }
   return waviOk(
     [
-      `Session ${childId} (${command.agent}${model}, ${where(plan)}) waits for the user's 开始 in Wavi.${uncommitted ? ' Your uncommitted changes will not be in it.' : ''}`,
+      `Session ${childId} (${command.agent}${model}, ${where(plan)}) waits for the user's 开始 in Wavi.${note}${uncommitted ? ' Your uncommitted changes will not be in it.' : ''}`,
       'wavi does not wait: end your turn now. Wavi sends you a message when the user decides, and a report when the session finishes a turn, fails or exits.'
     ].join('\n')
   )
@@ -259,7 +272,8 @@ function decide(callIds: readonly string[], outcome: 'started' | 'declined' | 't
 function launch(caller: Place, plan: ChildPlan, childId: SessionId, base: string, depth: number): StartedChild | null {
   const snapshot = plan.item.base === 'snapshot'
   const workspace = useWorkspace.getState()
-  const id = workspace.addBackgroundSession(caller.project.id, { path: plan.path, branch: plan.branch, ...(snapshot ? {} : { baseBranch: base }) }, plan.item.agent, childId)
+  const target = { path: plan.path, branch: plan.branch, ...(snapshot ? {} : { baseBranch: base }) }
+  const id = workspace.addBackgroundSession(caller.project.id, target, plan.item.agent, childId, plan.item.ui ?? 'cli')
   if (!id) return null
   useWorkspace.getState().patchSession(id, {
     title: plan.item.title,

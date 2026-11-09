@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-08
+> 最后更新：2026-11-09
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-09：`wavi run` 派出的子会话也能开成 GUI（PRD v1.161）：派活方是 GUI、子会话的 agent 能跑 GUI 时默认开 GUI，`--ui gui|cli` 指定。
 - 2026-11-08：Pi 的 GUI 会话直接用 `pi --mode rpc`（PRD v1.158），不用装 pi-acp；模型和推理强度换了就在同一会话上重启 Pi，不写 Pi 的全局配置；模式只有询问 / 接受编辑。分支 claude/pi-rpc-driver-74ad0b（基于 jacoy/gui-composer-65）。
 - 2026-11-07：手机会话页加两边头像、Markdown 表格和会话设置（PRD v1.144）：在手机上改模型、思考程度、权限，只改这个会话；GUI 会话全部 agent 都能改，终端里目前是 Claude。
 - 2026-11-07：iPhone App 按 Figma「手机 · iOS」第 59–63 节改完（PRD v1.143）：新的设计 token 和 Dynamic Type，连接失败时写清原因（Mac 睡了、Wavi 没开、Tailscale 没开、版本不配），对话里工具调用合成一句、一轮结束有改动汇总、回答过的留回执，Live Activity 加汇总行和「已过期」。
@@ -266,6 +267,8 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Figma 65 输入框和空会话（PRD v1.158，分支 jacoy/gui-composer-65）：选择器进框、去掉「格式」按钮；模式一个列表（询问 / 接受编辑 / 自动 / 计划）；快速（Claude `supportsFastMode` + `apply_flag_settings`，Codex `priority` service tier）；空会话欢迎语「让我们在 <项目> 中开工吧」、滚轮换项目、模型菜单先选 agent；每个 agent 记住上次的选择（workspace.json `guiPicks`）；e2e `gui-session.spec.ts` 25 个、新 `gui-switch.spec.ts` 3 个；独立 review 9 条（Major 4、Minor 5）全部属实已修
 - [x] 空会话的 agent 菜单列出每家的模型（PRD v1.159）：`src/main/gui/catalog.ts` 只握手不开对话（Claude `initialize`、Codex `model/list`、Grok ACP `initialize`、`cursor-agent models`、Pi `--mode rpc --no-session`），`gui.models` IPC；加载中 / 失败重试；Pi 列为已装（要 pi-acp）；本机五家实测、会话文件数不变
 - [x] Pi 直接用 `pi --mode rpc` 做 GUI 会话（PRD v1.160，照 Paseo / T3 Code，不再要 pi-acp）：`src/main/gui/pi-rpc.ts`（事件、对话框、选择器、会话文件历史）、`pi-driver.ts`，权限扩展 `resources/hooks/wavi-pi-gui.js`；换模型 / 推理强度在同一会话上重启（rpc 的 `set_model` 会写 `~/.pi/agent/settings.json`）；pty-host 认得 Pi 的 `extension_ui_response`（重开不再问已答的）。测试 `pi-rpc.test.ts`、`host.test.ts`（假 Pi `fixtures/fake-pi.mjs`）、e2e `gui-pi.spec.ts` 5 个；真 Pi 0.84.1 + DeepSeek 在 app 里跑过一轮工具、换模型、停止、重开；独立 review 8 条（高 1、中 2、低 5）已修。没做：app 关着时接受编辑下的 edit 要等重新打开（同 ACP agent）
+- [x] 派活的子会话开成 GUI（PRD v1.161）：`childUi`（`src/shared/dispatch.ts`）、`wavi run --ui`、`addBackgroundSession` 带界面、等「开始」的请求存界面；单测覆盖规则和存盘
+- [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流
 - [ ] Codex 的思考摘要：`turn/start` 带不带 `summary`（有模型收到会报错，openai/codex#31846），等作者机器上的 Codex 能连上后实测默认值和 `detailed`

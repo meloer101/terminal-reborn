@@ -117,6 +117,13 @@ describe('sanitizeSavedDispatch', () => {
     })
   })
 
+  it('keeps a waiting child’s GUI 界面 and nothing else in its place (PRD F21 v1.161)', () => {
+    const gui = { ...pending, plan: { ...pending.plan, item: { ...pending.plan.item, ui: 'gui' as const } } }
+    expect(sanitizeSavedDispatch({ confirms: [gui] }, sessions)?.confirms).toEqual([gui])
+    const odd = { ...pending, plan: { ...pending.plan, item: { ...pending.plan.item, ui: 'tui' } } }
+    expect(sanitizeSavedDispatch({ confirms: [odd] }, sessions)?.confirms).toEqual([pending])
+  })
+
   it('is nothing when nothing is left', () => {
     expect(sanitizeSavedDispatch({ confirms: [{ ...pending, parentId: 'gone' }], queues: {}, held: {} }, sessions)).toBeNull()
     expect(sanitizeSavedDispatch(42, sessions)).toBeNull()

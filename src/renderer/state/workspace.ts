@@ -155,9 +155,9 @@ interface WorkspaceState extends WorkspaceData {
   addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, ui?: SessionUi): SessionId | null
   /**
    * 一题多解: starts a session in a new worktree folder without selecting it (the overview shows the group). The
-   * selection stays where it was; with none, the new session takes it.
+   * selection stays where it was; with none, the new session takes it. `ui`: a `wavi run` child opens as GUI (PRD F21 v1.161).
    */
-  addBackgroundSession(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, sessionId?: SessionId): SessionId | null
+  addBackgroundSession(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, sessionId?: SessionId, ui?: SessionUi): SessionId | null
   /** Adds the Run button's terminal for a worktree (PRD F4) and selects it. */
   addRunSession(worktreeId: WorktreeId): SessionId | null
   /** Remembers the new-session sheet's 工作目录 for a git project. */
@@ -411,10 +411,10 @@ export const useWorkspace = create<WorkspaceState>()((set, get) => {
       commit(result.data, { mainView: 'session', focusRequest: get().focusRequest + 1 })
       return result.sessionId
     },
-    addBackgroundSession(projectId, target, kind, sessionId) {
+    addBackgroundSession(projectId, target, kind, sessionId, ui) {
       // A `wavi run` names the session before it exists (PRD F21): its answer already gave the agent this id.
       const makeId: MakeId | undefined = sessionId ? (prefix) => (prefix === 's' && !get().sessions.some((s) => s.id === sessionId) ? sessionId : randomId(prefix)) : undefined
-      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now(), makeId)
+      const result = addSessionInWorktree(pick(get()), projectId, target, kind, Date.now(), makeId, ui)
       if (!result) return null
       commit({ ...result.data, activeSessionId: get().activeSessionId ?? result.sessionId })
       return result.sessionId
