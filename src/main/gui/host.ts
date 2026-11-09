@@ -618,6 +618,8 @@ export class GuiHost<O extends GuiOwner> {
     // The pipe host drops a killed session at once (messages are handled in order): `begin` starts a new process.
     this.sessions.delete(sessionId)
     session.stop()
+    // The shorter conversation's context is not known until its next reply.
+    this.deps.status(sessionId, launch.agent, [{ type: 'context', context: null }], owner)
     const replacement = new GuiSession(next, owner, this.deps, this.relaunchOf(sessionId), state.items.slice(0, index))
     this.sessions.set(sessionId, replacement)
     const result = await replacement.begin(next.resumeAgentSessionId)

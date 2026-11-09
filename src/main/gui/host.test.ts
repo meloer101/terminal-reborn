@@ -218,6 +218,8 @@ describe('GuiHost · Claude stream-json', () => {
     const second = stateOf(h, 'c9').items.find((i) => i.kind === 'user' && i.text === 'second')!
     const edited = await h.host.edit('c9', second.id, 'second, edited')
     expect(edited.ok).toBe(true)
+    // The shorter conversation's context is not the longer one's: unknown until its next reply.
+    expect(h.status).toContainEqual({ type: 'context', context: null })
     await until(() => !stateOf(h, 'c9').busy && texts(stateOf(h, 'c9')).includes('text:Hello: second, edited'))
     expect(texts(stateOf(h, 'c9'))).toEqual(['user:first', 'text:Hello: first', 'user:second, edited', 'text:Hello: second, edited'])
     expect(prepared.at(-1)).toMatchObject({ resumeAgentSessionId: 'fake-claude-session', resumeAt: 'reply-1', initialPrompt: 'second, edited' })

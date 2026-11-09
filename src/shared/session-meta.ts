@@ -373,13 +373,13 @@ export function claudeStreamTokens(message: unknown): ClaudeStreamTokens | undef
 }
 
 /**
- * The window size from a turn's `result`: `modelUsage[model].contextWindow` (2.1.321). A result naming one model is
- * that model's; with several (a subagent on Haiku), only the reply's own model counts.
+ * The window size from a turn's `result`: `modelUsage[model].contextWindow` (2.1.321). With several models (a subagent
+ * on Haiku) only the reply's own counts; a result naming one model is the reply's, however a gateway spells it.
  */
 export function claudeStreamWindow(result: unknown, model: string | undefined): number | undefined {
   if (!isRec(result) || !isRec(result.modelUsage)) return undefined
   const entries = Object.entries(result.modelUsage)
-  const entry = model !== undefined ? result.modelUsage[model] : entries.length === 1 ? entries[0]![1] : undefined
+  const entry = (model !== undefined ? result.modelUsage[model] : undefined) ?? (entries.length === 1 ? entries[0]![1] : undefined)
   const size = isRec(entry) ? tokens(entry.contextWindow) : undefined
   return size !== undefined && size > 0 ? size : undefined
 }

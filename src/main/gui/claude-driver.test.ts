@@ -4,10 +4,10 @@ import type { GuiEvent } from '@shared/gui-chat'
 import type { ContextUsage } from '@shared/session-meta'
 import type { DriverIO, ImageBlock, Rec } from './driver'
 
-function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
-  const writes: Rec[] = []
-  const io: DriverIO = {
-    write: (message) => writes.push(message) > 0,
+/** A DriverIO that does nothing, with `overrides`. */
+function ioWith(overrides: Partial<DriverIO> = {}): DriverIO {
+  return {
+    write: () => true,
     emit: () => undefined,
     ready: () => undefined,
     agentSession: () => undefined,
@@ -15,9 +15,15 @@ function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
     context: () => undefined,
     turnEnd: () => undefined,
     fail: () => undefined,
-    image,
-    relaunch: () => Promise.resolve(false)
+    image: () => Promise.resolve(null),
+    relaunch: () => Promise.resolve(false),
+    ...overrides
   }
+}
+
+function driverWith(image: (path: string) => Promise<ImageBlock | null>) {
+  const writes: Rec[] = []
+  const io = ioWith({ write: (message) => writes.push(message) > 0, image })
   return { driver: createClaudeDriver(io, { cwd: '/w', clientVersion: '0' }), writes }
 }
 
@@ -43,18 +49,7 @@ describe('Claude driver · send', () => {
 describe('Claude driver · the / menu (Figma 59H)', () => {
   it('marks skills from each turn’s system/init on the commands from initialize and commands_changed', () => {
     const emitted: GuiEvent[] = []
-    const io: DriverIO = {
-      write: () => true,
-      emit: (events) => void emitted.push(...events),
-      ready: () => undefined,
-      agentSession: () => undefined,
-      title: () => undefined,
-      context: () => undefined,
-      turnEnd: () => undefined,
-      fail: () => undefined,
-      image: () => Promise.resolve(null),
-      relaunch: () => Promise.resolve(false)
-    }
+    const io = ioWith({ emit: (events) => void emitted.push(...events) })
     const driver = createClaudeDriver(io, { cwd: '/w', clientVersion: '0' })
     const latest = () => emitted.filter((e) => e.type === 'commands').at(-1)
     const kinds = () => {
@@ -74,18 +69,7 @@ describe('Claude driver · the / menu (Figma 59H)', () => {
 describe('Claude driver · context (Figma 52G)', () => {
   it('reports the window once a result names its size, then each main-thread reply; null after a compaction', () => {
     const readings: (ContextUsage | null)[] = []
-    const io: DriverIO = {
-      write: () => true,
-      emit: () => undefined,
-      ready: () => undefined,
-      agentSession: () => undefined,
-      title: () => undefined,
-      context: (context) => void readings.push(context),
-      turnEnd: () => undefined,
-      fail: () => undefined,
-      image: () => Promise.resolve(null),
-      relaunch: () => Promise.resolve(false)
-    }
+    const io = ioWith({ context: (context) => void readings.push(context) })
     const driver = createClaudeDriver(io, { cwd: '/w', clientVersion: '0' })
     const reply = (used: number, parent: string | null = null) => ({
       type: 'assistant',
@@ -101,5 +85,9 @@ describe('Claude driver · context (Figma 52G)', () => {
     expect(readings.map((r) => r?.usedTokens)).toEqual([20_000, 50_000])
     driver.line({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'manual', pre_tokens: 50_000 } }, false)
     expect(readings.at(-1)).toBeNull()
+    // The /compact turn ends with no reply: its result names no model for the window, so the window stays Opus's.
+    driver.line({ type: 'result', subtype: 'success', session_id: 's', modelUsage: { 'claude-haiku-5-5': { contextWindow: 1_000_000 } } }, false)
+    driver.line(reply(30_000), false)
+    expect(readings.at(-1)).toMatchObject({ percent: 15, windowTokens: 200_000 })
   })
 })

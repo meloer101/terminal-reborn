@@ -233,6 +233,8 @@ describe('GUI sessions · context', () => {
     expect(claudeStreamWindow(CLAUDE_RESULT, 'claude-sonnet-5-5')).toBeUndefined()
     // One model in the turn: its window, whatever the reply called it.
     expect(claudeStreamWindow({ modelUsage: { 'claude-opus-5-5': { contextWindow: 200000 } } }, undefined)).toBe(200_000)
+    // A gateway may spell the reply's model otherwise than its usage key (Bedrock's region prefix).
+    expect(claudeStreamWindow({ modelUsage: { 'us.anthropic.claude-opus-5-5': { contextWindow: 200000 } } }, 'claude-opus-5-5')).toBe(200_000)
   })
 
   it('Codex: thread/tokenUsage/updated reads as its rollout token_count does', () => {

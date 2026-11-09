@@ -39,7 +39,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
   let reply: ClaudeStreamTokens | undefined
   let contextWindow: { model: string | undefined; size: number } | undefined
   const reportContext = () => {
-    if (reply && contextWindow && (contextWindow.model === undefined || contextWindow.model === reply.model)) {
+    if (reply && contextWindow && contextWindow.model === reply.model) {
       io.context(claudeStreamContext(reply, contextWindow.size, COMPACT_RULE))
     }
   }
@@ -214,9 +214,10 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
           break
         case 'result': {
           noteSession(message)
-          const size = claudeStreamWindow(message, reply?.model)
-          if (size !== undefined) {
-            contextWindow = { model: reply?.model, size }
+          // A turn with no reply since the last compaction (the /compact turn) says nothing about the reply's window.
+          const size = reply ? claudeStreamWindow(message, reply.model) : undefined
+          if (reply && size !== undefined) {
+            contextWindow = { model: reply.model, size }
             reportContext()
           }
           // 快速 on but not serving: the turn's result says why (Figma 65 tooltip).
