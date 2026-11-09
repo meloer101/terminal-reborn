@@ -90,6 +90,8 @@ export function SettingsApp({ onClose }: { onClose(): void }) {
         {pane === 'worktree' && loaded && <WorktreePane
             base={settings.ports.base}
             update={(base) => updatePorts({ base })}
+            autoOpen={settings.ports.autoOpen}
+            updateAutoOpen={(autoOpen) => updatePorts({ autoOpen })}
             archiveAfterMerge={settings.archive.afterMerge}
             updateArchiveAfterMerge={(afterMerge) => updateArchive({ afterMerge })}
           />}

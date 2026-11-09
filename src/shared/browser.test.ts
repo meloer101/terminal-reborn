@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addConsoleEntry,
+  autoOpenStep,
   decidePopup,
   EMPTY_CONSOLE,
   formatErrorsForAgent,
@@ -326,5 +327,33 @@ describe('pageChord', () => {
     expect(pageChord(key('KeyK', { meta: false }))).toBeNull()
     expect(pageChord(key('KeyK', { control: true }))).toBeNull()
     expect(pageChord(key('KeyK', {}, 'keyUp'))).toBeNull()
+  })
+})
+
+describe('autoOpenStep (PRD F17 · 自动打开)', () => {
+  const at = (port: number, pid = 1) => ({ port, pid, host: 'localhost', label: '' })
+  const base = { prev: [at(3000)], next: [at(3000)], runningAtStart: false, opened: new Set<number>(), onScreen: true, shown: '', pending: undefined }
+
+  it('opens the lowest new port on screen, waits off screen, and marks every new port as seen', () => {
+    const step = autoOpenStep({ ...base, next: [at(3000), at(24678), at(5173)] })
+    expect(step).toMatchObject({ action: 'open', opened: [5173, 24678], dropPending: false })
+    expect(step.port?.port).toBe(5173)
+    expect(autoOpenStep({ ...base, next: [at(3000), at(5173)], onScreen: false }).action).toBe('wait')
+  })
+
+  it('takes the first report of a session running at start as the baseline; a new session starts from no ports', () => {
+    expect(autoOpenStep({ ...base, prev: undefined, next: [at(5173)], runningAtStart: true })).toMatchObject({ action: null, opened: [] })
+    expect(autoOpenStep({ ...base, prev: undefined, next: [at(5173)] }).action).toBe('open')
+  })
+
+  it('reloads a port that opened before only when the page still shows it', () => {
+    const back = { ...base, prev: [], next: [at(5173, 2)], opened: new Set([5173]) }
+    expect(autoOpenStep({ ...back, shown: 'http://localhost:5173/about' })).toMatchObject({ action: 'reload', opened: [] })
+    expect(autoOpenStep({ ...back, shown: 'https://example.com/' }).action).toBeNull()
+  })
+
+  it('forgets a waiting port once it stops listening', () => {
+    expect(autoOpenStep({ ...base, pending: 5173, prev: [at(5173)], next: [] }).dropPending).toBe(true)
+    expect(autoOpenStep({ ...base, pending: 5173, prev: [at(5173)], next: [at(5173)] }).dropPending).toBe(false)
   })
 })

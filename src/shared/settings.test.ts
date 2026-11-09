@@ -100,6 +100,16 @@ describe('archive settings (F15)', () => {
   })
 })
 
+describe('设置 · Worktree · 端口 · 自动打开 (PRD F17)', () => {
+  it('is on by default, takes a boolean only, and keeps the port base when only the switch changes', () => {
+    expect(DEFAULT_SETTINGS.ports.autoOpen).toBe(true)
+    const off = applySettingsPatch(DEFAULT_SETTINGS, { ports: { autoOpen: false } })
+    expect(off.ports).toEqual({ base: DEFAULT_SETTINGS.ports.base, autoOpen: false })
+    expect(applySettingsPatch(off, { ports: { autoOpen: 'no' } }).ports.autoOpen).toBe(true)
+    expect(sanitizeSettings({ ports: { base: 42000 } }).ports.autoOpen).toBe(true)
+  })
+})
+
 describe('alert settings (F11 · 额度提醒)', () => {
   it('turns usage alerts on by default and keeps only booleans', () => {
     expect(DEFAULT_SETTINGS.alerts.usage).toBe(true)

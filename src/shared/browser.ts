@@ -418,6 +418,55 @@ export function portsChanged(a: readonly ListeningPort[], b: readonly ListeningP
   return b.some((p) => !left.has(key(p)))
 }
 
+/** One session's port report, as 自动打开 (PRD F17) sees it. */
+export interface AutoOpenInput {
+  /** The session's last report; undefined before its first one. */
+  prev: readonly ListeningPort[] | undefined
+  next: readonly ListeningPort[]
+  /** The session was running when Wavi started: its first report is the baseline (servers already up open nothing). */
+  runningAtStart: boolean
+  /** Ports of this session that already opened by themselves. */
+  opened: ReadonlySet<number>
+  /** Its worktree is the one the main window shows. */
+  onScreen: boolean
+  /** The URL the worktree's page shows ('' for none). */
+  shown: string
+  /** The port waiting for the user to go to this worktree, if any. */
+  pending: number | undefined
+}
+
+export interface AutoOpenStep {
+  /** open: load it in the panel now · wait: mark it until the user goes there · reload: the shown server came back. */
+  action: 'open' | 'wait' | 'reload' | null
+  port: ListeningPort | null
+  /** Add to `opened`: every port new in this report (one dev server may bring two, e.g. Vite and its HMR socket). */
+  opened: number[]
+  /** The waiting port stopped listening: forget it. */
+  dropPending: boolean
+}
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin
+  } catch {
+    return false
+  }
+}
+
+/** What a session's new port report does: the lowest port never seen opens (or waits), a returning shown one reloads. */
+export function autoOpenStep(input: AutoOpenInput): AutoOpenStep {
+  const before = input.prev ?? (input.runningAtStart ? undefined : [])
+  const dropPending = input.pending !== undefined && !input.next.some((p) => p.port === input.pending)
+  if (!before) return { action: null, port: null, opened: [], dropPending }
+  const known = new Set(before.map((p) => p.port))
+  const fresh = input.next.filter((p) => !known.has(p.port)).sort((a, b) => a.port - b.port)
+  const first = fresh.find((p) => !input.opened.has(p.port))
+  const opened = fresh.filter((p) => !input.opened.has(p.port)).map((p) => p.port)
+  if (first) return { action: input.onScreen ? 'open' : 'wait', port: first, opened, dropPending }
+  const back = fresh.find((p) => sameOrigin(input.shown, portUrl(p)))
+  return back ? { action: 'reload', port: back, opened, dropPending } : { action: null, port: null, opened, dropPending }
+}
+
 // ── IPC contract (wired into TrApi in ipc.ts) ──────────────────────────────────────────────────────────────────
 
 /** The page well's rectangle in the window, CSS px. */
