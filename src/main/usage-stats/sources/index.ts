@@ -10,8 +10,12 @@ import type { StatsDirs, UsageSource } from './source'
 
 export const SOURCES: readonly UsageSource[] = [claudeSource, codexSource, opencodeSource, piSource, grokSource]
 
-export function defaultStatsDirs(env: NodeJS.ProcessEnv = process.env, home = homedir()): StatsDirs {
+/** Every log folder under one home; `TR_USAGE_STATS_HOME` puts them all there (e2e runs never read the real logs). */
+export function defaultStatsDirs(env: NodeJS.ProcessEnv = process.env, realHome = homedir()): StatsDirs {
   const abs = (v: string | undefined): string | null => (v && isAbsolute(v) ? v : null)
+  const pinned = abs(env.TR_USAGE_STATS_HOME)
+  if (pinned) env = {}
+  const home = pinned ?? realHome
   const claude = new Set([join(home, '.claude', 'projects')])
   const claudeConfig = abs(env.CLAUDE_CONFIG_DIR)
   if (claudeConfig) claude.add(join(claudeConfig, 'projects'))

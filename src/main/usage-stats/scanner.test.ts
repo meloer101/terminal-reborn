@@ -132,3 +132,12 @@ describe('UsageScanner', () => {
     expect(data.sessions).toHaveLength(1)
   })
 })
+
+describe('defaultStatsDirs', () => {
+  it('puts every log folder under TR_USAGE_STATS_HOME and ignores the agents’ own overrides then', async () => {
+    const { defaultStatsDirs } = await import('./sources')
+    const d = defaultStatsDirs({ TR_USAGE_STATS_HOME: '/tmp/h', CODEX_HOME: '/x/codex', CLAUDE_CONFIG_DIR: '/x/claude' }, '/Users/m')
+    expect(d).toMatchObject({ home: '/tmp/h', claudeProjects: ['/tmp/h/.claude/projects'], codexHome: '/tmp/h/.codex', opencodeData: '/tmp/h/.local/share/opencode' })
+    expect(defaultStatsDirs({ CODEX_HOME: '/x/codex' }, '/Users/m').codexHome).toBe('/x/codex')
+  })
+})

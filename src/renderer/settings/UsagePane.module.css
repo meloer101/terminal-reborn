@@ -1,33 +1,62 @@
-/* 设置 · 额度 (Figma 33E): a 640 column like the other panes' forms; the rows are session-meta/UsageRows (Figma 33I).
-   Groups are set apart by 16 of space, no lines (PRD §5 v1.68). */
+/* 设置 · 额度 (Figma 69″ / 69′A): an 868 column centred right of the nav (Figma 36E). Plan windows in two columns on the
+   UsageRows column lines, narrowed (Figma 69′A: name 84 · bar · used % · reset); then the statistics
+   (usage/UsageStats); hairlines set the plans, the statistics and 提醒 apart. */
 .page {
   display: flex;
-  /* Centred in the area right of the nav, like every pane (Figma 36E). */
   justify-content: center;
-  padding: var(--titlebar-height) 40px 40px;
+  padding: var(--titlebar-height) var(--space-40) var(--space-40);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  flex: 0 1 640px;
+  flex: 0 1 868px;
   min-width: 0;
 }
 
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  margin-bottom: var(--space-24);
+}
+
 .title {
-  margin: 0 0 28px;
+  margin: 0;
   font: var(--text-title-l);
   letter-spacing: var(--tracking-title-l);
   color: var(--text-primary);
 }
 
-.groups {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-16);
+.plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-16) var(--space-40);
+  --usage-columns: 84px minmax(60px, 1fr) 40px 104px;
+  --usage-gap: var(--space-12);
 }
 
 .group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.rule {
+  height: 1px;
+  margin: var(--space-32) 0;
+  background: var(--border-subtle);
+}
+
+.note {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-40);
 }
