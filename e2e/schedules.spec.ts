@@ -163,9 +163,27 @@ test.describe('定时任务', () => {
     await expect(row).toContainText('已发送', WITHIN)
   })
 
-  test("Claude's own /loop shows as a mark in the session header, its timers on hover", async () => {
+  test('the run\'s session says which task opened it; 设置 · 自动化 has the 定时任务 section', async () => {
     await page.keyboard.press('Escape')
     await expect(dialog()).toHaveCount(0)
+    await sidebar().getByText('定时 · ').click()
+    const origin = page.getByTestId('scheduled-by')
+    await expect(origin).toHaveText('由定时任务「每日依赖检查」开出', WITHIN)
+    await shoot('header')
+    await origin.click()
+    await expect(dialog()).toBeVisible()
+    await page.keyboard.press('Escape')
+    await sidebar().getByRole('button', { name: /^设置/ }).click()
+    const settings = page.getByRole('dialog', { name: '设置' })
+    await settings.getByRole('tab', { name: '自动化' }).click()
+    await expect(settings.getByRole('group', { name: '让 agent 建定时任务' })).toBeVisible()
+    await settings.getByRole('group', { name: '所有定时任务' }).scrollIntoViewIfNeeded()
+    await shoot('settings')
+    await page.keyboard.press('Escape')
+    await sidebar().locator(`[data-session-id="${ID}"]`).click()
+  })
+
+  test("Claude's own /loop shows as a mark in the session header, its timers on hover", async () => {
     agent.step({
       hook: 'Stop',
       payload: { last_assistant_message: '好的', session_crons: [{ id: 'c1', schedule: '*/10 * * * *', recurring: true, prompt: '看一下 CI 有没有过' }] }
