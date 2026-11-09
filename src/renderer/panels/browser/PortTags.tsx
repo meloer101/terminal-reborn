@@ -11,8 +11,12 @@ export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: numb
   // 自动打开 waits for the user to go to this worktree (auto-open.ts).
   const pending = useBrowser((s) => s.pendingPorts[sessionId])
   if (!ports || ports.length === 0) return null
-  const shown = ports.slice(0, max)
-  const rest = ports.length - shown.length
+  // A waiting port is never folded into +N.
+  const waiting = ports.find((p) => p.port === pending)
+  const first = ports.slice(0, max)
+  const shown = waiting && !first.includes(waiting) ? [...first.slice(0, max - 1), waiting] : first
+  const hidden = ports.filter((p) => !shown.includes(p))
+  const rest = hidden.length
   return (
     <span className={styles.ports} data-testid="port-tags">
       {shown.map((p) => {
@@ -44,7 +48,7 @@ export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: numb
         )
       })}
       {rest > 0 && (
-        <span className={styles.more} title={ports.slice(max).map((p) => `:${p.port}`).join(' ')}>
+        <span className={styles.more} title={hidden.map((p) => `:${p.port}`).join(' ')}>
           +{rest}
         </span>
       )}

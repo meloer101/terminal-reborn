@@ -1,29 +1,23 @@
-// 自动打开 (PRD F17): a port that starts listening in the worktree on screen opens in the right panel's browser,
-// like Claude's desktop app showing the dev server its agent starts. Works for every agent: it follows the port
-// scan (src/main/browser/ports.ts), not the agent's tool calls.
-// - Sessions that were already running when Wavi started: their first report is the baseline, so a restart opens nothing.
-// - Each port of a session opens by itself once. When it comes back (a restarted dev server) the page reloads if it
-//   still shows that port.
-// - A port in a worktree that is not on screen does not switch sessions: its tag is marked, and it opens when the
-//   user goes to that worktree.
-import { freshPort, portUrl, type ListeningPort } from '@shared/browser'
+// 自动打开 (PRD F17): a port that starts listening in the worktree the main window shows opens in its right panel's
+// browser, like Claude's desktop app showing the dev server its agent starts. It follows F14's port scan
+// (src/main/browser/ports.ts), not tool calls, so it covers every PTY session: each TUI agent and plain shells. GUI
+// sessions (F23) run outside the PTY map and are not scanned yet. The rules are autoOpenStep in @shared/browser;
+// this file only subscribes and acts.
+import { autoOpenStep, portUrl } from '@shared/browser'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { SessionId } from '@shared/types'
+import { MAIN_WINDOW } from '@shared/window-layout'
 import { openInBrowser, worktreeOf } from '../../state/link-actions'
-import { useWorkspace } from '../../state/workspace'
+import { paneViewOf, useWorkspace } from '../../state/workspace'
 import { useBrowser } from './store'
 
-function sameOrigin(a: string, b: string): boolean {
-  try {
-    return new URL(a).origin === new URL(b).origin
-  } catch {
-    return false
-  }
-}
+/** The session in the main window: the right panel lives only there (F20 · 多窗口). */
+const mainSession = (state: ReturnType<typeof useWorkspace.getState>): SessionId | null => paneViewOf(state, MAIN_WINDOW).activeSessionId
 
 function worktreeOnScreen(): string | undefined {
   const state = useWorkspace.getState()
-  return state.mainView === 'session' && state.activeSessionId ? worktreeOf(state.activeSessionId) : undefined
+  const sessionId = mainSession(state)
+  return state.mainView === 'session' && sessionId ? worktreeOf(sessionId) : undefined
 }
 
 function setPending(sessionId: SessionId, port: number | null): void {
@@ -46,41 +40,40 @@ export function startPortAutoOpen(): () => void {
   void window.tr.settings.get().then((s) => apply(s.ports.autoOpen))
   const offSettings = window.tr.settings.onChange((s) => apply(s.ports.autoOpen))
 
-  // A session started after this point has no ports before its first report.
-  const running = new Set(useWorkspace.getState().sessions.map((s) => s.id))
-  /** `${sessionId} ${port}` already opened by itself. */
-  const opened = new Set<string>()
-
-  const arrive = (sessionId: SessionId, port: ListeningPort): void => {
-    const worktree = worktreeOf(sessionId)
-    if (!worktree) return
-    const url = portUrl(port)
-    const key = `${sessionId} ${port.port}`
-    if (opened.has(key)) {
-      const shown = useBrowser.getState().pages[worktree]?.url ?? ''
-      if (sameOrigin(shown, url)) window.tr.browser.reload(worktree)
-      return
-    }
-    opened.add(key)
-    if (worktreeOnScreen() === worktree) openInBrowser(worktree, url)
-    else setPending(sessionId, port.port)
-  }
+  const runningAtStart = new Set(useWorkspace.getState().sessions.map((s) => s.id))
+  /** Per session, the ports that already opened by themselves. */
+  const opened = new Map<SessionId, Set<number>>()
 
   const offPorts = useBrowser.subscribe((state, prev) => {
     if (state.ports === prev.ports) return
-    for (const [sessionId, ports] of Object.entries(state.ports)) {
-      const before = prev.ports[sessionId] ?? (running.has(sessionId) ? undefined : [])
-      if (before === ports) continue
-      // A waiting port that stopped listening no longer opens.
-      const pending = state.pendingPorts[sessionId]
-      if (pending !== undefined && !ports.some((p) => p.port === pending)) setPending(sessionId, null)
-      const port = freshPort(before, ports)
-      if (port && enabled) arrive(sessionId, port)
+    const onScreen = worktreeOnScreen()
+    for (const [sessionId, next] of Object.entries(state.ports)) {
+      if (prev.ports[sessionId] === next) continue
+      const worktree = worktreeOf(sessionId)
+      if (!worktree) continue
+      const seen = opened.get(sessionId) ?? new Set<number>()
+      const step = autoOpenStep({
+        prev: prev.ports[sessionId],
+        next,
+        runningAtStart: runningAtStart.has(sessionId),
+        opened: seen,
+        onScreen: onScreen === worktree,
+        shown: state.pages[worktree]?.url ?? '',
+        pending: state.pendingPorts[sessionId]
+      })
+      if (step.dropPending) setPending(sessionId, null)
+      if (!enabled) continue
+      for (const port of step.opened) seen.add(port)
+      opened.set(sessionId, seen)
+      if (!step.port) continue
+      if (step.action === 'open') openInBrowser(worktree, portUrl(step.port))
+      else if (step.action === 'wait') setPending(sessionId, step.port.port)
+      else if (step.action === 'reload') window.tr.browser.reload(worktree)
     }
   })
 
   const offView = useWorkspace.subscribe((state, prev) => {
-    if (state.activeSessionId === prev.activeSessionId && state.mainView === prev.mainView) return
+    if (mainSession(state) === mainSession(prev) && state.mainView === prev.mainView) return
     const worktree = worktreeOnScreen()
     if (!worktree) return
     const { pendingPorts, ports } = useBrowser.getState()
