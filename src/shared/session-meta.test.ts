@@ -6,6 +6,12 @@ import {
   vendorStatus,
   autoCompactRuleFromEnv,
   claudeCompactAt,
+  claudeStreamContext,
+  claudeStreamTokens,
+  claudeStreamWindow,
+  parseAcpUsageUpdate,
+  parseCodexThreadTokenUsage,
+  parsePiContextUsage,
   codexCompactAt,
   codexContextPercent,
   contextDetail,
@@ -187,6 +193,75 @@ describe('Codex rollout', () => {
     ].join('\n')
     expect(lastCodexTokenCount(tail, AT).usage?.windows[0]?.percent).toBe(41)
     expect(lastCodexTokenCount('', AT)).toEqual({})
+  })
+})
+
+// GUI sessions (PRD F23): Claude 2.1.321 stream-json, Codex 0.167 app-server, ACP `usage_update`, Pi 0.84 RPC.
+const CLAUDE_ASSISTANT = {
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: { model: 'claude-opus-5-5', usage: { input_tokens: 2, cache_creation_input_tokens: 51969, cache_read_input_tokens: 1000, output_tokens: 4 } }
+}
+const CLAUDE_RESULT = {
+  type: 'result',
+  modelUsage: {
+    'claude-haiku-5-5': { contextWindow: 200000 },
+    'claude-opus-5-5': { inputTokens: 2, contextWindow: 1000000, maxOutputTokens: 128000 }
+  }
+}
+
+describe('GUI sessions · context', () => {
+  it('Claude: window tokens of a main-thread reply, the window from the turn result', () => {
+    const tokens = claudeStreamTokens(CLAUDE_ASSISTANT)
+    expect(tokens).toEqual({ model: 'claude-opus-5-5', used: 52971, cacheRead: 1000, cacheWrite: 51969, freshInput: 2 })
+    expect(claudeStreamWindow(CLAUDE_RESULT, 'claude-opus-5-5')).toBe(1_000_000)
+    expect(claudeStreamContext(tokens!, 1_000_000)).toEqual({
+      percent: 5,
+      usedTokens: 52971,
+      windowTokens: 1_000_000,
+      cacheRead: 1000,
+      cacheWrite: 51969,
+      freshInput: 2,
+      compactAt: 967_000,
+      compactPercent: 97
+    })
+  })
+
+  it('Claude: a subagent’s reply and a result without the model say nothing', () => {
+    expect(claudeStreamTokens({ ...CLAUDE_ASSISTANT, parent_tool_use_id: 'toolu_1' })).toBeUndefined()
+    expect(claudeStreamTokens({ type: 'assistant', message: {} })).toBeUndefined()
+    expect(claudeStreamWindow(CLAUDE_RESULT, 'claude-sonnet-5-5')).toBeUndefined()
+    // One model in the turn: its window, whatever the reply called it.
+    expect(claudeStreamWindow({ modelUsage: { 'claude-opus-5-5': { contextWindow: 200000 } } }, undefined)).toBe(200_000)
+  })
+
+  it('Codex: thread/tokenUsage/updated reads as its rollout token_count does', () => {
+    const params = {
+      threadId: 't',
+      turnId: 'u',
+      tokenUsage: {
+        total: { totalTokens: 110005, inputTokens: 110000, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 5, reasoningOutputTokens: 0 },
+        last: { totalTokens: 100005, inputTokens: 100000, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 5, reasoningOutputTokens: 0 },
+        modelContextWindow: 258400
+      }
+    }
+    expect(parseCodexThreadTokenUsage(params)).toEqual(parseCodexTokenCount(TOKEN_COUNT, AT).context)
+    expect(parseCodexThreadTokenUsage({ tokenUsage: { ...params.tokenUsage, modelContextWindow: null } })).toBeUndefined()
+  })
+
+  it('ACP: usage_update used / size', () => {
+    expect(parseAcpUsageUpdate({ sessionUpdate: 'usage_update', used: 53000, size: 200000, cost: { amount: 0.045, currency: 'USD' } })).toEqual({
+      percent: 27,
+      usedTokens: 53000,
+      windowTokens: 200000
+    })
+    expect(parseAcpUsageUpdate({ sessionUpdate: 'usage_update', used: 5, size: 0 })).toBeUndefined()
+  })
+
+  it('Pi: get_session_stats contextUsage; null right after a compaction', () => {
+    expect(parsePiContextUsage({ contextUsage: { tokens: 60000, contextWindow: 200000, percent: 30 } })).toEqual({ percent: 30, usedTokens: 60000, windowTokens: 200000 })
+    expect(parsePiContextUsage({ contextUsage: { tokens: null, contextWindow: 200000, percent: null } })).toBeNull()
+    expect(parsePiContextUsage({ tokens: { total: 5 } })).toBeUndefined()
   })
 })
 

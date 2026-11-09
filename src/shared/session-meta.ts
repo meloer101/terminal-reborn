@@ -341,6 +341,104 @@ export function parseCodexTokenCount(payload: unknown, at: number): MetaReading 
   return reading
 }
 
+// GUI sessions (PRD F23): the agent runs headless, without a statusLine or a rollout we read, so each protocol's own
+// figures say how full the window is.
+
+/** What one Claude reply put in the window, by kind. */
+export interface ClaudeStreamTokens {
+  model?: string
+  used: number
+  cacheRead: number
+  cacheWrite: number
+  freshInput: number
+}
+
+/**
+ * A `claude -p --output-format stream-json` `assistant` message (2.1.321): its `message.usage` is the window as that
+ * API call saw it (input + cache written + cache read, as the statusLine counts). Undefined for a subagent's reply
+ * (`parent_tool_use_id`) or without usage.
+ */
+export function claudeStreamTokens(message: unknown): ClaudeStreamTokens | undefined {
+  if (!isRec(message) || message.type !== 'assistant' || (message.parent_tool_use_id !== undefined && message.parent_tool_use_id !== null)) return undefined
+  const body = isRec(message.message) ? message.message : null
+  const usage = body && isRec(body.usage) ? body.usage : null
+  if (!usage) return undefined
+  const freshInput = tokens(usage.input_tokens) ?? 0
+  const cacheWrite = tokens(usage.cache_creation_input_tokens) ?? 0
+  const cacheRead = tokens(usage.cache_read_input_tokens) ?? 0
+  const used = freshInput + cacheWrite + cacheRead
+  if (used === 0) return undefined
+  const model = typeof body?.model === 'string' ? body.model : undefined
+  return { ...(model ? { model } : {}), used, cacheRead, cacheWrite, freshInput }
+}
+
+/**
+ * The window size from a turn's `result`: `modelUsage[model].contextWindow` (2.1.321). A result naming one model is
+ * that model's; with several (a subagent on Haiku), only the reply's own model counts.
+ */
+export function claudeStreamWindow(result: unknown, model: string | undefined): number | undefined {
+  if (!isRec(result) || !isRec(result.modelUsage)) return undefined
+  const entries = Object.entries(result.modelUsage)
+  const entry = model !== undefined ? result.modelUsage[model] : entries.length === 1 ? entries[0]![1] : undefined
+  const size = isRec(entry) ? tokens(entry.contextWindow) : undefined
+  return size !== undefined && size > 0 ? size : undefined
+}
+
+export function claudeStreamContext(reply: ClaudeStreamTokens, windowTokens: number, rule?: AutoCompactRule): ContextUsage {
+  const compactAt = claudeCompactAt(windowTokens, rule) ?? undefined
+  return compactContext({
+    percent: Math.min(100, Math.round((reply.used / windowTokens) * 100)),
+    usedTokens: reply.used,
+    windowTokens,
+    cacheRead: reply.cacheRead,
+    cacheWrite: reply.cacheWrite,
+    freshInput: reply.freshInput,
+    compactAt,
+    compactPercent: compactAt !== undefined ? Math.round((compactAt / windowTokens) * 100) : undefined
+  })
+}
+
+/**
+ * `codex app-server`'s `thread/tokenUsage/updated` params (0.167: `tokenUsage: { total, last, modelContextWindow }`,
+ * camelCase): the rollout's `token_count` in another spelling, read the same way.
+ */
+export function parseCodexThreadTokenUsage(params: unknown): ContextUsage | undefined {
+  const usage = isRec(params) && isRec(params.tokenUsage) ? params.tokenUsage : null
+  if (!usage) return undefined
+  const last = isRec(usage.last) ? usage.last : {}
+  const total = isRec(usage.total) ? usage.total : {}
+  const info = {
+    model_context_window: usage.modelContextWindow,
+    last_token_usage: { total_tokens: last.totalTokens, input_tokens: last.inputTokens, cached_input_tokens: last.cachedInputTokens },
+    total_token_usage: { output_tokens: total.outputTokens }
+  }
+  return parseCodexTokenCount({ type: 'token_count', info }, 0).context ?? undefined
+}
+
+/** An ACP `session/update` `usage_update` (stable in ACP v1 since 2026-06-05): `used` tokens of a `size` window. */
+export function parseAcpUsageUpdate(update: unknown): ContextUsage | undefined {
+  if (!isRec(update) || update.sessionUpdate !== 'usage_update') return undefined
+  const used = tokens(update.used)
+  const size = tokens(update.size)
+  if (used === undefined || size === undefined || size <= 0) return undefined
+  return { percent: Math.min(100, Math.round((used / size) * 100)), usedTokens: used, windowTokens: size }
+}
+
+/**
+ * Pi's `get_session_stats` data (0.84 `docs/rpc.md`): `contextUsage { tokens, contextWindow, percent }`, with `tokens`
+ * and `percent` null right after a compaction (then null: not known until its next reply). Undefined without it.
+ */
+export function parsePiContextUsage(data: unknown): ContextUsage | null | undefined {
+  const usage = isRec(data) && isRec(data.contextUsage) ? data.contextUsage : null
+  if (!usage) return undefined
+  const size = tokens(usage.contextWindow)
+  if (size === undefined || size <= 0) return undefined
+  if (usage.tokens === null) return null
+  const used = tokens(usage.tokens)
+  if (used === undefined) return undefined
+  return { percent: percentOf(usage.percent) ?? Math.min(100, Math.round((used / size) * 100)), usedTokens: used, windowTokens: size }
+}
+
 /** The newest `token_count` reading in a chunk of rollout JSONL (only the tail is read). */
 export function lastCodexTokenCount(text: string, at: number): MetaReading {
   const lines = text.split('\n')
