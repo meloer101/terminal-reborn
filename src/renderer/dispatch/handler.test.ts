@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import { DISPATCH_LIMITS, type DispatchRequest, type WaviCommand, type WaviResult } from '@shared/dispatch'
+import { DISPATCH_LIMITS, waviRunIds, type DispatchRequest, type WaviCommand, type WaviResult } from '@shared/dispatch'
 import type { Session } from '@shared/types'
 import { decideConfirms, dropConfirmsOf, handleWaviRequest, resumeConfirmTimers, setDispatchSettings } from './handler'
 import { restoreDispatch, savedDispatch, useDispatch } from './store'
@@ -66,6 +66,8 @@ describe('wavi in a window (PRD F21)', () => {
     expect(result.text).toContain('end your turn now')
     const [pending] = useDispatch.getState().confirms
     expect(result.text).toContain(`Session ${pending!.childId}`)
+    // A GUI dispatcher finds the session in this answer (Figma 68′).
+    expect(waviRunIds(result.text)).toEqual([pending!.childId])
     expect(pending!.plan).toMatchObject({ branch: '', request: { snapshotOf: '/repo' } })
     expect(addBackgroundSession).not.toHaveBeenCalled()
   })
@@ -120,6 +122,7 @@ describe('wavi in a window (PRD F21)', () => {
     const started = await call('child', runCmd('Check the types'))
     expect(started).toMatchObject({ ok: true, text: expect.stringContaining('Started session') })
     expect(addBackgroundSession).toHaveBeenCalledTimes(1)
+    expect(waviRunIds(started.text)).toEqual([addBackgroundSession.mock.calls[0]![3]])
     expect(await call('grand', runCmd('Go deeper'))).toMatchObject({ ok: false, failure: 'not_allowed' })
   })
 

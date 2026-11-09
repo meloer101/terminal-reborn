@@ -544,6 +544,65 @@ export function noticeText(outcome: 'started' | 'declined' | 'timeout', children
   return [`${NOTICE_HEADER} ${why}（来自 Wavi，不是用户的指示）：`, ...rows, '不要重试，除非用户要求；自己接着做，或者问用户。'].join('\n')
 }
 
+// --- reading Wavi's own words back (a GUI dispatcher draws them, Figma 68′) ---------------------------------------
+
+/** A shell command that runs `wavi run` (also after `cd … &&`, in a pipeline); not `wavi report` or a word in text. */
+export const isWaviRun = (command: string): boolean => /(?:^|[\s;&|(])wavi\s+run\s/.test(`${command} `)
+
+/** The sessions a `wavi run` answer (handler.ts) opened or holds for 开始, in order. */
+export function waviRunIds(output: string): SessionId[] {
+  return [...output.matchAll(/\b(?:Started session|Session) (\S+) \(/g)].map((m) => m[1])
+}
+
+export interface ParsedReport {
+  childId: SessionId
+  title: string
+  /** The agent's name as the report wrote it (agentLabel). */
+  agent: string
+  event: ChildEvent | null
+  /** The facts between the agent and the id, the event left out: model, branch or 快照, changes, checks, conflicts. */
+  facts: string[]
+  /** The child's report or last message as quoted, without Wavi's hints to the agent. */
+  excerpt: string
+}
+
+const EVENT_OF: Readonly<Record<string, ChildEvent>> = { ...Object.fromEntries(Object.entries(EVENT_TEXT).map(([k, v]) => [v, k as ChildEvent])), '一轮结束（估计）': 'done' }
+
+/** A `reportText` message read back, one entry per child; null for any other text. */
+export function parseReportText(text: string): ParsedReport[] | null {
+  if (!text.trimStart().startsWith(REPORT_HEADER)) return null
+  const out: ParsedReport[] = []
+  let current: { entry: ParsedReport; lines: string[] } | null = null
+  const flush = (): void => {
+    if (current) out.push({ ...current.entry, excerpt: current.lines.join('\n') })
+    current = null
+  }
+  for (const line of text.split('\n')) {
+    const head = /^— 「(.+?)」 · (.+) · id (\S+)$/.exec(line)
+    if (head) {
+      flush()
+      const [agent = '', ...rest] = head[2].split(' · ')
+      const at = rest.findIndex((f) => f in EVENT_OF)
+      const event = at >= 0 ? EVENT_OF[rest[at]] : null
+      current = { entry: { childId: head[3], title: head[1], agent, event, facts: rest.filter((_, i) => i !== at), excerpt: '' }, lines: [] }
+    } else if (current && line.startsWith('  ')) {
+      const body = line.slice(2)
+      if (!/^（.*）$/.test(body.trim())) current.lines.push(body)
+    } else if (current && line.trim() === '') flush()
+  }
+  flush()
+  return out
+}
+
+/** A `noticeText` message read back; null for any other text. */
+export function parseNoticeText(text: string): { outcome: 'started' | 'declined' | 'timeout'; ids: SessionId[]; titles: string[] } | null {
+  const first = text.trimStart().split('\n', 1)[0]
+  if (!first.startsWith(`${NOTICE_HEADER} `)) return null
+  const outcome = first.includes('已经开始') ? 'started' : first.includes('拒绝') ? 'declined' : 'timeout'
+  const rows = [...text.matchAll(/^- id (\S+) · [^·]+ · 「(.+?)」/gm)]
+  return { outcome, ids: rows.map((m) => m[1]), titles: rows.map((m) => m[2]) }
+}
+
 // --- the queue between a child's event and the dispatcher -----------------------------------------------------------
 
 export interface ReportQueue {
