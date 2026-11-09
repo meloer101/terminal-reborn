@@ -435,7 +435,8 @@ export function parsePiContextUsage(data: unknown): ContextUsage | null | undefi
   if (size === undefined || size <= 0) return undefined
   if (usage.tokens === null) return null
   const used = tokens(usage.tokens)
-  if (used === undefined) return undefined
+  // A session with no reply yet counts 0: nothing measured, as Claude and Codex say nothing before their first reply.
+  if (used === undefined || used === 0) return undefined
   return { percent: percentOf(usage.percent) ?? Math.min(100, Math.round((used / size) * 100)), usedTokens: used, windowTokens: size }
 }
 

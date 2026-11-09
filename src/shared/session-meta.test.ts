@@ -262,6 +262,8 @@ describe('GUI sessions · context', () => {
     expect(parsePiContextUsage({ contextUsage: { tokens: 60000, contextWindow: 200000, percent: 30 } })).toEqual({ percent: 30, usedTokens: 60000, windowTokens: 200000 })
     expect(parsePiContextUsage({ contextUsage: { tokens: null, contextWindow: 200000, percent: null } })).toBeNull()
     expect(parsePiContextUsage({ tokens: { total: 5 } })).toBeUndefined()
+    // A fresh session (the handshake's ask): no reply measured yet.
+    expect(parsePiContextUsage({ contextUsage: { tokens: 0, contextWindow: 1000000, percent: 0 } })).toBeUndefined()
   })
 })
 
