@@ -178,6 +178,18 @@ export interface DispatchSettings {
   autoApprove: boolean
 }
 
+/** 设置 · 自动化 · 定时任务 (PRD F24). */
+export interface ScheduleSettings {
+  /** 全部暂停: nothing runs or catches up; on again, every task starts from its next time. */
+  paused: boolean
+  /** Wavi 关着时也运行: after ⌘Q the pty daemon opens Wavi in the background when a task is due. */
+  whileClosed: boolean
+  /** 登录时在后台打开 Wavi (a macOS login item). */
+  openAtLogin: boolean
+  /** 让 agent 建定时任务: `wavi schedule`, each one confirmed by the user. */
+  agents: boolean
+}
+
 /** 设置 · 手机 (PRD F22). Off until the user turns it on: while on, Wavi listens on `port` for paired phones. */
 export interface RemoteSettings {
   enabled: boolean
@@ -196,6 +208,7 @@ export interface AppSettings {
   pr: PrSettings
   dispatch: DispatchSettings
   remote: RemoteSettings
+  schedules: ScheduleSettings
 }
 
 /** An appearance patch; its nested objects (chat, shellOpacity) merge one level deeper. */
@@ -213,6 +226,7 @@ export interface SettingsPatch {
   pr?: Partial<PrSettings>
   dispatch?: Partial<DispatchSettings>
   remote?: Partial<RemoteSettings>
+  schedules?: Partial<ScheduleSettings>
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -262,7 +276,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     writeOnOpen: false
   },
   dispatch: { tools: true, autoApprove: false },
-  remote: { enabled: false, port: DEFAULT_REMOTE_PORT, push: true }
+  remote: { enabled: false, port: DEFAULT_REMOTE_PORT, push: true },
+  schedules: { paused: false, whileClosed: true, openAtLogin: false, agents: true }
 }
 
 const MAX_REVIEW_RULES = 8000
@@ -398,6 +413,8 @@ export function sanitizeSettings(raw: unknown): AppSettings {
   const al = typeof v.alerts === 'object' && v.alerts !== null ? (v.alerts as Record<string, unknown>) : {}
   const dp = typeof v.dispatch === 'object' && v.dispatch !== null ? (v.dispatch as Record<string, unknown>) : {}
   const rm = typeof v.remote === 'object' && v.remote !== null ? (v.remote as Record<string, unknown>) : {}
+  const sc = typeof v.schedules === 'object' && v.schedules !== null ? (v.schedules as Record<string, unknown>) : {}
+  const sd = DEFAULT_SETTINGS.schedules
   return {
     version: 1,
     appearance: appearance(v.appearance),
@@ -414,6 +431,12 @@ export function sanitizeSettings(raw: unknown): AppSettings {
       enabled: typeof rm.enabled === 'boolean' ? rm.enabled : DEFAULT_SETTINGS.remote.enabled,
       port: typeof rm.port === 'number' && Number.isInteger(rm.port) && rm.port >= 1024 && rm.port <= 65535 ? rm.port : DEFAULT_SETTINGS.remote.port,
       push: typeof rm.push === 'boolean' ? rm.push : DEFAULT_SETTINGS.remote.push
+    },
+    schedules: {
+      paused: typeof sc.paused === 'boolean' ? sc.paused : sd.paused,
+      whileClosed: typeof sc.whileClosed === 'boolean' ? sc.whileClosed : sd.whileClosed,
+      openAtLogin: typeof sc.openAtLogin === 'boolean' ? sc.openAtLogin : sd.openAtLogin,
+      agents: typeof sc.agents === 'boolean' ? sc.agents : sd.agents
     }
   }
 }
@@ -459,6 +482,7 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
   const nextPr = typeof p.pr === 'object' && p.pr !== null ? { ...current.pr, ...(p.pr as object) } : current.pr
   const nextDispatch = typeof p.dispatch === 'object' && p.dispatch !== null ? { ...current.dispatch, ...(p.dispatch as object) } : current.dispatch
   const nextRemote = typeof p.remote === 'object' && p.remote !== null ? { ...current.remote, ...(p.remote as object) } : current.remote
+  const nextSchedules = typeof p.schedules === 'object' && p.schedules !== null ? { ...current.schedules, ...(p.schedules as object) } : current.schedules
   return sanitizeSettings({
     ...current,
     appearance: nextAppearance,
@@ -468,6 +492,7 @@ export function applySettingsPatch(current: AppSettings, patch: unknown): AppSet
     alerts: nextAlerts,
     pr: nextPr,
     dispatch: nextDispatch,
-    remote: nextRemote
+    remote: nextRemote,
+    schedules: nextSchedules
   })
 }

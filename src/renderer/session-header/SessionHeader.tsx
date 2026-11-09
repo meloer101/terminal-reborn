@@ -9,6 +9,7 @@ import { pressRun, runAction, runSessionOf, useRepoScripts, useRunRunning, type 
 import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
 import { MAIN_WINDOW } from '@shared/window-layout'
 import { useSessionView, useWorkspace, windowEffects, type PanelView } from '../state/workspace'
+import { openSchedules } from '../schedules/store'
 import { useSidebarCollapsed, useWindowKey } from '../state/window-scope'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
@@ -144,6 +145,16 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
             </span>
           )}
           {active.session.dispatchedBy && <DispatchedBy parentId={active.session.dispatchedBy} />}
+          {active.session.scheduledBy && (
+            <button
+              type="button"
+              className={styles.dispatchedBy}
+              onClick={() => openSchedules(active.session.scheduledBy?.id)}
+              data-testid="scheduled-by"
+            >
+              由定时任务「<span className={styles.dispatchedByName}>{active.session.scheduledBy.name}</span>」开出
+            </button>
+          )}
         </>
       )}
       {active && <span className={styles.spacer} />}

@@ -12,6 +12,11 @@ export function isProjectRoot(path: string): boolean {
   return store?.projectRoots().includes(path) ?? false
 }
 
+/** The root folder of a project of the workspace, as the renderer last saved it (定时任务's 前置检查, PRD F24). */
+export function projectRootOf(projectId: string): string | undefined {
+  return store?.projectRootOf(projectId)
+}
+
 /** More folders that count as the workspace's: the worktrees git lists for its projects (git-worktrees.ts). */
 const dirSources: Array<() => readonly string[]> = []
 

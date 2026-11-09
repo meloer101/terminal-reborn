@@ -73,6 +73,16 @@ export interface PersistedSession {
   dispatchBase?: 'snapshot'
   /** The model `wavi run --model` asked for. */
   dispatchModel?: string
+  /** The 定时任务 run that opened it (PRD F24). */
+  scheduledBy?: { id: string; name: string; planned: number }
+}
+
+/** A saved 定时任务 origin (PRD F24), or null. */
+function scheduledBy(value: unknown): PersistedSession['scheduledBy'] | null {
+  if (!isRecord(value)) return null
+  const { id, name, planned } = value
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(id) || !isText(name, 60) || name === '' || !isTime(planned)) return null
+  return { id, name, planned }
 }
 
 /** A saved archive marker (PRD F15), or null when it is not one. */
@@ -248,7 +258,8 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
                 ...(s.dispatchBase === 'snapshot' ? { dispatchBase: 'snapshot' as const } : {}),
                 ...(isString(s.dispatchModel) && MODEL_NAME.test(s.dispatchModel) ? { dispatchModel: s.dispatchModel } : {})
               }
-            : {})
+            : {}),
+          ...(s.kind !== 'shell' && scheduledBy(s.scheduledBy) ? { scheduledBy: scheduledBy(s.scheduledBy) as NonNullable<PersistedSession['scheduledBy']> } : {})
         }
       })
   )

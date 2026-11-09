@@ -106,7 +106,7 @@ function toRow(session: Session, worktree: Worktree | undefined, { depth, parent
     secondary: phaseLine(session) ?? session.currentAction ?? afterTurn(session) ?? '',
     attention: session.status === 'needs_you',
     // A snapshot has no branch (detached): its line says so instead.
-    branch: session.dispatchBase === 'snapshot' ? '快照' : (worktree?.branch ?? ''),
+    branch: session.dispatchBase === 'snapshot' ? '快照' : session.scheduledBy ? `定时 · ${worktree?.branch ?? ''}` : (worktree?.branch ?? ''),
     depth,
     model: session.dispatchModel ?? '',
     tree,

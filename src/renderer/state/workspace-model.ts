@@ -345,7 +345,7 @@ export function serializeWorkspace(
       ...(baseBranch ? { baseBranch } : {}),
       ...(archived ? { archived } : {})
     })),
-    sessions: data.sessions.map(({ id, worktreeId, kind, ui, guiPermission, guiPlan, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel }) => ({
+    sessions: data.sessions.map(({ id, worktreeId, kind, ui, guiPermission, guiPlan, title, titleSource, agentSessionId, startedAt, lastActivityAt, lastReply, finishedAt, script, dispatchedBy, dispatchTask, dispatchBase, dispatchModel, scheduledBy }) => ({
       id,
       worktreeId,
       kind,
@@ -362,7 +362,8 @@ export function serializeWorkspace(
       ...(script ? { script } : {}),
       ...(dispatchedBy
         ? { dispatchedBy, ...(dispatchTask ? { dispatchTask } : {}), ...(dispatchBase ? { dispatchBase } : {}), ...(dispatchModel ? { dispatchModel } : {}) }
-        : {})
+        : {}),
+      ...(scheduledBy ? { scheduledBy } : {})
     })),
     activeSessionId: data.activeSessionId,
     sidebarCollapsed: ui.sidebarCollapsed,
@@ -431,6 +432,7 @@ export function restoreWorkspace(file: WorkspaceFile | null): WorkspaceData {
             ...(s.dispatchModel ? { dispatchModel: s.dispatchModel } : {})
           }
         : {}),
+      ...(s.scheduledBy ? { scheduledBy: s.scheduledBy } : {}),
       ...(s.kind === 'shell' ? {} : { phase: 'not-started' as const })
     })),
     activeSessionId: file.activeSessionId,
@@ -481,7 +483,8 @@ export function persistedStateChanged(next: PersistedView, prev: PersistedView):
       s.lastReply !== before.lastReply ||
       s.finishedAt !== before.finishedAt ||
       s.dispatchedBy !== before.dispatchedBy ||
-      s.dispatchModel !== before.dispatchModel
+      s.dispatchModel !== before.dispatchModel ||
+      s.scheduledBy !== before.scheduledBy
     )
   })
 }

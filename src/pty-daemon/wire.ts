@@ -59,6 +59,8 @@ export type ClientMessage =
   | { type: 'shutdown'; killSessions: boolean }
   /** Electron's powerMonitor `shutdown`: a logout, restart or shutdown is under way (ignored by older daemons). */
   | { type: 'system-shutdown' }
+  /** PRD F24: open this app bundle in the background at `at` unless an app is connected then; null clears it (ignored by older daemons). */
+  | { type: 'wake'; at: number | null; app: string | null }
   /** The app's answer to a relayed hook: the hook's stdout, or 404 for a session it does not know. */
   | { type: 'hook-reply'; rid: number; status: number; body: string }
   | HostRequest

@@ -2,9 +2,13 @@
 // own Claude / Codex quota. Copy and layout follow Figma 16C (457:21367): section titles, then label · control rows, no explanatory lines.
 import { useState } from 'react'
 import { DEFAULT_REVIEW_RULES } from '@shared/background-review'
-import type { DispatchSettings, PrSettings, ReviewSettings } from '@shared/settings'
+import type { DispatchSettings, PrSettings, ReviewSettings, ScheduleSettings } from '@shared/settings'
+import { SHORTCUTS } from '@shared/shortcuts'
+import { formatAccelerator } from '../ui/menu-model'
+import { openSchedules } from '../schedules/store'
 import { Segmented } from '../ui/Segmented'
-import { Row, Section, Toggle } from './controls'
+import { Button, Row, Section, Toggle } from './controls'
+import { closeSettings } from './SettingsDialog'
 import styles from './AutomationPane.module.css'
 
 const MODEL = /^[A-Za-z0-9._:@/-]{0,64}$/
@@ -15,7 +19,9 @@ export function AutomationPane({
   pr,
   updatePr,
   dispatch,
-  updateDispatch
+  updateDispatch,
+  schedules,
+  updateSchedules
 }: {
   review: ReviewSettings
   update: (patch: Partial<ReviewSettings>) => void
@@ -23,6 +29,8 @@ export function AutomationPane({
   updatePr: (patch: Partial<PrSettings>) => void
   dispatch: DispatchSettings
   updateDispatch: (patch: Partial<DispatchSettings>) => void
+  schedules: ScheduleSettings
+  updateSchedules: (patch: Partial<ScheduleSettings>) => void
 }) {
   const builtin = review.mode === 'builtin'
   return (
@@ -138,6 +146,30 @@ export function AutomationPane({
               disabled={!dispatch.tools}
               onChange={(autoApprove) => updateDispatch({ autoApprove })}
             />
+          </Row>
+        </Section>
+        <Section title="定时任务">
+          <Row label="全部暂停">
+            <Toggle label="全部暂停" checked={schedules.paused} onChange={(paused) => updateSchedules({ paused })} />
+          </Row>
+          <Row label="Wavi 关着时也运行">
+            <Toggle label="Wavi 关着时也运行" checked={schedules.whileClosed} onChange={(whileClosed) => updateSchedules({ whileClosed })} />
+          </Row>
+          <Row label="登录时在后台打开 Wavi">
+            <Toggle label="登录时在后台打开 Wavi" checked={schedules.openAtLogin} onChange={(openAtLogin) => updateSchedules({ openAtLogin })} />
+          </Row>
+          <Row label="让 agent 建定时任务">
+            <Toggle label="让 agent 建定时任务" checked={schedules.agents} onChange={(agents) => updateSchedules({ agents })} />
+          </Row>
+          <Row label="所有定时任务">
+            <Button
+              onClick={() => {
+                closeSettings()
+                openSchedules()
+              }}
+            >
+              打开定时任务… <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['open-schedules'])}</span>
+            </Button>
           </Row>
         </Section>
       </div>

@@ -57,7 +57,12 @@ interface HostLink {
   shutdown?(): Promise<void>
   /** Daemon only: a logout / restart / shutdown is under way, so its SIGTERM may end the sessions. */
   systemShutdown?(): void
+  /** Daemon only: open the app at `at` if it is closed then (PRD F24). */
+  wake?(at: number | null, app: string | null): void
 }
+
+/** The last wake asked for, sent again to every daemon the app connects to. */
+let daemonWake: { at: number | null; app: string | null } = { at: null, app: null }
 
 let link: HostLink | null = null
 let linking: Promise<HostLink> | null = null
@@ -141,8 +146,10 @@ async function connectDaemon(): Promise<HostLink> {
     post: (message) => connection.post(message),
     close: () => connection.close(),
     shutdown: () => connection.shutdown(true),
-    systemShutdown: () => connection.systemShutdown()
+    systemShutdown: () => connection.systemShutdown(),
+    wake: (at, wakeApp) => connection.wake(at, wakeApp)
   }
+  if (daemonWake.at !== null) self.wake?.(daemonWake.at, daemonWake.app)
   return self
 }
 
@@ -360,6 +367,7 @@ async function hostLaunch(
     ...(dispatch ? { pathPrefix: dispatch.pathPrefix } : {}),
     ...(options.resumeAgentSessionId ? { resumeAgentSessionId: options.resumeAgentSessionId } : {}),
     ...(options.model ? { model: options.model } : {}),
+    ...(options.permission ? { permission: options.permission } : {}),
     ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
     ...(extraArgs.length > 0 ? { extraArgs } : {}),
     ...(script ? { before: setupCommand(script) } : {})
@@ -430,7 +438,7 @@ async function spawnSession(owner: WebContents, options: PtySpawnOptions): Promi
       else reject(error)
     }, SPAWN_TIMEOUT_MS)
     replacePendingStart(pendingSpawns, id, { resolve, reject, timer })
-    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, dispatched: _dispatched, ...rest } = options
+    const { sessionId: _sessionId, env: _env, script: _script, initialPrompt: _prompt, model: _model, permission: _permission, dispatched: _dispatched, ...rest } = options
     send({
       type: 'spawn',
       id,
@@ -519,6 +527,13 @@ export function quitKeepsSessions(): boolean {
 /** powerMonitor `shutdown` (logout, restart, shutdown): tell the daemon, which otherwise keeps sessions on SIGTERM. */
 export function notifySystemShutdown(): void {
   link?.systemShutdown?.()
+}
+
+/** PRD F24: the daemon opens `app` (a bundle path) in the background at `at` if the app is closed then; null clears it. */
+export function setDaemonWake(at: number | null, app: string | null): void {
+  if (daemonWake.at === at && daemonWake.app === app) return
+  daemonWake = { at, app }
+  link?.wake?.(at, app)
 }
 
 /** The next quit ends every session (and the daemon) instead of leaving them running. */

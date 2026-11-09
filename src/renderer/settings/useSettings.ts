@@ -7,6 +7,7 @@ import {
   type AppearancePatch,
   type ArchiveSettings,
   type DispatchSettings,
+  type ScheduleSettings,
   type PortSettings,
   type PrSettings,
   type RemoteSettings,
@@ -24,6 +25,7 @@ export interface SettingsHandle {
   updateAlerts(patch: Partial<AlertSettings>): void
   updatePr(patch: Partial<PrSettings>): void
   updateDispatch(patch: Partial<DispatchSettings>): void
+  updateSchedules(patch: Partial<ScheduleSettings>): void
   updateRemote(patch: Partial<RemoteSettings>): void
 }
 
@@ -88,10 +90,15 @@ export function useSettings(): SettingsHandle {
     void window.tr.settings.update({ dispatch: patch })
   }, [])
 
+  const updateSchedules = useCallback((patch: Partial<ScheduleSettings>) => {
+    setSettings((current) => applySettingsPatch(current, { schedules: patch }))
+    void window.tr.settings.update({ schedules: patch })
+  }, [])
+
   const updateRemote = useCallback((patch: Partial<RemoteSettings>) => {
     setSettings((current) => applySettingsPatch(current, { remote: patch }))
     void window.tr.settings.update({ remote: patch })
   }, [])
 
-  return { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch, updateRemote }
+  return { settings, loaded, updateAppearance, updatePorts, updateReview, updateArchive, updateAlerts, updatePr, updateDispatch, updateRemote, updateSchedules }
 }

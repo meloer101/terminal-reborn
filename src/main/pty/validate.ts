@@ -106,6 +106,10 @@ export function parseSpawnOptions(raw: unknown): PtySpawnOptions {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/.test(model)) throw new Error('invalid model')
     result.model = model
   }
+  if (o.permission !== undefined) {
+    if (o.permission !== 'accept-edits' && o.permission !== 'auto') throw new Error('invalid permission')
+    result.permission = o.permission
+  }
   if (o.dispatched !== undefined) {
     if (typeof o.dispatched !== 'boolean') throw new Error('invalid dispatched')
     if (o.dispatched) result.dispatched = true

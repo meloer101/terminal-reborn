@@ -69,6 +69,10 @@ export class WorkspaceFileStore {
   }
 
   /** Root folders of the workspace's projects (git IPC only acts on these). */
+  projectRootOf(projectId: string): string | undefined {
+    return this.latest?.projects.find((p) => p.id === projectId)?.rootPath
+  }
+
   projectRoots(): string[] {
     return this.latest?.projects.map((p) => p.rootPath) ?? []
   }

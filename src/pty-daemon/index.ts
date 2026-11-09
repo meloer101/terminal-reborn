@@ -4,6 +4,7 @@
 // piped agent processes the same way (PRD F23; SessionHost hands them to its PipeSessions) and says so in `welcome.pipes`.
 //   usage: pty-daemon.js --dir <userData>/daemon --socket <path>   (userData is the parent of --dir)
 import { createHash, timingSafeEqual } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { connect, createServer, type Server, type Socket } from 'node:net'
 import { dirname, join } from 'node:path'
@@ -14,6 +15,7 @@ import { ensureSpawnHelperExecutable, SessionHost, spawnHelperPath } from '../pt
 import { DiskSnapshots } from './disk-snapshots'
 import { DaemonHooks, type RelayReply } from './hooks'
 import { IdleTimer } from './idle'
+import { parseWake, WakeTimer } from './wake'
 import { SystemShutdown } from './sigterm'
 import {
   frame,
@@ -147,7 +149,16 @@ const hooks = new DaemonHooks({
   log: (...args) => log(...args)
 })
 
-const idle = new IdleTimer(IDLE_EXIT_MS, () => active === null && host.liveCount === 0, () => shutdown('idle', false))
+// A scheduled task due while the app is closed keeps the daemon up to open the app for it (PRD F24).
+const wake = new WakeTimer({
+  now: () => Date.now(),
+  appConnected: () => active !== null,
+  open: (app) => spawn('/usr/bin/open', ['-g', '-j', '-a', app, '--args', '--wavi-scheduled'], { detached: true, stdio: 'ignore' }).unref(),
+  changed: () => idle.update(),
+  log: (...args) => log(...args)
+})
+
+const idle = new IdleTimer(IDLE_EXIT_MS, () => active === null && host.liveCount === 0 && !wake.pending, () => shutdown('idle', false))
 
 function tokenMatches(given: unknown): boolean {
   if (typeof given !== 'string') return false
@@ -258,6 +269,10 @@ function handle(client: Client, message: ClientMessage & Record<string, unknown>
     void snapshots.flush()
     return
   }
+  if (message.type === 'wake') {
+    wake.set(parseWake(message, Date.now()))
+    return
+  }
   if (message.type === 'hook-reply') {
     if (typeof message.rid === 'number' && typeof message.body === 'string' && typeof message.status === 'number') {
       settleRelay(message.rid, { status: message.status, body: message.body })
@@ -276,6 +291,7 @@ function shutdown(reason: string, killSessions: boolean): void {
   shuttingDown = true
   log('shutting down:', reason, killSessions ? '(ending sessions)' : '')
   idle.stop()
+  wake.stop()
   // Screens changed since the app left go to disk first (logout's SIGTERM: the cold path after the reboot shows them).
   const flushed = Promise.race([snapshots.flush(), new Promise((resolve) => setTimeout(resolve, SNAPSHOT_FLUSH_MS))])
   void flushed.then(() => finishShutdown(killSessions))

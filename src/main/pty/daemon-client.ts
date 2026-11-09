@@ -192,6 +192,11 @@ export class DaemonConnection {
     this.write({ type: 'system-shutdown' })
   }
 
+  /** PRD F24: when to open `app` in the background if no app is connected then (null: never). */
+  wake(at: number | null, app: string | null): void {
+    this.write({ type: 'wake', at, app })
+  }
+
   /** Disconnects; the daemon keeps every session running (detached). */
   close(): void {
     if (this.closed) return

@@ -6,6 +6,7 @@ import type { GuiApi } from './gui-chat'
 import type { CliAgent } from './agents'
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
+import type { ScheduleApi } from './schedule'
 import type { ArchiveApi } from './archive'
 import type { BackgroundReviewApi } from './background-review'
 import type { PullRequestApi } from './pull-requests'
@@ -54,6 +55,8 @@ export interface PtySpawnOptions {
   initialPrompt?: string
   /** The model for this launch (PRD F21). */
   model?: string
+  /** A 定时任务's 权限 (PRD F24): Claude's `--permission-mode`; other CLIs have no such flag and start with their default. */
+  permission?: 'accept-edits' | 'auto'
   /** The session was started by another session's `wavi run` (PRD F21): its brief, not a system prompt, tells it about `wavi`. */
   dispatched?: boolean
   cols: number
@@ -420,6 +423,8 @@ export interface TrApi {
   browser: BrowserApi
   /** `.tr/settings.toml` scripts and TR_PORT (PRD F4). */
   repoScripts: RepoScriptsApi
+  /** 定时任务 (PRD F24); channels in SCHEDULE_IPC. */
+  schedules: ScheduleApi
   /** Background code review (PRD F13); channels in REVIEW_IPC. */
   review: BackgroundReviewApi
   /** Archiving a worktree (PRD F15); channels in ARCHIVE_IPC. */

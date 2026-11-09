@@ -47,6 +47,8 @@ export interface AgentLaunchOptions {
   pathPrefix?: string
   /** A model for this launch (`claude --model` / `codex -m`), e.g. what a dispatching agent asked for (PRD F21). */
   model?: string
+  /** A 定时任务's 权限 (PRD F24): only Claude has a launch flag for it (`--permission-mode`); ignored when resuming. */
+  permission?: 'accept-edits' | 'auto'
   /**
    * The first message, passed after `--` so the CLI submits it itself (PRD F21: nothing is typed into a starting TUI).
    * Ignored when resuming.
@@ -79,6 +81,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
       ...(options.claudeSettingsPath ? ['--settings', options.claudeSettingsPath] : []),
       ...(options.extraArgs ?? []),
       ...(model ? ['--model', model] : []),
+      ...(options.permission && !resumeId ? ['--permission-mode', options.permission === 'auto' ? 'auto' : 'acceptEdits'] : []),
       ...prompt
     ]
   }

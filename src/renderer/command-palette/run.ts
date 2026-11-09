@@ -2,6 +2,7 @@
 // entries.ts stays free of side effects.
 import type { AgentKind } from '@shared/types'
 import { restoreArchivedWorktree } from '../archive/actions'
+import { openSchedules } from '../schedules/store'
 import { openSameTaskForActive } from '../attempts/same-task-store'
 import { openNewSessionSheet } from '../new-session/sheet-store'
 import { openProjectInteractive } from '../state/session-actions'
@@ -52,6 +53,9 @@ function runAction(action: ActionId): void {
     case 'same-task':
       openSameTaskForActive()
       break
+    case 'schedules':
+      openSchedules()
+      break
     case 'toggle-sidebar':
       state.toggleSidebar()
       break
@@ -69,7 +73,7 @@ export function runEntry(entry: PaletteEntry): void {
   // Picking a session, starting one or restoring an archive hands the keyboard to its terminal (B7); other actions give it back.
   const toTerminal = target.type !== 'action' || NEW_KIND[target.action] !== undefined
   // The new-session and 同任务多解 sheets take the keyboard themselves.
-  const sheet = target.type === 'action' && (target.action === 'new-session' || target.action === 'same-task')
+  const sheet = target.type === 'action' && (target.action === 'new-session' || target.action === 'same-task' || target.action === 'schedules')
   closeCommandPalette({ restoreFocus: !toTerminal && !sheet })
   if (target.type === 'session') useWorkspace.getState().setActiveSession(target.sessionId)
   else if (target.type === 'archived') void restoreFromHistory(target.worktreeId)
