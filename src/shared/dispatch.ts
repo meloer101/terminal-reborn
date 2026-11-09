@@ -546,8 +546,8 @@ export function noticeText(outcome: 'started' | 'declined' | 'timeout', children
 
 // --- reading Wavi's own words back (a GUI dispatcher draws them, Figma 68′) ---------------------------------------
 
-/** A shell command that runs `wavi run` (also after `cd … &&`, in a pipeline); not `wavi report` or a word in text. */
-export const isWaviRun = (command: string): boolean => /(?:^|[\s;&|(])wavi\s+run\s/.test(`${command} `)
+/** A shell command that runs `wavi run` (also after `cd … &&`, `;`, in a pipeline); not `wavi report`, nor an argument. */
+export const isWaviRun = (command: string): boolean => /(?:^|[;&|(\n])\s*wavi\s+run\s/.test(`${command} `)
 
 /** The sessions a `wavi run` answer (handler.ts) opened or holds for 开始, in order. */
 export function waviRunIds(output: string): SessionId[] {

@@ -253,6 +253,8 @@ describe('reading Wavi’s own words back (the GUI draws them, Figma 68′)', ()
     expect(isWaviRun('cd app && wavi run claude - <<EOF')).toBe(true)
     expect(isWaviRun('wavi report "done"')).toBe(false)
     expect(isWaviRun('echo wavi running')).toBe(false)
+    expect(isWaviRun('echo wavi run codex')).toBe(false)
+    expect(isWaviRun('git status; wavi run grok "Review"')).toBe(true)
   })
   it('names the sessions a `wavi run` answer opened or holds for 开始, in order', () => {
     const out = [
