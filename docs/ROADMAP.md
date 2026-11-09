@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-09：设置 · 额度 加 token 统计（PRD v1.166，Figma 69″）：周 / 月 / 年 / 全部的 token、API 等价、会话、连续天数，每天或每月的柱、过去一年的热力图、按 agent / 模型 / 项目 / 小时的份额；只读本机日志（Claude、Codex、OpenCode、Pi、Grok），每家标自己的起点，Wavi 不另存。
 - 2026-11-09：GUI 会话的 context 圆环有数了（PRD v1.164）：Claude、Codex、ACP、Pi 的 GUI 会话各自从协议里报 context 用量，点圆环能看到 context 一行。
 - 2026-11-09：`wavi run` 派出的子会话也能开成 GUI（PRD v1.163）：派活方是 GUI、子会话的 agent 能跑 GUI 时默认开 GUI，`--ui gui|cli` 指定。
 - 2026-11-08：F17 新端口自动打开浏览器（PRD v1.162）：当前 worktree 出现新的监听端口时，右侧栏切到浏览器并打开它；其他 worktree 的端口标签变亮，切过去再开；设置 · Worktree 可关，默认开。
@@ -100,6 +101,8 @@
 - [x] e2e 不再留下守护进程（2026-10-27）：守护进程按设计忽略普通 SIGTERM（PRD §6.8），`scale.spec.ts` 和打包测试却用 SIGTERM 清理，机器上积了跑了 6–8 天的守护进程和 agent。改用 SIGKILL（`e2e/daemons.ts`），并在整轮结束时结束本轮各 profile 下还活着的守护进程（`e2e/global-setup.ts`，只碰本轮的 profile）。`pty-daemon.spec.ts` 在负载下丢掉开头几个字（点击时 xterm 还没打开，键盘没进终端），改为等终端拿到焦点、shell 画出提示符再打字：8 路并行 16/16
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
+- [x] 设置 · 额度的 token 统计（2026-11-09，PRD v1.166，Figma 69″）：Claude、Codex、OpenCode、Pi、Grok 的本机日志，周 / 月 / 年 / 全部、热力图、按 agent / 模型 / 项目 / 小时。
+- [ ] token 统计接其余 agent：Gemini、Qwen、Kimi、Copilot、Amp、Droid、Cline、Auggie、CodeBuddy、Antigravity、Kiro（ccusage / tokscale 有解析，本机没有日志、未核对）；Crush、Goose 只有整场会话的数字；Cursor 本地没有 token。
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
 - [x] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”（2026-10-20，PRD v1.52）。c#1027（44 👍：Running / Needs Input 时对时错）、c#2322（22 👍：通知时快时慢）、o#13600（Codex 自动批准后仍提示需要处理）。先核对了 Claude Code 2.1.304 二进制（`agent_id`、`background_tasks`、拒绝不发 PostToolUse、标题 `✳` = 有对话框，PRD §6.6），再按它写了会话模拟器 `src/shared/agent-sim.ts`，回放进状态机对照真实状态（`src/main/hooks/status-sim.test.ts`）。改动前：Claude 48 小时模拟里显示错误最长 266 s、超过 1 s 的错误占 5.5% 的时间，丢 5% hook 时最长 230 s，Codex 最长 39.5 s——主要是两个对话框互相顶替、子 agent 的调用把“等你处理 / 已完成”改回运行中、批准后工具在跑却还显示等你处理、空闲时 15 s 才检查一次。改后：每个对话框一个待确认项、子 agent 只算它的对话框、`idle_prompt` / 对话框后标题转动 / 屏幕上的对话框参与自愈、需要时立刻改用 1 s 检查（PRD §3.1）；最长 7 s、0.6%，丢 5% hook 时最长 7 s，Codex 最长 4.5 s。Claude 的 PermissionRequest 只在真要问人时触发（Auto mode 放行的不触发），所以 o#13600 那种误报在 Claude 上不会出现；Codex 的“Approve for me”没在真 CLI 上验证。测试：`status-sim.test.ts`（含丢 hook、完全没有 hook）、`session-state-machine.test.ts`（600 段随机序列：等你处理 ⇔ 有待确认项）、`normalize.test.ts`，e2e `asks.spec.ts`（真实 hook 链路），可选的 `TR_STATUS_STRESS=1 … e2e/status-stress.spec.ts`（假 agent 在应用里回放、对照侧栏）。真 CLI 下的并行对话框、后台 agent 请求权限和 agent teams 没跑（花额度，列在“待作者手动确认”）
 - [x] 把文件和图片拖进或粘贴进运行中的会话（2026-10-20，PRD F19）：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴截图、会话头的回形针（文件和文件夹），都把转义后的路径放进输入行，agent 自己把图片变成附件。c#3435（22 👍）、o#15377。e2e `attachments.spec.ts`；从 Finder 真实拖入还没在真机上走一遍（拖入用的 `pathForFile` 和欢迎页拖文件夹是同一个）
