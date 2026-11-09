@@ -10,8 +10,9 @@
 // waits for the user, a loop guard on report text and a wake budget (Nimbalyst); no resend when delivery is unsure
 // (Solo). Reports go in through each vendor's own channel where there is one (§6.14).
 import { AGENT_SPECS, isCliAgent, type CliAgent } from './agents'
+import { guiAvailability } from './gui-agents'
 import { folderNameFor, generateBranchName, slugify, type WorktreeCreateRequest } from './new-session'
-import type { SessionId, SessionStatus } from './types'
+import type { SessionId, SessionStatus, SessionUi } from './types'
 
 /** Every agent CLI can dispatch (it only needs a shell) and be dispatched. */
 export type DispatchAgent = CliAgent
@@ -75,7 +76,8 @@ const ID = /^[A-Za-z0-9._:-]{1,128}$/
 export type WaviBase = 'head' | 'snapshot'
 
 export type WaviCommand =
-  | { name: 'run'; agent: DispatchAgent; task: string; title?: string; model?: string; base: WaviBase }
+  /** `ui`: `--ui`, when given (else the child opens as its dispatcher does, `childUi`). */
+  | { name: 'run'; agent: DispatchAgent; task: string; title?: string; model?: string; base: WaviBase; ui?: SessionUi }
   | { name: 'send'; id: string; text: string }
   | { name: 'report'; text: string }
   | { name: 'ls' }
@@ -140,6 +142,7 @@ export function parseWaviCommand(raw: unknown): Parsed {
       if (v.title !== undefined && typeof v.title !== 'string') return bad('--title must be text.')
       if (v.model !== undefined && (typeof v.model !== 'string' || !MODEL.test(v.model))) return bad('--model is not a model name.')
       if (v.base !== undefined && v.base !== 'head' && v.base !== 'snapshot') return bad('--base is head or snapshot.')
+      if (v.ui !== undefined && v.ui !== 'gui' && v.ui !== 'cli') return bad('--ui is gui or cli.')
       const title = typeof v.title === 'string' && v.title.trim() !== '' ? v.title : undefined
       return {
         ok: true,
@@ -149,7 +152,8 @@ export function parseWaviCommand(raw: unknown): Parsed {
           task,
           base: v.base === 'snapshot' ? 'snapshot' : 'head',
           ...(title ? { title: titleFor(task, title) } : {}),
-          ...(typeof v.model === 'string' ? { model: v.model } : {})
+          ...(typeof v.model === 'string' ? { model: v.model } : {}),
+          ...(v.ui === 'gui' || v.ui === 'cli' ? { ui: v.ui } : {})
         }
       }
     }
@@ -189,7 +193,7 @@ export type WaviArgv =
   | { kind: 'help' }
   | { kind: 'error'; error: string }
 
-const FLAGS: Record<string, readonly string[]> = { run: ['model', 'title', 'base'], read: ['offset'] }
+const FLAGS: Record<string, readonly string[]> = { run: ['model', 'title', 'base', 'ui'], read: ['offset'] }
 
 /** `wavi <command> …` → the command object `parseWaviCommand` checks (main checks it again). */
 export function parseWaviArgv(argv: readonly string[]): WaviArgv {
@@ -222,7 +226,8 @@ export function parseWaviArgv(argv: readonly string[]): WaviArgv {
     case 'run': {
       const [agent, ...task] = rest
       const base = flags.base
-      return withText({ name, agent, ...(flags.model !== undefined ? { model: flags.model } : {}), ...(flags.title !== undefined ? { title: flags.title } : {}), ...(base !== undefined ? { base } : {}) }, 'task', task)
+      const optional = { ...(flags.model !== undefined ? { model: flags.model } : {}), ...(flags.title !== undefined ? { title: flags.title } : {}), ...(base !== undefined ? { base } : {}), ...(flags.ui !== undefined ? { ui: flags.ui } : {}) }
+      return withText({ name, agent, ...optional }, 'task', task)
     }
     case 'send': {
       const [id, ...text] = rest
@@ -244,7 +249,7 @@ export function parseWaviArgv(argv: readonly string[]): WaviArgv {
 export const WAVI_HELP = [
   'wavi — hand work to other coding agents in Wavi, each in its own git worktree, and get their results back.',
   '',
-  '  wavi run <agent> "<task>" [--model <model>] [--title <name>] [--base head|snapshot]',
+  '  wavi run <agent> "<task>" [--model <model>] [--title <name>] [--base head|snapshot] [--ui gui|cli]',
   '  wavi send <id> "<message>"',
   '  wavi report "<result>"',
   '  wavi ls',
@@ -266,7 +271,7 @@ export const WAVI_SKILL = [
   '- Start as few as you can: one session per independent deliverable. Never a second session for something already dispatched: use `wavi send` instead.',
   '',
   '## Commands',
-  `- \`wavi run <agent> "<task>"\` starts one session. Agents: ${AGENT_IDS}. Options: \`--model <name>\` (that CLI's own model names), \`--title <2–6 words>\`, \`--base head\` (default: a new branch off your current branch; your uncommitted changes are not copied, commit first if it needs them) or \`--base snapshot\` (a read-only copy of your working tree as it is now, uncommitted changes included: use it for reviews). Pass \`-\` as the task to read it from stdin.`,
+  `- \`wavi run <agent> "<task>"\` starts one session. Agents: ${AGENT_IDS}. Options: \`--model <name>\` (that CLI's own model names), \`--title <2–6 words>\`, \`--base head\` (default: a new branch off your current branch; your uncommitted changes are not copied, commit first if it needs them) or \`--base snapshot\` (a read-only copy of your working tree as it is now, uncommitted changes included: use it for reviews), \`--ui gui|cli\` (how the user sees it: a chat or a terminal; default: as your own session, a terminal when that agent has no chat mode here). Pass \`-\` as the task to read it from stdin.`,
   '- `wavi send <id> "<message>"` sends a follow-up to a session you started (a correction, the next review round). It arrives as a message from you, not from the user.',
   '- `wavi ls` lists the sessions you started: status, branch, changes, checks, conflicts, last reply and a suggested merge order.',
   '- `wavi read <id> [--offset <n>]` reads one session\'s last message in full, with its changed files. Reading it means its pending report is not sent to you again.',
@@ -341,6 +346,23 @@ export interface StartItem {
   title: string
   model?: string
   base: WaviBase
+  /** Opens as a GUI session (PRD F23); absent: a terminal. */
+  ui?: 'gui'
+}
+
+/**
+ * The 界面 a child opens with (PRD F21 v1.163): `--ui` when the agent gave one, else its dispatcher's own. GUI only for
+ * an agent that can run as one here (`guiAvailability`); otherwise a terminal, and `note` says so to the dispatcher
+ * when it asked for GUI itself. `installed`: whether a binary is on PATH (an ACP adapter such as amp-acp).
+ */
+export function childUi(input: { agent: DispatchAgent; requested?: SessionUi; parentUi: SessionUi; installed: (binary: string) => boolean }): { ui: SessionUi; note?: string } {
+  const wanted = input.requested ?? input.parentUi
+  if (wanted === 'cli') return { ui: 'cli' }
+  const gui = guiAvailability(input.agent, input.installed)
+  if (gui.kind === 'available') return { ui: 'gui' }
+  if (input.requested !== 'gui') return { ui: 'cli' }
+  const why = gui.kind === 'needs-adapter' ? `its chat mode needs ${gui.binary}, which is not installed (${gui.install})` : 'it has no chat mode'
+  return { ui: 'cli', note: `${agentLabel(input.agent)} opens in a terminal: ${why}.` }
 }
 
 export interface ChildPlan {
@@ -405,7 +427,7 @@ export function childBrief(input: { task: string; parentTitle: string; parentAge
     input.task,
     [
       '只做这件事；不要合并、推送或切换分支，这些由用户决定。',
-      '做完后在终端里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
+      '做完后在 shell 里运行 `wavi report "<结果>"` 把结果报给派活方：先写结果，再写改了哪些文件、跑了哪些检查和结果、还有什么没做；结果很长时写进文件，报文件路径。做不下去时运行 `wavi report "BLOCKED: <原因>"`。',
       onward
     ].join('')
   ].join('\n\n')

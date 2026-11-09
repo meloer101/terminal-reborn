@@ -207,7 +207,7 @@ function sanitizePending(raw: unknown): PendingStart | null {
     childId: raw.childId,
     base: raw.base,
     uncommitted: raw.uncommitted,
-    plan: { item: { agent: item.agent, task: item.task, title: item.title, ...optional('model', isText(item.model, 256) ? item.model : undefined), base: item.base }, branch, path, request: parsed }
+    plan: { item: { agent: item.agent, task: item.task, title: item.title, ...optional('model', isText(item.model, 256) ? item.model : undefined), base: item.base, ...(item.ui === 'gui' ? { ui: 'gui' as const } : {}) }, branch, path, request: parsed }
   }
 }
 

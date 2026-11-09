@@ -155,7 +155,7 @@ interface WorkspaceState extends WorkspaceData {
   addSessionInWorktree(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, ui?: SessionUi): SessionId | null
   /**
    * 一题多解: starts a session in a new worktree folder without selecting it (the overview shows the group). The
-   * selection stays where it was; with none, the new session takes it.
+   * selection stays where it was; with none, the new session takes it. `ui`: a `wavi run` child opens as GUI (PRD F21 v1.163).
    */
   addBackgroundSession(projectId: ProjectId, target: { path: string; branch: string; baseBranch?: string }, kind: AgentKind, sessionId?: SessionId, ui?: SessionUi): SessionId | null
   /** Adds the Run button's terminal for a worktree (PRD F4) and selects it. */
