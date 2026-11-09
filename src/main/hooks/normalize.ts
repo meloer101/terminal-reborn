@@ -4,7 +4,7 @@
 // the captures in PRD §6.7 (see ./codex-fixtures.ts); they are mapped onto Claude's tool vocabulary
 // (Bash, Edit/Write, AskUserQuestion) so the status, prompt-bar and permission code stays agent-agnostic.
 import { isSafeAgentSessionId } from '@shared/workspace-file'
-import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption } from '@shared/agent-events'
+import type { AgentEvent, AgentQuestion, HookAgent, QuestionOption, SessionCron } from '@shared/agent-events'
 import { autoCompactRuleFromEnv, parseClaudeStatusLine, type VendorUsage } from '@shared/session-meta'
 import type { BashResult } from '@shared/check-commands'
 import { trimHookPayload } from '@shared/hook-payload'
@@ -210,6 +210,20 @@ function stopEvent(payload: Rec): AgentEvent {
   return message ? { type: 'stop', message: message.slice(-REPLY_TAIL_CHARS) } : { type: 'stop' }
 }
 
+const MAX_CRONS = 50
+
+/** Claude's own session timers (`session_crons`, 2.1.304+; PRD F24): absent from older Claudes, so no event then. */
+function cronsEvent(payload: Rec): AgentEvent[] {
+  if (!Array.isArray(payload.session_crons)) return []
+  const items = payload.session_crons.flatMap((raw): SessionCron[] => {
+    if (!isRec(raw)) return []
+    const schedule = str(raw.schedule) ?? str(raw.cron)
+    const prompt = str(raw.prompt) ?? ''
+    return schedule ? [{ schedule: schedule.slice(0, 100), recurring: raw.recurring !== false, prompt: prompt.slice(0, 500) }] : []
+  })
+  return [{ type: 'crons', items: items.slice(0, MAX_CRONS) }]
+}
+
 /** SessionStart for both agents: carries the conversation id (`session_id`) that `--resume` needs after a restart. */
 function sessionStart(payload: Rec): AgentEvent {
   const id = str(payload.session_id)
@@ -283,7 +297,7 @@ function normalizeClaude(event: string, payload: Rec, at: number): NormalizedHoo
       }
     }
     case 'Stop':
-      return { events: [stopEvent(payload)], clears: 'all' }
+      return { events: [stopEvent(payload), ...cronsEvent(payload)], clears: 'all' }
     case 'StopFailure': {
       const message = str(payload.last_assistant_message) ?? str(payload.error)
       const reason = str(payload.error)

@@ -474,7 +474,8 @@ export interface ScheduleFire {
 
 export interface ScheduleApi {
   list(): Promise<Schedule[]>
-  create(draft: ScheduleDraft): Promise<Schedule | null>
+  /** `createdBy`: the session whose agent asked for it (`wavi schedule`); the task then expires in 7 days unless kept. */
+  create(draft: ScheduleDraft, createdBy?: string): Promise<Schedule | null>
   update(id: string, draft: ScheduleDraft): Promise<Schedule | null>
   setEnabled(id: string, enabled: boolean): Promise<void>
   keep(id: string): Promise<void>

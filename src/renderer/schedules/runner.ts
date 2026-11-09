@@ -14,6 +14,7 @@ import { useSessionMeta } from '../session-meta/store'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
 import { freeBranch, previousRunActive, quotaBlock, sendStep, unchanged } from './model'
+import { setAgentSchedulesAllowed } from './agent-requests'
 import { followSchedules, useSchedules } from './store'
 
 /** A 发给已有会话 run waiting for the session's turn to end gives up after this. */
@@ -184,10 +185,13 @@ function watchAutoArchive(): () => void {
 /** Mounted once the workspace is loaded: from then on main hands this window what comes due. */
 export function startScheduleRunner(): () => void {
   followSchedules()
+  void window.tr.settings.get().then((s) => setAgentSchedulesAllowed(s.schedules.agents))
+  const offSettings = window.tr.settings.onChange((s) => setAgentSchedulesAllowed(s.schedules.agents))
   const offFire = window.tr.schedules.onFire((fire) => void run(fire))
   const offArchive = watchAutoArchive()
   window.tr.schedules.ready()
   return () => {
+    offSettings()
     offFire()
     offArchive()
   }

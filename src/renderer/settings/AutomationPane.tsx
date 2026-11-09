@@ -8,7 +8,6 @@ import { formatAccelerator } from '../ui/menu-model'
 import { openSchedules } from '../schedules/store'
 import { Segmented } from '../ui/Segmented'
 import { Button, Row, Section, Toggle } from './controls'
-import { closeSettings } from './SettingsDialog'
 import styles from './AutomationPane.module.css'
 
 const MODEL = /^[A-Za-z0-9._:@/-]{0,64}$/
@@ -162,12 +161,8 @@ export function AutomationPane({
             <Toggle label="让 agent 建定时任务" checked={schedules.agents} onChange={(agents) => updateSchedules({ agents })} />
           </Row>
           <Row label="所有定时任务">
-            <Button
-              onClick={() => {
-                closeSettings()
-                openSchedules()
-              }}
-            >
+            {/* Over the settings: closing it comes back here. */}
+            <Button onClick={() => openSchedules()}>
               打开定时任务… <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['open-schedules'])}</span>
             </Button>
           </Row>

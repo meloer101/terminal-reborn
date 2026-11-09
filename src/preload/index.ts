@@ -183,7 +183,7 @@ const api: TrApi = {
   browser: browserApi,
   schedules: {
     list: () => ipcRenderer.invoke(SCHEDULE_IPC.list),
-    create: (draft) => ipcRenderer.invoke(SCHEDULE_IPC.create, draft),
+    create: (draft, createdBy) => ipcRenderer.invoke(SCHEDULE_IPC.create, draft, createdBy),
     update: (id, draft) => ipcRenderer.invoke(SCHEDULE_IPC.update, id, draft),
     setEnabled: (id, enabled) => ipcRenderer.invoke(SCHEDULE_IPC.setEnabled, id, enabled),
     keep: (id) => ipcRenderer.invoke(SCHEDULE_IPC.keep, id),

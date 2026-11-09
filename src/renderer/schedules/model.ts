@@ -2,7 +2,7 @@
 import { AGENT_SPECS } from '@shared/agents'
 import { clock } from '@shared/schedule'
 import type { VendorUsage } from '@shared/session-meta'
-import type { Session } from '@shared/types'
+import type { Session, SessionId } from '@shared/types'
 
 /** The account-wide limit is used up and has not reset: `Codex 额度用完，11:20 恢复`. */
 export function quotaBlock(label: string, usage: VendorUsage | undefined, now: number): string | null {
@@ -46,4 +46,26 @@ export function unchanged(listing: { dirtyCount: number | null; ahead: number | 
 export function freeBranch(name: string, taken: ReadonlySet<string>): string {
   if (!taken.has(name)) return name
   for (let i = 2; ; i++) if (!taken.has(`${name}-${i}`)) return `${name}-${i}`
+}
+
+/** `--at 14:30` is its next time (today, else tomorrow); `--at 2026-11-12T09:00` that moment. */
+export function onceAt(at: string, now: number): number | null {
+  const [day, time] = at.includes('T') ? at.split('T') : [null, at]
+  const [h, m] = (time ?? '').split(':').map(Number)
+  if (h === undefined || m === undefined || Number.isNaN(h) || Number.isNaN(m)) return null
+  if (day) {
+    const [y, mo, d] = day.split('-').map(Number)
+    const t = new Date(y ?? 0, (mo ?? 1) - 1, d ?? 1, h, m).getTime()
+    return t > now ? t : null
+  }
+  const today = new Date(now)
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m).getTime()
+  return t > now ? t : t + 24 * 60 * 60 * 1000
+}
+
+/** Requests waiting, per session (its 等你处理 label). */
+export function scheduleRequestCounts(pending: ReadonlyArray<{ sessionId: SessionId }>): Map<SessionId, number> {
+  const counts = new Map<SessionId, number>()
+  for (const r of pending) counts.set(r.sessionId, (counts.get(r.sessionId) ?? 0) + 1)
+  return counts
 }

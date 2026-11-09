@@ -29,6 +29,7 @@ import { startDispatchBridge } from '../dispatch/bridge'
 import { startRemoteBridge } from '../remote/bridge'
 import { startScheduleRunner } from '../schedules/runner'
 import { DispatchStrip } from '../dispatch/DispatchStrip'
+import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
 import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
 import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
 import { PlanStrip } from '../attempts/PlanStrip'
@@ -134,6 +135,7 @@ export function AppShell() {
             <SessionErrorBar />
             <SetupStrip />
             <DispatchStrip />
+            <ScheduleConfirmStrip />
             <HeldReportsStrip />
             <HeldAttemptReportStrip />
             <PlanStrip />

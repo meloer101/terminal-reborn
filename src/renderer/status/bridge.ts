@@ -14,7 +14,8 @@ import { StatusController, type StatusDeps } from './controller'
 import { createE2eHook, type E2eHook } from './e2e-hook'
 import { dropConfirmsOf } from '../dispatch/handler'
 import { finishGoesToDispatcher } from '../dispatch/reports'
-import { useDispatch, type PendingStart } from '../dispatch/store'
+import { useDispatch } from '../dispatch/store'
+import { scheduleRequestCounts, useScheduleRequests } from '../schedules/agent-requests'
 
 const FAST_TICK_MS = 1_000
 const SLOW_TICK_MS = 15_000
@@ -195,7 +196,7 @@ export function startStatusBridge(): () => void {
       return
     }
     // Metrics (session-meta/bridge.ts keeps them): the statusLine runs while idle too, so they say nothing about status.
-    if (event.type === 'context' || event.type === 'todos' || event.type === 'checks' || event.type === 'agent-exit' || event.type === 'billing' || event.type === 'subagents' || event.type === 'agent-settings') return
+    if (event.type === 'context' || event.type === 'todos' || event.type === 'checks' || event.type === 'agent-exit' || event.type === 'billing' || event.type === 'subagents' || event.type === 'agent-settings' || event.type === 'crons') return
     if (event.type === 'prompt-submit') {
       const session = useWorkspace.getState().sessions.find((s) => s.id === sessionId)
       const title = session && titleFromFirstPrompt(session, event.prompt)
@@ -224,13 +225,20 @@ export function startStatusBridge(): () => void {
   const unsubscribeClick = ui.onNotificationClick((tag) => controller.handleNotificationClick(tag))
 
   // PRD F21: while an agent's request to start sessions waits for 开始, its session is the user's to answer.
-  const applyConfirms = (confirms: readonly PendingStart[], prev: readonly PendingStart[]): void => {
-    const labels = confirmLabels(confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
-    for (const id of new Set([...prev.map((c) => c.parentId), ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
+  // PRD F24: so does an agent's `wavi schedule` (想建 N 个定时任务); a session with both shows the sessions first.
+  let asking = new Set<string>()
+  const applyConfirms = (): void => {
+    const labels = confirmLabels(useDispatch.getState().confirms.map((c) => ({ parentId: c.parentId, count: 1 })))
+    for (const [id, n] of scheduleRequestCounts(useScheduleRequests.getState().pending)) if (!labels.has(id)) labels.set(id, `想建 ${n} 个定时任务`)
+    for (const id of new Set([...asking, ...labels.keys()])) controller.setWaviAsk(id, labels.get(id) ?? null)
+    asking = new Set(labels.keys())
   }
-  applyConfirms(useDispatch.getState().confirms, [])
+  applyConfirms()
+  const unsubscribeScheduleRequests = useScheduleRequests.subscribe((state, prev) => {
+    if (state.pending !== prev.pending) applyConfirms()
+  })
   const unsubscribeConfirms = useDispatch.subscribe((state, prev) => {
-    if (state.confirms !== prev.confirms) applyConfirms(state.confirms, prev.confirms)
+    if (state.confirms !== prev.confirms) applyConfirms()
     // A report that could not go in waits for 送进去: the turn it is about is the user's to read after all.
     if (state.held !== prev.held) {
       for (const [id, items] of Object.entries(state.held)) {
@@ -267,6 +275,7 @@ export function startStatusBridge(): () => void {
     unsubscribeIssues()
     unsubscribeMarkers()
     unsubscribeConfirms()
+    unsubscribeScheduleRequests()
     clearTimeout(timer)
     unsubscribeStore()
     unsubscribeEvents()

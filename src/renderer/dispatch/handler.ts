@@ -29,6 +29,7 @@ import { createWorktreeFor, holdForWorktree, startEagerly } from '../new-session
 import { interruptAgent } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { randomId } from '../state/workspace-model'
+import { handleScheduleCommand } from '../schedules/agent-requests'
 import { checksOf, childrenOf, conflictsOf, placeOf, type Place } from './places'
 import { deliverMessage, queueReport } from './reports'
 import { addConfirm, queueOf, setLaunch, setQueue, setReported, takeConfirms, useDispatch, type PendingStart } from './store'
@@ -109,6 +110,10 @@ function run(caller: Place, request: DispatchRequest): Promise<WaviResult> | Wav
       return report(caller, command.text)
     case 'stop':
       return stop(caller, command.id)
+    case 'schedule':
+    case 'schedules':
+    case 'unschedule':
+      return handleScheduleCommand(caller, request, command)
   }
 }
 

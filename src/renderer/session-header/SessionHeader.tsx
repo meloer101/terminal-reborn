@@ -10,6 +10,7 @@ import { openSessionHeaderMenu, renameSession } from '../state/session-actions'
 import { MAIN_WINDOW } from '@shared/window-layout'
 import { useSessionView, useWorkspace, windowEffects, type PanelView } from '../state/workspace'
 import { openSchedules } from '../schedules/store'
+import { LoopBadge } from '../schedules/LoopBadge'
 import { useSidebarCollapsed, useWindowKey } from '../state/window-scope'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { IconButton } from '../ui/IconButton'
@@ -145,6 +146,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
             </span>
           )}
           {active.session.dispatchedBy && <DispatchedBy parentId={active.session.dispatchedBy} />}
+          <LoopBadge sessionId={active.session.id} />
           {active.session.scheduledBy && (
             <button
               type="button"

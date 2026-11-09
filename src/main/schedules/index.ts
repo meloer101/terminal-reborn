@@ -95,9 +95,10 @@ export function registerScheduleHandlers(): void {
     })
   }
   handle(SCHEDULE_IPC.list, () => current.list())
-  handle(SCHEDULE_IPC.create, (raw) => {
+  handle(SCHEDULE_IPC.create, (raw, by) => {
     const draft = parseDraft(raw)
-    return draft ? current.create(draft) : null
+    if (!draft) return null
+    return by === undefined ? current.create(draft) : current.create(draft, { sessionId: parseId(by) })
   })
   handle(SCHEDULE_IPC.update, (id, raw) => {
     const draft = parseDraft(raw)
