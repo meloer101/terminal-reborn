@@ -13,6 +13,8 @@ import {
   maySendNow,
   messagePage,
   noticeText,
+  parseNoticeText,
+  parseReportText,
   parseWaviArgv,
   parseWaviCommand,
   parseWaviResult,
@@ -24,6 +26,8 @@ import {
   takeAll,
   takeDue,
   titleFor,
+  waviRunIds,
+  isWaviRun,
   type ChildReport
 } from './dispatch'
 
@@ -254,6 +258,47 @@ describe('noticeText', () => {
     expect(looksLikeReport(started)).toBe(true)
     expect(noticeText('declined', [])).toContain('不要重试')
     expect(noticeText('timeout', [])).toContain('10 分钟内没有回答')
+  })
+})
+
+describe('reading Wavi’s own words back (the GUI draws them, Figma 68′)', () => {
+  it('finds `wavi run` in a shell call, not other wavi commands or text', () => {
+    expect(isWaviRun('wavi run codex "Write tests" --model gpt-6-sol')).toBe(true)
+    expect(isWaviRun('cd app && wavi run claude - <<EOF')).toBe(true)
+    expect(isWaviRun('wavi report "done"')).toBe(false)
+    expect(isWaviRun('echo wavi running')).toBe(false)
+    expect(isWaviRun('echo wavi run codex')).toBe(false)
+    expect(isWaviRun('git status; wavi run grok "Review"')).toBe(true)
+  })
+  it('names the sessions a `wavi run` answer opened or holds for 开始, in order', () => {
+    const out = [
+      "Session s-1a2b3c4d (codex · gpt-6-sol, a new branch off main) waits for the user's 开始 in Wavi.",
+      'wavi does not wait: end your turn now.',
+      'Started session s-99aa00bb (grok, a snapshot of your working tree). It works on its own.'
+    ].join('\n')
+    expect(waviRunIds(out)).toEqual(['s-1a2b3c4d', 's-99aa00bb'])
+    expect(waviRunIds('[limit] You already have 8 sessions.')).toEqual([])
+    // Only wavi's own lines: another program's words in the same command are not a session.
+    expect(waviRunIds('npm: Session cache (warm)\nSession s-1 (codex, a new branch) waits')).toEqual(['s-1'])
+  })
+  it('reads a report back: one entry per child, facts without the agent and event, the excerpt without hints', () => {
+    const text = reportText([
+      report({ model: 'gpt-6-sol', changes: '+12 −3 · 2 个文件', checks: '测试 ✓', message: 'Fixed it.\nRan npm test.' }),
+      report({ childId: 's-2', title: 'A · B', event: 'error', branch: '' })
+    ])
+    expect(parseReportText(text)).toEqual([
+      { childId: 's1', title: 'Fix login', agent: 'Codex', event: 'done', facts: ['gpt-6-sol', '分支 jacob/fix-login', '+12 −3', '2 个文件', '测试 ✓'], excerpt: 'Fixed it.\nRan npm test.' },
+      { childId: 's-2', title: 'A · B', agent: 'Codex', event: 'error', facts: ['快照'], excerpt: '' }
+    ])
+    expect(parseReportText(reportText([report({ event: 'report', message: 'ok' })]))?.[0]?.event).toBe('report')
+    expect(parseReportText('hello')).toBeNull()
+  })
+  it('reads a notice back: what the user decided and for which sessions', () => {
+    const started = noticeText('started', [{ id: 's-9', agent: 'grok', title: 'Review', branch: '' }, { id: 's-8', agent: 'codex', title: 'Tests', branch: 'jacob/t' }])
+    expect(parseNoticeText(started)).toEqual({ outcome: 'started', ids: ['s-9', 's-8'], titles: ['Review', 'Tests'] })
+    expect(parseNoticeText(noticeText('declined', [{ id: 's-9', agent: 'grok', title: 'Review', branch: '' }]))?.outcome).toBe('declined')
+    expect(parseNoticeText(noticeText('timeout', []))?.outcome).toBe('timeout')
+    expect(parseNoticeText(started.replace('[Wavi 派活]', '[Wavi 派活报告]'))).toBeNull()
   })
 })
 

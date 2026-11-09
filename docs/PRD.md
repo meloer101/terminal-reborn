@@ -1,6 +1,6 @@
 # Wavi PRD
 
-> 版本 v1.165 · 2026-11-09 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
+> 版本 v1.166 · 2026-11-09 · 本文写**产品最终会长什么样**：目标、功能、设计和技术架构。做到哪了见 [ROADMAP](ROADMAP.md)。
 > 维护规则：产品决定一变就改这里，并在“变更记录”里加一行。不再另建产品简报、调研、spike 或任务单；实测得到的技术结论压缩后写进 §6。
 > 设计稿：[Figma](https://www.figma.com/design/x6HGsLiMTk7fWDoKI5YkKh/coding-terminal)
 
@@ -8,6 +8,7 @@
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v1.166 | 2026-11-09 | **GUI 派活方的对话里画出派活**（F21 / F23，Figma 68′ `1075:49153`，作者 2026-11-09 看过 68A–68D 后：「二和三……我都想要」，68′「通过」；起因：作者说 GUI 里 `wavi run` 只是一条 Bash 行、子会话的报告被画成「我」发的气泡。调研 T3 Code e85e009（`delegate_task` 改写成三态动词、子任务结果是 notification 行）、Orca acf3aea（对话上方的 Crew 面板、「Update from worker」卡片）、Paseo e0f545f（按状态计数、失败的子会话始终可见；报告仍是用户气泡，不学）、Zed a1f2e21（派发消息原处变成 subagent 卡片））：① 一轮里 `wavi run` 的几次调用（回答里带会话编号的）合成一张**扇出图**，画在第一次调用的位置：派活方在左，曲线连到每个子会话，第二层从子节点再分出去；节点外圈是状态，运行中的线向外流动、外圈转动，等你处理 / 出错的节点带光晕和「去处理」/「打开」，报告送回时一个点沿线回到派活方，派活方角上计数；还在运行或被拒绝的调用照常是工具行。② 等「开始」时这张图就是确认（虚线节点、任务第一行、拒绝 / 开始 N 个），GUI 派活方不再显示终端下方的确认条；没有 ⌘↵（GUI 里 ⌘↵ 是发送）。③ 输入框上方的**派活条**：收起时一行（头像外圈 = 状态 · 派出 N 个会话 · 计数 · 最需要你的那一件和按钮），展开每个会话一行（状态 · agent · 标题 · 动作 · 计时 · 打开）和「看图」；全部结束后去掉颜色写「N 个会话都结束了 · M 份报告」，用户下一次发消息后收起；出错的一直显示到它的状态变了（Figma 里的「在条里关掉」没做）。④ 派活报告画成左侧的报告卡（子会话 agent 的标志和状态点 · agent · 报告 · 标题 · 事件 · 分支和改动 · 摘录 · 打开会话），派活通知画成一行小字，都不再是用户气泡。⑤ 运行中的 +/− 取上一次报告算的数（不另外读 git），第一轮结束前不显示。⑥ 系统「减少动态效果」时线不流动、外圈不转、不画回传的点。 |
 | v1.165 | 2026-11-09 | **新增 F24 定时任务**（作者 2026-11-09：「和 Claude Code、Orca 等竞品对齐的 schedule 功能」；Figma 第 67′ 节 `1058:46205`，作者 2026-11-09「开始开发」；读了 Claude Code 桌面版 Scheduled tasks / `/schedule` / `/loop` 的文档，Orca `c804008` `src/main/automations/`、T3 Code `e85e009` `scheduledTasks/`、Paseo `e0f545f` `schedule/` 的源码，Codex Automations 的文档和 issue）：① 侧栏底部「定时任务」（⇧⌘T）打开弹窗列出所有任务；② 两种：开新会话（新 worktree，智能体 · 界面 · 模型 · 权限 · 消息）/ 发给已有会话（空闲或已完成时才发）；③ 时间：间隔（≥ 10 分钟）· 每天 · 工作日 · 每周 · 一次，可设截止日；错过了只补最近一次（Codex #24327 的成批补跑不做）；④ 前置检查不通过、额度用完、上一次开的会话还在跑时跳过；连续 3 次失败暂停；⑤ ⌘Q 后 PTY 守护进程到点在后台打开 Wavi；⑥ agent 用 `wavi schedule` 建任务走确认条，7 天后到期；⑦ Claude 自己的 `/loop` 只显示。界面不写解释性小字（67′ 相对 67 去掉 27 处），规则都写在 F24。 |
 | v1.164 | 2026-11-09 | **GUI 会话的 context 圆环有数了**（F23 / §6.17，作者 2026-11-09：「点那个圆圈只能显示模型的额度，显示不了上下文窗口」）：GUI 会话里没有 statusLine 和 rollout，圆环和浮层的 context 一行一直空着。改为各协议自己报：Claude 取每条主线程回复的 `usage`（输入 + 写缓存 + 读缓存）和这一轮 `result.modelUsage[模型].contextWindow`，新会话第一轮结束才有窗口大小，`compact_boundary` 后清空到下一条回复；Codex 取 `thread/tokenUsage/updated`，算法同 rollout；ACP 取 `usage_update`（ACP v1 正式规范）；Pi 在每轮结束、压缩后和握手后问一次 `get_session_stats`。不发这些的 agent 仍只显示额度。 |
 | v1.163 | 2026-11-09 | **`wavi run` 派出的子会话也能开成 GUI**（F21 / F23，作者 2026-11-09：「让子会话也能开成GUI」；下面的规则是实现时定的默认，待作者看）：① 不加参数时子会话跟派活方一样：派活方是 GUI 会话、子会话的 agent 在这台机器上能跑 GUI（`guiAvailability`：Crush、Antigravity 不能，Amp 要装 amp-acp）就开成 GUI，否则开成 CLI，不另行说明。② `wavi run … --ui gui\|cli` 指定；要了 GUI 而这家不能时开成 CLI，`wavi run` 的回答里写明原因（如 `Crush opens in a terminal: it has no chat mode.`）。③ 界面在 `wavi run` 时定下，等「开始」的请求存盘时一起存（`plan.item.ui`）；开始后照 F23 走：任务是第一条消息、`--model` 只用这一次，报告由协议送进 GUI 会话。④ 简报里「在终端里运行 `wavi report`」改为「在 shell 里运行」。⑤ 没有新画面：确认条、侧栏、会话头照旧，子会话用现有的对话视图。 |
@@ -661,7 +662,7 @@ PermissionRequest / AskUserQuestion 只用来把会话标成“等你处理”�
 - **运行中再发**：先排在输入框上方（可改、可删），这一轮结束后发出。Claude 原生就这样排（§6.17）；Codex 的 `turn/steer` 会改写正在跑的一轮，所以不用它。
 - **状态**：Claude 的 hooks 在 `-p` 下照常触发，沿用现有的按次 `--settings` 和状态机；Codex 用 app-server 的 `turn/*`、`item/*`、`thread/status/changed` 和审批请求。侧栏、总览、通知、Dock 角标和 CLI 会话一样。
 - **历史**：重开 app 或重开会话时从 transcript 重建（`src/shared/transcript-chat.ts`，F22）。
-- **和现有功能**：派活报告（F21）由协议直接送进 GUI 会话，不模拟打字；拖文件进来变成附件（F19）；额度读 `rate_limit_event` / `account/rateLimits/updated`（F11）。
+- **和现有功能**：派活报告（F21）由协议直接送进 GUI 会话，不模拟打字，画成报告卡；派活方的对话里画扇出图、输入框上方有派活条（v1.166，Figma 68′）；拖文件进来变成附件（F19）；额度读 `rate_limit_event` / `account/rateLimits/updated`（F11）。
 - **哪些 agent**：19 家里 17 家能选 GUI：Claude、Codex、Pi 走各自的协议，其余 14 家走 ACP（Amp 装了适配器 `amp-acp` 才行，没装时「界面」的 GUI 一段置灰，下面一行给安装命令）；Crush 没有 ACP、Antigravity 的 ACP 服务要另外下载（不是 `agy` 自带的），这两家只能 CLI，GUI 一段置灰、悬停写原因。表在 `src/shared/gui-agents.ts`。ACP 的 agent 没有 AskUserQuestion 这类提问，权限按 agent 给的选项（allow_once / allow_always / reject_once …）画成同样的按钮。
 - **不做**：同一会话在 CLI 和 GUI 之间切换（v1.125 作者定）；用 `cli` 或别家的来源标签。
 - **验收**：① 选 GUI 新建 Claude / Codex 会话，文字逐字出现；② 工具行从运行中变完成，Edit 显示 `+N −M`；③ 权限、提问、计划在 GUI 里回答后 agent 继续，侧栏 1 s 内变化；④ 换模型、换权限模式从下一条消息起生效；⑤「/」菜单列出 agent 返回的命令；⑥ 排队的消息能改、能删、这一轮结束后发出；⑦ 停止 1 s 内中断；⑧ ⌘Q 后重开，GUI 会话还在跑、历史完整；⑨ Claude 会话 transcript 的 `entrypoint` 是 `wavi`；⑨′ 本机装了的 ACP agent（Grok、Cursor）和 Pi 选 GUI 能跑通一轮，Amp 没装 amp-acp 时 GUI 置灰并给出安装命令；⑩ CLI 会话的 e2e 全部通过；⑪ 10 个会话（5 个 GUI）常驻内存 < 1.5 GB、输入延迟 < 16 ms；⑫ `npm run check` 通过。

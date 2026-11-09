@@ -2,12 +2,12 @@
 // tested: how the feed groups items, what a tool row says, what each card's buttons and keys do, the composer's keys
 // and the pickers under it. Pure.
 import { CLI_AGENTS, type CliAgent } from '@shared/agents'
-import { looksLikeReport } from '@shared/dispatch'
+import { isWaviRun, looksLikeReport, parseNoticeText, parseReportText, waviRunIds, type ParsedReport } from '@shared/dispatch'
 import { AGENT_GUI, guiAvailability } from '@shared/gui-agents'
 import type { GuiCommand, GuiConfigOption, GuiPermission, GuiPermissionOption, GuiPrompt, GuiQuestion, GuiState } from '@shared/gui-chat'
 import { composerPickers, isGuiPermission } from '@shared/gui-chat'
 import type { ChatItem, ChatTodo, FileDiff } from '@shared/transcript-chat'
-import type { SessionStatus } from '@shared/types'
+import type { SessionId, SessionStatus } from '@shared/types'
 import type { AgentAvailability } from '@shared/ipc'
 import { binaryInstalled, listedAgents } from '../new-session/model'
 import { CUT_ESCAPE, ESCAPES } from './ansi'
@@ -75,6 +75,84 @@ export function feedBlocks(items: readonly ChatItem[]): FeedBlock[] {
     }
   }
   return blocks
+}
+
+// --- dispatch in the feed (Figma 68′) -------------------------------------------------------------------------------
+
+/** A `wavi run` row: the graph of the turn's dispatch (the sessions its calls named), or a call drawn by that graph. */
+export type DispatchRow = { kind: 'graph'; ids: SessionId[] } | { kind: 'merged' }
+
+/**
+ * The turn's `wavi run` calls (a shell call of the agent itself, not a subagent's) that named a session: the first is
+ * drawn as the graph of them all, the rest leave the feed. A call still running, or refused, stays a tool row.
+ */
+export function dispatchRows(items: readonly ChatItem[]): ReadonlyMap<string, DispatchRow> {
+  const rows = new Map<string, DispatchRow>()
+  let head: { kind: 'graph'; ids: SessionId[] } | null = null
+  for (const item of items) {
+    if (item.kind === 'user') head = null
+    if (item.kind !== 'tool' || item.parent !== undefined || item.name !== 'Bash' || item.state === 'running' || !item.output) continue
+    if (!isWaviRun(item.input ?? item.arg)) continue
+    const ids = waviRunIds(plainOutput(item.output))
+    if (ids.length === 0) continue
+    if (head) {
+      head.ids.push(...ids)
+      rows.set(item.id, { kind: 'merged' })
+    } else {
+      head = { kind: 'graph', ids: [...ids] }
+      rows.set(item.id, head)
+    }
+  }
+  return rows
+}
+
+/** What a steps block draws of dispatch, as a string: the block re-renders when it changes (`''`: nothing). */
+export function dispatchKey(block: FeedBlock, rows: ReadonlyMap<string, DispatchRow>): string {
+  if (block.kind !== 'steps' || rows.size === 0) return ''
+  return block.items
+    .flatMap((item) => {
+      const row = rows.get(item.id)
+      return row ? [`${item.id}=${row.kind === 'graph' ? row.ids.join(',') : ''}`] : []
+    })
+    .join(';')
+}
+
+/** Wavi's own message in the chat: a report drawn as cards, a notice as a line — never the user's bubble. */
+export type WaviMessage = { kind: 'report'; reports: ParsedReport[] } | { kind: 'notice'; notice: NonNullable<ReturnType<typeof parseNoticeText>> }
+
+export function waviMessage(text: string): WaviMessage | null {
+  const reports = parseReportText(text)
+  if (reports && reports.length > 0) return { kind: 'report', reports }
+  const notice = parseNoticeText(text)
+  return notice ? { kind: 'notice', notice } : null
+}
+
+/** The children whose report reached this chat. */
+export function reportedChildren(items: readonly ChatItem[]): ReadonlySet<SessionId> {
+  const out = new Set<SessionId>()
+  for (const item of items) if (item.kind === 'user') for (const r of parseReportText(item.text) ?? []) out.add(r.childId)
+  return out
+}
+
+/** Requests that never became sessions — turned down, or not answered in time — by Wavi's notices in the chat. */
+export function dispatchOutcomes(items: readonly ChatItem[]): ReadonlyMap<SessionId, { outcome: 'declined' | 'timeout'; title: string }> {
+  const out = new Map<SessionId, { outcome: 'declined' | 'timeout'; title: string }>()
+  for (const item of items) {
+    if (item.kind !== 'user') continue
+    const notice = parseNoticeText(item.text)
+    if (!notice || notice.outcome === 'started') continue
+    notice.ids.forEach((id, i) => out.set(id, { outcome: notice.outcome as 'declined' | 'timeout', title: notice.titles[i] ?? '' }))
+  }
+  return out
+}
+
+/** When the user last wrote here themselves (Wavi's messages are not theirs); null before that. */
+export function lastUserAt(items: readonly ChatItem[]): number | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    if (item?.kind === 'user' && !looksLikeReport(item.text)) return item.at
+  }
+  return null
 }
 
 /** Whether a block holds the row `id`, at the top of its run or under a subagent row. */
