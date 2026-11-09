@@ -1,0 +1,7 @@
+/* The strip is dispatch's (DispatchStrip.module.css); only the expiry sits on the footer's left. */
+.expires {
+  margin-right: auto;
+  padding-left: var(--space-8);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}

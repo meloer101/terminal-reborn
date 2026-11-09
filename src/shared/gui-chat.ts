@@ -75,6 +75,9 @@ export interface GuiConfigOption {
  */
 export type GuiPermission = 'ask' | 'accept-edits' | 'auto'
 export const isGuiPermission = (value: unknown): value is GuiPermission => value === 'ask' || value === 'accept-edits' || value === 'auto'
+/** A 权限 a terminal session can be launched with (Claude's `--permission-mode`, PRD F24); 询问 is every CLI's default. */
+export type CliPermission = Exclude<GuiPermission, 'ask'>
+export const isCliPermission = (value: unknown): value is CliPermission => value === 'accept-edits' || value === 'auto'
 
 /** A model (or effort) id as an agent names it, safe to pass on a command line and to keep in the workspace file. */
 export const GUI_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/[\]-]{0,79}$/

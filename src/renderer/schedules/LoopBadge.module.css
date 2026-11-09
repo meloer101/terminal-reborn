@@ -1,0 +1,65 @@
+/* Figma 67I′: a quiet mark after the session title; its popover (bg/popover, 12 radius) lists each timer as
+ * time · prompt in two columns. Shown on hover and on keyboard focus. */
+
+.badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 22px;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-sm);
+  background: var(--bg-selected);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.badge:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  left: 0;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: 400px;
+  padding: var(--space-12);
+  border-radius: var(--radius-popover);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-card);
+  white-space: normal;
+}
+
+.badge:hover .popover,
+.badge:focus-visible .popover {
+  display: flex;
+}
+
+.heading {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: var(--space-12);
+  font: var(--text-caption);
+}
+
+.when {
+  font: var(--text-mono-s);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.prompt {
+  color: var(--text-primary);
+}

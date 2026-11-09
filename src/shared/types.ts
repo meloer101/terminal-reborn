@@ -98,6 +98,14 @@ export interface Session {
   dispatchBase?: 'snapshot'
   /** The model `wavi run --model` asked for (the sidebar shows it, Figma 44B). Persisted with dispatchedBy. */
   dispatchModel?: string
+  /** The 定时任务 run that opened this session (PRD F24): its task, the task's name then, and the time it was due. Persisted. */
+  scheduledBy?: ScheduledBy
+}
+
+export interface ScheduledBy {
+  id: string
+  name: string
+  planned: number
 }
 
 /**

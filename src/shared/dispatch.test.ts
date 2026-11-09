@@ -57,6 +57,20 @@ describe('parseWaviArgv → parseWaviCommand', () => {
     return args.kind === 'command' ? parseWaviCommand(args.command) : args
   }
 
+  it('reads wavi schedule, schedules and unschedule (PRD F24)', () => {
+    expect(command('schedule', 'check', 'CI', '--every', '30m')).toEqual({ ok: true, command: { name: 'schedule', text: 'check CI', when: { every: 30 } } })
+    expect(command('schedule', 'weekly', 'notes', '--weekdays=09:00', '--new', 'codex', '--title', 'Notes')).toEqual({
+      ok: true,
+      command: { name: 'schedule', text: 'weekly notes', when: { weekdays: '09:00' }, title: 'Notes', agent: 'codex' }
+    })
+    expect(command('schedule', 'x', '--every', '5m')).toMatchObject({ ok: false })
+    expect(command('schedule', 'x', '--every', '30m', '--daily', '09:00')).toMatchObject({ ok: false })
+    expect(command('schedule', 'x', '--at', '25:00')).toMatchObject({ ok: false })
+    expect(command('schedule', 'x', '--new', 'nope', '--at', '14:30')).toMatchObject({ ok: false })
+    expect(command('schedules')).toEqual({ ok: true, command: { name: 'schedules' } })
+    expect(command('unschedule', 'abc-1')).toEqual({ ok: true, command: { name: 'unschedule', id: 'abc-1' } })
+  })
+
   it('reads each command with its flags, in any order', () => {
     expect(command('run', 'grok', 'Review', 'src/auth', '--base', 'snapshot', '--model=grok-4.7', '--title', 'Auth review')).toEqual({
       ok: true,

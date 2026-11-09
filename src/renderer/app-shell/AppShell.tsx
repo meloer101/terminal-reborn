@@ -20,13 +20,16 @@ import { CommandPalette } from '../command-palette/CommandPalette'
 import { StatusBridge } from '../status/StatusBridge'
 import { AppearanceBridge } from '../appearance/AppearanceBridge'
 import { SettingsDialog } from '../settings/SettingsDialog'
+import { SchedulesDialog } from '../schedules/SchedulesDialog'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
 import { MergeSheet } from '../panels/merge/MergeSheet'
 import { startPrAutomation } from '../pull-requests/auto-fix'
 import { startShipRuns } from '../pull-requests/ship-runner'
 import { startDispatchBridge } from '../dispatch/bridge'
 import { startRemoteBridge } from '../remote/bridge'
+import { startScheduleRunner } from '../schedules/runner'
 import { DispatchStrip } from '../dispatch/DispatchStrip'
+import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
 import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
 import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
 import { PlanStrip } from '../attempts/PlanStrip'
@@ -99,6 +102,7 @@ export function AppShell() {
   useEffect(() => startShipRuns(), [])
   useEffect(() => startDispatchBridge(), [])
   useEffect(() => startRemoteBridge(), [])
+  useEffect(() => startScheduleRunner(), [])
   useEffect(() => startTaskSources(), [])
   useEffect(() => startConflictRadarBridge(), [])
   useEffect(() => startBranchSync(), [])
@@ -131,6 +135,7 @@ export function AppShell() {
             <SessionErrorBar />
             <SetupStrip />
             <DispatchStrip />
+            <ScheduleConfirmStrip />
             <HeldReportsStrip />
             <HeldAttemptReportStrip />
             <PlanStrip />
@@ -158,6 +163,7 @@ export function AppShell() {
       <StatusBridge />
       <AppearanceBridge />
       <SettingsDialog />
+      <SchedulesDialog />
       {isKey && <NewSessionSheet />}
       {isKey && <SameTaskSheet />}
       <MergeSheet />

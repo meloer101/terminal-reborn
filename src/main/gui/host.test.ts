@@ -218,6 +218,8 @@ describe('GuiHost · Claude stream-json', () => {
     const second = stateOf(h, 'c9').items.find((i) => i.kind === 'user' && i.text === 'second')!
     const edited = await h.host.edit('c9', second.id, 'second, edited')
     expect(edited.ok).toBe(true)
+    // The shorter conversation's context is not the longer one's: unknown until its next reply.
+    expect(h.status).toContainEqual({ type: 'context', context: null })
     await until(() => !stateOf(h, 'c9').busy && texts(stateOf(h, 'c9')).includes('text:Hello: second, edited'))
     expect(texts(stateOf(h, 'c9'))).toEqual(['user:first', 'text:Hello: first', 'user:second, edited', 'text:Hello: second, edited'])
     expect(prepared.at(-1)).toMatchObject({ resumeAgentSessionId: 'fake-claude-session', resumeAt: 'reply-1', initialPrompt: 'second, edited' })
@@ -665,6 +667,37 @@ describe('GuiHost · Pi rpc (PRD F23 v1.160)', () => {
     expect(h.status.at(-1)).toEqual({ type: 'stop-failure', message: 'No API key for deepseek' })
     expect(stateOf(h, 'p3').busy).toBe(false)
   }, 30_000)
+})
+
+describe('GuiHost · context (Figma 52G)', () => {
+  const contexts = (h: Harness) => h.status.flatMap((e) => (e.type === 'context' ? [e.context] : []))
+
+  it('Codex: its own thread’s thread/tokenUsage/updated', async () => {
+    const h = harness()
+    await h.host.open(launchOf('codex', 'k1'), h.owner)
+    await ready(h, 'k1')
+    await h.host.send('k1', { text: 'measure slow', attachments: [] })
+    await until(() => contexts(h).length > 0)
+    expect(contexts(h)).toEqual([expect.objectContaining({ percent: 50, usedTokens: 135200, windowTokens: 258400 })])
+  })
+
+  it('ACP: usage_update', async () => {
+    const h = harness()
+    await h.host.open(launchOf('grok', 'k2'), h.owner)
+    await ready(h, 'k2')
+    await h.host.send('k2', { text: 'measure slow', attachments: [] })
+    await until(() => contexts(h).length > 0)
+    expect(contexts(h)).toEqual([{ percent: 27, usedTokens: 53000, windowTokens: 200000 }])
+  })
+
+  it('Pi: get_session_stats after a turn', async () => {
+    const h = harness()
+    await h.host.open(launchOf('pi', 'k3'), h.owner)
+    await ready(h, 'k3')
+    await h.host.send('k3', { text: 'measure', attachments: [] })
+    await until(() => contexts(h).length > 0)
+    expect(contexts(h)).toEqual([{ percent: 30, usedTokens: 60000, windowTokens: 200000 }])
+  })
 })
 
 describe('GuiHost · reattach edge cases (a stub link)', () => {

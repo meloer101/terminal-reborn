@@ -8,7 +8,8 @@
 
 ## 当前位置
 
-- 2026-11-09：GUI 派活方的对话里画出派活（PRD v1.164，Figma 68′）：`wavi run` 的位置是扇出图（也是确认），输入框上方是派活条，派活报告是报告卡、不再是用户气泡。
+- 2026-11-09：GUI 派活方的对话里画出派活（PRD v1.166，Figma 68′）：`wavi run` 的位置是扇出图（也是确认），输入框上方是派活条，派活报告是报告卡、不再是用户气泡。
+- 2026-11-09：GUI 会话的 context 圆环有数了（PRD v1.164）：Claude、Codex、ACP、Pi 的 GUI 会话各自从协议里报 context 用量，点圆环能看到 context 一行。
 - 2026-11-09：`wavi run` 派出的子会话也能开成 GUI（PRD v1.163）：派活方是 GUI、子会话的 agent 能跑 GUI 时默认开 GUI，`--ui gui|cli` 指定。
 - 2026-11-08：F17 新端口自动打开浏览器（PRD v1.162）：当前 worktree 出现新的监听端口时，右侧栏切到浏览器并打开它；其他 worktree 的端口标签变亮，切过去再开；设置 · Worktree 可关，默认开。
 - 2026-11-08：手机新建的会话一律是 GUI 会话（agent 有 GUI 时），手机打开的会话算看过、重启后没接上的会启动（PRD v1.161）：手机上的模型、思考程度、模式从建好起就能用按钮改。新建时在智能体下面选模型（Figma 第 67 节），进会话后改思考程度和模式（会话设置里「权限」改叫「模式」）。分支 claude/ios-model-effort-selection-48b92b。
@@ -201,7 +202,10 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 4. 小补丁
    - [ ] 收件箱：snooze（隐藏到需要你时，要批准、要回答、出错时提前冒出来）；PR 已合并时提示可以归档。不做 3 天自动收起
    - [ ] 额度用完：设置 · 自动化加「额度恢复后自动继续」，默认关；snooze 到重置时间。以后：换一个账号继续（T3 也还没做）
-5. [ ] 定时任务：按间隔或固定时间；每次开一个新会话（新 worktree，首条消息放在命令行上），或在已有会话空闲时发一条；调度放在 PTY 守护进程，⌘Q 后照样跑；列表写明会发什么、发给谁；不做 webhook
+5. [x] 定时任务（2026-11-09，PRD F24 v1.165，Figma 67′ `1058:46205`）：侧栏底部「定时任务」/ ⇧⌘T / ⌘K 打开弹窗；开新会话（新 worktree、智能体 · 界面 · 模型 · 权限、首条消息在命令行上）或发给已有会话（空闲才发，最多挂一条）；间隔 · 每天 · 工作日 · 每周 · 一次，错过了只补最近一次；前置检查、额度用完、上一次还在跑时跳过，连续 3 次失败暂停；没改动自动归档；⌘Q 后由 PTY 守护进程到点 `open -g -j` 后台打开 Wavi（不做 webhook）；`wavi schedule` 走确认条、7 天到期；Claude 的 `/loop` 只显示。纯逻辑 `src/shared/schedule.ts`，调度 `src/main/schedules/`（`schedules.json`，main 唯一写者），守护进程 `src/pty-daemon/wake.ts`，执行和界面 `src/renderer/schedules/`。测试：`schedule.test.ts`、`main/schedules/scheduler.test.ts`、`pty-daemon/wake.test.ts`、`renderer/schedules/*.test.ts`、`dispatch.test.ts`（wavi schedule）、`normalize.test.ts`（session_crons），e2e `schedules.spec.ts`（建任务、立即运行开出「定时 · 分支」会话且命令行带 `--permission-mode acceptEdits -- <消息>`、发给已有会话、/loop 标记，两种主题截图 `test-results/schedules/`）
+   - [ ] 打包版实测：⌘Q 后到点由守护进程后台打开 Wavi 并跑完（开发版不会被打开，下次启动按「错过了」补）
+   - [ ] e2e 没覆盖：`wavi schedule` 的确认条（只有解析的单测）、到点触发（只测了立即运行；到点的判断在 scheduler 单测里用假时钟测）、自动归档
+   - [ ] CLI 会话的权限只有 Claude 有启动参数；Codex（`--approve-for-me` / `-a`）等其他 CLI 的映射要实测后再加
 6. [ ] 多仓库项目（必须做，单独设计）：先读社区 fork LoganRupe/t3code 的 `multi-repo-workspaces` 分支和 t3code#7041（▲85）、#15752，再出方案。方向：一个项目包含多个仓库；会话的工作目录是一个工作区文件夹，每个选中的仓库各开一个 worktree，按原来的相对位置摆放；变更、合并、PR 和冲突雷达按仓库分组
 7. [ ] 原生适配更多 agent（作者 2026-10-24 定，取代原来的“在一个窗口里让 agent 来回切换”：同一个窗口里开 Claude / Codex、切换、分屏都已经有了，中途换 agent 不做）：现在新建会话只能选 Claude 和 Codex，要加上 OpenCode、Grok、Pi、Gemini、Qwen 等，能加的尽量都加；只接原生 agent 用它自己的模型（作者 2026-10-24 定：DeepSeek、Kimi、GLM 这类“Claude Code 换接入地址”不做，用户自己用 CC Switch 切）。底线：和 Claude / Codex 一样，在新建会话面板里选了就能直接启动。做到多深（作者 2026-10-24 定，依据是读完 Orca、cmux、Superset、T3 Code、Vibe Kanban 的实现和各家 CLI 的接入口）：
    - [x] agent 抽成一张能力表（2026-10-24，`src/shared/agents.ts`，19 家：命令、安装命令、首条消息、续上对话、模型、状态来源；`AgentKind` = 这些 + 终端）。只认 Claude / Codex 的功能（派活、额度、后台审阅、一题多解、发送协议的占位符）改成显式判断，其他 CLI 用通用发送参数
@@ -271,8 +275,9 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 空会话的 agent 菜单列出每家的模型（PRD v1.159）：`src/main/gui/catalog.ts` 只握手不开对话（Claude `initialize`、Codex `model/list`、Grok ACP `initialize`、`cursor-agent models`、Pi `--mode rpc --no-session`），`gui.models` IPC；加载中 / 失败重试；Pi 列为已装（要 pi-acp）；本机五家实测、会话文件数不变
 - [x] Pi 直接用 `pi --mode rpc` 做 GUI 会话（PRD v1.160，照 Paseo / T3 Code，不再要 pi-acp）：`src/main/gui/pi-rpc.ts`（事件、对话框、选择器、会话文件历史）、`pi-driver.ts`，权限扩展 `resources/hooks/wavi-pi-gui.js`；换模型 / 推理强度在同一会话上重启（rpc 的 `set_model` 会写 `~/.pi/agent/settings.json`）；pty-host 认得 Pi 的 `extension_ui_response`（重开不再问已答的）。测试 `pi-rpc.test.ts`、`host.test.ts`（假 Pi `fixtures/fake-pi.mjs`）、e2e `gui-pi.spec.ts` 5 个；真 Pi 0.84.1 + DeepSeek 在 app 里跑过一轮工具、换模型、停止、重开；独立 review 8 条（高 1、中 2、低 5）已修。没做：app 关着时接受编辑下的 edit 要等重新打开（同 ACP agent）
 - [x] 派活的子会话开成 GUI（PRD v1.163）：`childUi`（`src/shared/dispatch.ts`）、`wavi run --ui`、`addBackgroundSession` 带界面、等「开始」的请求存界面；单测覆盖规则和存盘
-- [x] GUI 派活可视化（PRD v1.164，Figma 68′）：`src/renderer/gui/Dispatch.tsx`（扇出图、派活条、报告卡和通知），`src/renderer/dispatch/view.ts`（两处共用的视图），`src/shared/dispatch.ts` 读回 `wavi run` 的回答、报告和通知；e2e `gui-dispatch.spec.ts`（假 Claude 真跑 `wavi run`，两种主题截图在 `test-results/gui-dispatch/`）
+- [x] GUI 派活可视化（PRD v1.166，Figma 68′）：`src/renderer/gui/Dispatch.tsx`（扇出图、派活条、报告卡和通知），`src/renderer/dispatch/view.ts`（两处共用的视图），`src/shared/dispatch.ts` 读回 `wavi run` 的回答、报告和通知；e2e `gui-dispatch.spec.ts`（假 Claude 真跑 `wavi run`，两种主题截图在 `test-results/gui-dispatch/`）
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
+- [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
 - [ ] Figma 65 没测：真 Claude / Codex 开着快速跑一轮（作者账户 `extra_usage_disabled`）；作者机器上空会话不显示 59G（新配置 + 真 Claude 复现不出，当时 app 是 main 构建、守护进程是 v0.14 分支拉起的，原因未确认）
 - [ ] 第二阶段（作者 2026-11-07 定：输入框、对话字号体系、工具行 / subagent / skills 一起调研、一起出 Figma 稿，保持视觉统一）：对话不透明度低时和背景融在一起；shell 命令不显示 Claude 的 `description`、输出只留末尾 2000 字、运行中不流式；`system/init` 的 `agents` 没读、Codex 没有 `/` 菜单；Claude MCP 工具丢了服务器名；气泡里不显示发出的图片、agent 输出的图片丢弃；费用 / 用量 / 额度事件不进对话流

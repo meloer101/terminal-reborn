@@ -214,6 +214,7 @@ export type SessionPatch = Partial<
     | 'dispatchTask'
     | 'dispatchBase'
     | 'dispatchModel'
+    | 'scheduledBy'
     | 'guiPermission'
     | 'guiPlan'
   >

@@ -3,6 +3,7 @@
 // way to each dispatcher, and messages held for 送进去 — when the session has no channel, nobody should be typed over,
 // delivery failed, or the hourly budget is used. The waits, the queues and the held messages are saved with the
 // workspace (saved-runs.ts), so a reload does not drop what an agent was promised.
+import type { CliPermission } from '@shared/gui-chat'
 import { create } from 'zustand'
 import { emptyQueue, type ChildReport, type HeldItem, type PendingStart, type ReportQueue } from '@shared/dispatch'
 
@@ -13,7 +14,7 @@ import type { SessionId } from '@shared/types'
 interface State {
   confirms: PendingStart[]
   /** One-shot spawn extras for a child's first launch (taken by the terminal). */
-  launches: Record<SessionId, { initialPrompt: string; model?: string } | undefined>
+  launches: Record<SessionId, DispatchLaunch | undefined>
   /** A child's last message, whole (the Stop hook's `last_assistant_message`, tail-clipped by main). */
   messages: Record<SessionId, string | undefined>
   queues: Record<SessionId, ReportQueue | undefined>
@@ -59,12 +60,19 @@ export function takeConfirms(callIds: readonly string[]): PendingStart[] {
   return taken
 }
 
-export function setLaunch(id: SessionId, launch: { initialPrompt: string; model?: string }): void {
+/** A new session's first launch: its first message, model and (a 定时任务's, PRD F24) 权限 for a CLI's launch flag. */
+export interface DispatchLaunch {
+  initialPrompt: string
+  model?: string
+  permission?: CliPermission
+}
+
+export function setLaunch(id: SessionId, launch: DispatchLaunch): void {
   useDispatch.setState((s) => ({ launches: { ...s.launches, [id]: launch } }))
 }
 
 /** The child's first message and model, once: a later spawn of the same session resumes instead. */
-export function takeDispatchLaunch(id: SessionId): { initialPrompt: string; model?: string } | undefined {
+export function takeDispatchLaunch(id: SessionId): DispatchLaunch | undefined {
   const launch = useDispatch.getState().launches[id]
   if (launch) useDispatch.setState((s) => ({ launches: { ...s.launches, [id]: undefined } }))
   return launch

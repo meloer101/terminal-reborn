@@ -5,6 +5,7 @@
 // Electron-free.
 
 import type { GuiAnswer, GuiConfigOption, GuiPermission } from '@shared/gui-chat'
+import { parseCodexThreadTokenUsage } from '@shared/session-meta'
 import { CODEX_APPROVAL, codexAnswerResult, codexConfig, codexTurnParams, createCodexNormalizer, isCodexLevel } from './codex-app-server'
 import { isRec, isResponse, isServerRequest, RpcClient, str, type DriverIO, type DriverOptions, type GuiDriver, type Rec } from './driver'
 import { isImagePath, withPaths } from './launch'
@@ -126,6 +127,11 @@ export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriv
         const name = str(params.threadName)
         // Not knowing our thread yet (a truncated replay), it could be another one's: `thread/resume` brings ours.
         if (name && threadId && params.threadId === threadId) io.title(name)
+        return
+      }
+      if (method === 'thread/tokenUsage/updated') {
+        const context = params.threadId === threadId ? parseCodexThreadTokenUsage(params) : undefined
+        if (context) io.context(context)
         return
       }
       if (method === 'turn/started') {

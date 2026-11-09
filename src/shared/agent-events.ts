@@ -62,11 +62,39 @@ export type AgentEvent =
    */
   | { type: 'subagents'; items: SubagentInfo[] }
   /**
+   * Claude's own timers in this session (`/loop`, CronCreate; Stop hook `session_crons`), the whole list each turn,
+   * [] when none (PRD F24, Figma 67I′). Display only: Wavi never changes them. Not activity.
+   */
+  | { type: 'crons'; items: SessionCron[] }
+  /**
    * The model, effort and permission mode the agent reports (Claude statusLine `model.id` / `effort.level`, SessionStart
    * `model`, `permission_mode` on prompt and stop hooks; Codex `model`), for the phone's 会话设置 (PRD F22 v1.144). Only
    * what this payload carried. Not activity.
    */
   | { type: 'agent-settings'; model?: string; effort?: string; permission?: string }
+
+/** One of Claude's own session timers: its 5-field cron, whether it repeats, and the prompt it sends. */
+export interface SessionCron {
+  schedule: string
+  recurring: boolean
+  prompt: string
+}
+
+// A cron as Figma 67I′ reads it: every-N-minutes → `每 10 分钟`, every-N-hours → `每 2 小时`, `0 17 * * *` → `每天 17:00`;
+// anything else as written.
+export function cronLabel(cron: string): string {
+  const f = cron.trim().split(/\s+/)
+  if (f.length !== 5) return cron
+  const [min, hour, dom, mon, dow] = f as [string, string, string, string, string]
+  const rest = dom === '*' && mon === '*' && dow === '*'
+  const n = (s: string, prefix: string): number | null => (s.startsWith(prefix) && /^\d+$/.test(s.slice(prefix.length)) ? Number(s.slice(prefix.length)) : null)
+  if (rest && hour === '*' && n(min, '*/') !== null) return `每 ${n(min, '*/')} 分钟`
+  if (rest && hour === '*' && min === '*') return '每分钟'
+  if (rest && /^\d+$/.test(min) && n(hour, '*/') !== null) return `每 ${n(hour, '*/')} 小时`
+  if (rest && /^\d+$/.test(min) && hour === '*') return '每小时'
+  if (rest && /^\d+$/.test(min) && /^\d+$/.test(hour)) return `每天 ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
+  return cron
+}
 
 /** A subagent the agent started inside its session: never a Wavi session (PRD F21 v1.109). */
 export interface SubagentInfo {

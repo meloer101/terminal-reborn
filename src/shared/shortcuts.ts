@@ -29,7 +29,9 @@ export const MENU_COMMANDS = [
   'open-project-in-window',
   'pane-to-window',
   // 设置 · 额度 straight away (PRD F11 · 额度页).
-  'open-usage'
+  'open-usage',
+  // 定时任务 (PRD F24).
+  'open-schedules'
 ] as const
 
 export type MenuCommand = (typeof MENU_COMMANDS)[number]
@@ -67,6 +69,7 @@ export const SHORTCUTS = {
   'open-project-in-window': 'Shift+CmdOrCtrl+O',
   settings: 'CmdOrCtrl+,',
   'open-usage': 'Shift+CmdOrCtrl+U',
+  'open-schedules': 'Shift+CmdOrCtrl+T',
   'font-bigger': 'CmdOrCtrl+Plus',
   'font-smaller': 'CmdOrCtrl+-',
   'font-reset': 'CmdOrCtrl+0'

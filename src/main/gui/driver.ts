@@ -3,6 +3,7 @@
 
 import { randomInt } from 'node:crypto'
 import type { GuiAnswer, GuiEvent, GuiPermission } from '@shared/gui-chat'
+import type { ContextUsage } from '@shared/session-meta'
 
 export type Rec = Record<string, unknown>
 export const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -26,6 +27,11 @@ export interface DriverIO {
   agentSession(id: string): void
   /** The agent named the conversation (Codex `thread/name/updated` or a thread's `name`, ACP `session_info_update`). */
   title(title: string): void
+  /**
+   * How full the context window is, from the protocol's own figures (no statusLine or rollout runs for a GUI session);
+   * null when the agent says it does not know right now (just compacted).
+   */
+  context(context: ContextUsage | null): void
   /** A turn ended (status: Stop / StopFailure for the agents without hooks). */
   turnEnd(outcome: { failed: boolean; message?: string }): void
   /** The handshake failed; shown above the composer. */
