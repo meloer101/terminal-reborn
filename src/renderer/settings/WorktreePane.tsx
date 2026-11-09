@@ -8,11 +8,15 @@ import styles from './WorktreePane.module.css'
 export function WorktreePane({
   base,
   update,
+  autoOpen,
+  updateAutoOpen,
   archiveAfterMerge,
   updateArchiveAfterMerge
 }: {
   base: number
   update: (base: number) => void
+  autoOpen: boolean
+  updateAutoOpen: (on: boolean) => void
   archiveAfterMerge: boolean
   updateArchiveAfterMerge: (on: boolean) => void
 }) {
@@ -26,6 +30,12 @@ export function WorktreePane({
           </Row>
           <p className={styles.hint}>
             每个目录分到 10 个连续端口。TR_PORT 是其中的第一个。已经分过的目录仍用原来的一段；改起点只影响之后新分的目录。
+          </p>
+          <Row label="新端口自动打开浏览器">
+            <Toggle label="新端口自动打开浏览器" checked={autoOpen} onChange={updateAutoOpen} />
+          </Row>
+          <p className={styles.hint}>
+            会话里出现新的监听端口（例如 agent 启动了 dev server）时，在右侧栏的浏览器里打开。不在当前会话的端口不会切走你的画面，端口标签变亮，切过去时再打开。每个端口只自动打开一次，服务重启后刷新页面。
           </p>
         </Section>
         <Section title="归档">

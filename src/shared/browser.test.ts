@@ -4,6 +4,7 @@ import {
   decidePopup,
   EMPTY_CONSOLE,
   formatErrorsForAgent,
+  freshPort,
   MAX_AGENT_TEXT,
   mergePorts,
   pageChord,
@@ -326,5 +327,19 @@ describe('pageChord', () => {
     expect(pageChord(key('KeyK', { meta: false }))).toBeNull()
     expect(pageChord(key('KeyK', { control: true }))).toBeNull()
     expect(pageChord(key('KeyK', {}, 'keyUp'))).toBeNull()
+  })
+})
+
+describe('freshPort (PRD F17 · 自动打开)', () => {
+  const at = (port: number, pid = 1) => ({ port, pid, host: 'localhost', label: '' })
+
+  it('is the lowest port that was not listening in the last report', () => {
+    expect(freshPort([at(3000)], [at(3000), at(5174), at(5173)])?.port).toBe(5173)
+  })
+
+  it('is null for the baseline report (servers already running) and when nothing is new', () => {
+    expect(freshPort(undefined, [at(5173)])).toBeNull()
+    expect(freshPort([at(5173)], [at(5173, 2)])).toBeNull()
+    expect(freshPort([at(5173)], [])).toBeNull()
   })
 })

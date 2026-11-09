@@ -418,6 +418,15 @@ export function portsChanged(a: readonly ListeningPort[], b: readonly ListeningP
   return b.some((p) => !left.has(key(p)))
 }
 
+/** The lowest port in `next` that `prev` did not list; null when `prev` is unknown (the baseline) or nothing is new. */
+export function freshPort(prev: readonly ListeningPort[] | undefined, next: readonly ListeningPort[]): ListeningPort | null {
+  if (!prev) return null
+  const before = new Set(prev.map((p) => p.port))
+  let fresh: ListeningPort | null = null
+  for (const p of next) if (!before.has(p.port) && (!fresh || p.port < fresh.port)) fresh = p
+  return fresh
+}
+
 // ── IPC contract (wired into TrApi in ipc.ts) ──────────────────────────────────────────────────────────────────
 
 /** The page well's rectangle in the window, CSS px. */

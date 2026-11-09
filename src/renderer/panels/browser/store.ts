@@ -9,9 +9,11 @@ interface BrowserStore {
   ports: Record<SessionId, ListeningPort[]>
   /** One line under the toolbar, per worktree. */
   notices: Record<string, string>
+  /** A new port of a session whose worktree is not on screen: it opens when the user goes there (auto-open.ts). */
+  pendingPorts: Record<SessionId, number>
 }
 
-export const useBrowser = create<BrowserStore>(() => ({ pages: {}, ports: {}, notices: {} }))
+export const useBrowser = create<BrowserStore>(() => ({ pages: {}, ports: {}, notices: {}, pendingPorts: {} }))
 
 let listening = false
 

@@ -29,7 +29,7 @@ export function resolveSessionPaths(sessionId: SessionId, paths: readonly string
   return root ? window.tr.worktree.resolveLinks(root, paths) : Promise.resolve(paths.map(() => null))
 }
 
-function worktreeOf(sessionId: SessionId): string | undefined {
+export function worktreeOf(sessionId: SessionId): string | undefined {
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === sessionId)
   return state.worktrees.find((w) => w.id === session?.worktreeId)?.path
@@ -50,6 +50,11 @@ export function openLink(sessionId: SessionId, url: string, target: LinkTarget):
     return
   }
   showSession(sessionId)
+  openInBrowser(worktree, url)
+}
+
+/** Loads `url` in the worktree's page and shows the right panel's 浏览器 view; the session on screen stays. */
+export function openInBrowser(worktree: string, url: string): void {
   setNotice(worktree, null)
   window.tr.browser.navigate(worktree, url)
   useWorkspace.getState().setRightPanel('browser')

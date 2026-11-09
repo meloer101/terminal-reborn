@@ -8,6 +8,8 @@ import styles from './PortTags.module.css'
 /** Renders nothing when this session is not listening. */
 export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: number }) {
   const ports = useBrowser((s) => s.ports[sessionId])
+  // 自动打开 waits for the user to go to this worktree (auto-open.ts).
+  const pending = useBrowser((s) => s.pendingPorts[sessionId])
   if (!ports || ports.length === 0) return null
   const shown = ports.slice(0, max)
   const rest = ports.length - shown.length
@@ -15,12 +17,14 @@ export function PortTags({ sessionId, max = 2 }: { sessionId: string; max?: numb
     <span className={styles.ports} data-testid="port-tags">
       {shown.map((p) => {
         const url = portUrl(p)
+        const waiting = p.port === pending
         return (
           <button
             key={`${p.host}:${p.port}:${p.pid}`}
             type="button"
             className={styles.port}
-            title={`${p.label ? `${p.label} · ` : ''}在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`}
+            data-pending={waiting || undefined}
+            title={`${waiting ? '新端口，切到这个会话时自动打开 · ' : ''}${p.label ? `${p.label} · ` : ''}在内置浏览器打开 ${url} · ⌥ 点击用系统浏览器打开 · 右键结束进程`}
             aria-label={`打开 ${url}`}
             onClick={(e) => {
               e.stopPropagation()

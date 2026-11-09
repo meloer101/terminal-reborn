@@ -24,6 +24,11 @@
   cursor: default;
 }
 
+/* A new port that opens once the user goes to its session (自动打开). */
+.port[data-pending] {
+  color: var(--text-primary);
+}
+
 .port:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
