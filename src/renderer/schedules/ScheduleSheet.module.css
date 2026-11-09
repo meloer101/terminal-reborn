@@ -1,7 +1,7 @@
 /* 新建定时任务 (Figma 67D′–67G′): the 新建会话 sheet (new-session/NewSessionSheet.module.css) a little wider, with the
  * task's own inputs. Every input is a fill without a border, 30 high, like the sheet's select. */
 
-.sheet {
+.sheet.sheet {
   width: 600px;
   max-height: calc(100vh - 2 * var(--space-24));
 }
@@ -57,11 +57,17 @@
 }
 
 .time {
-  width: 88px;
+  width: 76px;
 }
 
 .date {
-  width: 136px;
+  width: 124px;
+}
+
+/* The system's clock and calendar buttons: typing (and arrow keys) is enough, and they cut the value off. */
+.time::-webkit-calendar-picker-indicator,
+.date::-webkit-calendar-picker-indicator {
+  display: none;
 }
 
 .text:focus-visible,

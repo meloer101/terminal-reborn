@@ -1,7 +1,8 @@
 /* 定时任务 (Figma 67A′–67C′): the sheet's glass (new-session/NewSessionSheet.module.css), 880 wide. Rows are 56 high
  * with no separators; the hovered and unfolded row get the hover fill. Colour only for an outcome's mark. */
 
-.dialog {
+/* Doubled: the sheet's own 560 (another module, loaded in no fixed order) must not win. */
+.dialog.dialog {
   width: 880px;
   max-height: calc(100vh - 2 * var(--space-40));
 }

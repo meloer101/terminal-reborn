@@ -136,7 +136,7 @@ function Row({ schedule }: { schedule: Schedule }) {
   const last = schedule.runs[0]
   const state = schedule.paused === 'failures' ? '已暂停：连续 3 次失败' : !schedule.enabled ? '已关闭' : null
   return (
-    <div className={styles.item} role="listitem">
+    <div className={styles.item} role="listitem" data-testid="schedule-row">
       <div className={styles.row} data-expanded={expanded} data-off={!schedule.enabled} onClick={() => toggleExpanded(schedule.id)}>
         <span className={styles.toggle} onClick={(e) => e.stopPropagation()}>
           <Toggle checked={schedule.enabled} label={`${schedule.name}：开关`} onChange={(on) => void window.tr.schedules.setEnabled(schedule.id, on)} />

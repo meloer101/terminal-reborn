@@ -1,6 +1,6 @@
 # Wavi 路线图与进度
 
-> 最后更新：2026-11-08
+> 最后更新：2026-11-09
 > 本文只记**做到哪了**：已完成什么、正在做什么、还没做什么。产品最终长什么样写在 [PRD](PRD.md)。
 > 维护规则：完成、新增、取消一项时直接改这里（勾选、移动或划掉），更新顶部日期；不要另建任务单、验收记录或计划文档。验收结论写进对应里程碑下面，几行即可。
 
@@ -199,7 +199,10 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 4. 小补丁
    - [ ] 收件箱：snooze（隐藏到需要你时，要批准、要回答、出错时提前冒出来）；PR 已合并时提示可以归档。不做 3 天自动收起
    - [ ] 额度用完：设置 · 自动化加「额度恢复后自动继续」，默认关；snooze 到重置时间。以后：换一个账号继续（T3 也还没做）
-5. [ ] 定时任务：按间隔或固定时间；每次开一个新会话（新 worktree，首条消息放在命令行上），或在已有会话空闲时发一条；调度放在 PTY 守护进程，⌘Q 后照样跑；列表写明会发什么、发给谁；不做 webhook
+5. [x] 定时任务（2026-11-09，PRD F24 v1.163，Figma 67′ `1058:46205`）：侧栏底部「定时任务」/ ⇧⌘T / ⌘K 打开弹窗；开新会话（新 worktree、智能体 · 界面 · 模型 · 权限、首条消息在命令行上）或发给已有会话（空闲才发，最多挂一条）；间隔 · 每天 · 工作日 · 每周 · 一次，错过了只补最近一次；前置检查、额度用完、上一次还在跑时跳过，连续 3 次失败暂停；没改动自动归档；⌘Q 后由 PTY 守护进程到点 `open -g -j` 后台打开 Wavi（不做 webhook）；`wavi schedule` 走确认条、7 天到期；Claude 的 `/loop` 只显示。纯逻辑 `src/shared/schedule.ts`，调度 `src/main/schedules/`（`schedules.json`，main 唯一写者），守护进程 `src/pty-daemon/wake.ts`，执行和界面 `src/renderer/schedules/`。测试：`schedule.test.ts`、`main/schedules/scheduler.test.ts`、`pty-daemon/wake.test.ts`、`renderer/schedules/*.test.ts`、`dispatch.test.ts`（wavi schedule）、`normalize.test.ts`（session_crons），e2e `schedules.spec.ts`（建任务、立即运行开出「定时 · 分支」会话且命令行带 `--permission-mode acceptEdits -- <消息>`、发给已有会话、/loop 标记，两种主题截图 `test-results/schedules/`）
+   - [ ] 打包版实测：⌘Q 后到点由守护进程后台打开 Wavi 并跑完（开发版不会被打开，下次启动按「错过了」补）
+   - [ ] e2e 没覆盖：`wavi schedule` 的确认条（只有解析的单测）、到点触发（只测了立即运行；到点的判断在 scheduler 单测里用假时钟测）、自动归档
+   - [ ] CLI 会话的权限只有 Claude 有启动参数；Codex（`--approve-for-me` / `-a`）等其他 CLI 的映射要实测后再加
 6. [ ] 多仓库项目（必须做，单独设计）：先读社区 fork LoganRupe/t3code 的 `multi-repo-workspaces` 分支和 t3code#7041（▲85）、#15752，再出方案。方向：一个项目包含多个仓库；会话的工作目录是一个工作区文件夹，每个选中的仓库各开一个 worktree，按原来的相对位置摆放；变更、合并、PR 和冲突雷达按仓库分组
 7. [ ] 原生适配更多 agent（作者 2026-10-24 定，取代原来的“在一个窗口里让 agent 来回切换”：同一个窗口里开 Claude / Codex、切换、分屏都已经有了，中途换 agent 不做）：现在新建会话只能选 Claude 和 Codex，要加上 OpenCode、Grok、Pi、Gemini、Qwen 等，能加的尽量都加；只接原生 agent 用它自己的模型（作者 2026-10-24 定：DeepSeek、Kimi、GLM 这类“Claude Code 换接入地址”不做，用户自己用 CC Switch 切）。底线：和 Claude / Codex 一样，在新建会话面板里选了就能直接启动。做到多深（作者 2026-10-24 定，依据是读完 Orca、cmux、Superset、T3 Code、Vibe Kanban 的实现和各家 CLI 的接入口）：
    - [x] agent 抽成一张能力表（2026-10-24，`src/shared/agents.ts`，19 家：命令、安装命令、首条消息、续上对话、模型、状态来源；`AgentKind` = 这些 + 终端）。只认 Claude / Codex 的功能（派活、额度、后台审阅、一题多解、发送协议的占位符）改成显式判断，其他 CLI 用通用发送参数
