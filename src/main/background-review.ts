@@ -47,6 +47,7 @@ import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { headCommit, reviewDiff } from './git-graph'
 import { getSettings } from './settings'
+import { isWorkspaceDir } from './workspace-store'
 import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 import { killGroup, searchPath } from './git/run'
 
@@ -497,10 +498,15 @@ export async function turnEnded(owner: WebContents, root: string, agent: ReviewA
   await startReview(owner, { root, agent, trigger: 'turn' }).catch(() => {})
 }
 
-const isRoot = (value: unknown): value is string => typeof value === 'string' && value.startsWith('/') && value.length <= MAX_ROOT && !value.includes('\0')
+/** A workspace folder (worktree or project root), as every other folder IPC requires. */
+const isRoot = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith('/') && value.length <= MAX_ROOT && !value.includes('\0') && isWorkspaceDir(value)
 
 export function registerBackgroundReviewHandlers(): void {
-  ipcMain.handle(REVIEW_IPC.start, (event, raw: unknown) => startReview(event.sender, raw))
+  ipcMain.handle(REVIEW_IPC.start, (event, raw: unknown) => {
+    if (!isRoot(typeof raw === 'object' && raw !== null ? (raw as { root?: unknown }).root : undefined)) throw new Error('not a workspace folder')
+    return startReview(event.sender, raw)
+  })
   ipcMain.on(REVIEW_IPC.cancel, (_event, root: unknown) => {
     if (isRoot(root)) cancelReview(root)
   })
