@@ -12,7 +12,9 @@
   --term-headroom: var(--titlebar-height);
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  /* clip, not hidden: a hidden box can still be scrolled, and with the grid shifted down (headroom) focusing xterm's
+     textarea scrolled the card by the shift, putting the first rows back under the header. */
+  overflow: clip;
   /* Its own stacking context, so the edge overlay below never draws over a header's popover hanging into the card. */
   isolation: isolate;
   border-radius: var(--radius-window);
