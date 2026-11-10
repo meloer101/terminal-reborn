@@ -104,7 +104,9 @@ const session: RemoteSession = {
     locked: 'running',
     readOnly: true
   }
-}
+} satisfies Required<RemoteSession>
+// `satisfies Required<…>`: a field the Mac adds to these types (optional ones too) must get a value here, so the
+// phone's test sees it.
 
 const sessions: RemoteSessionList = {
   projects: [{ id: 'proj1', name: 'wavi' }],
@@ -226,7 +228,7 @@ const results: Results = {
     base: 'main',
     baseProtected: true,
     archive: { blocker: '还有未推送的提交' }
-  }
+  } satisfies Required<RemoteExits>
 }
 
 function compute() {
