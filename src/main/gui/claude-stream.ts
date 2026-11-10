@@ -16,7 +16,7 @@ import {
   type GuiPrompt,
   type GuiQuestion
 } from '@shared/gui-chat'
-import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
 
 type Rec = Record<string, unknown>
@@ -148,8 +148,8 @@ export function promptOf(pending: ClaudePending, description?: string, cwd?: str
   return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options, ...(diff ? { diff } : {}) }
 }
 
-export function createClaudeStreamNormalizer(cwd: string, now: () => number = Date.now): ClaudeStreamNormalizer {
-  const parser: ChatParser = createChatParser('claude', now)
+export function createClaudeStreamNormalizer(cwd: string, now: () => number = Date.now, keep?: KeepImage): ClaudeStreamNormalizer {
+  const parser: ChatParser = createChatParser('claude', now, keep)
   const waiting = new Map<string, ClaudePending>()
   let live: { kind: 'text' | 'thinking'; text: string } | null = null
 

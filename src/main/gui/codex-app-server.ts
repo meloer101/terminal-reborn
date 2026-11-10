@@ -3,7 +3,7 @@
 // for our response. Pure: the session host owns the process and the JSON-RPC ids.
 
 import { effortLabel, fastOption, permissionOption, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, inlineOfDataUrl, keptImages, rel, todosArg, todosOf, type ChatItem, type FileDiff, type InlineImage, type KeepImage } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -42,11 +42,17 @@ function diffsOfChanges(changes: unknown, cwd: string): FileDiff[] {
   )
 }
 
-function userText(content: unknown): { text: string; images: number } {
+/** A user message's text and pictures: a `localImage` names its file, an `image` URL with data is kept as one. */
+function userText(content: unknown, keep: KeepImage | undefined): { text: string; images: number; attachments?: string[] } {
   const parts = Array.isArray(content) ? content.filter(isRec) : []
+  const pictures = parts.filter((p) => p.type === 'image' || p.type === 'localImage')
+  const local = pictures.flatMap((p) => (p.type === 'localImage' && str(p.path) ? [str(p.path)!] : []))
+  const inline = pictures.flatMap((p) => (p.type === 'image' ? [inlineOfDataUrl(p.url)].filter((i): i is InlineImage => i !== null) : []))
+  const attachments = [...local, ...(keptImages(inline, keep) ?? [])]
   return {
     text: parts.map((p) => (p.type === 'text' ? (str(p.text) ?? '') : '')).join('').trim(),
-    images: parts.filter((p) => p.type === 'image' || p.type === 'localImage').length
+    images: pictures.length,
+    ...(attachments.length > 0 ? { attachments } : {})
   }
 }
 
@@ -79,7 +85,7 @@ function toolCallOutput(item: Rec): string {
     .join('\n')
 }
 
-export function createCodexNormalizer(cwd: string, now: () => number = Date.now): CodexNormalizer {
+export function createCodexNormalizer(cwd: string, now: () => number = Date.now, keep?: KeepImage): CodexNormalizer {
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
   const waiting = new Map<string, CodexPending>()
@@ -118,8 +124,8 @@ export function createCodexNormalizer(cwd: string, now: () => number = Date.now)
     switch (item.type) {
       case 'userMessage': {
         if (!done) return []
-        const { text, images } = userText(item.content)
-        return text || images ? [put(id, { kind: 'user', id, at, text: clip(text, CHAT_LIMITS.text), images })] : []
+        const { text, images, attachments } = userText(item.content, keep)
+        return text || images ? [put(id, { kind: 'user', id, at, text: clip(text, CHAT_LIMITS.text), images, ...(attachments ? { attachments } : {}) })] : []
       }
       case 'agentMessage': {
         if (!done) return []

@@ -40,6 +40,13 @@ describe('pickers', () => {
 })
 
 describe('the stream', () => {
+  it('keeps the pictures of a prompt as files (Figma 71A)', () => {
+    const n = createPiNormalizer('/w', () => 1000, (image) => `/kept/${image.data}.${image.mediaType.slice(6)}`)
+    const content = [{ type: 'text', text: '看图' }, { type: 'image', data: 'AAAA', mimeType: 'image/jpeg' }]
+    const state = fold(n.event({ type: 'message_end', message: { role: 'user', content } }))
+    expect(state.items[0]).toMatchObject({ kind: 'user', text: '看图', images: 1, attachments: ['/kept/AAAA.jpeg'] })
+  })
+
   it('streams text, folds it into an item, draws a bash row from start to end and ends the turn on agent_end', () => {
     const n = createPiNormalizer('/w', () => 1000)
     const events = [

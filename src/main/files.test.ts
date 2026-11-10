@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -27,5 +27,24 @@ describe('dragTempFile', () => {
     expect(await dragTempFile(join(lent, 'gone.png'), temp)).toBeNull()
     expect(await dragTempFile(join(lent, '..', '..', 'secret.txt'), temp)).toBeNull()
     expect(await dragTempFile('shot.png', temp)).toBeNull()
+  })
+})
+
+describe('keepInlineImage', () => {
+  const dir = join(realpathSync(mkdtempSync(join(tmpdir(), 'tr-sent-'))), 'attachments')
+  const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64')
+
+  it('writes a sent picture once, under a name its bytes pick, and finds it again', async () => {
+    const { keepInlineImage } = await import('./files')
+    const path = keepInlineImage({ mediaType: 'image/png', data: png }, dir)
+    expect(path).toMatch(/\/sent-[0-9a-f]{32}\.png$/)
+    expect(readFileSync(path!)).toEqual(Buffer.from('89504e470d0a1a0a', 'hex'))
+    expect(keepInlineImage({ mediaType: 'image/png', data: png }, dir)).toBe(path)
+    expect(keepInlineImage({ mediaType: 'image/jpeg', data: 'AAAA' }, dir)).toMatch(/\.jpg$/)
+  })
+
+  it('keeps no file for a type the chat does not draw', async () => {
+    const { keepInlineImage } = await import('./files')
+    expect(keepInlineImage({ mediaType: 'image/heic', data: png }, dir)).toBeNull()
   })
 })

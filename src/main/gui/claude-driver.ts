@@ -28,7 +28,7 @@ const INIT_TIMEOUT_MS = 60_000
 const COMPACT_RULE = autoCompactRuleFromEnv(process.env)
 
 export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDriver {
-  const normalizer: ClaudeStreamNormalizer = createClaudeStreamNormalizer(options.cwd)
+  const normalizer: ClaudeStreamNormalizer = createClaudeStreamNormalizer(options.cwd, undefined, options.keepImage)
   const pending = new Map<string, (outcome: ControlOutcome) => void>()
   /** `tool_use_id` → the `can_use_tool` request asking for it: a tool result answers it (seen on replay). */
   const asks = new Map<string, string>()

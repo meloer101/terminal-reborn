@@ -202,6 +202,8 @@ export interface PendingSend {
   /** User messages in the feed when it was sent: one more means the agent's own copy arrived. */
   users: number
   at: number
+  /** The files sent with it, for the thumbnails over the bubble (Figma 71A). */
+  attachments?: readonly string[]
 }
 
 export const userCount = (items: readonly ChatItem[]): number => items.reduce((n, item) => (item.kind === 'user' ? n + 1 : n), 0)
@@ -209,7 +211,9 @@ export const userCount = (items: readonly ChatItem[]): number => items.reduce((n
 /** The feed's items with the message just sent at the end, until the agent's copy of it is there. */
 export function withPendingSend(items: readonly ChatItem[], pending: PendingSend | null): readonly ChatItem[] {
   if (!pending || userCount(items) > pending.users) return items
-  return [...items, { kind: 'user', id: pending.id, at: pending.at, text: pending.text, images: 0 }]
+  const pictures = (pending.attachments ?? []).filter((path) => thumbnailUrl(path) !== null)
+  const sent = { kind: 'user' as const, id: pending.id, at: pending.at, text: pending.text, images: pictures.length }
+  return [...items, pictures.length > 0 ? { ...sent, attachments: pictures } : sent]
 }
 
 /**

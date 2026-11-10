@@ -71,7 +71,8 @@ export interface AcpNormalizer {
   /** `session/prompt` returned: the turn is over. `failure`: why it failed (an error, a refusal), shown as a line. */
   promptDone(stopReason: string | undefined, failure?: string): GuiEvent[]
   /** The user's own message, shown at once (ACP does not echo it back). */
-  sent(id: string, text: string, images: number): GuiEvent[]
+  /** `attachments`: the files of the pictures it carries inline (Figma 71A). */
+  sent(id: string, text: string, images: number, attachments?: readonly string[]): GuiEvent[]
   request(id: string, params: Rec): GuiEvent[]
   /** A permission request Wavi answered itself (接受编辑, acpAutoAllow): its tool row, no prompt. */
   allowed(params: Rec): GuiEvent[]
@@ -188,10 +189,11 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
       events.push({ type: 'busy', busy: false })
       return events
     },
-    sent(id, text, images) {
+    sent(id, text, images, attachments) {
       planId = null
       replayed = null
-      return [...flush(), put(id, { kind: 'user', id, at: now(), text: clip(text, CHAT_LIMITS.text), images }), { type: 'busy', busy: true }]
+      const files = attachments && attachments.length > 0 ? { attachments: [...attachments] } : {}
+      return [...flush(), put(id, { kind: 'user', id, at: now(), text: clip(text, CHAT_LIMITS.text), images, ...files }), { type: 'busy', busy: true }]
     },
     request(id, params) {
       const prompt = acpPermissionPrompt(id, params)

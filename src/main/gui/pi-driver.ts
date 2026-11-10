@@ -18,7 +18,7 @@ const ABORT_TIMEOUT_MS = 15_000
 type Outcome = { ok: true; data: unknown } | { ok: false; message: string }
 
 export function createPiDriver(io: DriverIO, options: DriverOptions): GuiDriver {
-  const normalizer = createPiNormalizer(options.cwd)
+  const normalizer = createPiNormalizer(options.cwd, undefined, options.keepImage)
   // Ids start at a random prefix per client: a reattached session's new client must not take the earlier one's answers.
   const prefix = `w${randomInt(1, 2 ** 31)}-`
   let next = 0

@@ -28,7 +28,15 @@ export interface FileDiff {
 }
 
 export type ChatItem =
-  | { kind: 'user'; id: string; at: number; text: string; images: number }
+  | {
+      kind: 'user'
+      id: string
+      at: number
+      text: string
+      images: number
+      /** The pictures sent with it as local files (Figma 71A), when they are known: drawn as thumbnails over the bubble. */
+      attachments?: string[]
+    }
   | {
       kind: 'text'
       id: string
@@ -378,12 +386,50 @@ export interface ChatParser {
   readonly items: readonly ChatItem[]
 }
 
-/** A parser for one session's transcript. `agent` picks the format. */
-export function createChatParser(agent: 'claude' | 'codex', now: () => number = Date.now): ChatParser {
-  return agent === 'claude' ? claudeParser(now) : codexParser(now)
+/** A picture inside a message, as base64. */
+export interface InlineImage {
+  mediaType: string
+  data: string
 }
 
-function claudeParser(now: () => number): ChatParser {
+/**
+ * Where a picture sent inline is kept as a file, for the chat to draw it (main writes it; null: not kept). Messages
+ * carry only the bytes, so a resumed or replayed conversation finds its pictures through this.
+ */
+export type KeepImage = (image: InlineImage) => string | null
+
+/** The kept files of a message's inline pictures, in order; undefined when none was kept. */
+export function keptImages(images: readonly InlineImage[], keep: KeepImage | undefined): string[] | undefined {
+  if (!keep) return undefined
+  const paths = images.map((image) => keep(image)).filter((path): path is string => path !== null)
+  return paths.length > 0 ? paths : undefined
+}
+
+/** A `data:<type>;base64,<data>` URL's picture (how Codex keeps one), or null. */
+export function inlineOfDataUrl(url: unknown): InlineImage | null {
+  if (typeof url !== 'string') return null
+  const match = /^data:([\w/+.-]+);base64,/.exec(url)
+  return match ? { mediaType: match[1]!, data: url.slice(match[0].length) } : null
+}
+
+/** A parser for one session's transcript. `agent` picks the format; `keep` keeps its inline pictures. */
+export function createChatParser(agent: 'claude' | 'codex', now: () => number = Date.now, keep?: KeepImage): ChatParser {
+  return agent === 'claude' ? claudeParser(now, keep) : codexParser(now, keep)
+}
+
+/** Claude's `image` blocks with base64 data. */
+function claudeImages(content: unknown): InlineImage[] {
+  if (!Array.isArray(content)) return []
+  const out: InlineImage[] = []
+  for (const block of content) {
+    if (!isRec(block) || block.type !== 'image' || !isRec(block.source) || block.source.type !== 'base64') continue
+    const { media_type: mediaType, data } = block.source
+    if (typeof mediaType === 'string' && typeof data === 'string') out.push({ mediaType, data })
+  }
+  return out
+}
+
+function claudeParser(now: () => number, keep: KeepImage | undefined): ChatParser {
   const items: ChatItem[] = []
   const tools = new Map<string, number>()
   let seq = 0
@@ -484,7 +530,8 @@ function claudeParser(now: () => number): ChatParser {
       if (command !== null) return command ? [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(command, CHAT_LIMITS.text), images: 0 })] : []
       if (/^\[Request interrupted by user/.test(text)) return [add({ kind: 'system', id: nextId('s'), at, text: '已中断' })]
       if (!text && images === 0) return []
-      return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images })]
+      const attachments = images > 0 ? keptImages(claudeImages(content), keep) : undefined
+      return [add({ kind: 'user', id: str(line.uuid) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images, ...(attachments ? { attachments } : {}) })]
     }
 
     // Nothing else of a subagent's shows.
@@ -530,7 +577,7 @@ function codexOutcome(out: string): { failed: boolean; exit?: number } {
 /** Codex's own context it puts in user messages: not something the user typed. */
 const CODEX_CONTEXT = /^\s*<(environment_context|user_instructions|permissions instructions|turn_aborted)>/
 
-function codexParser(now: () => number): ChatParser {
+function codexParser(now: () => number, keep: KeepImage | undefined): ChatParser {
   const items: ChatItem[] = []
   const calls = new Map<string, number>()
   let seq = 0
@@ -582,8 +629,12 @@ function codexParser(now: () => number): ChatParser {
           .trim()
         if (p.role === 'assistant') return text ? [add({ kind: 'text', id: str(p.id) ?? nextId('t'), at, text: clip(text, CHAT_LIMITS.text) })] : []
         if (p.role !== 'user' || CODEX_CONTEXT.test(text)) return []
-        const images = content.filter((b) => isRec(b) && b.type === 'input_image').length
-        return text || images ? [add({ kind: 'user', id: str(p.id) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images })] : []
+        const inputs = content.filter((b): b is Rec => isRec(b) && b.type === 'input_image')
+        const images = inputs.length
+        if (!text && !images) return []
+        const inline = inputs.map((b) => inlineOfDataUrl(b.image_url)).filter((i): i is InlineImage => i !== null)
+        const attachments = keptImages(inline, keep)
+        return [add({ kind: 'user', id: str(p.id) ?? nextId('m'), at, text: clip(text, CHAT_LIMITS.text), images, ...(attachments ? { attachments } : {}) })]
       }
       case 'reasoning': {
         const summary = Array.isArray(p.summary) ? p.summary.filter(isRec).map((s) => str(s.text) ?? '').join('\n').trim() : ''

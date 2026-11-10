@@ -237,7 +237,8 @@ export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: 
       const split = await splitAttachments(attachments, images ? io.image : null)
       const blocks: Rec[] = split.images.map((image) => ({ type: 'image', mimeType: image.mediaType, data: image.data }))
       const body = withPaths(text, split.paths)
-      io.emit(normalizer.sent(`u-sent-${++sent}`, body, blocks.length))
+      const inline = attachments.filter((path) => !split.paths.includes(path))
+      io.emit(normalizer.sent(`u-sent-${++sent}`, body, blocks.length, inline))
       const id = sessionId
       void rpc.request('session/prompt', { sessionId: id, prompt: [{ type: 'text', text: body }, ...blocks] }).then((outcome) => {
         if (outcome.ok) turnDone(isRec(outcome.result) ? str(outcome.result.stopReason) : undefined)

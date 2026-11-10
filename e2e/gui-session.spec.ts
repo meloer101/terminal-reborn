@@ -352,6 +352,38 @@ test.describe('F23 GUI session (Claude)', () => {
     await expect(thumb).toHaveCount(0)
   })
 
+  test('a sent picture stays on the message as a thumbnail over the bubble (Figma 71A)', async () => {
+    const shot = join(root, 'sent.png')
+    writeFileSync(shot, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
+    const saved = execFileSync('pbpaste', { encoding: 'utf8' })
+    try {
+      execFileSync('osascript', ['-e', `set the clipboard to (read (POSIX file "${shot}") as «class PNGf»)`])
+      await input().click()
+      await page.keyboard.press('Meta+V')
+    } finally {
+      execFileSync('pbcopy', { input: saved })
+    }
+    await expect(composer().getByRole('img', { name: /^paste-.*\.png$/ })).toBeVisible(WITHIN)
+    await send('看这张图')
+    await expect(feed().getByText('Hello: 看这张图 [1 image]')).toBeVisible(WITHIN)
+    // Claude's own copy carries only the bytes: main keeps them as a file, and the bubble draws that.
+    const message = feed().locator('[data-item]').filter({ hasText: '看这张图' }).first()
+    const sent = message.getByTestId('gui-message-pictures').getByRole('img', { name: /^sent-[0-9a-f]+\.png$/ })
+    await expect(sent).toBeVisible(WITHIN)
+    expect(await sent.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true)
+    expect(await sent.boundingBox()).toMatchObject({ width: 64, height: 64 })
+    const [picture, bubble] = await Promise.all([sent.boundingBox(), message.getByText('看这张图', { exact: true }).boundingBox()])
+    expect(picture!.y + picture!.height).toBeLessThanOrEqual(bubble!.y)
+    await expect(composer().getByRole('img')).toHaveCount(0)
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((t) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: t } }), theme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: join(SHOTS, `sent-picture-${theme}.png`) })
+    }
+    await page.evaluate(() => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update({ appearance: { theme: 'dark' } }))
+  })
+
   /**
    * ProseMirror takes a selection made with the keyboard from the next `selectionchange`: a shortcut pressed in the
    * same instant would apply to the old one. Two frames are enough.
