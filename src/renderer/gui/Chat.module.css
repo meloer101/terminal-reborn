@@ -398,6 +398,43 @@
   border-left: 1px solid var(--border-subtle);
 }
 
+/* Figma 70′B: a run of calls folded into one row — the summary in the verb's style, the call still running after it in
+   the target's; opened, the rows under it as under a subagent's row, scrolling past 320. */
+.groupText {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-step);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupArg {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupFill {
+  flex: 1;
+}
+
+.groupSteps {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.failed {
+  flex-shrink: 0;
+  font: var(--type-step);
+  color: var(--status-error);
+}
+
 .subagentText {
   margin: 0;
   font: var(--type-step);

@@ -205,6 +205,13 @@ test.describe('F23 GUI session (Claude)', () => {
 
   test('tool rows read as icon · verb · target; a command’s output keeps its colors (Figma 59J)', async () => {
     await send('show colors')
+    // Figma 70′B: the read and the command fold into one row (the command failed); it opens to them.
+    const group = feed().getByRole('button', { name: /^读取了 1 个文件，运行了 1 条命令\s*1 个失败$/ })
+    await expect(group).toBeVisible(WITHIN)
+    await expect(group).toHaveAttribute('aria-expanded', 'false')
+    await expect(feed().getByRole('button', { name: /运行\s*pnpm vitest run server\/auth/ })).toHaveCount(0)
+    await page.screenshot({ path: join(SHOTS, 'tool-group.png') })
+    await group.click()
     const bash = feed().getByRole('button', { name: /运行\s*pnpm vitest run server\/auth/ })
     await expect(bash).toBeVisible(WITHIN)
     await expect(feed().getByRole('button', { name: /读取\s*src\/auth\/session\.ts/ })).toBeVisible()
