@@ -304,12 +304,19 @@ async function handleStop(c: FixCtx): Promise<void> {
   handling.add(id)
   try {
     const target = targetOf(c)
-    // Without the diff the 削弱检查 brake sees nothing to judge: say so in the log instead of passing silently.
-    const diff =
-      (await window.tr.ship.diffSince({ ...target, since: run.since }).catch((error: unknown) => {
-        console.warn('[auto-fix] could not read the fix diff; the brakes judge an empty one', error)
-        return null
-      })) ?? ''
+    // Without the diff the brakes cannot judge the fix (an empty one would read as 没有进展): stop and say why.
+    const diffRead = await window.tr.ship.diffSince({ ...target, since: run.since }).then(
+      (text) => ({ ok: true as const, text: text ?? '' }),
+      (error: unknown) => {
+        console.warn('[auto-fix] could not read the fix diff', error)
+        return { ok: false as const }
+      }
+    )
+    if (!diffRead.ok) {
+      if (read(c.scope, c.worktree)?.run === run) stopWith(c, '自动修复已停：没能读到这次修复的改动')
+      return
+    }
+    const diff = diffRead.text
     const note = fixNote(
       await window.tr.ship.readHandoff({ ...target, kind: 'fix' }).catch((error: unknown) => {
         console.warn('[auto-fix] could not read the fix note', error)
