@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -41,6 +41,7 @@ describe('keepInlineImage', () => {
     expect(readFileSync(path!)).toEqual(Buffer.from('89504e470d0a1a0a', 'hex'))
     expect(keepInlineImage({ mediaType: 'image/png', data: png }, dir)).toBe(path)
     expect(keepInlineImage({ mediaType: 'image/jpeg', data: 'AAAA' }, dir)).toMatch(/\.jpg$/)
+    expect(readdirSync(dir).filter((name) => name.endsWith('.partial'))).toEqual([])
   })
 
   it('keeps no file for a type the chat does not draw', async () => {

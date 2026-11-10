@@ -16,7 +16,7 @@ import {
   type GuiPermissionOption,
   type GuiPrompt
 } from '@shared/gui-chat'
-import { CHAT_LIMITS, fileDiffs, lineDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff } from '@shared/transcript-chat'
+import { CHAT_LIMITS, fileDiffs, keptImages, lineDiff, rel, todosArg, todosOf, type ChatItem, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 
 type Rec = Record<string, unknown>
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -80,7 +80,7 @@ export interface AcpNormalizer {
   settle(id: string): GuiEvent[]
 }
 
-export function createAcpNormalizer(cwd: string, now: () => number = Date.now): AcpNormalizer {
+export function createAcpNormalizer(cwd: string, now: () => number = Date.now, keep?: KeepImage): AcpNormalizer {
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
   const tools = new Map<string, ToolItem>()
@@ -156,13 +156,20 @@ export function createAcpNormalizer(cwd: string, now: () => number = Date.now): 
           // Replayed history (session/load); a live session shows the user's message from `sent`.
           planId = null
           const piece = textOfBlock(update.content)
+          // A picture chunk (`{type: 'image', data, mimeType}`): counted, and kept as a file to draw (Figma 71A).
+          const block = isRec(update.content) && update.content.type === 'image' ? update.content : null
+          const image = block && typeof block.data === 'string' && typeof block.mimeType === 'string' ? { mediaType: block.mimeType, data: block.data } : null
+          const kept = image ? (keptImages([image], keep) ?? []) : []
+          const base = replayed?.item ?? { kind: 'user' as const, id: `u${seq}`, at: now(), text: '', images: 0 }
+          const files = [...(base.attachments ?? []), ...kept]
+          const item = { ...base, text: clip(base.text + piece, CHAT_LIMITS.text), images: base.images + (block ? 1 : 0), ...(files.length > 0 ? { attachments: files } : {}) }
           if (replayed) {
-            replayed = { ...replayed, item: { ...replayed.item, text: clip(replayed.item.text + piece, CHAT_LIMITS.text) } }
-            return [put(replayed.key, replayed.item)]
+            replayed = { ...replayed, item }
+            return [put(replayed.key, item)]
           }
-          const key = `u${seq}`
-          replayed = { key, item: { kind: 'user', id: `u${seq++}`, at: now(), text: clip(piece, CHAT_LIMITS.text), images: 0 } }
-          return [...flush(), put(key, replayed.item)]
+          const key = `u${seq++}`
+          replayed = { key, item }
+          return [...flush(), put(key, item)]
         }
         case 'tool_call':
         case 'tool_call_update':

@@ -15,7 +15,7 @@ const HANDSHAKE_TIMEOUT_MS = 60_000
 const UPDATES_THAT_RUN = new Set(['agent_message_chunk', 'agent_thought_chunk', 'tool_call', 'tool_call_update', 'plan'])
 
 export function createAcpDriver(io: DriverIO, options: DriverOptions & { label: string }): GuiDriver {
-  const normalizer = createAcpNormalizer(options.cwd)
+  const normalizer = createAcpNormalizer(options.cwd, undefined, options.keepImage)
   const rpc = new RpcClient(io.write, true)
   const requestIds = new Map<string, unknown>()
   let sessionId: string | undefined

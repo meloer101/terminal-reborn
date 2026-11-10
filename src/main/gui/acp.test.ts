@@ -99,6 +99,13 @@ describe('createAcpNormalizer', () => {
     expect(s.items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
   })
 
+  it('keeps the pictures of a replayed message as files (session/load, Figma 71A)', () => {
+    const n = createAcpNormalizer('/repo', () => 0, (image) => `/kept/${image.data}.png`)
+    let s = fold(n.update(chunk('user_message_chunk', '看图')))
+    s = fold(n.update({ sessionUpdate: 'user_message_chunk', content: { type: 'image', data: 'AAAA', mimeType: 'image/png' } }), s)
+    expect(s.items).toEqual([{ kind: 'user', id: 'u0', at: 0, text: '看图', images: 1, attachments: ['/kept/AAAA.png'] }])
+  })
+
   it('joins the chunks of one replayed message into one bubble (session/load)', () => {
     const n = createAcpNormalizer('/repo', () => 0)
     let s = fold(n.update(chunk('user_message_chunk', 'Fix the ')))
