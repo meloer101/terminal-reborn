@@ -420,9 +420,9 @@
   white-space: nowrap;
 }
 
-/* The chevron is 8 high and thin, the CJK summary beside it heavy low down: centred boxes read as the chevron riding high
-   (author 2026-11-10, Release, 对话 · 字号 15), so it sits 1px lower. */
-.groupChevron {
+/* A step row's chevron (a tool group's, 思考了's, a subagent's) is 8 high and thin, the CJK beside it heavy low down:
+   centred boxes read as the chevron riding high (author 2026-11-10, Release, 对话 · 字号 15), so it sits 1px lower. */
+.rowChevron {
   translate: 0 calc(var(--space-2) / 2);
 }
 

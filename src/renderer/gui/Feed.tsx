@@ -387,7 +387,7 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
           <Brain {...ICON} />
         </StepMark>
         <span>{thinkingLabel(item.ms)}</span>
-        {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
+        {open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}
       </button>
       {open && item.text && <p className={styles.thinkingText}>{item.text}</p>}
     </div>
@@ -405,7 +405,7 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
   return (
     <div className={styles.tool} data-testid="gui-tool-group">
       <button type="button" className={styles.toolRow} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <StepMark>{view.running ? <StatusGlyph status="running" /> : open ? <ChevronDown {...ICON} className={styles.groupChevron} /> : <ChevronRight {...ICON} className={styles.groupChevron} />}</StepMark>
+        <StepMark>{view.running ? <StatusGlyph status="running" /> : open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</StepMark>
         <span className={styles.groupText}>{view.text}</span>
         {view.live && (
           <>
@@ -461,7 +461,7 @@ function Tool({
           {view.verb}
         </span>
         <span className={subagent ? styles.subagentArg : styles.toolArg}>{view.arg}</span>
-        {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}</span>}
+        {subagent && expandable && <span className={styles.chevron}>{open ? <ChevronDown {...ICON} className={styles.rowChevron} /> : <ChevronRight {...ICON} className={styles.rowChevron} />}</span>}
         {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
         {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
         {view.waiting && <span className={styles.waiting}>等你确认</span>}
