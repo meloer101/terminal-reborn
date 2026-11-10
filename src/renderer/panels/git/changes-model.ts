@@ -7,7 +7,10 @@ import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { CommentSide, ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
 
-export type ChangeGroup = 'uncommitted' | 'committed'
+import { changeKey, type ChangeGroup } from '@shared/review-progress'
+
+/** Moved to src/shared/review-progress.ts (已看 marks key rows the same way); kept here for the panel's imports. */
+export { changeKey, type ChangeGroup }
 
 /** Files with more changed lines than this are not diffed in the panel (open them in an editor instead). */
 export const MAX_DIFF_LINES = 20_000
@@ -19,8 +22,6 @@ export const MAX_DIFF_LINES = 20_000
  * any more, so no row is folded today).
  */
 export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, split: 20, note: 28, comment: 68, editor: 124 } as const
-
-export const changeKey = (group: ChangeGroup, path: string): string => `${group}:${path}`
 
 export type NoDiffReason = 'nested' | 'large' | 'binary'
 
@@ -211,16 +212,8 @@ export function changeItems(
   return items
 }
 
-/**
- * Whether the worktree has no branch of its own to merge or propose: the project's main checkout while it has its base
- * out (on the base itself the base is its upstream), no base, or a detached HEAD. A feature branch checked out in the
- * main checkout merges and opens PRs like any worktree's (PRD F4 / F16).
- */
-export function onOwnBase(isMain: boolean, changes: Pick<GitChanges, 'branch' | 'base'>): boolean {
-  if (!isMain) return false
-  const { branch, base } = changes
-  return !branch || !base || base === branch || base === `origin/${branch}`
-}
+/** Moved to the merge chain (src/shared/ship-chain.ts); kept here for the panel's imports. */
+export { onOwnBase } from '@shared/ship-chain'
 
 export const itemHeight = (item: ChangeItem): number => ITEM_HEIGHT[item.kind]
 

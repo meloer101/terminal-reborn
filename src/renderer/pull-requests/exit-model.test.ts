@@ -124,6 +124,24 @@ describe('shipExits', () => {
     })
   })
 
+  describe('blocks 创建 PR before the agent writes anything', () => {
+    it('when gh is missing or not logged in', () => {
+      expect(shipExits(state(ok({ gh: 'missing' }))).secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login' })
+      expect(shipExits(state(ok({ gh: 'signed-out' }), { remembered: 'pr' })).primary).toEqual({
+        kind: 'pr',
+        label: '创建 PR',
+        blocker: 'gh 还没有登录：在终端运行 gh auth login 后可以创建 PR'
+      })
+      expect(shipExits(state(ok({ gh: 'ready' }))).secondary?.blocker).toBeNull()
+    })
+
+    it('when the remote is not on GitHub, leaving 合并到 main open', () => {
+      const { primary, secondary } = shipExits(state(ok({ remoteOnGitHub: false })))
+      expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: null })
+      expect(secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '远程不在 GitHub 上' })
+    })
+  })
+
   it('blocks the single main exit when there is nothing to ship and no remote', () => {
     expect(shipExits(state(ok({ remote: null, ahead: 0 }))).primary).toEqual({
       kind: 'main',
@@ -153,6 +171,34 @@ describe('exitPlan', () => {
     const base = plan({ isMain: true, changes: { ...changes, branch: 'main' } })
     expect(base.onBase).toBe(true)
     expect(base.blocker(base.exits.primary)).toMatch(/基线分支/)
+  })
+
+  it('gates 创建 PR on gh and the remote through the plan too', () => {
+    const missing = plan({ gh: 'missing' })
+    expect(missing.blocker(missing.exits.secondary!)).toBe('创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login')
+    const signedOut = plan({ preflight: ok({ gh: 'signed-out' }), remembered: 'pr' })
+    expect(signedOut.exits.primary.kind).toBe('pr')
+    expect(signedOut.blocker(signedOut.exits.primary)).toBe('gh 还没有登录：在终端运行 gh auth login 后可以创建 PR')
+    const elsewhere = plan({ preflight: ok({ remoteOnGitHub: false }) })
+    expect(elsewhere.blocker(elsewhere.exits.secondary!)).toBe('远程不在 GitHub 上')
+    expect(elsewhere.blocker(elsewhere.exits.primary)).toBeNull()
+  })
+
+  it('puts any exit behind the plan’s own blocker, an open-PR exit built by the caller too', () => {
+    const open = { kind: 'open-pr' as const, number: 7, label: '打开 PR #7', blocker: null }
+    expect(plan({ preflight: null }).blocker(open)).toBe('正在检查…')
+    expect(plan({ preflight: { ok: false, message: '不是 git 仓库' } }).blocker(open)).toBe('不是 git 仓库')
+    expect(plan().blocker(open)).toBeNull()
+  })
+
+  it('carries the chain state it is built on', () => {
+    expect(plan().chain.stage).toBe('exits')
+    expect(plan({ preflight: ok({ merged: true }) }).chain.next?.id).toBe('archive')
+  })
+
+  it('has nothing to ship once the PR is merged on GitHub, even before the base is pulled', () => {
+    const merged = { number: 7, state: 'merged' as const, url: 'https://github.com/o/r/pull/7' } as never
+    expect(plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr: merged, checkedAt: 0 } }).nothingToShip).toBe(true)
   })
 
   it('sees an open PR with nothing to push as idle, and one with a newer local head as unpushed', () => {

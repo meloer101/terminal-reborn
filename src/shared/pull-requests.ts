@@ -120,6 +120,23 @@ export interface PrStatus {
   checkedAt: number
   /** Open PRs: the local branch head against the PR's (v1.63). `remoteAhead`: the PR has commits the branch has not. */
   local?: { head: string; remoteAhead: boolean }
+  /**
+   * The last poll failed (合入链路 v2, PRD v1.169): what gh said, in words, and since when (epoch ms) the polls have
+   * been failing. `pr` is then the last status that was read, shown as stale, not as current. Absent when the last poll
+   * worked. Not filled by main yet.
+   */
+  error?: { message: string; since: number }
+}
+
+/** The branch's PR while it is open (or a draft). */
+export const livePr = (status: PrStatus | null | undefined): PullRequestInfo | null =>
+  status?.pr && (status.pr.state === 'open' || status.pr.state === 'draft') ? status.pr : null
+
+/** The open PR's head differs from the local head and the PR has nothing the branch lacks. */
+export function unpushedOf(status: PrStatus | null | undefined): boolean {
+  const pr = livePr(status)
+  const local = status?.local
+  return Boolean(pr?.details && local && !local.remoteAhead && local.head !== pr.details.headOid)
 }
 
 /** A worktree a window shows: `root` is its project's root (main accepts only workspace projects). */

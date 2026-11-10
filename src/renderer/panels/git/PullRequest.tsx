@@ -4,6 +4,7 @@
 // to get one, stands in; a muted notice (a receipt such as 已创建 PR #3) only while there is no PR to show.
 import { Check, CircleDashed, GitPullRequest, X } from 'lucide-react'
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
+import { CHAIN_TEXT } from '@shared/ship-chain'
 import type { Session, SessionId, Worktree } from '@shared/types'
 import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
@@ -16,10 +17,7 @@ import { agentLabel } from '../merge/model'
 import ci from './CiRows.module.css'
 import styles from './GitView.module.css'
 
-const GH_HINT = {
-  missing: '创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login',
-  'signed-out': 'gh 还没有登录：在终端运行 gh auth login 后可以创建 PR'
-} as const
+const GH_HINT = { missing: CHAIN_TEXT.ghMissing, 'signed-out': CHAIN_TEXT.ghSignedOut } as const
 
 /** The PR's headline and facts (Figma 29R), shared by the headline row and the zone's facts line. */
 export function usePrLines(worktree: Worktree) {

@@ -188,6 +188,12 @@ export interface GitFileChange {
   nested?: boolean
   /** 未提交 only: an untracked file too large to count or diff. */
   tooLarge?: boolean
+  /**
+   * A cheap fingerprint of the file's diff (合入链路 v2, review progress): status + added + removed + size + mtime of
+   * the working file, joined by main. A 已看 mark is dropped when it changes (src/shared/review-progress.ts). Absent
+   * until main fills it; then a mark falls back to status + line counts.
+   */
+  stamp?: string
 }
 
 export interface GitChanges {

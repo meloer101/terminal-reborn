@@ -43,6 +43,14 @@ describe('sanitizeWorkspaceFile', () => {
     expect(sanitizeWorkspaceFile({ ...structuredClone(valid), reviewComments: { '/elsewhere': [note] } }, 0)).not.toHaveProperty('reviewComments')
   })
 
+  it('keeps 已看 marks of worktrees that exist; files without them load', () => {
+    const marks = { 'committed:src/a.ts': 'M:3:1:120:9' }
+    const file = sanitizeWorkspaceFile({ ...structuredClone(valid), reviewMarks: { '/code/acme': marks, '/elsewhere': marks } }, 0)
+    expect(file?.reviewMarks).toEqual({ '/code/acme': marks })
+    expect(sanitizeWorkspaceFile({ ...structuredClone(valid), reviewMarks: 'junk' }, 0)).not.toHaveProperty('reviewMarks')
+    expect(sanitizeWorkspaceFile(structuredClone(valid), 0)).not.toHaveProperty('reviewMarks')
+  })
+
   it('keeps 一题多解 groups of sessions that exist; files without them stay as they were', () => {
     const group = { id: 'g1', prompt: '改登录页', base: 'main', createdAt: 5, members: ['s1', 'gone'] }
     expect(sanitizeWorkspaceFile({ ...structuredClone(valid), attemptGroups: [group] }, 0)?.attemptGroups).toEqual([{ ...group, members: ['s1'] }])
