@@ -88,6 +88,8 @@ targets:
       - path: WaviTests
       - path: ../src/shared/remote-vectors.json
         buildPhase: resources
+      - path: ../src/shared/remote-wire-samples.json
+        buildPhase: resources
     dependencies:
       - target: Wavi
     settings:

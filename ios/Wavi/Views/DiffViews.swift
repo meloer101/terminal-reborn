@@ -193,7 +193,7 @@ struct FileDiffView: View {
   @State private var rows: [DiffRow]?
   @State private var error: String?
 
-  private struct Text_: Decodable { let text: String? }
+  struct Text_: Codable { let text: String? }
 
   var body: some View {
     let (name, dir) = splitPath(path)
