@@ -4,6 +4,37 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-10
+
+Scheduled tasks, dispatch you can see, and token statistics: tasks that open a session or message one on a schedule, even with Wavi closed; a GUI dispatcher's chat draws its `wavi run` children as a fan-out graph, and runs of tool calls fold into one row; 设置 · 额度 counts tokens by week, month and year from the agents' own logs.
+定时任务、看得见的派活和 token 统计：按时间开新会话或给已有会话发消息，Wavi 关着也行；GUI 派活方的对话把 `wavi run` 的子会话画成扇出图，连续的工具调用收成一行；设置 · 额度 从各家自己的日志按周 / 月 / 年统计 token。
+
+### Scheduled tasks / 定时任务
+- 定时任务 at the bottom of the sidebar (⇧⌘T): open a new session in a new worktree, or message an existing one when it is idle; every N minutes, daily, weekdays, weekly or once, with an end date; a missed run catches up once.
+  侧栏底部「定时任务」（⇧⌘T）：开新会话（新 worktree）或在已有会话空闲时发消息；间隔、每天、工作日、每周或一次，可设截止日；错过的只补最近一次。
+
+### GUI sessions / GUI 会话
+- A dispatcher's `wavi run` calls draw as a fan-out graph, a strip above the composer tracks the children, and their reports are report cards instead of your bubbles.
+  派活方 `wavi run` 的调用画成扇出图，输入框上方的派活条跟着子会话，派活报告是报告卡、不再是你的气泡。
+- `wavi run` children open as GUI sessions when the dispatcher is one and the agent can (`--ui gui|cli` to choose).
+  派活方是 GUI、子会话的 agent 能跑 GUI 时，`wavi run` 的子会话开成 GUI（`--ui gui|cli` 指定）。
+- The context ring has numbers in GUI sessions: Claude, Codex, ACP agents and Pi each report context window use; it stays right across gateways, /compact and edits.
+  GUI 会话的 context 圆环有数了：Claude、Codex、ACP 和 Pi 各自报 context 用量，换网关、/compact 和编辑后也对。
+- Two or more tool calls between the agent's words fold into one summary row ("Read 2 files, ran 1 command ›") that opens to them; the agent's text, subagents, dispatch graphs and calls waiting for you stay out.
+  agent 两段文字之间的两个以上工具调用收成一行摘要（「读取了 2 个文件，运行了 1 条命令 ›」），点开看每一行；agent 的文字、子 agent、派活图、等你确认的调用不收。
+
+### Browser / 浏览器
+- A new listening port in the current worktree opens in the right panel's browser (once per session and port; reloads when a restarted server comes back); 设置 · Worktree can turn it off.
+  当前 worktree 出现新的监听端口时，右侧栏的浏览器自动打开它（同一会话同一端口一次；服务重启后回来会刷新）；设置 · Worktree 可关。
+
+### Settings / 设置
+- 设置 · 额度 adds token statistics: tokens, API-equivalent cost, sessions and streaks by week / month / year / all, daily or monthly bars, a year heatmap, and shares by agent, model, project and hour — read from Claude, Codex, OpenCode, Pi and Grok logs on this Mac, nothing stored by Wavi.
+  设置 · 额度 加 token 统计：周 / 月 / 年 / 全部的 token、API 等价、会话、连续天数，每天或每月的柱、过去一年的热力图、按 agent / 模型 / 项目 / 小时的份额；只读本机 Claude、Codex、OpenCode、Pi、Grok 的日志，Wavi 不另存。
+
+### iPhone / 手机
+- Sessions created on the phone are GUI sessions when the agent has one: pick the model when creating, change effort and 模式 by button; opening a session on the phone marks it seen.
+  手机新建的会话在 agent 有 GUI 时一律是 GUI 会话：新建时选模型，用按钮换思考程度和模式；手机打开过的会话算「看过」。
+
 ## [0.15.1] - 2026-11-08
 
 GUI sessions, round two: a quieter chat with tool rows that read as icon · verb · target, a Paseo-style composer where you pick the agent and project before the first message, subagents and task lists in place, and Pi driven directly over `pi --mode rpc`. Settings split 外观 into 外观 / 终端 / 对话.
@@ -561,7 +592,8 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/meloer101/terminal-reborn/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/meloer101/terminal-reborn/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/meloer101/terminal-reborn/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/meloer101/terminal-reborn/compare/v0.13.0...v0.14.0
