@@ -29,9 +29,11 @@ import {
   dispatchRows,
   waviMessage,
   feedBlocks,
+  groupView,
   isSubagentTool,
   liveStartsTurn,
   sentMessage,
+  stepParts,
   subagentElapsed,
   thinkingLabel,
   toolView,
@@ -202,7 +204,14 @@ const Block = memo(
     if (block.kind === 'steps') {
       return (
         <div className={styles.steps}>
-          {block.items.map((item) => {
+          {/* Figma 70′B: calls between two of the agent's words fold into one row; the dispatch graph and a call waiting on
+              you stay out, and the calls the graph draws are not there to split a run. */}
+          {stepParts(
+            block.items.filter((item) => dispatch.get(item.id)?.kind !== 'merged'),
+            (item) => dispatch.has(item.id) || item.id === waitingTool
+          ).map((part) => {
+            if (part.kind === 'group') return <ToolGroup key={part.key} items={part.items} nested={block.nested} />
+            const { item } = part
             const row = dispatch.get(item.id)
             if (row?.kind === 'graph') return <DispatchGraph key={item.id} parentId={sessionId} ids={row.ids} />
             if (row?.kind === 'merged') return null
@@ -381,6 +390,39 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
         {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
       </button>
       {open && item.text && <p className={styles.thinkingText}>{item.text}</p>}
+    </div>
+  )
+}
+
+/**
+ * Figma 70′B / 70C: a run of calls as one row — › · what they did (读取了 2 个文件，运行了 1 条命令) · +N −M · N 个失败; while
+ * one runs, the mark turns and the call follows the summary (· 运行 pnpm test). Opened, its rows are listed right of a
+ * line as under a subagent's row, up to 320 high.
+ */
+function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: ReadonlyMap<string, readonly NestedItem[]> }) {
+  const [open, setOpen] = useState(false)
+  const view = groupView(items)
+  return (
+    <div className={styles.tool} data-testid="gui-tool-group">
+      <button type="button" className={styles.toolRow} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <StepMark>{view.running ? <StatusGlyph status="running" /> : open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}</StepMark>
+        <span className={styles.groupText}>{view.text}</span>
+        {view.live && (
+          <>
+            <span className={styles.toolVerb}>· {view.live.verb}</span>
+            <span className={styles.groupArg}>{view.live.arg}</span>
+          </>
+        )}
+        <span className={styles.groupFill} />
+        {view.added !== undefined && <span className={styles.added}>+{view.added}</span>}
+        {view.removed !== undefined && <span className={styles.removed}>−{view.removed}</span>}
+        {view.failed > 0 && <span className={styles.failed}>{view.failed} 个失败</span>}
+      </button>
+      {open && (
+        <div className={`${styles.subagentSteps} ${styles.groupSteps}`} data-testid="gui-tool-group-steps">
+          {items.map((item) => (item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={nested} waitingTool={null} />))}
+        </div>
+      )}
     </div>
   )
 }

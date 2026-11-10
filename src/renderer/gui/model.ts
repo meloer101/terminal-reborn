@@ -404,6 +404,113 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
   }
 }
 
+// --- tool groups (Figma 70′B / 70C) --------------------------------------------------------------------------------
+
+/** Calls that ask the user (a question, a plan to approve): like a call waiting on a permission, never folded. */
+const ASKS_YOU: ReadonlySet<string> = new Set(['AskUserQuestion', 'ExitPlanMode'])
+
+/** A run of steps as drawn: a row, or calls folded into one summary row (`key` stays while the group grows). */
+export type StepPart = { kind: 'step'; item: StepItem } | { kind: 'group'; key: string; items: StepItem[] }
+
+/**
+ * Figma 70′B: the rows between two of the agent's words that hold two or more calls fold into one summary row; one call,
+ * or thinking alone, stays as it is. A subagent's row, a question or plan the agent asks, and what `apart` says (the
+ * call waiting on a permission, the dispatch graph) are never folded: they split the run.
+ */
+export function stepParts(items: readonly StepItem[], apart: (item: StepItem) => boolean): StepPart[] {
+  const parts: StepPart[] = []
+  let run: StepItem[] = []
+  const flush = (): void => {
+    if (run.filter((item) => item.kind === 'tool').length >= 2) parts.push({ kind: 'group', key: `group-${run[0]!.id}`, items: run })
+    else for (const item of run) parts.push({ kind: 'step', item })
+    run = []
+  }
+  for (const item of items) {
+    if (item.kind === 'tool' && (isSubagentTool(item.name) || ASKS_YOU.has(item.name) || apart(item))) {
+      flush()
+      parts.push({ kind: 'step', item })
+    } else run.push(item)
+  }
+  flush()
+  return parts
+}
+
+/**
+ * What a group's summary says of each kind of call, by the tool's name (the same names `TOOL_WORDS` reads, so every
+ * agent's): `distinct` counts files or pages, not calls. Any other tool (MCP, an agent's own) is 用了 <name> N 次.
+ */
+const GROUP_WORDS: Readonly<Record<string, { kind: string; say: (n: number, args: readonly string[]) => string; distinct?: true }>> = (() => {
+  const run = { kind: 'run', say: (n: number) => `运行了 ${n} 条命令` }
+  const read = { kind: 'read', say: (n: number) => `读取了 ${n} 个文件`, distinct: true as const }
+  const edit = { kind: 'edit', say: (n: number) => `编辑了 ${n} 个文件`, distinct: true as const }
+  const search = { kind: 'search', say: (n: number) => `搜索了 ${n} 次` }
+  const fetch = { kind: 'fetch', say: (n: number) => `读取了 ${n} 个网页`, distinct: true as const }
+  const todo = { kind: 'todo', say: () => '更新了任务' }
+  return {
+    Bash: run,
+    BashOutput: { kind: 'output', say: (n) => `读取了 ${n} 次输出` },
+    KillShell: { kind: 'stop', say: (n) => `停止了 ${n} 条命令` },
+    Read: read,
+    Edit: edit,
+    MultiEdit: edit,
+    NotebookEdit: edit,
+    Write: { kind: 'write', say: (n) => `写入了 ${n} 个文件`, distinct: true },
+    Delete: { kind: 'delete', say: (n) => `删除了 ${n} 个文件`, distinct: true },
+    Move: { kind: 'move', say: (n) => `移动了 ${n} 个文件`, distinct: true },
+    Grep: search,
+    Glob: search,
+    Search: search,
+    WebSearch: { kind: 'web-search', say: (n) => `搜索了 ${n} 次网页` },
+    WebFetch: fetch,
+    Fetch: fetch,
+    TodoWrite: todo,
+    Plan: todo,
+    Skill: { kind: 'skill', say: (n, args) => (n === 1 && args[0] ? `用了 Skill ${args[0]}` : `用了 ${n} 个 Skill`), distinct: true },
+    Think: { kind: 'think', say: (n) => `思考了 ${n} 次` },
+    Mode: { kind: 'mode', say: () => '切换了模式' },
+    Tool: { kind: 'tool', say: (n) => `用了 ${n} 次工具` }
+  }
+})()
+
+export interface GroupView {
+  /** 「读取了 2 个文件，运行了 1 条命令」: each kind once, in the order it first came. */
+  text: string
+  /** A call in it still runs (Figma 70C): the row turns, and `live` is the last of them. */
+  running: boolean
+  live?: { verb: string; arg: string }
+  /** Calls that failed: 「N 个失败」 at the row's end. */
+  failed: number
+  /** Edits' `+N −M` over the group (each part only when non-zero). */
+  added?: number
+  removed?: number
+}
+
+export function groupView(items: readonly StepItem[]): GroupView {
+  const kinds = new Map<string, { say: (n: number, args: readonly string[]) => string; distinct: boolean; calls: number; args: Set<string> }>()
+  let live: GroupView['live']
+  let failed = 0
+  let added = 0
+  let removed = 0
+  for (const item of items) {
+    if (item.kind !== 'tool') continue
+    const words = Object.hasOwn(GROUP_WORDS, item.name) ? GROUP_WORDS[item.name] : undefined
+    const key = words?.kind ?? `other:${item.name}`
+    let kind = kinds.get(key)
+    if (!kind) kinds.set(key, (kind = { say: words?.say ?? ((n) => `用了 ${item.name} ${n} 次`), distinct: !!words?.distinct, calls: 0, args: new Set() }))
+    kind.calls++
+    const files = item.files ?? (item.diff ? [item.diff] : [])
+    for (const arg of files.length > 0 ? files.map((f) => f.path) : [item.arg]) kind.args.add(arg)
+    for (const file of files) {
+      added += file.added
+      removed += file.removed
+    }
+    if (item.state === 'error') failed++
+    if (item.state === 'running') live = { verb: (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name]?.[1] : undefined) ?? item.name, arg: item.arg }
+  }
+  const text = [...kinds.values()].map((k) => k.say(k.distinct ? k.args.size : k.calls, [...k.args])).join('，')
+  return { text, running: live !== undefined, ...(live ? { live } : {}), failed, ...(added > 0 ? { added } : {}), ...(removed > 0 ? { removed } : {}) }
+}
+
 /**
  * Figma 59J: the task list shown above the composer — the conversation's latest one, while something in it is left
  * (hidden once every task is done, or when it is empty). A subagent's own list is not the conversation's.

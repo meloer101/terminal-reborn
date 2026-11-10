@@ -46,7 +46,10 @@ import {
   waviMessage,
   reportedChildren,
   lastUserAt,
-  dispatchOutcomes
+  dispatchOutcomes,
+  stepParts,
+  type StepItem,
+  groupView
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -70,6 +73,59 @@ describe('feedBlocks (Figma 49″C)', () => {
 
   it('keys a run by its first item, so a growing run keeps its rows', () => {
     expect(feedBlocks([tool('a')])[0]?.key).toBe(feedBlocks([tool('a'), tool('b')])[0]?.key)
+  })
+})
+
+describe('tool groups (Figma 70′B / 70C)', () => {
+  const ids = (parts: ReturnType<typeof stepParts>) => parts.map((p) => (p.kind === 'group' ? p.items.map((i) => i.id) : p.item.id))
+  const never = () => false
+
+  it('folds a run with two or more calls into one group; one call, or thinking alone, stays a row', () => {
+    expect(ids(stepParts([thinking('t1'), tool('a'), tool('b')] as StepItem[], never))).toEqual([['t1', 'a', 'b']])
+    expect(ids(stepParts([thinking('t1'), tool('a'), thinking('t2')] as StepItem[], never))).toEqual(['t1', 'a', 't2'])
+    expect(stepParts([tool('a'), tool('b')], never)[0]).toMatchObject({ kind: 'group', key: 'group-a' })
+  })
+
+  it('leaves a subagent, and what the caller sets apart (a call waiting on you, dispatch), out of any group', () => {
+    const items = [tool('a'), tool('b'), tool('s', { name: 'Agent' }), tool('c'), tool('d'), tool('w', { state: 'running' })]
+    expect(ids(stepParts(items, (item) => item.id === 'w'))).toEqual([['a', 'b'], 's', ['c', 'd'], 'w'])
+  })
+
+  it('leaves a question or a plan the agent asks out of any group', () => {
+    const items = [tool('a'), tool('b'), tool('q', { name: 'AskUserQuestion', state: 'running' })]
+    expect(ids(stepParts(items, never))).toEqual([['a', 'b'], 'q'])
+  })
+
+  it('reads ACP and Codex tool names the same way', () => {
+    expect(groupView([tool('1', { name: 'Search', arg: 'x' }), tool('2', { name: 'Plan', arg: '2 项' }), tool('3', { name: 'Tool', arg: '' }), tool('4', { name: 'Tool', arg: '' })]).text).toBe('搜索了 1 次，更新了任务，用了 2 次工具')
+  })
+
+  it('says what the calls did in the order they first came, counting a file once', () => {
+    const view = groupView([
+      tool('1', { name: 'Read', arg: 'a.ts' }),
+      thinking('t'),
+      tool('2', { name: 'Bash', arg: 'ls' }),
+      tool('3', { name: 'Read', arg: 'b.ts' }),
+      tool('4', { name: 'Read', arg: 'a.ts' }),
+      tool('5', { name: 'Edit', arg: 'a.ts', diff: { path: 'a.ts', hunks: [], added: 3, removed: 1, truncated: false } }),
+      tool('6', { name: 'Edit', arg: 'a.ts', diff: { path: 'a.ts', hunks: [], added: 2, removed: 0, truncated: false } }),
+      tool('7', { name: 'Grep', arg: 'x' }),
+      tool('8', { name: 'get_screenshot', arg: '' }),
+      tool('9', { name: 'get_screenshot', arg: '' })
+    ] as StepItem[])
+    expect(view).toMatchObject({ text: '读取了 2 个文件，运行了 1 条命令，编辑了 1 个文件，搜索了 1 次，用了 get_screenshot 2 次', running: false, failed: 0, added: 5, removed: 1 })
+  })
+
+  it('counts every file of a change to several, and each agent’s own tool names', () => {
+    const files = ['x.ts', 'y.ts'].map((path) => ({ path, hunks: [], added: 1, removed: 0, truncated: false }))
+    expect(groupView([tool('1', { name: 'Edit', arg: 'x.ts 等 2 个文件', diff: files[0]!, files }), tool('2', { name: 'WebSearch', arg: 'q' })]).text).toBe('编辑了 2 个文件，搜索了 1 次网页')
+    expect(groupView([tool('1', { name: 'TodoWrite', arg: '3 项' }), tool('2', { name: 'TodoWrite', arg: '3 项' }), tool('3', { name: 'Skill', arg: 'figma-use' })]).text).toBe('更新了任务，用了 Skill figma-use')
+  })
+
+  it('shows the call still running after the summary, and how many failed', () => {
+    const view = groupView([tool('1', { name: 'Bash', arg: 'pnpm i', state: 'error' }), tool('2', { name: 'Bash', arg: 'pnpm test', state: 'running' })])
+    expect(view).toMatchObject({ text: '运行了 2 条命令', running: true, live: { verb: '运行', arg: 'pnpm test' }, failed: 1 })
+    expect(view.added).toBeUndefined()
   })
 })
 
