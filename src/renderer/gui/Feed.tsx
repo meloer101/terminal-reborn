@@ -405,7 +405,7 @@ function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: Read
   return (
     <div className={styles.tool} data-testid="gui-tool-group">
       <button type="button" className={styles.toolRow} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <StepMark>{view.running ? <StatusGlyph status="running" /> : open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}</StepMark>
+        <StepMark>{view.running ? <StatusGlyph status="running" /> : open ? <ChevronDown {...ICON} className={styles.groupChevron} /> : <ChevronRight {...ICON} className={styles.groupChevron} />}</StepMark>
         <span className={styles.groupText}>{view.text}</span>
         {view.live && (
           <>
