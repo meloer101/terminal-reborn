@@ -91,6 +91,15 @@ describe('tool groups (Figma 70′B / 70C)', () => {
     expect(ids(stepParts(items, (item) => item.id === 'w'))).toEqual([['a', 'b'], 's', ['c', 'd'], 'w'])
   })
 
+  it('leaves a question or a plan the agent asks out of any group', () => {
+    const items = [tool('a'), tool('b'), tool('q', { name: 'AskUserQuestion', state: 'running' })]
+    expect(ids(stepParts(items, never))).toEqual([['a', 'b'], 'q'])
+  })
+
+  it('reads ACP and Codex tool names the same way', () => {
+    expect(groupView([tool('1', { name: 'Search', arg: 'x' }), tool('2', { name: 'Plan', arg: '2 项' }), tool('3', { name: 'Tool', arg: '' }), tool('4', { name: 'Tool', arg: '' })]).text).toBe('搜索了 1 次，更新了任务，用了 2 次工具')
+  })
+
   it('says what the calls did in the order they first came, counting a file once', () => {
     const view = groupView([
       tool('1', { name: 'Read', arg: 'a.ts' }),

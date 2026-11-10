@@ -204,8 +204,12 @@ const Block = memo(
     if (block.kind === 'steps') {
       return (
         <div className={styles.steps}>
-          {/* Figma 70′B: calls between two of the agent's words fold into one row; dispatch and a call waiting on you stay out. */}
-          {stepParts(block.items, (item) => dispatch.has(item.id) || item.id === waitingTool).map((part) => {
+          {/* Figma 70′B: calls between two of the agent's words fold into one row; the dispatch graph and a call waiting on
+              you stay out, and the calls the graph draws are not there to split a run. */}
+          {stepParts(
+            block.items.filter((item) => dispatch.get(item.id)?.kind !== 'merged'),
+            (item) => dispatch.has(item.id) || item.id === waitingTool
+          ).map((part) => {
             if (part.kind === 'group') return <ToolGroup key={part.key} items={part.items} nested={block.nested} />
             const { item } = part
             const row = dispatch.get(item.id)
@@ -397,7 +401,7 @@ function Thinking({ item }: { item: Extract<StepItem, { kind: 'thinking' }> }) {
  */
 function ToolGroup({ items, nested }: { items: readonly StepItem[]; nested: ReadonlyMap<string, readonly NestedItem[]> }) {
   const [open, setOpen] = useState(false)
-  const view = useMemo(() => groupView(items), [items])
+  const view = groupView(items)
   return (
     <div className={styles.tool} data-testid="gui-tool-group">
       <button type="button" className={styles.toolRow} aria-expanded={open} onClick={() => setOpen(!open)}>

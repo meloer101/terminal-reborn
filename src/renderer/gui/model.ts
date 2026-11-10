@@ -406,13 +406,16 @@ export function toolView(item: Extract<ChatItem, { kind: 'tool' }>, waiting: boo
 
 // --- tool groups (Figma 70′B / 70C) --------------------------------------------------------------------------------
 
+/** Calls that ask the user (a question, a plan to approve): like a call waiting on a permission, never folded. */
+const ASKS_YOU: ReadonlySet<string> = new Set(['AskUserQuestion', 'ExitPlanMode'])
+
 /** A run of steps as drawn: a row, or calls folded into one summary row (`key` stays while the group grows). */
 export type StepPart = { kind: 'step'; item: StepItem } | { kind: 'group'; key: string; items: StepItem[] }
 
 /**
  * Figma 70′B: the rows between two of the agent's words that hold two or more calls fold into one summary row; one call,
- * or thinking alone, stays as it is. A subagent's row and what `apart` says (the call waiting on you, dispatch rows)
- * are never folded: they split the run.
+ * or thinking alone, stays as it is. A subagent's row, a question or plan the agent asks, and what `apart` says (the
+ * call waiting on a permission, the dispatch graph) are never folded: they split the run.
  */
 export function stepParts(items: readonly StepItem[], apart: (item: StepItem) => boolean): StepPart[] {
   const parts: StepPart[] = []
@@ -423,7 +426,7 @@ export function stepParts(items: readonly StepItem[], apart: (item: StepItem) =>
     run = []
   }
   for (const item of items) {
-    if (item.kind === 'tool' && (isSubagentTool(item.name) || apart(item))) {
+    if (item.kind === 'tool' && (isSubagentTool(item.name) || ASKS_YOU.has(item.name) || apart(item))) {
       flush()
       parts.push({ kind: 'step', item })
     } else run.push(item)
@@ -462,7 +465,6 @@ const GROUP_WORDS: Readonly<Record<string, { kind: string; say: (n: number, args
     Fetch: fetch,
     TodoWrite: todo,
     Plan: todo,
-    ExitPlanMode: { kind: 'plan', say: () => '写了计划' },
     Skill: { kind: 'skill', say: (n, args) => (n === 1 && args[0] ? `用了 Skill ${args[0]}` : `用了 ${n} 个 Skill`), distinct: true },
     Think: { kind: 'think', say: (n) => `思考了 ${n} 次` },
     Mode: { kind: 'mode', say: () => '切换了模式' },
@@ -498,11 +500,12 @@ export function groupView(items: readonly StepItem[]): GroupView {
     kind.calls++
     const files = item.files ?? (item.diff ? [item.diff] : [])
     for (const arg of files.length > 0 ? files.map((f) => f.path) : [item.arg]) kind.args.add(arg)
-    const view = toolView(item, false)
-    added += view.added ?? 0
-    removed += view.removed ?? 0
+    for (const file of files) {
+      added += file.added
+      removed += file.removed
+    }
     if (item.state === 'error') failed++
-    if (item.state === 'running') live = { verb: view.verb, arg: view.arg }
+    if (item.state === 'running') live = { verb: (Object.hasOwn(TOOL_WORDS, item.name) ? TOOL_WORDS[item.name]?.[1] : undefined) ?? item.name, arg: item.arg }
   }
   const text = [...kinds.values()].map((k) => k.say(k.distinct ? k.args.size : k.calls, [...k.args])).join('，')
   return { text, running: live !== undefined, ...(live ? { live } : {}), failed, ...(added > 0 ? { added } : {}), ...(removed > 0 ? { removed } : {}) }
