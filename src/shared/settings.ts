@@ -1,6 +1,7 @@
 // User settings (PRD §4 F7). Persisted by main in <userData>/settings.json; every window receives
 // changes through TrApi.settings.onChange. Pure: sanitizing never throws, unknown/invalid values
 // fall back to defaults so a hand-edited file can't break the app.
+import { headlessAgent } from './agents'
 import { normalizeHex } from './color'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 import { DEFAULT_REMOTE_PORT } from './remote'
@@ -453,7 +454,7 @@ function prSettings(value: unknown): PrSettings {
     mergeWhenGreen: typeof v.mergeWhenGreen === 'boolean' ? v.mergeWhenGreen : d.mergeWhenGreen,
     maxAutoFixes: Math.round(num(v.maxAutoFixes, d.maxAutoFixes, { min: 1, max: 5 })),
     bots,
-    writer: v.writer === 'claude' || v.writer === 'codex' ? v.writer : d.writer,
+    writer: headlessAgent(v.writer) ?? d.writer,
     writerClaudeModel: typeof v.writerClaudeModel === 'string' && (v.writerClaudeModel === '' || REVIEW_MODEL.test(v.writerClaudeModel)) ? v.writerClaudeModel : d.writerClaudeModel,
     writerCodexModel: typeof v.writerCodexModel === 'string' && (v.writerCodexModel === '' || REVIEW_MODEL.test(v.writerCodexModel)) ? v.writerCodexModel : d.writerCodexModel,
     writeOnOpen: typeof v.writeOnOpen === 'boolean' ? v.writeOnOpen : d.writeOnOpen

@@ -3,11 +3,13 @@
 // session, never committed or created without the user seeing it: the text lands in the sheet's fields to edit.
 // Which CLI and model: 设置 · 自动化 · PR (session's agent by default, Haiku for Claude). Pure: main gathers the git
 // material and runs the process.
+import { headlessAgent, type HeadlessAgent } from './agents'
 import { structuredCandidates } from './background-review'
 import { commitMessage, stripControl } from './pull-requests'
 import type { PrSettings } from './settings'
 
-export type WriterAgent = 'claude' | 'codex'
+/** The CLIs that can write commit / PR text: the ones Wavi runs headless (agents.ts). */
+export type WriterAgent = HeadlessAgent
 export type WriterKind = 'commit' | 'pr'
 
 export interface WriteRequest {
@@ -71,7 +73,8 @@ export function parseWriteRequest(raw: unknown): WriteRequest | null {
   const v = raw as Record<string, unknown>
   if (!isPath(v.root) || !isPath(v.worktree)) return null
   if (v.kind !== 'commit' && v.kind !== 'pr') return null
-  if (v.agent !== 'claude' && v.agent !== 'codex') return null
+  const agent = headlessAgent(v.agent)
+  if (!agent) return null
   if (!Array.isArray(v.paths) || v.paths.length > 5000 || !v.paths.every(isRelative)) return null
   if (v.kind === 'commit' && v.paths.length === 0) return null
   if (v.pendingMessage !== undefined && (typeof v.pendingMessage !== 'string' || v.pendingMessage.length > 64 * 1024)) return null
@@ -79,7 +82,7 @@ export function parseWriteRequest(raw: unknown): WriteRequest | null {
     root: v.root,
     worktree: v.worktree,
     kind: v.kind,
-    agent: v.agent,
+    agent,
     paths: [...new Set(v.paths as string[])],
     ...(typeof v.pendingMessage === 'string' && v.pendingMessage.trim() ? { pendingMessage: v.pendingMessage } : {})
   }

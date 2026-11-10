@@ -155,7 +155,7 @@ export function uiRow(kind: AgentKind, choice: SessionUi, installed: (binary: st
 
 /** 已安装: Claude Code and Codex always (a missing one says so in the terminal), every other CLI only when it is on PATH. */
 export function listedAgents(found: AgentAvailability | null): AgentKind[] {
-  return CLI_AGENTS.filter((id) => id === 'claude' || id === 'codex' || found?.[id] === true)
+  return CLI_AGENTS.filter((id) => AGENT_SPECS[id].listedWhenMissing === true || found?.[id] === true)
 }
 
 /**

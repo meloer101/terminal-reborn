@@ -1,6 +1,7 @@
 // Session metrics in the renderer (PRD F11 / F12): each session's context window, todo list and turn checks, and the account's
 // plan usage per vendor. Main sends only changes (and replays them to a reloaded window); usage comes from every
 // session of a vendor and is kept by main across runs, so a fresh window asks for it once.
+import { usageVendor } from '@shared/agents'
 import { create } from 'zustand'
 import type { AgentEvent, HookAgent, SessionCron, SubagentInfo } from '@shared/agent-events'
 import { usageAlertText, type ContextUsage, type UsageAccount, type UsageVendor, type VendorUsage } from '@shared/session-meta'
@@ -150,7 +151,8 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
     state.clearSession(sessionId)
     return
   }
-  if (agent === 'claude' || agent === 'codex') state.setAgent(sessionId, agent)
+  const vendor = usageVendor(agent)
+  if (vendor) state.setAgent(sessionId, vendor)
   if (event.type === 'context') state.setContext(sessionId, event.context)
   else if (event.type === 'todos') state.setTodos(sessionId, event.items)
   else if (event.type === 'checks') state.setChecks(sessionId, event.checks)

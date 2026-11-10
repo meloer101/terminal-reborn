@@ -1,4 +1,4 @@
-import { claudeOrCodex } from '@shared/agents'
+import { usageVendor } from '@shared/agents'
 import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
@@ -167,7 +167,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
           {/* A GUI session shows context and usage under its composer instead (Figma 52F). */}
           <SessionMetaChips
             sessionId={active.session.id}
-            vendor={active.session.kind === 'shell' ? shellAgent ?? null : claudeOrCodex(active.session.kind)}
+            vendor={active.session.kind === 'shell' ? shellAgent ?? null : usageVendor(active.session.kind)}
             meters={active.session.ui !== 'gui'}
           >
             {/* After the used-up UsageChip: type 继续 once the plan limit resets (PRD F11). */}

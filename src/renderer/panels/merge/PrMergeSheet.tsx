@@ -2,6 +2,7 @@
 // checks, whether the PR is the code here, conflicts, approvals and threads (those only inform), Wavi's review and the
 // agent's own checks — then the methods the repository allows, removing the remote branch and archiving. 合并 is pinned
 // to the head main checked; while checks run it becomes 检查通过后合并 (GitHub auto-merge; refused when the repository has it off).
+import { headlessAgent } from '@shared/agents'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import { severityCounts } from '@shared/background-review'
@@ -44,7 +45,7 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' })
   const [failure, setFailure] = useState<string | null>(null)
 
-  const reviewAgent = agent && (agent.kind === 'claude' || agent.kind === 'codex') ? agent.kind : null
+  const reviewAgent = headlessAgent(agent?.kind)
   const review = useBackgroundReview((s) => s.byRoot[target.worktreePath])
   const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
   const checksView = useTurnCheckView(agent?.id)

@@ -5,6 +5,7 @@
 import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { hasHooks, usageVendor } from '@shared/agents'
 import { IPC } from '@shared/ipc'
 import type { AgentEvent, AgentEventEnvelope, HookAgent, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
@@ -113,6 +114,13 @@ let usageStore: UsageStore | null = null
 
 /** The account asked directly, per vendor (./plan-usage-poller.ts); none when `TR_ACCOUNT_USAGE=off` (e2e). */
 let pollers: Partial<Record<UsageVendor, PlanUsagePoller>> = {}
+
+/** An agent of an on-plan session did something: its vendor's account is in use, so ask about its usage soon. */
+function nudgeUsage(envelope: AgentEventEnvelope): void {
+  // A session on a third-party endpoint does not make the account "in use" (it would be asked far more often).
+  const vendor = usageVendor(envelope.agent)
+  if (vendor && !offPlan.has(envelope.sessionId)) pollers[vendor]?.nudge()
+}
 let codexAccount: CodexAccountClient | null = null
 /** What each account said when last asked this run (the 额度 page's status per vendor). */
 const accounts = new Map<UsageVendor, UsageAccount>()
@@ -267,8 +275,7 @@ const emitter: BridgeEmitter = {
     // Any hook traffic proves the hooks reach us; withdraw the "silent since launch" countdown.
     watchdog.disarm(envelope.sessionId)
     trackBilling(envelope.sessionId, envelope.event)
-    // A session on a third-party endpoint does not make the account "in use" (it would be asked far more often).
-    if (!offPlan.has(envelope.sessionId) && (envelope.agent === 'claude' || envelope.agent === 'codex')) pollers[envelope.agent]?.nudge()
+    nudgeUsage(envelope)
     ownerOf(envelope.sessionId)?.send(IPC.agentEvent, envelope)
     remoteListener?.activity(envelope.sessionId)
   },
@@ -293,7 +300,7 @@ const emitter: BridgeEmitter = {
  * window like a hook's event, and to the phone server and the plan-usage pollers the same way.
  */
 export function emitGuiAgentEvent(envelope: AgentEventEnvelope, owner: WebContents | null): void {
-  if (!offPlan.has(envelope.sessionId) && (envelope.agent === 'claude' || envelope.agent === 'codex')) pollers[envelope.agent]?.nudge()
+  nudgeUsage(envelope)
   if (owner && !owner.isDestroyed()) owner.send(IPC.agentEvent, envelope)
   remoteListener?.activity(envelope.sessionId)
 }
@@ -428,8 +435,9 @@ export function registerHookHandlers(): void {
   })
 
   ipcMain.handle(IPC.agentUsageShares, async (_event, vendor: unknown, since: unknown): Promise<SessionSpend[]> => {
-    if ((vendor !== 'claude' && vendor !== 'codex') || typeof since !== 'number' || !Number.isFinite(since)) return []
-    return transcripts.spend(vendor, since)
+    const known = usageVendor(vendor)
+    if (!known || typeof since !== 'number' || !Number.isFinite(since)) return []
+    return transcripts.spend(known, since)
   })
 
   ipcMain.handle(IPC.agentGetHooksHealth, async (): Promise<HooksHealth> => {
@@ -470,8 +478,9 @@ export async function prepareAgentLaunch(
   /** The agent starts only after something else (the repository's setup script): armStartWatchdog() then. */
   options: { deferStartWatchdog?: boolean; cwd?: string } = {}
 ): Promise<AgentLaunchHooks | null> {
-  if (agent !== 'claude' && agent !== 'codex' && agent !== 'gemini' && agent !== 'qwen' && agent !== 'pi') return null
-  if (agent === 'claude' || agent === 'codex') pollers[agent]?.nudge()
+  if (!hasHooks(agent)) return null
+  const vendor = usageVendor(agent)
+  if (vendor) pollers[vendor]?.nudge()
   const rt = await runtime
   // A cheap self-check per launch: an agent must not inherit a socket that is already gone.
   const health = rt ? await rt.supervisor.check() : startFailure

@@ -2,7 +2,7 @@
 // context window is used. A click opens, above it, the context row and the current agent's plan windows in the 设置 ·
 // 额度 rows (Figma 33I) — what the session header's context and usage chips show for a CLI session. No figures, no ring.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { claudeOrCodex } from '@shared/agents'
+import { usageVendor } from '@shared/agents'
 import { contextHigh, VENDOR_LABEL, vendorStatus, windowKey, type ContextUsage } from '@shared/session-meta'
 import type { AgentKind, SessionId } from '@shared/types'
 import { useMetaNow } from '../session-meta/MetaChips'
@@ -18,7 +18,7 @@ export function ContextButton({ sessionId, agent }: { sessionId: SessionId; agen
   const context = useSessionMeta((s) => s.bySession[sessionId]?.context)
   // Off the plan (a third-party endpoint), the account's usage is not this session's.
   const onPlan = useSessionMeta((s) => s.bySession[sessionId]?.plan !== false)
-  const vendor = onPlan ? claudeOrCodex(agent) : null
+  const vendor = onPlan ? usageVendor(agent) : null
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -52,7 +52,7 @@ export function ContextButton({ sessionId, agent }: { sessionId: SessionId; agen
   )
 }
 
-function ContextPanel({ context, vendor }: { context: ContextUsage | undefined; vendor: ReturnType<typeof claudeOrCodex> }) {
+function ContextPanel({ context, vendor }: { context: ContextUsage | undefined; vendor: ReturnType<typeof usageVendor> }) {
   const now = useMetaNow()
   const usage = useSessionMeta((s) => (vendor ? s.usage[vendor] : undefined))
   const account = useSessionMeta((s) => (vendor ? s.accounts[vendor] : undefined))

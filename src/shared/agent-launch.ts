@@ -1,6 +1,6 @@
 // How a session's agent is started inside the user's login shell (PRD §6.2).
 // Pure: the pty-host supplies the shell and the real cwd.
-import { AGENT_SPECS } from './agents'
+import { AGENT_SPECS, hasOwnAdapter } from './agents'
 import type { CliPermission } from './gui-chat'
 import type { AgentKind } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
@@ -74,7 +74,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
   const resumeId = isSafeAgentSessionId(options.resumeAgentSessionId) ? options.resumeAgentSessionId : undefined
   const model = options.model !== undefined && MODEL.test(options.model) ? options.model : undefined
   const prompt = !resumeId && options.initialPrompt?.trim() ? ['--', options.initialPrompt] : []
-  if (kind !== 'claude' && kind !== 'codex') return otherAgentArgv(kind, resumeId, model, options)
+  if (!hasOwnAdapter(kind)) return otherAgentArgv(kind, resumeId, model, options)
   if (kind === 'claude') {
     return [
       'claude',
@@ -130,7 +130,7 @@ function otherAgentArgv(kind: Exclude<AgentKind, 'shell' | 'claude' | 'codex'>, 
 
 /** Whether a first message can ride on this CLI's command line; when not, it is sent once the TUI is up (§6.9). */
 export function promptOnCommandLine(kind: Exclude<AgentKind, 'shell'>): boolean {
-  return kind === 'claude' || kind === 'codex' || AGENT_SPECS[kind].prompt.kind !== 'type'
+  return AGENT_SPECS[kind].prompt.kind !== 'type'
 }
 
 /** OSC number the launch script uses to tell the terminal what became of the agent process. */

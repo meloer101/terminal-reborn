@@ -2,7 +2,7 @@
 // worktree session as the phone's 新建会话 does (remote/handler.ts) and gives it the task's message as its first one
 // (F21's launch); a 发给已有会话 task writes into the session through the send protocol (§6.9) once it is idle. A run's
 // session that ends its turn with nothing changed is archived (F15) when the task says so. Every outcome goes back to main.
-import { AGENT_SPECS } from '@shared/agents'
+import { AGENT_SPECS, usageVendor } from '@shared/agents'
 import { isCliPermission } from '@shared/gui-chat'
 import { runBranch, runSessionTitle, type Schedule, type ScheduleFire, type ScheduleRun } from '@shared/schedule'
 import type { SessionId, SessionStatus } from '@shared/types'
@@ -44,7 +44,8 @@ async function openSession(schedule: Schedule, planned: number): Promise<Outcome
   const project = workspace.projects.find((p) => p.id === action.projectId)
   if (!project) return fail('项目不在了')
   const label = AGENT_SPECS[action.agent].label
-  const quota = action.agent === 'claude' || action.agent === 'codex' ? quotaBlock(label, useSessionMeta.getState().usage[action.agent], Date.now()) : null
+  const vendor = usageVendor(action.agent)
+  const quota = vendor ? quotaBlock(label, useSessionMeta.getState().usage[vendor], Date.now()) : null
   if (quota) return skip(quota)
   if (previousRunActive(workspace.sessions, schedule.id)) return skip('上次开的会话还没完')
   const [installed, info] = await Promise.all([window.tr.app.detectAgents(), window.tr.gitWorktrees.newSessionInfo(project.rootPath)])
