@@ -160,7 +160,9 @@ export async function newSessionInfo(root: unknown): Promise<NewSessionInfo> {
 /** Brings remote branches up to date before branching off; offline or no remote is fine (the local refs are used). */
 async function fetchRemotes(top: string): Promise<void> {
   if ((await orEmpty(git(top, ['remote']))).trim() === '') return
-  await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(top) }).catch(() => {})
+  await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(top) }).catch((error: unknown) =>
+    console.warn('[worktree-create] fetch failed; branching from the local refs', error)
+  )
 }
 
 const refExists = (top: string, ref: string): Promise<boolean> =>
@@ -268,7 +270,9 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
     return { ok: false, reason: 'git', message: error instanceof Error ? error.message : String(error) }
   }
   // The Worktree view and the merge compare against this (PRD F17 / F4).
-  await git(top, ['config', `branch.${request.branch}.base`, request.base]).catch(() => {})
+  await git(top, ['config', `branch.${request.branch}.base`, request.base]).catch((error: unknown) =>
+    console.warn(`[worktree-create] could not set branch.${request.branch}.base`, error)
+  )
   const copyFailures = request.prepare ? await copyIncluded(top, path) : 0
   return { ok: true, path, copyFailures }
 }
