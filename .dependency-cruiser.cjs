@@ -65,6 +65,30 @@ module.exports = {
       from: { path: '^src/main/usage-stats/', pathNot: '^src/main/usage-stats/index\\.ts$' },
       to: { path: ['^src/(?!shared/|main/usage-stats/)', '(^|/)node_modules/electron/'] }
     },
+    // Renderer layers, bottom to top: ui + styles (atoms, tokens) → state (workspace store, actions) → feature folders
+    // (terminal, sidebar, panels …) → app-shell (layout). A layer imports only from layers below it. What broke this
+    // when the rules came in is listed in .dependency-cruiser-known-violations.json (shrink-only): fix, never add.
+    {
+      name: 'renderer-ui-is-the-bottom',
+      severity: 'error',
+      comment: 'src/renderer/ui and styles are the atoms every layer uses: they import no state, feature or app-shell code.',
+      from: { path: '^src/renderer/(ui|styles)/' },
+      to: { path: '^src/renderer/(?!ui/|styles/)' }
+    },
+    {
+      name: 'renderer-state-under-features',
+      severity: 'error',
+      comment: 'src/renderer/state is what features read and act through: it imports ui and styles, never a feature or app-shell.',
+      from: { path: '^src/renderer/state/' },
+      to: { path: '^src/renderer/(?!state/|ui/|styles/)' }
+    },
+    {
+      name: 'renderer-app-shell-on-top',
+      severity: 'error',
+      comment: 'src/renderer/app-shell lays the features out: a feature, state or ui never imports it (main.tsx mounts it).',
+      from: { path: '^src/renderer/(?!app-shell/)', pathNot: '^src/renderer/main\\.tsx$' },
+      to: { path: '^src/renderer/app-shell/' }
+    },
     {
       name: 'pty-host-stands-alone',
       severity: 'error',

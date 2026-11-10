@@ -1,0 +1,464 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/renderer/command-palette/palette-store.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/sidebar/shortcuts-runtime.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/split/commands.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/split/drag.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/split/font-zoom.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/status/bridge.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/terminal/search-store.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/terminal/TerminalArea.tsx",
+    "to": "src/renderer/app-shell/drawer-motion.ts",
+    "unresolvedTo": "../app-shell/drawer-motion",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/terminal/TerminalArea.tsx",
+    "to": "src/renderer/app-shell/layout.ts",
+    "unresolvedTo": "../app-shell/layout",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/terminal/TerminalArea.tsx",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/ui/menu.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-app-shell-on-top"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/branch-sync.ts",
+    "to": "src/renderer/panels/worktree/model.ts",
+    "unresolvedTo": "../panels/worktree/model",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/branch-sync.ts",
+    "to": "src/renderer/panels/worktree/store.ts",
+    "unresolvedTo": "../panels/worktree/store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/link-actions.ts",
+    "to": "src/renderer/panels/browser/store.ts",
+    "unresolvedTo": "../panels/browser/store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/link-actions.ts",
+    "to": "src/renderer/panels/files/actions.ts",
+    "unresolvedTo": "../panels/files/actions",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/link-actions.ts",
+    "to": "src/renderer/panels/files/store.ts",
+    "unresolvedTo": "../panels/files/store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/link-actions.ts",
+    "to": "src/renderer/terminal/links.ts",
+    "unresolvedTo": "../terminal/links",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/persistence.ts",
+    "to": "src/renderer/composer/drafts.ts",
+    "unresolvedTo": "../composer/drafts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/archive/store.ts",
+    "unresolvedTo": "../archive/store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/attempts/same-task-store.ts",
+    "unresolvedTo": "../attempts/same-task-store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/new-session/model.ts",
+    "unresolvedTo": "../new-session/model",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/new-session/sheet-store.ts",
+    "unresolvedTo": "../new-session/sheet-store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/panels/merge/store.ts",
+    "unresolvedTo": "../panels/merge/store",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/panels/worktree/actions.ts",
+    "unresolvedTo": "../panels/worktree/actions",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/settings/SettingsDialog.tsx",
+    "unresolvedTo": "../settings/SettingsDialog",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-actions.ts",
+    "to": "src/renderer/split/commands.ts",
+    "unresolvedTo": "../split/commands",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-start.ts",
+    "to": "src/renderer/gui/launch.ts",
+    "unresolvedTo": "../gui/launch",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-start.ts",
+    "to": "src/renderer/terminal/live-sessions.ts",
+    "unresolvedTo": "../terminal/live-sessions",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/state/session-start.ts",
+    "to": "src/renderer/terminal/registry.ts",
+    "unresolvedTo": "../terminal/registry",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-state-under-features"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/ui/menu.ts",
+    "to": "src/renderer/app-shell/windows-runtime.ts",
+    "unresolvedTo": "../app-shell/windows-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-ui-is-the-bottom"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/renderer/ui/MenuHost.tsx",
+    "to": "src/renderer/state/window-scope.ts",
+    "unresolvedTo": "../state/window-scope",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "renderer-ui-is-the-bottom"
+    }
+  }
+]
