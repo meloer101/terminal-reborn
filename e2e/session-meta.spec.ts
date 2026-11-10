@@ -488,6 +488,8 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(dialog.getByTestId('usage-page-window-codex-300')).toHaveAttribute('data-level', 'exhausted')
     await expect(dialog.getByRole('switch', { name: '用到 75%、90% 和用完时发通知' })).toHaveAttribute('aria-checked', 'true')
     // Figma 33I: the agent's mark on the title's left edge; window labels start where the agent's name does.
+    // Measured once the sheet has grown in (it opens at 0.97 scale, which moves every left edge).
+    await dialog.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
     const textLeft = (l: Locator) =>
       l.evaluate((el) => {
         const range = document.createRange()

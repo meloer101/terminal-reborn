@@ -53,7 +53,6 @@ const BASELINE: Record<string, number> = {
   'settings/AppearancePane.module.css': 1,
   'settings/PhonePane.module.css': 2,
   'settings/PreviewTerminal.module.css': 2,
-  'settings/UsagePane.module.css': 3,
   'settings/WorktreePane.module.css': 2,
   'settings/controls.module.css': 16,
   'sidebar/SelectionDrop.module.css': 4,

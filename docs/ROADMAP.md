@@ -8,7 +8,8 @@
 
 ## 当前位置
 
-- 2026-11-09：GUI 对话里连续的工具调用收成一行摘要（PRD v1.167，Figma 70′B / 70C）：「读取了 2 个文件，运行了 1 条命令 ›」，点开看每一行；agent 的文字、子 agent、派活图、等你确认的调用不收。
+- 2026-11-09：GUI 对话里连续的工具调用收成一行摘要（PRD v1.168，Figma 70′B / 70C）：「读取了 2 个文件，运行了 1 条命令 ›」，点开看每一行；agent 的文字、子 agent、派活图、等你确认的调用不收。
+- 2026-11-09：设置 · 额度 加 token 统计（PRD v1.167，Figma 69″）：周 / 月 / 年 / 全部的 token、API 等价、会话、连续天数，每天或每月的柱、过去一年的热力图、按 agent / 模型 / 项目 / 小时的份额；只读本机日志（Claude、Codex、OpenCode、Pi、Grok），每家标自己的起点，Wavi 不另存。
 - 2026-11-09：GUI 派活方的对话里画出派活（PRD v1.166，Figma 68′）：`wavi run` 的位置是扇出图（也是确认），输入框上方是派活条，派活报告是报告卡、不再是用户气泡。
 - 2026-11-09：GUI 会话的 context 圆环有数了（PRD v1.164）：Claude、Codex、ACP、Pi 的 GUI 会话各自从协议里报 context 用量，点圆环能看到 context 一行。
 - 2026-11-09：`wavi run` 派出的子会话也能开成 GUI（PRD v1.163）：派活方是 GUI、子会话的 agent 能跑 GUI 时默认开 GUI，`--ui gui|cli` 指定。
@@ -102,6 +103,8 @@
 - [x] e2e 不再留下守护进程（2026-10-27）：守护进程按设计忽略普通 SIGTERM（PRD §6.8），`scale.spec.ts` 和打包测试却用 SIGTERM 清理，机器上积了跑了 6–8 天的守护进程和 agent。改用 SIGKILL（`e2e/daemons.ts`），并在整轮结束时结束本轮各 profile 下还活着的守护进程（`e2e/global-setup.ts`，只碰本轮的 profile）。`pty-daemon.spec.ts` 在负载下丢掉开头几个字（点击时 xterm 还没打开，键盘没进终端），改为等终端拿到焦点、shell 画出提示符再打字：8 路并行 16/16
 
 外部需求（每条写明来源；o = stablyai/orca，c = manaflow-ai/cmux，s = superset-sh/superset，cc = anthropics/claude-code，cx = openai/codex）：
+- [x] 设置 · 额度的 token 统计（2026-11-09，PRD v1.167，Figma 69″）：Claude、Codex、OpenCode、Pi、Grok 的本机日志，周 / 月 / 年 / 全部、热力图、按 agent / 模型 / 项目 / 小时。
+- [ ] token 统计接其余 agent：Gemini、Qwen、Kimi、Copilot、Amp、Droid、Cline、Auggie、CodeBuddy、Antigravity、Kiro（ccusage / tokscale 有解析，本机没有日志、未核对）；Crush、Goose 只有整场会话的数字；Cursor 本地没有 token。
 - [ ] 国产套餐（GLM、MiniMax、Kimi）的额度显示。o#18506、o#21757。现在走第三方端点的会话只是不显示额度（v1.46）
 - [x] 状态在 Auto mode、subagent、后台任务下的长时压测，顺带修“两个同时确认的工具调用互相顶替”（2026-10-20，PRD v1.52）。c#1027（44 👍：Running / Needs Input 时对时错）、c#2322（22 👍：通知时快时慢）、o#13600（Codex 自动批准后仍提示需要处理）。先核对了 Claude Code 2.1.304 二进制（`agent_id`、`background_tasks`、拒绝不发 PostToolUse、标题 `✳` = 有对话框，PRD §6.6），再按它写了会话模拟器 `src/shared/agent-sim.ts`，回放进状态机对照真实状态（`src/main/hooks/status-sim.test.ts`）。改动前：Claude 48 小时模拟里显示错误最长 266 s、超过 1 s 的错误占 5.5% 的时间，丢 5% hook 时最长 230 s，Codex 最长 39.5 s——主要是两个对话框互相顶替、子 agent 的调用把“等你处理 / 已完成”改回运行中、批准后工具在跑却还显示等你处理、空闲时 15 s 才检查一次。改后：每个对话框一个待确认项、子 agent 只算它的对话框、`idle_prompt` / 对话框后标题转动 / 屏幕上的对话框参与自愈、需要时立刻改用 1 s 检查（PRD §3.1）；最长 7 s、0.6%，丢 5% hook 时最长 7 s，Codex 最长 4.5 s。Claude 的 PermissionRequest 只在真要问人时触发（Auto mode 放行的不触发），所以 o#13600 那种误报在 Claude 上不会出现；Codex 的“Approve for me”没在真 CLI 上验证。测试：`status-sim.test.ts`（含丢 hook、完全没有 hook）、`session-state-machine.test.ts`（600 段随机序列：等你处理 ⇔ 有待确认项）、`normalize.test.ts`，e2e `asks.spec.ts`（真实 hook 链路），可选的 `TR_STATUS_STRESS=1 … e2e/status-stress.spec.ts`（假 agent 在应用里回放、对照侧栏）。真 CLI 下的并行对话框、后台 agent 请求权限和 agent teams 没跑（花额度，列在“待作者手动确认”）
 - [x] 把文件和图片拖进或粘贴进运行中的会话（2026-10-20，PRD F19）：拖到终端上（Finder 或右侧栏「文件」视图）、⌘V 粘贴截图、会话头的回形针（文件和文件夹），都把转义后的路径放进输入行，agent 自己把图片变成附件。c#3435（22 👍）、o#15377。e2e `attachments.spec.ts`；从 Finder 真实拖入还没在真机上走一遍（拖入用的 `pathForFile` 和欢迎页拖文件夹是同一个）
@@ -277,7 +280,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] Pi 直接用 `pi --mode rpc` 做 GUI 会话（PRD v1.160，照 Paseo / T3 Code，不再要 pi-acp）：`src/main/gui/pi-rpc.ts`（事件、对话框、选择器、会话文件历史）、`pi-driver.ts`，权限扩展 `resources/hooks/wavi-pi-gui.js`；换模型 / 推理强度在同一会话上重启（rpc 的 `set_model` 会写 `~/.pi/agent/settings.json`）；pty-host 认得 Pi 的 `extension_ui_response`（重开不再问已答的）。测试 `pi-rpc.test.ts`、`host.test.ts`（假 Pi `fixtures/fake-pi.mjs`）、e2e `gui-pi.spec.ts` 5 个；真 Pi 0.84.1 + DeepSeek 在 app 里跑过一轮工具、换模型、停止、重开；独立 review 8 条（高 1、中 2、低 5）已修。没做：app 关着时接受编辑下的 edit 要等重新打开（同 ACP agent）
 - [x] 派活的子会话开成 GUI（PRD v1.163）：`childUi`（`src/shared/dispatch.ts`）、`wavi run --ui`、`addBackgroundSession` 带界面、等「开始」的请求存界面；单测覆盖规则和存盘
 - [x] GUI 派活可视化（PRD v1.166，Figma 68′）：`src/renderer/gui/Dispatch.tsx`（扇出图、派活条、报告卡和通知），`src/renderer/dispatch/view.ts`（两处共用的视图），`src/shared/dispatch.ts` 读回 `wavi run` 的回答、报告和通知；e2e `gui-dispatch.spec.ts`（假 Claude 真跑 `wavi run`，两种主题截图在 `test-results/gui-dispatch/`）
-- [x] GUI 工具调用收成一行（PRD v1.167，Figma 70′B / 70C）：`src/renderer/gui/model.ts` 的 `stepParts` / `groupView`，`Feed.tsx` 的 `ToolGroup`；e2e 在 `gui-session.spec.ts` 的工具行一项。没测：运行中那一组的样子（转圈、后接正在跑的调用）只有单测，没在真界面截图；MCP 的摘要只写工具名（ChatItem 没有服务名）。
+- [x] GUI 工具调用收成一行（PRD v1.168，Figma 70′B / 70C）：`src/renderer/gui/model.ts` 的 `stepParts` / `groupView`，`Feed.tsx` 的 `ToolGroup`；e2e 在 `gui-session.spec.ts` 的工具行一项。没测：运行中那一组的样子（转圈、后接正在跑的调用）只有单测，没在真界面截图；MCP 的摘要只写工具名（ChatItem 没有服务名）。
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
