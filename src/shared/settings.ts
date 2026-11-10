@@ -1,7 +1,7 @@
 // User settings (PRD §4 F7). Persisted by main in <userData>/settings.json; every window receives
 // changes through TrApi.settings.onChange. Pure: sanitizing never throws, unknown/invalid values
 // fall back to defaults so a hand-edited file can't break the app.
-import { headlessAgent } from './agents'
+import { headlessAgent, type HeadlessAgent } from './agents'
 import { normalizeHex } from './color'
 import { DEFAULT_PORT_BASE, PORT_BASE_LIMITS } from './ports'
 import { DEFAULT_REMOTE_PORT } from './remote'
@@ -159,7 +159,7 @@ export interface PrSettings {
    * AI 写 in 创建 PR 面板 (v1.68): which CLI writes the commit message and the PR title / body — the session's own
    * agent, or always Claude / Codex — on the user's own login, in a separate headless run.
    */
-  writer: 'session' | 'claude' | 'codex'
+  writer: 'session' | HeadlessAgent
   /** Model for Claude's runs; empty uses the CLI's own. Haiku by default: a commit message needs no big model. */
   writerClaudeModel: string
   /** Model for Codex's runs; empty uses the CLI's own (at low reasoning effort). */

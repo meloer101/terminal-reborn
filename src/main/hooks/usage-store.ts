@@ -4,6 +4,7 @@
 // Readings come from several places that see the account at different moments — every session's statusLine or rollout
 // (whatever its last response said) and the polled account answer (./plan-usage-poller.ts) — so they are merged per
 // window: within one period usage only grows, so the higher figure is the newer one; a later reset time is a new period.
+import { USAGE_VENDORS } from '@shared/agents'
 import {
   sameUsage,
   usageAlertLevel,
@@ -18,7 +19,7 @@ import {
 /** The same figures again are passed on at most this often (they refresh the popover's "N 分钟前更新"). */
 export const UNCHANGED_REFRESH_MS = 60_000
 
-const VENDORS: ReadonlySet<string> = new Set<UsageVendor>(['claude', 'codex'])
+const VENDORS: ReadonlySet<string> = new Set<UsageVendor>(USAGE_VENDORS)
 
 /** Readings older than this (a replayed log, a stale file) never raise an alert. */
 export const ALERT_FRESH_MS = 10 * 60_000

@@ -3,6 +3,7 @@
 // JSONL under ~/.claude/projects, Codex's rollout under ~/.codex/sessions, Pi's session file under
 // ~/.pi/agent/sessions (read with pi-rpc.ts). Electron-free.
 
+import type { ClaudeOrCodex } from '@shared/agents'
 import { existsSync, realpathSync } from 'node:fs'
 import { open, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -18,7 +19,7 @@ const READ_BYTES = 32 * 1024 * 1024
 const MAX_DAY_DIRS = 400
 
 export interface TranscriptSource {
-  agent: 'claude' | 'codex'
+  agent: ClaudeOrCodex
   path: string
 }
 

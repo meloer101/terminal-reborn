@@ -1,6 +1,6 @@
 // How a session's agent is started inside the user's login shell (PRD §6.2).
 // Pure: the pty-host supplies the shell and the real cwd.
-import { AGENT_SPECS, hasOwnAdapter } from './agents'
+import { AGENT_SPECS, hasOwnAdapter, type ClaudeOrCodex } from './agents'
 import type { CliPermission } from './gui-chat'
 import type { AgentKind } from './types'
 import { isSafeAgentSessionId } from './workspace-file'
@@ -101,7 +101,7 @@ export function agentArgv(kind: Exclude<AgentKind, 'shell'>, realCwd: string, op
 }
 
 /** Every other CLI, from its row in agents.ts: binary, its own fixed arguments, the adapter's, resume, model, first prompt. */
-function otherAgentArgv(kind: Exclude<AgentKind, 'shell' | 'claude' | 'codex'>, resumeId: string | undefined, model: string | undefined, options: AgentLaunchOptions): string[] {
+function otherAgentArgv(kind: Exclude<AgentKind, 'shell' | ClaudeOrCodex>, resumeId: string | undefined, model: string | undefined, options: AgentLaunchOptions): string[] {
   const spec = AGENT_SPECS[kind]
   const resume =
     resumeId === undefined

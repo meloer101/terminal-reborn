@@ -1,6 +1,7 @@
 // A session's conversation for the phone (PRD F22, Figma 45C): its transcript read incrementally into chat items
 // (@shared/transcript-chat), pages on request, and what is appended pushed to the phones watching it. A file is only
 // read while a phone looks at its session. Electron-free: index.ts says where each session's transcript is.
+import type { ClaudeOrCodex } from '@shared/agents'
 import { watch, type FSWatcher } from 'node:fs'
 import { open, stat } from 'node:fs/promises'
 import { StringDecoder } from 'node:string_decoder'
@@ -8,7 +9,7 @@ import { createChatParser, type ChatItem, type ChatParser } from '@shared/transc
 import { REMOTE_LIMITS, type PhoneEvent } from '@shared/remote'
 
 export interface FeedSource {
-  agent: 'claude' | 'codex'
+  agent: ClaudeOrCodex
   path: string
 }
 

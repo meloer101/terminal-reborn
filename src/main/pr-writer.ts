@@ -1,6 +1,7 @@
 // AI 写 (PRD F16 v1.68): gathers the git material for a commit message or a PR title / body and runs the user's own
 // Claude / Codex headlessly over it (src/shared/ship-writer.ts has the prompt, argv and parsing). One run per worktree
 // and kind (commit message / PR text): asking again cancels the earlier one. Nothing is committed or sent here — the text goes back to the sheet's fields.
+import { HEADLESS_AGENTS } from '@shared/agents'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -148,7 +149,7 @@ export async function writeShipText(raw: unknown): Promise<WriteResult> {
   if (!info.base || info.base === info.branch) return fail('这是基线分支本身')
 
   const path = await searchPath()
-  const order: WriterAgent[] = request.agent === 'claude' ? ['claude', 'codex'] : ['codex', 'claude']
+  const order: WriterAgent[] = [request.agent, ...HEADLESS_AGENTS.filter((a) => a !== request.agent)]
   const agent = order.find((name) => executableOnPath(path, name))
   if (!agent) return fail('没有找到 claude 或 codex：装好其中一个后再试')
   const binary = executableOnPath(path, agent)!

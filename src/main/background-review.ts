@@ -4,6 +4,7 @@
 // when their switch in 设置 · 自动化 · 代码审阅 is on. Nothing here ever types into the coding session.
 // Finished results and the findings the user ignored are saved in `review-results.json` (v1.63), so a restart neither
 // reviews the same diff again nor lands an ignored finding again.
+import { headlessAgent } from '@shared/agents'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -57,7 +58,6 @@ const KILL_GRACE_MS = 1000
 const MAX_STDOUT = 16 * 1024 * 1024
 const MAX_STDERR = 8 * 1024
 const MAX_ROOT = 4096
-const AGENTS: ReadonlySet<unknown> = new Set<ReviewAgent>(['claude', 'codex'])
 const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
 
 interface Job {
@@ -166,10 +166,11 @@ export function parseReviewRequest(raw: unknown): ReviewRequest {
   if (typeof raw !== 'object' || raw === null) throw new Error('invalid review request')
   const { root, agent, trigger, base, force } = raw as Record<string, unknown>
   if (typeof root !== 'string' || !root.startsWith('/') || root.length > MAX_ROOT || root.includes('\0')) throw new Error('invalid worktree root')
-  if (!AGENTS.has(agent)) throw new Error('invalid agent')
+  const reviewer = headlessAgent(agent)
+  if (!reviewer) throw new Error('invalid agent')
   if (!TRIGGERS.has(trigger)) throw new Error('invalid trigger')
   if (base !== undefined && (typeof base !== 'string' || base.length > 255)) throw new Error('invalid base')
-  return { root, agent: agent as ReviewAgent, trigger: trigger as ReviewTrigger, ...(typeof base === 'string' ? { base } : {}), ...(force === true ? { force: true } : {}) }
+  return { root, agent: reviewer, trigger: trigger as ReviewTrigger, ...(typeof base === 'string' ? { base } : {}), ...(force === true ? { force: true } : {}) }
 }
 
 function rulesOf(settings: ReviewSettings): string {
@@ -514,7 +515,8 @@ export function registerBackgroundReviewHandlers(): void {
     if (isRoot(root)) void turnStarted(root)
   })
   ipcMain.on(REVIEW_IPC.turnEnded, (event, root: unknown, agent: unknown) => {
-    if (isRoot(root) && AGENTS.has(agent)) void turnEnded(event.sender, root, agent as ReviewAgent)
+    const reviewer = headlessAgent(agent)
+    if (isRoot(root) && reviewer) void turnEnded(event.sender, root, reviewer)
   })
   ipcMain.handle(REVIEW_IPC.latest, (_event, root: unknown) => (isRoot(root) ? latestReview(root) : null))
   ipcMain.on(REVIEW_IPC.dismiss, (_event, root: unknown, keys: unknown, undo: unknown) => {

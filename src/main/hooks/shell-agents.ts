@@ -7,11 +7,13 @@
 //   more right before the first prompt, after every rc file ran. fish: the same through XDG_DATA_DIRS vendor_conf.d.
 //   bash and other shells: PATH at launch only.
 // Electron-free: the glue passes the directories.
+import { OWN_ADAPTER_AGENTS } from '@shared/agents'
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { shellQuote } from '@shared/agent-launch'
 
-export const SHIM_AGENTS = ['claude', 'codex'] as const
+/** The CLIs a plain terminal gets shims for: the ones with their own adapters (agents.ts). */
+export const SHIM_AGENTS = OWN_ADAPTER_AGENTS
 
 /** The executable shim for one agent: hands over to the shared script. */
 export function shimFile(agent: (typeof SHIM_AGENTS)[number], scriptPath: string): string {

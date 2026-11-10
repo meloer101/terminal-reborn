@@ -2,7 +2,7 @@
 // Evidence for every constant below: PRD §6.9 (Claude Code 2.1.296, Codex 0.142.5).
 // Pure and synchronous: this file only decides WHAT to write; send-executor.ts performs it.
 
-import { claudeOrCodex } from './agents'
+import { claudeOrCodex, type ClaudeOrCodex } from './agents'
 import { resumeScreen } from './limit-resume'
 import type { AgentKind } from './types'
 
@@ -46,7 +46,7 @@ export interface AgentSendProfile {
   preEnterDelayMs: number
 }
 
-export const AGENT_PROFILES: Record<'claude' | 'codex', AgentSendProfile> = {
+export const AGENT_PROFILES: Record<ClaudeOrCodex, AgentSendProfile> = {
   // Claude Code 2.1.296: >800 chars or >=3 newlines -> `[Pasted text #N]` / `[Pasted text #N +K lines]`.
   // A placeholder paste reaches the model wrapped in `<pasted_content id="…">…</pasted_content id="…">`.
   claude: { placeholderOverChars: 800, placeholderAtNewlines: 3, placeholderNeedle: '[Pasted text', preEnterDelayMs: 60 },

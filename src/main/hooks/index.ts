@@ -5,7 +5,7 @@
 import { app, ipcMain, type WebContents } from 'electron'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { hasHooks, usageVendor } from '@shared/agents'
+import { hasHooks, usageVendor, type ClaudeOrCodex } from '@shared/agents'
 import { IPC } from '@shared/ipc'
 import type { AgentEvent, AgentEventEnvelope, HookAgent, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from '@shared/agent-events'
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from '@shared/session-meta'
@@ -268,7 +268,7 @@ export async function promptHeld(promptId: string): Promise<boolean> {
 }
 
 /** The session's transcript, once a hook has named it. */
-export const transcriptSource = (sessionId: string): { agent: 'claude' | 'codex'; path: string } | null => transcripts.sourceOf(sessionId)
+export const transcriptSource = (sessionId: string): { agent: ClaudeOrCodex; path: string } | null => transcripts.sourceOf(sessionId)
 
 const emitter: BridgeEmitter = {
   event: (envelope) => {

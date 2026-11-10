@@ -16,11 +16,18 @@ function sources(dir: string): string[] {
   })
 }
 
-/** `x === 'claude' || x === 'codex'`, `x !== 'codex' && x !== 'claude'` and the like, on one line. */
-const MEMBERSHIP = /(['"])(claude|codex)\1[^\n]*?(\|\||&&)[^\n]*?(['"])(?!\2)(claude|codex)\4/
+/**
+ * The two named together: `x === 'claude' || x === 'codex'` (and `!== … &&`), a list of just the two
+ * (`['claude', 'codex']`), or a union of just the two (`'claude' | 'codex'`). Longer lists are other capabilities.
+ */
+const MEMBERSHIP = [
+  /(['"])(claude|codex)\1[^\n]*?(\|\||&&)[^\n]*?(['"])(?!\2)(claude|codex)\4/,
+  /\[\s*(['"])(claude|codex)\1\s*,\s*(['"])(?!\2)(claude|codex)\3\s*\]/,
+  /(?<!\|\s*)(['"])(claude|codex)\1\s*\|\s*(['"])(?!\2)(claude|codex)\3(?!\s*\|)/
+]
 
 export function membershipChecks(source: string): number {
-  return source.split('\n').filter((line) => MEMBERSHIP.test(line)).length
+  return source.split('\n').filter((line) => MEMBERSHIP.some((pattern) => pattern.test(line))).length
 }
 
 describe('agent capabilities', () => {
@@ -29,6 +36,10 @@ describe('agent capabilities', () => {
     expect(membershipChecks("if (a !== 'codex' && a !== 'claude') return")).toBe(1)
     expect(membershipChecks("const x = kind === 'claude' ? 1 : 2")).toBe(0)
     expect(membershipChecks("const name = kind === 'codex' ? 'Codex' : 'Claude'")).toBe(0)
+    expect(membershipChecks("const VENDORS = new Set(['claude', 'codex'])")).toBe(1)
+    expect(membershipChecks("type A = 'codex' | 'claude'")).toBe(1)
+    expect(membershipChecks("type HookAgent = 'claude' | 'codex' | 'gemini'")).toBe(0)
+    expect(membershipChecks("const STATS = ['claude', 'codex', 'opencode']")).toBe(0)
   })
 
   it('no file outside agents.ts asks whether an agent is Claude Code or Codex', () => {

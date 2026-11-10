@@ -8,7 +8,7 @@
 // The files are only read — incrementally, from where the last read stopped — and only inside the agents' own data
 // directories. Nothing here is persisted: after an app restart a session's history is read again from its file.
 import { open } from 'node:fs/promises'
-import { claudeOrCodex, hasOwnAdapter } from '@shared/agents'
+import { claudeOrCodex, hasOwnAdapter, type ClaudeOrCodex } from '@shared/agents'
 import type { HookAgent } from '@shared/agent-events'
 import type { ContextHistory, ContextPoint, SessionSpend, UsageVendor } from '@shared/session-meta'
 import { claudeUsage, codexTokenCount, entryTime, isRec, type JsonRec } from '@shared/usage-records'
@@ -237,7 +237,7 @@ export class TranscriptMeter {
   }
 
   /** Where the session's conversation is written, while it runs (the phone's chat view reads it, PRD F22). */
-  sourceOf(sessionId: string): { agent: 'claude' | 'codex'; path: string } | null {
+  sourceOf(sessionId: string): { agent: ClaudeOrCodex; path: string } | null {
     const tracked = this.sessions.get(sessionId)
     const agent = claudeOrCodex(tracked?.agent)
     if (!tracked || !tracked.path || tracked.detachedAt !== undefined || !agent) return null
