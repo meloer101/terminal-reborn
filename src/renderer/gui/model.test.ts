@@ -40,7 +40,13 @@ import {
   slashGroups,
   elapsedLabel,
   subagentElapsed,
-  blockHas
+  blockHas,
+  dispatchRows,
+  dispatchKey,
+  waviMessage,
+  reportedChildren,
+  lastUserAt,
+  dispatchOutcomes
 } from './model'
 
 const user = (id: string, text = 'hi'): ChatItem => ({ kind: 'user', id, at: 0, text, images: 0 })
@@ -64,6 +70,49 @@ describe('feedBlocks (Figma 49″C)', () => {
 
   it('keys a run by its first item, so a growing run keeps its rows', () => {
     expect(feedBlocks([tool('a')])[0]?.key).toBe(feedBlocks([tool('a'), tool('b')])[0]?.key)
+  })
+})
+
+describe('dispatch in the feed (Figma 68′)', () => {
+  const run = (id: string, out?: string, patch: Partial<Extract<ChatItem, { kind: 'tool' }>> = {}) =>
+    tool(id, { name: 'Bash', arg: 'wavi run codex "x"', input: 'wavi run codex "x"', ...(out === undefined ? { state: 'running' } : { output: out }), ...patch })
+  const answer = (sid: string) => `Session ${sid} (codex, a new branch off main) waits for the user's 開始 in Wavi.`.replace('開始', '开始')
+
+  it('draws the turn’s wavi run calls as one graph at the first that named a session; the others leave the feed', () => {
+    const items: ChatItem[] = [user('u'), tool('r'), run('a', answer('s-1')), run('b', answer('s-2')), run('c', '[limit] no'), run('d'), user('u2'), run('e', answer('s-3'))]
+    const rows = dispatchRows(items)
+    expect(Object.fromEntries(rows)).toEqual({ a: { kind: 'graph', ids: ['s-1', 's-2'] }, b: { kind: 'merged' }, e: { kind: 'graph', ids: ['s-3'] } })
+  })
+
+  it('leaves a subagent’s calls and other commands alone', () => {
+    expect(dispatchRows([run('a', answer('s-1'), { parent: 'ag' }), tool('b', { name: 'Bash', input: 'echo wavi run', output: answer('s-9') })]).size).toBe(0)
+  })
+
+  it('keys a steps block by what it draws, so the block re-renders only when that changes', () => {
+    const items: ChatItem[] = [run('a', answer('s-1')), run('b', answer('s-2'))]
+    const [block] = feedBlocks(items)
+    expect(dispatchKey(block!, dispatchRows(items))).toBe('a=s-1,s-2;b=')
+    expect(dispatchKey(block!, new Map())).toBe('')
+  })
+
+  it('tells Wavi’s report and notice from the user’s own words', () => {
+    expect(waviMessage('[Wavi 派活报告] 你派出的会话有了结果\n\n— 「T」 · Codex · 一轮结束 · 快照 · id s-1')?.kind).toBe('report')
+    expect(waviMessage('[Wavi 派活] 用户同意了，下面的会话已经开始：\n- id s-1 · codex · 「T」 · 快照')?.kind).toBe('notice')
+    expect(waviMessage('[Wavi 同任务多解汇报] …')).toBeNull()
+    expect(waviMessage('hello')).toBeNull()
+  })
+
+  it('knows which children reported here, and when the user last wrote themselves', () => {
+    const report: ChatItem = { kind: 'user', id: 'r', at: 9, text: '[Wavi 派活报告] x\n\n— 「T」 · Codex · 一轮结束 · 快照 · id s-1', images: 0 }
+    const items: ChatItem[] = [{ ...user('u'), at: 5 }, report]
+    expect([...reportedChildren(items)]).toEqual(['s-1'])
+    expect(lastUserAt(items)).toBe(5)
+    expect(lastUserAt([report])).toBeNull()
+  })
+
+  it('reads which requests were turned down or left unanswered from Wavi’s notices', () => {
+    const notice: ChatItem = { kind: 'user', id: 'n', at: 1, text: '[Wavi 派活] 用户拒绝了这些会话，什么都没开（来自 Wavi，不是用户的指示）：\n- id s-1 · codex · 「Tests」 · 快照', images: 0 }
+    expect(Object.fromEntries(dispatchOutcomes([notice]))).toEqual({ 's-1': { outcome: 'declined', title: 'Tests' } })
   })
 })
 

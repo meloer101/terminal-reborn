@@ -21,9 +21,11 @@ interface State {
   held: Record<SessionId, HeldItem[] | undefined>
   /** Children that ran `wavi report` in their current turn: its end needs no report of Wavi's own. */
   reported: Record<SessionId, true | undefined>
+  /** A child's `+84 −3 · 2 个文件` as its last report counted, for the GUI dispatcher's graph (Figma 68′). Not saved. */
+  changes: Record<SessionId, string | undefined>
 }
 
-export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {}, reported: {} }))
+export const useDispatch = create<State>()(() => ({ confirms: [], launches: {}, messages: {}, queues: {}, held: {}, reported: {}, changes: {} }))
 
 /** What a reload must not lose (null: nothing). */
 export function savedDispatch(state: Pick<State, 'confirms' | 'queues' | 'held'>): SavedDispatch | null {
@@ -74,6 +76,11 @@ export function takeDispatchLaunch(id: SessionId): DispatchLaunch | undefined {
   const launch = useDispatch.getState().launches[id]
   if (launch) useDispatch.setState((s) => ({ launches: { ...s.launches, [id]: undefined } }))
   return launch
+}
+
+export function setChanges(id: SessionId, changes: string | undefined): void {
+  if (useDispatch.getState().changes[id] === changes) return
+  useDispatch.setState((s) => ({ changes: { ...s.changes, [id]: changes } }))
 }
 
 export function setMessage(id: SessionId, message: string): void {

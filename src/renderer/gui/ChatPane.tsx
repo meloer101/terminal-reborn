@@ -18,6 +18,7 @@ import { PromptCard, type CardKeys } from './Cards'
 import { Composer } from './Composer'
 import { Feed } from './Feed'
 import { TodoCard } from './Todos'
+import { DispatchStripGui } from './Dispatch'
 import { retargetGuiSession } from './launch'
 import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { ProjectChip } from './ProjectChip'
@@ -161,6 +162,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
       ref={rootRef}
       className={styles.chat}
       data-testid="gui-chat"
+      data-gui-chat
       data-empty={empty || undefined}
       onKeyDown={(event) => {
         // A waiting card answers from the keyboard. The composer routes its own keys (Composer); typing elsewhere
@@ -205,6 +207,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
       )}
       <div className={styles.dock}>
         {todos && <TodoCard todos={todos} />}
+        <DispatchStripGui parentId={sessionId} />
         {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (
           <QueuedBar key={queued.id} sessionId={sessionId} id={queued.id} text={queued.text} />

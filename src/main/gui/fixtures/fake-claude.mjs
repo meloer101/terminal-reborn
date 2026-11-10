@@ -4,9 +4,11 @@
 // replays the message 1.5 s late; "think" thinks for 1.2 s first and sends it without text (display omitted); "colors"
 // runs a command with colored output; "tasks" writes a task list (TodoWrite), "tasks done" finishes it; "patch file" asks
 // `can_use_tool` for an Edit; "subagent" runs an Agent whose own messages (`parent_tool_use_id`) come before its result,
-// which comes 1.5 s later. With
+// which comes 1.5 s later; "dispatch" runs two `wavi run cursor … --ui cli` in its own shell (the real wavi on PATH),
+// each a Bash call with what it printed. With
 // CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real CLI (`uuid` / `parentUuid`, a
 // `--resume-session-at` resume hangs the next message under that message). `--version` answers as Claude Code 2.1.318.
+import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
@@ -74,6 +76,21 @@ function reply(text) {
     return
   }
   out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: `Hello: ${text}` }] }, session_id: SESSION, parent_tool_use_id: null })
+  if (text.includes('dispatch') && !text.startsWith('[Wavi')) {
+    const runs = [
+      ['Write the login tests', '登录接口测试'],
+      ['Drop the localStorage reads', '移除 localStorage 读写']
+    ]
+    runs.forEach(([task, title], i) => {
+      const command = `wavi run cursor "${task}" --title "${title}" --ui cli`
+      const id = `tu-wavi-${i}`
+      out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] }, session_id: SESSION, parent_tool_use_id: null })
+      const r = spawnSync('/bin/sh', ['-c', command], { encoding: 'utf8', env: process.env, timeout: 20_000 })
+      const printed = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? String(r.error) : ''}`
+      out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: printed, is_error: r.status !== 0 }] }, session_id: SESSION, parent_tool_use_id: null })
+    })
+    return finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '两个会话做完会报告回来，这一轮先到这里。' }] }, session_id: SESSION, parent_tool_use_id: null })
+  }
   if (text.includes('colors')) {
     // A command with colored output and a reply in rich Markdown (Figma 59J's tool rows and type scale).
     out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu2', name: 'Read', input: { file_path: 'src/auth/session.ts' } }] }, session_id: SESSION, parent_tool_use_id: null })

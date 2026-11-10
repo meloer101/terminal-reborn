@@ -1,4 +1,4 @@
-// 派活确认 (PRD F21, Figma 40B): an agent ran `wavi run`. The request belongs to its session, like a permission
+// 派活确认 (PRD F21, Figma 40B): an agent in a terminal session ran `wavi run`. The request belongs to its session, like a permission
 // dialog: the session shows 等你处理 (status/bridge.ts) and this strip sits under its terminal, never over the window,
 // so the other sessions stay usable. Every request of that session waiting at once is one row here — agent, name, the
 // branch it gets (or 当前改动的快照), its task (a click shows all of it) — then 拒绝 / 开始. ⌘↵ starts while the strip
@@ -16,7 +16,9 @@ const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
 const NONE: PendingStart[] = []
 
 export function DispatchStrip() {
-  const id = useActiveSession()?.session.id ?? null
+  const session = useActiveSession()?.session
+  // A GUI dispatcher answers in its chat: the fan-out graph where `wavi run` was called is the confirm (Figma 68′).
+  const id = session && session.ui !== 'gui' ? session.id : null
   const confirms = useDispatch((s) => s.confirms)
   const pending = id ? confirms.filter((c) => c.parentId === id) : NONE
   return id && pending.length > 0 ? <Strip parentId={id} pending={pending} /> : null
