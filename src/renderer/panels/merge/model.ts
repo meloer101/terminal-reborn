@@ -1,8 +1,9 @@
 // What the merge sheet (PRD F4, Figma 05) says about a precheck, its options and a result. Pure.
-import type { GitOperation, MergeBlocker, MergeConflict, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
+import type { GitOperation, MergeBlocker, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 import { shortAgentName } from '@shared/agents'
+import { conflictReason, MAX_PROMPT_CHARS } from '@shared/ship-chain'
 
 /** `muted`: a plain fact, neither good nor bad (还没有自己的提交). */
 export type CheckTone = 'ok' | 'warn' | 'error' | 'working' | 'muted'
@@ -126,19 +127,8 @@ export function testBlocksMerge(state: MergeTestState | null, hasTest: boolean):
   return state?.status !== 'passed'
 }
 
-const CONFLICT_TYPE: Record<string, string> = {
-  content: '两边都改了同一处',
-  'add/add': '两边都新增了这个文件',
-  'modify/delete': '一边修改、一边删除',
-  'rename/delete': '一边重命名、一边删除',
-  'rename/rename': '两边重命名成不同的名字',
-  'file/directory': '一边是文件、一边是文件夹',
-  binary: '二进制文件两边都改了'
-}
-
-export function conflictReason(conflict: MergeConflict): string {
-  return CONFLICT_TYPE[conflict.type] ?? conflict.type
-}
+// How a file conflicts and the hand-off length cap live with the merge chain's hand-offs (src/shared/ship-chain.ts).
+export { conflictReason, MAX_PROMPT_CHARS }
 
 /** Methods the sheet offers, with why one is off. */
 export function methodOptions(check: MergePrecheck): { value: MergeMethod; label: string; disabled: boolean }[] {
@@ -173,8 +163,6 @@ export function agentSessionFor<T extends Pick<Session, 'id' | 'kind'>>(sessions
 }
 
 const MAX_PROMPT_FILES = 10
-/** Below Claude's paste-placeholder threshold (PRD §6.9), so the whole text stays readable in the input line. */
-export const MAX_PROMPT_CHARS = 800
 
 /**
  * One line put into the agent's input line (not sent; the user reads it and presses Enter): merge the base in,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest } from './ship-requests'
+import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from './ship-requests'
 
 const target = { root: '/r', worktree: '/w' }
 
@@ -70,5 +70,16 @@ describe('parseShipMainRequest', () => {
     expect(parseShipMainRequest({ ...valid, message: 'x'.repeat(10_001) })).toBeNull()
     expect(parseShipMainRequest({ ...valid, message: 4 })).toBeNull()
     expect(parseShipMainRequest({ root: '/r', message: 'x', method: 'squash', paths: null })).toBeNull()
+  })
+})
+
+describe('parseShipOperationRequest', () => {
+  it('takes continue or abort on a worktree, nothing else', () => {
+    expect(parseShipOperationRequest({ ...target, action: 'continue' })).toEqual({ ...target, action: 'continue' })
+    expect(parseShipOperationRequest({ ...target, action: 'abort', extra: 1 })).toEqual({ ...target, action: 'abort' })
+    expect(parseShipOperationRequest({ ...target, action: 'skip' })).toBeNull()
+    expect(parseShipOperationRequest({ ...target })).toBeNull()
+    expect(parseShipOperationRequest({ root: '/r', action: 'abort' })).toBeNull()
+    expect(parseShipOperationRequest(null)).toBeNull()
   })
 })

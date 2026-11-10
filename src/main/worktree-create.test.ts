@@ -126,6 +126,27 @@ describe('createWorktree', () => {
     const result = await createWorktree({ root: clone, branch: 'jacob/fresh', base: 'main', folder: 'fresh', prepare: false })
     expect(result.ok).toBe(true)
     if (result.ok) expect(existsSync(join(result.path, 'new.txt'))).toBe(true)
+    expect(result).not.toHaveProperty('fetchFailed')
+  })
+
+  it('says when the fetch before branching off failed, and still starts from the local base', async () => {
+    const origin = repo('gone-origin')
+    const clone = join(base, 'offline-clone')
+    git(base, 'clone', '-q', origin, clone)
+    roots.add(clone)
+    rmSync(origin, { recursive: true, force: true })
+    const result = await createWorktree({ root: clone, branch: 'jacob/offline', base: 'main', folder: 'offline', prepare: false })
+    expect(result).toMatchObject({ ok: true, fetchFailed: '没有远程仓库，没法拉取' })
+    if (result.ok) expect(git(result.path, 'rev-parse', 'HEAD').trim()).toBe(git(clone, 'rev-parse', 'main').trim())
+  })
+
+  it('says when the base could not be recorded', async () => {
+    const lockRepo = repo('locked-config')
+    writeFileSync(join(lockRepo, '.git', 'config.lock'), '')
+    const result = await createWorktree({ root: lockRepo, branch: 'jacob/unsaved', base: 'main', folder: 'unsaved', prepare: false })
+    rmSync(join(lockRepo, '.git', 'config.lock'))
+    expect(result).toMatchObject({ ok: true, baseNotSaved: expect.stringMatching(/^没能记下基线分支 main：.*lock/) })
+    expect(() => git(lockRepo, 'config', '--get', 'branch.jacob/unsaved.base')).toThrow()
   })
 })
 

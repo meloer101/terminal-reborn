@@ -1,6 +1,6 @@
 // Runs the Git view's main-process functions against throwaway repos.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -134,12 +134,60 @@ describe('changes', () => {
     execFileSync('git', ['init', '-q'], { cwd: join(r.dir, 'nested') })
     writeFileSync(join(r.dir, 'nested', 'inner.txt'), 'inner\n')
     const result = await changes(r.dir, undefined)
-    expect(result?.uncommitted).toEqual([
+    expect(result?.uncommitted.map(({ stamp: _stamp, ...rest }) => rest)).toEqual([
       { path: 'nested', status: 'A', added: null, removed: null, untracked: true, nested: true },
       { path: 'new/file.ts', status: 'A', added: 3, removed: 0, untracked: true },
       { path: 'tracked.txt', status: 'M', added: 2, removed: 1 }
     ])
     expect(result).toMatchObject({ base: null, untrackedOmitted: 0 })
+  })
+})
+
+describe('changes · review stamps (合入链路 v2)', () => {
+  const stamps = async (dir: string, base?: string) => {
+    const result = await changes(dir, base)
+    const of = (rows: readonly { path: string; stamp?: string }[]) => Object.fromEntries(rows.map((c) => [c.path, c.stamp]))
+    return { uncommitted: of(result?.uncommitted ?? []), committed: of(result?.committed ?? []) }
+  }
+
+  it('stamps each changed file with its status, counts, size and mtime: an edit changes it, an untouched file keeps it', async () => {
+    const r = repo()
+    r.write('a.txt', 'a\n')
+    r.write('b.txt', 'b\n')
+    r.write('gone.txt', 'g\n')
+    r.commit('init')
+    r.write('a.txt', 'a2\n')
+    r.write('b.txt', 'b2\n')
+    r.write('new.txt', 'n\n')
+    r.git('rm', '-q', 'gone.txt')
+    const old = new Date('2026-01-01T00:00:00Z')
+    for (const path of ['a.txt', 'b.txt', 'new.txt']) utimesSync(join(r.dir, path), old, old)
+    const before = await stamps(r.dir)
+    expect(before.uncommitted['a.txt']).toBe(`M:1:1:3:${old.getTime()}`)
+    expect(before.uncommitted['new.txt']).toBe(`A:1:0:2:${old.getTime()}`)
+    // A deleted file has no size or mtime.
+    expect(before.uncommitted['gone.txt']).toBe('D:0:1:-:-')
+
+    // Same size and line counts: only the mtime tells the edit.
+    r.write('a.txt', 'a3\n')
+    const after = await stamps(r.dir)
+    expect(after.uncommitted['a.txt']).not.toBe(before.uncommitted['a.txt'])
+    expect(after.uncommitted['b.txt']).toBe(before.uncommitted['b.txt'])
+    expect(after.uncommitted['new.txt']).toBe(before.uncommitted['new.txt'])
+    expect(after.uncommitted['gone.txt']).toBe(before.uncommitted['gone.txt'])
+  })
+
+  it('stamps committed files by their diff against the base alone, not the working file', async () => {
+    const r = repo()
+    r.write('a.txt', 'a\n')
+    r.commit('init')
+    r.git('switch', '-q', '-c', 'feat')
+    r.write('a.txt', 'a\nb\n')
+    r.commit('feat')
+    const before = await stamps(r.dir, 'main')
+    expect(before.committed['a.txt']).toBe('M:1:0:-:-')
+    r.write('a.txt', 'a\nb\nc\n')
+    expect((await stamps(r.dir, 'main')).committed['a.txt']).toBe(before.committed['a.txt'])
   })
 })
 

@@ -2,7 +2,7 @@
 // (合并到 main 并推送 / 创建 PR). The agent in the session writes every piece of text and fixes code; Wavi runs the
 // mechanical steps (commit, merge, push, gh) and the brakes. These are the IPC payloads of window.tr.ship.
 import type { GitFailure } from './git-failures'
-import type { MergeMethod } from './git-merge'
+import type { MergeConflict, MergeMethod } from './git-merge'
 import type { ChecksSummary, GhState, PrTarget, RepoMergeMethods } from './pull-requests'
 import type { RiskMarker } from './risk-markers'
 import type { HandoffKind } from './ship-handoff'
@@ -35,7 +35,8 @@ export type ShipPreflight =
       uncommitted: number
       /** Commits on the branch the base lacks. */
       ahead: number
-      /** Those commits' work is already in the base (a squash merge leaves them ahead): nothing of them to ship. */
+      /** The branch's work is already in the base: its commits' content (a squash merge leaves them ahead), or, with
+       *  nothing ahead, commits it made itself that the base now has (a fast-forward; the merge sheet's 已经全部合并). */
       merged: boolean
       /** Local base commits not on its upstream: a PR or a push would carry them too (Figma 29 note). */
       baseAheadOfUpstream: number
@@ -46,30 +47,33 @@ export type ShipPreflight =
       /** The merge methods the repository allows on GitHub and its default (PRD F16 v1.105); null when there are no
        *  GitHub settings to go by (no GitHub remote, no gh, or gh could not tell): the user picks, Wavi remembers. */
       mergeMethods: RepoMergeMethods | null
-      // ── 合入链路 v2 (PRD v1.169), read by src/shared/ship-chain.ts. Optional for now: main does not fill them yet,
-      // and the chain treats a missing field as "not known" (it blocks nothing on it). ─────────────────────────────
-      /** Whether gh is installed and logged in, as main last checked. Optional for now. */
-      gh?: GhState
-      /** `remote` points at a GitHub host (gh can make PRs there); null when there is no remote. Optional for now. */
-      remoteOnGitHub?: boolean | null
-      /** A merge / rebase / cherry-pick stopped in the worktree; null when none. Optional for now. */
-      operation?: ShipOperation | null
-      /** Commits on the base the branch lacks (同步 <base> brings them in). Optional for now. */
-      behindBase?: number
+      // ── 合入链路 v2 (PRD v1.169), read by src/shared/ship-chain.ts ─────────────────────────────────────────────────
+      /** The branch's tip commit (a merged PR counts as this branch only while the tip is the PR's head). */
+      head: string
+      /** Whether gh is installed and logged in, as main last checked. */
+      gh: GhState
+      /** `remote` is a GitHub repository gh can make PRs in (its URL names a host / owner / repository); null when
+       *  there is no remote. */
+      remoteOnGitHub: boolean | null
+      /** A merge / rebase / cherry-pick stopped in the worktree; null when none. */
+      operation: ShipOperation | null
+      /** Commits on the base the branch lacks (同步 <base> brings them in). */
+      behindBase: number
       /** Files that would conflict if the branch landed on the base now (`merge-tree --write-tree`); null when unknown
-       *  (old git, the check failed). Optional for now. */
-      baseConflicts?: string[] | null
-      /** The branch has an upstream or a same-named branch on `remote` (同步 merges then, never rebases). Optional for now. */
-      pushed?: boolean
-      /** Against that remote branch: commits the local branch has that it lacks (`ahead`, 推送) and the other way round
-       *  (`behind`, 拉取); null when the branch was never pushed. Optional for now. */
-      upstream?: { ahead: number; behind: number } | null
+       *  (git older than 2.38, the check failed). */
+      baseConflicts: string[] | null
+      /** The branch has an upstream or a same-named branch on `remote` (同步 merges then, never rebases). */
+      pushed: boolean
+      /** Against that remote branch as last fetched (no network call): commits the local branch has that it lacks
+       *  (`ahead`, 推送) and the other way round (`behind`, 拉取); null when the branch was never pushed. */
+      upstream: { ahead: number; behind: number } | null
     }
   | {
       ok: false
       message: string
-      /** A rebase leaves HEAD detached, so main may answer ok: false and still name the operation (继续 / 中止 stay
-       *  reachable). Optional for now. */
+      /** A rebase leaves HEAD detached, so main answers ok: false and still names the operation (继续 / 中止 stay
+       *  reachable); null when none (or the request was not valid). Main always fills it; optional because the renderer
+       *  makes failures of its own (the IPC call threw), which know of no operation. */
       operation?: ShipOperation | null
     }
 
@@ -98,6 +102,8 @@ export type ShipMainResult =
       pushError?: string
       /** The push was refused because the base is protected: 改为创建 PR is the way on (not after a network error). */
       pushRefused?: true
+      /** pushed false after a failed push: what git said, classified (src/shared/git-failures.ts). */
+      failure?: GitFailure
     }
   | {
       ok: false
@@ -110,6 +116,9 @@ export type ShipMainResult =
       conflicts?: string[]
       /** The end of what git and its hooks printed. */
       output?: string
+      /** A step git ran and that failed: what it said, classified (src/shared/git-failures.ts). Absent when Wavi refused
+       *  before running git (the message says why). */
+      failure?: GitFailure
     }
 
 /** The retry of a failed push (ShipApi.pushBase). */
@@ -162,6 +171,12 @@ export interface ShipApi {
   /** Check names failing on the base's upstream tip too (the brake asks before fixing them); null when unknown. */
   baseFailing(target: PrTarget): Promise<string[] | null>
   onBaseCi(listener: (ci: BaseCi) => void): () => void
+  /** 同步 <base> (合入链路 v2): fetch, fast-forward the local base, bring it into the branch. Never pushes. */
+  sync(request: ShipSyncRequest): Promise<ShipSyncResult>
+  /** 拉取: fast-forward the branch to its upstream. */
+  pull(request: ShipPullRequest): Promise<ShipPullResult>
+  /** 继续 / 中止 the merge, rebase or cherry-pick stopped in the worktree. */
+  operation(request: ShipOperationRequest): Promise<ShipOperationResult>
 }
 
 export const SHIP_IPC = {
@@ -189,16 +204,15 @@ export const SHIP_IPC = {
   baseFailing: 'ship:base-failing',
   /** main → renderer, payload BaseCi */
   baseCiChanged: 'ship:base-ci-changed',
-  /** invoke(ShipSyncRequest) → ShipSyncResult (合入链路 v2; no handler yet) */
+  /** invoke(ShipSyncRequest) → ShipSyncResult (合入链路 v2) */
   sync: 'ship:sync',
-  /** invoke(ShipPullRequest) → ShipPullResult (合入链路 v2; no handler yet) */
+  /** invoke(ShipPullRequest) → ShipPullResult (合入链路 v2) */
   pull: 'ship:pull',
-  /** invoke(ShipOperationRequest) → ShipOperationResult (合入链路 v2; no handler yet) */
+  /** invoke(ShipOperationRequest) → ShipOperationResult (合入链路 v2) */
   operation: 'ship:operation'
 } as const
 
-// --- 合入链路 v2 (PRD v1.169): 同步 / 拉取 / 继续 · 中止. Contract only: main has no handlers and the preload does not
-// expose them yet; they join ShipApi (as ShipChainApi's members) when both do. -----------------------------------
+// --- 合入链路 v2 (PRD v1.169): 同步 / 拉取 / 继续 · 中止 (src/main/ship.ts, members of ShipApi) ----------------------
 
 /**
  * 同步 <base>: fetch; fast-forward the local base when its checkout is clean; then bring the base into the branch —
@@ -208,11 +222,14 @@ export const SHIP_IPC = {
 export type ShipSyncRequest = PrTarget
 
 export type ShipSyncResult =
-  | { ok: true }
+  /** `baseNotCaughtUp`: the local base could not be fast-forwarded to its upstream (its checkout has uncommitted
+   *  changes, the two diverged): why, in words; the branch was synced with the local base as it is. */
+  | { ok: true; baseNotCaughtUp?: string }
   /** Nothing ran: tracked uncommitted changes (先提交改动), an operation in progress, no base. */
   | { ok: false; reason: 'blocked'; message: string }
-  /** Nothing ran: these files would conflict. `mode` is what 同步 would have run, so the hand-off names the right steps. */
-  | { ok: false; reason: 'conflicts'; files: string[]; mode: 'rebase' | 'merge' }
+  /** Nothing ran (or what ran was aborted): these files would conflict. `mode` is what 同步 would have run, so the
+   *  hand-off names the right steps; `conflicts` adds how each conflicts when the pre-check could tell (else []). */
+  | { ok: false; reason: 'conflicts'; files: string[]; mode: 'rebase' | 'merge'; conflicts: MergeConflict[]; baseNotCaughtUp?: string }
   | { ok: false; reason: 'failed'; failure: GitFailure }
 
 /** 拉取: fast-forward the branch to its upstream, nothing else (a diverged branch fails as `diverged`). */
@@ -232,12 +249,8 @@ export type ShipOperationResult =
   | { ok: false; reason: 'conflicts'; files: string[] }
   | { ok: false; reason: 'failed'; failure: GitFailure }
 
-/** The ShipApi members 合入链路 v2 adds; kept apart until the preload implements them. */
-export interface ShipChainApi {
-  sync(request: ShipSyncRequest): Promise<ShipSyncResult>
-  pull(request: ShipPullRequest): Promise<ShipPullResult>
-  operation(request: ShipOperationRequest): Promise<ShipOperationResult>
-}
+/** The ShipApi members 合入链路 v2 added (folded into ShipApi). */
+export type ShipChainApi = Pick<ShipApi, 'sync' | 'pull' | 'operation'>
 
 // --- the Ship block's state (Git · 变更, Figma 29C / 29D / 29H), saved with the workspace while a run is open ---------
 

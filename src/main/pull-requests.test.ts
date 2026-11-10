@@ -25,6 +25,7 @@ case "$1 $2" in
     echo "github.com: Logged in"; exit 0 ;;
   "pr list")
     if [ -f "$d/rate-limit" ]; then echo "GraphQL: API rate limit exceeded for user ID 1." >&2; exit 1; fi
+    if [ -f "$d/list-fail" ]; then cat "$d/list-fail" >&2; exit 1; fi
     cat "$d/pr-list.json" 2>/dev/null || echo '[]'; exit 0 ;;
   "pr create")
     [ -f "$d/after-create.json" ] && cp "$d/after-create.json" "$d/pr-list.json"
@@ -186,7 +187,7 @@ function pushedWithPr(details: Partial<Parameters<typeof detailsJson>[0]> = {}) 
 }
 
 beforeEach(() => {
-  for (const name of ['calls', 'signed-out', 'rate-limit', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail'])
+  for (const name of ['calls', 'signed-out', 'rate-limit', 'list-fail', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail'])
     rmSync(join(ghDir, name), { force: true })
   for (const name of readdirSync(ghDir)) if (name.startsWith('input-')) rmSync(join(ghDir, name), { force: true })
   confirmAnswer.mockReset()
@@ -375,6 +376,8 @@ describe('合并 PR (PRD F16 v1.63)', () => {
     writeFileSync(join(ghDir, 'after-merge.json'), prJson({ state: 'MERGED' }))
     const result = await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: true })
     expect(result).toMatchObject({ ok: true, outcome: 'merged', message: '已合并 PR #7' })
+    // The fetch of the merged base cannot reach "GitHub" here (https is off): the result says the base did not follow.
+    expect(result).toMatchObject({ baseNotCaughtUp: expect.stringMatching(/^没能获取 origin\/main：/) })
     const merge = ghCalls('pr merge')[0]!
     expect(merge).toEqual(['pr', 'merge', '7', '--repo=github.com/acme/widget', '--squash', `--match-head-commit=${head}`])
     expect(merge).toEqual(expect.arrayContaining(['7', '--squash', `--match-head-commit=${head}`]))
@@ -411,6 +414,22 @@ describe('合并 PR (PRD F16 v1.63)', () => {
     expect(ghCalls('pr merge')[0]).toEqual(expect.arrayContaining(['--merge', `--match-head-commit=${head}`, '--auto']))
     expect(await cancelMerge({ root, worktree: wt })).toMatchObject({ ok: true, outcome: 'cancelled' })
     expect(ghCalls('pr merge')[1]).toEqual(expect.arrayContaining(['--disable-auto']))
+    unwatch(w)
+  })
+
+  it('words what GitHub said when it does not merge, classified', async () => {
+    const { root, wt, w } = pushedWithPr()
+    writeFileSync(join(ghDir, 'merge-fail'), 'GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)')
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({
+      ok: false,
+      reason: 'failed',
+      message: 'GitHub 没有合并：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)',
+      failure: { kind: 'unknown', message: '合并 PR失败：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)' }
+    })
+    writeFileSync(join(ghDir, 'merge-fail'), 'error connecting to api.github.com')
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({
+      failure: { kind: 'network', message: '连不上 GitHub：检查网络后重试' }
+    })
     unwatch(w)
   })
 
@@ -534,7 +553,12 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     git(root, 'config', 'core.hooksPath', hooks)
     writeFileSync(join(wt, 'b.txt'), 'b2\n')
     const head = git(wt, 'rev-parse', 'HEAD').trim()
-    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, reason: 'failed', output: 'lint: 2 problems in b.txt' })
+    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({
+      ok: false,
+      reason: 'failed',
+      output: 'lint: 2 problems in b.txt',
+      failure: { kind: 'unknown', message: '提交失败：lint: 2 problems in b.txt', tail: 'lint: 2 problems in b.txt' }
+    })
     expect(git(wt, 'rev-parse', 'HEAD').trim()).toBe(head)
   })
 
@@ -577,7 +601,11 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     commit(other, 'e.txt', 'e\n', 'From elsewhere')
     git(other, 'push', '-q', 'origin', 'feat')
     commit(wt, 'f.txt', 'f\n', 'Mine')
-    expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: false, message: 'origin 上的分支有本地没有的提交：先拉取或 rebase，再推送' })
+    expect(await pushBranch({ root, worktree: wt })).toMatchObject({
+      ok: false,
+      message: 'origin 上的分支有本地没有的提交：先拉取或 rebase，再推送',
+      failure: { kind: 'non-fast-forward', message: '远程有本地没有的提交', next: 'pull' }
+    })
   })
 })
 
@@ -599,16 +627,100 @@ describe('catching up the base after a merge (v1.65)', () => {
     git(base, 'clone', '-q', bare, other)
     commit(other, 'merged.txt', 'm\n', 'Merge pull request #7')
     git(other, 'push', '-q', 'origin', 'main')
-    await catchUpBase(root, 'origin', 'main')
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: true })
     expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: false })
 
     commit(other, 'more.txt', 'x\n', 'Another merge')
     git(other, 'push', '-q', 'origin', 'main')
     writeFileSync(join(root, 'a.txt'), 'local edit\n')
     const before = git(root, 'rev-parse', 'main').trim()
-    await catchUpBase(root, 'origin', 'main')
+    // Says why instead of returning quietly (合入链路 v2).
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: false, message: 'main 的工作区有未提交的改动，没有快进到 origin/main' })
     expect(git(root, 'rev-parse', 'main').trim()).toBe(before)
     expect(git(root, 'rev-parse', 'origin/main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+  })
+
+  it('says why when the base diverged, when nobody has it out it moves the ref, and a failed fetch is classified', async () => {
+    const { root, bare } = setup()
+    git(root, 'remote', 'set-url', 'origin', bare)
+    const other = join(base, `clone-${Date.now()}-b`)
+    git(base, 'clone', '-q', bare, other)
+    commit(other, 'merged.txt', 'm\n', 'Merge pull request #7')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'checkout', '-q', '--detach')
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: true })
+    expect(git(root, 'rev-parse', 'refs/heads/main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+
+    commit(other, 'more.txt', 'x\n', 'Another merge')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'update-ref', 'refs/heads/main', git(root, 'commit-tree', '-p', 'main', '-m', 'local only', 'main^{tree}').trim())
+    const before = git(root, 'rev-parse', 'main').trim()
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: false, message: 'main 和 origin/main 各有对方没有的提交，没法快进' })
+    expect(git(root, 'rev-parse', 'main').trim()).toBe(before)
+
+    git(root, 'remote', 'set-url', 'origin', join(base, 'gone.git'))
+    expect(await catchUpBase(root, 'origin', 'main')).toMatchObject({ ok: false, message: '没能获取 origin/main：没有远程仓库，没法拉取', failure: { kind: 'no-remote' } })
+  })
+})
+
+describe('status · a failed poll (合入链路 v2)', () => {
+  it('keeps the last PR, says what went wrong and since when, and clears it once a poll works', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    const good = await checkWorktree(wt)
+    expect(good?.pr?.number).toBe(7)
+    expect(good).not.toHaveProperty('error')
+
+    writeFileSync(join(ghDir, 'list-fail'), 'error connecting to api.github.com\ncheck your internet connection or https://githubstatus.com')
+    const first = await checkWorktree(wt)
+    expect(first).toMatchObject({ pr: { number: 7 }, error: { message: '连不上 GitHub：检查网络后重试' } })
+    expect(first?.checkedAt).toBe(good?.checkedAt)
+    expect(w.sent.at(-1)).toEqual(first)
+    const sent = w.sent.length
+    const second = await checkWorktree(wt)
+    // Still failing: the same sentence since the same time, not sent again.
+    expect(second?.error).toEqual(first?.error)
+    expect(w.sent).toHaveLength(sent)
+
+    writeFileSync(join(ghDir, 'list-fail'), 'GraphQL: Something went wrong while executing your query.')
+    expect((await checkWorktree(wt))?.error).toEqual({ message: '读取 PR 状态失败：GraphQL: Something went wrong while executing your query.', since: first!.error!.since })
+
+    rmSync(join(ghDir, 'list-fail'))
+    const back = await checkWorktree(wt)
+    expect(back).toMatchObject({ pr: { number: 7 } })
+    expect(back).not.toHaveProperty('error')
+    expect(w.sent.at(-1)).toEqual(back)
+    unwatch(w)
+  })
+
+  it('says it when the very first poll fails', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'list-fail'), 'HTTP 502: Bad Gateway')
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ worktree: wt, branch: 'feat', pr: null, error: { message: '读取 PR 状态失败：HTTP 502: Bad Gateway' } })
+    unwatch(w)
+  })
+})
+
+describe('status · a merged PR (合入链路 v2)', () => {
+  it('carries the merged head and the local head, so new work after the merge is not taken as merged', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ state: 'MERGED', headRefOid: head }))
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7, state: 'merged', headOid: head }, local: { head, remoteAhead: false } })
+    commit(wt, 'after.txt', 'a\n', 'After the merge')
+    expect((await checkWorktree(wt))?.local).toEqual({ head: git(wt, 'rev-parse', 'HEAD').trim(), remoteAhead: false })
+    expect(ghCalls('pr list')[0]).toContain('--json=number,state,isDraft,url,title,isCrossRepository,headRepositoryOwner,headRefOid,statusCheckRollup')
+    unwatch(w)
   })
 })
 

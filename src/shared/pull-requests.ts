@@ -1,6 +1,7 @@
 // PR / CI status (PRD F16) through the user's own `gh` login: Wavi stores no token and never talks to GitHub itself.
 // Pure: what gh prints becomes a PullRequestInfo, how checks add up, which repository a branch's PR lives in, how
 // often to ask again, and what 让 agent 修复 puts into the input line (§6.9). Processes run in src/main/pull-requests.ts.
+import type { GitFailure } from './git-failures'
 import type { WriteRequest, WriteResult } from './ship-writer'
 
 /** Whether gh can be used: not installed, installed but not logged in, or ready. */
@@ -31,6 +32,9 @@ export interface PullRequestInfo {
   url: string
   title: string
   checks: ChecksSummary
+  /** The PR's head commit as `gh pr list` reports it (`headRefOid`); a merged PR counts as the local branch only while
+   *  the branch is still at it (合入链路 v2). Missing when gh did not say. */
+  headOid?: string
   /** Open and draft PRs only, from one `gh api graphql` per check (PRD F16 v1.63). Missing when that call failed. */
   details?: PrDetails
 }
@@ -118,12 +122,13 @@ export interface PrStatus {
   /** null: the branch has no PR, or no upstream (then gh is not asked). */
   pr: PullRequestInfo | null
   checkedAt: number
-  /** Open PRs: the local branch head against the PR's (v1.63). `remoteAhead`: the PR has commits the branch has not. */
+  /** Open PRs: the local branch head against the PR's (v1.63). `remoteAhead`: the PR has commits the branch has not.
+   *  Merged PRs (合入链路 v2): the local head when polled, `remoteAhead` false. */
   local?: { head: string; remoteAhead: boolean }
   /**
    * The last poll failed (合入链路 v2, PRD v1.169): what gh said, in words, and since when (epoch ms) the polls have
    * been failing. `pr` is then the last status that was read, shown as stale, not as current. Absent when the last poll
-   * worked. Not filled by main yet.
+   * worked.
    */
   error?: { message: string; since: number }
 }
@@ -195,12 +200,13 @@ export interface PrCommitRequest extends PrTarget {
 
 export type PrCommitResult =
   | { ok: true; commit: string; subject: string }
-  /** `output`: the end of what git and its hooks printed. */
-  | { ok: false; reason: 'blocked' | 'failed'; message: string; output?: string }
+  /** `output`: the end of what git and its hooks printed; `failure`: that output classified (failed commits only). */
+  | { ok: false; reason: 'blocked' | 'failed'; message: string; output?: string; failure?: GitFailure }
 
 export type PrCreateResult =
   | { ok: true; url: string; number: number | null; existed: boolean }
-  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string }
+  /** `failure`: what git (the push) or gh (`pr create`) said, classified; absent when Wavi refused before running them. */
+  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string; failure?: GitFailure }
 
 /** What 让 agent 修复 needs: the failing checks and the tail of their logs (raw; ciFixPrompt quotes it). */
 export interface CiFailure {
@@ -249,8 +255,10 @@ export interface PrMergeRequest extends PrTarget {
 }
 
 export type PrWriteResult =
-  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'cancelled' | 'pushed'; message: string }
-  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string }
+  /** `baseNotCaughtUp`: after a merge, the local base could not be brought up to the merged remote base: why, in words. */
+  | { ok: true; outcome: 'merged' | 'auto-merge' | 'queued' | 'cancelled' | 'pushed'; message: string; baseNotCaughtUp?: string }
+  /** `failure`: what git (a push) or gh (`pr merge`) said, classified; absent when Wavi refused before running them. */
+  | { ok: false; reason: 'declined' | 'blocked' | 'failed'; message: string; failure?: GitFailure }
 
 export const PR_IPC = {
   /** invoke → GhState */
@@ -286,7 +294,7 @@ export const PR_IPC = {
 } as const
 
 /** Fields of `gh pr list --json` (gh 2.92). */
-export const PR_JSON_FIELDS = 'number,state,isDraft,url,title,isCrossRepository,headRepositoryOwner,statusCheckRollup'
+export const PR_JSON_FIELDS = 'number,state,isDraft,url,title,isCrossRepository,headRepositoryOwner,headRefOid,statusCheckRollup'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -349,7 +357,7 @@ function prState(state: unknown, draft: unknown): PrState | null {
 
 function onePullRequest(item: unknown, headOwner: string | null): PullRequestInfo | null {
   if (!isRecord(item)) return null
-  const { number, state, isDraft, url, title, isCrossRepository, headRepositoryOwner, statusCheckRollup } = item
+  const { number, state, isDraft, url, title, isCrossRepository, headRepositoryOwner, headRefOid, statusCheckRollup } = item
   if (typeof number !== 'number' || !Number.isSafeInteger(number) || number < 1) return null
   if (typeof url !== 'string' || !/^https:\/\/[^\s]+$/.test(url) || url.length > 2048) return null
   const kind = prState(state, isDraft)
@@ -367,7 +375,8 @@ function onePullRequest(item: unknown, headOwner: string | null): PullRequestInf
     state: kind,
     url,
     title: typeof title === 'string' ? stripControl(title).trim().slice(0, 300) : '',
-    checks: summarizeChecks(statusCheckRollup)
+    checks: summarizeChecks(statusCheckRollup),
+    ...(typeof headRefOid === 'string' && /^[0-9a-f]{40,64}$/.test(headRefOid) ? { headOid: headRefOid } : {})
   }
 }
 

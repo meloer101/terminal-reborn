@@ -5,8 +5,9 @@
 import { isSignedOut, stripControl } from './pull-requests'
 import { CHAIN_TEXT, type ChainActionId } from './ship-chain'
 
-/** The step that failed. `pr-create` / `pr-merge` are gh calls (`gh pr create` pushes the branch too). */
-export type GitStep = 'commit' | 'push' | 'pull' | 'merge' | 'rebase' | 'pr-create' | 'pr-merge' | 'fetch'
+/** The step that failed. `pr-create` / `pr-merge` / `pr-status` are gh calls (`gh pr create` pushes the branch too;
+ *  `pr-status` is the PR poll's `gh pr list`). */
+export type GitStep = 'commit' | 'push' | 'pull' | 'merge' | 'rebase' | 'pr-create' | 'pr-merge' | 'fetch' | 'pr-status'
 
 export type GitFailureKind =
   /** The remote has commits the pushed ref lacks (`! [rejected] … (non-fast-forward | fetch first)`). */
@@ -79,11 +80,12 @@ const STEP_WORD: Record<GitStep, string> = {
   rebase: 'rebase',
   'pr-create': '创建 PR',
   'pr-merge': '合并 PR',
-  fetch: '获取远程'
+  fetch: '获取远程',
+  'pr-status': '读取 PR 状态'
 }
 
 const COMMIT_STEPS: ReadonlySet<GitStep> = new Set(['commit', 'merge', 'rebase'])
-const GH_STEPS: ReadonlySet<GitStep> = new Set(['pr-create', 'pr-merge'])
+const GH_STEPS: ReadonlySet<GitStep> = new Set(['pr-create', 'pr-merge', 'pr-status'])
 const FETCH_STEPS: ReadonlySet<GitStep> = new Set(['pull', 'fetch'])
 
 const COMMIT_HOOKS = 'pre-commit|commit-msg|prepare-commit-msg|pre-merge-commit'

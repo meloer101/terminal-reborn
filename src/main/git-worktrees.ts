@@ -384,7 +384,11 @@ async function startWatch(sender: WebContents, root: unknown): Promise<void> {
   if (forSender.has(key)) return
   const watcher = watch(commonDir, { recursive: true })
   const entry: Watch = { watcher, timer: null }
-  watcher.on('error', () => stopWatch(sender, key))
+  watcher.on('error', (error) => {
+    // The list stops following git; nobody waits on it, so it is logged.
+    console.error(`[git-worktrees] stopped watching ${commonDir}:`, error)
+    stopWatch(sender, key)
+  })
   watcher.on('change', (_type, filename) => {
     if (typeof filename !== 'string' || !affectsWorktreeList(relative(commonDir, join(commonDir, filename)))) return
     entry.timer ??= setTimeout(() => {
@@ -399,7 +403,9 @@ export function registerGitWorktreeHandlers(): void {
   addWorkspaceDirSource(listedWorktreePaths)
   ipcMain.handle(IPC.gitWorktreesList, (_event, root: unknown, knownPaths: unknown, only: unknown) => listWorktrees(root, knownPaths, only))
   ipcMain.handle(IPC.gitWorktreesRemove, (_event, root: unknown, path: unknown, force: unknown) => removeWorktree(root, path, force))
-  ipcMain.on(IPC.gitWorktreesWatch, (event, root: unknown) => void startWatch(event.sender, root).catch(() => {}))
+  ipcMain.on(IPC.gitWorktreesWatch, (event, root: unknown) =>
+    void startWatch(event.sender, root).catch((error: unknown) => console.error('[git-worktrees] could not watch the worktree list:', error))
+  )
   ipcMain.on(IPC.gitWorktreesUnwatch, (event, root: unknown) => {
     if (typeof root === 'string') stopWatch(event.sender, root)
   })

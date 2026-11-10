@@ -127,10 +127,19 @@ async function alreadyInBase(cwd: string, base: string, head: string, tree: stri
   return headTree !== forkTree
 }
 
+/**
+ * One in-memory merge of `head` onto `base`: the files that would conflict, and whether the branch's work is already in
+ * the base (see `alreadyInBase()`; false when it conflicts). Rejects as `mergeTreeConflicts()` does.
+ */
+export async function baseMergeCheck(cwd: string, base: string, head: string): Promise<{ conflicts: MergeConflict[]; inBase: boolean }> {
+  const merged = await mergeTreeConflicts(cwd, base, head)
+  if (merged.conflicts.length > 0) return { conflicts: merged.conflicts, inBase: false }
+  return { conflicts: [], inBase: await alreadyInBase(cwd, base, head, merged.tree) }
+}
+
 /** Whether the branch's work is already in its base (see `alreadyInBase()`). Rejects as `mergeTreeConflicts()` does. */
 export async function workInBase(cwd: string, base: string, head: string): Promise<boolean> {
-  const merged = await mergeTreeConflicts(cwd, base, head)
-  return merged.conflicts.length === 0 && (await alreadyInBase(cwd, base, head, merged.tree))
+  return (await baseMergeCheck(cwd, base, head)).inBase
 }
 
 /** Whether a merge-tree error means git is too old for `--write-tree`. */
@@ -315,14 +324,15 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
     .map((subject) => ({ subject, body: subject }))
 }
 
-/** Pushes the local base to origin; '' when it went through, else git's error. */
-export async function pushBase(realRoot: string, base: string): Promise<string> {
-  try {
-    await git(realRoot, ['push', '--quiet', 'origin', `refs/heads/${base}:refs/heads/${base}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(realRoot) })
-    return ''
-  } catch (error) {
-    return errorText(error)
-  }
+/** Pushes the local base to `remote` (origin unless the caller knows better); '' when it went through, else what git
+ *  printed (its whole stderr, so the failure can be classified). */
+export async function pushBase(realRoot: string, base: string, remote = 'origin'): Promise<string> {
+  const ran = await runGit(realRoot, ['push', '--quiet', '--', remote, `refs/heads/${base}:refs/heads/${base}`], {
+    timeout: PUSH_TIMEOUT_MS,
+    maxStdout: MAX_BUFFER,
+    env: { GIT_EDITOR: 'true', ...(await pushEnv(realRoot)) }
+  })
+  return ran.code === 0 ? '' : ran.stderr.trim() || ran.stdout.trim() || `git exited with ${ran.code}`
 }
 
 /** Whether the worktree has no uncommitted changes to tracked files (untracked files do not count). */
@@ -358,8 +368,12 @@ async function moveBranchTo(path: string, branch: string, head: string, squash: 
 /** One merge per repository at a time. */
 const merging = new Set<string>()
 
-/** Merges the worktree's branch into its base with the chosen method (PRD F4). Never leaves a half-done merge. */
-export async function mergeWorktree(raw: unknown): Promise<MergeResult> {
+/**
+ * Merges the worktree's branch into its base with the chosen method (PRD F4). Never leaves a half-done merge. `remote`
+ * (main's callers, never the renderer): where `push` sends the base — default origin when the repository has one; null
+ * pushes nowhere.
+ */
+export async function mergeWorktree(raw: unknown, options: { remote?: string | null } = {}): Promise<MergeResult> {
   const request = parseMergeRequest(raw)
   if (!request) return { ok: false, reason: 'invalid' }
   let inspection: Inspection
@@ -409,7 +423,8 @@ export async function mergeWorktree(raw: unknown): Promise<MergeResult> {
       throw error
     }
     if (request.method === 'squash') await moveBranchTo(worktreePath, check.branch, check.head, commit)
-    const push = request.push && check.hasOrigin ? await pushBase(realRoot, check.base) : null
+    const remote = options.remote !== undefined ? options.remote : check.hasOrigin ? 'origin' : null
+    const push = request.push && remote ? await pushBase(realRoot, check.base, remote) : null
     return { ok: true, commit, push }
   } catch (error) {
     return { ok: false, reason: 'git', message: errorText(error), rebased }
@@ -420,5 +435,9 @@ export async function mergeWorktree(raw: unknown): Promise<MergeResult> {
 
 export function registerGitMergeHandlers(): void {
   ipcMain.handle(IPC.gitWorktreesMergePrecheck, (_event, root: unknown, worktree: unknown) => mergePrecheck(root, worktree))
-  ipcMain.handle(IPC.gitWorktreesMerge, (_event, request: unknown) => mergeWorktree(request))
+  // The merge sheet shows a failed push in one line, as before pushBase kept git's whole output for classification.
+  ipcMain.handle(IPC.gitWorktreesMerge, async (_event, request: unknown) => {
+    const result = await mergeWorktree(request)
+    return result.ok && result.push ? { ...result, push: lastLines(result.push) } : result
+  })
 }

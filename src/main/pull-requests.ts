@@ -15,6 +15,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { hostWindowFor } from './app-windows'
+import { classifyGitFailure, type GitFailure, type GitFailureContext, type GitStep } from '@shared/git-failures'
 import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
 import {
   cleanFailedLog,
@@ -273,6 +274,8 @@ interface Entry {
   lastCheck: number
   /** From the last check that reached gh: where `failure()` reads logs. */
   repo: GitHubRepo | null
+  /** When the polls started failing (the first failure in a row); null while they work. */
+  errorSince: number | null
 }
 
 const entries = new Map<string, Entry>()
@@ -326,8 +329,25 @@ function setStatus(entry: Entry, branch: string | null, pr: PullRequestInfo | nu
     ...(local ? { local } : {})
   }
   entry.status = status
+  entry.errorSince = null
   const sameLocal = JSON.stringify(previous?.local) === JSON.stringify(status.local)
-  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameLocal) broadcast(status)
+  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameLocal || previous.error) broadcast(status)
+  return status
+}
+
+/**
+ * A poll that failed: the last status that was read stays (shown as stale), with what gh said in words and since when
+ * the polls have been failing. Sent to the windows when the sentence changes or the failures start.
+ */
+function setPollError(entry: Entry, output: string, context: GitFailureContext, branch: string | null): PrStatus {
+  const previous = entry.status
+  const since = (entry.errorSince ??= Date.now())
+  const message = classifyGitFailure('pr-status', output, context).message
+  const status: PrStatus = previous
+    ? { ...previous, error: { message, since } }
+    : { worktree: entry.target.worktree, branch, pr: null, checkedAt: Date.now(), error: { message, since } }
+  entry.status = status
+  if (previous?.error?.message !== message || previous.error.since !== since) broadcast(status)
   return status
 }
 
@@ -351,7 +371,7 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     entry.failures++
     if (isRateLimited(found.error)) pausedUntil = Date.now() + PR_POLL.rateLimitMs
     if (isSignedOut(found.error)) void detectGh(true)
-    return entry.status
+    return setPollError(entry, found.error, { base: info.base ?? 'main', remote: info.remote }, info.branch)
   }
   entry.failures = 0
   let pr = found.pr
@@ -366,14 +386,20 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     }
   }
   let local: PrStatus['local']
-  if (pr?.details) {
+  if (pr && (pr.details || pr.state === 'merged')) {
     const head = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${info.branch}`])).trim()
-    if (head) local = { head, remoteAhead: pr.details.headOid !== head && !(await localHas(info.cwd, pr.details.headOid, info.branch)) }
+    // A merged PR: the local head, so the chain can tell the merged work from commits made after it.
+    if (head && pr.details) local = { head, remoteAhead: pr.details.headOid !== head && !(await localHas(info.cwd, pr.details.headOid, info.branch)) }
+    else if (head) local = { head, remoteAhead: false }
   }
   const wasOpen = entry.status?.pr?.number === pr?.number && (entry.status?.pr?.state === 'open' || entry.status?.pr?.state === 'draft')
   const status = setStatus(entry, info.branch, pr, local)
-  // Merged on GitHub (auto-merge, the queue, or someone else): bring the base here too, as after Wavi's own merge.
-  if (wasOpen && pr?.state === 'merged' && info.remote && info.base) await catchUpBase(info.cwd, info.remote, info.base)
+  // Merged on GitHub (auto-merge, the queue, or someone else): bring the base here too, as after Wavi's own merge. Nobody
+  // waits on this poll: a base that could not follow is logged (the preflight counts it as behind its upstream).
+  if (wasOpen && pr?.state === 'merged' && info.remote && info.base) {
+    const caught = await catchUpBase(info.cwd, info.remote, info.base)
+    if (!caught.ok) console.error(`[pull-requests] ${info.base} did not catch up after PR #${pr.number} was merged:`, caught.message)
+  }
   return status
 }
 
@@ -385,9 +411,9 @@ function checkEntry(entry: Entry): Promise<PrStatus | null> {
     entry.timer = null
   }
   entry.inFlight = checkOnce(entry)
-    .catch(() => {
+    .catch((error: unknown) => {
       entry.failures++
-      return entry.status
+      return setPollError(entry, error instanceof Error ? error.message : String(error), { base: 'main', remote: null }, entry.status?.branch ?? null)
     })
     .finally(() => {
       entry.inFlight = null
@@ -421,7 +447,7 @@ export function watchTargets(watcher: PrWatcher, raw: unknown): void {
       if (known.target.root !== target.root) known.target = target
       continue
     }
-    const entry: Entry = { target, status: null, failures: 0, timer: null, inFlight: null, lastCheck: 0, repo: null }
+    const entry: Entry = { target, status: null, failures: 0, timer: null, inFlight: null, lastCheck: 0, repo: null, errorSince: null }
     entries.set(target.worktree, entry)
     schedule(entry, 300 * fresh++)
   }
@@ -525,10 +551,10 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
       )
       if (!yes) return { ok: false, reason: 'declined', message: '没有推送，也没有创建 PR' }
       const pushed = await git(cwd, ['push', '--quiet', '--set-upstream', '--', remote, `refs/heads/${branch}:refs/heads/${branch}`], { timeout: PUSH_TIMEOUT_MS, env })
-      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}` }
+      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }) }
     } else if ((await countCommits(cwd, `refs/remotes/${remote}/${headBranch}..refs/heads/${branch}`)) !== 0) {
       const pushed = await git(cwd, ['push', '--quiet', '--', remote, `refs/heads/${branch}:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env })
-      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}` }
+      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }) }
     }
 
     const subjects = (await gitOut(cwd, ['log', '--reverse', '--max-count=101', '--format=%s', `${baseRef}..refs/heads/${branch}`, '--'])).split('\n').filter(Boolean)
@@ -548,7 +574,14 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
       { cwd, timeout: 60_000 }
     )
     const url = created.code === 0 ? parseCreatedUrl(created.stdout) : null
-    if (!url) return { ok: false, reason: 'failed', message: `gh 没能创建 PR：${lastLines(created.stderr || created.stdout) || `退出码 ${created.code}`}` }
+    if (!url) {
+      return {
+        ok: false,
+        reason: 'failed',
+        message: `gh 没能创建 PR：${lastLines(created.stderr || created.stdout) || `退出码 ${created.code}`}`,
+        failure: classified('pr-create', created, { base, remote })
+      }
+    }
     await refreshAfterCreate(request.worktree)
     return { ok: true, url: url.url, number: url.number, existed: false }
   } finally {
@@ -648,19 +681,27 @@ export async function commitWorktree(raw: unknown): Promise<PrCommitResult> {
     const env = { GIT_LITERAL_PATHSPECS: '1', PATH: await searchPath() }
     const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
     const added = await runProcess('git', ['add', '-A', ...fromStdin], { cwd: info.cwd, env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }), timeout: GIT_TIMEOUT_MS, input: paths.join('\0') })
-    if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added) }
+    const context = { base: info.base, remote: info.remote }
+    if (added.code !== 0) return { ok: false, reason: 'failed', message: '没能暂存勾选的文件', output: outputTail(added), failure: classified('commit', added, context) }
     const committed = await runProcess('git', ['commit', '--only', '--no-edit', `--message=${request.message}`, ...fromStdin], {
       cwd: info.cwd,
       env: gitEnv({ ...NO_OPTIONAL_LOCKS, ...env }),
       timeout: COMMIT_TIMEOUT_MS,
       input: [...new Set([...paths, ...sources])].join('\0')
     })
-    if (committed.code !== 0) return { ok: false, reason: 'failed', message: '提交没有成功（git hook 或 git 报错）', output: outputTail(committed) }
+    if (committed.code !== 0) {
+      return { ok: false, reason: 'failed', message: '提交没有成功（git hook 或 git 报错）', output: outputTail(committed), failure: classified('commit', committed, context) }
+    }
     const head = (await gitOut(info.cwd, ['rev-parse', '--short', 'HEAD'])).trim()
     return { ok: true, commit: head, subject: commitSubject(request.message) }
   } finally {
     creating.delete(request.worktree)
   }
+}
+
+/** What a failed git or gh call printed (both streams: hooks print to either), classified. */
+function classified(step: GitStep, ran: Ran, context: GitFailureContext): GitFailure {
+  return classifyGitFailure(step, [ran.stderr.trim(), ran.stdout.trim()].filter(Boolean).join('\n'), context)
 }
 
 /** What git and its hooks printed, the end of it (hooks print to either stream). */
@@ -695,8 +736,9 @@ export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
     const pushed = await git(cwd, ['push', '--quiet', '--', info.remote, `refs/heads/${branch}:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env })
     if (pushed.code !== 0) {
       const output = pushed.stderr || pushed.stdout
-      if (/non-fast-forward|fetch first|\[rejected\]/i.test(output)) return refused(behind)
-      return { ok: false, reason: 'failed', message: `推送失败：${lastLines(output)}` }
+      const failure = classified('push', pushed, { base, remote: info.remote })
+      if (/non-fast-forward|fetch first|\[rejected\]/i.test(output)) return { ok: false, reason: 'blocked', message: behind, failure }
+      return { ok: false, reason: 'failed', message: `推送失败：${lastLines(output)}`, failure }
     }
     await refreshAfterCreate(target.worktree)
     return { ok: true, outcome: 'pushed', message: `已推送到 ${info.remote}/${info.remoteRef.slice('refs/heads/'.length)}` }
@@ -763,7 +805,12 @@ export async function failedLogs(repo: GitHubRepo, failing: readonly FailingChec
 const writing = new Set<string>()
 
 const writeBlocked = (message: string): PrWriteResult => ({ ok: false, reason: 'blocked', message })
-const writeFailed = (what: string, ran: Ran): PrWriteResult => ({ ok: false, reason: 'failed', message: `${what}：${lastLines(ran.stderr || ran.stdout) || `退出码 ${ran.code}`}` })
+const writeFailed = (what: string, ran: Ran, step: GitStep, context: GitFailureContext): PrWriteResult => ({
+  ok: false,
+  reason: 'failed',
+  message: `${what}：${lastLines(ran.stderr || ran.stdout) || `退出码 ${ran.code}`}`,
+  failure: classified(step, ran, context)
+})
 
 /** The watched entry of a validated target, freshly checked, with gh ready. */
 async function freshEntry(where: { root: string; worktree: string }): Promise<Entry | PrWriteResult> {
@@ -784,22 +831,41 @@ async function localHas(cwd: string, oid: string, branch: string): Promise<boole
   return (await git(cwd, ['merge-base', '--is-ancestor', oid, `refs/heads/${branch}`])).code === 0
 }
 
-/** After a merge: fetch the base, and fast-forward the local base branch when nothing is in the way. */
-export async function catchUpBase(cwd: string, remote: string, base: string): Promise<void> {
-  const env = await pushEnv(cwd)
-  const fetched = await git(cwd, ['fetch', '--quiet', '--', remote, `refs/heads/${base}:refs/remotes/${remote}/${base}`], { timeout: PUSH_TIMEOUT_MS, env })
-  if (fetched.code !== 0) return
+/** Whether the local base followed its remote: moved or not, or why it could not (in words, and git's failure). */
+export type CatchUp = { ok: true; moved: boolean } | { ok: false; message: string; failure?: GitFailure }
+
+/**
+ * After a merge (and in 同步): fetch the base (unless the caller just fetched `remote`), then fast-forward the local base
+ * branch when nothing is in the way — the checkout that has it out when that is clean, else the ref itself. A base with
+ * nothing new does not move and is fine; otherwise why it could not move is returned.
+ */
+export async function catchUpBase(cwd: string, remote: string, base: string, options: { fetched?: boolean } = {}): Promise<CatchUp> {
+  const tracking = `refs/remotes/${remote}/${base}`
+  const name = `${remote}/${base}`
+  if (!options.fetched) {
+    const fetched = await git(cwd, ['fetch', '--quiet', '--', remote, `refs/heads/${base}:${tracking}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(cwd) })
+    if (fetched.code !== 0) {
+      const failure = classified('fetch', fetched, { base, remote })
+      return { ok: false, message: `没能获取 ${name}：${failure.message}`, failure }
+    }
+  }
+  if (!(await refExists(cwd, tracking)) || !(await refExists(cwd, `refs/heads/${base}`))) return { ok: true, moved: false }
+  if ((await countCommits(cwd, `refs/heads/${base}..${tracking}`)) === 0) return { ok: true, moved: false }
+  const diverged: CatchUp = { ok: false, message: `${base} 和 ${name} 各有对方没有的提交，没法快进` }
+  if ((await git(cwd, ['merge-base', '--is-ancestor', `refs/heads/${base}`, tracking])).code !== 0) return diverged
   const listing = parseWorktreePorcelain(await gitOut(cwd, ['worktree', 'list', '--porcelain']))
   const holder = listing.find((e) => e.branch === base)
   if (holder) {
     // Checked out: only a clean checkout moves, and only forward.
-    if ((await gitOut(holder.path, ['status', '--porcelain', '--untracked-files=no'])).trim() !== '') return
-    await git(holder.path, ['merge', '--ff-only', '--quiet', `refs/remotes/${remote}/${base}`])
-    return
+    const status = await git(holder.path, ['status', '--porcelain', '--untracked-files=no'])
+    if (status.code !== 0) return { ok: false, message: `没能检查 ${base} 的工作区：${lastLines(status.stderr || status.stdout)}` }
+    if (status.stdout.trim() !== '') return { ok: false, message: `${base} 的工作区有未提交的改动，没有快进到 ${name}` }
+    const ran = await git(holder.path, ['merge', '--ff-only', '--quiet', tracking])
+    return ran.code === 0 ? { ok: true, moved: true } : { ok: false, message: `没能快进 ${base}：${lastLines(ran.stderr || ran.stdout)}` }
   }
   const old = (await gitOut(cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${base}`])).trim()
-  if (!old || (await git(cwd, ['merge-base', '--is-ancestor', old, `refs/remotes/${remote}/${base}`])).code !== 0) return
-  await git(cwd, ['update-ref', `refs/heads/${base}`, `refs/remotes/${remote}/${base}`, old])
+  const ran = await git(cwd, ['update-ref', `refs/heads/${base}`, tracking, old])
+  return ran.code === 0 ? { ok: true, moved: true } : { ok: false, message: `没能快进 ${base}：${lastLines(ran.stderr || ran.stdout)}` }
 }
 
 async function runMerge(entry: Entry, method: PrMergeRequest['method'], headOid: string, auto: boolean): Promise<Ran | null> {
@@ -808,15 +874,20 @@ async function runMerge(entry: Entry, method: PrMergeRequest['method'], headOid:
   return gh(mergeArgs(entry.repo, pr.number, method, headOid, auto), { timeout: 120_000 })
 }
 
-async function afterMerge(entry: Entry, deleteRemoteBranch: boolean): Promise<void> {
+/** After merging on GitHub: delete the remote branch when asked, bring the local base up; why it could not, or null. */
+async function afterMerge(entry: Entry, deleteRemoteBranch: boolean): Promise<string | null> {
   const info = await branchInfo(entry.target)
+  let notCaughtUp: string | null = null
   if (info?.remote && info.base) {
     if (deleteRemoteBranch && info.remoteRef) {
-      await git(info.cwd, ['push', '--quiet', '--', info.remote, `:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(info.cwd) })
+      const deleted = await git(info.cwd, ['push', '--quiet', '--', info.remote, `:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(info.cwd) })
+      if (deleted.code !== 0) console.error(`[pull-requests] could not delete ${info.remote} ${info.remoteRef}:`, lastLines(deleted.stderr || deleted.stdout))
     }
-    await catchUpBase(info.cwd, info.remote, info.base)
+    const caught = await catchUpBase(info.cwd, info.remote, info.base)
+    if (!caught.ok) notCaughtUp = caught.message
   }
   await checkEntry(entry)
+  return notCaughtUp
 }
 
 /**
@@ -849,25 +920,25 @@ export async function mergePullRequest(raw: unknown): Promise<PrWriteResult> {
     if (localHead && localHead !== headOid) {
       // Local commits the PR does not have yet: push them; the checks start over, so the merge waits for them.
       const pushed = await git(info.cwd, ['push', '--quiet', '--', info.remote, `refs/heads/${info.branch}:${info.remoteRef}`], { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(info.cwd) })
-      if (pushed.code !== 0) return writeFailed('推送失败', pushed)
+      if (pushed.code !== 0) return writeFailed('推送失败', pushed, 'push', { base: info.base ?? 'main', remote: info.remote })
       headOid = localHead
       when = 'when-ready'
     }
 
     if (when === 'when-ready') {
       const ran = await runMerge(entry, request.method, headOid, true)
-      if (!ran || ran.code !== 0) return writeFailed('没能打开自动合并', ran ?? { code: -1, stdout: '', stderr: '' })
+      if (!ran || ran.code !== 0) return writeFailed('没能打开自动合并', ran ?? { code: -1, stdout: '', stderr: '' }, 'pr-merge', { base: info.base ?? 'main', remote: info.remote })
       await checkEntry(entry)
       const queued = entry.status?.pr?.details?.inMergeQueue === true
       return { ok: true, outcome: queued ? 'queued' : 'auto-merge', message: queued ? `PR #${pr.number} 已进入合并队列` : `检查通过后 GitHub 会合并 PR #${pr.number}` }
     }
 
     const ran = await runMerge(entry, request.method, headOid, false)
-    if (!ran || ran.code !== 0) return writeFailed('GitHub 没有合并', ran ?? { code: -1, stdout: '', stderr: '' })
-    await afterMerge(entry, request.deleteRemoteBranch)
+    if (!ran || ran.code !== 0) return writeFailed('GitHub 没有合并', ran ?? { code: -1, stdout: '', stderr: '' }, 'pr-merge', { base: info.base ?? 'main', remote: info.remote })
+    const notCaughtUp = await afterMerge(entry, request.deleteRemoteBranch)
     const merged = entry.status?.pr?.state === 'merged'
     if (!merged && entry.status?.pr?.details?.inMergeQueue) return { ok: true, outcome: 'queued', message: `PR #${pr.number} 已进入合并队列` }
-    return { ok: true, outcome: 'merged', message: `已合并 PR #${pr.number}` }
+    return { ok: true, outcome: 'merged', message: `已合并 PR #${pr.number}`, ...(notCaughtUp ? { baseNotCaughtUp: notCaughtUp } : {}) }
   } finally {
     writing.delete(request.worktree)
   }
@@ -881,7 +952,7 @@ export async function cancelMerge(raw: unknown): Promise<PrWriteResult> {
   const pr = entry.status?.pr
   if (!pr || !entry.repo) return writeBlocked('这个分支没有打开的 PR')
   const ran = await gh(['pr', 'merge', String(pr.number), `--repo=${repoArg(entry.repo)}`, '--disable-auto'])
-  if (ran.code !== 0) return writeFailed('没能取消自动合并', ran)
+  if (ran.code !== 0) return writeFailed('没能取消自动合并', ran, 'pr-merge', { base: 'main', remote: null })
   await checkEntry(entry)
   return { ok: true, outcome: 'cancelled', message: `已取消 PR #${pr.number} 的自动合并` }
 }

@@ -17,6 +17,14 @@ function ok(patch: Partial<Extract<ShipPreflight, { ok: true }>> = {}): ShipPref
     baseBehindUpstream: 0,
     openPr: null,
     mergeMethods: null,
+    head: 'c0ffee',
+    gh: 'ready',
+    remoteOnGitHub: true,
+    operation: null,
+    behindBase: 1,
+    baseConflicts: null,
+    pushed: false,
+    upstream: null,
     ...patch
   }
 }
@@ -39,7 +47,7 @@ describe('shipExits', () => {
   })
 
   it('puts the preflight failure on both exits, main first', () => {
-    const { primary, secondary } = shipExits(state({ ok: false, message: '不是 git 仓库' }, { remembered: 'pr' }))
+    const { primary, secondary } = shipExits(state({ ok: false, message: '不是 git 仓库', operation: null }, { remembered: 'pr' }))
     expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: '不是 git 仓库' })
     expect(secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '不是 git 仓库' })
   })
@@ -187,7 +195,7 @@ describe('exitPlan', () => {
   it('puts any exit behind the plan’s own blocker, an open-PR exit built by the caller too', () => {
     const open = { kind: 'open-pr' as const, number: 7, label: '打开 PR #7', blocker: null }
     expect(plan({ preflight: null }).blocker(open)).toBe('正在检查…')
-    expect(plan({ preflight: { ok: false, message: '不是 git 仓库' } }).blocker(open)).toBe('不是 git 仓库')
+    expect(plan({ preflight: { ok: false, message: '不是 git 仓库', operation: null } }).blocker(open)).toBe('不是 git 仓库')
     expect(plan().blocker(open)).toBeNull()
   })
 
@@ -197,8 +205,11 @@ describe('exitPlan', () => {
   })
 
   it('has nothing to ship once the PR is merged on GitHub, even before the base is pulled', () => {
-    const merged = { number: 7, state: 'merged' as const, url: 'https://github.com/o/r/pull/7' } as never
+    // The branch is still at the merged PR's head (the preflight's `head`).
+    const merged = { number: 7, state: 'merged' as const, url: 'https://github.com/o/r/pull/7', headOid: 'c0ffee' } as never
     expect(plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr: merged, checkedAt: 0 } }).nothingToShip).toBe(true)
+    // Commits after the merge are new work.
+    expect(plan({ preflight: ok({ head: 'beef00' }), prStatus: { worktree: '/w', branch: 'feat/x', pr: merged, checkedAt: 0 } }).nothingToShip).toBe(false)
   })
 
   it('sees an open PR with nothing to push as idle, and one with a newer local head as unpushed', () => {

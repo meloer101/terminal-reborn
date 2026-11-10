@@ -8,6 +8,7 @@ import { cp, mkdir, mkdtemp, readdir, realpath, rm, stat } from 'node:fs/promise
 import { homedir, tmpdir, userInfo } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
+import { classifyGitFailure } from '@shared/git-failures'
 import { IPC } from '@shared/ipc'
 import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch, WAVI_WORKTREES_DIR } from '@shared/git-worktrees'
 import {
@@ -44,6 +45,8 @@ function git(cwd: string, args: string[], options: { timeout?: number; env?: Rec
 }
 
 const orEmpty = (promise: Promise<string>): Promise<string> => promise.catch(() => '')
+
+const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 const exists = (path: string): Promise<boolean> => stat(path).then(() => true, () => false)
 
@@ -157,10 +160,19 @@ export async function newSessionInfo(root: unknown): Promise<NewSessionInfo> {
   }
 }
 
-/** Brings remote branches up to date before branching off; offline or no remote is fine (the local refs are used). */
-async function fetchRemotes(top: string): Promise<void> {
-  if ((await orEmpty(git(top, ['remote']))).trim() === '') return
-  await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(top) }).catch(() => {})
+/**
+ * Brings remote branches up to date before branching off. No remote is fine; a fetch that fails (offline, a login git
+ * cannot ask for) still lets the branch start from the local refs, and why it failed is returned, in words, so the
+ * sheet can say the base may be behind. null when it went through or there is no remote.
+ */
+async function fetchRemotes(top: string, base: string): Promise<string | null> {
+  if ((await orEmpty(git(top, ['remote']))).trim() === '') return null
+  try {
+    await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(top) })
+    return null
+  } catch (error) {
+    return classifyGitFailure('fetch', errorText(error), { base, remote: null }).message
+  }
 }
 
 const refExists = (top: string, ref: string): Promise<boolean> =>
@@ -258,7 +270,7 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
   const path = join(dir, request.folder)
   if (await exists(path)) return { ok: false, reason: 'folder-exists' }
 
-  await fetchRemotes(top)
+  const fetchFailed = await fetchRemotes(top, request.base)
   const start = await startPoint(top, request.base)
   if (!start) return { ok: false, reason: 'base-missing' }
   await mkdir(dir, { recursive: true })
@@ -267,10 +279,13 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
   } catch (error) {
     return { ok: false, reason: 'git', message: error instanceof Error ? error.message : String(error) }
   }
-  // The Worktree view and the merge compare against this (PRD F17 / F4).
-  await git(top, ['config', `branch.${request.branch}.base`, request.base]).catch(() => {})
+  // The Worktree view and the merge compare against this (PRD F17 / F4); without it they fall back on the main branch.
+  const baseNotSaved = await git(top, ['config', `branch.${request.branch}.base`, request.base]).then(
+    () => null,
+    (error: unknown) => `没能记下基线分支 ${request.base}：${errorText(error) || 'git config 失败'}`
+  )
   const copyFailures = request.prepare ? await copyIncluded(top, path) : 0
-  return { ok: true, path, copyFailures }
+  return { ok: true, path, copyFailures, ...(fetchFailed ? { fetchFailed } : {}), ...(baseNotSaved ? { baseNotSaved } : {}) }
 }
 
 export function registerWorktreeCreateHandlers(): void {

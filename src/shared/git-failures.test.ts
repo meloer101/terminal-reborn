@@ -234,6 +234,12 @@ describe('classifyGitFailure', () => {
     )
   })
 
+  it('words a failed PR poll as a gh call', () => {
+    expect(classifyGitFailure('pr-status', NETWORK.gh, ctx)).toMatchObject({ kind: 'network', message: '连不上 GitHub：检查网络后重试' })
+    expect(classifyGitFailure('pr-status', GH_SIGNED_OUT, ctx)).toMatchObject({ kind: 'auth', message: 'gh 还没有登录：在终端运行 gh auth login' })
+    expect(classifyGitFailure('pr-status', 'GraphQL: Something went wrong', ctx)).toMatchObject({ kind: 'unknown', message: '读取 PR 状态失败：GraphQL: Something went wrong' })
+  })
+
   it('reads a fast-forward-only pull that cannot fast-forward as diverged', () => {
     expect(classifyGitFailure('pull', DIVERGED, ctx)).toMatchObject({ kind: 'diverged', message: '远程分支和本地分叉', next: 'handoff' })
     expect(kind('pull', 'fatal: Not possible to fast-forward, aborting.')).toBe('diverged')

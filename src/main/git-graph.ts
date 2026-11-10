@@ -3,7 +3,7 @@
 // paths stay inside the worktree (symlinks resolved), refs are full `refs/heads|remotes/…` names, pathspecs are
 // literal, and git never gets an argument that could be read as an option.
 import { createHash } from 'node:crypto'
-import { access, constants, open, realpath, stat } from 'node:fs/promises'
+import { access, constants, lstat, open, realpath, stat } from 'node:fs/promises'
 import { delimiter, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
@@ -27,6 +27,7 @@ import {
   type GitRef
 } from '@shared/git-graph/log'
 import { stampDiffGroup, untrackedFileDiff } from '@shared/background-review'
+import { changeStamp } from '@shared/review-progress'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
 import { appPath, gitEnv, NO_OPTIONAL_LOCKS, pushEnv, runProcess } from './git/run'
 import { isInside, normalizeRelative } from './worktree-files'
@@ -262,6 +263,21 @@ async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T
   return results
 }
 
+/**
+ * An uncommitted file with its review stamp (合入链路 v2): status, line counts and the working file's size and mtime, one
+ * lstat each. A deleted (or unreadable) file has no size or mtime.
+ */
+async function stampedUncommitted(cwd: string, change: GitFileChange): Promise<GitFileChange> {
+  const info = await lstat(join(cwd, change.path)).catch(() => null)
+  return { ...change, stamp: changeStamp({ status: change.status, added: change.added, removed: change.removed, size: info?.size ?? null, mtimeMs: info?.mtimeMs ?? null }) }
+}
+
+/** A committed file with its review stamp: its diff against the base does not depend on the working file. */
+const stampedCommitted = (change: GitFileChange): GitFileChange => ({
+  ...change,
+  stamp: changeStamp({ status: change.status, added: change.added, removed: change.removed, size: null, mtimeMs: null })
+})
+
 const listUntracked = async (cwd: string, path?: string) =>
   (await git(cwd, ['ls-files', '--others', '--exclude-standard', '-z', '--', ...(path ? [path] : [])])).split('\0').filter(Boolean)
 
@@ -314,10 +330,11 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
     git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--numstat', '-z', hasHead ? 'HEAD' : EMPTY_TREE, '--']),
     listUntracked(cwd)
   ])
-  const uncommitted = [
+  const listed = [
     ...parseRawNumstat(diffOut),
     ...(await mapLimited(untracked.slice(0, MAX_UNTRACKED), COUNT_CONCURRENCY, (entry) => untrackedChange(cwd, entry)))
-  ].sort(byPath)
+  ]
+  const uncommitted = (await mapLimited(listed, COUNT_CONCURRENCY, (change) => stampedUncommitted(cwd, change))).sort(byPath)
   const untrackedOmitted = Math.max(0, untracked.length - MAX_UNTRACKED)
 
   const candidates = [isValidRefName(base) ? base : null, pickTrunk(refs, originHead.trim() || null)?.name ?? null, upstream.trim() || null]
@@ -334,7 +351,7 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
     ...parseLeftRight(counts),
     uncommitted,
     untrackedOmitted,
-    committed: parseRawNumstat(committedOut)
+    committed: parseRawNumstat(committedOut).map(stampedCommitted)
   }
 }
 

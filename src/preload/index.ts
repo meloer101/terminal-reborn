@@ -243,7 +243,10 @@ const api: TrApi = {
     baseCi: (target) => ipcRenderer.invoke(SHIP_IPC.baseCi, target),
     baseFailure: (target) => ipcRenderer.invoke(SHIP_IPC.baseFailure, target),
     baseFailing: (target) => ipcRenderer.invoke(SHIP_IPC.baseFailing, target),
-    onBaseCi: (listener) => listen(SHIP_IPC.baseCiChanged, listener)
+    onBaseCi: (listener) => listen(SHIP_IPC.baseCiChanged, listener),
+    sync: (request) => ipcRenderer.invoke(SHIP_IPC.sync, request),
+    pull: (request) => ipcRenderer.invoke(SHIP_IPC.pull, request),
+    operation: (request) => ipcRenderer.invoke(SHIP_IPC.operation, request)
   },
   radar: {
     watch: (targets) => ipcRenderer.send(RADAR_IPC.watch, targets),

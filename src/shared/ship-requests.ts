@@ -1,7 +1,7 @@
 // Validation of what the renderer sends to the ship handlers (src/shared/ship.ts): main trusts none of it. Pure.
 import { MAX_MERGE_MESSAGE, MERGE_METHODS, multiLine, type MergeMethod } from './git-merge'
 import { MAX_SHIP_FILES, parsePrTarget } from './pull-requests'
-import type { DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest } from './ship'
+import type { DiffSinceRequest, HandoffRequest, PushBaseRequest, ShipMainRequest, ShipOperationRequest } from './ship'
 import { HANDOFF_FILES, type HandoffKind } from './ship-handoff'
 
 const MAX_PATH = 4096
@@ -54,4 +54,11 @@ export function parseShipMainRequest(raw: unknown): ShipMainRequest | null {
   const message = multiLine(raw.message)
   if (paths && !message) return null
   return { ...target, message, method: raw.method as MergeMethod, paths }
+}
+
+/** 继续 / 中止: a worktree and one of the two actions. */
+export function parseShipOperationRequest(raw: unknown): ShipOperationRequest | null {
+  const target = parsePrTarget(raw)
+  if (!target || !isRecord(raw)) return null
+  return raw.action === 'continue' || raw.action === 'abort' ? { ...target, action: raw.action } : null
 }
