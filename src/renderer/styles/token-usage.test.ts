@@ -12,7 +12,8 @@ const TOKENS = join(__dirname, 'tokens.css')
 const SPACING = /^\s*(?:(?:scroll-)?margin|(?:scroll-)?padding|gap|row-gap|column-gap|border(?:-[a-z]+)*-radius)(?:-[a-z]+)*\s*:\s*(.+)$/s
 /** A non-zero px length, negative ones too (0px and the 0 of `0 4px` do not count). */
 const LITERAL_PX = /(?<![\w.])-?(?:[1-9]\d*(?:\.\d+)?|0?\.\d+)px\b/g
-const HEX_COLOR = /#[0-9a-fA-F]{3,8}\b/g
+/** A literal color: hex, or a color function (`color-mix` of variables is fine, so it is not one). */
+const LITERAL_COLOR = /#[0-9a-fA-F]{3,8}\b|(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/g
 
 function cssFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -22,14 +23,14 @@ function cssFiles(dir: string): string[] {
   })
 }
 
-/** Literal px in spacing / radius declarations and hex colors, per file (comments left out). */
+/** Literal px in spacing / radius declarations and literal colors, per file (comments left out). */
 export function violations(css: string): number {
   let count = 0
   // One declaration at a time, however the rule is laid out.
   for (const declaration of css.replace(/\/\*[\s\S]*?\*\//g, '').split(/[;{}]/)) {
     const spacing = SPACING.exec(declaration)
     if (spacing) count += spacing[1]!.match(LITERAL_PX)?.length ?? 0
-    count += declaration.match(HEX_COLOR)?.length ?? 0
+    count += declaration.match(LITERAL_COLOR)?.length ?? 0
   }
   return count
 }
@@ -68,8 +69,10 @@ function counts(): Map<string, number> {
 }
 
 describe('styles use the tokens (CLAUDE.md Conventions)', () => {
-  it('counts literal px in spacing and radius, and hex colors', () => {
+  it('counts literal px in spacing and radius, and literal colors', () => {
     expect(violations('.a { padding: 8px 0; margin: 0 var(--space-2); color: #fff; }\n.b { gap: 0px; border-top-left-radius: 2.5px; }')).toBe(3)
+    expect(violations('.a { color: rgb(0 0 0); background: hsla(0, 0%, 0%, 0.5); fill: oklch(70% 0.1 200); }')).toBe(3)
+    expect(violations('.a { background: color-mix(in srgb, var(--term-bg) 80%, transparent); color: var(--rgb-ish); }')).toBe(0)
     expect(violations('.a {\n  padding: 8px 0;\n  color: #fff;\n  gap: 0px;\n  border-top-left-radius: 2.5px;\n  /* #000 */\n}')).toBe(3)
     // Negative margins, logical and scroll properties, a value over several lines.
     expect(violations('.a { margin-top: -12px; padding-inline-start: 4px; scroll-margin-top: 8px; padding:\n  8px\n  16px; }')).toBe(5)
