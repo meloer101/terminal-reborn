@@ -9,7 +9,7 @@ import { homedir, tmpdir, userInfo } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 import { ipcMain } from 'electron'
 import { IPC } from '@shared/ipc'
-import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
+import { mainWorktreeIndex, parseWorktreePorcelain, pickMainBranch, WAVI_WORKTREES_DIR } from '@shared/git-worktrees'
 import {
   branchPrefix,
   MAX_INCLUDE_LISTED,
@@ -61,7 +61,7 @@ async function repoTop(root: unknown): Promise<string | null> {
 
 /** Where new worktrees of a repository go: `~/.tr/worktrees/<repo folder name>` (PRD F4). */
 export function worktreesDirFor(top: string, home = homedir()): string {
-  return join(home, '.tr', 'worktrees', basename(top))
+  return join(home, ...WAVI_WORKTREES_DIR, basename(top))
 }
 
 /** Lines of `for-each-ref --format=%(refname)`, without the given prefix. */

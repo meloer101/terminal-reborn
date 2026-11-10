@@ -1,0 +1,494 @@
+/* 设置 · 额度 statistics (Figma 69″ / 69′A, 868 wide): monochrome — agents, heat levels and the peak hour are steps of
+   text/primary, never hue. No cards: blocks are set apart by space and hairlines. */
+
+/* KPIs: four columns, hairlines between. */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+  padding: 0 var(--space-16) 0 var(--space-24);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.kpi:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+.kpiLabel,
+.kpiSub {
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kpiSub[data-change='true'] {
+  color: var(--text-primary);
+}
+
+.kpiValue {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.kpiNum {
+  font: var(--text-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-display);
+  color: var(--text-primary);
+}
+
+.kpiUnit {
+  font: var(--text-title-m);
+  color: var(--text-secondary);
+}
+
+/* A block: its title on the left, legend or facts on the right. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.blockTitle {
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.legend,
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-6) var(--space-16);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.legendStart {
+  color: var(--text-tertiary);
+}
+
+.swatch,
+.swatchSmall {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-xs);
+  background: var(--text-primary);
+}
+
+.swatchSmall {
+  width: 6px;
+  height: 6px;
+}
+
+/* Bars: a 180-high plot, the axis on the right, labels under each bar. */
+.chart {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  column-gap: var(--space-8);
+  padding-bottom: var(--space-24);
+}
+
+.plot {
+  position: relative;
+  height: 180px;
+}
+
+.grid,
+.baseline {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.baseline {
+  bottom: 0;
+  background: var(--border-default);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.bars {
+  position: absolute;
+  inset: 0;
+  display: grid;
+}
+
+.slot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+}
+
+.stack,
+.noRecord {
+  width: min(64%, 48px);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column-reverse;
+  min-height: 2px;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* While one bar is pointed at, the others step back. */
+.bars:hover .stack {
+  opacity: 0.8;
+}
+
+.bars:hover .stack[data-hover='true'] {
+  opacity: 1;
+}
+
+.part {
+  flex-basis: 0;
+  min-height: 1px;
+  background: var(--text-primary);
+}
+
+/* Before any log: an empty frame, not a zero. */
+.noRecord {
+  height: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.barLabel {
+  position: absolute;
+  top: calc(100% + var(--space-8));
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.barLabel[data-now='true'] {
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
+
+.axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 180px;
+  margin: calc(-1 * var(--space-8)) 0;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.tooltip {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--at);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 180px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-overlay);
+  pointer-events: none;
+  transform: translateX(var(--space-16));
+}
+
+.tooltip[data-side='left'] {
+  transform: translateX(calc(-100% - var(--space-16)));
+}
+
+.tipHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-16);
+  font: var(--text-caption-strong);
+  color: var(--text-primary);
+}
+
+.tipRow {
+  display: grid;
+  grid-template-columns: 6px 1fr auto;
+  align-items: center;
+  gap: var(--space-8);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.tipValue {
+  text-align: right;
+}
+
+.tipValue[data-muted='true'] {
+  color: var(--text-tertiary);
+}
+
+/* Heatmap: 53 Monday-first weeks; start lines and labels sit on the columns where an agent's logs begin. */
+.heat {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  grid-template-rows: 16px 18px auto;
+}
+
+.heatMarks,
+.heatMonths,
+.heatLines {
+  position: relative;
+  grid-column: 2;
+}
+
+.heatMarks {
+  grid-row: 1;
+}
+
+.heatMonths {
+  grid-row: 2;
+}
+
+.heatLines {
+  grid-row: 1 / 4;
+  pointer-events: none;
+}
+
+.heatStart,
+.heatMonths span {
+  position: absolute;
+  top: 0;
+  left: calc(var(--col) / var(--weeks) * 100%);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.heatStart {
+  padding-left: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.heatMonths span {
+  color: var(--text-tertiary);
+}
+
+.heatLine {
+  position: absolute;
+  top: 2px;
+  bottom: 0;
+  left: calc(var(--col) / var(--weeks) * 100%);
+  width: 1px;
+  background: var(--text-primary);
+  opacity: 0.5;
+}
+
+.heatDays {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-row: 3;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.heatDays span {
+  line-height: 1;
+}
+
+.heatGrid {
+  display: grid;
+  grid-row: 3;
+  grid-column: 2;
+  grid-template-rows: repeat(7, auto);
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: var(--space-4);
+}
+
+.cell {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: var(--radius-xs);
+  background: var(--text-primary);
+}
+
+.cell[data-level='none'] {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.cell[data-level='0'] {
+  opacity: 0.07;
+}
+
+.cell[data-level='1'] {
+  opacity: 0.2;
+}
+
+.cell[data-level='2'] {
+  opacity: 0.38;
+}
+
+.cell[data-level='3'] {
+  opacity: 0.62;
+}
+
+.cell[data-level='4'] {
+  opacity: 0.95;
+}
+
+.heatLegend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.heatLegend .cell {
+  width: 11px;
+}
+
+/* Shares: two columns, rows on one set of column lines. */
+.breakdowns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-40) var(--space-40);
+}
+
+.shareList {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.shareList > .blockTitle {
+  margin-bottom: var(--space-8);
+}
+
+.shareRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 72px 40px;
+  align-items: center;
+  column-gap: var(--space-12);
+  height: 30px;
+}
+
+.shareName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+  font: var(--text-body);
+  color: var(--text-primary);
+}
+
+.shareLabel {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shareStart {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+}
+
+.shareRow[data-unsupported='true'] .shareLabel {
+  color: var(--text-secondary);
+}
+
+.shareBar {
+  display: flex;
+  height: 4px;
+}
+
+.shareBar span {
+  border-radius: var(--radius-xs);
+  background: var(--text-primary);
+  opacity: 0.85;
+}
+
+.shareTokens {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sharePct {
+  font: var(--text-mono-s-medium);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.hours {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  align-items: end;
+  gap: var(--space-4);
+  height: 104px;
+  margin-top: var(--space-16);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.hour {
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: var(--text-primary);
+  opacity: 0.45;
+}
+
+.hour[data-peak='true'] {
+  opacity: 1;
+}
+
+.hourAxis {
+  position: relative;
+  height: 16px;
+  margin-top: var(--space-6);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.hourAxis span {
+  position: absolute;
+  left: calc(var(--h) / 24 * 100%);
+}
+
+.hourAxis .hourPeak {
+  font: var(--text-caption);
+  color: var(--text-primary);
+}
