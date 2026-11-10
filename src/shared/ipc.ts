@@ -15,6 +15,7 @@ import type { ShipApi } from './ship'
 import type { ConflictRadarApi } from './conflict-radar'
 import type { AgentEventEnvelope, HooksHealth, PendingPrompt, PermissionDecision, PromptResolution, SessionHooksSignal } from './agent-events'
 import type { ContextHistory, SessionSpend, UsageAccount, UsageAlert, UsageVendor, VendorUsage } from './session-meta'
+import type { UsageDataset } from './usage-stats'
 import type { AppSettings, SettingsPatch } from './settings'
 import type { MenuCommand } from './shortcuts'
 import type { AgentKind, SessionId } from './types'
@@ -401,6 +402,8 @@ export interface AgentApi {
   getContextHistory(sessionId: string): Promise<ContextHistory | null>
   /** Tokens each of the vendor's sessions spent since `since` (epoch ms), closed ones included. Figma 18B. */
   getUsageShares(vendor: UsageVendor, since: number): Promise<SessionSpend[]>
+  /** Every agent's token use from its own logs on this Mac (设置 · 额度 statistics, PRD F11, Figma 69″). Rejects when the scan fails. */
+  getUsageStats(): Promise<UsageDataset>
 }
 
 export interface TrApi {
@@ -498,6 +501,8 @@ export const IPC = {
   agentContextHistory: 'agent:context-history',
   /** invoke(vendor, since) → SessionSpend[] */
   agentUsageShares: 'agent:usage-shares',
+  /** invoke → UsageDataset */
+  agentGetUsageStats: 'agent:get-usage-stats',
   uiOpenSettings: 'ui:open-settings',
   /** main → renderer: show the settings dialog */
   uiShowSettings: 'ui:show-settings',

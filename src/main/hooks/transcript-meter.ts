@@ -10,6 +10,7 @@
 import { open } from 'node:fs/promises'
 import type { HookAgent } from '@shared/agent-events'
 import type { ContextHistory, ContextPoint, SessionSpend, UsageVendor } from '@shared/session-meta'
+import { claudeUsage, codexTokenCount, entryTime, isRec, type JsonRec } from '@shared/usage-records'
 import { claudeTranscriptPath, defaultAgentDataDirs, type AgentDataDirs } from './agent-title'
 import { codexRolloutPath } from './codex-usage'
 import type { Scheduler } from './permission-registry'
@@ -29,9 +30,7 @@ const MAX_IDS = 512
 const READ_ON: ReadonlySet<string> = new Set(['SessionStart', 'UserPromptSubmit', 'Stop', 'SubagentStop', 'PreCompact', 'PostToolUse'])
 const READ_AFTER_MS = [250, 1_500]
 
-type Rec = Record<string, unknown>
-const isRec = (value: unknown): value is Rec => typeof value === 'object' && value !== null && !Array.isArray(value)
-const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0)
+type Rec = JsonRec
 
 /** What the lines read so far say. Mutated by `parseLines`. */
 export interface MeterState {
@@ -51,10 +50,7 @@ export function emptyMeterState(): MeterState {
   return { turns: [], pending: null, compactions: [], spend: [], counted: new Map(), cumulative: 0 }
 }
 
-function timeOf(entry: Rec, fallback: number): number {
-  const parsed = typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : NaN
-  return Number.isFinite(parsed) ? parsed : fallback
-}
+const timeOf = entryTime
 
 function addSpend(state: MeterState, at: number, tokens: number): void {
   if (tokens <= 0) return
@@ -91,13 +87,9 @@ export const CODEX_WEIGHT = { cached: 0.1, output: 8 } as const
 
 function claudeLine(state: MeterState, entry: Rec, now: number): void {
   const at = timeOf(entry, now)
-  if (entry.type === 'assistant' && isRec(entry.message) && isRec(entry.message.usage)) {
-    const usage = entry.message.usage
-    const id = typeof entry.message.id === 'string' ? entry.message.id : typeof entry.requestId === 'string' ? entry.requestId : ''
-    const input = count(usage.input_tokens)
-    const write = count(usage.cache_creation_input_tokens)
-    const read = count(usage.cache_read_input_tokens)
-    const output = count(usage.output_tokens)
+  const usage = claudeUsage(entry)
+  if (usage) {
+    const { id, input, cacheWrite: write, cacheRead: read, output } = usage
     const seen = id ? state.counted.get(id) : undefined
     if (seen === undefined) {
       addSpend(state, at, Math.round(input + write * CLAUDE_WEIGHT.write + read * CLAUDE_WEIGHT.read + output * CLAUDE_WEIGHT.output))
@@ -110,7 +102,7 @@ function claudeLine(state: MeterState, entry: Rec, now: number): void {
       state.counted.set(id, output)
     }
     // Subagents run in their own context; only the main conversation's fill counts.
-    if (entry.isSidechain !== true && input + write + read > 0) state.pending = { at, tokens: input + write + read }
+    if (!usage.sidechain && input + write + read > 0) state.pending = { at, tokens: input + write + read }
     return
   }
   if (entry.type === 'system' && entry.subtype === 'compact_boundary') {
@@ -128,26 +120,21 @@ function codexLine(state: MeterState, entry: Rec, now: number): void {
     state.compactions.push(at)
     return
   }
-  if (entry.type !== 'event_msg' || !isRec(entry.payload)) return
-  const payload = entry.payload
-  if (payload.type === 'user_message') {
+  if (entry.type === 'event_msg' && isRec(entry.payload) && entry.payload.type === 'user_message') {
     closeTurn(state)
     return
   }
-  if (payload.type !== 'token_count' || !isRec(payload.info)) return
-  const info = payload.info
-  const window = count(info.model_context_window)
-  if (window > 0) state.windowTokens = window
-  const last = isRec(info.last_token_usage) ? info.last_token_usage : null
-  const total = isRec(info.total_token_usage) ? count(info.total_token_usage.total_tokens) : 0
+  const tc = codexTokenCount(entry)
+  if (!tc) return
+  if (tc.window > 0) state.windowTokens = tc.window
+  const { last } = tc
   // The same token_count is repeated (e.g. when rate limits update); only a larger running total is new spend.
-  if (last && total > state.cumulative) {
-    state.cumulative = total
-    const cached = count(last.cached_input_tokens)
-    const fresh = Math.max(0, count(last.input_tokens) - cached)
-    addSpend(state, at, Math.round(fresh + cached * CODEX_WEIGHT.cached + count(last.output_tokens) * CODEX_WEIGHT.output))
+  if (last && tc.runningTotal > state.cumulative) {
+    state.cumulative = tc.runningTotal
+    const fresh = Math.max(0, last.input - last.cached)
+    addSpend(state, at, Math.round(fresh + last.cached * CODEX_WEIGHT.cached + last.output * CODEX_WEIGHT.output))
   }
-  if (last && count(last.total_tokens) > 0) state.pending = { at, tokens: count(last.total_tokens) }
+  if (last && last.total > 0) state.pending = { at, tokens: last.total }
 }
 
 /** Applies complete JSONL lines to the state. Unparseable lines are skipped. */

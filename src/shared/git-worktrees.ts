@@ -4,6 +4,9 @@
 // (only offer --force for one recognised refusal), both MIT.
 
 /** One worktree of the repository, as main read it. Paths are absolute. */
+/** Where Wavi puts new worktrees, under the home folder: `~/.tr/worktrees/<repo folder name>/<name>` (PRD F4). */
+export const WAVI_WORKTREES_DIR = ['.tr', 'worktrees'] as const
+
 export interface GitWorktreeInfo {
   /** Path as `git worktree list` prints it. */
   path: string

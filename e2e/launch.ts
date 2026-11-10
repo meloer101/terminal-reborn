@@ -29,6 +29,8 @@ export function launchApp(
     TR_KILL_SESSIONS_ON_QUIT: '1',
     // Never ask the real Claude / Codex account for its plan usage from a test run.
     TR_ACCOUNT_USAGE: 'off',
+    // Nor read the real agents' logs for 设置 · 额度's statistics: an empty home unless a test brings its own.
+    TR_USAGE_STATS_HOME: join(userData, 'usage-home'),
     // Nor the real gh for PRs (PRD F16); e2e/pull-requests.spec.ts puts a fake one on the PATH instead.
     TR_GH: 'off',
     ...envOverrides

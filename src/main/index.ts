@@ -20,6 +20,7 @@ import { registerSettingsHandlers } from './settings'
 import { registerThemeImportHandler } from './theme-import'
 import { registerUiHandlers } from './ui'
 import { registerUpdateHandlers } from './updates'
+import { registerUsageStatsHandlers } from './usage-stats'
 import { registerLiveRebuilds } from './live-rebuilds'
 import { createMainWindow, getMainWindow, installAppMenu, showMainWindow, showSettings } from './windows'
 import { registerTerminalSnapshots } from './terminal-snapshots'
@@ -107,6 +108,7 @@ function boot(): void {
   registerConflictRadarHandlers()
   registerBrowserHandlers()
   registerHookHandlers()
+  registerUsageStatsHandlers()
   registerDispatchHandlers(sessionOwner)
   registerRemoteHandlers(sessionOwner, () => getMainWindow()?.webContents ?? null)
   registerPtyHandlers()
