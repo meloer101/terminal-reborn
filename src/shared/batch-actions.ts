@@ -25,7 +25,8 @@ const MAX_DIALOG_TEXT = 480
 const PREVIEW_CHARS = 160
 export const MAX_BROADCAST_TEXT = 20_000
 
-const isAgent = (c: BatchCandidate): boolean => c.kind === 'claude' || c.kind === 'codex'
+/** Any CLI agent takes a message and an Esc; a plain shell does not. */
+const isAgent = (c: BatchCandidate): boolean => c.kind !== 'shell'
 const exited = (c: BatchCandidate): boolean => c.status === 'exited' || c.phase === 'exited'
 
 /** Why `action` does not reach this session, or null when it does. */

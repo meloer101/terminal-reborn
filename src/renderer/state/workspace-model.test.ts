@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { pane, PICKER_PANE, sessionsIn, splitPane, type SplitNode } from '@shared/split-layout'
 import { sanitizeWorkspaceFile } from '@shared/workspace-file'
 import {
+  newProjectAgent,
   rememberRecentProject,
   addProject,
   addRunSession,
@@ -492,5 +493,21 @@ describe('reconcileSplit (PRD F20)', () => {
     expect(sessionsIn(file.split)).toEqual(['s-3', 's-4'])
     expect(shape(restoreWorkspace(sanitizeWorkspaceFile(file, 0)).split)).toEqual(['s-3', 's-4'])
     expect(persistedStateChanged({ ...prev, ...ui }, { ...prev, ...ui, split: null })).toBe(true)
+  })
+})
+
+describe('newProjectAgent (⌘O)', () => {
+  it('starts the agent of the session used last, skipping plain terminals', () => {
+    const sessions = [
+      { kind: 'claude' as const, lastActivityAt: 1 },
+      { kind: 'codex' as const, lastActivityAt: 5 },
+      { kind: 'shell' as const, lastActivityAt: 9 }
+    ]
+    expect(newProjectAgent(sessions, { claude: true, codex: true })).toBe('codex')
+  })
+
+  it('with no agent session yet, starts the first CLI on PATH, else Claude Code', () => {
+    expect(newProjectAgent([], { codex: true })).toBe('codex')
+    expect(newProjectAgent([{ kind: 'shell', lastActivityAt: 3 }], null)).toBe('claude')
   })
 })

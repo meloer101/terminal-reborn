@@ -22,6 +22,12 @@ describe('batchPlan', () => {
     expect(batchPlan('stop', picked).targets.map((t) => t.id)).toEqual(['登录页'])
     expect(batchPlan('close', picked).targets).toHaveLength(4)
   })
+
+  it('reaches every CLI agent, not only Claude Code and Codex', () => {
+    const others = [c('Gemini', { kind: 'gemini', status: 'running' }), c('Cursor', { kind: 'cursor', status: 'running' })]
+    expect(batchPlan('send', others).targets.map((t) => t.id)).toEqual(['Gemini', 'Cursor'])
+    expect(batchPlan('stop', others).targets.map((t) => t.id)).toEqual(['Gemini', 'Cursor'])
+  })
 })
 
 describe('labels and confirmations', () => {

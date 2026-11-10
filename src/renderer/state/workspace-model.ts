@@ -526,3 +526,19 @@ export function titleFromAgent(
   if (session.titleSource === 'agent' && session.title === title) return null
   return { title, titleSource: 'agent' }
 }
+
+/**
+ * The agent ⌘O / 打开项目… starts in a project that has no session yet: the agent of the session used last (the one
+ * the user is working with), else the first CLI on PATH, else Claude Code (its session then says it is missing).
+ */
+export function newProjectAgent(sessions: readonly Pick<Session, 'kind' | 'lastActivityAt'>[], installed: Partial<Record<CliAgent, boolean>> | null): CliAgent {
+  let last: CliAgent | null = null
+  let at = -Infinity
+  for (const s of sessions) {
+    if (s.kind !== 'shell' && s.lastActivityAt > at) {
+      last = s.kind
+      at = s.lastActivityAt
+    }
+  }
+  return last ?? CLI_AGENTS.find((id) => installed?.[id]) ?? 'claude'
+}
