@@ -63,6 +63,17 @@ export function popupMenu(entries: MenuEntry[], anchor: MenuAnchor): Promise<str
 }
 
 /**
+ * Replaces the entries of the menu `anchor` opened while it is still open (a menu that shows live state follows it in
+ * place: same placement, focus and highlight); false when `anchor`'s menu is not the open one.
+ */
+export function updateMenu(anchor: Element, entries: MenuEntry[]): boolean {
+  const { menu } = useMenu.getState()
+  if (!menu || openedBy !== anchor) return false
+  useMenu.setState({ menu: { ...menu, entries } })
+  return true
+}
+
+/**
  * Closes the open menu (if any), hands focus back, then resolves its promise with `id`. `pressedOutsideOn` is the
  * target of the press outside the menu that dismissed it.
  */

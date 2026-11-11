@@ -259,7 +259,8 @@ export async function prRepoFor(cwd: string, remote: string): Promise<{ repo: Gi
 /** `gh pr list --head`: the branch's PR (null when it has none), or an error message. */
 async function listPr(repo: GitHubRepo, headOwner: string | null, headBranch: string): Promise<{ pr: PullRequestInfo | null } | { error: string }> {
   const ran = await gh(['pr', 'list', `--repo=${repoArg(repo)}`, `--head=${headBranch}`, '--state=all', '--limit=10', `--json=${PR_JSON_FIELDS}`])
-  if (ran.code !== 0) return { error: lastLines(ran.stderr || ran.stdout) || `gh exited with ${ran.code}` }
+  // All main kept of it (not its last lines): the classifier reads the whole and shows its tail.
+  if (ran.code !== 0) return { error: (ran.stderr.trim() || ran.stdout.trim()) || `gh exited with ${ran.code}` }
   try {
     return { pr: pickPullRequest(JSON.parse(ran.stdout) as unknown, headOwner) }
   } catch {
@@ -282,7 +283,8 @@ async function prDetails(repo: GitHubRepo, number: number): Promise<{ details: P
     '-F',
     `number=${number}`
   ])
-  if (ran.code !== 0) return { error: lastLines(ran.stderr || ran.stdout) || `gh exited with ${ran.code}` }
+  // All main kept of it (not its last lines): the classifier reads the whole and shows its tail.
+  if (ran.code !== 0) return { error: (ran.stderr.trim() || ran.stdout.trim()) || `gh exited with ${ran.code}` }
   try {
     return { details: parsePrDetails(JSON.parse(ran.stdout) as unknown) }
   } catch {
@@ -423,6 +425,8 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
       if (known?.number === pr.number && known.details) pr = { ...pr, details: known.details }
       if ('error' in more && isRateLimited(more.error)) pausedUntil = Date.now() + PR_POLL.rateLimitMs
       if ('error' in more && !pr.details) detailsError = classifyGitFailure('pr-status', more.error, { base: info.base ?? 'main', remote: info.remote }).message
+      // gh answered but not with the PR's details (pullRequest null, a field missing): no less a failure than a failed call.
+      else if (!pr.details) detailsError = `没能读到 PR #${pr.number} 的详情`
     }
   }
   let local: PrStatus['local']

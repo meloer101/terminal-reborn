@@ -85,7 +85,7 @@ vi.mock('@shared/risk-markers', () => ({
 
 const { detectGh, checkWorktree, pushBranch, watchTargets, unwatch } = await import('./pull-requests')
 const { changes } = await import('./git-graph')
-const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipRisks, shipToMain, syncWorktree } = await import('./ship')
+const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, diffSinceWithCut, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipRisks, shipToMain, syncWorktree } = await import('./ship')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 Object.assign(process.env, identity, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false' })
@@ -407,6 +407,26 @@ describe('shipToMain', () => {
     const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
     expect(result).toMatchObject({ ok: false, step: 'merge', message: '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」' })
     if (!result.ok && result.failure) expect(result.failure.message).toBe('变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」')
+    expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
+  })
+
+  // M6: git prints a rebase's failure first and ten lines of hints after it; the class is read from all of it.
+  it('rebase: a commit that could not be signed is told apart, although git’s hints push the reason out of the last lines', async () => {
+    const { root, wt } = setup()
+    commit(root, 'd.txt', 'd\n', 'add d on main')
+    git(root, 'push', '-q', 'origin', 'main')
+    const gpg = join(base, `gpg-${counter}`)
+    writeFileSync(gpg, '#!/bin/sh\necho "gpg: signing failed: No pinentry" >&2\nexit 1\n', { mode: 0o755 })
+    const saved = { count: process.env.GIT_CONFIG_COUNT, value: process.env.GIT_CONFIG_VALUE_0 }
+    Object.assign(process.env, { GIT_CONFIG_COUNT: '2', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: 'gpg.program', GIT_CONFIG_VALUE_1: gpg })
+    try {
+      const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
+      expect(result).toMatchObject({ ok: false, step: 'merge', failure: { kind: 'signing', message: '提交签名需要口令', next: null } })
+    } finally {
+      Object.assign(process.env, { GIT_CONFIG_COUNT: saved.count, GIT_CONFIG_VALUE_0: saved.value })
+      delete process.env.GIT_CONFIG_KEY_1
+      delete process.env.GIT_CONFIG_VALUE_1
+    }
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
   })
 
@@ -739,6 +759,23 @@ describe('diffSince and discardSince', () => {
     expect(diff!.endsWith('\n')).toBe(true)
   })
 
+  // A capped diff names only some files: whoever decides from its file list must know it is not the whole diff.
+  it('says when the diff was cut at the cap, with the same text', async () => {
+    const { root, wt } = setup({ github: false })
+    const since = sha(wt, 'HEAD')
+    commit(wt, 'fix.txt', 'fix\n', 'fix it')
+    const small = await diffSinceWithCut({ root, worktree: wt, since })
+    expect(small).toEqual({ text: await diffSince({ root, worktree: wt, since }), cut: false })
+    expect(small!.text).toContain('+++ b/fix.txt')
+
+    commit(wt, 'big.txt', `${'x'.repeat(99)}\n`.repeat(30_000), 'big')
+    commit(wt, 'z.txt', 'z\n', 'after the big one')
+    const big = await diffSinceWithCut({ root, worktree: wt, since })
+    expect(big).toEqual({ text: await diffSince({ root, worktree: wt, since }), cut: true })
+    expect(big!.text).not.toContain('z.txt')
+    expect(await diffSinceWithCut({ root, worktree: wt, since: 'abcdef1234' })).toBeNull()
+  })
+
   it('moves the branch back to the commit, and refuses uncommitted changes and strangers', async () => {
     const { root, wt } = setup({ github: false })
     const since = sha(wt, 'HEAD')
@@ -922,12 +959,16 @@ describe('preflight · the chain fields', () => {
   })
 })
 
+/** The base 同步 brings in: the local base, or origin's when the local one is only behind it and could not catch up. */
+const LOCAL_MAIN = { onto: 'main', ontoRef: 'refs/heads/main' }
+const ORIGIN_MAIN = { onto: 'origin/main', ontoRef: 'refs/remotes/origin/main' }
+
 describe('同步 <base>', () => {
   it('rebases a branch that was never pushed onto the base, and pushes nothing', async () => {
     const { root, wt, bare } = setup({ github: false })
     commit(root, 'm.txt', 'm\n', 'main moved on')
     git(root, 'push', '-q', 'origin', 'main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'main moved on', 'init'])
     expect(git(wt, 'rev-list', '--merges', 'HEAD').trim()).toBe('')
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
@@ -940,7 +981,7 @@ describe('同步 <base>', () => {
     const pushed = sha(wt, 'HEAD')
     commit(root, 'm.txt', 'm\n', 'main moved on')
     git(root, 'push', '-q', 'origin', 'main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(git(wt, 'log', '-1', '--format=%P', 'HEAD').trim().split(' ')).toEqual([pushed, sha(root, 'main')])
     expect(git(wt, 'log', '-1', '--format=%s', 'HEAD').trim()).toBe("Merge branch 'main' into feat")
     expect(sha(bare, 'feat')).toBe(pushed)
@@ -955,7 +996,7 @@ describe('同步 <base>', () => {
     git(root, 'config', 'merge.ff', 'only')
     git(root, 'config', 'branch.feat.mergeOptions', '--squash --no-commit')
     git(root, 'config', 'merge.log', 'true')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(git(wt, 'log', '-1', '--format=%P%n%B', 'HEAD').trim()).toBe(`${pushed} ${sha(root, 'main')}\nMerge branch 'main' into feat`)
 
     // rebase.autoSquash is not set here: git reads it only for an interactive rebase, which 同步 never runs.
@@ -965,7 +1006,7 @@ describe('同步 <base>', () => {
     git(fresh.root, 'config', 'rebase.updateRefs', 'true')
     git(fresh.wt, 'branch', 'side', 'HEAD~1')
     const side = sha(fresh.wt, 'side')
-    expect(await syncWorktree({ root: fresh.root, worktree: fresh.wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root: fresh.root, worktree: fresh.wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(git(fresh.wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['more on feat', 'Make nav sticky', 'main moved on', 'init'])
     expect(sha(fresh.wt, 'side')).toBe(side)
   })
@@ -977,7 +1018,7 @@ describe('同步 <base>', () => {
     const pushed = sha(wt, 'HEAD')
     commit(root, 'm.txt', 'm\n', 'main moved on')
     git(root, 'push', '-q', 'origin', 'main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(git(wt, 'log', '-1', '--format=%P', 'HEAD').trim().split(' ')).toEqual([pushed, sha(root, 'main')])
   })
 
@@ -992,7 +1033,7 @@ describe('同步 <base>', () => {
     // A branch the remote deleted and replaced: a whole-remote fetch cannot create origin/foo/bar next to it.
     git(root, 'update-ref', 'refs/remotes/origin/foo', sha(root, 'main'))
     expect(() => git(root, 'fetch', '-q', 'origin')).toThrow()
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
   })
 
@@ -1004,7 +1045,7 @@ describe('同步 <base>', () => {
     const other = cloneOf(bare)
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
     expect(git(wt, 'log', '-1', '--format=%P', 'HEAD').trim().split(' ')).toEqual([pushed, sha(bare, 'main')])
   })
@@ -1017,7 +1058,7 @@ describe('同步 <base>', () => {
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
     git(root, 'update-ref', '-d', 'refs/remotes/origin/main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
     expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'upstream work', 'init'])
 
@@ -1025,7 +1066,7 @@ describe('同步 <base>', () => {
     commit(gone.root, 'm.txt', 'm\n', 'local main work')
     git(gone.root, 'update-ref', '-d', 'refs/remotes/origin/main')
     git(gone.bare, 'branch', '-q', '-m', 'main', 'trunk')
-    expect(await syncWorktree({ root: gone.root, worktree: gone.wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root: gone.root, worktree: gone.wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(git(gone.wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'local main work', 'init'])
   })
 
@@ -1037,7 +1078,7 @@ describe('同步 <base>', () => {
     git(root, 'fetch', '-q', 'origin')
     writeFileSync(join(root, 'a.txt'), 'edited in the main checkout\n')
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, behindBase: 1 })
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main' })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main', ...ORIGIN_MAIN })
     expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'upstream work', 'init'])
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, behindBase: 0 })
 
@@ -1048,7 +1089,7 @@ describe('同步 <base>', () => {
     commit(elsewhere, 'up.txt', 'u\n', 'upstream work')
     git(elsewhere, 'push', '-q', 'origin', 'main')
     writeFileSync(join(pushedOne.root, 'a.txt'), 'edited in the main checkout\n')
-    expect(await syncWorktree({ root: pushedOne.root, worktree: pushedOne.wt })).toMatchObject({ ok: true })
+    expect(await syncWorktree({ root: pushedOne.root, worktree: pushedOne.wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main', ...ORIGIN_MAIN })
     expect(git(pushedOne.wt, 'log', '-1', '--format=%P%n%s', 'HEAD').trim()).toBe(
       `${sha(pushedOne.wt, 'HEAD^1')} ${sha(pushedOne.bare, 'main')}\nMerge remote-tracking branch 'origin/main' into feat`
     )
@@ -1059,7 +1100,7 @@ describe('同步 <base>', () => {
     const other = cloneOf(bare)
     commit(other, 'up.txt', 'u\n', 'upstream work')
     git(other, 'push', '-q', 'origin', 'main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
     expect(existsSync(join(root, 'up.txt'))).toBe(true)
     expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'upstream work', 'init'])
@@ -1073,7 +1114,7 @@ describe('同步 <base>', () => {
     git(root, 'update-ref', 'refs/heads/main', git(root, 'commit-tree', '-p', 'main', '-m', 'local only', 'main^{tree}').trim())
     const before = sha(root, 'main')
     const result = await syncWorktree({ root, worktree: wt })
-    expect(result).toEqual({ ok: true, baseNotCaughtUp: 'main 和 origin/main 各有对方没有的提交，没法快进' })
+    expect(result).toEqual({ ok: true, baseNotCaughtUp: 'main 和 origin/main 各有对方没有的提交，没法快进', ...LOCAL_MAIN })
     expect(sha(root, 'main')).toBe(before)
     expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'local only', 'init'])
   })
@@ -1085,7 +1126,7 @@ describe('同步 <base>', () => {
     git(other, 'push', '-q', 'origin', 'main')
     writeFileSync(join(root, 'a.txt'), 'edited in the main checkout\n')
     const before = sha(root, 'main')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main' })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main', ...ORIGIN_MAIN })
     expect(sha(root, 'main')).toBe(before)
     expect(readFileSync(join(root, 'a.txt'), 'utf8')).toBe('edited in the main checkout\n')
   })
@@ -1094,10 +1135,10 @@ describe('同步 <base>', () => {
     const { root, wt } = conflicting()
     writeFileSync(join(wt, 'scratch.txt'), 's\n')
     const before = snapshot(wt)
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: false, reason: 'conflicts', files: ['a.txt'], mode: 'rebase', conflicts: [{ path: 'a.txt', type: 'content' }] })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: false, reason: 'conflicts', files: ['a.txt'], mode: 'rebase', conflicts: [{ path: 'a.txt', type: 'content' }], ...LOCAL_MAIN })
     expect(snapshot(wt)).toEqual(before)
     git(wt, 'push', '-q', '-u', 'origin', 'feat')
-    expect(await syncWorktree({ root, worktree: wt })).toMatchObject({ ok: false, reason: 'conflicts', files: ['a.txt'], mode: 'merge' })
+    expect(await syncWorktree({ root, worktree: wt })).toMatchObject({ ok: false, reason: 'conflicts', files: ['a.txt'], mode: 'merge', ...LOCAL_MAIN })
     expect(snapshot(wt)).toEqual(before)
   })
 
@@ -1108,7 +1149,7 @@ describe('同步 <base>', () => {
     expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: false, reason: 'blocked', message: '先提交改动' })
     git(wt, 'checkout', '--', 'b.txt')
     writeFileSync(join(wt, 'new.txt'), 'n\n')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(existsSync(join(wt, 'new.txt'))).toBe(true)
   })
 
@@ -1119,7 +1160,7 @@ describe('同步 <base>', () => {
     commit(wt, 'a.txt', 'one\ntwo\nthree\n', 'feat reverts a')
     commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
     const before = snapshot(wt)
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: false, reason: 'conflicts', files: ['a.txt'], mode: 'rebase', conflicts: [] })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: false, reason: 'conflicts', files: ['a.txt'], mode: 'rebase', conflicts: [], ...LOCAL_MAIN })
     expect(snapshot(wt)).toEqual(before)
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
   })
@@ -1137,7 +1178,7 @@ describe('同步 <base>', () => {
   it('does nothing when the branch has every base commit, and refuses strangers and an operation in progress', async () => {
     const { root, wt } = setup({ github: false })
     const head = sha(wt, 'HEAD')
-    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, ...LOCAL_MAIN })
     expect(sha(wt, 'HEAD')).toBe(head)
     expect(await syncWorktree({ root: join(base, 'elsewhere'), worktree: wt })).toEqual({ ok: false, reason: 'blocked', message: '请求无效' })
     expect(await syncWorktree({ root, worktree: root })).toMatchObject({ ok: false, reason: 'blocked' })
@@ -1188,6 +1229,15 @@ describe('拉取', () => {
     expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: true })
     expect(sha(bare, 'feat')).toBe(sha(wt, 'HEAD'))
     expect(git(bare, 'tag').trim()).toBe('')
+  })
+
+  it('says the remote no longer has the branch when it was deleted there (after its PR merged)', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    git(bare, 'branch', '-D', 'feat')
+    const head = sha(wt, 'HEAD')
+    expect(await pullWorktree({ root, worktree: wt })).toEqual({ ok: false, reason: 'blocked', message: 'origin 上已经没有分支 feat' })
+    expect(sha(wt, 'HEAD')).toBe(head)
   })
 
   it('needs a branch that was pushed and a remote', async () => {

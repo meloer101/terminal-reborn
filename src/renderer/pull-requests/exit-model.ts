@@ -77,7 +77,7 @@ export interface ExitInput {
   preflight: ShipPreflight | null
   remembered: ShipExitKind | null
   prStatus: PrStatus | null
-  changes: Pick<GitChanges, 'branch' | 'base' | 'ahead' | 'uncommitted' | 'untrackedOmitted'>
+  changes: Pick<GitChanges, 'branch' | 'base' | 'ahead' | 'uncommitted' | 'untrackedOmitted'> & Partial<Pick<GitChanges, 'baseRef'>>
   /** The worktree is the project's main checkout. */
   isMain: boolean
   /** The worktree's project root; null when the worktree has no project. */

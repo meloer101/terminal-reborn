@@ -48,6 +48,12 @@ const readHandoff = vi.fn<(request: unknown) => Promise<string | null>>()
 const diffSince = vi.fn<(request: unknown) => Promise<string | null>>()
 const changes = vi.fn<(worktree: string) => Promise<unknown>>()
 const create = vi.fn<(request: unknown) => Promise<unknown>>()
+/** diffSinceWithCut answers diffSince's text, cut at the cap when this is set. */
+let diffCut = false
+const diffSinceWithCut = async (request: unknown): Promise<{ text: string; cut: boolean } | null> => {
+  const text = await diffSince(request)
+  return text === null ? null : { text, cut: diffCut }
+}
 
 const ctx = {
   root: '/repo',
@@ -89,6 +95,7 @@ beforeEach(() => {
   readHandoff.mockReset()
   diffSince.mockReset()
   diffSince.mockResolvedValue(null)
+  diffCut = false
   changes.mockReset()
   // What is uncommitted now: nothing of the run's ticked files by default.
   changes.mockResolvedValue({ uncommitted: [], untrackedOmitted: 0 })
@@ -107,7 +114,7 @@ beforeEach(() => {
     tr: {
       pr: { write: async () => ({ ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {}, commit, create, push: async () => ({ ok: true, message: '已推送' }) },
       git: { changes },
-      ship: { shipToMain, pushBase, preflight, sync, pull, diffSince, handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }), readHandoff },
+      ship: { shipToMain, pushBase, preflight, sync, pull, diffSince, diffSinceWithCut, handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }), readHandoff },
       agent: { onEvent: () => () => {} },
       app: { detectAgents },
       ui: { notify: () => {} }
@@ -394,6 +401,45 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
       expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已提交 · h2abcde' })
     })
 
+    // U1: the same for 合并到 main 并推送: main refuses the commit inside its merge call; the run goes on to the merge
+    // with nothing to commit instead of a 重试 that repeats the refusal.
+    it('合并到 main 并推送: a commit main refuses for having nothing left, after a reload, is the one that went in', async () => {
+      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
+      preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 0, head: 'h2abcdef' })
+      diffSince.mockResolvedValueOnce('diff --git a/new.txt b/new.txt\ndiff --git a/z.ts b/z.ts\n')
+      shipToMain.mockResolvedValueOnce({ ok: false, step: 'commit', reason: 'blocked', message: '勾选的文件已经没有改动了' })
+      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+      retryShip(ctx.worktree)
+      await settle()
+      expect(shipToMain).toHaveBeenCalledTimes(3)
+      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: null }))
+      expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
+      expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已合并到 main 并推送 · c3' })
+    })
+
+    it('合并到 main 并推送: a refusal of a run not taken up after a reload stays a failure', async () => {
+      shipToMain.mockResolvedValueOnce({ ok: false, step: 'commit', reason: 'blocked', message: '勾选的文件已经没有改动了' })
+      startShip(ctx, 'main', 'feat: new', { head: 'h0' })
+      await settle()
+      submitShip(ctx.worktree)
+      await settle()
+      expect(state().error).toMatchObject({ step: 'commit', message: '勾选的文件已经没有改动了' })
+      expect(shipToMain).toHaveBeenCalledTimes(1)
+    })
+
+    // U11: a diff cut at its cap names only some files: whether the run's commit landed is not decided from it.
+    it('a diff cut at the cap does not tell that the run’s commit went in', async () => {
+      await reloaded('main', () => shipToMain.mockReturnValueOnce(new Promise(() => {})))
+      preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 0, head: 'h1' })
+      diffSince.mockResolvedValueOnce(DIFF_A)
+      diffCut = true
+      shipToMain.mockResolvedValueOnce({ ok: true, commit: 'c3', pushed: true })
+      retryShip(ctx.worktree)
+      await settle()
+      expect(diffSince).toHaveBeenCalledWith({ root: '/repo', worktree: '/repo-wt', since: 'h0' })
+      expect(shipToMain).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['new.txt'] }))
+    })
+
     // R58: a known limit of the legacy check (no start tip): a partial tick whose commit went in is committed again
     // (main refuses it); such a save exists once, from before the start tip was kept.
     it('an older saved run without the start tip keeps the old check', async () => {
@@ -533,6 +579,29 @@ describe('合入链路 v2 runs', () => {
     expect(handoffText(state().error, 'main', 'feat')).toBe(state().error!.prompt)
   })
 
+  // U2: the local base could not catch up and 同步 used origin/main: the step and the hand-off name that ref.
+  it('同步 main that used origin/main names it on the step and in the hand-off', async () => {
+    sync.mockResolvedValueOnce({ ok: false, reason: 'conflicts', files: ['src/store.ts'], mode: 'rebase', conflicts: [], baseNotCaughtUp: 'x', onto: 'origin/main', ontoRef: 'refs/remotes/origin/main' })
+    startShip({ ...ctx, paths: null }, 'sync', '同步 main', { syncMode: 'rebase', behind: 5 })
+    await settle()
+    expect(state().steps.find((s) => s.id === 'merge')?.label).toBe('rebase 到 origin/main')
+    expect(state().error!.prompt).toContain('origin/main 已经合入了别的改动')
+    expect(state().error!.prompt).toContain('GIT_EDITOR=true git rebase refs/remotes/origin/main，')
+    cancelShip(ctx.worktree)
+
+    sync.mockResolvedValueOnce({ ok: true, baseNotCaughtUp: 'x', onto: 'origin/main', ontoRef: 'refs/remotes/origin/main' })
+    startShip({ ...ctx, paths: null }, 'sync', '同步 main', { syncMode: 'merge' })
+    await settle()
+    expect(state().steps.map((s) => s.label)).toEqual(['拉取 main', '合并 origin/main'])
+    cancelShip(ctx.worktree)
+
+    // The local base itself: the labels stay as they were.
+    sync.mockResolvedValueOnce({ ok: true, baseNotCaughtUp: 'x', onto: 'main', ontoRef: 'refs/heads/main' })
+    startShip({ ...ctx, paths: null }, 'sync', '同步 main', { syncMode: 'rebase' })
+    await settle()
+    expect(state().steps.map((s) => s.label)).toEqual(['拉取 main', 'rebase 到 main'])
+  })
+
   // Review findings 20 / 41: 交给 <agent> names, enables and types into the same session: the one the run started with.
   it('the hand-off goes to the run’s session, whichever session is active now', async () => {
     workspace.sessions = [
@@ -601,6 +670,6 @@ describe('合入链路 v2 runs', () => {
     startShip({ ...ctx, paths: null }, 'pull', '拉取')
     await settle()
     expect(state().error).toMatchObject({ step: 'sync', message: '远程分支和本地分叉' })
-    expect(state().error!.prompt).toContain('git pull --no-rebase origin feat')
+    expect(state().error!.prompt).toContain('git pull --no-rebase origin refs/heads/feat，')
   })
 })

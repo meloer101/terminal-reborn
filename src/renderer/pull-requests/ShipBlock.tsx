@@ -23,6 +23,7 @@ import {
   useShips
 } from './ship-runner'
 import {
+  baseNotCaughtUp,
   failureOutput,
   failureWay,
   glanceFields,
@@ -105,6 +106,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
   const Icon = TITLE_ICON[titleIcon(state)]
   // 同步's pre-check found conflicts: nothing was started, so the step is held (ⓘ, the reason in its place), not failed.
   const held = heldBeforeStart(state)
+  const behind = baseNotCaughtUp(state)
   const fields = showFields ? glanceFields(state) : []
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -148,6 +150,18 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
                   <span className={styles.stepText}>{held.text}</span>
                   {/* A hand-off that could not be typed says why under it. */}
                   {state.error!.message !== held.text && <span className={styles.failureText}>{state.error!.message}</span>}
+                </span>
+              </li>
+            ) : step.id === behind?.step ? (
+              // 拉取 <base> whose base could not catch up did not happen as its label says (Figma 73K1): held, the
+              // reason on its own row.
+              <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
+                <span className={styles.glyph} role="img" aria-label="没有完成">
+                  <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
+                </span>
+                <span className={styles.stepBody}>
+                  <span className={styles.stepText}>{step.label}</span>
+                  <span className={styles.failureText}>{behind.reason}</span>
                 </span>
               </li>
             ) : (

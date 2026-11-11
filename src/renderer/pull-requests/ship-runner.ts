@@ -47,6 +47,7 @@ import {
   startState,
   stepWord,
   syncConflictText,
+  syncOnto,
   toGlance,
   toRunning,
   waitNote,
@@ -735,10 +736,13 @@ async function landedCommit(run: Run, now: ShipPreflight | null): Promise<string
   if (!ctx.head) return undefined
   if (!ctx.paths || !now?.ok || now.head === ctx.head) return null
   const [diff, committed] = await Promise.all([
-    window.tr.ship.diffSince({ root: ctx.root, worktree: ctx.worktree, since: ctx.head }).catch(() => null),
+    window.tr.ship.diffSinceWithCut({ root: ctx.root, worktree: ctx.worktree, since: ctx.head }).catch(() => null),
     noneUncommitted(ctx)
   ])
-  return committed && diff !== null && onlyPaths(diff, ctx.paths) && namesEvery(diff, ctx.paths) ? now.head : null
+  // A diff cut at its cap names only some of the files: it cannot tell that the commit was only the run's (unknown,
+  // so not made; a commit main then refuses for having nothing left is caught by committedMeanwhile).
+  if (!diff || diff.cut) return null
+  return committed && onlyPaths(diff.text, ctx.paths) && namesEvery(diff.text, ctx.paths) ? now.head : null
 }
 
 /**
@@ -794,17 +798,30 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
   }
   // After a failed push the merge stands on the local base: only the push is left.
   const mergeDone = stepDone(state, 'merge')
-  const result = mergeDone
-    ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...(run.merged ? { commit: run.merged } : {}) })
-    : await window.tr.ship.shipToMain({
-        root: ctx.root,
-        worktree: ctx.worktree,
-        message: state.texts.commit,
-        method: ctx.method ?? 'squash',
-        paths: run.committed ? null : ctx.paths
-      })
+  const ship = () =>
+    window.tr.ship.shipToMain({
+      root: ctx.root,
+      worktree: ctx.worktree,
+      message: state.texts.commit,
+      method: ctx.method ?? 'squash',
+      paths: run.committed ? null : ctx.paths
+    })
+  let result = mergeDone ? await window.tr.ship.pushBase({ root: ctx.root, worktree: ctx.worktree, ...(run.merged ? { commit: run.merged } : {}) }) : await ship()
   if (!alive(worktree, token)) return
   const hasCommit = state.steps.some((s) => s.id === 'commit')
+  // Main refused the commit (nothing classified) in a run taken up after a reload: the ticked files may have gone in
+  // while no window watched (as in runPr / runCommit). Then the merge goes on with nothing to commit.
+  if (!result.ok && result.step === 'commit' && result.reason === 'blocked' && !result.failure && !run.committed) {
+    const landed = await committedMeanwhile(run)
+    if (!alive(worktree, token)) return
+    if (landed) {
+      run.commit = landed
+      run.committed = true
+      if (hasCommit) patch(worktree, token, (s) => begin(complete(s, 'commit', landed.slice(0, 7)), 'merge'))
+      result = await ship()
+      if (!alive(worktree, token)) return
+    }
+  }
   if (!result.ok) {
     if (result.reason === 'declined') {
       patch(worktree, token, backToGlance)
@@ -826,7 +843,7 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     })
     return
   }
-  if (!mergeDone) patch(worktree, token, (s) => complete(hasCommit ? complete(s, 'commit') : s, 'merge'))
+  if (!mergeDone) patch(worktree, token, (s) => complete(hasCommit && !stepDone(s, 'commit') ? complete(s, 'commit') : s, 'merge'))
   run.merged = result.commit
   if (result.pushError) {
     // 改为创建 PR only where a PR can be made; the merge Wavi kept on the local base is said with the class's words.
@@ -943,7 +960,7 @@ async function runSync(worktree: string, token: number, run: Run): Promise<void>
   const result = await window.tr.ship.sync({ root: ctx.root, worktree: ctx.worktree })
   if (!alive(worktree, token)) return
   if (result.ok) {
-    patch(worktree, token, (s) => complete(complete(s, 'sync', result.baseNotCaughtUp), 'merge'))
+    patch(worktree, token, (s) => complete(complete(syncOnto(s, result.onto), 'sync', result.baseNotCaughtUp), 'merge'))
     // The local base could not catch up with its remote: the block stays, saying so on the step, until it is closed.
     if (result.baseNotCaughtUp) window.tr.pr.refresh(worktree)
     else finish(worktree, token, `已同步 ${ctx.base}`)
@@ -954,10 +971,17 @@ async function runSync(worktree: string, token: number, run: Run): Promise<void>
     return
   }
   if (result.reason === 'conflicts') {
-    const handoff = { base: ctx.base, branch: ctx.branch, behind: run.behind ?? null, conflicts: result.conflicts.length > 0 ? result.conflicts : result.files }
+    // The ref 同步 used (origin/main when the local base could not catch up); an older main does not say: the local base.
+    const onto = result.onto && result.ontoRef ? { base: result.onto, baseRef: result.ontoRef } : { base: ctx.base }
+    const handoff = { ...onto, branch: ctx.branch, behind: run.behind ?? null, conflicts: result.conflicts.length > 0 ? result.conflicts : result.files }
     const prompt = agentHandoffPrompt(result.mode === 'rebase' ? { kind: 'sync-rebase', ...handoff } : { kind: 'sync-merge', ...handoff })
     patch(worktree, token, (s) =>
-      fail(complete(s, 'sync', result.baseNotCaughtUp), { step: 'merge', message: syncConflictText(result.mode, result.files), conflicts: result.files, prompt })
+      fail(complete(syncOnto(s, result.onto, result.mode), 'sync', result.baseNotCaughtUp), {
+        step: 'merge',
+        message: syncConflictText(result.mode, result.files),
+        conflicts: result.files,
+        prompt
+      })
     )
     return
   }

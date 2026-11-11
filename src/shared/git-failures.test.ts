@@ -394,6 +394,27 @@ error: failed to push some refs to 'github.com:o/r.git'`
     expect(classifyGitFailure('push', protectedUnsigned, ctx)).toMatchObject({ message: 'main 被仓库规则拒绝：提交需要验证过的签名', next: null })
   })
 
+  // GitHub lists every secret it found between its header and git's own refusal: the telling words leave the tail.
+  it('reads the whole output, not only the tail it shows', () => {
+    const locations = Array.from({ length: 60 }, (_, i) => `remote:       - commit: ${String(i).padStart(40, 'a')}\nremote:         path: config/keys-${i}.json:1`).join('\n')
+    const output = `remote: error: GH013: Repository rule violations found for refs/heads/feat.
+remote: - GITHUB PUSH PROTECTION
+remote:     - Push cannot contain secrets
+remote:       —— AWS Access Key ————————————————————
+${locations}
+To github.com:o/r.git
+ ! [remote rejected] feat -> feat (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:o/r.git'`
+    const failure = classifyGitFailure('push', output, ctx)
+    expect(failure).toMatchObject({ kind: 'protected-branch', message: 'feat 被推送保护拒绝：提交里有密钥', next: null })
+    expect(failure.tail).toBe(failureTail(output))
+    expect(failure.tail).not.toContain('GITHUB PUSH PROTECTION')
+
+    const hookChatter = Array.from({ length: 50 }, (_, i) => `remote: [audit] checked file ${i}`).join('\n')
+    const login = `remote: Invalid username or token. Password authentication is not supported for Git operations.\nfatal: Authentication failed for 'https://github.com/o/r.git/'\n${hookChatter}`
+    expect(classifyGitFailure('fetch', login, ctx)).toMatchObject({ kind: 'auth', message: '拉取需要登录：在终端里运行一次 git fetch' })
+  })
+
   it('offers 改为创建 PR only for a refused push, not for a PR GitHub will not merge', () => {
     const output = 'GraphQL: Required status check "test" is expected. (mergePullRequest)'
     expect(classifyGitFailure('pr-merge', output, ctx)).toMatchObject({ kind: 'protected-branch', next: null })

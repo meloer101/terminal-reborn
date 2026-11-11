@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import { Check, GitBranch, GitFork, Globe, Minus, Plus } from 'lucide-react'
 import {
   addAgentRow,
+  attemptBaseRef,
   attemptButtonLabel,
   attemptKinds,
   defaultRows,
@@ -118,9 +119,9 @@ function Dialog() {
       : null
 
   const send = (): void => {
-    if (!session || !project || !base || !plan?.members) return
+    if (!session || !project || !repo || !base || !plan?.members) return
     closeSameTask(false)
-    runAttemptPlan(project.id, base, task.trim(), plan.members, { id: session.id, title: session.title })
+    runAttemptPlan(project.id, base, attemptBaseRef(base, repo.branches), task.trim(), plan.members, { id: session.id, title: session.title })
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {

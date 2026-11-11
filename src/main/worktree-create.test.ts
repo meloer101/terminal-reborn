@@ -140,6 +140,19 @@ describe('createWorktree', () => {
     if (result.ok) expect(git(result.path, 'rev-parse', 'HEAD').trim()).toBe(git(clone, 'rev-parse', 'main').trim())
   })
 
+  // M6: the server's reason comes before its banner and git's own closing lines; the class is read from all of them.
+  it('names a fetch that needs a login although a long server message follows the reason', async () => {
+    const origin = repo('login-origin')
+    const clone = join(base, 'login-clone')
+    git(base, 'clone', '-q', origin, clone)
+    roots.add(clone)
+    const uploadPack = join(base, 'login-upload-pack')
+    writeFileSync(uploadPack, '#!/bin/sh\necho "remote: Authentication failed for this repository" >&2\nfor i in 1 2 3 4 5 6 7 8 9 10; do echo "banner line $i" >&2; done\nexit 1\n', { mode: 0o755 })
+    git(clone, 'config', 'remote.origin.uploadpack', uploadPack)
+    const result = await createWorktree({ root: clone, branch: 'jacob/login', base: 'main', folder: 'login', prepare: false })
+    expect(result).toMatchObject({ ok: true, fetchFailed: '拉取需要登录：在终端里运行一次 git fetch' })
+  })
+
   it('says when the base could not be recorded', async () => {
     const lockRepo = repo('locked-config')
     writeFileSync(join(lockRepo, '.git', 'config.lock'), '')

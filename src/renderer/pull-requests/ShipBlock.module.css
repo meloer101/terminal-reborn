@@ -140,6 +140,8 @@
   overflow: auto;
   border-radius: var(--radius-md);
   background: var(--bg-inset);
+  /* Figma 73K2: an inner hairline, so the block has an edge where its fill is close to the Ship block's (light). */
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
   font: var(--text-mono-s);
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -172,6 +174,8 @@
   border: 0;
   border-radius: var(--radius-md);
   background: var(--bg-selected);
+  /* Figma 73K2: an inner hairline (focus makes it stronger). */
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
   color: var(--text-primary);
   outline: none;
   user-select: text;

@@ -48,7 +48,17 @@ interface RunResult {
   stderr: string
 }
 
-/** Runs git; resolves for exit codes in `ok` (default 0), rejects otherwise with git's last lines as the message. */
+/** A failed git run: git's last lines as the message, and all it printed (`output`) for classifying the failure. */
+class GitRunError extends Error {
+  constructor(
+    message: string,
+    readonly output: string
+  ) {
+    super(message)
+  }
+}
+
+/** Runs git; resolves for exit codes in `ok` (default 0), rejects otherwise with a GitRunError. */
 async function run(
   cwd: string,
   args: string[],
@@ -62,7 +72,7 @@ async function run(
     ...(options.input !== undefined ? { input: options.input } : {})
   })
   if ((options.ok ?? [0]).includes(ran.code)) return ran
-  throw new Error(lastLines(ran.stderr || ran.stdout) || 'git failed')
+  throw new GitRunError(lastLines(ran.stderr || ran.stdout) || 'git failed', [ran.stderr, ran.stdout].filter((text) => text.trim() !== '').join('\n'))
 }
 
 
@@ -71,6 +81,12 @@ const git = async (cwd: string, args: string[], options?: Parameters<typeof run>
 const orEmpty = (promise: Promise<string>): Promise<string> => promise.catch(() => '')
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+/** A failed merge's message, with everything git printed when it was git that failed. */
+const failed = (error: unknown): { message: string; output?: string } => ({
+  message: errorText(error),
+  ...(error instanceof GitRunError && error.output !== '' ? { output: error.output } : {})
+})
 
 async function realOrSelf(path: string): Promise<string> {
   try {
@@ -337,7 +353,7 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
 }
 
 /** Pushes the local base to `remote`; '' when it went through, else what git
- *  printed (its whole stderr, so the failure can be classified). A base that tracks another branch name there is not
+ *  printed (all the stderr main keeps, its last 8 KiB, so the failure can be classified). A base that tracks another branch name there is not
  *  pushed (see renamedUpstream). */
 export async function pushBase(realRoot: string, base: string, remote = 'origin'): Promise<string> {
   const renamed = await renamedUpstream(realRoot, base, remote)
@@ -415,7 +431,7 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
           await git(worktreePath, pinned.rebase('--quiet', check.baseHead), { timeout: CHECKOUT_TIMEOUT_MS })
         } catch (error) {
           await orEmpty(git(worktreePath, ['rebase', '--abort']))
-          return { ok: false, reason: 'conflict', message: errorText(error) }
+          return { ok: false, reason: 'conflict', ...failed(error) }
         }
         rebased = true
       }
@@ -442,7 +458,7 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
     const push = request.push && remote ? await pushBase(realRoot, check.base, remote) : null
     return { ok: true, commit, push }
   } catch (error) {
-    return { ok: false, reason: 'git', message: errorText(error), rebased }
+    return { ok: false, reason: 'git', ...failed(error), rebased }
   } finally {
     merging.delete(realRoot)
   }
@@ -450,9 +466,14 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
 
 export function registerGitMergeHandlers(): void {
   ipcMain.handle(IPC.gitWorktreesMergePrecheck, (_event, root: unknown, worktree: unknown) => mergePrecheck(root, worktree))
-  // The merge sheet shows a failed push in one line, as before pushBase kept git's whole output for classification.
+  // The merge sheet shows a failed push in one line, as before pushBase kept git's whole output for classification; a
+  // failed merge's whole output (kept for the ship chain's classification) stays in main.
   ipcMain.handle(IPC.gitWorktreesMerge, async (_event, request: unknown) => {
     const result = await mergeWorktree(request)
-    return result.ok && result.push ? { ...result, push: lastLines(result.push) } : result
+    if (!result.ok) {
+      const { output: _output, ...shown } = result
+      return shown
+    }
+    return result.push ? { ...result, push: lastLines(result.push) } : result
   })
 }

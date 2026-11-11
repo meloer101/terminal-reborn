@@ -5,6 +5,7 @@ import type { ConfirmOptions } from '@shared/lifecycle'
 import { livePr, type GhState, type PrStatus } from '@shared/pull-requests'
 import type { ShipKind, ShipOperation, ShipOperationRequest, ShipOperationResult, ShipPreflight } from '@shared/ship'
 import { CHAIN_TEXT, oneLine, type ChainActionId, type ChainState, type ChainTone } from '@shared/ship-chain'
+import { PR_CONFLICT_FACT } from './auto-fix-model'
 
 /** Every way into the chain from the zone, the ⋯ menu and ⌘K (pull-requests/chain-actions.ts runs them): a chain move,
  *  the local merge sheet (the menu's 合并到 <base>…), the built-in review and opening the PR. */
@@ -114,6 +115,14 @@ export function zoneHeadline(chain: ChainState): ZoneHeadline | null {
   if (!line) return null
   const at = line.text.indexOf('：')
   return at < 0 ? { tone: line.tone, strong: line.text, rest: null } : { tone: line.tone, strong: line.text.slice(0, at), rest: line.text.slice(at + 1) }
+}
+
+/**
+ * The PR line's facts beside the state line `shown`: while the chain stands at the conflict with the base (rule c / f)
+ * the state line says it (和 main 冲突, 和 main 会冲突 · N 个文件), so the PR line drops its 和基线冲突.
+ */
+export function zonePrFacts(facts: readonly string[], chain: Pick<ChainState, 'stage'> | null, shown: ZoneHeadline | null): string[] {
+  return chain?.stage === 'conflicts' && shown !== null ? facts.filter((fact) => fact !== PR_CONFLICT_FACT) : [...facts]
 }
 
 /** The files the state line is about (73C3, 73D3): what would conflict with the base, or what an operation left unresolved. */

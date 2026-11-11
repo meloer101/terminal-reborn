@@ -85,6 +85,9 @@ export interface ChainLocal {
   trackedUncommitted: number
   /** The commit HEAD was at when the change list was read; absent or null when not known. */
   head?: string | null
+  /** The full ref `base` names (`refs/heads/main`, `refs/remotes/origin/main` when the local base is behind it); absent
+   *  when not known. */
+  baseRef?: string | null
 }
 
 export interface ChainInput {
@@ -162,6 +165,8 @@ export const CHAIN_TEXT = {
   operationConflicts: (op: ShipOperation['kind'], files: number) => `${op} 进行中 · ${files} 个文件有冲突`,
   diverged: '远程分支和本地分叉',
   remoteAhead: '远程有本地没有的提交',
+  /** The state line's remoteAhead when the count is known (Figma 73K6). */
+  remoteAheadCount: (n: number) => `远程有本地没有的提交 · ${n} 个`,
   merged: (base: string) => `已经全部合并到 ${base}`,
   baseConflicts: (base: string, files: number) => `和 ${base} 会冲突 · ${files} 个文件`,
   // GitHub's merge state dirty, as the PR line says it (和基线冲突), with the base named as the chain names it.
@@ -204,7 +209,7 @@ export function chainInputFrom(sources: {
   preflight: ShipPreflight | null
   remembered: ShipExitKind | null
   prStatus: PrStatus | null
-  changes: Pick<GitChanges, 'branch' | 'base' | 'ahead' | 'uncommitted' | 'untrackedOmitted' | 'head'>
+  changes: Pick<GitChanges, 'branch' | 'base' | 'ahead' | 'uncommitted' | 'untrackedOmitted' | 'head'> & Partial<Pick<GitChanges, 'baseRef'>>
   isMain: boolean
   projectRoot: string | null
   gh?: GhState | null
@@ -240,7 +245,8 @@ export function chainInputFrom(sources: {
       ahead: changes.ahead,
       uncommitted: changes.uncommitted.length + changes.untrackedOmitted,
       trackedUncommitted: changes.uncommitted.filter((c) => !c.untracked).length,
-      ...(changes.head !== undefined ? { head: changes.head } : {})
+      ...(changes.head !== undefined ? { head: changes.head } : {}),
+      ...(changes.baseRef !== undefined ? { baseRef: changes.baseRef } : {})
     },
     pr,
     prMerged: !live && prStatus?.pr?.state === 'merged' && mergedPrIsThisBranch(prStatus.pr, ok?.head ?? prStatus.local?.head ?? null, ok?.merged === true),
@@ -275,6 +281,16 @@ function remoteBranch(pf: Extract<ShipPreflight, { ok: true }> | null, pr: Chain
   return undefined
 }
 
+/**
+ * The base branch the change list compares against, by name: a remote-tracking ref (`refs/remotes/<remote>/<name>`,
+ * which the list uses while the local base is only behind it) gives `<name>` (remote names have no slash; branch names
+ * may); else the list's short name.
+ */
+function baseBranchOf(local: Pick<ChainLocal, 'base' | 'baseRef'>): string | null {
+  const remote = /^refs\/remotes\/[^/]+\/(.+)$/.exec(local.baseRef ?? '')
+  return remote ? remote[1]! : local.base
+}
+
 const first = (...reasons: Array<string | false | null | undefined>): string | null => reasons.find((r): r is string => typeof r === 'string') ?? null
 
 // ── the chain ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -283,7 +299,8 @@ export function shipChain(input: ChainInput): ChainState {
   const { preflight, local, isMain } = input
   const pf = preflight?.ok ? preflight : null
   const operation = preflight?.operation ?? null
-  const base = pf?.base ?? local.base ?? 'main'
+  // The labels name the base branch, never a remote-tracking ref the change list compares against while checking.
+  const base = pf?.base ?? baseBranchOf(local) ?? 'main'
   const ahead = pf ? pf.ahead : local.ahead
   const merged = pf?.merged === true
   const uncommitted = local.uncommitted
@@ -294,6 +311,10 @@ export function shipChain(input: ChainInput): ChainState {
   const remoteAhead = (rb?.behind ?? 0) > 0 || pr?.remoteAhead === true
   const unpushed = pr !== null && !remoteAhead && (pr.unpushed || (rb?.ahead ?? 0) > 0)
   const diverged = rb !== null && rb !== undefined && rb.ahead > 0 && rb.behind > 0
+  /** The state line's sentence for a remote with commits the branch lacks: with how many when the remote-tracking ref
+   *  counts them; not when the PR poll saw the PR ahead (its head may be past what was fetched). */
+  const remoteAheadText =
+    pf?.upstream && pf.upstream.behind > 0 && pr?.remoteAhead !== true ? CHAIN_TEXT.remoteAheadCount(pf.upstream.behind) : CHAIN_TEXT.remoteAhead
   const gh = input.gh && input.gh !== 'checking' ? input.gh : (pf?.gh ?? input.gh)
   const conflicts = pf?.baseConflicts ?? input.radarConflicts ?? null
   const nothing = (ahead === 0 || merged) && uncommitted === 0
@@ -450,7 +471,7 @@ export function shipChain(input: ChainInput): ChainState {
     if (remoteAhead) {
       if (diverged) return state('pr', { tone: 'blocked', text: CHAIN_TEXT.diverged }, handoff)
       const pull = move('pull')
-      return state('pr', pull.blocker ? headlineOf(pull) : { tone: 'info', text: CHAIN_TEXT.remoteAhead }, pull)
+      return state('pr', pull.blocker ? headlineOf(pull) : { tone: 'info', text: remoteAheadText }, pull)
     }
     // Conflicts with the base, once nothing is left to send: 同步 <base> (提交… first while tracked files are uncommitted).
     if (prConflicts && ticked === 0 && !unpushed) {
@@ -474,7 +495,7 @@ export function shipChain(input: ChainInput): ChainState {
   if (pf.remote !== null && rb && rb.behind > 0) {
     if (diverged) return state('exits', { tone: 'blocked', text: CHAIN_TEXT.diverged }, handoff, move('main'))
     const pull = move('pull')
-    return state('exits', pull.blocker ? headlineOf(pull) : { tone: 'info', text: CHAIN_TEXT.remoteAhead }, pull, move('main'))
+    return state('exits', pull.blocker ? headlineOf(pull) : { tone: 'info', text: remoteAheadText }, pull, move('main'))
   }
 
   // f. Landing on the base would conflict. 同步 refuses tracked uncommitted changes: 提交… comes first then.
@@ -547,6 +568,10 @@ export function shellWord(name: string): string | null {
  *  in a sentence (`words` then). */
 export const branchArg = (name: string, words: string): string => (shellWord(name) === null ? `<${words}>` : (shellWord(`refs/heads/${name}`) ?? `<${words}>`))
 const refText = (name: string, words: string): string => (shellWord(name) === null ? words : name)
+/** The base in a command: `baseRef` when the caller knows the full ref it used (`refs/remotes/origin/main`, 同步's onto),
+ *  else the local branch `base`; `<基线分支>` when either cannot be one shell word. */
+export const baseArg = (base: string, baseRef: string | undefined): string =>
+  baseRef === undefined ? branchArg(base, '基线分支') : shellWord(base) === null ? '<基线分支>' : (shellWord(baseRef) ?? '<基线分支>')
 
 const CONFLICT_REASON: Record<string, string> = {
   content: '两边都改了同一处',
@@ -618,13 +643,15 @@ export function rebaseInstruction(input: {
   conflicts: readonly ConflictFile[]
   uncommitted: boolean
   handoff?: boolean
+  /** The full ref of `base` when it is not the local branch (`refs/remotes/origin/main`); omitted: `refs/heads/<base>`. */
+  baseRef?: string
 }): string {
   const { base, conflicts } = input
   const handoff = input.handoff === true
   // Branch and file names come from the repository: quoted as data in the radar's text as in the chain's hand-off.
   const head = movedHead(base, input.branch, input.behind, NAMES_QUOTED(conflicts.length > 0))
   const commit = input.uncommitted ? '先提交当前的改动，再' : ''
-  const tail = `请在当前 worktree 里${commit}运行 GIT_EDITOR=true git rebase ${branchArg(base, '基线分支')}，有冲突就解决后 git add 并 GIT_EDITOR=true git rebase --continue，确认构建和测试通过，完成后告诉我。${handoff ? NO_PUSH : ''}`
+  const tail = `请在当前 worktree 里${commit}运行 GIT_EDITOR=true git rebase ${baseArg(base, input.baseRef)}，有冲突就解决后 git add 并 GIT_EDITOR=true git rebase --continue，确认构建和测试通过，完成后告诉我。${handoff ? NO_PUSH : ''}`
   if (conflicts.length === 0) return marked(`${head}预计不会冲突。${tail}`)
   return withFiles(head, 'rebase 时会冲突：', conflicts, tail, true)
 }
@@ -641,12 +668,13 @@ export function mergeConflictPrompt(input: { base: string; branch: string; confl
   return withFiles(head, '：', input.conflicts, tail, true)
 }
 
-/** What the chain hands to the agent: 同步's conflicts (by the step it would have run) or an operation's. */
+/** What the chain hands to the agent: 同步's conflicts (by the step it would have run) or an operation's. `base` is the
+ *  ref 同步 used as git prints it (`main`, `origin/main`), `baseRef` its full ref when it is not `refs/heads/<base>`. */
 export type AgentHandoff =
   /** 同步 of a branch never pushed: rebase onto the base. */
-  | { kind: 'sync-rebase'; base: string; branch: string; behind: number | null; conflicts: readonly ConflictFile[] }
+  | { kind: 'sync-rebase'; base: string; baseRef?: string; branch: string; behind: number | null; conflicts: readonly ConflictFile[] }
   /** 同步 of a pushed branch: merge the base in (a rebase would need a force-push). */
-  | { kind: 'sync-merge'; base: string; branch: string; behind: number | null; conflicts: readonly ConflictFile[] }
+  | { kind: 'sync-merge'; base: string; baseRef?: string; branch: string; behind: number | null; conflicts: readonly ConflictFile[] }
   /** A merge / rebase / cherry-pick stopped on conflicts in the worktree; `files` are still unresolved. */
   | { kind: 'operation'; operation: ShipOperation['kind']; files: readonly string[] }
 
@@ -658,7 +686,7 @@ export function agentHandoffPrompt(handoff: AgentHandoff): string {
     case 'sync-merge': {
       const { base } = handoff
       const head = movedHead(base, handoff.branch, handoff.behind, NAMES_QUOTED(handoff.conflicts.length > 0))
-      const tail = `分支已经推送过，不要 rebase：请在当前 worktree 里运行 GIT_EDITOR=true git merge ${branchArg(base, '基线分支')}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。${NO_PUSH}`
+      const tail = `分支已经推送过，不要 rebase：请在当前 worktree 里运行 GIT_EDITOR=true git merge ${baseArg(base, handoff.baseRef)}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。${NO_PUSH}`
       if (handoff.conflicts.length === 0) return marked(`${head}${tail}`)
       return withFiles(head, `合并 ${refText(base, '基线分支')} 时会冲突：`, handoff.conflicts, tail, true)
     }

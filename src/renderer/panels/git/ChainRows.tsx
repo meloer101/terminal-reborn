@@ -2,12 +2,13 @@
 // part and the rest — with the files it is about under it, and the exits: the chain's second move and its primary
 // (⇧⌘M), then ⋯ with every chain action in a fixed order, a blocked one disabled with its reason in the trailing slot.
 // Every action goes through pull-requests/chain-actions.ts, the same function ⌘K calls.
+import { useEffect, useRef } from 'react'
 import { Check, CircleAlert, CircleDashed, Ellipsis } from 'lucide-react'
 import type { ChainMove, ChainState } from '@shared/ship-chain'
 import { SHORTCUTS } from '@shared/shortcuts'
 import { runChainCommand } from '../../pull-requests/chain-actions'
 import { zoneMenu, type ChainCommand, type ZoneHeadline } from '../../pull-requests/chain-zone'
-import { popupMenu, type MenuEntry } from '../../ui/menu'
+import { popupMenu, updateMenu, type MenuEntry } from '../../ui/menu'
 import { formatAccelerator } from '../../ui/menu-model'
 import ci from './CiRows.module.css'
 import styles from './GitView.module.css'
@@ -68,15 +69,20 @@ export function ChainButtons({
       {primary && shortcut && <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>}
     </button>
   )
-  const items = zoneMenu(chain)
+  const entries: MenuEntry[] = zoneMenu(chain).map((item) => ({
+    type: 'item',
+    id: item.command,
+    label: item.label,
+    enabled: idle && item.blocker === null,
+    ...(item.blocker ? { detail: item.blocker } : {})
+  }))
+  // The open menu follows the chain (a preflight that answers while it is open), never the chain it was opened with.
+  const more = useRef<HTMLButtonElement>(null)
+  const entriesKey = JSON.stringify(entries)
+  useEffect(() => {
+    if (more.current) updateMenu(more.current, JSON.parse(entriesKey) as MenuEntry[])
+  }, [entriesKey])
   const openMenu = async (anchor: HTMLElement) => {
-    const entries: MenuEntry[] = items.map((item) => ({
-      type: 'item',
-      id: item.command,
-      label: item.label,
-      enabled: idle && item.blocker === null,
-      ...(item.blocker ? { detail: item.blocker } : {})
-    }))
     const chosen = await popupMenu(entries, anchor)
     if (chosen) run(chosen as ChainCommand)
   }
@@ -87,6 +93,7 @@ export function ChainButtons({
       {chain.next && button(chain.next, true)}
       <button
         type="button"
+        ref={more}
         className={styles.moreButton}
         aria-label="全部操作"
         aria-haspopup="menu"

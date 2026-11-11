@@ -67,14 +67,19 @@ export interface GitFailureContext {
 
 export const FAILURE_TAIL_LINES = 40
 
-/** The last `lines` lines: CRLF and carriage-return progress collapsed, colors and control characters out. */
-export function failureTail(output: string, lines = FAILURE_TAIL_LINES): string {
+/** Every line: CRLF and carriage-return progress collapsed, colors and control characters out, trailing blanks dropped. */
+function cleanLines(output: string): string[] {
   const kept = output
     .replace(/\r\n/g, '\n')
     .split('\n')
     .map((line) => stripControl(line.split('\r').pop() ?? '').trimEnd())
   while (kept.length > 0 && kept[kept.length - 1] === '') kept.pop()
-  return kept.slice(-lines).join('\n')
+  return kept
+}
+
+/** The last `lines` lines: CRLF and carriage-return progress collapsed, colors and control characters out. */
+export function failureTail(output: string, lines = FAILURE_TAIL_LINES): string {
+  return cleanLines(output).slice(-lines).join('\n')
 }
 
 const STEP_WORD: Record<GitStep, string> = {
@@ -144,10 +149,12 @@ function authMessage(step: GitStep, output: string): string {
   return FETCH_STEPS.has(step) ? '拉取需要登录：在终端里运行一次 git fetch' : '推送需要登录：在终端里运行一次 git push'
 }
 
-/** What went wrong, from `output` (stderr and stdout of the failed step, in any order). */
+/** What went wrong, from `output` (all main kept of the failed step: its stdout and the last 8 KiB of its stderr, in any order; not a few last lines). */
 export function classifyGitFailure(step: GitStep, output: string, context: GitFailureContext): GitFailure {
-  const tail = failureTail(output)
-  const text = tail
+  const lines = cleanLines(output)
+  const tail = lines.slice(-FAILURE_TAIL_LINES).join('\n')
+  // Read whole: a long hook or server message (GitHub's list of secrets) pushes the telling line out of the tail shown.
+  const text = lines.join('\n')
   const fail = (kind: GitFailureKind, message: string, next: GitFailureNext): GitFailure => ({ kind, message, next, tail })
 
   if (GH_STEPS.has(step)) {

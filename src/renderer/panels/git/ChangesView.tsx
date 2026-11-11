@@ -27,7 +27,7 @@ import { ReviewMarker } from '../../review/ReviewMarker'
 import { markKey, useReviewMarks } from '../../review/marks'
 import { chainPlace, chainPlanOf, runChainCommand } from '../../pull-requests/chain-actions'
 import { loadPreflight, useChainStore } from '../../pull-requests/chain-store'
-import { zoneFiles, zoneHeadline, zoneShortcut, zoneShortcutShown } from '../../pull-requests/chain-zone'
+import { zoneFiles, zoneHeadline, zonePrFacts, zoneShortcut, zoneShortcutShown } from '../../pull-requests/chain-zone'
 import { livePr } from '../../pull-requests/exit-model'
 import { useShipPaths, useShips } from '../../pull-requests/ship-runner'
 import { ShipBlock } from '../../pull-requests/ShipBlock'
@@ -208,7 +208,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         <FactsLine
           risks={shipping ? [] : risks}
           checks={shipping ? null : turnChecks}
-          more={[...(prLines?.facts ?? []), ...(prWords?.text ? [prWords.text] : [])]}
+          more={[...zonePrFacts(prLines?.facts ?? [], chain, headline), ...(prWords?.text ? [prWords.text] : [])]}
           note={prWords?.note ?? null}
         />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}

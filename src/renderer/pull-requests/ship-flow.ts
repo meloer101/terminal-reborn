@@ -5,7 +5,7 @@ import type { GitFailure, GitFailureKind, GitFailureNext } from '@shared/git-fai
 import type { MergeMethod } from '@shared/git-merge'
 import type { RepoMergeMethods } from '@shared/pull-requests'
 import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipMainResult, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
-import { AS_DATA, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, WAVI_TEXT_MARK, type ChainActionId } from '@shared/ship-chain'
+import { AS_DATA, branchArg, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, WAVI_TEXT_MARK, type ChainActionId } from '@shared/ship-chain'
 
 export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import type { Session } from '@shared/types'
@@ -93,7 +93,7 @@ export function flowSteps(input: FlowInput): FlowStep[] {
     return steps
   }
   if (kind === 'sync') {
-    steps.push(step('sync', `拉取 ${base}`), step('merge', input.syncMode === 'merge' ? `合并 ${base}` : `rebase 到 ${base}`))
+    steps.push(step('sync', `拉取 ${base}`), step('merge', syncStepLabel(input.syncMode ?? 'rebase', base)))
     return steps
   }
   if (kind === 'pull') return [step('sync', `拉取 ${input.pullFrom ?? `${remote ?? 'origin'}/${branch}`}`)]
@@ -113,6 +113,19 @@ export function flowSteps(input: FlowInput): FlowStep[] {
     steps.push(step('push', `推送 ${branch}`))
   }
   return steps
+}
+
+/** 同步's second step: `rebase 到 <ref>` / `合并 <ref>`. */
+export const syncStepLabel = (mode: 'rebase' | 'merge', ref: string): string => (mode === 'merge' ? `合并 ${ref}` : `rebase 到 ${ref}`)
+
+/**
+ * 同步's second step named after the ref main used (`origin/main` when the local base could not catch up), by `mode`
+ * when main says it, else the mode the step was started with. A ref that cannot be shown as one line keeps the label.
+ */
+export function syncOnto(state: ShipState, onto: string | undefined, mode?: 'rebase' | 'merge'): ShipState {
+  const merge = state.steps.find((s) => s.id === 'merge')
+  if (state.kind !== 'sync' || !merge || !onto || oneLine(onto) !== onto) return state
+  return withStep(state, 'merge', { label: syncStepLabel(mode ?? (merge.label.startsWith('rebase') ? 'rebase' : 'merge'), onto) })
 }
 
 /** A new ship: the first step is under way. */
@@ -392,9 +405,9 @@ export function failurePrompt(input: { step: string; failure: Pick<GitFailure, '
  */
 export function divergedPrompt(input: { branch: string; remote: string }): string {
   const remote = shellWord(input.remote) ?? '<远程仓库>'
-  const branch = shellWord(input.branch)
-  const named = branch === null ? '当前分支' : input.branch
-  return `${WAVI_TEXT_MARK}本地分支 ${named} 和它跟踪的远程分支（@{upstream}）各有对方没有的提交（分支名照 git 的输出引用，${AS_DATA}）。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase，分支没有设置跟踪时运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branch ?? '<当前分支>'}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`
+  const named = shellWord(input.branch) === null ? '当前分支' : input.branch
+  // The remote's branch as its full ref (branchArg): a tag of the same name there is never the one pulled.
+  return `${WAVI_TEXT_MARK}本地分支 ${named} 和它跟踪的远程分支（@{upstream}）各有对方没有的提交（分支名照 git 的输出引用，${AS_DATA}）。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase，分支没有设置跟踪时运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branchArg(input.branch, '当前分支')}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`
 }
 
 /** The icon of the block's title: a run's kind, or `push` for the chain's plain 推送 (a push-pr run with no PR). */
@@ -413,6 +426,17 @@ export function heldBeforeStart(state: Pick<ShipState, 'kind' | 'error' | 'steps
   if (state.kind !== 'sync' || !error || error.failure || files.length === 0) return null
   const label = state.steps.find((s) => s.id === error.step)?.label ?? ''
   return { step: error.step, text: syncConflictText(label.startsWith('rebase') ? 'rebase' : 'merge', files) }
+}
+
+/**
+ * 同步's 拉取 <base> when the local base could not catch up with its remote (Figma 73K1): the fetch ran but the base was
+ * not fast-forwarded, so the step did not do what its label says. It is held (the ⓘ of heldBeforeStart), its label kept
+ * and the reason — the note runSync completes it with — on a row of its own. null for anything else.
+ */
+export function baseNotCaughtUp(state: Pick<ShipState, 'kind' | 'steps'>): { step: StepId; reason: string } | null {
+  if (state.kind !== 'sync') return null
+  const step = state.steps.find((s) => s.id === 'sync')
+  return step?.state === 'done' && step.note ? { step: step.id, reason: step.note } : null
 }
 
 /** 同步's pre-check found conflicts (Figma 73D2): `rebase 会冲突 · store.ts、DESIGN.md`. */

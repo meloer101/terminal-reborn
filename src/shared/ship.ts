@@ -142,6 +142,12 @@ export interface DiffSinceRequest extends PrTarget {
   since: string
 }
 
+/** diffSince's text with whether it was cut at the cap: a cut diff names only some of the changed files. */
+export interface DiffSinceAnswer {
+  text: string
+  cut: boolean
+}
+
 /** CI on the base after 合并到 main pushed it (Figma 29E / 29F), pushed to the windows that watch the worktree. */
 export interface BaseCi {
   worktree: string
@@ -170,6 +176,8 @@ export interface ShipApi {
   /** After 合并到 main 并推送 kept the merge but its push failed: pushes the base again (nothing is merged). */
   pushBase(request: PushBaseRequest): Promise<ShipMainResult>
   diffSince(request: DiffSinceRequest): Promise<string | null>
+  /** The same diff, saying whether it was cut at the cap (a file list read from a cut diff is not the whole list). */
+  diffSinceWithCut(request: DiffSinceRequest): Promise<DiffSinceAnswer | null>
   /** 丢弃 (Figma 29G): moves the worktree's branch back to `since` (a fix the brake stopped). Refuses with
    *  uncommitted changes or when `since` is not an ancestor of HEAD. */
   discardSince(request: DiffSinceRequest): Promise<{ ok: true } | { ok: false; message: string }>
@@ -202,6 +210,8 @@ export const SHIP_IPC = {
   pushBase: 'ship:push-base',
   /** invoke(DiffSinceRequest) → string | null */
   diffSince: 'ship:diff-since',
+  /** invoke(DiffSinceRequest) → DiffSinceAnswer | null */
+  diffSinceWithCut: 'ship:diff-since-with-cut',
   /** invoke(DiffSinceRequest) → { ok } */
   discardSince: 'ship:discard-since',
   /** invoke(PrTarget) → RiskMarker[] */
@@ -231,15 +241,25 @@ export const SHIP_IPC = {
  */
 export type ShipSyncRequest = PrTarget
 
+/**
+ * The base ref 同步 brought in (or would have): the local base, or `<remote>/<base>` when the local base is only behind
+ * it and could not catch up. `onto` is the name as git prints it (`main`, `origin/main`), for the step's words;
+ * `ontoRef` the full ref (`refs/heads/main`, `refs/remotes/origin/main`), for a command (a tag of the same name never wins).
+ */
+export interface ShipSyncOnto {
+  onto: string
+  ontoRef: string
+}
+
 export type ShipSyncResult =
   /** `baseNotCaughtUp`: the local base could not be fast-forwarded to its upstream (its checkout has uncommitted
    *  changes, the two diverged): why, in words; the branch was synced with the local base as it is. */
-  | { ok: true; baseNotCaughtUp?: string }
+  | ({ ok: true; baseNotCaughtUp?: string } & ShipSyncOnto)
   /** Nothing ran: tracked uncommitted changes (先提交改动), an operation in progress, no base. */
   | { ok: false; reason: 'blocked'; message: string }
   /** Nothing ran (or what ran was aborted): these files would conflict. `mode` is what 同步 would have run, so the
    *  hand-off names the right steps; `conflicts` adds how each conflicts when the pre-check could tell (else []). */
-  | { ok: false; reason: 'conflicts'; files: string[]; mode: 'rebase' | 'merge'; conflicts: MergeConflict[]; baseNotCaughtUp?: string }
+  | ({ ok: false; reason: 'conflicts'; files: string[]; mode: 'rebase' | 'merge'; conflicts: MergeConflict[]; baseNotCaughtUp?: string } & ShipSyncOnto)
   /** `step: 'fetch'`: the fetch failed and nothing else ran (otherwise the rebase or merge failed). */
   | { ok: false; reason: 'failed'; failure: GitFailure; step?: 'fetch' }
 

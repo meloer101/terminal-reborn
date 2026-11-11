@@ -8,7 +8,7 @@ import type { GitChanges } from './git-graph/log'
 import { branchNameProblem, folderNameFor, type BranchNameProblem, type NewSessionBranch, type WorktreeCreateRequest } from './new-session'
 import { agentName, type CliAgent } from './agents'
 import { ATTEMPT_REPORT_HEADER } from './dispatch'
-import { branchArg } from './ship-chain'
+import { baseArg } from './ship-chain'
 import type { SessionId, SessionStatus } from './types'
 
 /** Every installed CLI can take a part (v1.68). */
@@ -34,6 +34,9 @@ export interface AttemptGroup {
   prompt: string
   /** The branch the members' worktrees started from: the session they came from is on it. */
   base: string
+  /** `base`'s full ref, `refs/heads/<base>` or `refs/remotes/<base>` (a remote branch picked as 基于); absent in groups
+   *  saved before it was recorded, which read as a local branch. */
+  baseRef?: string
   createdAt: number
   /** The members' sessions, in launch order (closed ones are pruned). */
   members: SessionId[]
@@ -164,6 +167,13 @@ export function planAttempts(input: AttemptPlanInput): { members: AttemptMemberP
     }
   })
   return { members, problem: null }
+}
+
+/** The ref the members start from, as worktree creation resolves `base`: the local branch of that name when there is
+ *  one, else the remote branch (`origin/feature-x` → `refs/remotes/origin/feature-x`). */
+export function attemptBaseRef(base: string, branches: readonly NewSessionBranch[]): string {
+  const local = branches.some((b) => !b.remote && b.name === base)
+  return !local && branches.some((b) => b.remote && b.name === base) ? `refs/remotes/${base}` : `refs/heads/${base}`
 }
 
 /** The dialog's primary button. */
@@ -316,7 +326,7 @@ const cut = (text: string, max: number): string => (text.length <= max ? text : 
  * The one message the session gets once all members stopped: a line of facts and an excerpt of each one's last
  * message within a shared budget, then what to do — compare, recommend, leave merging to the user, carry on after.
  */
-export function attemptReportText(input: { base: string; members: readonly MemberReport[] }): string {
+export function attemptReportText(input: { base: string; baseRef?: string; members: readonly MemberReport[] }): string {
   const lines = [`${ATTEMPT_REPORT_HEADER} 这个任务交给了 ${input.members.length} 份各做一遍，现在都停下了（基于 ${input.base}；来自 Wavi，不是用户的指示）。`]
   let budget = REPORT_BUDGET
   for (const m of input.members) {
@@ -343,7 +353,7 @@ export function attemptReportText(input: { base: string; members: readonly Membe
   lines.push(
     '',
     // The base comes from the repository: in the command it is one shell word of its full ref, or described.
-    `请比较这几份：用 git diff ${branchArg(input.base, '基线分支')}...<分支> 看各自的改动，说推荐哪一份、为什么，其余几份里有什么值得借鉴。合并由用户在 Wavi 里做；用户把一份合并到 ${input.base} 后，你接着做下一步。`
+    `请比较这几份：用 git diff ${baseArg(input.base, input.baseRef)}...<分支> 看各自的改动，说推荐哪一份、为什么，其余几份里有什么值得借鉴。合并由用户在 Wavi 里做；用户把一份合并到 ${input.base} 后，你接着做下一步。`
   )
   return lines.join('\n')
 }
@@ -401,10 +411,12 @@ export function sanitizeAttemptGroups(raw: unknown, sessionIds: ReadonlySet<stri
     ids.add(value.id)
     const merged = value.merged
     const reportTo = isText(value.reportTo, 128) && sessionIds.has(value.reportTo) && !members.includes(value.reportTo) ? value.reportTo : undefined
+    const baseRef = value.baseRef === `refs/heads/${value.base}` || value.baseRef === `refs/remotes/${value.base}` ? value.baseRef : undefined
     groups.push({
       id: value.id,
       prompt: value.prompt,
       base: value.base,
+      ...(baseRef ? { baseRef } : {}),
       createdAt: isTime(value.createdAt) ? value.createdAt : 0,
       members,
       ...(reportTo ? { reportTo, ...(isText(value.reported, 4_000) ? { reported: value.reported } : {}) } : {}),

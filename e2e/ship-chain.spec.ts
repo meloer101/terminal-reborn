@@ -254,6 +254,7 @@ test.describe('合入链路 v2 · gh ready', () => {
   commitIn(prPath, 'pr.ts', 'export {}\n', 'Add pr')
   gitIn(prPath, 'push', '-q', '-u', 'origin', 'jacob/pr')
   gh.setPrs('jacob/pr', [{ number: 12, state: 'OPEN', checks: [{ name: 'test', status: 'COMPLETED', conclusion: 'SUCCESS' }] }])
+  gh.setPlainDetails(12, gitIn(prPath, 'rev-parse', 'HEAD').trim())
 
   const agents: Record<string, FakeAgentFolder> = {}
   for (const name of names) agents[name] = fake.folder(`wt-${name}`)
@@ -345,14 +346,14 @@ test.describe('合入链路 v2 · gh ready', () => {
       await expect(kit.panel().getByRole('checkbox', { name: `提交 ${path}` })).toHaveAttribute('aria-checked', ticked)
     }
     await expect(kit.tickAll()).toBeDisabled()
-    // R67: the locked boxes look locked (muted), a ticked one still filled.
-    const [lockedFill, lockedBorder, tertiary, softBorder] = await kit
+    // R67 / U8 (Figma 73K3): a locked ticked box is muted, still filled; an unticked one keeps its normal border.
+    const [lockedFill, lockedBorder, tertiary, normalBorder] = await kit
       .panel()
       .getByRole('checkbox', { name: '提交 a.ts' })
       .evaluate((el) => {
         const probe = document.createElement('span')
         probe.style.color = 'var(--text-tertiary)'
-        probe.style.borderColor = 'var(--border-default)'
+        probe.style.borderColor = 'var(--border-strong)'
         document.body.appendChild(probe)
         const want = [getComputedStyle(probe).color, getComputedStyle(probe).borderColor]
         probe.remove()
@@ -360,7 +361,7 @@ test.describe('合入链路 v2 · gh ready', () => {
         return [getComputedStyle(el).backgroundColor, getComputedStyle(unticked).borderTopColor, ...want]
       })
     expect(lockedFill).toBe(tertiary)
-    expect(lockedBorder).toBe(softBorder)
+    expect(lockedBorder).toBe(normalBorder)
     await kit.shoot('a')
     await page.keyboard.press('Meta+Enter')
     await expect(kit.ship()).toHaveCount(0, WITHIN)

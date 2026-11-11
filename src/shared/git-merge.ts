@@ -108,6 +108,8 @@ export type MergeResult =
       ok: false
       reason: MergeFailure
       message?: string
+      /** Everything git printed when a git run failed (main only: the ship chain classifies it; not sent to the renderer). */
+      output?: string
       blocker?: MergeBlocker
       conflicts?: MergeConflict[]
       /** Rebase only: the branch was rebased onto the base but the base could not be moved. */

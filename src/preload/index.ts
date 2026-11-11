@@ -238,6 +238,7 @@ const api: TrApi = {
     shipToMain: (request) => ipcRenderer.invoke(SHIP_IPC.shipToMain, request),
     pushBase: (target) => ipcRenderer.invoke(SHIP_IPC.pushBase, target),
     diffSince: (request) => ipcRenderer.invoke(SHIP_IPC.diffSince, request),
+    diffSinceWithCut: (request) => ipcRenderer.invoke(SHIP_IPC.diffSinceWithCut, request),
     discardSince: (request) => ipcRenderer.invoke(SHIP_IPC.discardSince, request),
     risks: (target) => ipcRenderer.invoke(SHIP_IPC.risks, target),
     baseCi: (target) => ipcRenderer.invoke(SHIP_IPC.baseCi, target),

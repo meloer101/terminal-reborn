@@ -29,6 +29,7 @@ import {
   SHIP_IPC,
   type BaseCi,
   type BaseCiFailure,
+  type DiffSinceAnswer,
   type DiffSinceRequest,
   type HandoffSlot,
   type ShipMainRequest,
@@ -424,13 +425,19 @@ async function syncBase(root: string, check: MergePrecheck): Promise<{ moved: bo
 
 const REBASE_GAVE_UP = '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」'
 
-/** A classified failure that only says what git printed (`unknown`) keeps Wavi's own, more specific sentence. */
-const ownWords = (classified: { failure: GitFailure } | Record<string, never>, message: string): { failure: GitFailure } | Record<string, never> =>
-  'failure' in classified && classified.failure.kind === 'unknown' ? { failure: { ...classified.failure, message } } : classified
+/** A rebase given up and aborted: conflicts on one of its commits (or nothing git named) keep Wavi's sentence, and no
+ *  way on, since nothing is left to resolve; a class git did name (a commit that could not be signed) keeps its own. */
+function gaveUp(classified: { failure: GitFailure } | Record<string, never>): GitFailure | null {
+  if (!('failure' in classified)) return null
+  const { failure } = classified
+  return failure.kind === 'unknown' || failure.kind === 'conflicts' ? { ...failure, message: REBASE_GAVE_UP, next: null } : failure
+}
 
 function mergeFailure(result: Extract<MergeResult, { ok: false }>, check: MergePrecheck, method: ShipMainRequest['method'], remote: string | null): ShipMainResult {
+  // Classified on everything git printed: its hints after a failed rebase push the reason out of the last lines.
+  const printed = result.output ?? result.message
   const classified = (step: GitStep): { failure: GitFailure } | Record<string, never> =>
-    result.message ? { failure: classifyGitFailure(step, result.message, { base: check.base, remote }) } : {}
+    printed ? { failure: classifyGitFailure(step, printed, { base: check.base, remote }) } : {}
   switch (result.reason) {
     case 'stale':
       return stepFailure('merge', 'failed', `分支或 ${check.base} 在检查之后又变了：再试一次`)
@@ -438,7 +445,10 @@ function mergeFailure(result: Extract<MergeResult, { ok: false }>, check: MergeP
       if (result.conflicts && result.conflicts.length > 0) {
         return stepFailure('merge', 'conflicts', `${result.conflicts.length} 个文件和 ${check.base} 冲突`, { conflicts: result.conflicts.map((c) => c.path) })
       }
-      return stepFailure('merge', 'failed', REBASE_GAVE_UP, { output: result.message, ...ownWords(classified('rebase'), REBASE_GAVE_UP) })
+      {
+        const failure = gaveUp(classified('rebase'))
+        return stepFailure('merge', 'failed', failure?.message ?? REBASE_GAVE_UP, { output: result.message, ...(failure ? { failure } : {}) })
+      }
     case 'blocked':
       return stepFailure('merge', 'blocked', result.blocker ? blockerMessage(result.blocker, check.base) : '现在合并不了')
     case 'invalid':
@@ -668,7 +678,9 @@ export async function syncWorktree(raw: unknown): Promise<ShipSyncResult> {
     // What the preflight counts against (origin/<base> when the local base could not catch up and is only behind it):
     // the base 同步 brings in, so the chain never offers a 同步 that changes nothing.
     const baseRef = await baseCompareRef(cwd, base, branch)
-    if ((await countCommits(cwd, `refs/heads/${branch}..${baseRef}`)) === 0) return { ok: true, ...note }
+    // The ref the step and a conflict hand-off name: what runs, not the local base when that is another ref.
+    const onto = { onto: baseRef.replace(/^refs\/(?:heads|remotes)\//, ''), ontoRef: baseRef }
+    if ((await countCommits(cwd, `refs/heads/${branch}..${baseRef}`)) === 0) return { ok: true, ...note, ...onto }
     // Pushed (an upstream, even one git keeps no remote-tracking ref of): never rewritten, the base is merged in.
     const mode = pushed ? 'merge' : 'rebase'
 
@@ -678,7 +690,7 @@ export async function syncWorktree(raw: unknown): Promise<ShipSyncResult> {
     } catch {
       // git < 2.38 has no merge-tree --write-tree: run it and abort on conflicts.
     }
-    if (conflicts && conflicts.length > 0) return { ok: false, reason: 'conflicts', files: conflicts.map((c) => c.path), mode, conflicts, ...note }
+    if (conflicts && conflicts.length > 0) return { ok: false, reason: 'conflicts', files: conflicts.map((c) => c.path), mode, conflicts, ...note, ...onto }
 
     const status = await git(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=no', '--ignore-submodules=dirty'])
     if (status.code !== 0) return failedResult(mode, printed(status), context)
@@ -692,14 +704,14 @@ export async function syncWorktree(raw: unknown): Promise<ShipSyncResult> {
         ? pinned.rebase('--quiet', baseRef)
         : pinned.merge('--ff', '--no-edit', '--quiet', `--message=Merge ${merged} into ${branch}`, baseRef)
     const ran = await git(cwd, args, { timeout: CHECKOUT_TIMEOUT_MS, env: await commitEnv() })
-    if (ran.code === 0) return { ok: true, ...note }
+    if (ran.code === 0) return { ok: true, ...note, ...onto }
     const files = await unresolvedPaths(cwd)
     const stopped = await operationOf(cwd)
     if (stopped) {
       const aborted = await git(cwd, [stopped.kind, '--abort'], { timeout: CHECKOUT_TIMEOUT_MS, env: NO_EDITOR })
       if (aborted.code !== 0) console.error(`[ship] could not abort the ${stopped.kind} 同步 started in ${cwd}:`, lastLines(printed(aborted)))
     }
-    if (files.length > 0) return { ok: false, reason: 'conflicts', files, mode, conflicts: [], ...note }
+    if (files.length > 0) return { ok: false, reason: 'conflicts', files, mode, conflicts: [], ...note, ...onto }
     return failedResult(mode, printed(ran), context)
   })
 }
@@ -724,6 +736,10 @@ export async function pullWorktree(raw: unknown): Promise<ShipPullResult> {
     if (!pushed) return blockedResult(CHAIN_TEXT.neverPushed)
     const context = { base: base ?? branch, remote: pushed.remote }
     const fetched = await git(cwd, pinned.fetch('--quiet', '--', pushed.remote, pushedRefspec(pushed)), { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(cwd) })
+    // The remote branch was deleted (its PR merged) while the upstream config stays: nothing to pull, not a failure.
+    if (fetched.code !== 0 && NO_SUCH_REMOTE_REF.test(printed(fetched))) {
+      return blockedResult(`${pushed.remote} 上已经没有分支 ${pushed.remoteRef.slice('refs/heads/'.length)}`)
+    }
     if (fetched.code !== 0) return failedResult('fetch', printed(fetched), context)
     const tip = pushed.tracking ?? (await gitOut(cwd, ['rev-parse', '--verify', '--quiet', 'FETCH_HEAD^{commit}'])).trim()
     if (!tip) return failedResult('fetch', `没能读到 ${pushed.remote} 上的 ${pushed.remoteRef.slice('refs/heads/'.length)}`, context)
@@ -1027,14 +1043,19 @@ export function resetShip(): void {
 // ── diffs ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** stdout of a git command, at most `cap` characters (the rest is dropped and the process stopped); null on failure. */
-function gitCapped(cwd: string, args: string[], cap: number): Promise<string | null> {
+async function gitCapped(cwd: string, args: string[], cap: number): Promise<string | null> {
+  return (await gitCappedWithCut(cwd, args, cap))?.text ?? null
+}
+
+/** gitCapped's text and whether it was cut at `cap`; null on failure. */
+function gitCappedWithCut(cwd: string, args: string[], cap: number): Promise<DiffSinceAnswer | null> {
   return new Promise((resolve) => {
     let text = ''
     let capped = false
     let settled = false
     const decoder = new StringDecoder('utf8')
     const child = spawn('git', args, { cwd, env: gitEnv(NO_OPTIONAL_LOCKS), stdio: ['ignore', 'pipe', 'ignore'] })
-    const finish = (value: string | null): void => {
+    const finish = (value: DiffSinceAnswer | null): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -1057,8 +1078,8 @@ function gitCapped(cwd: string, args: string[], cap: number): Promise<string | n
       if (capped) {
         // Whole lines only.
         const cut = text.slice(0, cap)
-        finish(cut.slice(0, cut.lastIndexOf('\n') + 1) || cut)
-      } else finish(code === 0 ? text + decoder.end() : null)
+        finish({ text: cut.slice(0, cut.lastIndexOf('\n') + 1) || cut, cut: true })
+      } else finish(code === 0 ? { text: text + decoder.end(), cut: false } : null)
     })
   })
 }
@@ -1082,9 +1103,14 @@ async function sinceTarget(raw: unknown): Promise<{ cwd: string; request: DiffSi
 
 /** The branch's diff from `since` to HEAD (what a fix the agent committed changed), at most 2 MB. */
 export async function diffSince(raw: unknown): Promise<string | null> {
+  return (await diffSinceWithCut(raw))?.text ?? null
+}
+
+/** diffSince, saying whether the diff was cut at the cap. */
+export async function diffSinceWithCut(raw: unknown): Promise<DiffSinceAnswer | null> {
   const found = await sinceTarget(raw)
   if (typeof found === 'string') return null
-  return gitCapped(found.cwd, ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', found.sha, 'HEAD', '--'], DIFF_SINCE_CAP)
+  return gitCappedWithCut(found.cwd, ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', found.sha, 'HEAD', '--'], DIFF_SINCE_CAP)
 }
 
 const discarding = new Set<string>()
@@ -1136,6 +1162,7 @@ export function registerShipHandlers(): void {
   ipcMain.handle(SHIP_IPC.shipToMain, (_event, raw: unknown) => shipToMain(raw))
   ipcMain.handle(SHIP_IPC.pushBase, (_event, raw: unknown) => pushBaseAgain(raw))
   ipcMain.handle(SHIP_IPC.diffSince, (_event, raw: unknown) => diffSince(raw))
+  ipcMain.handle(SHIP_IPC.diffSinceWithCut, (_event, raw: unknown) => diffSinceWithCut(raw))
   ipcMain.handle(SHIP_IPC.discardSince, (_event, raw: unknown) => discardSince(raw))
   ipcMain.handle(SHIP_IPC.risks, (_event, raw: unknown) => shipRisks(raw))
   ipcMain.handle(SHIP_IPC.baseCi, (_event, raw: unknown) => baseCi(raw))

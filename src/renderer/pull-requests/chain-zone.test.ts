@@ -3,7 +3,8 @@ import type { ShipPreflight } from '@shared/ship'
 import { CHAIN_TEXT, shipChain, type ChainInput } from '@shared/ship-chain'
 import type { PrStatus, PullRequestInfo } from '@shared/pull-requests'
 import type { ShipOperationRequest, ShipOperationResult } from '@shared/ship'
-import { abortConfirmation, mergePrBlocker, prRunKind, paletteGitActions, runOperation, shortReason, zoneFiles, zoneHeadline, zoneMenu, zoneShortcut, zoneShortcutShown } from './chain-zone'
+import { abortConfirmation, mergePrBlocker, prRunKind, paletteGitActions, runOperation, shortReason, zoneFiles, zoneHeadline, zoneMenu, zonePrFacts, zoneShortcut, zoneShortcutShown } from './chain-zone'
+import { prHeadline } from './auto-fix-model'
 
 type Ok = Extract<ShipPreflight, { ok: true }>
 
@@ -69,6 +70,37 @@ describe('zoneHeadline', () => {
     expect(zoneHeadline(shipChain(input({}, stopped)))).toMatchObject({ tone: 'blocked', strong: 'rebase 进行中 · 1 个文件有冲突' })
     const resolved = preflight({ operation: { kind: 'rebase', unresolved: [] } })
     expect(zoneHeadline(shipChain(input({}, resolved)))).toEqual({ tone: 'ok', strong: 'rebase 进行中 · 冲突都解决了', rest: null })
+  })
+})
+
+// U4: GitHub's conflict with the base is said once: by the state line while the chain stands at it.
+describe('zonePrFacts', () => {
+  const dirtyPr = {
+    number: 5,
+    state: 'open',
+    url: 'https://github.com/o/r/pull/5',
+    checks: { state: 'none', total: 0, passed: 0, pending: 0, failing: [] },
+    details: { reviewDecision: 'review-required', mergeState: 'dirty' }
+  } as unknown as PullRequestInfo
+  const { facts } = prHeadline(dirtyPr, '已打开', 0)
+
+  it('drops the PR line\'s conflict while the state line says it', () => {
+    expect(facts).toEqual(['需要审批', '和基线冲突'])
+    const chain = shipChain(input({ pr: { number: 5, draft: false, unpushed: false, remoteAhead: false, details: true, conflicting: true }, local: { branch: 'jacoy/tidy-owl', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }))
+    expect(chain.stage).toBe('conflicts')
+    const line = zoneHeadline(chain)
+    expect(line?.strong).toBe('和 main 冲突')
+    expect(zonePrFacts(facts, chain, line)).toEqual(['需要审批'])
+  })
+
+  it('keeps it when the state line does not show or says something else', () => {
+    const chain = shipChain(input({ pr: { number: 5, draft: false, unpushed: true, remoteAhead: false, details: true, conflicting: true } }))
+    expect(chain.stage).toBe('pr')
+    expect(zonePrFacts(facts, chain, zoneHeadline(chain))).toEqual(facts)
+    const conflicts = shipChain(input({ pr: { number: 5, draft: false, unpushed: false, remoteAhead: false, details: true, conflicting: true }, local: { branch: 'jacoy/tidy-owl', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }))
+    // A run holds the zone: no state line, the PR line keeps the fact.
+    expect(zonePrFacts(facts, conflicts, null)).toEqual(facts)
+    expect(zonePrFacts(facts, null, null)).toEqual(facts)
   })
 })
 
