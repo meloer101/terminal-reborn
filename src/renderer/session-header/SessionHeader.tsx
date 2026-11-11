@@ -1,5 +1,5 @@
 import { claudeOrCodex } from '@shared/agents'
-import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, X, type LucideIcon } from 'lucide-react'
+import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, Workflow, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
@@ -17,6 +17,9 @@ import { IconButton } from '../ui/IconButton'
 import { SessionMetaChips } from '../session-meta/MetaChips'
 import { LimitResumeButton, useLimitResumeShown } from '../limit-resume/LimitResumeButton'
 import { addFiles } from '../terminal/file-input'
+import { readViewport } from '../terminal/registry'
+import { ultracodeOnScreen } from '@shared/workflow-run'
+import type { SessionId } from '@shared/types'
 import { useSessionMeta } from '../session-meta/store'
 import styles from './SessionHeader.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -139,6 +142,7 @@ export function SessionHeader({ sessionId, pane, part: asked = 'full' }: { sessi
               {active.session.title}
             </h1>
           )}
+          {active.session.kind === 'claude' && active.session.ui !== 'gui' && <UltracodeBadge sessionId={active.session.id} />}
           {active.worktree?.branch && (
             <span className={styles.branch}>
               <GitBranch size={16} strokeWidth={1.75} />
@@ -261,6 +265,34 @@ function RunButton({ action, command, port, onPress }: { action: RunAction; comm
     <IconButton label={RUN_LABEL[action]} title={title} active={action !== 'start'} data-testid="run-script" onClick={() => onPress(action)}>
       {action === 'stop' ? <Square size={16} strokeWidth={1.75} /> : <Play size={16} strokeWidth={1.75} />}
     </IconButton>
+  )
+}
+
+/** How often the shown Claude terminal's screen is read for its ultracode tag. */
+const ULTRACODE_READ_MS = 1_500
+
+/**
+ * Figma 74D: Ultracode is on in this Claude terminal — the user turned it on there (/effort ultracode); Wavi never
+ * does (PRD F25). Read from the TUI's prompt box border every 1.5 s while the header shows the session; a screen with
+ * no prompt box keeps the last answer.
+ */
+function UltracodeBadge({ sessionId }: { sessionId: SessionId }) {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    const read = (): void => {
+      const seen = ultracodeOnScreen(readViewport(sessionId))
+      if (seen !== null) setOn(seen)
+    }
+    read()
+    const timer = setInterval(read, ULTRACODE_READ_MS)
+    return () => clearInterval(timer)
+  }, [sessionId])
+  if (!on) return null
+  return (
+    <span className={styles.ultracode} data-testid="ultracode-badge" title="Ultracode 开着：每个任务都编排多个 agent 并行做">
+      <Workflow size={14} strokeWidth={1.75} aria-hidden />
+      Ultracode
+    </span>
   )
 }
 

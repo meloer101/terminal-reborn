@@ -35,6 +35,8 @@ export interface WorkflowRun {
   runId?: string
   /** The Workflow tool call that launched it: a GUI chat draws the card at that call. */
   toolUseId?: string
+  /** Claude's background task id (GUI sessions): what 停止 sends (`stop_task`). */
+  taskId?: string
   name: string
   status: WorkflowStatus
   phases: WorkflowPhase[]
@@ -54,6 +56,9 @@ const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+/** Claude's background task id (`w6k3u3ud4` on 2.1.322): checked before it goes into a control request. */
+export const GUI_TASK_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 /** Claude's run id: `wf_` + letters, digits and dashes (2.1.322 `/^wf_[a-z0-9-]{6,}$/`). Anything else never becomes a path. */
 export const WORKFLOW_RUN_ID = /^wf_[a-z0-9-]{6,64}$/
@@ -403,6 +408,7 @@ export function sanitizeWorkflowRun(raw: unknown): WorkflowRun | null {
     key: clip(str(raw.key)!, 80),
     ...(str(raw.runId) && WORKFLOW_RUN_ID.test(str(raw.runId)!) ? { runId: str(raw.runId)! } : {}),
     ...(str(raw.toolUseId) ? { toolUseId: clip(str(raw.toolUseId)!, 80) } : {}),
+    ...(str(raw.taskId) && GUI_TASK_ID.test(str(raw.taskId)!) ? { taskId: str(raw.taskId)! } : {}),
     name: clip(str(raw.name)!, LABEL_CHARS),
     status,
     phases,
@@ -413,4 +419,19 @@ export function sanitizeWorkflowRun(raw: unknown): WorkflowRun | null {
     ...(str(raw.error) ? { error: clip(str(raw.error)!, ERROR_CHARS) } : {}),
     ...(raw.partial === true ? { partial: true } : {})
   }
+}
+
+/**
+ * Whether ultracode is on, from a Claude TUI's screen (PRD F25, Figma 74D): its prompt box's top border carries the tag
+ * `ultracode` at its right end while it is on (2.1.322). Null when no prompt box is on screen (a full-screen view, a
+ * dialog): nothing to say.
+ */
+export function ultracodeOnScreen(screen: string): boolean | null {
+  let border = false
+  for (const line of screen.split('\n')) {
+    if (!/─{8,}/.test(line)) continue
+    border = true
+    if (/─\s*ultracode\s*─/.test(line) || /─ ?ultracode\s*$/.test(line.trimEnd())) return true
+  }
+  return border ? false : null
 }

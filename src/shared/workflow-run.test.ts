@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { phaseViews, runFromJournal, runFromSnapshot, runOutcome, sanitizeWorkflowRun, scriptMeta, tokenLabel, workflowCounts, workflowLine, workflowRows } from './workflow-run'
+import { phaseViews, runFromJournal, runFromSnapshot, runOutcome, sanitizeWorkflowRun, scriptMeta, tokenLabel, ultracodeOnScreen, workflowCounts, workflowLine, workflowRows } from './workflow-run'
 
 // Row shapes as Claude Code 2.1.322 writes them in `workflows/<runId>.json` (trimmed; PRD §6.18).
 const agentRow = (over: Record<string, unknown>) => ({
@@ -140,4 +140,11 @@ it('sanitizeWorkflowRun keeps a well-formed run and drops junk', () => {
   const run = runFromSnapshot(snapshot)!
   expect(sanitizeWorkflowRun(JSON.parse(JSON.stringify(run)))).toEqual(run)
   expect(sanitizeWorkflowRun({ key: 1 })).toBeNull()
+})
+
+it('ultracodeOnScreen reads the tag on the prompt box border', () => {
+  const box = (top: string) => [`● done`, '', top, '› ', '─'.repeat(60), '  ⏵⏵ auto mode on'].join('\n')
+  expect(ultracodeOnScreen(box(`${'─'.repeat(48)} ultracode ──`))).toBe(true)
+  expect(ultracodeOnScreen(box('─'.repeat(60)))).toBe(false)
+  expect(ultracodeOnScreen('Select model\n❯ 1. Opus')).toBeNull()
 })

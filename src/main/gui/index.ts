@@ -11,6 +11,7 @@ import type { HookAgent } from '@shared/agent-events'
 import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
 import { GUI_IPC, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_TASK_ID } from '@shared/workflow-run'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
 import { keepInlineImage } from '../files'
@@ -204,6 +205,11 @@ export function registerGuiHandlers(): void {
   ipcMain.handle(GUI_IPC.interrupt, (event, rawId: unknown): boolean => {
     const id = owned(event.sender, rawId)
     return id !== null && host.interrupt(id)
+  })
+
+  ipcMain.handle(GUI_IPC.stopTask, (event, rawId: unknown, rawTask: unknown): boolean => {
+    const id = owned(event.sender, rawId)
+    return id !== null && typeof rawTask === 'string' && GUI_TASK_ID.test(rawTask) && host.stopTask(id, rawTask)
   })
 
   ipcMain.handle(GUI_IPC.setConfig, (event, rawId: unknown, rawOption: unknown, rawValue: unknown): Promise<boolean> => {

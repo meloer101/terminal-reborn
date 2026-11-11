@@ -23,6 +23,8 @@ import { CopyButton } from './CopyButton'
 import { DispatchGraph, WaviMessageView } from './Dispatch'
 import { DiffBlock, diffText } from './DiffBlock'
 import { TodoList } from './Todos'
+import { WorkflowCard, type WorkflowAsk } from './WorkflowCard'
+import type { WorkflowRun } from '@shared/workflow-run'
 import {
   blockHas,
   composerKey,
@@ -98,9 +100,38 @@ interface FeedProps {
   canEdit: boolean
   /** Asks again from `messageId` with `text`; the reason when it did not. */
   onEdit(messageId: string, text: string): Promise<string | null>
+  /** Claude's workflow runs (PRD F25): drawn as a card at their Workflow call. */
+  workflows?: readonly WorkflowRun[]
+  /** The Workflow call waiting on the user: its card is the ask (Figma 74A). */
+  workflowAsk?: WorkflowAsk | null
+  onStopWorkflow?(run: WorkflowRun): void
 }
 
-export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit }: FeedProps) {
+/** What the run cards of the feed draw: by Workflow call, the ask, and 停止. */
+interface WorkflowSlot {
+  byTool: ReadonlyMap<string, WorkflowRun>
+  ask: WorkflowAsk | null
+  onStop?(run: WorkflowRun): void
+}
+
+/** What a block draws of the runs: the memo compares this, not the map. */
+function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string | null): string {
+  if (block.kind !== 'steps') return ''
+  const parts: string[] = []
+  for (const item of block.items) {
+    if (item.kind !== 'tool' || item.name !== 'Workflow') continue
+    const run = slot.byTool.get(item.id)
+    if (run) parts.push(JSON.stringify(run))
+    if (item.id === waitingTool && slot.ask) parts.push(`ask:${slot.ask.id}:${slot.ask.pending}`)
+  }
+  return parts.join('|')
+}
+
+export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+  const slot = useMemo<WorkflowSlot>(
+    () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
+    [workflows, workflowAsk, onStopWorkflow]
+  )
   const blocks = useMemo(() => feedBlocks(items), [items])
   const starts = useMemo(() => turnStarts(blocks), [blocks])
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
@@ -174,6 +205,8 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
                 waitingTool={block.kind === 'steps' && waitingTool !== null && blockHas(block, waitingTool) ? waitingTool : null}
                 dispatch={dispatch}
                 dispatchShape={dispatchKey(block, dispatch)}
+                workflow={slot}
+                workflowShape={workflowKey(block, slot, waitingTool)}
               />
             </AgentTurn>
           )
@@ -193,7 +226,8 @@ const Block = memo(
     sessionId,
     block,
     waitingTool,
-    dispatch
+    dispatch,
+    workflow
   }: {
     sessionId: SessionId
     block: FeedBlock
@@ -201,6 +235,9 @@ const Block = memo(
     dispatch: ReadonlyMap<string, DispatchRow>
     /** What the block draws of `dispatch` (dispatchKey): the memo compares this, not the map. */
     dispatchShape: string
+    workflow: WorkflowSlot
+    /** What it draws of the runs (workflowKey). */
+    workflowShape: string
   }) {
     if (block.kind === 'steps') {
       return (
@@ -209,13 +246,19 @@ const Block = memo(
               you stay out, and the calls the graph draws are not there to split a run. */}
           {stepParts(
             block.items.filter((item) => dispatch.get(item.id)?.kind !== 'merged'),
-            (item) => dispatch.has(item.id) || item.id === waitingTool
+            (item) => dispatch.has(item.id) || item.id === waitingTool || (item.kind === 'tool' && item.name === 'Workflow')
           ).map((part) => {
             if (part.kind === 'group') return <ToolGroup key={part.key} items={part.items} nested={block.nested} />
             const { item } = part
             const row = dispatch.get(item.id)
             if (row?.kind === 'graph') return <DispatchGraph key={item.id} parentId={sessionId} ids={row.ids} />
             if (row?.kind === 'merged') return null
+            // Figma 74: a Workflow call is its run's card — the ask before it runs, then the run.
+            if (item.kind === 'tool' && item.name === 'Workflow') {
+              const run = workflow.byTool.get(item.id)
+              const ask = item.id === waitingTool ? workflow.ask : null
+              if (run || ask) return <WorkflowCard key={item.id} {...(run ? { run } : {})} {...(ask ? { ask } : {})} {...(workflow.onStop ? { onStop: workflow.onStop } : {})} />
+            }
             return item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={block.nested} waitingTool={waitingTool} />
           })}
         </div>
@@ -233,7 +276,13 @@ const Block = memo(
         return null
     }
   },
-  (a, b) => a.sessionId === b.sessionId && a.waitingTool === b.waitingTool && a.dispatchShape === b.dispatchShape && sameBlock(a.block, b.block)
+  (a, b) =>
+    a.sessionId === b.sessionId &&
+    a.waitingTool === b.waitingTool &&
+    a.dispatchShape === b.dispatchShape &&
+    a.workflowShape === b.workflowShape &&
+    a.workflow.onStop === b.workflow.onStop &&
+    sameBlock(a.block, b.block)
 )
 
 const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean => !!b && a.length === b.length && a.every((item, i) => item === b[i])

@@ -302,6 +302,12 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       return true
     },
 
+    stopTask(taskId) {
+      if (!isReady) return false
+      void control({ subtype: 'stop_task', task_id: taskId })
+      return true
+    },
+
     async setConfig(id, value) {
       const option = config.find((o) => o.id === id)
       // The level 计划 returns to: the one chosen before it (or before Claude was put in plan mode some other way).

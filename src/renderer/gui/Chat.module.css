@@ -1500,7 +1500,8 @@
   background: var(--bg-hover);
 }
 
-.pickerIcon[aria-pressed='true'] {
+.pickerIcon[aria-pressed='true'],
+.picker[aria-pressed='true'] {
   background: var(--bg-selected);
   color: var(--text-primary);
 }

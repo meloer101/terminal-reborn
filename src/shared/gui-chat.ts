@@ -309,6 +309,8 @@ export interface GuiApi {
   send(sessionId: string, message: { text: string; attachments: string[] }): Promise<GuiSendResult>
   answer(sessionId: string, answer: GuiAnswer): Promise<boolean>
   interrupt(sessionId: string): Promise<boolean>
+  /** Stops a background task of the agent: a Claude workflow run's 停止 (PRD F25, Figma 74B). */
+  stopTask(sessionId: string, taskId: string): Promise<boolean>
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean>
   /** Edits a queued message; an empty text removes it. */
   editQueued(sessionId: string, queuedId: string, text: string): Promise<boolean>
@@ -330,6 +332,7 @@ export const GUI_IPC = {
   send: 'gui:send',
   answer: 'gui:answer',
   interrupt: 'gui:interrupt',
+  stopTask: 'gui:stop-task',
   setConfig: 'gui:set-config',
   editQueued: 'gui:edit-queued',
   edit: 'gui:edit',

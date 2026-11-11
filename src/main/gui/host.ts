@@ -487,6 +487,10 @@ class GuiSession<O extends GuiOwner> {
     return !this.exited && this.driver.interrupt()
   }
 
+  stopTask(taskId: string): boolean {
+    return !this.exited && (this.driver.stopTask?.(taskId) ?? false)
+  }
+
   setConfig(optionId: string, value: string): Promise<boolean> {
     return this.exited ? Promise.resolve(false) : this.driver.setConfig(optionId, value).catch(() => false)
   }
@@ -596,6 +600,10 @@ export class GuiHost<O extends GuiOwner> {
 
   interrupt(sessionId: string): boolean {
     return this.sessions.get(sessionId)?.interrupt() ?? false
+  }
+
+  stopTask(sessionId: string, taskId: string): boolean {
+    return this.sessions.get(sessionId)?.stopTask(taskId) ?? false
   }
 
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean> {

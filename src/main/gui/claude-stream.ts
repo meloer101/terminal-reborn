@@ -227,6 +227,7 @@ export function createClaudeWorkflowTracker(now: () => number = Date.now): Claud
         byTask.set(taskId, {
           key: toolUseId ?? taskId,
           ...(toolUseId ? { toolUseId } : {}),
+          taskId,
           name,
           status: 'running',
           phases: declared?.phases ?? [],
