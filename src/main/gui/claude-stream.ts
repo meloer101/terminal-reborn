@@ -14,8 +14,10 @@ import {
   type GuiPermission,
   type GuiPermissionOption,
   type GuiPrompt,
-  type GuiQuestion
+  type GuiQuestion,
+  ultracodeOption
 } from '@shared/gui-chat'
+import { scriptMeta, workflowRows, workflowStatus, type WorkflowPhase, type WorkflowRun } from '@shared/workflow-run'
 import { addedFile, createChatParser, fileDiffs, lineDiff, rel, type ChatParser, type DiffHunk, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { safeSuggestions } from '../hooks/normalize'
 
@@ -43,6 +45,9 @@ export interface ClaudePickerState {
   /** Figma 65: 快速 as chosen, and why Claude says it is not serving (a result's `fast_mode_disabled_reason`). */
   fast?: boolean
   fastBlocked?: string
+  /** Figma 74A: Ultracode as Claude applies it (`get_settings` `applied.ultracode`), and whether it can be on at all. */
+  ultracode?: boolean
+  ultracodeAvailable?: boolean
 }
 
 /** Claude's `fast_mode_disabled_reason` (2.1.319) in words, for the 快速 button's tooltip; null = nothing to say. */
@@ -139,13 +144,119 @@ export function permissionDiff(tool: string, input: Rec, cwd?: string): FileDiff
   return fileDiffs([{ path: rel(path, cwd), hunks }])[0]
 }
 
+/** Figma 74A: what a Workflow call will run — its name and the phases its script declares (none for a saved one). */
+export function workflowCall(input: Rec): { name: string; phases: WorkflowPhase[] } {
+  const meta = typeof input.script === 'string' ? scriptMeta(input.script) : null
+  return { name: meta?.name ?? str(input.name) ?? 'workflow', phases: meta?.phases ?? [] }
+}
+
 export function promptOf(pending: ClaudePending, description?: string, cwd?: string): GuiPrompt {
   const id = pending.requestId
   if (pending.tool === 'AskUserQuestion') return { kind: 'question', id, questions: questionsOf(pending.input) }
   if (pending.tool === 'ExitPlanMode') return { kind: 'plan', id, plan: str(pending.input.plan) ?? '' }
   const options = pending.suggestions.length > 0 ? ANSWER_OPTIONS : ANSWER_OPTIONS.filter((o) => o.kind !== 'allow_always')
   const diff = permissionDiff(pending.tool, pending.input, cwd)
-  return { kind: 'permission', id, tool: pending.tool, detail: detailOf(pending.tool, pending.input, description, cwd), options, ...(diff ? { diff } : {}) }
+  const workflow = pending.tool === 'Workflow' ? workflowCall(pending.input) : undefined
+  return {
+    kind: 'permission',
+    id,
+    tool: pending.tool,
+    detail: workflow ? workflow.name : detailOf(pending.tool, pending.input, description, cwd),
+    options,
+    ...(diff ? { diff } : {}),
+    ...(workflow ? { workflow } : {})
+  }
+}
+
+/**
+ * Claude's workflow runs in a GUI session (PRD F25, §6.20): `system/task_started` (`task_type: local_workflow`) opens
+ * one at its Workflow call, `task_progress` brings its `workflow_progress` rows (not on every event: the last full list
+ * is kept) and tokens, `task_updated` / `task_notification` its status. The Workflow call's own input names the phases
+ * before any agent runs; its result names the run id.
+ */
+export interface ClaudeWorkflowTracker {
+  /** One stdout message; the runs when something changed, else null. */
+  push(message: Rec): WorkflowRun[] | null
+  runs(): WorkflowRun[]
+}
+
+const MAX_GUI_RUNS = 10
+
+export function createClaudeWorkflowTracker(now: () => number = Date.now): ClaudeWorkflowTracker {
+  /** Workflow calls seen, by tool_use id: what their scripts declare. */
+  const calls = new Map<string, { name: string; phases: WorkflowPhase[] }>()
+  const byTask = new Map<string, WorkflowRun>()
+  const list = (): WorkflowRun[] => [...byTask.values()]
+
+  const call = (message: Rec): boolean => {
+    const content = isRec(message.message) && Array.isArray(message.message.content) ? message.message.content : []
+    let changed = false
+    for (const block of content) {
+      if (!isRec(block)) continue
+      if (message.type === 'assistant' && block.type === 'tool_use' && block.name === 'Workflow' && typeof block.id === 'string') {
+        calls.set(block.id, workflowCall(isRec(block.input) ? block.input : {}))
+        if (calls.size > 50) calls.delete(calls.keys().next().value!)
+      }
+    }
+    // The call's result names the run (`{ status: 'async_launched', taskId, runId }`).
+    const result = isRec(message.tool_use_result) ? message.tool_use_result : null
+    const taskId = str(result?.taskId)
+    const runId = str(result?.runId)
+    const run = taskId ? byTask.get(taskId) : undefined
+    if (run && runId && run.runId !== runId) {
+      // The key stays the call's id: the card and the sidebar's fold follow it.
+      byTask.set(taskId!, { ...run, runId })
+      changed = true
+    }
+    return changed
+  }
+
+  return {
+    runs: list,
+    push(message) {
+      if (message.type === 'assistant' || message.type === 'user') return call(message) ? list() : null
+      if (message.type !== 'system') return null
+      const taskId = str(message.task_id)
+      if (!taskId) return null
+      const known = byTask.get(taskId)
+      if (message.subtype === 'task_started') {
+        if (message.task_type !== 'local_workflow' || known) return null
+        const toolUseId = str(message.tool_use_id)
+        const declared = toolUseId ? calls.get(toolUseId) : undefined
+        const name = str(message.workflow_name) ?? declared?.name ?? 'workflow'
+        if (byTask.size >= MAX_GUI_RUNS) byTask.delete(byTask.keys().next().value!)
+        byTask.set(taskId, {
+          key: toolUseId ?? taskId,
+          ...(toolUseId ? { toolUseId } : {}),
+          taskId,
+          name,
+          status: 'running',
+          phases: declared?.phases ?? [],
+          agents: [],
+          startedAt: now()
+        })
+        return list()
+      }
+      if (!known) return null
+      let next: WorkflowRun = known
+      if (Array.isArray(message.workflow_progress) && message.workflow_progress.length > 0) {
+        const declared = known.toolUseId ? calls.get(known.toolUseId)?.phases : undefined
+        const { phases, agents } = workflowRows(message.workflow_progress, declared ?? [])
+        next = { ...next, phases, agents }
+      }
+      const usage = isRec(message.usage) ? message.usage : null
+      if (typeof usage?.total_tokens === 'number' && usage.total_tokens !== next.tokens) next = { ...next, tokens: usage.total_tokens }
+      const patch = message.subtype === 'task_updated' && isRec(message.patch) ? message.patch : message.subtype === 'task_notification' ? message : null
+      if (patch && typeof patch.status === 'string') {
+        const status = workflowStatus(patch.status)
+        if (status !== next.status) next = { ...next, status, ...(status !== 'running' && status !== 'paused' && next.startedAt !== undefined ? { ms: now() - next.startedAt } : {}) }
+        if (status === 'failed' && str(patch.error)) next = { ...next, error: str(patch.error)! }
+      }
+      if (next === known) return null
+      byTask.set(taskId, next)
+      return list()
+    }
+  }
 }
 
 export function createClaudeStreamNormalizer(cwd: string, now: () => number = Date.now, keep?: KeepImage): ClaudeStreamNormalizer {
@@ -291,16 +402,29 @@ export function claudeConfig(init: Rec, current: ClaudePickerState): GuiConfigOp
   // 快速 (Figma 65): only a model Claude says can answer faster. In `-p` it is off until the session opts in (a flag
   // setting), which is what turning it on sends.
   if (chosen?.supportsFastMode === true) config.push(fastOption(current.fast === true, current.fast ? claudeFastHint(current.fastBlocked) : undefined))
+  // Figma 74A: Ultracode only while Claude says it can be on here (its own rule for hosts, 2.1.322).
+  if (current.ultracodeAvailable === true) config.push(ultracodeOption(current.ultracode === true))
   return config
 }
 
-/** The control request that applies a picker change; `level` is the permission level 计划 off returns to. */
-export function claudeConfigRequest(id: string, value: string, level: GuiPermission = 'ask'): Rec | null {
+/** `get_settings` `applied`: whether ultracode is on and can be (2.1.322; absent from older Claudes). */
+export function settingsUltracode(response: Rec): { on: boolean; available: boolean } | null {
+  const applied = isRec(response.applied) ? response.applied : null
+  if (!applied || typeof applied.ultracodeAvailable !== 'boolean') return null
+  return { on: applied.ultracode === true, available: applied.ultracodeAvailable }
+}
+
+/**
+ * The control request that applies a picker change; `level` is the permission level 计划 off returns to. `ultracode`
+ * is sent along with an effort change: one without it turns ultracode off (2.1.322).
+ */
+export function claudeConfigRequest(id: string, value: string, level: GuiPermission = 'ask', ultracode?: boolean): Rec | null {
   if (id === 'model') return { subtype: 'set_model', model: value }
   if (id === 'permission') return isClaudeLevel(value) ? { subtype: 'set_permission_mode', mode: CLAUDE_MODE_OF[value] } : null
   if (id === 'plan') return { subtype: 'set_permission_mode', mode: value === 'on' ? 'plan' : CLAUDE_MODE_OF[level] }
-  if (id === 'effort') return { subtype: 'apply_flag_settings', settings: { effortLevel: value } }
+  if (id === 'effort') return { subtype: 'apply_flag_settings', settings: { effortLevel: value, ...(ultracode !== undefined ? { ultracode } : {}) } }
   if (id === 'fast') return { subtype: 'apply_flag_settings', settings: { fastMode: value === 'on' } }
+  if (id === 'ultracode') return { subtype: 'apply_flag_settings', settings: { ultracode: value === 'on' } }
   return null
 }
 

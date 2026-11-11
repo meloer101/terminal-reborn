@@ -5,7 +5,9 @@
 // runs a command with colored output; "tasks" writes a task list (TodoWrite), "tasks done" finishes it; "patch file" asks
 // `can_use_tool` for an Edit; "subagent" runs an Agent whose own messages (`parent_tool_use_id`) come before its result,
 // which comes 1.5 s later; "dispatch" runs two `wavi run cursor … --ui cli` in its own shell (the real wavi on PATH),
-// each a Bash call with what it printed. With
+// each a Bash call with what it printed; "workflow" asks `can_use_tool` for a Workflow (ultracode, PRD F25) and, once
+// allowed, launches a run that reports its agents (`task_started` / `task_progress`) and stops on `stop_task`;
+// `get_settings` says ultracode can be on and `apply_flag_settings` turns it on or off. With
 // CLAUDE_CONFIG_DIR set it writes its messages to a transcript there like the real CLI (`uuid` / `parentUuid`, a
 // `--resume-session-at` resume hangs the next message under that message). `--version` answers as Claude Code 2.1.318.
 import { spawnSync } from 'node:child_process'
@@ -47,6 +49,8 @@ if (log) writeFileSync(log, JSON.stringify({ args, entrypoint: process.env.CLAUD
 process.stdout.write('welcome to zsh\n')
 
 let model = args.includes('--model') ? args[args.indexOf('--model') + 1] : 'opus'
+let ultracode = false
+let workflow = null
 let turn = null
 let slow = null
 const queue = []
@@ -146,6 +150,14 @@ function reply(text) {
     turn.toolUse = 'tu-edit'
     return
   }
+  if (text.includes('workflow')) {
+    const script = "export const meta = { name: 'auth-cookie-migration', phases: [{ title: '调研', detail: '找出 localStorage 的三处读写点' }, { title: '改写', detail: '按模块分头改：登录、刷新、登出' }, { title: '核对', detail: '逐条对照验收标准' }] }\nphase('调研')"
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '这件事能拆开并行做。我写了一个 workflow，确认后在后台跑。' }, { type: 'tool_use', id: 'tu-wf', name: 'Workflow', input: { script } }] }, session_id: SESSION, parent_tool_use_id: null })
+    out({ type: 'control_request', request_id: 'req-wf', request: { subtype: 'can_use_tool', tool_name: 'Workflow', input: { script }, description: 'Review dynamic workflow before running', permission_suggestions: [], tool_use_id: 'tu-wf' } })
+    turn.waiting = 'req-wf'
+    turn.toolUse = 'tu-wf'
+    return
+  }
   if (text.includes('write')) {
     out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: 'a.txt', content: 'hi' } }] }, session_id: SESSION, parent_tool_use_id: null })
     out({ type: 'control_request', request_id: 'req-1', request: { subtype: 'can_use_tool', tool_name: 'Write', input: { file_path: 'a.txt', content: 'hi' }, permission_suggestions: [{ type: 'addRules' }], tool_use_id: 'tu1' } })
@@ -196,7 +208,17 @@ function control(message) {
       ],
       current_permission_mode: 'default'
     })
-  } else if (r.subtype === 'get_settings') reply({ effective: { effortLevel: 'max' }, sources: [], applied: {} })
+  } else if (r.subtype === 'get_settings') reply({ effective: { effortLevel: 'max' }, sources: [], applied: { ultracode, ultracodeRequested: ultracode, ultracodeAvailable: true } })
+  else if (r.subtype === 'apply_flag_settings' && typeof r.settings?.ultracode === 'boolean') {
+    ultracode = r.settings.ultracode
+    reply({})
+  } else if (r.subtype === 'stop_task' && workflow && r.task_id === workflow.task) {
+    reply({})
+    clearTimeout(workflow.timer)
+    out({ type: 'system', subtype: 'task_progress', task_id: workflow.task, workflow_progress: workflowRows(true), usage: { total_tokens: 431_000 }, session_id: SESSION })
+    out({ type: 'system', subtype: 'task_notification', task_id: workflow.task, status: 'stopped', session_id: SESSION })
+    workflow = null
+  }
   else if (r.subtype === 'set_model') {
     model = r.model
     reply({})
@@ -212,11 +234,46 @@ function control(message) {
   } else out({ type: 'control_response', response: { subtype: 'error', request_id: message.request_id, error: 'unknown' } })
 }
 
+/** The run's agents (2.1.322 `workflow_progress` rows): 调研 done, 改写 two done, two running, two queued. */
+function workflowRows(stopped = false) {
+  const t = Date.now()
+  const agent = (index, label, phase, state, extra = {}) => ({ type: 'workflow_agent', index, label, phaseIndex: phase, phaseTitle: ['', '调研', '改写'][phase], agentId: `a${index}`.padEnd(17, '0'), model: index === 5 ? 'claude-haiku-5-5' : 'claude-opus-5-5', state, queuedAt: t - 400_000, ...extra })
+  const running = (index, label, ago) => (stopped ? agent(index, label, 2, 'error', { startedAt: t - ago, endedWithRun: 'stopped' }) : agent(index, label, 2, 'progress', { startedAt: t - ago }))
+  return [
+    { type: 'workflow_phase', index: 1, title: '调研' },
+    { type: 'workflow_phase', index: 2, title: '改写' },
+    agent(1, '读写点 · 登录', 1, 'done', { startedAt: t - 400_000, durationMs: 40_000, tokens: 60_000 }),
+    agent(2, '读写点 · 刷新', 1, 'done', { startedAt: t - 400_000, durationMs: 52_000, tokens: 58_000 }),
+    agent(3, '读写点 · 登出', 1, 'done', { startedAt: t - 398_000, durationMs: 58_000, tokens: 61_000 }),
+    agent(4, '登录 · 写入 httpOnly cookie', 2, 'done', { startedAt: t - 330_000, durationMs: 72_000, tokens: 80_000 }),
+    agent(5, '登出 · 清掉 cookie 和缓存', 2, 'done', { startedAt: t - 330_000, durationMs: 47_000, tokens: 22_000 }),
+    running(6, '刷新 · 过期前续期', 150_000),
+    running(7, '中间件 · 从 cookie 读会话', 122_000),
+    stopped ? agent(8, '测试 · 登录和登出', 2, 'error', { endedWithRun: 'stopped' }) : agent(8, '测试 · 登录和登出', 2, 'start'),
+    stopped ? agent(9, '测试 · 自动刷新', 2, 'error', { endedWithRun: 'stopped' }) : agent(9, '测试 · 自动刷新', 2, 'start')
+  ]
+}
+
 function controlResponse(message) {
   const r = message.response
   if (!turn || r.request_id !== turn.waiting) return
   turn.waiting = null
   const allowed = r.response.behavior === 'allow'
+  if (turn.toolUse === 'tu-wf' && allowed) {
+    // Launched in the background: the call returns at once and the turn ends while the run goes on (PRD §6.20).
+    workflow = { task: 'wtask0001', timer: null }
+    out({ type: 'system', subtype: 'task_started', task_id: workflow.task, tool_use_id: 'tu-wf', task_type: 'local_workflow', workflow_name: 'auth-cookie-migration', description: 'auth-cookie-migration', session_id: SESSION })
+    out({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu-wf', content: 'Workflow launched in background.' }] },
+      session_id: SESSION,
+      parent_tool_use_id: null,
+      tool_use_result: { status: 'async_launched', taskId: workflow.task, taskType: 'local_workflow', workflowName: 'auth-cookie-migration', runId: 'wf_fake0001' }
+    })
+    out({ type: 'system', subtype: 'task_progress', task_id: workflow.task, workflow_progress: workflowRows(), usage: { total_tokens: 412_000 }, session_id: SESSION })
+    finish({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'workflow 在后台跑，这一轮先到这里。' }] }, session_id: SESSION, parent_tool_use_id: null })
+    return
+  }
   out({
     type: 'user',
     message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: turn.toolUse, content: allowed ? 'File created' : r.response.message, is_error: !allowed }] },

@@ -264,6 +264,7 @@ const api: TrApi = {
     send: (sessionId, message) => ipcRenderer.invoke(GUI_IPC.send, sessionId, message),
     answer: (sessionId, answer) => ipcRenderer.invoke(GUI_IPC.answer, sessionId, answer),
     interrupt: (sessionId) => ipcRenderer.invoke(GUI_IPC.interrupt, sessionId),
+    stopTask: (sessionId, taskId) => ipcRenderer.invoke(GUI_IPC.stopTask, sessionId, taskId),
     setConfig: (sessionId, optionId, value) => ipcRenderer.invoke(GUI_IPC.setConfig, sessionId, optionId, value),
     editQueued: (sessionId, queuedId, text) => ipcRenderer.invoke(GUI_IPC.editQueued, sessionId, queuedId, text),
     edit: (sessionId, messageId, text) => ipcRenderer.invoke(GUI_IPC.edit, sessionId, messageId, text),

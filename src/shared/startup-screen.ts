@@ -62,3 +62,18 @@ export function blockedAction(reason: BlockedReason): string {
   if (reason.kind === 'dialog') return reason.dialog === 'codex-update' ? '等你确认：更新提示' : '等你确认：信任此文件夹'
   return '等你回答：终端里的提示'
 }
+
+/**
+ * Whether ultracode is on, from a Claude TUI's screen (PRD F25, Figma 74D): its prompt box's top border carries the tag
+ * `ultracode` at its right end while it is on (2.1.322). Null when no prompt box is on screen (a full-screen view, a
+ * dialog): nothing to say.
+ */
+export function ultracodeOnScreen(screen: string): boolean | null {
+  let border = false
+  for (const line of screen.split('\n')) {
+    if (!/─{8,}/.test(line)) continue
+    border = true
+    if (/─\s*ultracode\s*─/.test(line) || /─ ?ultracode\s*$/.test(line.trimEnd())) return true
+  }
+  return border ? false : null
+}

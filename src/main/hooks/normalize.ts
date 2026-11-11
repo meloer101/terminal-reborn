@@ -205,9 +205,19 @@ const isUserTurn = (payload: Rec): boolean => payload.source !== 'system'
  */
 const REPLY_TAIL_CHARS = 48_000
 
+/** Task states of a background task that has ended (2.1.322 task statuses); anything else still runs. */
+const ENDED_TASK = new Set(['completed', 'failed', 'killed', 'stopped'])
+
+/** Claude workflow runs still going after the turn (Stop `background_tasks` `{ type: 'workflow', status }`, PRD F25). */
+export function liveWorkflowTasks(payload: Rec): number {
+  if (!Array.isArray(payload.background_tasks)) return 0
+  return payload.background_tasks.filter((t) => isRec(t) && (t.type === 'workflow' || t.type === 'local_workflow') && !ENDED_TASK.has(str(t.status) ?? '')).length
+}
+
 function stopEvent(payload: Rec): AgentEvent {
   const message = str(payload.last_assistant_message)
-  return message ? { type: 'stop', message: message.slice(-REPLY_TAIL_CHARS) } : { type: 'stop' }
+  const workflows = liveWorkflowTasks(payload)
+  return { type: 'stop', ...(message ? { message: message.slice(-REPLY_TAIL_CHARS) } : {}), ...(workflows > 0 ? { workflows } : {}) }
 }
 
 const MAX_CRONS = 50

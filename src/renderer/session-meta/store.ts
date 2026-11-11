@@ -7,6 +7,7 @@ import { usageAlertText, type ContextUsage, type UsageAccount, type UsageVendor,
 import type { TodoItem } from '@shared/todo-progress'
 import type { TurnChecks } from '@shared/turn-checks'
 import type { SessionId } from '@shared/types'
+import type { WorkflowRun } from '@shared/workflow-run'
 import { useWorkspace } from '../state/workspace'
 
 export interface SessionMetrics {
@@ -24,6 +25,8 @@ export interface SessionMetrics {
   settings?: { model?: string; effort?: string; permission?: string }
   /** Claude's own session timers (`/loop`, PRD F24); absent when none. */
   crons?: SessionCron[]
+  /** Claude's workflow runs in the session (ultracode, PRD F25, Figma 74), live and ended; absent when none. */
+  workflows?: WorkflowRun[]
 }
 
 interface SessionMetaState {
@@ -40,6 +43,7 @@ interface SessionMetaState {
   setChecks(sessionId: SessionId, checks: TurnChecks): void
   setSubagents(sessionId: SessionId, items: SubagentInfo[]): void
   setCrons(sessionId: SessionId, items: SessionCron[]): void
+  setWorkflows(sessionId: SessionId, runs: WorkflowRun[]): void
   setUsage(usage: VendorUsage): void
   setAccount(account: UsageAccount): void
   setAgent(sessionId: SessionId, agent: UsageVendor): void
@@ -100,6 +104,15 @@ export const useSessionMeta = create<SessionMetaState>()((set) => ({
         return items.length > 0 ? { ...rest, crons: items } : rest
       })
     ),
+  setWorkflows: (sessionId, runs) =>
+    set((s) =>
+      runs.length === 0 && !s.bySession[sessionId]?.workflows
+        ? s
+        : patchSession(s, sessionId, (m) => {
+            const { workflows: _runs, ...rest } = m
+            return runs.length > 0 ? { ...rest, workflows: runs } : rest
+          })
+    ),
   setSettings: (sessionId, settings) =>
     set((s) => {
       const current = s.bySession[sessionId]?.settings ?? {}
@@ -157,6 +170,7 @@ export function applyMetaEvent(sessionId: SessionId, event: AgentEvent, agent?: 
   else if (event.type === 'billing') state.setPlan(sessionId, event.plan)
   else if (event.type === 'subagents') state.setSubagents(sessionId, event.items)
   else if (event.type === 'crons') state.setCrons(sessionId, event.items)
+  else if (event.type === 'workflows') state.setWorkflows(sessionId, event.runs)
   else if (event.type === 'agent-settings') {
     const { type: _type, ...settings } = event
     state.setSettings(sessionId, settings)

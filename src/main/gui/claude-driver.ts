@@ -13,7 +13,9 @@ import {
   claudeLevel,
   commandsOf,
   createClaudeStreamNormalizer,
+  createClaudeWorkflowTracker,
   markSkills,
+  settingsUltracode,
   type ClaudePickerState,
   type ClaudeStreamNormalizer
 } from './claude-stream'
@@ -29,6 +31,8 @@ const COMPACT_RULE = autoCompactRuleFromEnv(process.env)
 
 export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDriver {
   const normalizer: ClaudeStreamNormalizer = createClaudeStreamNormalizer(options.cwd, undefined, options.keepImage)
+  // Ultracode's workflow runs (PRD F25): their cards and the sidebar's WorkflowRow.
+  const workflows = createClaudeWorkflowTracker()
   const pending = new Map<string, (outcome: ControlOutcome) => void>()
   /** `tool_use_id` → the `can_use_tool` request asking for it: a tool result answers it (seen on replay). */
   const asks = new Map<string, string>()
@@ -84,6 +88,15 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
     emitConfig()
   }
 
+  /** Ultracode as Claude applies it now: a set without an error can still leave it off (2.1.322, PRD §6.20). */
+  const readUltracode = async (): Promise<void> => {
+    const settings = await control({ subtype: 'get_settings' }, 10_000)
+    const ultracode = settings.ok ? settingsUltracode(settings.response) : null
+    if (!ultracode) return
+    current.ultracode = ultracode.on
+    current.ultracodeAvailable = ultracode.available
+  }
+
   const settingsEffort = (response: Rec): string | undefined => {
     // Claude 2.1.317 answers `{ effective, sources, applied }`; `effective` is what the session runs with (§6.17).
     const settings = isRec(response.effective) ? response.effective : isRec(response.settings) ? response.settings : response
@@ -108,6 +121,11 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
     if (settings.ok) {
       const effort = settingsEffort(settings.response)
       if (effort) current.effort = effort
+      const ultracode = settingsUltracode(settings.response)
+      if (ultracode) {
+        current.ultracode = ultracode.on
+        current.ultracodeAvailable = ultracode.available
+      }
       emitConfig()
     }
     becomeReady()
@@ -240,6 +258,8 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
           if (replay && isUserTurn(message)) io.emit([{ type: 'busy', busy: true }])
           break
       }
+      const runs = workflows.push(message)
+      if (runs) io.workflows?.(runs)
       // commands_changed: marked with the skills known so far.
       const events = normalizer.push(message).map((e) => (e.type === 'commands' ? commandsEvent(e.commands) : e))
       if (events.length > 0) io.emit(events)
@@ -282,6 +302,11 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       return true
     },
 
+    async stopTask(taskId) {
+      if (!isReady) return false
+      return (await control({ subtype: 'stop_task', task_id: taskId }, 10_000)).ok
+    },
+
     async setConfig(id, value) {
       const option = config.find((o) => o.id === id)
       // The level 计划 returns to: the one chosen before it (or before Claude was put in plan mode some other way).
@@ -293,16 +318,18 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
         emitConfig()
         return true
       }
-      const request = claudeConfigRequest(id, value, level)
+      const request = claudeConfigRequest(id, value, level, current.ultracode)
       if (!option || !request || !option.values.some((v) => v.value === value)) return false
       const outcome = await control(request, 15_000)
       if (!outcome.ok) return false
       if (id === 'model') current.model = value
       else if (id === 'effort') current.effort = value
+      // Whether ultracode is on, and can be, depends on the model (xhigh) and the effort change (PRD §6.20).
+      if (id === 'model' || id === 'effort') await readUltracode()
       else if (id === 'fast') {
         current.fast = value === 'on'
         current.fastBlocked = undefined
-      }
+      } else if (id === 'ultracode') await readUltracode()
       else if (isRec(request) && typeof request.mode === 'string') {
         current.level = id === 'permission' ? (value as ClaudePickerState['level']) : level
         current.mode = request.mode

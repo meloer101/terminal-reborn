@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyGuiEvent, emptyGuiState, type GuiEvent, type GuiState } from '@shared/gui-chat'
-import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, markSkills, promptOf, type ClaudePending } from './claude-stream'
+import { claudeAnswerResponse, claudeConfig, claudeConfigRequest, commandsOf, createClaudeStreamNormalizer, createClaudeWorkflowTracker, markSkills, promptOf, settingsUltracode, type ClaudePending } from './claude-stream'
 
 // Shapes as `claude -p --output-format stream-json --include-partial-messages` 2.1.317 prints them (PRD §6.17).
 const at = '2026-11-05T15:54:30.000Z'
@@ -301,5 +301,63 @@ describe('markSkills (Figma 59H)', () => {
     const commands = commandsOf([{ name: 'compact', description: 'Compact' }, { name: 'research', description: 'Research (user)', argumentHint: '<topic>' }, { name: 'figma:figma-use', description: 'x' }])
     expect(markSkills(commands, new Set(['research', 'figma:figma-use'])).map((c) => `${c.name}:${c.kind}`)).toEqual(['compact:command', 'research:skill', 'figma:figma-use:skill'])
     expect(markSkills(commands, new Set()).every((c) => c.kind === 'command')).toBe(true)
+  })
+})
+
+describe('ultracode (PRD F25, Figma 74A)', () => {
+  const init = { current_permission_mode: 'default', models: [{ value: 'opus', displayName: 'Opus 5.5', supportsEffort: true, supportedEffortLevels: ['high', 'xhigh'] }] }
+
+  it('offers Ultracode only while Claude says it can be on, and reads it back from get_settings applied', () => {
+    expect(claudeConfig(init, {}).some((c) => c.id === 'ultracode')).toBe(false)
+    expect(claudeConfig(init, { ultracodeAvailable: true, ultracode: true }).find((c) => c.id === 'ultracode')?.current).toBe('on')
+    expect(settingsUltracode({ applied: { ultracode: false, ultracodeRequested: true, ultracodeAvailable: false } })).toEqual({ on: false, available: false })
+    // An older Claude says nothing about it.
+    expect(settingsUltracode({ applied: { effortLevel: 'high' } })).toBeNull()
+  })
+
+  it('turns it on with a flag setting, and keeps it through an effort change (which would turn it off)', () => {
+    expect(claudeConfigRequest('ultracode', 'on')).toEqual({ subtype: 'apply_flag_settings', settings: { ultracode: true } })
+    expect(claudeConfigRequest('effort', 'high', 'ask', true)).toEqual({ subtype: 'apply_flag_settings', settings: { effortLevel: 'high', ultracode: true } })
+    expect(claudeConfigRequest('effort', 'high')).toEqual({ subtype: 'apply_flag_settings', settings: { effortLevel: 'high' } })
+  })
+
+  it('asks for a Workflow with its name and declared phases', () => {
+    const script = "export const meta = { name: 'auth', phases: [{ title: '调研', detail: '找读写点' }, { title: '改写' }] }"
+    const prompt = promptOf({ requestId: 'r1', tool: 'Workflow', input: { script }, suggestions: [] }, 'Review dynamic workflow before running')
+    expect(prompt).toMatchObject({ kind: 'permission', detail: 'auth', workflow: { name: 'auth', phases: [{ title: '调研', detail: '找读写点' }, { title: '改写' }] } })
+  })
+})
+
+describe('createClaudeWorkflowTracker (stream-json task events, 2.1.322)', () => {
+  const script = "export const meta = { name: 'auth', phases: [{ title: '调研' }, { title: '改写' }] }"
+  const row = (over: Record<string, unknown>) => ({ type: 'workflow_agent', label: '登录', phaseIndex: 2, phaseTitle: '改写', agentId: 'a1', model: 'claude-opus-5-5', state: 'progress', startedAt: 5, ...over })
+
+  it('opens a run at task_started, keeps the last full rows, and ends it with the notification', () => {
+    let clock = 1_000
+    const t = createClaudeWorkflowTracker(() => clock)
+    t.push({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_w', name: 'Workflow', input: { script } }] } })
+    expect(t.push({ type: 'system', subtype: 'task_started', task_id: 'w1', tool_use_id: 'toolu_w', task_type: 'local_workflow', workflow_name: 'auth' })).toMatchObject([
+      { key: 'toolu_w', toolUseId: 'toolu_w', name: 'auth', status: 'running', phases: [{ title: '调研' }, { title: '改写' }] }
+    ])
+    // A shell task is not a workflow.
+    expect(t.push({ type: 'system', subtype: 'task_started', task_id: 'b1', task_type: 'local_bash' })).toBeNull()
+    const runs = t.push({
+      type: 'system',
+      subtype: 'task_progress',
+      task_id: 'w1',
+      usage: { total_tokens: 41_000 },
+      workflow_progress: [{ type: 'workflow_phase', index: 2, title: '改写' }, row({}), row({ label: '刷新', agentId: undefined, state: 'start', startedAt: undefined })]
+    })!
+    expect(runs[0]!.agents.map((a) => [a.label, a.phase, a.state])).toEqual([
+      ['登录', 1, 'running'],
+      ['刷新', 1, 'queued']
+    ])
+    expect(runs[0]!.tokens).toBe(41_000)
+    // A throttled event without rows keeps them.
+    expect(t.push({ type: 'system', subtype: 'task_progress', task_id: 'w1', usage: { total_tokens: 41_000 } })).toBeNull()
+    t.push({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_w' }] }, tool_use_result: { status: 'async_launched', taskId: 'w1', runId: 'wf_abcdef12' } })
+    clock = 61_000
+    const ended = t.push({ type: 'system', subtype: 'task_notification', task_id: 'w1', status: 'completed' })!
+    expect(ended[0]).toMatchObject({ key: 'toolu_w', runId: 'wf_abcdef12', status: 'completed', ms: 60_000, agents: [{ label: '登录' }, { label: '刷新' }] })
   })
 })

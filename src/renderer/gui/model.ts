@@ -752,7 +752,7 @@ export interface PickerButton {
   key: string
   label: string
   options: GuiConfigOption[]
-  /** 快速 (Figma 65): a switch, pressed while on, not a menu. */
+  /** 快速 (Figma 65), Ultracode (Figma 74A): a switch, pressed while on, not a menu. */
   toggle?: { on: boolean }
   /** 模式 (Figma 65): 询问 / 接受编辑 / 自动 / 计划 as one list; `current` is 'plan' while planning. */
   mode?: { current: ModeChoice; choices: { value: ModeChoice; label: string }[] }
@@ -787,7 +787,7 @@ export function pickerButtons(config: readonly GuiConfigOption[]): PickerButton[
   }
   for (const option of pickers) {
     if (option === model || option === effort || option.category === 'permission' || option === plan) continue
-    if (option.category === 'fast') buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' }, ...(option.hint ? { hint: option.hint } : {}) })
+    if (option.category === 'fast' || option.category === 'ultracode') buttons.push({ key: option.id, label: option.label, options: [option], toggle: { on: option.current === 'on' }, ...(option.hint ? { hint: option.hint } : {}) })
     else buttons.push({ key: option.id, label: currentLabel(option), options: [option] })
   }
   return buttons

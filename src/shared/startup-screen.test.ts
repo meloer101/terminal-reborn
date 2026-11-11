@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockedAction, blockedReasonOf, readScreen } from './startup-screen'
+import { blockedAction, blockedReasonOf, readScreen, ultracodeOnScreen } from './startup-screen'
 
 // Captured from Claude Code 2.1.299 (docs: phase 2a lifecycle lab).
 const CLAUDE_IDLE = `
@@ -77,4 +77,11 @@ describe('blocked reasons', () => {
     expect(blockedAction({ kind: 'dialog', dialog: 'codex-update' })).toBe('等你确认：更新提示')
     expect(blockedAction({ kind: 'prompt' })).toBe('等你回答：终端里的提示')
   })
+})
+
+it('ultracodeOnScreen reads the tag on the prompt box border', () => {
+  const box = (top: string) => [`● done`, '', top, '› ', '─'.repeat(60), '  ⏵⏵ auto mode on'].join('\n')
+  expect(ultracodeOnScreen(box(`${'─'.repeat(48)} ultracode ──`))).toBe(true)
+  expect(ultracodeOnScreen(box('─'.repeat(60)))).toBe(false)
+  expect(ultracodeOnScreen('Select model\n❯ 1. Opus')).toBeNull()
 })

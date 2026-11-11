@@ -4,6 +4,18 @@ import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree } 
 import { compareByUrgency, needsAttention, STATUS_LABEL, STATUS_ORDER } from '@shared/session-status'
 import type { SidebarGroupBy } from '@shared/workspace-file'
 import { phaseLine } from '../lifecycle/present'
+import { currentPhase, isLiveRun, phaseViews, runOutcome, type WorkflowPhaseView, type WorkflowRun } from '@shared/workflow-run'
+
+/**
+ * A line hung under a session: a subagent (Figma 44B), or a Claude workflow run and its phases (Figma 74D, PRD F25).
+ * `glyph` and `right` are the run's and phases' own; a subagent's glyph comes from its asks.
+ */
+export interface SideItem extends SubagentInfo {
+  kind?: 'workflow' | 'phase'
+  glyph?: SessionStatus
+  /** Right-hand figure: a run's or phase's done / all. */
+  right?: string
+}
 
 export interface SessionRowModel {
   session: Session
@@ -54,6 +66,10 @@ export interface SubagentRowModel {
   tree: 'child' | 'last'
   /** Depth 2: its session is not the last of its dispatcher's line, so that line runs on past this row. */
   pass: boolean
+  /** A workflow run's row, or one of its phases (Figma 74D); absent for a subagent. */
+  kind?: 'workflow' | 'phase'
+  glyph?: SessionStatus
+  right?: string
 }
 
 export interface SidebarGroup {
@@ -79,7 +95,7 @@ export interface SidebarInput {
   sessions: Session[]
   collapsedProjectIds?: readonly ProjectId[]
   /** Running subagents per session (session-meta); none when absent. */
-  subagents?: Readonly<Record<SessionId, readonly SubagentInfo[] | undefined>>
+  subagents?: Readonly<Record<SessionId, readonly SideItem[] | undefined>>
   /** Absent = by project. */
   groupBy?: SidebarGroupBy
   collapsedStatusGroups?: readonly SessionStatus[]
@@ -117,7 +133,16 @@ function toRow(session: Session, worktree: Worktree | undefined, { depth, parent
 }
 
 export const sameSubagent = (a: SubagentRowModel, b: SubagentRowModel): boolean =>
-  a.id === b.id && a.title === b.title && a.model === b.model && a.attention === b.attention && a.depth === b.depth && a.tree === b.tree && a.pass === b.pass
+  a.id === b.id &&
+  a.title === b.title &&
+  a.model === b.model &&
+  a.attention === b.attention &&
+  a.depth === b.depth &&
+  a.tree === b.tree &&
+  a.pass === b.pass &&
+  a.kind === b.kind &&
+  a.glyph === b.glyph &&
+  a.right === b.right
 
 /**
  * Whether two models draw the same row (its `after` rows are drawn by SubagentRow, which compares them itself). buildSidebarGroups makes new ones on every store change (an agent's hook event
@@ -147,20 +172,62 @@ export interface NestedRow {
   after?: SubagentRowModel[]
 }
 
-type SubagentsOf = (id: SessionId) => readonly SubagentInfo[]
+type SubagentsOf = (id: SessionId) => readonly SideItem[]
 const NO_SUBAGENTS: SubagentsOf = () => []
 
-function subagentRows(session: Session, items: readonly SubagentInfo[], depth: 1 | 2, pass: boolean): SubagentRowModel[] {
+function subagentRows(session: Session, items: readonly SideItem[], depth: 1 | 2, pass: boolean): SubagentRowModel[] {
   return items.map((item, i) => ({
     sessionId: session.id,
     id: item.id,
     title: item.title,
     model: item.model ?? '',
-    attention: session.askingAgents?.includes(item.id) ?? false,
+    attention: !item.kind && (session.askingAgents?.includes(item.id) ?? false),
     depth,
     tree: i === items.length - 1 ? 'last' : 'child',
-    pass: depth === 2 && pass
+    pass: depth === 2 && pass,
+    ...(item.kind ? { kind: item.kind } : {}),
+    ...(item.glyph ? { glyph: item.glyph } : {}),
+    ...(item.right !== undefined ? { right: item.right } : {})
   }))
+}
+
+/** A run's or phase's state as a session glyph (status is never colour only: each has its own shape). */
+const RUN_GLYPH: Readonly<Record<ReturnType<typeof runOutcome>, SessionStatus>> = {
+  running: 'running',
+  paused: 'idle',
+  completed: 'done_unread',
+  'partly-failed': 'error',
+  failed: 'error',
+  stopped: 'exited'
+}
+const PHASE_GLYPH: Readonly<Record<WorkflowPhaseView['state'], SessionStatus>> = {
+  pending: 'idle',
+  running: 'running',
+  paused: 'idle',
+  done: 'done_unread',
+  error: 'error',
+  stopped: 'exited'
+}
+
+/**
+ * Figma 74D: a session's workflow runs under it — a row per run (state · name · the current phase's done / all) and,
+ * unless folded, a row per phase. A run that ended stays while the session's turn is unread (the user has not looked
+ * yet), then goes. Its agents are not listed one by one.
+ */
+export function workflowItems(runs: readonly WorkflowRun[], { unread, folded }: { unread: boolean; folded: ReadonlySet<string> }): SideItem[] {
+  const items: SideItem[] = []
+  for (const run of runs) {
+    if (!isLiveRun(run) && !unread) continue
+    const views = phaseViews(run, 0)
+    const at = isLiveRun(run) ? currentPhase(views) : undefined
+    const done = run.agents.filter((a) => a.state === 'done').length
+    items.push({ id: `workflow:${run.key}`, title: run.name, kind: 'workflow', glyph: RUN_GLYPH[runOutcome(run)], right: at ? `${at.done} / ${at.total}` : `${done} / ${run.agents.length}` })
+    if (folded.has(run.key)) continue
+    views.forEach((phase, i) =>
+      items.push({ id: `phase:${run.key}:${i}`, title: phase.title, kind: 'phase', glyph: PHASE_GLYPH[phase.state], right: phase.total > 0 ? `${phase.done} / ${phase.total}` : '—' })
+    )
+  }
+  return items
 }
 
 /**
