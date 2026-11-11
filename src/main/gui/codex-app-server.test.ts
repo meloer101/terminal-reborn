@@ -30,9 +30,15 @@ describe('createCodexNormalizer', () => {
         item: { type: 'fileChange', id: 'f1', status: 'completed', changes: [{ path: '/repo/src/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1,2 +1,2 @@\n a\n-b\n+c\n' }] }
       })
     ])
-    expect(s.items[0]).toMatchObject({ kind: 'user', text: 'Run ls', images: 1 })
+    expect(s.items[0]).toMatchObject({ kind: 'user', text: 'Run ls', images: 1, attachments: ['/a.png'] })
     expect(s.items[1]).toMatchObject({ kind: 'tool', name: 'Bash', arg: 'echo lab > a.txt', state: 'ok' })
     expect(s.items[2]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'src/a.ts', state: 'ok', diff: { added: 1, removed: 1 } })
+  })
+
+  it('keeps a picture sent as data as a file (Figma 71A)', () => {
+    const n = createCodexNormalizer('/repo', () => 0, (image) => `/kept/${image.data}.${image.mediaType.slice(6)}`)
+    const s = fold(n.notification('item/completed', { item: { type: 'userMessage', id: 'u1', content: [{ type: 'image', url: 'data:image/png;base64,AAAA' }, { type: 'image', url: 'https://x/y.png' }] } }))
+    expect(s.items[0]).toMatchObject({ kind: 'user', text: '', images: 2, attachments: ['/kept/AAAA.png'] })
   })
 
   it('keeps a command’s whole text and its exit code', () => {

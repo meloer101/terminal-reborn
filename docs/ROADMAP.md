@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-10：GUI 对话里发出的图片留在你的消息上（PRD v1.169，Figma 71A）：气泡上方 64 的缩略图；Claude / Pi / Codex 的图片字节由主进程存成附件目录里的文件，重开 app、续上会话后照样显示。
 - 2026-11-09：GUI 对话里连续的工具调用收成一行摘要（PRD v1.168，Figma 70′B / 70C）：「读取了 2 个文件，运行了 1 条命令 ›」，点开看每一行；agent 的文字、子 agent、派活图、等你确认的调用不收。
 - 2026-11-09：设置 · 额度 加 token 统计（PRD v1.167，Figma 69″）：周 / 月 / 年 / 全部的 token、API 等价、会话、连续天数，每天或每月的柱、过去一年的热力图、按 agent / 模型 / 项目 / 小时的份额；只读本机日志（Claude、Codex、OpenCode、Pi、Grok），每家标自己的起点，Wavi 不另存。
 - 2026-11-09：GUI 派活方的对话里画出派活（PRD v1.166，Figma 68′）：`wavi run` 的位置是扇出图（也是确认），输入框上方是派活条，派活报告是报告卡、不再是用户气泡。
@@ -281,6 +282,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 派活的子会话开成 GUI（PRD v1.163）：`childUi`（`src/shared/dispatch.ts`）、`wavi run --ui`、`addBackgroundSession` 带界面、等「开始」的请求存界面；单测覆盖规则和存盘
 - [x] GUI 派活可视化（PRD v1.166，Figma 68′）：`src/renderer/gui/Dispatch.tsx`（扇出图、派活条、报告卡和通知），`src/renderer/dispatch/view.ts`（两处共用的视图），`src/shared/dispatch.ts` 读回 `wavi run` 的回答、报告和通知；e2e `gui-dispatch.spec.ts`（假 Claude 真跑 `wavi run`，两种主题截图在 `test-results/gui-dispatch/`）
 - [x] GUI 工具调用收成一行（PRD v1.168，Figma 70′B / 70C）：`src/renderer/gui/model.ts` 的 `stepParts` / `groupView`，`Feed.tsx` 的 `ToolGroup`；e2e 在 `gui-session.spec.ts` 的工具行一项。没测：运行中那一组的样子（转圈、后接正在跑的调用）只有单测，没在真界面截图；MCP 的摘要只写工具名（ChatItem 没有服务名）。
+- [x] GUI 发出的图片留在消息上（PRD v1.169，Figma 71A）：`ChatItem` 用户消息加 `attachments`；`KeepImage`（`transcript-chat.ts`）由 `src/main/files.ts` `keepInlineImage` 实现，经 `DriverOptions.keepImage` 和读历史传进 Claude / Codex / Pi 的解析，ACP 发出时带附件路径、`session/load` 回放的图片块存成文件；`Feed.tsx` 复用输入框的 `Attachment`；e2e `gui-session.spec.ts` 粘贴一张图发出后气泡上方是 `sent-*.png`。没测：真 Claude / Codex / Pi / ACP agent 发图后的样子（只有假 Claude 和单测）；ACP 续上会话时的图片
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑

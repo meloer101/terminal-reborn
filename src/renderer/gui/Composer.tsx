@@ -265,12 +265,15 @@ function buttonMark(button: PickerButton, agent: AgentKind): ReactNode {
   return null
 }
 
-/** 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name. */
-function Attachment({ path, remove }: { path: string; remove(): void }) {
+/**
+ * 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name.
+ * 71A / 71D: the same over a sent message's bubble, without ×.
+ */
+export function Attachment({ path, remove }: { path: string; remove?: () => void }) {
   const [broken, setBroken] = useState(false)
   const url = broken ? null : thumbnailUrl(path)
   const name = path.slice(path.lastIndexOf('/') + 1)
-  const button = (
+  const button = remove && (
     <button type="button" className={styles.attachmentRemove} aria-label={`移除 ${path}`} onClick={remove}>
       <X size={12} strokeWidth={1.75} aria-hidden />
     </button>
@@ -284,7 +287,7 @@ function Attachment({ path, remove }: { path: string; remove(): void }) {
     )
   }
   return (
-    <li className={styles.attachment} title={path}>
+    <li className={styles.attachment} title={path} data-fixed={remove ? undefined : 'true'}>
       <span className={styles.attachmentName}>{name}</span>
       {button}
     </li>

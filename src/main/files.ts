@@ -1,14 +1,44 @@
 import { app, ipcMain } from 'electron'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, sep } from 'node:path'
 import { IPC, type ImageExtension } from '@shared/ipc'
+import type { InlineImage } from '@shared/transcript-chat'
 
 const IMAGE_EXTENSIONS = new Set<ImageExtension>(['png', 'jpg', 'gif', 'webp'])
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024
 
 const attachmentsDir = (): string => join(app.getPath('temp'), 'wavi', 'attachments')
+
+const SENT_EXTENSIONS: Readonly<Record<string, ImageExtension>> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
+
+/**
+ * A picture a GUI message carried inline, as a file the chat can draw (Figma 71A): `sent-<hash>.<ext>` in the
+ * attachments folder, written the first time it is seen, so reading a conversation again finds the same file. Null for
+ * a type the chat does not draw, or when it cannot be written. Synchronous: the chat item that names it is built in
+ * the same step, and the renderer loads the file as soon as it gets the item.
+ */
+export function keepInlineImage(image: InlineImage, dir: string = attachmentsDir()): string | null {
+  const extension = SENT_EXTENSIONS[image.mediaType]
+  if (!extension || image.data.length === 0) return null
+  const hash = createHash('sha256').update(image.data).digest('hex').slice(0, 32)
+  const file = join(dir, `sent-${hash}.${extension}`)
+  if (existsSync(file)) return file
+  // Written under another name and renamed: a write cut short never stands in for the picture.
+  const partial = `${file}.${randomBytes(3).toString('hex')}.partial`
+  try {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(partial, Buffer.from(image.data, 'base64'))
+    renameSync(partial, file)
+    return file
+  } catch (error) {
+    rmSync(partial, { force: true })
+    console.warn(`[gui] could not keep a sent picture at ${file}:`, error)
+    return null
+  }
+}
 
 /**
  * macOS's folder for files handed over for one drag (`$TMPDIR/TemporaryItems/NSIRD_<app>_…/`): only the app that

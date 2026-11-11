@@ -4,6 +4,7 @@
 import { randomInt } from 'node:crypto'
 import type { GuiAnswer, GuiEvent, GuiPermission } from '@shared/gui-chat'
 import type { ContextUsage } from '@shared/session-meta'
+import type { KeepImage } from '@shared/transcript-chat'
 
 export type Rec = Record<string, unknown>
 export const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -59,6 +60,8 @@ export interface DriverOptions {
   plan?: boolean
   /** An ACP agent whose permission mode is a launch argument: which of 自动 / 计划 its arguments offer. */
   launchPermission?: { auto: boolean; plan: boolean }
+  /** Keeps the pictures a message carries inline as files, for the chat to draw them (Figma 71A). */
+  keepImage?: KeepImage
 }
 
 export interface GuiDriver {

@@ -6,7 +6,7 @@
 // and a conversation read back from Pi's session file. Pure: pi-driver.ts owns the process.
 
 import { effortLabel, permissionOption, type GuiAnswer, type GuiCommand, type GuiConfigOption, type GuiEvent, type GuiPermission, type GuiPermissionOption, type GuiPrompt } from '@shared/gui-chat'
-import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, lineDiff, rel, toolArg, type ChatItem, type FileDiff } from '@shared/transcript-chat'
+import { addedFile, CHAT_LIMITS, fileDiffs, hunksOfUnifiedDiff, keptImages, lineDiff, rel, toolArg, type ChatItem, type FileDiff, type KeepImage } from '@shared/transcript-chat'
 import { clip, isRec, str, tail, type Rec } from './driver'
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
@@ -135,9 +135,11 @@ function withResult(item: ToolItem, tool: string, args: unknown, result: unknown
   return { ...item, state: isError ? 'error' : 'ok', ...(output ? { output: tail(output, CHAT_LIMITS.output) } : {}), ...(diff ? { diff } : {}) }
 }
 
-function userItem(id: string, at: number, content: unknown): ChatItem {
-  const images = Array.isArray(content) ? content.filter((b) => isRec(b) && b.type === 'image').length : 0
-  return { kind: 'user', id, at, text: clip(textOf(content), CHAT_LIMITS.text), images }
+function userItem(id: string, at: number, content: unknown, keep: KeepImage | undefined): ChatItem {
+  const blocks = Array.isArray(content) ? content.filter((b): b is Rec => isRec(b) && b.type === 'image') : []
+  const inline = blocks.flatMap((b) => (typeof b.mimeType === 'string' && typeof b.data === 'string' ? [{ mediaType: b.mimeType, data: b.data }] : []))
+  const attachments = keptImages(inline, keep)
+  return { kind: 'user', id, at, text: clip(textOf(content), CHAT_LIMITS.text), images: blocks.length, ...(attachments ? { attachments } : {}) }
 }
 
 // --- what Pi waits on -----------------------------------------------------------------------------------------------
@@ -211,7 +213,7 @@ export interface PiNormalizer {
   dropPrompts(): GuiEvent[]
 }
 
-export function createPiNormalizer(cwd: string, now: () => number = Date.now): PiNormalizer {
+export function createPiNormalizer(cwd: string, now: () => number = Date.now, keep?: KeepImage): PiNormalizer {
   const items: ChatItem[] = []
   const indexOf = new Map<string, number>()
   const tools = new Map<string, { item: ToolItem; tool: string; args: unknown }>()
@@ -266,7 +268,7 @@ export function createPiNormalizer(cwd: string, now: () => number = Date.now): P
     const role = str(m.role)
     if (role === 'user') {
       const id = `u${seq++}`
-      return [...flush(), put(id, userItem(id, now(), m.content))]
+      return [...flush(), put(id, userItem(id, now(), m.content, keep))]
     }
     if (role === 'assistant') {
       const events = flush()
@@ -406,13 +408,13 @@ export function piBranchMessages(lines: readonly string[]): Rec[] {
 }
 
 /** Finished messages → chat items (a tool call's row takes the result that follows it). */
-export function piHistoryItems(messages: readonly Rec[], cwd: string): ChatItem[] {
+export function piHistoryItems(messages: readonly Rec[], cwd: string, keep?: KeepImage): ChatItem[] {
   const items: ChatItem[] = []
   const calls = new Map<string, { index: number; tool: string; args: unknown }>()
   let seq = 0
   for (const m of messages) {
     const at = typeof m.timestamp === 'number' ? m.timestamp : 0
-    if (m.role === 'user') items.push(userItem(`u${seq++}`, at, m.content))
+    if (m.role === 'user') items.push(userItem(`u${seq++}`, at, m.content, keep))
     else if (m.role === 'assistant') {
       for (const block of Array.isArray(m.content) ? m.content.filter(isRec) : []) {
         if (block.type === 'thinking' && str(block.thinking)?.trim()) items.push({ kind: 'thinking', id: `k${seq++}`, at, text: clip(str(block.thinking)!.trim(), CHAT_LIMITS.thinking) })

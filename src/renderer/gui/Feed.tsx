@@ -17,6 +17,7 @@ import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ansiSpans } from './ansi'
 import { ChatMarkdown } from './ChatMarkdown'
+import { Attachment } from './Composer'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
 import { DispatchGraph, WaviMessageView } from './Dispatch'
@@ -282,11 +283,13 @@ interface UserMessageProps {
 
 /**
  * 51A: what the user sent, as Markdown, with their picture beside it when they set one (设置 · 外观 · 对话). 54A: time ·
- * copy · edit under it on hover; 54C: editing, a text box in its place.
+ * copy · edit under it on hover; 54C: editing, a text box in its place. 71A: the pictures sent with it over the bubble
+ * (71C: no bubble when it had no words; 71D: a file that is gone shows its name).
  */
 const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave }: UserMessageProps) {
   const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
+  const pictures = item.attachments ?? []
   return (
     <div className={styles.userRow} data-item={item.id} data-faded={faded || undefined}>
       <div className={styles.userColumn}>
@@ -294,10 +297,19 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
           <InlineEdit text={item.text} onCancel={onCancel} onSave={(text) => onSave(item.id, text)} />
         ) : (
           <>
-            <div className={styles.bubble}>
-              {header && <span className={styles.bubbleHeader}>{header}</span>}
-              <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
-            </div>
+            {pictures.length > 0 && (
+              <ul className={`${styles.attachments} ${styles.sentPictures}`} aria-label="图片" data-testid="gui-message-pictures">
+                {pictures.map((path, i) => (
+                  <Attachment key={`${i}:${path}`} path={path} />
+                ))}
+              </ul>
+            )}
+            {(item.text.trim() || pictures.length === 0) && (
+              <div className={styles.bubble}>
+                {header && <span className={styles.bubbleHeader}>{header}</span>}
+                <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
+              </div>
+            )}
             <div className={styles.messageActions} data-testid="gui-message-actions">
               <span className={styles.messageTime}>{timeOf(item.at)}</span>
               <CopyButton text={item.text} />
