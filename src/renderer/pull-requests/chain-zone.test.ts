@@ -3,7 +3,7 @@ import type { ShipPreflight } from '@shared/ship'
 import { CHAIN_TEXT, shipChain, type ChainInput } from '@shared/ship-chain'
 import type { PrStatus, PullRequestInfo } from '@shared/pull-requests'
 import type { ShipOperationRequest, ShipOperationResult } from '@shared/ship'
-import { abortConfirmation, mergePrBlocker, paletteGitActions, runOperation, shortReason, zoneFiles, zoneHeadline, zoneMenu } from './chain-zone'
+import { abortConfirmation, mergePrBlocker, prRunKind, paletteGitActions, runOperation, shortReason, zoneFiles, zoneHeadline, zoneMenu, zoneShortcut, zoneShortcutShown } from './chain-zone'
 
 type Ok = Extract<ShipPreflight, { ok: true }>
 
@@ -125,7 +125,7 @@ describe('paletteGitActions (73H)', () => {
   it('lists only what can run, with what it acts on, the primary marked, then review and the PR', () => {
     const pf = preflight({ behindBase: 4, baseConflicts: [], uncommitted: 0 })
     const chain = shipChain(input({ remembered: 'pr', local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 3, trackedUncommitted: 0 } }, pf))
-    const rows = paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'session-cookie', remote: 'origin', reviewFiles: 12, pr: null })
+    const rows = paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'session-cookie', remote: 'origin', reviewFiles: 12, pr: null, exitRegistered: true })
     expect(rows.map((r) => [r.label, r.detail, r.primary])).toEqual([
       ['提交…', '3 个文件', false],
       ['同步 main', '落后 4', false],
@@ -134,17 +134,78 @@ describe('paletteGitActions (73H)', () => {
       ['合并到 main 并推送', '', false],
       ['审阅全部改动', '12 个文件', false]
     ])
-    expect(paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'b', remote: 'origin', reviewFiles: null, pr: 7 }).at(-1)).toMatchObject({ command: 'open-pr', label: '打开 PR #7' })
+    expect(paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'b', remote: 'origin', reviewFiles: null, pr: 7, exitRegistered: true }).at(-1)).toMatchObject({ command: 'open-pr', label: '打开 PR #7' })
+  })
+
+  // R23: ⇧⌘M runs an exit only while Git · 变更 has registered it; 合并 PR #N… it runs through the chain anyway.
+  it('marks the primary exit with ⇧⌘M only where the shortcut runs it', () => {
+    const facts = { ticked: 3, behind: 4, branch: 'b', remote: 'origin', reviewFiles: null, pr: null, exitRegistered: false }
+    const chain = shipChain(input({ remembered: 'pr' }, preflight({ uncommitted: 0, behindBase: 4 })))
+    expect(chain.next?.id).toBe('pr')
+    expect(paletteGitActions(chain, facts).find((r) => r.command === 'pr')?.primary).toBe(false)
+    const pr = { number: 5, draft: false, unpushed: false, remoteAhead: false, details: true, conflicting: false }
+    const merge = shipChain(input({ pr, local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }, preflight({ uncommitted: 0, openPr: 5 })))
+    expect(merge.next?.id).toBe('merge-pr')
+    expect(paletteGitActions(merge, facts).find((r) => r.command === 'merge-pr')?.primary).toBe(true)
+  })
+
+  // R25 / R71: 拉取 names what it fetches, the upstream's own branch name.
+  it('names the branch 拉取 fetches', () => {
+    const pf = preflight({ uncommitted: 0, pushed: true, upstream: { ahead: 0, behind: 2 }, pullFrom: 'origin/jacoy/feat' })
+    const chain = shipChain(input({ local: { branch: 'feat', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }, pf))
+    const facts = { ticked: 0, behind: null, branch: 'feat', remote: 'origin', reviewFiles: null, pr: null, exitRegistered: true }
+    expect(paletteGitActions(chain, { ...facts, pullFrom: 'origin/jacoy/feat' }).find((r) => r.command === 'pull')?.detail).toBe('origin/jacoy/feat')
+    expect(paletteGitActions(chain, facts).find((r) => r.command === 'pull')?.detail).toBe('origin/feat')
   })
 
   it('offers 归档… only once the branch is merged', () => {
-    const facts = { ticked: 0, behind: null, branch: 'b', remote: 'origin', reviewFiles: null, pr: null }
+    const facts = { ticked: 0, behind: null, branch: 'b', remote: 'origin', reviewFiles: null, pr: null, exitRegistered: true }
     const merged = shipChain(input({ local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }, preflight({ merged: true, uncommitted: 0 })))
     expect(merged.stage).toBe('merged')
     expect(paletteGitActions(merged, facts).map((r) => r.label)).toContain('归档…')
     const open = shipChain(input())
     expect(open.actions.find((a) => a.id === 'archive')?.blocker).toBeNull()
     expect(paletteGitActions(open, facts).map((r) => r.label)).not.toContain('归档…')
+  })
+})
+
+// L7 / R13 / R61: ⇧⌘M in Git · 变更 goes through the chain for 合并 PR #N… too (its reason, never the local merge sheet),
+// and its hint shows only on a primary that can run.
+describe('zoneShortcut', () => {
+  const pr = (patch: Partial<NonNullable<ChainInput['pr']>> = {}) => ({ number: 5, draft: false, unpushed: false, remoteAhead: false, details: false, conflicting: false, ...patch })
+  const clean = { branch: 'b', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 }
+  it('runs 合并 PR #N… through the chain even while it waits for the PR\'s details', () => {
+    const waiting = shipChain(input({ pr: pr(), local: clean }, preflight({ uncommitted: 0, openPr: 5 })))
+    expect(waiting.next).toMatchObject({ id: 'merge-pr', blocker: CHAIN_TEXT.checking })
+    expect(zoneShortcut(waiting, true)).toBe('merge-pr')
+    expect(zoneShortcutShown(waiting)).toBe(false)
+    const ready = shipChain(input({ pr: pr({ details: true }), local: clean }, preflight({ uncommitted: 0, openPr: 5 })))
+    expect(zoneShortcutShown(ready)).toBe(true)
+  })
+
+  it('runs an exit that can run, does nothing for a blocked one or while busy, and leaves the rest to the merge sheet', () => {
+    const exits = shipChain(input())
+    expect(zoneShortcut(exits, true)).toBe('main')
+    expect(zoneShortcutShown(exits)).toBe(true)
+    expect(zoneShortcut(exits, false)).toBe('nothing')
+    const nothing = shipChain(input({ local: { ...clean, ahead: 2, uncommitted: 2, trackedUncommitted: 2 }, ticked: 0 }, preflight({ ahead: 0 })))
+    expect(nothing.next?.blocker).not.toBeNull()
+    expect(zoneShortcut(nothing, true)).toBe('nothing')
+    expect(zoneShortcutShown(nothing)).toBe(false)
+    const merged = shipChain(input({ local: clean }, preflight({ merged: true, uncommitted: 0 })))
+    expect(zoneShortcut(merged, true)).toBeNull()
+    expect(zoneShortcut(null, true)).toBeNull()
+  })
+})
+
+// R19: with gh signed out the renderer has no PR status, the preflight still names the open PR: 推送到 PR #N pushes to
+// it, never starts 创建 PR beside it.
+describe('prRunKind', () => {
+  it('pushes to the chain’s open PR, also one only the preflight knows', () => {
+    const chain = shipChain(input({ gh: 'signed-out', pr: { number: 5, draft: false, unpushed: false, remoteAhead: false, details: false, conflicting: false } }, preflight({ openPr: 5 })))
+    expect(chain.actions.find((a) => a.id === 'pr')?.label).toBe('提交并推送到 PR #5')
+    expect(prRunKind(chain)).toBe('push-pr')
+    expect(prRunKind(shipChain(input()))).toBe('pr')
   })
 })
 
@@ -182,13 +243,26 @@ describe('runOperation', () => {
     expect(many.detail?.endsWith('等 12 个文件')).toBe(true)
   })
 
+  // R34: main refuses a confirm detail over 500 characters; names from git are one line each.
+  it('keeps the detail within what main accepts, one line per name', () => {
+    const long = Array.from({ length: 9 }, (_, i) => `packages/desktop/src/renderer/settings/AppearanceSection${i}.test.tsx`)
+    const detail = abortConfirmation('rebase', long).detail!
+    expect(detail.length).toBeLessThanOrEqual(500)
+    expect(detail.endsWith('等 9 个文件')).toBe(true)
+    const odd = abortConfirmation('rebase', ['a\nb.ts', 'x'.repeat(600)]).detail!
+    expect(odd.length).toBeLessThanOrEqual(500)
+    expect(odd.split('\n')[0]).toBe('a b.ts')
+    expect(odd.split('\n')).toHaveLength(2)
+  })
+
   it('resends 中止 with force only when the user says 中止', async () => {
     sent.length = 0
     const asked: string[] = []
     const yes = await runOperation({ ...target, action: 'abort' }, 'rebase', fake([{ ok: false, reason: 'confirm', files: ['a.ts'] }, { ok: true }]), async (o) => (asked.push(o.message), true))
     expect(yes).toEqual({ ok: true })
     expect(asked).toEqual(['中止 rebase 会丢掉 1 个文件里已解决或改过的内容'])
-    expect(sent).toEqual([{ ...target, action: 'abort' }, { ...target, action: 'abort', force: true }])
+    // R29: the files the user was shown go with the forced 中止, so main can ask again about any other.
+    expect(sent).toEqual([{ ...target, action: 'abort' }, { ...target, action: 'abort', force: true, confirmed: ['a.ts'] }])
 
     sent.length = 0
     const no = await runOperation({ ...target, action: 'abort' }, 'rebase', fake([{ ok: false, reason: 'confirm', files: ['a.ts'] }]), async () => false)

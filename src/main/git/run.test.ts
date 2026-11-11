@@ -1,9 +1,12 @@
 // The process runner every git and gh call goes through: what callers read when a command fails, stops or floods.
 import { execFileSync } from 'node:child_process'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ ipcMain: { handle: () => {} } }))
-const { gitEnv, gitText, lastLines, runGit, runProcess } = await import('./run')
+const { gitEnv, gitText, lastLines, pinned, runGit, runProcess } = await import('./run')
 
 const shell = (script: string, options: { timeout?: number; maxStdout?: number; input?: string } = {}) =>
   runProcess('/bin/sh', ['-c', script], { cwd: '/', env: process.env, timeout: options.timeout ?? 5_000, ...options })
@@ -26,6 +29,34 @@ describe('runProcess', () => {
     const missing = await runProcess('/no/such/program', [], { cwd: '/', env: process.env, timeout: 1_000 })
     expect(missing.code).toBe(-1)
     expect(missing.stderr).toContain('ENOENT')
+  })
+})
+
+describe('pinned.push', () => {
+  it('keeps the user’s submodule check: a commit pointing at a submodule commit no remote has is not pushed', async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tr-run-')))
+    try {
+      const sh = (cwd: string, ...args: string[]) =>
+        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'protocol.file.allow=always', ...args], { cwd, stdio: 'pipe' }).toString()
+      for (const name of ['sub.git', 'top.git']) sh(dir, 'init', '-q', '--bare', '-b', 'main', name)
+      sh(dir, 'clone', '-q', join(dir, 'sub.git'), 'sub')
+      sh(join(dir, 'sub'), 'commit', '-q', '--allow-empty', '-m', 'sub one')
+      sh(join(dir, 'sub'), 'push', '-q', 'origin', 'main')
+      sh(dir, 'clone', '-q', join(dir, 'top.git'), 'top')
+      const top = join(dir, 'top')
+      sh(top, 'submodule', 'add', '-q', join(dir, 'sub.git'), 'sm')
+      sh(top, 'commit', '-q', '-m', 'add sm')
+      sh(top, 'push', '-q', 'origin', 'main')
+      sh(join(top, 'sm'), 'commit', '-q', '--allow-empty', '-m', 'sub two, not pushed')
+      sh(top, 'commit', '-q', '-am', 'bump sm')
+      sh(top, 'config', 'push.recurseSubmodules', 'check')
+      const ran = await runGit(top, pinned.push('--quiet', '--', 'origin', 'refs/heads/main:refs/heads/main'))
+      expect(ran.code).not.toBe(0)
+      expect(ran.stderr).toMatch(/submodule/i)
+      expect(sh(top, 'rev-parse', 'origin/main').trim()).toBe(sh(top, 'rev-parse', 'HEAD~1').trim())
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

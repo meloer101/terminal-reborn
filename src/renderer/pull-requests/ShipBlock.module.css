@@ -133,11 +133,6 @@
   user-select: text;
 }
 
-.failureNote {
-  font: var(--text-caption);
-  color: var(--text-secondary);
-}
-
 .output {
   max-height: 120px;
   margin: 0;

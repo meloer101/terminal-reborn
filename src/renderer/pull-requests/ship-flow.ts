@@ -5,7 +5,7 @@ import type { GitFailure, GitFailureKind, GitFailureNext } from '@shared/git-fai
 import type { MergeMethod } from '@shared/git-merge'
 import type { RepoMergeMethods } from '@shared/pull-requests'
 import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipMainResult, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
-import { AS_DATA, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, type ChainActionId } from '@shared/ship-chain'
+import { AS_DATA, CHAIN_LABEL, MAX_PROMPT_CHARS, oneLine, shellWord, WAVI_TEXT_MARK, type ChainActionId } from '@shared/ship-chain'
 
 export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import type { Session } from '@shared/types'
@@ -17,6 +17,10 @@ export interface FlowInput {
   base: string
   branch: string
   remote: string | null
+  /** 合并到 <base> 并推送: the remote the base is pushed to (the preflight's `baseRemote`); omitted: `remote`. */
+  baseRemote?: string | null
+  /** 拉取: what it fetches, `<remote>/<branch there>` (the preflight's `pullFrom`); omitted: `<remote>/<branch>`. */
+  pullFrom?: string | null
   /** The background review runs first (推送前 / 合并前审阅 is on and the diff has none). */
   review: boolean
   /** Uncommitted paths exist: the agent also writes a commit message and Wavi commits. */
@@ -92,13 +96,14 @@ export function flowSteps(input: FlowInput): FlowStep[] {
     steps.push(step('sync', `拉取 ${base}`), step('merge', input.syncMode === 'merge' ? `合并 ${base}` : `rebase 到 ${base}`))
     return steps
   }
-  if (kind === 'pull') return [step('sync', `拉取 ${remote ?? 'origin'}/${branch}`)]
+  if (kind === 'pull') return [step('sync', `拉取 ${input.pullFrom ?? `${remote ?? 'origin'}/${branch}`}`)]
   if (input.review) steps.push(step('review', '审阅'))
   if (kind === 'main') {
     // Figma 73E: the commit of the ticked files is a step of its own (main runs it inside the merge call).
     steps.push(write('写提交说明'))
     if (input.uncommitted) steps.push(step('commit', '提交'))
-    steps.push(step('merge', `合并到 ${base} · ${METHOD_LABEL[input.method ?? 'squash']}`), step('push', `推送 ${remote ?? 'origin'}/${base}`))
+    const pushTo = input.baseRemote !== undefined ? input.baseRemote : remote
+    steps.push(step('merge', `合并到 ${base} · ${METHOD_LABEL[input.method ?? 'squash']}`), step('push', `推送 ${pushTo ?? 'origin'}/${base}`))
   } else if (kind === 'pr') {
     steps.push(write('写标题和正文'))
     if (input.uncommitted) steps.push(step('commit', '提交'))
@@ -285,15 +290,6 @@ export function createFailureStep(message: string): StepId {
   return /推送|push|remote|rejected|denied|hook|被拒/i.test(message) ? 'push' : 'create'
 }
 
-/** What 交给 agent 解 puts into the input line (no Enter): the files, nothing else. */
-export function conflictPrompt(base: string, files: readonly string[]): string {
-  return [
-    `合并到 ${base} 时这些文件有冲突，请解决后提交：`,
-    ...files.slice(0, 50).map((f) => `- ${f}`),
-    ...(files.length > 50 ? [`- 另外 ${files.length - 50} 个文件`] : [])
-  ].join('\n')
-}
-
 // --- the exit this repository used last --------------------------------------------------------------------------
 
 export const rememberedKey = (root: string): string => `wavi.ship-exit:${root}`
@@ -333,10 +329,14 @@ function wayOf(next: GitFailureNext, kind: GitFailure['kind']): FailureWay {
   return kind === 'network' ? { kind: 'retry' } : null
 }
 
-/** What git printed, worth showing under the step: a hook's own words (Figma 73E3), else the step's output. */
+/** Failures whose message names only the class: what was printed says which hook, rule or error it was. */
+const TAIL_SHOWN: ReadonlySet<GitFailureKind> = new Set(['commit-hook', 'pre-push-hook', 'pre-receive-hook', 'protected-branch', 'unknown'])
+
+/** What git printed, worth showing under the step: a hook's or a repository rule's own words (Figma 73E3), else the
+ *  step's output. */
 export function failureOutput(error: Pick<ShipError, 'failure' | 'output'>): string | null {
   const kind = error.failure?.kind
-  if (kind === 'commit-hook' || kind === 'pre-push-hook' || kind === 'pre-receive-hook') return error.failure!.tail || error.output || null
+  if (kind && TAIL_SHOWN.has(kind)) return error.failure!.tail || error.output || null
   return error.output ?? null
 }
 
@@ -345,6 +345,14 @@ export function failureOutput(error: Pick<ShipError, 'failure' | 'output'>): str
 const OWN_MESSAGE: ReadonlySet<GitFailureKind> = new Set(['commit-hook', 'pre-push-hook', 'pre-receive-hook'])
 /** A quoted line of output is cut to this. */
 const MAX_OUTPUT_LINE = 200
+
+const STEP_WORD: Record<StepId, string> = { review: '审阅', write: '写说明', commit: '提交', merge: '合并', push: '推送', create: '创建 PR', sync: '拉取' }
+
+/** A failed step as failurePrompt names it: a fixed word by its id (labels carry branch and remote names, which come
+ *  from the repository and stay out of Wavi's own sentence). */
+export function stepWord(step: Pick<FlowStep, 'id' | 'label'>): string {
+  return step.id === 'merge' && step.label.startsWith('rebase') ? 'rebase' : STEP_WORD[step.id]
+}
 
 /**
  * 交给 <agent> for a failed step (a hook that did not pass, a refused push): what failed, that the agent must not push,
@@ -355,7 +363,7 @@ const MAX_OUTPUT_LINE = 200
 export function failurePrompt(input: { step: string; failure: Pick<GitFailure, 'kind' | 'message' | 'tail'> }): string {
   const { failure } = input
   const reason = OWN_MESSAGE.has(failure.kind) ? `：${oneLine(failure.message, 60)}` : ''
-  const head = `Wavi 运行「${oneLine(input.step, 40)}」时失败了${reason}。请查明原因并修好，确认构建和测试通过后提交，完成后告诉我。不要推送。`
+  const head = `${WAVI_TEXT_MARK}Wavi 运行「${oneLine(input.step, 40)}」时失败了${reason}。请查明原因并修好，确认构建和测试通过后提交，完成后告诉我。不要推送。`
   const lines = failure.tail
     .split('\n')
     .map((line) => oneLine(line, MAX_OUTPUT_LINE))
@@ -386,7 +394,7 @@ export function divergedPrompt(input: { branch: string; remote: string }): strin
   const remote = shellWord(input.remote) ?? '<远程仓库>'
   const branch = shellWord(input.branch)
   const named = branch === null ? '当前分支' : input.branch
-  return `本地分支 ${named} 和它跟踪的远程分支（@{upstream}）各有对方没有的提交（分支名照 git 的输出引用，${AS_DATA}）。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase，分支没有设置跟踪时运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branch ?? '<当前分支>'}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`
+  return `${WAVI_TEXT_MARK}本地分支 ${named} 和它跟踪的远程分支（@{upstream}）各有对方没有的提交（分支名照 git 的输出引用，${AS_DATA}）。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase，分支没有设置跟踪时运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branch ?? '<当前分支>'}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`
 }
 
 /** The icon of the block's title: a run's kind, or `push` for the chain's plain 推送 (a push-pr run with no PR). */

@@ -198,6 +198,49 @@ error: failed to push some refs to 'github.com:o/r.git'`
     expect(classifyGitFailure('pr-create', output, ctx)).toMatchObject({ kind: 'pre-push-hook' })
   })
 
+  it('reads a pre-push hook that printed network or login words as the hook, not as the network or a login', () => {
+    // Real git 2.50 output: the hook's lines, then git's own, with no ref line (nothing reached the remote).
+    const hookOutput = (lines: string) => `${lines}\nerror: failed to push some refs to '../r.git'`
+    for (const lines of ['dial tcp 127.0.0.1:5432: connect: connection refused', 'Authentication failed for user test', "fatal: 'db' does not appear to be a git repository"]) {
+      expect(classifyGitFailure('push', hookOutput(lines), ctx)).toMatchObject({ kind: 'pre-push-hook', message: 'pre-push hook 没通过', next: 'handoff' })
+      expect(kind('pr-create', hookOutput(lines))).toBe('pre-push-hook')
+    }
+    // git's own transport failures are still read as such.
+    expect(kind('push', `error: RPC failed; HTTP 500 curl 22 The requested URL returned error: 500\nfatal: the remote end hung up unexpectedly\nerror: failed to push some refs to 'https://github.com/o/r.git'`)).not.toBe('pre-push-hook')
+  })
+
+  it('reads only local classes at the merge and rebase steps, which never reach a remote', () => {
+    // A pre-commit hook run by `git merge --continue` (real output: only the hook's line).
+    for (const output of ['dial tcp 127.0.0.1:5432: connect: connection refused', 'Authentication failed for the test database', "fatal: 'origin' does not appear to be a git repository", 'remote: error: GH006: Protected branch update failed for refs/heads/main.']) {
+      for (const step of ['merge', 'rebase'] as const) expect(classifyGitFailure(step, output, ctx)).toMatchObject({ kind: 'unknown', next: null })
+    }
+    expect(kind('merge', CONFLICT)).toBe('conflicts')
+    expect(kind('merge', DIRTY)).toBe('dirty')
+    expect(kind('rebase', HUSKY8_PRE_COMMIT)).toBe('commit-hook')
+  })
+
+  it('does not read a verbose pre-commit hook that passed as a failed one', () => {
+    const passedVerbose = `check yaml...............................................................Passed
+- hook id: check-yaml
+- duration: 0.03s`
+    expect(classifyGitFailure('commit', `${passedVerbose}\nerror: gpg failed to sign the data\nfatal: failed to write commit object`, ctx)).toMatchObject({ kind: 'signing' })
+    expect(classifyGitFailure('push', `${passedVerbose}\nssh: Could not resolve hostname github.com: nodename nor servname provided, or not known\nfatal: Could not read from remote repository.`, ctx)).toMatchObject({
+      kind: 'network',
+      next: null
+    })
+    const failedVerbose = `mypy.....................................................................Failed
+- hook id: mypy
+- duration: 1.2s
+- exit code: 1`
+    expect(kind('commit', failedVerbose)).toBe('commit-hook')
+    expect(kind('commit', 'ruff format..............................................................Failed\n- hook id: ruff-format\n- files were modified by this hook')).toBe('commit-hook')
+  })
+
+  it('does not read a commit object git could not write for permissions as signing', () => {
+    const output = 'error: insufficient permission for adding an object to repository database .git/objects\nfatal: failed to write commit object'
+    expect(classifyGitFailure('commit', output, ctx)).toMatchObject({ kind: 'unknown', message: '提交失败：failed to write commit object' })
+  })
+
   it('says a push or fetch needs a login, without trying to recover', () => {
     for (const output of Object.values(AUTH)) {
       expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'auth', message: '推送需要登录：在终端里运行一次 git push', next: null })
@@ -315,11 +358,40 @@ To github.com:o/r.git
  ! [remote rejected] wavi/fix-login -> wavi/fix-login (push declined due to repository rule violations)
 error: failed to push some refs to 'github.com:o/r.git'`
     const failure = classifyGitFailure('push', secret, ctx)
-    expect(failure).toMatchObject({ kind: 'protected-branch', message: 'wavi/fix-login 被仓库规则拒绝', next: null })
+    expect(failure).toMatchObject({ kind: 'protected-branch', message: 'wavi/fix-login 被推送保护拒绝：提交里有密钥', next: null })
     expect(failure.tail).toContain('Push cannot contain secrets')
-    expect(classifyGitFailure('pr-create', secret, ctx)).toMatchObject({ message: 'wavi/fix-login 被仓库规则拒绝', next: null })
+    expect(classifyGitFailure('pr-create', secret, ctx)).toMatchObject({ message: 'wavi/fix-login 被推送保护拒绝：提交里有密钥', next: null })
     const signed = ' ! [remote rejected] feat -> feat (push declined due to repository rule violations)\nremote: - Commits must have verified signatures.'
-    expect(classifyGitFailure('push', `remote: error: GH013: Repository rule violations found.\n${signed}`, ctx)).toMatchObject({ message: 'feat 被仓库规则拒绝', next: null })
+    expect(classifyGitFailure('push', `remote: error: GH013: Repository rule violations found.\n${signed}`, ctx)).toMatchObject({ message: 'feat 被仓库规则拒绝：提交需要验证过的签名', next: null })
+    const other = ' ! [remote rejected] feat -> feat (push declined due to repository rule violations)\nremote: - Changes must be made through a pull request.'
+    expect(classifyGitFailure('push', `remote: error: GH013: Repository rule violations found.\n${other}`, ctx)).toMatchObject({ message: 'feat 被仓库规则拒绝', next: null })
+  })
+
+  it('names push protection and a signature rule, and offers no PR for them, whatever ref was refused (a PR carries the same commits)', () => {
+    const secretOnBase = `remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote:
+remote: - GITHUB PUSH PROTECTION
+remote:   —————————————————————————————————————————
+remote:     Resolve the following violations before pushing again
+remote:
+remote:     - Push cannot contain secrets
+To github.com:o/r.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:o/r.git'`
+    const secret = classifyGitFailure('push', secretOnBase, ctx)
+    expect(secret).toMatchObject({ kind: 'protected-branch', message: 'main 被推送保护拒绝：提交里有密钥', next: null })
+    expect(secret.tail).toContain('Push cannot contain secrets')
+    expect(classifyGitFailure('push', 'remote: error: GH009: Secrets detected! This push failed.\n ! [remote rejected] main -> main (pre-receive hook declined)', ctx)).toMatchObject({
+      message: 'main 被推送保护拒绝：提交里有密钥',
+      next: null
+    })
+    const unsigned = `remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote: - Commits must have verified signatures.
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:o/r.git'`
+    expect(classifyGitFailure('push', unsigned, ctx)).toMatchObject({ kind: 'protected-branch', message: 'main 被仓库规则拒绝：提交需要验证过的签名', next: null })
+    const protectedUnsigned = 'remote: error: GH006: Protected branch update failed for refs/heads/main.\nremote: error: Commits must have verified signatures.'
+    expect(classifyGitFailure('push', protectedUnsigned, ctx)).toMatchObject({ message: 'main 被仓库规则拒绝：提交需要验证过的签名', next: null })
   })
 
   it('offers 改为创建 PR only for a refused push, not for a PR GitHub will not merge', () => {

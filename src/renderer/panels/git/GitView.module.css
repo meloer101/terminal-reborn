@@ -587,9 +587,16 @@ button.pill:hover {
   background: var(--fill-primary);
 }
 
-/* While a Ship run is open the boxes show what it commits and do not change. */
+/* While a Ship run is open the boxes show what it commits and do not change: muted, the ticked ones still filled. */
 .tick:disabled {
   cursor: default;
+  border-color: var(--border-default);
+}
+
+.tick:disabled[aria-checked='true'],
+.tick:disabled[aria-checked='mixed'] {
+  border-color: var(--text-tertiary);
+  background: var(--text-tertiary);
 }
 
 .tick:focus-visible {

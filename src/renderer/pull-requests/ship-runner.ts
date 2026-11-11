@@ -14,7 +14,7 @@ import type { ReviewAgent } from '@shared/background-review'
 import type { SavedShipContext, SavedShipRun } from '@shared/saved-runs'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ShipError, ShipPreflight, StepId } from '@shared/ship'
-import { agentHandoffPrompt } from '@shared/ship-chain'
+import { agentHandoffPrompt, mergeConflictPrompt } from '@shared/ship-chain'
 import type { Session, SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { cancelBackgroundReview, startBackgroundReview, useBackgroundReview } from '../review/background'
@@ -22,14 +22,12 @@ import { insertIntoTerminal, submitPrompt } from '../session-io'
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
-import { useChainStore } from './chain-store'
 import {
   agentFree,
   backToGlance,
   begin,
   canTakeMessage,
   complete,
-  conflictPrompt,
   createFailureStep,
   divergedPrompt,
   fail,
@@ -47,6 +45,7 @@ import {
   retry,
   setTexts,
   startState,
+  stepWord,
   syncConflictText,
   toGlance,
   toRunning,
@@ -75,8 +74,12 @@ interface Run {
   merged?: string
   /** The commit this run made of `ctx.paths` (its hash), once known: a retry after a reload does not commit again. */
   commit?: string
-  /** Taken up after a reload: main may have committed or merged meanwhile, so the first retry asks before it acts. */
+  /** Taken up after a reload while its commit (or 合并到 main 并推送's merge) was under way: main may have committed or
+   *  merged meanwhile, so the first retry asks before it acts. */
   resumed?: boolean
+  /** Taken up after a reload at all: a commit main refuses because the ticked files have nothing left to commit went in
+   *  while no window watched. */
+  restored?: boolean
   /** 同步: how far the branch is behind the base when it started (the hand-off names it); null when not known. */
   behind?: number | null
 }
@@ -86,8 +89,13 @@ export interface ShipStartOptions {
   /** A branch never pushed is rebased onto the base, a pushed one merges it (ShipPreflight.pushed). */
   syncMode?: 'rebase' | 'merge'
   behind?: number | null
-  /** The branch's tip the run starts from (its preflight's `head`); default: the preflight Git · 变更 last read. */
+  /** The branch's tip the run starts from (the preflight the starting command just read); default: `ctx.head`, else
+   *  unknown (the reload check then falls back to the older count). */
   head?: string
+  /** 合并到 <base> 并推送: where the base is pushed (the preflight's `baseRemote`), for the push step's label. */
+  baseRemote?: string | null
+  /** 拉取: what it fetches (the preflight's `pullFrom`), for the step's label. */
+  pullFrom?: string | null
 }
 
 const runs = new Map<string, Run>()
@@ -186,11 +194,19 @@ export function savedShipRuns(): SavedShipRun[] {
   return saved
 }
 
+/** The step that was under way when the block was saved: where main may have gone on without a window. Only a commit
+ *  (or 合并到 main 并推送's merge, which commits inside it) can have landed then; at the glance, the writing or a failed
+ *  step nothing ran. */
+function interruptedAtCommit(item: SavedShipRun): boolean {
+  const working = item.state.steps.find((s) => s.state === 'working')?.id
+  return working === 'commit' || (item.kind === 'main' && working === 'merge')
+}
+
 /** Blocks an earlier window left open come back; the step that was under way is failed for 重试 (interruptedShip). */
 export function restoreShipRuns(saved: readonly SavedShipRun[], settings: ShipContext['settings']): void {
   for (const item of saved) {
     if (runs.has(item.ctx.worktree)) continue
-    const run: Run = { ctx: { ...item.ctx, settings }, kind: item.kind, token: ++counter, committed: item.committed, resumed: true }
+    const run: Run = { ctx: { ...item.ctx, settings }, kind: item.kind, token: ++counter, committed: item.committed, restored: true, resumed: interruptedAtCommit(item) }
     if (item.merged) run.merged = item.merged
     if (item.commit) run.commit = item.commit
     runs.set(item.ctx.worktree, run)
@@ -215,7 +231,7 @@ export function startShipRuns(): () => void {
     if (s.byWorktree !== prev.byWorktree) requestSave()
   })
   void window.tr.settings.get().then((all) => {
-    for (const run of runs.values()) if (run.resumed) run.ctx = { ...run.ctx, settings: { review: all.review, pr: all.pr } }
+    for (const run of runs.values()) if (run.restored) run.ctx = { ...run.ctx, settings: { review: all.review, pr: all.pr } }
   })
   return () => {
     offSnapshot()
@@ -225,16 +241,12 @@ export function startShipRuns(): () => void {
 
 // --- starting and steering ----------------------------------------------------------------------------------------
 
-/** The branch tip the preflight Git · 变更 (or the command that starts a run) last read, when it is this branch's. */
-function knownHead(ctx: Pick<ShipContext, 'worktree' | 'branch'>): string | undefined {
-  const preflight = useChainStore.getState().preflights[ctx.worktree]
-  return preflight?.ok && preflight.branch === ctx.branch ? preflight.head : undefined
-}
-
 export function startShip(ctx: ShipContext, kind: ShipKind, title: string, options: ShipStartOptions = {}): void {
   if (runs.has(ctx.worktree)) return
   const token = ++counter
-  const head = options.head ?? knownHead(ctx)
+  // The tip the starting command just read (or the run's own, carried over by 改为创建 PR); never an older preflight a
+  // panel left in the chain store, which would make the reload check judge commits made before the run.
+  const head = options.head ?? ctx.head
   runs.set(ctx.worktree, { ctx: head ? { ...ctx, head } : ctx, kind, token, committed: false, behind: options.behind ?? null })
   const state = startState(
     {
@@ -243,6 +255,8 @@ export function startShip(ctx: ShipContext, kind: ShipKind, title: string, optio
       base: ctx.base,
       branch: ctx.branch,
       remote: ctx.remote,
+      ...(options.baseRemote !== undefined ? { baseRemote: options.baseRemote } : {}),
+      ...(options.pullFrom !== undefined ? { pullFrom: options.pullFrom } : {}),
       review: reviewWanted(ctx, kind),
       uncommitted: (ctx.paths?.length ?? 0) > 0,
       ...(ctx.method ? { method: ctx.method } : {}),
@@ -292,11 +306,15 @@ export function retryShip(worktree: string): void {
   if (patch(worktree, run.token, retry)) void drive(worktree, run.token)
 }
 
-/** What 交给 <agent> puts into the input line for a failed step: the text worked out when it failed, else the files. */
-export function handoffText(error: ShipError | null | undefined, base: string): string | null {
+/** Whether a failed step has something for 交给 <agent> to type (handoffText is not null). */
+export const hasHandoffText = (error: ShipError | null | undefined): boolean => Boolean(error?.prompt || (error?.conflicts && error.conflicts.length > 0))
+
+/** What 交给 <agent> puts into the input line for a failed step: the text worked out when it failed, else the files
+ *  (a block saved before the text was worked out). */
+export function handoffText(error: ShipError | null | undefined, base: string, branch: string): string | null {
   if (!error) return null
   if (error.prompt) return error.prompt
-  if (error.conflicts && error.conflicts.length > 0) return conflictPrompt(base, error.conflicts)
+  if (error.conflicts && error.conflicts.length > 0) return mergeConflictPrompt({ base, branch, conflicts: error.conflicts })
   return null
 }
 
@@ -304,7 +322,7 @@ export function handoffText(error: ShipError | null | undefined, base: string): 
  *  the run ends. */
 export async function handConflictsToAgent(worktree: string): Promise<void> {
   const run = runs.get(worktree)
-  const text = handoffText(current(worktree)?.error, run?.ctx.base ?? 'main')
+  const text = run ? handoffText(current(worktree)?.error, run.ctx.base, run.ctx.branch) : null
   const session = shipHandoffSession(worktree)
   if (!run || !text || !session) return
   const sessionId = session.id
@@ -329,10 +347,11 @@ export async function handConflictsToAgent(worktree: string): Promise<void> {
   }
 }
 
-/** 改为创建 PR: the base's push was refused, so the branch goes up as a PR instead. */
+/** 改为创建 PR: the base's push was refused, so the branch goes up as a PR instead (offered only where 创建 PR can work,
+ *  see prPossible). */
 export function switchToPr(worktree: string): void {
   const run = runs.get(worktree)
-  if (!run) return
+  if (!run || !current(worktree)?.error?.pushRefused) return
   const { ctx } = run
   cancelShip(worktree)
   startShip({ ...ctx, paths: null }, 'pr', '创建 PR')
@@ -673,12 +692,12 @@ const stepDone = (state: ShipState, id: string): boolean => state.steps.some((s)
  * on is 交给 <agent>, the text that goes into its input line.
  */
 function stepError(state: ShipState, run: Run, step: StepId, message: string, failure: GitFailure | undefined, extra: Partial<ShipError> = {}): ShipError {
-  const label = state.steps.find((s) => s.id === step)?.label ?? step
+  const found = state.steps.find((s) => s.id === step)
   const prompt =
     failure?.next === 'handoff'
       ? failure.kind === 'diverged'
         ? divergedPrompt({ branch: run.ctx.branch, remote: run.ctx.remote ?? 'origin' })
-        : failurePrompt({ step: label, failure })
+        : failurePrompt({ step: found ? stepWord(found) : step, failure })
       : undefined
   return { step, message: failure?.message ?? message, ...extra, ...(failure ? { failure } : {}), ...(prompt ? { prompt } : {}) }
 }
@@ -689,10 +708,25 @@ function onlyPaths(diff: string, paths: readonly string[]): boolean {
   return headers.length > 0 && headers.every((line) => paths.some((path) => line.endsWith(` b/${path}`)))
 }
 
+/** Whether a diff has a file header for every one of `paths`. */
+function namesEvery(diff: string, paths: readonly string[]): boolean {
+  const headers = diff.split('\n').filter((line) => line.startsWith('diff --git '))
+  return paths.every((path) => headers.some((line) => line.endsWith(` b/${path}`)))
+}
+
+/** None of `paths` is uncommitted now (the change list read now); false when that cannot be told. */
+async function noneUncommitted(ctx: ShipContext): Promise<boolean> {
+  const changes = await window.tr.git.changes(ctx.worktree).catch(() => null)
+  if (!changes || changes.untrackedOmitted > 0) return false
+  const left = new Set(changes.uncommitted.map((c) => c.path))
+  return (ctx.paths ?? []).every((path) => !left.has(path))
+}
+
 /**
  * After a reload: the commit of `ctx.paths` the run made while no window watched (main goes on without the window),
- * decided from the commit, never from what is left uncommitted (unticked files stay). The hash it remembers; else,
- * when it knows the tip it started from, a branch moved off that tip by a commit of only its files (`now` is the
+ * decided from the commit, never from a count of what is left uncommitted (unticked files stay). The hash it remembers;
+ * else, when it knows the tip it started from, a branch moved off that tip by a commit of exactly its files — every one
+ * of them in it and none still uncommitted (a commit the agent made of some of them is not the run's) — (`now` is the
  * preflight read now). null: not made. undefined: an older saved run that knows neither (the caller's old check).
  */
 async function landedCommit(run: Run, now: ShipPreflight | null): Promise<string | null | undefined> {
@@ -700,8 +734,24 @@ async function landedCommit(run: Run, now: ShipPreflight | null): Promise<string
   const { ctx } = run
   if (!ctx.head) return undefined
   if (!ctx.paths || !now?.ok || now.head === ctx.head) return null
-  const diff = await window.tr.ship.diffSince({ root: ctx.root, worktree: ctx.worktree, since: ctx.head }).catch(() => null)
-  return diff !== null && onlyPaths(diff, ctx.paths) ? now.head : null
+  const [diff, committed] = await Promise.all([
+    window.tr.ship.diffSince({ root: ctx.root, worktree: ctx.worktree, since: ctx.head }).catch(() => null),
+    noneUncommitted(ctx)
+  ])
+  return committed && diff !== null && onlyPaths(diff, ctx.paths) && namesEvery(diff, ctx.paths) ? now.head : null
+}
+
+/**
+ * A commit main refused (blocked, nothing classified) in a run taken up after a reload: when the branch moved off the
+ * start tip and none of the ticked files is uncommitted any more, they went in while no window watched (a commit the
+ * landed-commit check could not read as only the run's); the tip now, else null.
+ */
+async function committedMeanwhile(run: Run): Promise<string | null> {
+  const { ctx } = run
+  if (!run.restored || !ctx.head || !ctx.paths) return null
+  const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
+  if (!now?.ok || now.head === ctx.head) return null
+  return (await noneUncommitted(ctx)) ? now.head : null
 }
 
 /** Before the commit step of a run taken up after a reload: the commit it made meanwhile is completed, not made again.
@@ -768,7 +818,9 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
         committed,
         stepError(committed, run, step, result.message, result.failure, {
           ...(result.output ? { output: result.output } : {}),
-          ...(result.conflicts && result.conflicts.length > 0 ? { conflicts: result.conflicts } : {})
+          ...(result.conflicts && result.conflicts.length > 0
+            ? { conflicts: result.conflicts, prompt: mergeConflictPrompt({ base: ctx.base, branch: ctx.branch, conflicts: result.conflicts }) }
+            : {})
         })
       )
     })
@@ -777,11 +829,25 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
   if (!mergeDone) patch(worktree, token, (s) => complete(hasCommit ? complete(s, 'commit') : s, 'merge'))
   run.merged = result.commit
   if (result.pushError) {
-    patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.pushError!, result.failure, result.pushRefused ? { pushRefused: true } : {})))
+    // 改为创建 PR only where a PR can be made; the merge Wavi kept on the local base is said with the class's words.
+    const refused = result.pushRefused === true && (await prPossible(ctx))
+    if (!alive(worktree, token)) return
+    const kept = `（合并已留在本地 ${ctx.base} 上）`
+    const failure = result.failure
+      ? { ...result.failure, message: `${result.failure.message}${kept}`, next: !refused && result.failure.next === 'create-pr' ? null : result.failure.next }
+      : undefined
+    patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.pushError!, failure, refused ? { pushRefused: true } : {})))
     return
   }
   patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : '没有远程，没有推送'))
   finish(worktree, token, `已合并到 ${ctx.base}${result.pushed ? ' 并推送' : ''} · ${result.commit.slice(0, 7)}`)
+}
+
+/** 创建 PR can work for the run's branch: its remote is a GitHub repository and gh is installed and signed in (the
+ *  chain blocks 创建 PR otherwise), as a fresh preflight says. */
+async function prPossible(ctx: ShipContext): Promise<boolean> {
+  const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
+  return Boolean(now?.ok && now.remote !== null && now.remoteOnGitHub === true && now.gh === 'ready')
 }
 
 /** Exit B, and a push to the branch's open PR: commit if needed, then push (and create). */
@@ -797,12 +863,15 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
       paths: ctx.paths ?? []
     })
     if (!alive(worktree, token)) return
-    if (!made.ok) {
+    const landed = !made.ok && !made.failure ? await committedMeanwhile(run) : null
+    if (!alive(worktree, token)) return
+    if (!made.ok && !landed) {
       patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
       return
     }
-    run.commit = made.commit
-    patch(worktree, token, (s) => complete(s, 'commit', made.commit.slice(0, 7)))
+    const hash = made.ok ? made.commit : landed!
+    run.commit = hash
+    patch(worktree, token, (s) => complete(s, 'commit', hash.slice(0, 7)))
   }
   if (!alive(worktree, token)) return
   if (kind === 'push-pr') {
@@ -833,8 +902,12 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
       patch(worktree, token, backToGlance)
       return
     }
-    // gh pr create pushes first: a classified push failure names the push step.
-    const step = created.failure && created.failure.kind !== 'not-github' && created.failure.kind !== 'no-pr' && created.failure.kind !== 'unknown' ? 'push' : createFailureStep(created.message)
+    // Main says which half failed (the push, or gh pr create); an older main does not: a classified push failure then
+    // names the push step.
+    const step =
+      created.step ??
+      (created.failure && created.failure.kind !== 'not-github' && created.failure.kind !== 'no-pr' && created.failure.kind !== 'unknown' ? 'push' : createFailureStep(created.message))
+    if (step === 'create') patch(worktree, token, (s) => begin(complete(s, 'push'), 'create'))
     patch(worktree, token, (s) => fail(s, stepError(s, run, step, created.message, created.failure)))
     return
   }
@@ -851,13 +924,16 @@ async function runCommit(worktree: string, token: number, run: Run, state: ShipS
   patch(worktree, token, (s) => begin(s, 'commit'))
   const made = await window.tr.pr.commit({ root: ctx.root, worktree: ctx.worktree, message: state.texts.commit, paths: ctx.paths ?? [] })
   if (!alive(worktree, token)) return
-  if (!made.ok) {
+  const landed = !made.ok && !made.failure ? await committedMeanwhile(run) : null
+  if (!alive(worktree, token)) return
+  if (!made.ok && !landed) {
     patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
     return
   }
-  run.commit = made.commit
-  patch(worktree, token, (s) => complete(s, 'commit', made.commit.slice(0, 7)))
-  finish(worktree, token, `已提交 · ${made.commit.slice(0, 7)}`)
+  const hash = made.ok ? made.commit : landed!
+  run.commit = hash
+  patch(worktree, token, (s) => complete(s, 'commit', hash.slice(0, 7)))
+  finish(worktree, token, `已提交 · ${hash.slice(0, 7)}`)
 }
 
 /** 同步 <base> (Figma 73D1 / 73D2): main fetches, brings the base in, and on conflicts starts nothing. */
@@ -885,9 +961,10 @@ async function runSync(worktree: string, token: number, run: Run): Promise<void>
     )
     return
   }
-  // A fetch that failed stops at 拉取; the rest at the rebase / merge.
+  // A fetch that failed stops at 拉取 (main says so); the rest at the rebase / merge. An older main does not say: the
+  // classes only a fetch has then.
   const { failure } = result
-  const atFetch = failure.kind === 'network' || failure.kind === 'auth' || failure.kind === 'no-remote'
+  const atFetch = result.step === 'fetch' || failure.kind === 'network' || failure.kind === 'auth' || failure.kind === 'no-remote'
   patch(worktree, token, (s) => fail(atFetch ? s : complete(s, 'sync'), stepError(s, run, atFetch ? 'sync' : 'merge', failure.message, failure)))
 }
 
@@ -899,7 +976,9 @@ async function runPull(worktree: string, token: number, run: Run): Promise<void>
   if (!alive(worktree, token)) return
   if (result.ok) {
     patch(worktree, token, (s) => complete(s, 'sync'))
-    finish(worktree, token, `已拉取 ${ctx.remote ?? 'origin'}/${ctx.branch}`)
+    // The step names what was fetched (its upstream, which may be named otherwise than the local branch).
+    const label = current(worktree)?.steps.find((s) => s.id === 'sync')?.label
+    finish(worktree, token, label ? `已${label}` : `已拉取 ${ctx.remote ?? 'origin'}/${ctx.branch}`)
     return
   }
   if (result.reason === 'blocked') patch(worktree, token, (s) => fail(s, { step: 'sync', message: result.message }))

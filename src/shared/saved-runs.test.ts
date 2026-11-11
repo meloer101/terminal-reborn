@@ -90,9 +90,12 @@ describe('sanitizeShipRuns', () => {
     expect(sanitizeShipRuns([commit], worktrees)).toEqual([commit])
     expect(sanitizeShipRuns([sync], worktrees)).toEqual([sync])
     expect(sanitizeShipRuns([pull], worktrees)).toEqual([pull])
-    // An unknown method is dropped, the run kept; a failure that does not validate drops the run.
+    // An unknown method is dropped, the run kept. L10: so is a failure that does not validate (a newer build's): the run
+    // keeps its commit, message and step.
     expect(sanitizeShipRuns([{ ...shipRun, ctx: { ...shipRun.ctx, method: 'octopus' } }], worktrees)).toEqual([shipRun])
-    expect(sanitizeShipRuns([{ ...commit, state: { ...commit.state, error: { ...commit.state.error, failure: { ...failure, next: 'deploy' } } } }], worktrees)).toEqual([])
+    const newer = { ...commit, commit: 'abc1234', state: { ...commit.state, error: { ...commit.state.error, failure: { ...failure, next: 'deploy' } } } }
+    const { failure: _dropped, ...withoutFailure } = commit.state.error
+    expect(sanitizeShipRuns([newer], worktrees)).toEqual([{ ...newer, state: { ...commit.state, error: withoutFailure } }])
   })
 
   // Review findings 15 / 16: the tip a run started from and the commit it made come back; anything else is dropped.

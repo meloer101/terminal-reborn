@@ -1,6 +1,6 @@
 // Runs the Git view's main-process functions against throwaway repos.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
@@ -87,6 +87,22 @@ describe('logPage', () => {
 })
 
 describe('changes', () => {
+  // R20: edits inside a submodule are not a change of this repository to commit (commit, 同步 and the preflight ignore
+  // them); a submodule whose checked-out commit moved is.
+  it('lists a submodule only when its commit moved, as git status --ignore-submodules=dirty does', async () => {
+    const sub = repo()
+    sub.write('s.txt', 's\n')
+    sub.commit('sub init')
+    const r = repo()
+    r.write('a.txt', 'a\n')
+    r.git('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', sub.dir, 'sub')
+    r.commit('init')
+    writeFileSync(join(r.dir, 'sub', 's.txt'), 'edited inside\n')
+    expect((await changes(r.dir, 'main'))?.uncommitted.map((c) => c.path)).toEqual([])
+    execFileSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-am', 'sub moves'], { cwd: join(r.dir, 'sub') })
+    expect((await changes(r.dir, 'main'))?.uncommitted.map((c) => c.path)).toEqual(['sub'])
+  })
+
   it('compares against a base whose name git accepts but looks unusual', async () => {
     const r = repo()
     r.commit('init')
@@ -208,6 +224,22 @@ describe('changes · review stamps (合入链路 v2)', () => {
     expect(after.committed['a.txt']).toMatch(/^M:1:0:-:-:/)
     expect(after.committed['a.txt']).not.toBe(before.committed['a.txt'])
     expect(after.committed['gone.txt']).toBe(before.committed['gone.txt'])
+  })
+
+  it('drops a committed stamp when a later commit changes only the file mode', async () => {
+    const r = repo()
+    r.write('run.sh', 'echo one\n')
+    r.commit('init')
+    r.git('switch', '-q', '-c', 'feat')
+    r.write('run.sh', 'echo two\n')
+    r.commit('feat')
+    const before = await stamps(r.dir, 'main')
+    chmodSync(join(r.dir, 'run.sh'), 0o755)
+    r.commit('chmod +x run.sh')
+    expect(r.git('diff', '--raw', 'HEAD~1', 'HEAD').trim()).toMatch(/^:100644 100755 /)
+    const after = await stamps(r.dir, 'main')
+    expect(after.committed['run.sh']).toMatch(/^M:1:1:-:-:/)
+    expect(after.committed['run.sh']).not.toBe(before.committed['run.sh'])
   })
 })
 

@@ -29,7 +29,8 @@ import {
 import { hadOwnCommits, mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
 import { gitAvailable } from './git-graph'
-import { baseRemoteFor } from './git/remote'
+import { operationOnBranch } from './git/operation'
+import { baseRemoteFor, renamedUpstream } from './git/remote'
 import { lastLines, pinned, pushEnv, runGit } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
@@ -228,10 +229,10 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
 
   const baseIndex = entries.findIndex((e) => !e.bare && e.branch === base)
   check.baseCheckout = baseIndex < 0 ? null : reals[baseIndex]!
-  if (check.baseCheckout) {
-    const baseOperation = await operationIn(check.baseCheckout)
-    if (baseOperation) return done({ kind: 'busy', where: 'base', operation: baseOperation })
-  }
+  // In the base's checkout, or a rebase of the base stopped in any checkout (detached there): exit A's catch-up and the
+  // fast-forward below would move the ref under it.
+  const baseOperation = await operationOnBranch(entries, base)
+  if (baseOperation) return done({ kind: 'busy', where: 'base', operation: baseOperation })
 
   try {
     const counts = (await git(realRoot, ['rev-list', '--left-right', '--count', `${baseHead}...${head}`])).trim().split(/\s+/)
@@ -305,7 +306,13 @@ async function advanceBase(inspection: Inspection, commit: string, expected: str
       commitOf(check.baseCheckout, 'HEAD')
     ])
     if (branch.trim() !== `refs/heads/${check.base}` || head !== expected) throw new StaleError()
-    await git(check.baseCheckout, pinned.merge('--ff-only', '--no-edit', '--quiet', commit), { timeout: CHECKOUT_TIMEOUT_MS })
+    try {
+      await git(check.baseCheckout, pinned.merge('--ff-only', '--no-edit', '--quiet', commit), { timeout: CHECKOUT_TIMEOUT_MS })
+    } catch (error) {
+      // Moved between the check and the fast-forward (another session's 同步, a commit there): stale, not diverged.
+      if ((await commitOf(check.baseCheckout, 'HEAD')) !== expected) throw new StaleError()
+      throw error
+    }
   } else {
     await git(realRoot, ['update-ref', '-m', `wavi: merge ${check.branch} into ${check.base}`, `refs/heads/${check.base}`, commit, expected])
   }
@@ -330,8 +337,11 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
 }
 
 /** Pushes the local base to `remote`; '' when it went through, else what git
- *  printed (its whole stderr, so the failure can be classified). */
+ *  printed (its whole stderr, so the failure can be classified). A base that tracks another branch name there is not
+ *  pushed (see renamedUpstream). */
 export async function pushBase(realRoot: string, base: string, remote = 'origin'): Promise<string> {
+  const renamed = await renamedUpstream(realRoot, base, remote)
+  if (renamed) return `${base} 跟踪的是 ${renamed}，不是同名分支，没有推送`
   const ran = await runGit(realRoot, pinned.push('--quiet', '--', remote, `refs/heads/${base}:refs/heads/${base}`), {
     timeout: PUSH_TIMEOUT_MS,
     maxStdout: MAX_BUFFER,

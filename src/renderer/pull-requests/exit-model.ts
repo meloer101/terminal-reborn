@@ -42,8 +42,10 @@ function exitsOf(chain: ChainState, input: ChainInput): Exits {
   if (!preflight.ok) return both('main')
   if (input.pr) {
     const { number } = input.pr
-    // The chain's own count: the PR poll can lag behind the preflight's remote branch.
-    if (input.local.uncommitted > 0 || chain.unpushed) return { primary: { kind: 'push-pr', number, label: pr.label, blocker: pr.blocker }, secondary: null }
+    // The chain's own count: the PR poll can lag behind the preflight's remote branch. Only ticked files are sent: a
+    // nested repository or an unticked file is not something to push.
+    const ticked = Math.min(input.ticked ?? input.local.uncommitted, input.local.uncommitted)
+    if (ticked > 0 || chain.unpushed) return { primary: { kind: 'push-pr', number, label: pr.label, blocker: pr.blocker }, secondary: null }
     return { primary: { kind: 'open-pr', number, label: `打开 PR #${number}`, blocker: null }, secondary: null }
   }
   if (preflight.remote === null || preflight.remoteOnGitHub === false) return { primary: main, secondary: null }
@@ -88,7 +90,7 @@ export interface ExitInput {
   sessions?: readonly Pick<Session, 'status'>[]
   /** The conflict radar's files against the base. */
   radarConflicts?: readonly string[] | null
-  /** Ticked uncommitted files (Git · 变更's checkboxes); omitted: every one (the phone has no checkboxes). */
+  /** Ticked uncommitted files (Git · 变更's checkboxes, which the phone honours too); omitted: every one. */
   ticked?: number
 }
 
@@ -143,7 +145,7 @@ export function shipContextFor(input: {
   openIn: SessionId | null
   checksLine: string | null
   settings: Pick<AppSettings, 'review' | 'pr'>
-  /** The ticked 未提交 paths (合入链路 v2); omitted: every one (the phone has no checkboxes). */
+  /** The ticked 未提交 paths (合入链路 v2: the Mac's checkboxes, for the phone too); omitted: every tickable one. */
   ticked?: readonly string[]
 }): ShipContext {
   const paths = input.ticked ? [...input.ticked] : input.changes.uncommitted.filter((c) => !c.nested).map((c) => c.path)

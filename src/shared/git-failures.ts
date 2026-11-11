@@ -97,8 +97,8 @@ const COMMIT_HOOKS = 'pre-commit|commit-msg|prepare-commit-msg|pre-merge-commit'
 /** husky 8 (`husky - pre-push hook exited with code 1`) and 9 (`husky - pre-push script failed (code 1)`). */
 const HUSKY = /husky - ([a-z-]+) (?:hook exited|script failed)/
 const NAMED_HOOK = new RegExp(`\\b(pre-push|${COMMIT_HOOKS}) hook\\b(?! declined)`)
-/** The pre-commit framework's report of a failed hook. */
-const PRE_COMMIT_FRAMEWORK = /^- hook id: /m
+/** The pre-commit framework's report of a failed hook (a verbose hook that passed prints `- hook id:` too, never these). */
+const PRE_COMMIT_FRAMEWORK = /^- hook id: [^\n]*\n(?:- duration: [^\n]*\n)?- (?:exit code: |files were modified by this hook)/m
 
 const PROTECTED =
   /GH006|GH013|protected branch|branch protection|repository rule violations|Changes must be made through a pull request|required status checks?/i
@@ -110,7 +110,8 @@ const NON_FF = /\((?:non-fast-forward|fetch first)\)|Updates were rejected becau
 const DIVERGED = /Not possible to fast-forward|Diverging branches can't be fast-forwarded|have diverged/i
 const PRE_RECEIVE = /pre-receive hook declined/
 const IDENTITY = /Please tell me who you are|empty ident name|unable to auto-detect email address/i
-const SIGNING = /gpg failed to sign|signing failed|error: Load key|incorrect passphrase|cannot run gpg|No secret key|failed to write commit object/i
+// Not `failed to write commit object`: git prints it after any failed write (an object directory it may not write to).
+const SIGNING = /gpg failed to sign|signing failed|error: Load key|incorrect passphrase|cannot run gpg|No secret key/i
 const AUTH =
   /Authentication failed|Permission denied \(publickey|could not read (?:Username|Password)|terminal prompts disabled|Host key verification failed|Repository not found|The requested URL returned error: 40[13]|Permission to \S+ denied/i
 const NO_REMOTE = /does not appear to be a git repository|No configured push destination|No remote repository specified/
@@ -122,6 +123,11 @@ const DIRTY = /local changes to the following files would be overwritten|untrack
 const CONFLICTS = /^CONFLICT \(|Automatic merge failed|could not apply [0-9a-f]+/m
 const PUSH_FAILED = /failed to push some refs/
 const REMOTE_REJECTION = /! \[(?:rejected|remote rejected)\]/
+/** git's own words for a connection that broke during a push (a hook does not print these). */
+const TRANSPORT = /RPC failed|remote end hung up|send-pack: unexpected disconnect|Could not read from remote repository/
+/** Rules a PR cannot get round: it pushes the same commits (GitHub push protection / secret scanning, signed commits). */
+const PUSH_PROTECTION = /GITHUB PUSH PROTECTION|Push cannot contain secrets|GH009|Secrets detected/i
+const SIGNATURE_RULE = /Commits must have verified signatures|must have (?:a )?verified signatures?|require[sd]? signed commits|signed commits are required/i
 
 /** The line an unknown failure is summed up by: git's last `fatal:` / `error:` line, else the last line. */
 function summaryLine(tail: string): string {
@@ -162,11 +168,25 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
   // The same key words mean a commit that could not be signed, or a push whose SSH key wants its passphrase.
   if (COMMIT_STEPS.has(step) && SIGNING.test(text)) return fail('signing', '提交签名需要口令', null)
 
-  // A commit never reaches a remote: what a hook printed about networks, logins or remotes is the hook's own business.
-  if (step === 'commit') {
+  // A commit, merge or rebase never reaches a remote: what a hook printed about networks, logins or remotes is the
+  // hook's own business.
+  if (COMMIT_STEPS.has(step)) {
     if (DIRTY.test(text)) return fail('dirty', CHAIN_TEXT.commitFirst, 'commit')
     if (CONFLICTS.test(text)) return fail('conflicts', `和 ${context.base} 有冲突`, 'handoff')
-    return unknown(step, tail, 'handoff', fail)
+    return unknown(step, tail, step === 'commit' ? 'handoff' : null, fail)
+  }
+
+  // A pre-push hook that printed no name: git refused before any ref was sent, so nothing was rejected. Read before the
+  // remote classes, since the hook's own output (tests against a database, a login) can say anything.
+  if ((step === 'push' || step === 'pr-create') && PUSH_FAILED.test(text) && !REMOTE_REJECTION.test(text) && !TRANSPORT.test(text)) {
+    return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
+  }
+
+  // Refused for what the commits hold: a PR pushes the same commits, so 改为创建 PR does not help on any ref.
+  const ruleRef = (): string => PROTECTED_REF.exec(text)?.[1] ?? REMOTE_REJECTED_REF.exec(text)?.[1] ?? context.base
+  if (PUSH_PROTECTION.test(text)) return fail('protected-branch', `${ruleRef()} 被推送保护拒绝：提交里有密钥`, null)
+  if (SIGNATURE_RULE.test(text) && (PROTECTED.test(text) || REMOTE_REJECTION.test(text))) {
+    return fail('protected-branch', `${ruleRef()} 被仓库规则拒绝：提交需要验证过的签名`, null)
   }
 
   if (PROTECTED.test(text)) {
@@ -191,11 +211,6 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
 
   if (DIRTY.test(text)) return fail('dirty', CHAIN_TEXT.commitFirst, 'commit')
   if (CONFLICTS.test(text)) return fail('conflicts', `和 ${context.base} 有冲突`, 'handoff')
-
-  // A pre-push hook that printed no name: git refused before any ref was sent, so nothing was rejected.
-  if ((step === 'push' || step === 'pr-create') && PUSH_FAILED.test(text) && !REMOTE_REJECTION.test(text)) {
-    return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
-  }
 
   return unknown(step, tail, null, fail)
 }

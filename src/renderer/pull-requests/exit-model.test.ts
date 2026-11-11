@@ -165,6 +165,15 @@ describe('exitPlan', () => {
   const plan = (patch: Partial<Parameters<typeof exitPlan>[0]> = {}) =>
     exitPlan({ preflight: ok(), remembered: null, prStatus: null, changes, isMain: false, projectRoot: '/r', ...patch })
 
+  // R24: with an open PR, files nothing can tick (a nested repository) or that are unticked are not something to send.
+  it('opens the PR when no uncommitted file is ticked and nothing is unpushed', () => {
+    const prStatus = { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0 } as never
+    const nested = { ...changes, uncommitted: [{ path: 'vendor/x', status: '?', untracked: true, nested: true }] } as never
+    expect(plan({ preflight: ok({ openPr: 7, uncommitted: 1 }), prStatus, changes: nested, ticked: 0 }).exits.primary).toEqual({ kind: 'open-pr', number: 7, label: '打开 PR #7', blocker: null })
+    const one = { ...changes, uncommitted: [{ path: 'a.ts', status: 'M' }] } as never
+    expect(plan({ preflight: ok({ openPr: 7, uncommitted: 1 }), prStatus, changes: one, ticked: 1 }).exits.primary).toMatchObject({ kind: 'push-pr', label: '提交并推送到 PR #7' })
+  })
+
   it('offers both exits for a branch with work, and says what blocks them', () => {
     const p = plan()
     expect(p.exits.primary.kind).toBe('main')

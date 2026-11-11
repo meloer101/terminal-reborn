@@ -35,6 +35,7 @@ const setPrNotice = vi.fn()
 vi.mock('./store', () => ({ setPrNotice: (...args: unknown[]) => setPrNotice(...args) }))
 
 const { cancelShip, editShip, handConflictsToAgent, handoffText, restoreShipRuns, retryShip, savedShipRuns, shipCanRetry, shipFinished, shipHandoffSession, startShip, submitShip, useShips } = await import('./ship-runner')
+const { useChainStore } = await import('./chain-store')
 
 const shipToMain = vi.fn<(request: unknown) => Promise<ShipMainResult>>()
 const commit = vi.fn<(request: unknown) => Promise<unknown>>()
@@ -45,6 +46,8 @@ const pushBase = vi.fn<(target: unknown) => Promise<ShipMainResult>>()
 const preflight = vi.fn<(target: unknown) => Promise<unknown>>()
 const readHandoff = vi.fn<(request: unknown) => Promise<string | null>>()
 const diffSince = vi.fn<(request: unknown) => Promise<string | null>>()
+const changes = vi.fn<(worktree: string) => Promise<unknown>>()
+const create = vi.fn<(request: unknown) => Promise<unknown>>()
 
 const ctx = {
   root: '/repo',
@@ -86,6 +89,10 @@ beforeEach(() => {
   readHandoff.mockReset()
   diffSince.mockReset()
   diffSince.mockResolvedValue(null)
+  changes.mockReset()
+  // What is uncommitted now: nothing of the run's ticked files by default.
+  changes.mockResolvedValue({ uncommitted: [], untrackedOmitted: 0 })
+  create.mockReset()
   readHandoff.mockResolvedValue('feat: from the agent\n')
   detectAgents.mockReset()
   detectAgents.mockResolvedValue({ claude: true, codex: true })
@@ -98,7 +105,8 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
   vi.stubGlobal('window', {
     tr: {
-      pr: { write: async () => ({ ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {}, commit },
+      pr: { write: async () => ({ ok: true, kind: 'commit', agent: 'claude', message: 'feat: new' }), cancelWrite: () => {}, refresh: async () => {}, commit, create, push: async () => ({ ok: true, message: '已推送' }) },
+      git: { changes },
       ship: { shipToMain, pushBase, preflight, sync, pull, diffSince, handoff: async (r: { kind: string }) => ({ ok: true, path: `/repo-wt/.git/wavi/${r.kind}.md` }), readHandoff },
       agent: { onEvent: () => () => {} },
       app: { detectAgents },
@@ -138,7 +146,8 @@ describe('合并到 main 并推送 after its push failed', () => {
     // 同步 cannot repair a local base that diverged from its remote, and 重试 would be refused the same way.
     const failure = { kind: 'non-fast-forward' as const, message: '远程有本地没有的提交', next: null, tail: '! [rejected] main -> main (fetch first)' }
     await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败', failure })
-    expect(state().error).toMatchObject({ step: 'push', message: '远程有本地没有的提交', failure })
+    // R47: the class's words, and Wavi's own note that the merge stays on the local base.
+    expect(state().error).toMatchObject({ step: 'push', message: '远程有本地没有的提交（合并已留在本地 main 上）', failure: { ...failure, message: '远程有本地没有的提交（合并已留在本地 main 上）' } })
     expect(failureWay(state().error!)).toBeNull()
     expect(state().steps.map((s) => [s.id, s.state])).toEqual([
       ['write', 'done'],
@@ -157,8 +166,32 @@ describe('合并到 main 并推送 after its push failed', () => {
   })
 
   it('offers 改为创建 PR when main says the base is protected', async () => {
+    preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1, remote: 'origin', remoteOnGitHub: true, gh: 'ready' })
     await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: 'main 受保护', pushRefused: true })
     expect(state().error).toMatchObject({ step: 'push', pushRefused: true })
+  })
+
+  // R46: a GitLab repository, or gh signed out: 创建 PR cannot work there, so it is not offered.
+  it('offers no 改为创建 PR where a PR cannot be made', async () => {
+    const failure = { kind: 'protected-branch' as const, message: 'main 受保护', next: 'create-pr' as const, tail: 'remote: GitLab: You are not allowed to push code to protected branches' }
+    for (const where of [{ remoteOnGitHub: false, gh: 'ready' }, { remoteOnGitHub: true, gh: 'signed-out' }]) {
+      cancelShip(ctx.worktree)
+      shipToMain.mockReset()
+      preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 1, remote: 'origin', ...where })
+      await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: 'main 受保护', pushRefused: true, failure })
+      expect(state().error).not.toHaveProperty('pushRefused')
+      expect(failureWay(state().error!)).toBeNull()
+    }
+  })
+
+  // R37: exit A's conflicts go to the agent as one line, names quoted as data.
+  it('has the one-line merge hand-off ready when the merge conflicts', async () => {
+    await shipUntilPushFails({ ok: false, step: 'merge', reason: 'conflicts', message: '3 个文件和 main 冲突', conflicts: ['a.ts', 'b.ts', 'c.ts'] })
+    const prompt = state().error!.prompt!
+    expect(prompt).not.toContain('\n')
+    expect(prompt).toContain('"a.ts"、"b.ts"、"c.ts"')
+    expect(prompt).toContain('GIT_EDITOR=true git merge refs/heads/main')
+    expect(handoffText(state().error, 'main', 'feat')).toBe(prompt)
   })
 
   it('stays on the push step when the retried push fails too', async () => {
@@ -188,6 +221,20 @@ describe('合并到 main 并推送 after its push failed', () => {
 })
 
 describe('a Ship block across a reload (architecture review, batch 6)', () => {
+  // R31: the start tip is the one the starting command read, never an older preflight a panel left in the store.
+  it('keeps no start tip it was not given', async () => {
+    useChainStore.setState({ preflights: { [ctx.worktree]: { ok: true, branch: 'feat', head: 'h_old' } as never } })
+    startShip(ctx, 'commit', '提交 1 个文件')
+    await settle()
+    expect(savedShipRuns()[0]?.ctx).not.toHaveProperty('head')
+    cancelShip(ctx.worktree)
+    startShip(ctx, 'commit', '提交 1 个文件', { head: 'h_new' })
+    await settle()
+    expect(savedShipRuns()[0]?.ctx).toMatchObject({ head: 'h_new' })
+    cancelShip(ctx.worktree)
+    useChainStore.setState({ preflights: {} })
+  })
+
   it('is saved without the settings, and comes back with the step under way failed, ready for 重试', async () => {
     shipToMain.mockReturnValueOnce(new Promise(() => {}))
     startShip(ctx, 'main', 'feat: new')
@@ -297,6 +344,58 @@ describe('a Ship block across a reload (architecture review, batch 6)', () => {
       expect(savedShipRuns()[0]).toMatchObject({ commit: 'h1' })
     })
 
+    // R26: the agent, still running in its terminal, committed some of the ticked files while the window reloaded.
+    it('a commit of only some of the ticked files is not the run’s: the rest are committed with the user’s message', async () => {
+      const both = { ...ctx, paths: ['a.ts', 'b.ts'] }
+      commit.mockReturnValueOnce(new Promise(() => {}))
+      startShip(both, 'commit', '提交 2 个文件', { head: 'h0' })
+      await settle()
+      submitShip(ctx.worktree)
+      await settle()
+      const [saved] = savedShipRuns()
+      cancelShip(ctx.worktree)
+      restoreShipRuns([saved!], ctx.settings)
+      preflight.mockResolvedValueOnce({ ok: true, merged: false, uncommitted: 1, head: 'h1' })
+      diffSince.mockResolvedValueOnce('diff --git a/a.ts b/a.ts\n')
+      changes.mockResolvedValue({ uncommitted: [{ path: 'b.ts' }], untrackedOmitted: 0 })
+      commit.mockResolvedValueOnce({ ok: true, commit: 'c2c2c2c2', subject: 'feat: new' })
+      retryShip(ctx.worktree)
+      await settle()
+      expect(commit).toHaveBeenCalledTimes(2)
+      expect(commit).toHaveBeenLastCalledWith(expect.objectContaining({ paths: ['a.ts', 'b.ts'], message: 'feat: new' }))
+      expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已提交 · c2c2c2c' })
+    })
+
+    // R26: a block saved at its glance never committed anything: it is not taken up as resumed.
+    it('a block saved before its commit ran does not look for a commit made meanwhile', async () => {
+      startShip({ ...ctx, sessionId: null }, 'commit', '提交 1 个文件', { head: 'h0' })
+      await settle()
+      expect(state().stage).toBe('glance')
+      const [saved] = savedShipRuns()
+      cancelShip(ctx.worktree)
+      restoreShipRuns([saved!], ctx.settings)
+      commit.mockResolvedValueOnce({ ok: true, commit: 'c2c2c2c2', subject: 'feat: new' })
+      submitShip(ctx.worktree)
+      await settle()
+      expect(diffSince).not.toHaveBeenCalled()
+      expect(commit).toHaveBeenCalledTimes(1)
+    })
+
+    // R30: the run's commit went in, then the branch moved again: the landed-commit check cannot tell, main refuses
+    // the commit for having nothing left; the step is done instead of a 重试 that repeats the refusal.
+    it('a commit main refuses for having nothing left, after a reload, is the one that went in', async () => {
+      await reloaded('commit', () => commit.mockReturnValueOnce(new Promise(() => {})))
+      preflight.mockResolvedValue({ ok: true, merged: false, uncommitted: 0, head: 'h2abcdef' })
+      diffSince.mockResolvedValueOnce('diff --git a/new.txt b/new.txt\ndiff --git a/z.ts b/z.ts\n')
+      commit.mockResolvedValueOnce({ ok: false, reason: 'blocked', message: '勾选的文件已经没有改动了' })
+      retryShip(ctx.worktree)
+      await settle()
+      expect(useShips.getState().byWorktree[ctx.worktree]).toBeUndefined()
+      expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已提交 · h2abcde' })
+    })
+
+    // R58: a known limit of the legacy check (no start tip): a partial tick whose commit went in is committed again
+    // (main refuses it); such a save exists once, from before the start tip was kept.
     it('an older saved run without the start tip keeps the old check', async () => {
       shipToMain.mockReturnValueOnce(new Promise(() => {}))
       startShip(ctx, 'main', 'feat: new')
@@ -429,9 +528,9 @@ describe('合入链路 v2 runs', () => {
       ['merge', 'failed']
     ])
     expect(state().error).toMatchObject({ step: 'merge', message: 'rebase 会冲突 · store.ts', conflicts: ['src/store.ts'] })
-    expect(state().error!.prompt).toContain('GIT_EDITOR=true git rebase main')
+    expect(state().error!.prompt).toContain('GIT_EDITOR=true git rebase refs/heads/main')
     expect(state().error!.prompt).toContain('落后 5 个提交')
-    expect(handoffText(state().error, 'main')).toBe(state().error!.prompt)
+    expect(handoffText(state().error, 'main', 'feat')).toBe(state().error!.prompt)
   })
 
   // Review findings 20 / 41: 交给 <agent> names, enables and types into the same session: the one the run started with.
@@ -461,6 +560,40 @@ describe('合入链路 v2 runs', () => {
     startShip({ ...ctx, sessionId: 's9', paths: null }, 'sync', '同步 main', { syncMode: 'rebase' })
     await settle()
     expect(shipHandoffSession(ctx.worktree)).toBeNull()
+  })
+
+  // R28 / R44 / R53: main says the fetch failed; the merge never started.
+  it('同步 whose fetch failed stops at the fetch step, whatever the class', async () => {
+    const failure = { kind: 'unknown' as const, message: "拉取失败：fatal: couldn't find remote ref refs/heads/feat", next: null, tail: "fatal: couldn't find remote ref refs/heads/feat" }
+    sync.mockResolvedValueOnce({ ok: false, reason: 'failed', failure, step: 'fetch' })
+    startShip({ ...ctx, paths: null }, 'sync', '同步 main', { syncMode: 'merge' })
+    await settle()
+    expect(state().steps.map((s) => [s.id, s.state])).toEqual([
+      ['sync', 'failed'],
+      ['merge', 'pending']
+    ])
+  })
+
+  // R50: gh pr create failed after the push went through: the push is done, 创建 PR failed.
+  it('创建 PR whose gh call failed after the push shows the push done and the create failed', async () => {
+    create.mockResolvedValueOnce({ ok: false, reason: 'failed', message: 'gh 没能创建 PR：error connecting to api.github.com', failure: { kind: 'network', message: '连不上 GitHub：检查网络后重试', next: null, tail: '' }, step: 'create' })
+    startShip({ ...ctx, paths: null }, 'pr', '创建 PR')
+    await settle()
+    editShip(ctx.worktree, { title: 't' })
+    submitShip(ctx.worktree)
+    await settle()
+    expect(state().steps.filter((s) => s.id === 'push' || s.id === 'create').map((s) => [s.id, s.state])).toEqual([
+      ['push', 'done'],
+      ['create', 'failed']
+    ])
+  })
+
+  // R71: the notice names what 拉取 fetched (the step's label).
+  it('拉取 says what it fetched', async () => {
+    pull.mockResolvedValueOnce({ ok: true })
+    startShip({ ...ctx, paths: null }, 'pull', '拉取', { pullFrom: 'origin/jacoy/feat' })
+    await settle()
+    expect(setPrNotice).toHaveBeenLastCalledWith('/repo-wt', { tone: 'muted', text: '已拉取 origin/jacoy/feat' })
   })
 
   it('拉取 of a diverged branch fails with the merge hand-off', async () => {

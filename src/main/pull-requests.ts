@@ -10,14 +10,13 @@
 // roots must be the workspace's, worktrees theirs, and no value reaches git or gh where it could be read as an option.
 // v1.63 adds the write (PRD F16 · L2): merging the PR (pinned to the head Wavi checked; GitHub auto-merge when the
 // repository allows it, else 检查通过后合并 is refused). It runs only on a button the user clicked.
-import { readdir, readFile, realpath } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { hostWindowFor } from './app-windows'
 import { classifyGitFailure, type GitFailure, type GitFailureContext, type GitStep } from '@shared/git-failures'
-import { operationInProgress, type GitOperation } from '@shared/git-merge'
-import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
+import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
 import { CHAIN_TEXT } from '@shared/ship-chain'
 import {
   cleanFailedLog,
@@ -68,8 +67,9 @@ import {
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { confirm } from './confirm'
-import { remoteFor } from './git/remote'
-import { git, GIT_TIMEOUT_MS, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pinned, pushEnv, refExists, runProcess, searchPath, type Ran } from './git/run'
+import { operationOnBranch } from './git/operation'
+import { baseRemoteFor, remoteFor } from './git/remote'
+import { ENGLISH_LOCALE, git, GIT_TIMEOUT_MS, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pinned, pushEnv, refExists, runProcess, searchPath, type Ran } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
 const GH_TIMEOUT_MS = 30_000
@@ -101,7 +101,9 @@ async function ghEnv(): Promise<Record<string, string>> {
     GH_PAGER: 'cat',
     NO_COLOR: '1',
     CLICOLOR: '0',
-    GIT_TERMINAL_PROMPT: '0'
+    GIT_TERMINAL_PROMPT: '0',
+    // The git gh runs (pushes in `gh pr create`, `gh pr merge`) speaks English, as Wavi's own git does.
+    ...ENGLISH_LOCALE
   })
 }
 
@@ -350,19 +352,23 @@ function schedule(entry: Entry, delay?: number): void {
   entry.timer.unref?.()
 }
 
-function setStatus(entry: Entry, branch: string | null, pr: PullRequestInfo | null, local?: PrStatus['local']): PrStatus {
+/** `error`: the PR was read but a part of it (its details) could not be, in words; the status says so until it can. */
+function setStatus(entry: Entry, branch: string | null, pr: PullRequestInfo | null, local?: PrStatus['local'], error?: string): PrStatus {
   const previous = entry.status
+  const since = error ? (entry.errorSince ??= Date.now()) : null
   const status: PrStatus = {
     worktree: entry.target.worktree,
     branch,
     pr,
     checkedAt: Date.now(),
-    ...(local ? { local } : {})
+    ...(local ? { local } : {}),
+    ...(error && since !== null ? { error: { message: error, since } } : {})
   }
   entry.status = status
-  entry.errorSince = null
+  entry.errorSince = since
   const sameLocal = JSON.stringify(previous?.local) === JSON.stringify(status.local)
-  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameLocal || previous.error) broadcast(status)
+  const sameError = previous?.error?.message === status.error?.message && previous?.error?.since === status.error?.since
+  if (!previous || previous.branch !== branch || !samePullRequest(previous.pr, pr) || !sameLocal || !sameError) broadcast(status)
   return status
 }
 
@@ -406,6 +412,8 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
   }
   entry.failures = 0
   let pr = found.pr
+  /** The details could not be read and none are known: 合并 PR #N… says why rather than waiting on them. */
+  let detailsError: string | undefined
   if (pr && (pr.state === 'open' || pr.state === 'draft')) {
     const more = await prDetails(where.repo, pr.number)
     if ('details' in more && more.details) pr = { ...pr, details: more.details }
@@ -414,6 +422,7 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
       const known = entry.status?.pr
       if (known?.number === pr.number && known.details) pr = { ...pr, details: known.details }
       if ('error' in more && isRateLimited(more.error)) pausedUntil = Date.now() + PR_POLL.rateLimitMs
+      if ('error' in more && !pr.details) detailsError = classifyGitFailure('pr-status', more.error, { base: info.base ?? 'main', remote: info.remote }).message
     }
   }
   let local: PrStatus['local']
@@ -424,12 +433,12 @@ async function checkOnce(entry: Entry): Promise<PrStatus | null> {
     else if (head) local = { head, remoteAhead: false }
   }
   const wasOpen = entry.status?.pr?.number === pr?.number && (entry.status?.pr?.state === 'open' || entry.status?.pr?.state === 'draft')
-  const status = setStatus(entry, info.branch, pr, local)
+  const status = setStatus(entry, info.branch, pr, local, detailsError)
   // Merged on GitHub (auto-merge, the queue, or someone else): bring the base here too, as after Wavi's own merge. Nobody
   // waits on this poll: a base that could not follow is logged (the preflight counts it as behind its upstream).
-  if (wasOpen && pr?.state === 'merged' && info.remote && info.base) {
-    const caught = await catchUpBase(info.cwd, info.remote, info.base)
-    if (!caught.ok) console.error(`[pull-requests] ${info.base} did not catch up after PR #${pr.number} was merged:`, caught.message)
+  if (wasOpen && pr?.state === 'merged' && info.base) {
+    const caught = await catchUpMergedBase(info.cwd, info.branch, info.base)
+    if (caught && !caught.ok) console.error(`[pull-requests] ${info.base} did not catch up after PR #${pr.number} was merged:`, caught.message)
   }
   return status
 }
@@ -582,10 +591,10 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
       )
       if (!yes) return { ok: false, reason: 'declined', message: '没有推送，也没有创建 PR' }
       const pushed = await git(cwd, pinned.push('--quiet', '--set-upstream', '--', remote, `refs/heads/${branch}:refs/heads/${branch}`), { timeout: PUSH_TIMEOUT_MS, env })
-      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }) }
+      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }), step: 'push' }
     } else if ((await countCommits(cwd, `refs/remotes/${remote}/${headBranch}..refs/heads/${branch}`)) !== 0) {
       const pushed = await git(cwd, pinned.push('--quiet', '--', remote, `refs/heads/${branch}:${info.remoteRef}`), { timeout: PUSH_TIMEOUT_MS, env })
-      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }) }
+      if (pushed.code !== 0) return { ok: false, reason: 'failed', message: `推送失败：${lastLines(pushed.stderr || pushed.stdout)}`, failure: classified('push', pushed, { base, remote }), step: 'push' }
     }
 
     const subjects = (await gitOut(cwd, ['log', '--reverse', '--max-count=101', '--format=%s', `${baseRef}..refs/heads/${branch}`, '--'])).split('\n').filter(Boolean)
@@ -610,7 +619,9 @@ export async function createPullRequest(raw: unknown, parent?: BrowserWindow | n
         ok: false,
         reason: 'failed',
         message: `gh 没能创建 PR：${lastLines(created.stderr || created.stdout) || `退出码 ${created.code}`}`,
-        failure: classified('pr-create', created, { base, remote })
+        failure: classified('pr-create', created, { base, remote }),
+        // The branch is on the remote by now: gh's own call failed, not the push.
+        step: 'create'
       }
     }
     await refreshAfterCreate(request.worktree)
@@ -882,28 +893,6 @@ async function localHas(cwd: string, oid: string, branch: string): Promise<boole
   return (await git(cwd, ['merge-base', '--is-ancestor', oid, `refs/heads/${branch}`])).code === 0
 }
 
-/**
- * A merge, rebase, cherry-pick or revert in progress on `branch` in any worktree: in the checkout that has it out, or a
- * rebase of it whose HEAD is detached (git's is_worktree_being_rebased). Moving the ref under it would break it.
- */
-async function operationOnBranch(listing: readonly PorcelainWorktree[], branch: string): Promise<GitOperation | null> {
-  for (const entry of listing) {
-    if (entry.bare || (entry.branch && entry.branch !== branch)) continue
-    const gitDir = (await gitOut(entry.path, ['rev-parse', '--absolute-git-dir'])).trim()
-    if (!gitDir) continue
-    if (entry.branch === branch) {
-      const kind = operationInProgress(await readdir(gitDir).catch(() => []))
-      if (kind) return kind
-      continue
-    }
-    for (const dir of ['rebase-merge', 'rebase-apply']) {
-      const head = await readFile(join(gitDir, dir, 'head-name'), 'utf8').catch(() => '')
-      if (head.trim() === `refs/heads/${branch}`) return 'rebase'
-    }
-  }
-  return null
-}
-
 /** Whether the local base followed its remote: moved or not, or why it could not (in words, and git's failure). */
 export type CatchUp = { ok: true; moved: boolean } | { ok: false; message: string; failure?: GitFailure }
 
@@ -943,6 +932,15 @@ export async function catchUpBase(cwd: string, remote: string, base: string, opt
   return ran.code === 0 ? { ok: true, moved: true } : { ok: false, message: `没能快进 ${base}：${lastLines(ran.stderr || ran.stdout)}` }
 }
 
+/**
+ * After a PR merged: the base catches up from the remote it is pushed to and tracks (see baseRemoteFor), not from the
+ * fork the branch was published to. null when the base has no such remote.
+ */
+async function catchUpMergedBase(cwd: string, branch: string | null, base: string): Promise<CatchUp | null> {
+  const remote = await baseRemoteFor(cwd, branch, base)
+  return remote ? catchUpBase(cwd, remote, base) : null
+}
+
 async function runMerge(entry: Entry, method: PrMergeRequest['method'], headOid: string, auto: boolean): Promise<Ran | null> {
   const pr = entry.status?.pr
   if (!pr || !entry.repo) return null
@@ -958,8 +956,8 @@ async function afterMerge(entry: Entry, deleteRemoteBranch: boolean): Promise<st
       const deleted = await git(info.cwd, pinned.push('--quiet', '--', info.remote, `:${info.remoteRef}`), { timeout: PUSH_TIMEOUT_MS, env: await pushEnv(info.cwd) })
       if (deleted.code !== 0) console.error(`[pull-requests] could not delete ${info.remote} ${info.remoteRef}:`, lastLines(deleted.stderr || deleted.stdout))
     }
-    const caught = await catchUpBase(info.cwd, info.remote, info.base)
-    if (!caught.ok) notCaughtUp = caught.message
+    const caught = await catchUpMergedBase(info.cwd, info.branch, info.base)
+    if (caught && !caught.ok) notCaughtUp = caught.message
   }
   await checkEntry(entry)
   return notCaughtUp

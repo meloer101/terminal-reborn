@@ -296,7 +296,9 @@ export async function shipPreflight(raw: unknown): Promise<ShipPreflight> {
     behindBase,
     baseConflicts: check ? check.conflicts.map((c) => c.path) : null,
     pushed: pushed !== null,
-    upstream: branchUpstream
+    upstream: branchUpstream,
+    baseRemote,
+    pullFrom: pushed ? `${pushed.remote}/${pushed.remoteRef.replace(/^refs\/heads\//, '')}` : null
   }
 }
 
@@ -420,6 +422,12 @@ async function syncBase(root: string, check: MergePrecheck): Promise<{ moved: bo
   return ran.code === 0 ? { moved: true } : cannot(`：${lastLines(ran.stderr || ran.stdout)}`)
 }
 
+const REBASE_GAVE_UP = '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」'
+
+/** A classified failure that only says what git printed (`unknown`) keeps Wavi's own, more specific sentence. */
+const ownWords = (classified: { failure: GitFailure } | Record<string, never>, message: string): { failure: GitFailure } | Record<string, never> =>
+  'failure' in classified && classified.failure.kind === 'unknown' ? { failure: { ...classified.failure, message } } : classified
+
 function mergeFailure(result: Extract<MergeResult, { ok: false }>, check: MergePrecheck, method: ShipMainRequest['method'], remote: string | null): ShipMainResult {
   const classified = (step: GitStep): { failure: GitFailure } | Record<string, never> =>
     result.message ? { failure: classifyGitFailure(step, result.message, { base: check.base, remote }) } : {}
@@ -430,7 +438,7 @@ function mergeFailure(result: Extract<MergeResult, { ok: false }>, check: MergeP
       if (result.conflicts && result.conflicts.length > 0) {
         return stepFailure('merge', 'conflicts', `${result.conflicts.length} 个文件和 ${check.base} 冲突`, { conflicts: result.conflicts.map((c) => c.path) })
       }
-      return stepFailure('merge', 'failed', `变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」`, { output: result.message, ...classified('rebase') })
+      return stepFailure('merge', 'failed', REBASE_GAVE_UP, { output: result.message, ...ownWords(classified('rebase'), REBASE_GAVE_UP) })
     case 'blocked':
       return stepFailure('merge', 'blocked', result.blocker ? blockerMessage(result.blocker, check.base) : '现在合并不了')
     case 'invalid':
@@ -612,16 +620,14 @@ async function fetchOnly(cwd: string, wanted: ReadonlyMap<string, readonly strin
   return null
 }
 
-/** The remote the local base catches up from (where it is pushed, see baseRemoteFor) when that remote has the base. */
-async function baseRemoteOf(cwd: string, branch: string, base: string): Promise<string | null> {
-  const remote = await baseRemoteFor(cwd, branch, base)
-  return remote && (await refExists(cwd, `refs/remotes/${remote}/${base}`)) ? remote : null
-}
+/** git's answer to a fetch of a branch the remote does not have. */
+const NO_SUCH_REMOTE_REF = /couldn't find remote ref/i
 
 /**
- * 同步 <base>: fetch the base and the branch's own pushed ref, nothing else (a failure is returned at the fetch step,
- * nothing else runs) → fast-forward the local base when its checkout is clean or nobody has it out (when it cannot, why
- * is returned and the branch syncs with the base as it is)
+ * 同步 <base>: fetch the base (a failure is returned at the fetch step, nothing else runs) and the branch's own pushed ref
+ * (its failure does not count), nothing else → fast-forward the local base when its checkout is clean or nobody has it
+ * out (when it cannot, why is returned and the branch syncs with what the preflight counts against: origin/<base> when
+ * the local base is only behind it)
  * → nothing to do when the branch has every base commit → merge-tree pre-check (conflicts: the files, nothing started)
  * → tracked uncommitted changes block → a branch never pushed is rebased onto the base, a pushed one merges it. Never
  * pushes. A rebase or merge that stops on conflicts anyway is aborted and answered as conflicts.
@@ -640,12 +646,18 @@ export async function syncWorktree(raw: unknown): Promise<ShipSyncResult> {
     if (!(await refExists(cwd, `refs/heads/${base}`))) return blockedResult(`找不到基线分支 ${base}`)
     const remote = await remoteFor(cwd, branch, base)
     const context = { base, remote }
-    const [pushed, baseRemote] = await Promise.all([pushedTo(cwd, info, remote), baseRemoteOf(cwd, branch, base)])
-    const wanted = new Map<string, string[]>()
-    if (baseRemote) wanted.set(baseRemote, [`+refs/heads/${base}:refs/remotes/${baseRemote}/${base}`])
-    if (pushed) wanted.set(pushed.remote, [...(wanted.get(pushed.remote) ?? []), pushedRefspec(pushed)])
-    const fetchFailed = await fetchOnly(cwd, wanted, base)
-    if (fetchFailed) return fetchFailed
+    // The base is fetched from where it is pushed (see baseRemoteFor) whether or not a remote-tracking ref of it was
+    // ever fetched (a remote added later); a remote without the branch is not a failure, the local base is used.
+    const [pushed, pushTo] = await Promise.all([pushedTo(cwd, info, remote), baseRemoteFor(cwd, branch, base)])
+    let baseRemote: string | null = null
+    if (pushTo) {
+      const fetchFailed = await fetchOnly(cwd, new Map([[pushTo, [`+refs/heads/${base}:refs/remotes/${pushTo}/${base}`]]]), base)
+      if (fetchFailed && !NO_SUCH_REMOTE_REF.test(fetchFailed.failure.tail)) return fetchFailed
+      if (!fetchFailed) baseRemote = pushTo
+    }
+    // The branch's own ref only refreshes what the preflight counts: a remote branch deleted after its PR merged (an
+    // upstream config stays behind) must not stop 同步, so its fetch failing is not one.
+    if (pushed) await fetchOnly(cwd, new Map([[pushed.remote, [pushedRefspec(pushed)]]]), base)
 
     let note: { baseNotCaughtUp?: string } = {}
     if (baseRemote) {
@@ -653,13 +665,16 @@ export async function syncWorktree(raw: unknown): Promise<ShipSyncResult> {
       if (!caught.ok) note = { baseNotCaughtUp: caught.message }
     }
 
-    if ((await countCommits(cwd, `refs/heads/${branch}..refs/heads/${base}`)) === 0) return { ok: true, ...note }
+    // What the preflight counts against (origin/<base> when the local base could not catch up and is only behind it):
+    // the base 同步 brings in, so the chain never offers a 同步 that changes nothing.
+    const baseRef = await baseCompareRef(cwd, base, branch)
+    if ((await countCommits(cwd, `refs/heads/${branch}..${baseRef}`)) === 0) return { ok: true, ...note }
     // Pushed (an upstream, even one git keeps no remote-tracking ref of): never rewritten, the base is merged in.
     const mode = pushed ? 'merge' : 'rebase'
 
     let conflicts: MergeConflict[] | null = null
     try {
-      conflicts = (await mergeTreeConflicts(cwd, `refs/heads/${base}`, `refs/heads/${branch}`)).conflicts
+      conflicts = (await mergeTreeConflicts(cwd, baseRef, `refs/heads/${branch}`)).conflicts
     } catch {
       // git < 2.38 has no merge-tree --write-tree: run it and abort on conflicts.
     }
@@ -671,10 +686,11 @@ export async function syncWorktree(raw: unknown): Promise<ShipSyncResult> {
 
     // The full ref (a tag of the same name never wins), with the message git would write for the short name. The user's
     // merge / rebase config does not change what runs (a merge.ff=only would refuse the merge commit 同步 is for).
+    const merged = baseRef.startsWith('refs/remotes/') ? `remote-tracking branch '${baseRef.slice('refs/remotes/'.length)}'` : `branch '${base}'`
     const args =
       mode === 'rebase'
-        ? pinned.rebase('--quiet', `refs/heads/${base}`)
-        : pinned.merge('--ff', '--no-edit', '--quiet', `--message=Merge branch '${base}' into ${branch}`, `refs/heads/${base}`)
+        ? pinned.rebase('--quiet', baseRef)
+        : pinned.merge('--ff', '--no-edit', '--quiet', `--message=Merge ${merged} into ${branch}`, baseRef)
     const ran = await git(cwd, args, { timeout: CHECKOUT_TIMEOUT_MS, env: await commitEnv() })
     if (ran.code === 0) return { ok: true, ...note }
     const files = await unresolvedPaths(cwd)
@@ -717,23 +733,35 @@ export async function pullWorktree(raw: unknown): Promise<ShipPullResult> {
 }
 
 /**
- * Tracked files a rebase or cherry-pick abort would lose: staged resolutions and edits made since the stop, besides the
- * unresolved files. Against AUTO_MERGE (git ≥ 2.42: the tree git wrote when it stopped), so what git itself staged for
- * the stopped commit does not count; without it, only edits not staged.
+ * Tracked files a 中止 would lose. A rebase abort is `reset --hard`: everything changed since the stop goes. A merge or
+ * cherry-pick abort is `reset --merge`: what is staged and the conflicted files go, an edit that is not staged in a file
+ * the operation did not touch stays.
+ *
+ * Against AUTO_MERGE (git ≥ 2.42: the tree git wrote when it stopped, conflict markers included), so what git itself
+ * staged does not count: staged changes besides the unresolved files (whose index entries always differ), a conflicted
+ * file edited since (not staged yet), and for a rebase any other edit. Without AUTO_MERGE nothing tells git's own work
+ * from the user's, so every staged change besides the unresolved files counts (for a rebase every edit too); an edited
+ * conflicted file cannot be told from its markers there.
  */
-async function lostOnAbort(cwd: string, unresolved: readonly string[]): Promise<string[]> {
+async function lostOnAbort(cwd: string, operation: ShipOperation): Promise<string[]> {
   const names = (out: string): string[] => out.split('\0').filter(Boolean)
+  const resets = operation.kind === 'rebase'
+  const unresolved = new Set(operation.unresolved)
   const hasAutoMerge = (await git(cwd, ['rev-parse', '--verify', '--quiet', 'AUTO_MERGE^{tree}'])).code === 0
-  const lists = hasAutoMerge
-    ? await Promise.all([gitOut(cwd, ['diff', '--name-only', '-z', '--cached', 'AUTO_MERGE', '--']), gitOut(cwd, ['diff', '--name-only', '-z', 'AUTO_MERGE', '--'])])
-    : [await gitOut(cwd, ['diff', '--name-only', '-z', '--'])]
-  const skip = new Set(unresolved)
-  return [...new Set(lists.flatMap(names))].filter((path) => !skip.has(path)).sort()
+  const stopped = hasAutoMerge ? 'AUTO_MERGE' : 'HEAD'
+  const literal = [...unresolved].map((path) => `:(literal)${path}`)
+  const [staged, edited, editedConflicts] = await Promise.all([
+    gitOut(cwd, ['diff', '--name-only', '-z', '--cached', stopped, '--']).then(names),
+    resets ? gitOut(cwd, ['diff', '--name-only', '-z', stopped, '--']).then(names) : Promise.resolve([]),
+    hasAutoMerge && literal.length > 0 ? gitOut(cwd, ['diff', '--name-only', '-z', 'AUTO_MERGE', '--', ...literal]).then(names) : Promise.resolve([])
+  ])
+  const besides = [...staged, ...edited].filter((path) => !unresolved.has(path))
+  return [...new Set([...besides, ...editedConflicts])].sort()
 }
 
 /**
- * 继续 / 中止 the merge, rebase or cherry-pick stopped in the worktree. 继续 with unresolved files answers them; 中止 of a
- * rebase or cherry-pick that would lose other changes asks first (`confirm`, then the request again with `force`).
+ * 继续 / 中止 the merge, rebase or cherry-pick stopped in the worktree. 继续 with unresolved files answers them; 中止 that
+ * would lose resolutions or other changes asks first (`confirm`, then the request again with `force`).
  */
 export async function shipOperation(raw: unknown): Promise<ShipOperationResult> {
   const request = parseShipOperationRequest(raw)
@@ -747,10 +775,13 @@ export async function shipOperation(raw: unknown): Promise<ShipOperationResult> 
     const step: GitStep = operation.kind === 'rebase' ? 'rebase' : 'merge'
     const context = { base: info.base ?? '基线', remote: null }
     if (request.action === 'abort') {
-      // A rebase or cherry-pick abort resets the worktree: resolutions and other edits made since it stopped go too.
-      if (operation.kind !== 'merge' && request.force !== true) {
-        const files = await lostOnAbort(cwd, operation.unresolved)
-        if (files.length > 0) return { ok: false, reason: 'confirm', files }
+      // An abort resets the worktree: resolutions (and, for a rebase, other edits) made since it stopped go too.
+      // Forced after a yes: asked again when it would now lose a file the user was not shown (edited while the
+      // confirmation was open). A renderer that sends no list is not compared.
+      if (request.force !== true || request.confirmed) {
+        const files = await lostOnAbort(cwd, operation)
+        const shown = new Set(request.confirmed ?? [])
+        if (request.force === true ? files.some((path) => !shown.has(path)) : files.length > 0) return { ok: false, reason: 'confirm', files }
       }
       const ran = await git(cwd, [operation.kind, '--abort'], { timeout: CHECKOUT_TIMEOUT_MS, env: NO_EDITOR })
       return ran.code === 0 ? { ok: true } : failedResult(step, printed(ran), context)

@@ -8,6 +8,7 @@ import type { GitChanges } from './git-graph/log'
 import { branchNameProblem, folderNameFor, type BranchNameProblem, type NewSessionBranch, type WorktreeCreateRequest } from './new-session'
 import { agentName, type CliAgent } from './agents'
 import { ATTEMPT_REPORT_HEADER } from './dispatch'
+import { branchArg } from './ship-chain'
 import type { SessionId, SessionStatus } from './types'
 
 /** Every installed CLI can take a part (v1.68). */
@@ -341,7 +342,8 @@ export function attemptReportText(input: { base: string; members: readonly Membe
   }
   lines.push(
     '',
-    `请比较这几份：用 git diff ${input.base}...<分支> 看各自的改动，说推荐哪一份、为什么，其余几份里有什么值得借鉴。合并由用户在 Wavi 里做；用户把一份合并到 ${input.base} 后，你接着做下一步。`
+    // The base comes from the repository: in the command it is one shell word of its full ref, or described.
+    `请比较这几份：用 git diff ${branchArg(input.base, '基线分支')}...<分支> 看各自的改动，说推荐哪一份、为什么，其余几份里有什么值得借鉴。合并由用户在 Wavi 里做；用户把一份合并到 ${input.base} 后，你接着做下一步。`
   )
   return lines.join('\n')
 }

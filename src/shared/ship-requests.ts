@@ -61,5 +61,9 @@ export function parseShipOperationRequest(raw: unknown): ShipOperationRequest | 
   const target = parsePrTarget(raw)
   if (!target || !isRecord(raw)) return null
   if (raw.action !== 'continue' && raw.action !== 'abort') return null
-  return { ...target, action: raw.action, ...(raw.force === true ? { force: true as const } : {}) }
+  if (raw.force !== true) return { ...target, action: raw.action }
+  if (raw.confirmed === undefined) return { ...target, action: raw.action, force: true }
+  const confirmed = raw.confirmed
+  if (!Array.isArray(confirmed) || confirmed.length > MAX_SHIP_FILES || !confirmed.every(isRelativePath)) return null
+  return { ...target, action: raw.action, force: true, confirmed: [...confirmed] }
 }

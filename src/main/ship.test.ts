@@ -209,8 +209,20 @@ describe('preflight', () => {
       behindBase: 0,
       baseConflicts: [],
       pushed: false,
-      upstream: null
+      upstream: null,
+      baseRemote: 'origin',
+      pullFrom: null
     })
+  })
+
+  // R60 / R71 / R25: where exit A pushes the base (the base's own remote), and what 拉取 fetches (the upstream's own name).
+  it('names where the base is pushed and the remote branch 拉取 fetches', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(root, 'remote', 'add', 'fork', bare)
+    git(wt, 'push', '-q', 'fork', 'feat:refs/heads/jacoy/feat')
+    git(wt, 'fetch', '-q', 'fork')
+    git(wt, 'branch', '-q', '--set-upstream-to=fork/jacoy/feat')
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, remote: 'fork', baseRemote: 'origin', pullFrom: 'fork/jacoy/feat' })
   })
 
   it('reads the merge methods the GitHub repository allows and its default, cached for a while', async () => {
@@ -382,6 +394,20 @@ describe('shipToMain', () => {
     expect(git(bare, 'log', '--format=%s', 'main').trim().split('\n')).toEqual(['feat: new file', 'Make nav sticky', 'main moved on', 'init'])
     expect(sha(root, 'feat')).toBe(sha(bare, 'main'))
     expect(git(wt, 'status', '--porcelain').trim()).toBe('?? other.txt')
+  })
+
+  // R47: a rebase that stops on a commit's conflicts although the trees merge cleanly is given up with Wavi's own
+  // sentence (use 压缩 or 合并), not git's hint lines that tell the user to abort a rebase already aborted.
+  it('rebase: a rebase given up on a commit’s conflicts keeps Wavi’s sentence', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
+    commit(wt, 'a.txt', 'one\ntwo\nthree\n', 'feat puts a back')
+    commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
+    git(root, 'push', '-q', 'origin', 'main')
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: x', method: 'rebase', paths: null })
+    expect(result).toMatchObject({ ok: false, step: 'merge', message: '变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」' })
+    if (!result.ok && result.failure) expect(result.failure.message).toBe('变基时遇到冲突，已放弃，分支没有变化：改用「压缩」或「合并」')
+    expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
   })
 
   it('without paths and without a message keeps the branch own commit message', async () => {
@@ -932,15 +958,15 @@ describe('同步 <base>', () => {
     expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
     expect(git(wt, 'log', '-1', '--format=%P%n%B', 'HEAD').trim()).toBe(`${pushed} ${sha(root, 'main')}\nMerge branch 'main' into feat`)
 
+    // rebase.autoSquash is not set here: git reads it only for an interactive rebase, which 同步 never runs.
     const fresh = setup({ github: false })
-    commit(fresh.wt, 'c.txt', 'c\n', 'fixup! Make nav sticky')
+    commit(fresh.wt, 'c.txt', 'c\n', 'more on feat')
     commit(fresh.root, 'm.txt', 'm\n', 'main moved on')
-    git(fresh.root, 'config', 'rebase.autoSquash', 'true')
     git(fresh.root, 'config', 'rebase.updateRefs', 'true')
     git(fresh.wt, 'branch', 'side', 'HEAD~1')
     const side = sha(fresh.wt, 'side')
     expect(await syncWorktree({ root: fresh.root, worktree: fresh.wt })).toEqual({ ok: true })
-    expect(git(fresh.wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['fixup! Make nav sticky', 'Make nav sticky', 'main moved on', 'init'])
+    expect(git(fresh.wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['more on feat', 'Make nav sticky', 'main moved on', 'init'])
     expect(sha(fresh.wt, 'side')).toBe(side)
   })
 
@@ -968,6 +994,64 @@ describe('同步 <base>', () => {
     expect(() => git(root, 'fetch', '-q', 'origin')).toThrow()
     expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
     expect(sha(root, 'main')).toBe(sha(bare, 'main'))
+  })
+
+  it('still syncs a pushed branch whose remote branch was deleted (a merged PR), merging the base as for any pushed branch', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const pushed = sha(wt, 'HEAD')
+    git(wt, 'push', '-q', 'origin', ':refs/heads/feat')
+    const other = cloneOf(bare)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(sha(root, 'main')).toBe(sha(bare, 'main'))
+    expect(git(wt, 'log', '-1', '--format=%P', 'HEAD').trim().split(' ')).toEqual([pushed, sha(bare, 'main')])
+  })
+
+  // R75: a remote added and never fetched (no remote-tracking ref of the base yet) is fetched all the same; a remote that
+  // has no such branch is not a failure, 同步 goes on with the local base.
+  it('fetches the base from its remote although no remote-tracking ref of it exists yet', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    const other = cloneOf(bare)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'update-ref', '-d', 'refs/remotes/origin/main')
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(sha(root, 'main')).toBe(sha(bare, 'main'))
+    expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'upstream work', 'init'])
+
+    const gone = setup({ github: false })
+    commit(gone.root, 'm.txt', 'm\n', 'local main work')
+    git(gone.root, 'update-ref', '-d', 'refs/remotes/origin/main')
+    git(gone.bare, 'branch', '-q', '-m', 'main', 'trunk')
+    expect(await syncWorktree({ root: gone.root, worktree: gone.wt })).toEqual({ ok: true })
+    expect(git(gone.wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'local main work', 'init'])
+  })
+
+  it('brings in what the preflight counts against when the local base cannot catch up, so 同步 is never a no-op', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    const other = cloneOf(bare)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'fetch', '-q', 'origin')
+    writeFileSync(join(root, 'a.txt'), 'edited in the main checkout\n')
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, behindBase: 1 })
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true, baseNotCaughtUp: 'main 的工作区有未提交的改动，没有快进到 origin/main' })
+    expect(git(wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['Make nav sticky', 'upstream work', 'init'])
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, behindBase: 0 })
+
+    // A pushed branch merges it, with the message git writes for a remote-tracking branch.
+    const pushedOne = setup({ github: false })
+    git(pushedOne.wt, 'push', '-q', '-u', 'origin', 'feat')
+    const elsewhere = cloneOf(pushedOne.bare)
+    commit(elsewhere, 'up.txt', 'u\n', 'upstream work')
+    git(elsewhere, 'push', '-q', 'origin', 'main')
+    writeFileSync(join(pushedOne.root, 'a.txt'), 'edited in the main checkout\n')
+    expect(await syncWorktree({ root: pushedOne.root, worktree: pushedOne.wt })).toMatchObject({ ok: true })
+    expect(git(pushedOne.wt, 'log', '-1', '--format=%P%n%s', 'HEAD').trim()).toBe(
+      `${sha(pushedOne.wt, 'HEAD^1')} ${sha(pushedOne.bare, 'main')}\nMerge remote-tracking branch 'origin/main' into feat`
+    )
   })
 
   it('fetches first and fast-forwards the clean base checkout to its upstream before bringing it in', async () => {
@@ -1179,7 +1263,24 @@ describe('继续 / 中止', () => {
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
   })
 
-  it('cherry-pick: 中止 does not count what git staged for the stopped commit itself', async () => {
+  // R29: a file edited while the confirmation was open is named before it is lost.
+  it('rebase: a forced 中止 asks again when it would now lose a file the user was not shown', async () => {
+    const { root, wt } = setup({ github: false })
+    commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
+    commit(wt, 'u.txt', 'u\n', 'feat adds u')
+    commit(root, 'c.txt', 'c\n', 'main adds c')
+    commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
+    gitFails(wt, 'rebase', 'main')
+    writeFileSync(join(wt, 'b.txt'), 'edited while stopped\n')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['b.txt'] })
+    // The sheet is open; the agent edits another tracked file.
+    writeFileSync(join(wt, 'c.txt'), 'edited too\n')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort', force: true, confirmed: ['b.txt'] })).toEqual({ ok: false, reason: 'confirm', files: ['b.txt', 'c.txt'] })
+    expect(await shipOperation({ root, worktree: wt, action: 'abort', force: true, confirmed: ['b.txt', 'c.txt'] })).toEqual({ ok: true })
+    expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
+  })
+
+  it('cherry-pick: 中止 does not count what git staged for the stopped commit itself, nor an edit the abort keeps', async () => {
     const { root, wt } = setup({ github: false })
     commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
     git(root, 'switch', '-q', '-c', 'pick')
@@ -1188,9 +1289,65 @@ describe('继续 / 中止', () => {
     git(root, 'add', '.')
     git(root, 'commit', '-q', '-m', 'to pick')
     git(root, 'switch', '-q', 'main')
+    // An edit the cherry-pick does not touch: `cherry-pick --abort` (reset --merge) keeps it.
+    writeFileSync(join(wt, 'b.txt'), 'edited, not staged\n')
     gitFails(wt, 'cherry-pick', 'pick')
     expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: true })
-    expect(git(wt, 'status', '--porcelain', '--untracked-files=no').trim()).toBe('')
+    expect(git(wt, 'status', '--porcelain', '--untracked-files=no').trim()).toBe('M b.txt')
+    expect(readFileSync(join(wt, 'b.txt'), 'utf8')).toBe('edited, not staged\n')
+  })
+
+  it('rebase: 中止 asks about a conflicted file edited since the stop although it is not staged yet', async () => {
+    const { root, wt } = conflicting()
+    gitFails(wt, 'rebase', 'main')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: true })
+    gitFails(wt, 'rebase', 'main')
+    writeFileSync(join(wt, 'a.txt'), 'one\nboth, resolved by hand\nthree\n')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['a.txt'] })
+    expect(await shipOperation({ root, worktree: wt, action: 'abort', force: true })).toEqual({ ok: true })
+  })
+
+  it('merge: 中止 asks about staged resolutions and edited conflicted files, not about an edit the abort keeps', async () => {
+    const { root, wt } = setup({ github: false })
+    commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
+    commit(wt, 'c.txt', 'feat c\n', 'feat adds c')
+    commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
+    commit(root, 'c.txt', 'main c\n', 'main adds c')
+    // An edit the merge does not touch: `merge --abort` (reset --merge) keeps it.
+    writeFileSync(join(wt, 'b.txt'), 'edited, not staged\n')
+    gitFails(wt, 'merge', 'main')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: true })
+    expect(readFileSync(join(wt, 'b.txt'), 'utf8')).toBe('edited, not staged\n')
+
+    gitFails(wt, 'merge', 'main')
+    writeFileSync(join(wt, 'a.txt'), 'one\nFEAT + MAIN\nthree\n')
+    git(wt, 'add', 'a.txt')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['a.txt'] })
+    writeFileSync(join(wt, 'c.txt'), 'both c\n')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['a.txt', 'c.txt'] })
+    expect(await shipOperation({ root, worktree: wt, action: 'abort', force: true })).toEqual({ ok: true })
+    expect(readFileSync(join(wt, 'a.txt'), 'utf8')).toBe('one\nFEAT\nthree\n')
+    expect(readFileSync(join(wt, 'b.txt'), 'utf8')).toBe('edited, not staged\n')
+  })
+
+  it('without AUTO_MERGE (git < 2.42) 中止 asks about every staged change besides the unresolved files', async () => {
+    const dropAutoMerge = (cwd: string) => rmSync(join(cwd, git(cwd, 'rev-parse', '--git-path', 'AUTO_MERGE').trim()), { force: true })
+    for (const kind of ['rebase', 'merge'] as const) {
+      const { root, wt } = setup({ github: false })
+      commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
+      commit(wt, 'c.txt', 'feat c\n', 'feat adds c')
+      commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
+      commit(root, 'c.txt', 'main c\n', 'main adds c')
+      gitFails(wt, kind, 'main')
+      dropAutoMerge(wt)
+      expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: true })
+      gitFails(wt, kind, 'main')
+      dropAutoMerge(wt)
+      writeFileSync(join(wt, 'a.txt'), 'one\nFEAT + MAIN\nthree\n')
+      git(wt, 'add', 'a.txt')
+      expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['a.txt'] })
+      expect(await shipOperation({ root, worktree: wt, action: 'abort', force: true })).toEqual({ ok: true })
+    }
   })
 
   it('refuses bad requests', async () => {
@@ -1233,6 +1390,39 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
     expect(sha(bare, 'main')).toBe(sha(root, 'main'))
     expect(sha(fork, 'main')).toBe(forkMain)
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, remote: 'myfork', baseAheadOfUpstream: 0 })
+  })
+
+  it('pushes the base to origin, not to the fork, when the base was pushed without an upstream', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(root, 'branch', '--unset-upstream', 'main')
+    const fork = join(base, `fork-${++counter}.git`)
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(root, 'remote', 'add', 'myfork', fork)
+    git(root, 'push', '-q', 'myfork', 'main')
+    git(wt, 'push', '-q', '-u', 'myfork', 'feat')
+    const forkMain = sha(fork, 'main')
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })).toMatchObject({ ok: true, pushed: true })
+    expect(sha(bare, 'main')).toBe(sha(root, 'main'))
+    expect(sha(fork, 'main')).toBe(forkMain)
+  })
+
+  it('moves neither the base nor its catch-up while a rebase of the base is stopped elsewhere with HEAD detached', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    commit(root, 'b2.txt', 'b\n', 'second on main')
+    git(root, 'push', '-q', 'origin', 'main')
+    const other = cloneOf(bare)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    execFileSync('git', ['-c', 'rebase.abbreviateCommands=false', 'rebase', '-i', 'HEAD~1'], { cwd: root, env: { ...process.env, GIT_SEQUENCE_EDITOR: "sed -i.bak 's/^pick /edit /'" }, stdio: 'ignore' })
+    const before = sha(root, 'refs/heads/main')
+    expect(await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })).toMatchObject({
+      ok: false,
+      step: 'merge',
+      reason: 'blocked',
+      message: 'main 的工作区里有进行中的变基：先完成或放弃它'
+    })
+    expect(sha(root, 'refs/heads/main')).toBe(before)
+    git(root, 'rebase', '--continue')
   })
 
   it('retries a push to that remote, and reads CI where it lives', async () => {

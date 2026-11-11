@@ -280,7 +280,7 @@ test.describe('F13 review block · F16 exit A', () => {
     await ship().getByRole('button', { name: '交给 Claude' }).click()
     await expect(ship()).toHaveCount(0)
     // Put into the input line, not sent: the text arrives without an Enter after it until the user presses one.
-    await expect.poll(conflictTyped, WITHIN).toContain('GIT_EDITOR=true git rebase main')
+    await expect.poll(conflictTyped, WITHIN).toContain('GIT_EDITOR=true git rebase refs/heads/main')
     await page.waitForTimeout(500)
     expect(conflictTyped().endsWith('不要推送。')).toBe(true)
     await page.keyboard.press('Enter')

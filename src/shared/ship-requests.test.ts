@@ -88,4 +88,12 @@ describe('parseShipOperationRequest', () => {
     expect(parseShipOperationRequest({ ...target, action: 'abort', force: 'yes' })).toEqual({ ...target, action: 'abort' })
     expect(parseShipOperationRequest({ ...target, action: 'abort', force: false })).toEqual({ ...target, action: 'abort' })
   })
+
+  // R29: the files the user was shown go along with the forced 中止; a list that is not one of paths is refused.
+  it('carries the confirmed files of a forced 中止', () => {
+    expect(parseShipOperationRequest({ ...target, action: 'abort', force: true, confirmed: ['a.ts', 'src/b.ts'] })).toEqual({ ...target, action: 'abort', force: true, confirmed: ['a.ts', 'src/b.ts'] })
+    expect(parseShipOperationRequest({ ...target, action: 'abort', force: true, confirmed: ['../x'] })).toBeNull()
+    expect(parseShipOperationRequest({ ...target, action: 'abort', force: true, confirmed: 'a.ts' })).toBeNull()
+    expect(parseShipOperationRequest({ ...target, action: 'abort', confirmed: ['a.ts'] })).toEqual({ ...target, action: 'abort' })
+  })
 })

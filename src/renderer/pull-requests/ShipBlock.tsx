@@ -13,7 +13,7 @@ import {
   cancelShip,
   editShip,
   handConflictsToAgent,
-  handoffText,
+  hasHandoffText,
   retryShip,
   shipCanRetry,
   shipFinished,
@@ -90,7 +90,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
   const finished = shipFinished(state)
   const running = state.stage === 'running' && state.error === null && !finished
   const way: FailureWay = state.error ? failureWay(state.error) : null
-  const handoff = way?.kind === 'handoff' && handoffText(state.error, base) !== null
+  const handoff = way?.kind === 'handoff' && hasHandoffText(state.error)
   // 重试 / ⌘↵: the failure's way on, or a failed commit whose message is still editable (beside its own way on).
   const canRetry = shipCanRetry(state)
   const goAhead = (): void => {
@@ -148,7 +148,6 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
                   <span className={styles.stepText}>{held.text}</span>
                   {/* A hand-off that could not be typed says why under it. */}
                   {state.error!.message !== held.text && <span className={styles.failureText}>{state.error!.message}</span>}
-                  {handoff && !hasSession && <span className={styles.failureNote}>{CHAIN_TEXT.noAgent}</span>}
                 </span>
               </li>
             ) : (
@@ -168,7 +167,7 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
                     {step.label}
                     {step.note && <span className={styles.stepNote}> · {step.note}</span>}
                   </span>
-                  {state.error?.step === step.id && <StepFailure state={state} noAgent={handoff && !hasSession} />}
+                  {state.error?.step === step.id && <StepFailure state={state} />}
                 </span>
               </li>
             )
@@ -193,7 +192,13 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
                 {chainLabel(way.id, base)}
               </button>
             ) : handoff ? (
-              <button type="button" className={canRetry ? styles.ghost : styles.primary} disabled={!hasSession} onClick={() => void handConflictsToAgent(worktree)}>
+              <button
+                type="button"
+                className={canRetry ? styles.ghost : styles.primary}
+                disabled={!hasSession}
+                title={hasSession ? undefined : CHAIN_TEXT.noAgent}
+                onClick={() => void handConflictsToAgent(worktree)}
+              >
                 {CHAIN_LABEL.handoff(handoffAgent)}
               </button>
             ) : null}
@@ -217,16 +222,15 @@ export function ShipBlock({ worktree, base }: { worktree: string; base: string }
   )
 }
 
-/** Under the failed step: what went wrong in plain words and, for a hook, what it printed (Figma 73E). Without an
- *  agent session to take the hand-off, why 交给 … cannot be clicked. */
-function StepFailure({ state, noAgent }: { state: ShipState; noAgent: boolean }) {
+/** Under the failed step: what went wrong in plain words and, for a hook or a repository rule, what it printed (Figma
+ *  73E). Without an agent session 交给 agent is disabled; no caption says so (the button carries it). */
+function StepFailure({ state }: { state: ShipState }) {
   const error = state.error!
   const output = failureOutput(error)
   return (
     <span className={styles.failure} role="alert">
       <span className={styles.failureText}>{error.message}</span>
       {output && <pre className={styles.output}>{output}</pre>}
-      {noAgent && <span className={styles.failureNote}>{CHAIN_TEXT.noAgent}</span>}
     </span>
   )
 }

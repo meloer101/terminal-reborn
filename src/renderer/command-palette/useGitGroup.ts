@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import type { GitChanges } from '@shared/git-graph/log'
 import { useGit } from '../panels/git/store'
+import { primaryExitOf } from '../panels/merge/store'
 import { chainPlace, chainPlanOf } from '../pull-requests/chain-actions'
 import { loadPreflight, useChainStore } from '../pull-requests/chain-store'
 import { paletteGitActions } from '../pull-requests/chain-zone'
@@ -58,7 +59,9 @@ export function useGitGroup(): PaletteGit | null {
     branch: preflight.ok ? preflight.branch : place.worktree.branch,
     remote: preflight.ok ? preflight.remote : null,
     reviewFiles: reviewable ? files : null,
-    pr: prStatus?.pr && (prStatus.pr.state === 'open' || prStatus.pr.state === 'draft') ? prStatus.pr.number : null
+    pr: prStatus?.pr && (prStatus.pr.state === 'open' || prStatus.pr.state === 'draft') ? prStatus.pr.number : null,
+    exitRegistered: primaryExitOf(path) !== undefined,
+    ...(preflight.ok && preflight.pullFrom !== undefined ? { pullFrom: preflight.pullFrom } : {})
   })
   if (actions.length === 0) return null
   return { name: preflight.ok ? preflight.branch : place.worktree.branch, worktreePath: path, sessionId, actions }

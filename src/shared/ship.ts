@@ -71,6 +71,12 @@ export type ShipPreflight =
        *  (`ahead`, 推送) and the other way round (`behind`, 拉取); null when the branch was never pushed, or when git
        *  keeps no remote-tracking ref of it (a single-branch clone) so they cannot be known. */
       upstream: { ahead: number; behind: number } | null
+      /** Where 合并到 <base> 并推送 pushes the base (its own upstream remote first, see main's baseRemoteFor); null without
+       *  a remote. Absent from an older main. */
+      baseRemote?: string | null
+      /** What 拉取 fetches: `<remote>/<the branch there>` of the branch's upstream (or same-named remote branch), which
+       *  can be named otherwise than the local branch; null when the branch was never pushed. Absent from an older main. */
+      pullFrom?: string | null
     }
   | {
       ok: false
@@ -247,6 +253,9 @@ export interface ShipOperationRequest extends PrTarget {
   action: 'continue' | 'abort'
   /** 中止 after the user said yes to losing `files` (a `confirm` answer). */
   force?: true
+  /** With `force`: the files the user was shown (the `confirm` answer's); main asks again when the abort would now lose
+   *  another. Absent: an older renderer, nothing is compared. */
+  confirmed?: string[]
 }
 
 export type ShipOperationResult =

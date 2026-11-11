@@ -27,7 +27,7 @@ import { ReviewMarker } from '../../review/ReviewMarker'
 import { markKey, useReviewMarks } from '../../review/marks'
 import { chainPlace, chainPlanOf, runChainCommand } from '../../pull-requests/chain-actions'
 import { loadPreflight, useChainStore } from '../../pull-requests/chain-store'
-import { zoneFiles, zoneHeadline } from '../../pull-requests/chain-zone'
+import { zoneFiles, zoneHeadline, zoneShortcut, zoneShortcutShown } from '../../pull-requests/chain-zone'
 import { livePr } from '../../pull-requests/exit-model'
 import { useShipPaths, useShips } from '../../pull-requests/ship-runner'
 import { ShipBlock } from '../../pull-requests/ShipBlock'
@@ -174,23 +174,16 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
 
   const reviewSession = target?.id ?? reviewer
   const baseName = preflight?.ok ? preflight.base : (changes.base ?? 'main')
-  const next = chain?.next ?? null
-  const exitNext = next !== null && (next.id === 'main' || next.id === 'pr')
   const headline = chain && idle ? zoneHeadline(chain) : null
   const files = chain && headline ? zoneFiles(chain, preflight, null) : []
   const nothing = chain === null || chain.stage === 'empty'
   const runnable = chain?.actions.some((a) => a.blocker === null) ?? false
 
-  // ⇧⌘M runs the primary while it is an exit that can run; 合并 PR #N… keeps the PR merge sheet (merge/store.ts opens
-  // it), as do a merged, empty or stuck worktree. A stopped fix's answers replace the exits, and the chain's other
-  // moves (同步, 交给 agent, 继续) are clicked: the shortcut does nothing then.
-  const shortcutExit = !idle
-    ? () => undefined
-    : exitNext && next.blocker === null
-      ? () => void runChainCommand(worktree.path, next.id, sessionId)
-      : next === null || next.id === 'merge-pr' || chain?.stage === 'merged' || chain?.stage === 'stuck'
-        ? null
-        : () => undefined
+  // ⇧⌘M (zoneShortcut): the primary exit that can run, 合并 PR #N… through the chain (its reason while it cannot open,
+  // never the local merge sheet past the PR), nothing for the chain's other moves or a blocked exit; the merge sheet for
+  // a merged, empty or stuck worktree.
+  const shortcut = zoneShortcut(chain, idle)
+  const shortcutExit = shortcut === null ? null : shortcut === 'nothing' ? () => undefined : () => void runChainCommand(worktree.path, shortcut, sessionId)
 
   return (
     <>
@@ -261,7 +254,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
                 (!reviewShown || settings.review.mode === 'agent-command') && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
               )}
               <span className={styles.spacer} />
-              {chain && <ChainButtons chain={chain} worktreePath={worktree.path} openIn={sessionId} shortcut={exitNext || next?.id === 'merge-pr'} idle={idle} />}
+              {chain && <ChainButtons chain={chain} worktreePath={worktree.path} openIn={sessionId} shortcut={chain ? zoneShortcutShown(chain) : false} idle={idle} />}
             </div>
           )
         )}

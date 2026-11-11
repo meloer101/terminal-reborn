@@ -14,15 +14,15 @@ import { ensureAgentUp } from '../lifecycle/agent-up'
 import { commentTarget } from '../panels/git/comments'
 import { tickedPaths } from '../panels/git/changes-model'
 import { gitOf, loadChanges } from '../panels/git/store'
-import { openMergeSheet, targetFor } from '../panels/merge/store'
+import { openMergeSheet, primaryExitOf, targetFor } from '../panels/merge/store'
 import { agentLabel } from '../panels/merge/model'
 import { startBackgroundReview } from '../review/background'
 import { useSessionMeta } from '../session-meta/store'
 import { insertIntoTerminal } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
-import { bumpChain, loadPreflight } from './chain-store'
-import { mergePrBlocker, runOperation, type ChainCommand } from './chain-zone'
+import { bumpChain, loadPreflight, useChainStore } from './chain-store'
+import { mergePrBlocker, prRunKind, runOperation, type ChainCommand } from './chain-zone'
 import { exitPlan, shipContextFor, type ExitPlan } from './exit-model'
 import { commitTitle, divergedPrompt } from './ship-flow'
 import { readRemembered, startShip, useShips } from './ship-runner'
@@ -158,7 +158,7 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
   if (command === 'merge-sheet') return openMergeSheet(targetFor(project.rootPath, worktree))
   if (command === 'merge-pr') {
     // The sheet shows the PR's merge only with its details; without them it would be the local merge.
-    const blocker = mergePrBlocker(prStatusOf(path))
+    const blocker = mergePrBlocker(prStatusOf(path), usePullRequests.getState().gh)
     return blocker ? say(path, blocker) : openMergeSheet(targetFor(project.rootPath, worktree))
   }
   if (command === 'open-pr') {
@@ -217,18 +217,41 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     ticked
   })
   const label = chain.actions.find((a) => a.id === command)?.label ?? ''
+  // The tip the run starts from: the preflight just read (after a reload the run's own commit is told by it).
+  const head = preflight.head
   switch (command) {
     case 'commit':
-      return startShip(ctx, 'commit', commitTitle(ticked.length))
+      return startShip(ctx, 'commit', commitTitle(ticked.length), { head })
     case 'sync':
-      return startShip({ ...ctx, paths: null }, 'sync', label, { syncMode: preflight.pushed ? 'merge' : 'rebase', behind: preflight.behindBase })
+      return startShip({ ...ctx, paths: null }, 'sync', label, { syncMode: preflight.pushed ? 'merge' : 'rebase', behind: preflight.behindBase, head })
     case 'pull':
-      return startShip({ ...ctx, paths: null }, 'pull', label)
+      return startShip({ ...ctx, paths: null }, 'pull', label, { head, ...(preflight.pullFrom !== undefined ? { pullFrom: preflight.pullFrom } : {}) })
     case 'push':
-      return startShip({ ...ctx, paths: null, openPr: null }, 'push-pr', label)
+      return startShip({ ...ctx, paths: null, openPr: null }, 'push-pr', label, { head })
     case 'pr':
-      return startShip(ctx, plan.pr ? 'push-pr' : 'pr', label)
+      // The chain's open PR (the poll's, else the preflight's number while gh is not ready): a push to it, never 创建 PR.
+      return startShip(ctx, prRunKind(chain), label, { head })
     case 'main':
-      return startShip(ctx, 'main', label)
+      return startShip(ctx, 'main', label, { head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) })
   }
+}
+
+/**
+ * ⇧⌘M (menu command merge-worktree) for the active session's worktree: the primary Git · 变更 registered while it is open
+ * there; else, with an open PR (the poll's, or the preflight's number), 合并 PR #N… through the chain (its reason when
+ * the PR's details are not read, never the local merge sheet past the PR); else the merge sheet.
+ */
+export function mergeShortcut(): void {
+  const state = useWorkspace.getState()
+  const session = state.sessions.find((s) => s.id === state.activeSessionId)
+  const worktree = session ? state.worktrees.find((w) => w.id === session.worktreeId && !w.archived) : undefined
+  const project = worktree ? state.projects.find((p) => p.id === worktree.projectId) : undefined
+  if (!worktree || !project) return
+  const exit = primaryExitOf(worktree.path)
+  if (exit) return exit()
+  const known = useChainStore.getState().preflights[worktree.path]
+  const pr = usePullRequests.getState().byWorktree[worktree.path]
+  const open = (pr?.pr && (pr.pr.state === 'open' || pr.pr.state === 'draft')) || (known?.ok && known.openPr !== null)
+  if (open) return void runChainCommand(worktree.path, 'merge-pr', session?.id ?? null)
+  openMergeSheet(targetFor(project.rootPath, worktree))
 }

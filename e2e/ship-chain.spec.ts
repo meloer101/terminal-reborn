@@ -345,6 +345,22 @@ test.describe('合入链路 v2 · gh ready', () => {
       await expect(kit.panel().getByRole('checkbox', { name: `提交 ${path}` })).toHaveAttribute('aria-checked', ticked)
     }
     await expect(kit.tickAll()).toBeDisabled()
+    // R67: the locked boxes look locked (muted), a ticked one still filled.
+    const [lockedFill, lockedBorder, tertiary, softBorder] = await kit
+      .panel()
+      .getByRole('checkbox', { name: '提交 a.ts' })
+      .evaluate((el) => {
+        const probe = document.createElement('span')
+        probe.style.color = 'var(--text-tertiary)'
+        probe.style.borderColor = 'var(--border-default)'
+        document.body.appendChild(probe)
+        const want = [getComputedStyle(probe).color, getComputedStyle(probe).borderColor]
+        probe.remove()
+        const unticked = el.closest('[role="list"]')!.querySelector<HTMLElement>('[aria-label="提交 c.ts"]')!
+        return [getComputedStyle(el).backgroundColor, getComputedStyle(unticked).borderTopColor, ...want]
+      })
+    expect(lockedFill).toBe(tertiary)
+    expect(lockedBorder).toBe(softBorder)
     await kit.shoot('a')
     await page.keyboard.press('Meta+Enter')
     await expect(kit.ship()).toHaveCount(0, WITHIN)
@@ -432,7 +448,7 @@ test.describe('合入链路 v2 · gh ready', () => {
     expect(gitIn(wt('conflict'), 'rev-parse', 'HEAD').trim()).toBe(before)
     await kit.ship().getByRole('button', { name: '交给 Claude' }).click()
     await expect(kit.ship()).toHaveCount(0, WITHIN)
-    await expect.poll(() => typedBy(agents.conflict!), WITHIN).toContain('GIT_EDITOR=true git rebase main')
+    await expect.poll(() => typedBy(agents.conflict!), WITHIN).toContain('GIT_EDITOR=true git rebase refs/heads/main')
     await page.waitForTimeout(500)
     // In the input line, not sent.
     expect(typedBy(agents.conflict!)).not.toMatch(/不要推送。<ENTER>/)
@@ -550,6 +566,16 @@ test.describe('合入链路 v2 · gh ready', () => {
         theme
       )
       await page.waitForTimeout(250)
+      // L9 / R66: the sidebar tag's ? is a monochrome mark too: text-primary, not the tag's tertiary grey, in both themes.
+      const [sidebarMark, primary] = await tag.locator('[data-checks="unknown"]').evaluate((el) => {
+        const probe = document.createElement('span')
+        probe.style.color = 'var(--text-primary)'
+        el.parentElement!.appendChild(probe)
+        const want = getComputedStyle(probe).color
+        probe.remove()
+        return [getComputedStyle(el).color, want]
+      })
+      expect([theme, sidebarMark]).toEqual([theme, primary])
       await page.locator('[data-region="sidebar"] [data-session-id="s-pr"]').screenshot({ path: join(SHOTS, `h-sidebar-${theme}.png`) }).catch(() => undefined)
     }
     gh.setPrListFails(false)

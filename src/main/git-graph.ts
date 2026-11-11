@@ -274,7 +274,8 @@ async function stampedUncommitted(cwd: string, change: GitFileChange): Promise<G
 
 /**
  * The blob each committed file's diff ends at (the old side for a deletion), from `diff --raw --no-abbrev -z` output:
- * equal line counts can hide a changed line, the blob cannot.
+ * equal line counts can hide a changed line, the blob cannot. A mode other than a plain file's (100644) goes before it,
+ * so a commit that only changes the mode (chmod +x) changes the stamp; a plain file's stays the bare blob, as before.
  */
 export function committedBlobs(out: string): Map<string, string> {
   const blobs = new Map<string, string>()
@@ -283,10 +284,11 @@ export function committedBlobs(out: string): Map<string, string> {
     const field = fields[i]
     if (!field) continue
     if (field.startsWith(':')) {
-      const [, , oldBlob = '', newBlob = '', status = ''] = field.slice(1).split(' ')
+      const [oldMode = '', newMode = '', oldBlob = '', newBlob = '', status = ''] = field.slice(1).split(' ')
       if (status.startsWith('R') || status.startsWith('C')) i++
       const path = fields[++i] ?? ''
-      if (path) blobs.set(path, status.startsWith('D') ? oldBlob : newBlob)
+      const [mode, blob] = status.startsWith('D') ? [oldMode, oldBlob] : [newMode, newBlob]
+      if (path) blobs.set(path, mode === '100644' ? blob : `${mode}:${blob}`)
     } else if (field.split('\t')[2] === '') i += 2 // a numstat rename: its two paths follow
   }
   return blobs
@@ -360,9 +362,10 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
   const hasHead = headOut.trim() !== ''
   const refs = parseRefs(refsOut)
 
-  // 未提交: one diff of index + working tree vs HEAD, then the untracked files.
+  // 未提交: one diff of index + working tree vs HEAD, then the untracked files. A submodule counts only when its commit
+  // moved (edits inside it are its own repository's), as in the status commit, 同步 and the preflight read.
   const [diffOut, untracked] = await Promise.all([
-    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--numstat', '-z', hasHead ? 'HEAD' : EMPTY_TREE, '--']),
+    git(cwd, ['diff', '--no-color', '--no-ext-diff', '--ignore-submodules=dirty', '-M', '--raw', '--numstat', '-z', hasHead ? 'HEAD' : EMPTY_TREE, '--']),
     listUntracked(cwd)
   ])
   const listed = [
@@ -374,7 +377,8 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
 
   const candidates = [isValidRefName(base) ? base : null, pickTrunk(refs, originHead.trim() || null)?.name ?? null, upstream.trim() || null]
   const baseRef = hasHead ? await pickBase(cwd, branch, candidates, refs) : null
-  if (!baseRef) return { branch, base: null, baseRef: null, ahead: 0, behind: 0, uncommitted, untrackedOmitted, committed: [] }
+  const head = headOut.trim() || null
+  if (!baseRef) return { branch, base: null, baseRef: null, ahead: 0, behind: 0, uncommitted, untrackedOmitted, committed: [], head }
   const [counts, committedOut] = await Promise.all([
     git(cwd, ['rev-list', '--left-right', '--count', `${baseRef}...HEAD`, '--']),
     git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--no-abbrev', '--numstat', '-z', `${baseRef}...HEAD`, '--'])
@@ -387,7 +391,8 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
     ...parseLeftRight(counts),
     uncommitted,
     untrackedOmitted,
-    committed: parseRawNumstat(committedOut).map((change) => stampedCommitted(change, blobs))
+    committed: parseRawNumstat(committedOut).map((change) => stampedCommitted(change, blobs)),
+    head
   }
 }
 

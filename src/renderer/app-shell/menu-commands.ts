@@ -12,7 +12,7 @@ import { isKeyEcho, noteKeyCommand } from '../state/key-commands'
 import { closeActiveSession, openProjectInNewWindowInteractive, openProjectInteractive, quickNewSession } from '../state/session-actions'
 import { useWorkspace, windowEffects } from '../state/workspace'
 import { openTerminalSearch } from '../terminal/search-store'
-import { openMergeForActiveSession } from '../panels/merge/store'
+import { mergeShortcut } from '../pull-requests/chain-actions'
 import { openSettings } from '../settings/SettingsDialog'
 import { closeFocusedPane, focusPaneToward, moveFocusedPaneToNewWindow, splitFocusedPane } from '../split/commands'
 import { everyWindow } from './windows-runtime'
@@ -41,7 +41,7 @@ const RUN: Record<MenuCommand, () => void> = {
   'toggle-sidebar': () => useWorkspace.getState().toggleSidebar(),
   'toggle-right-panel': inMainWindow(() => useWorkspace.getState().toggleRightPanel()),
   // The sheet is for the session the keyboard is in; it shows in the main window (secondary-windows.tsx).
-  'merge-worktree': openMergeForActiveSession,
+  'merge-worktree': mergeShortcut,
   'same-task': openSameTaskForActive,
   'split-right': () => splitFocusedPane('right'),
   'split-down': () => splitFocusedPane('bottom'),

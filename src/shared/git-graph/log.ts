@@ -211,6 +211,9 @@ export interface GitChanges {
   untrackedOmitted: number
   /** `base...HEAD`: what this branch committed since it left the base. */
   committed: GitFileChange[]
+  /** The commit HEAD was at when the list was read (the merge chain matches the preflight to it); null without a
+   *  commit; absent from an older main. */
+  head?: string | null
 }
 
 export type GitDiffScope = 'uncommitted' | 'committed'

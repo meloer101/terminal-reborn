@@ -3,7 +3,7 @@ import type { GitOperation, MergeBlocker, MergeMethod, MergePrecheck, MergeResul
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 import { shortAgentName } from '@shared/agents'
-import { conflictReason, MAX_PROMPT_CHARS } from '@shared/ship-chain'
+import { conflictReason, MAX_PROMPT_CHARS, mergeConflictPrompt } from '@shared/ship-chain'
 
 /** `muted`: a plain fact, neither good nor bad (还没有自己的提交). */
 export type CheckTone = 'ok' | 'warn' | 'error' | 'working' | 'muted'
@@ -162,25 +162,13 @@ export function agentSessionFor<T extends Pick<Session, 'id' | 'kind'>>(sessions
   return agents.find((s) => s.id === activeId) ?? agents[0] ?? null
 }
 
-const MAX_PROMPT_FILES = 10
-
 /**
  * One line put into the agent's input line (not sent; the user reads it and presses Enter): merge the base in,
- * resolve, commit, without an editor. Files are listed while the text stays within MAX_PROMPT_CHARS.
+ * resolve, commit, without an editor — the merge chain's builder (src/shared/ship-chain.ts): names quoted as data, the
+ * base as one shell word of its full ref, the files listed while the text stays within MAX_PROMPT_CHARS.
  */
 export function conflictPrompt(check: Pick<MergePrecheck, 'base' | 'branch' | 'conflicts'>): string {
-  const head = `把 ${check.branch} 合并到 ${check.base} 会冲突：`
-  const tail = `请在当前 worktree 里运行 GIT_EDITOR=true git merge ${check.base}，解决这些冲突，确认构建和测试通过后提交合并结果，完成后告诉我。`
-  const total = check.conflicts.length
-  const files: string[] = []
-  for (const conflict of check.conflicts.slice(0, MAX_PROMPT_FILES)) {
-    const next = [...files, `${conflict.path}（${conflictReason(conflict)}）`]
-    const more = next.length < total ? ` 等 ${total} 个文件` : ''
-    if (files.length > 0 && head.length + next.join('、').length + more.length + 1 + tail.length > MAX_PROMPT_CHARS) break
-    files.push(next[next.length - 1]!)
-  }
-  const more = files.length < total ? ` 等 ${total} 个文件` : ''
-  return `${head}${files.join('、')}${more}。${tail}`
+  return mergeConflictPrompt({ base: check.base, branch: check.branch, conflicts: check.conflicts })
 }
 
 export function agentLabel(kind: AgentKind): string {
@@ -198,7 +186,7 @@ export function turnChecksLine(view: TurnCheckView, kind: AgentKind): CheckLine 
 
 /** The sheet's push switch: the remote the base is pushed to (the precheck's, which main pushes to). */
 export function pushSwitchLabel(check: Pick<MergePrecheck, 'pushRemote'>): string {
-  return check.pushRemote ? `合并后推送到 ${check.pushRemote}` : '合并后推送到远程仓库'
+  return check.pushRemote ? `合并后推送到 ${check.pushRemote}` : '合并后推送'
 }
 
 /** Lines after a merge: the commit, the push (to `remote`, the precheck's pushRemote), the worktree removal. */

@@ -186,8 +186,8 @@ function sanitizeShipState(raw: unknown): ShipState | null {
     if (!isRecord(e) || !STEP_IDS.has(e.step) || !isText(e.message, 4096)) return null
     const conflicts = e.conflicts === undefined ? undefined : textList(e.conflicts, 10_000)
     if (conflicts === null) return null
-    const failure = e.failure === undefined ? undefined : sanitizeFailure(e.failure)
-    if (failure === null) return null
+    // A failure this build cannot read (a newer build's class) is dropped, not the run: its commit and step stay.
+    const failure = e.failure === undefined ? undefined : (sanitizeFailure(e.failure) ?? undefined)
     error = {
       step: e.step as StepId,
       message: e.message,
