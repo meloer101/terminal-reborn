@@ -487,8 +487,8 @@ class GuiSession<O extends GuiOwner> {
     return !this.exited && this.driver.interrupt()
   }
 
-  stopTask(taskId: string): boolean {
-    return !this.exited && (this.driver.stopTask?.(taskId) ?? false)
+  async stopTask(taskId: string): Promise<boolean> {
+    return !this.exited && ((await this.driver.stopTask?.(taskId)) ?? false)
   }
 
   setConfig(optionId: string, value: string): Promise<boolean> {
@@ -602,8 +602,8 @@ export class GuiHost<O extends GuiOwner> {
     return this.sessions.get(sessionId)?.interrupt() ?? false
   }
 
-  stopTask(sessionId: string, taskId: string): boolean {
-    return this.sessions.get(sessionId)?.stopTask(taskId) ?? false
+  stopTask(sessionId: string, taskId: string): Promise<boolean> {
+    return this.sessions.get(sessionId)?.stopTask(taskId) ?? Promise.resolve(false)
   }
 
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean> {

@@ -114,6 +114,14 @@ interface WorkflowSlot {
   onStop?(run: WorkflowRun): void
 }
 
+/** A run's shape, once per run object (each list from main is new objects; renders in between reuse them). */
+const runShapes = new WeakMap<WorkflowRun, string>()
+function runShape(run: WorkflowRun): string {
+  let shape = runShapes.get(run)
+  if (shape === undefined) runShapes.set(run, (shape = JSON.stringify(run)))
+  return shape
+}
+
 /** What a block draws of the runs: the memo compares this, not the map. */
 function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string | null): string {
   if (block.kind !== 'steps') return ''
@@ -121,7 +129,7 @@ function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string |
   for (const item of block.items) {
     if (item.kind !== 'tool' || item.name !== 'Workflow') continue
     const run = slot.byTool.get(item.id)
-    if (run) parts.push(JSON.stringify(run))
+    if (run) parts.push(runShape(run))
     if (item.id === waitingTool && slot.ask) parts.push(`ask:${slot.ask.id}:${slot.ask.pending}`)
   }
   return parts.join('|')

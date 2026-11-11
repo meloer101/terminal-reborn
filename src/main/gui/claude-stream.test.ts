@@ -358,6 +358,6 @@ describe('createClaudeWorkflowTracker (stream-json task events, 2.1.322)', () =>
     t.push({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_w' }] }, tool_use_result: { status: 'async_launched', taskId: 'w1', runId: 'wf_abcdef12' } })
     clock = 61_000
     const ended = t.push({ type: 'system', subtype: 'task_notification', task_id: 'w1', status: 'completed' })!
-    expect(ended[0]).toMatchObject({ key: 'wf_abcdef12', runId: 'wf_abcdef12', status: 'completed', ms: 60_000, agents: [{ label: '登录' }, { label: '刷新' }] })
+    expect(ended[0]).toMatchObject({ key: 'toolu_w', runId: 'wf_abcdef12', status: 'completed', ms: 60_000, agents: [{ label: '登录' }, { label: '刷新' }] })
   })
 })

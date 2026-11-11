@@ -169,7 +169,7 @@ export function promptOf(pending: ClaudePending, description?: string, cwd?: str
 }
 
 /**
- * Claude's workflow runs in a GUI session (PRD F25, §6.18): `system/task_started` (`task_type: local_workflow`) opens
+ * Claude's workflow runs in a GUI session (PRD F25, §6.20): `system/task_started` (`task_type: local_workflow`) opens
  * one at its Workflow call, `task_progress` brings its `workflow_progress` rows (not on every event: the last full list
  * is kept) and tokens, `task_updated` / `task_notification` its status. The Workflow call's own input names the phases
  * before any agent runs; its result names the run id.
@@ -204,7 +204,8 @@ export function createClaudeWorkflowTracker(now: () => number = Date.now): Claud
     const runId = str(result?.runId)
     const run = taskId ? byTask.get(taskId) : undefined
     if (run && runId && run.runId !== runId) {
-      byTask.set(taskId!, { ...run, key: runId, runId })
+      // The key stays the call's id: the card and the sidebar's fold follow it.
+      byTask.set(taskId!, { ...run, runId })
       changed = true
     }
     return changed

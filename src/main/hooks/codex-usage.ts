@@ -53,8 +53,9 @@ export async function readHead(path: string, maxBytes: number): Promise<string> 
   let handle: Awaited<ReturnType<typeof open>> | undefined
   try {
     handle = await open(path, 'r')
-    const buffer = Buffer.alloc(maxBytes)
-    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    // What the file holds, up to maxBytes: a small file does not cost a large buffer.
+    const buffer = Buffer.alloc(Math.min((await handle.stat()).size, maxBytes))
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
     return buffer.subarray(0, bytesRead).toString('utf8')
   } catch {
     return ''

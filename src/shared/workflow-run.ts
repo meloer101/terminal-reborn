@@ -3,7 +3,7 @@
 // - stream-json `system/task_progress` `workflow_progress` rows (GUI sessions; queued agents and tokens included),
 // - `workflows/<runId>.json`, the snapshot Claude writes when the run ends (same rows, plus status and totals),
 // - `subagents/workflows/<runId>/journal.jsonl` (terminal sessions while the run goes: only agents that started).
-// Shapes measured on Claude Code 2.1.322 (PRD §6.18). Pure: no Node, no Electron.
+// Shapes measured on Claude Code 2.1.322 (PRD §6.20). Pure: no Node, no Electron.
 
 export type WorkflowStatus = 'running' | 'paused' | 'completed' | 'failed' | 'stopped'
 export type WorkflowAgentState = 'queued' | 'running' | 'done' | 'error' | 'stopped'
@@ -379,59 +379,4 @@ export const isLiveRun = (run: WorkflowRun): boolean => run.status === 'running'
 export function runOutcome(run: WorkflowRun): 'running' | 'paused' | 'completed' | 'partly-failed' | 'failed' | 'stopped' {
   if (run.status === 'completed') return run.agents.some((a) => a.state === 'error') ? 'partly-failed' : 'completed'
   return run.status
-}
-
-/** A run checked when it crosses IPC: renderer input is never trusted shape-wise. */
-export function sanitizeWorkflowRun(raw: unknown): WorkflowRun | null {
-  if (!isRec(raw) || !str(raw.key) || !str(raw.name)) return null
-  const status = workflowStatus(raw.status)
-  const phases = declaredPhases(raw.phases)
-  const agents = (Array.isArray(raw.agents) ? raw.agents : []).slice(0, MAX_AGENTS).flatMap((a): WorkflowAgent[] => {
-    if (!isRec(a) || !str(a.label)) return []
-    const state = ['queued', 'running', 'done', 'error', 'stopped'].includes(a.state as string) ? (a.state as WorkflowAgentState) : 'running'
-    const phase = num(a.phase) ?? 0
-    return [
-      {
-        ...(str(a.id) ? { id: str(a.id)! } : {}),
-        label: clip(str(a.label)!, LABEL_CHARS),
-        phase: phase >= 0 && phase < Math.max(phases.length, 1) ? phase : 0,
-        state,
-        ...(str(a.model) ? { model: str(a.model)! } : {}),
-        ...(num(a.tokens) !== undefined ? { tokens: num(a.tokens)! } : {}),
-        ...(num(a.startedAt) !== undefined ? { startedAt: num(a.startedAt)! } : {}),
-        ...(num(a.ms) !== undefined ? { ms: num(a.ms)! } : {}),
-        ...(str(a.error) ? { error: clip(str(a.error)!, ERROR_CHARS) } : {})
-      }
-    ]
-  })
-  return {
-    key: clip(str(raw.key)!, 80),
-    ...(str(raw.runId) && WORKFLOW_RUN_ID.test(str(raw.runId)!) ? { runId: str(raw.runId)! } : {}),
-    ...(str(raw.toolUseId) ? { toolUseId: clip(str(raw.toolUseId)!, 80) } : {}),
-    ...(str(raw.taskId) && GUI_TASK_ID.test(str(raw.taskId)!) ? { taskId: str(raw.taskId)! } : {}),
-    name: clip(str(raw.name)!, LABEL_CHARS),
-    status,
-    phases,
-    agents,
-    ...(num(raw.tokens) !== undefined ? { tokens: num(raw.tokens)! } : {}),
-    ...(num(raw.startedAt) !== undefined ? { startedAt: num(raw.startedAt)! } : {}),
-    ...(num(raw.ms) !== undefined ? { ms: num(raw.ms)! } : {}),
-    ...(str(raw.error) ? { error: clip(str(raw.error)!, ERROR_CHARS) } : {}),
-    ...(raw.partial === true ? { partial: true } : {})
-  }
-}
-
-/**
- * Whether ultracode is on, from a Claude TUI's screen (PRD F25, Figma 74D): its prompt box's top border carries the tag
- * `ultracode` at its right end while it is on (2.1.322). Null when no prompt box is on screen (a full-screen view, a
- * dialog): nothing to say.
- */
-export function ultracodeOnScreen(screen: string): boolean | null {
-  let border = false
-  for (const line of screen.split('\n')) {
-    if (!/─{8,}/.test(line)) continue
-    border = true
-    if (/─\s*ultracode\s*─/.test(line) || /─ ?ultracode\s*$/.test(line.trimEnd())) return true
-  }
-  return border ? false : null
 }

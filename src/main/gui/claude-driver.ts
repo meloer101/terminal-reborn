@@ -88,7 +88,7 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
     emitConfig()
   }
 
-  /** Ultracode as Claude applies it now: a set without an error can still leave it off (2.1.322, PRD §6.18). */
+  /** Ultracode as Claude applies it now: a set without an error can still leave it off (2.1.322, PRD §6.20). */
   const readUltracode = async (): Promise<void> => {
     const settings = await control({ subtype: 'get_settings' }, 10_000)
     const ultracode = settings.ok ? settingsUltracode(settings.response) : null
@@ -302,10 +302,9 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       return true
     },
 
-    stopTask(taskId) {
+    async stopTask(taskId) {
       if (!isReady) return false
-      void control({ subtype: 'stop_task', task_id: taskId })
-      return true
+      return (await control({ subtype: 'stop_task', task_id: taskId }, 10_000)).ok
     },
 
     async setConfig(id, value) {
@@ -325,6 +324,8 @@ export function createClaudeDriver(io: DriverIO, options: DriverOptions): GuiDri
       if (!outcome.ok) return false
       if (id === 'model') current.model = value
       else if (id === 'effort') current.effort = value
+      // Whether ultracode is on, and can be, depends on the model (xhigh) and the effort change (PRD §6.20).
+      if (id === 'model' || id === 'effort') await readUltracode()
       else if (id === 'fast') {
         current.fast = value === 'on'
         current.fastBlocked = undefined

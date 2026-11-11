@@ -207,7 +207,7 @@ export function registerGuiHandlers(): void {
     return id !== null && host.interrupt(id)
   })
 
-  ipcMain.handle(GUI_IPC.stopTask, (event, rawId: unknown, rawTask: unknown): boolean => {
+  ipcMain.handle(GUI_IPC.stopTask, async (event, rawId: unknown, rawTask: unknown): Promise<boolean> => {
     const id = owned(event.sender, rawId)
     return id !== null && typeof rawTask === 'string' && GUI_TASK_ID.test(rawTask) && host.stopTask(id, rawTask)
   })

@@ -3,12 +3,13 @@
 // run id); while it goes, `subagents/workflows/<runId>/journal.jsonl` says which agents started and ended (queued ones
 // are not there yet, so the run is `partial`); when it ends, `workflows/<runId>.json` has the whole run. Files are
 // only read, and only beside a transcript under Claude's projects directory. GUI sessions are skipped: their
-// stream-json carries the same rows live (gui/claude-driver.ts). Measured on 2.1.322 (PRD §6.18).
-import { open, readdir, stat } from 'node:fs/promises'
+// stream-json carries the same rows live (gui/claude-driver.ts). Measured on 2.1.322 (PRD §6.20).
+import { open, readdir } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 import type { HookAgent } from '@shared/agent-events'
 import { isLiveRun, runFromJournal, runFromSnapshot, scriptMeta, WORKFLOW_RUN_ID, type WorkflowPhase, type WorkflowRun } from '@shared/workflow-run'
 import { claudeTranscriptPath, defaultAgentDataDirs, type AgentDataDirs } from './agent-title'
+import { readHead } from './codex-usage'
 
 type Rec = Record<string, unknown>
 const isRec = (value: unknown): value is Rec => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -37,26 +38,15 @@ export interface WorkflowFiles {
 }
 
 export const nodeWorkflowFiles: WorkflowFiles = {
-  async read(path, maxBytes) {
-    let handle: Awaited<ReturnType<typeof open>> | undefined
-    try {
-      const size = (await stat(path)).size
-      handle = await open(path, 'r')
-      const buffer = Buffer.alloc(Math.min(size, maxBytes))
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
-      return buffer.subarray(0, bytesRead).toString('utf8')
-    } catch {
-      return null
-    } finally {
-      await handle?.close().catch(() => undefined)
-    }
-  },
+  // A file that is not there (yet) reads as ''.
+  read: async (path, maxBytes) => (await readHead(path, maxBytes)) || null,
   async readFrom(path, offset, maxBytes) {
     let handle: Awaited<ReturnType<typeof open>> | undefined
     try {
       handle = await open(path, 'r')
-      const buffer = Buffer.alloc(maxBytes)
-      const { bytesRead } = await handle.read(buffer, 0, maxBytes, offset)
+      const buffer = Buffer.alloc(Math.max(0, Math.min((await handle.stat()).size - offset, maxBytes)))
+      if (buffer.length === 0) return buffer
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset)
       return buffer.subarray(0, bytesRead)
     } catch {
       return null

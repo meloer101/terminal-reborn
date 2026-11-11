@@ -260,7 +260,7 @@ function controlResponse(message) {
   turn.waiting = null
   const allowed = r.response.behavior === 'allow'
   if (turn.toolUse === 'tu-wf' && allowed) {
-    // Launched in the background: the call returns at once and the turn ends while the run goes on (PRD §6.18).
+    // Launched in the background: the call returns at once and the turn ends while the run goes on (PRD §6.20).
     workflow = { task: 'wtask0001', timer: null }
     out({ type: 'system', subtype: 'task_started', task_id: workflow.task, tool_use_id: 'tu-wf', task_type: 'local_workflow', workflow_name: 'auth-cookie-migration', description: 'auth-cookie-migration', session_id: SESSION })
     out({

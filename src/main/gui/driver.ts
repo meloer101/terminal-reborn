@@ -79,7 +79,7 @@ export interface GuiDriver {
   interrupt(): boolean
   setConfig(id: string, value: string): Promise<boolean>
   /** Stops one of the agent's background tasks (Claude `stop_task`: a workflow run's 停止, PRD F25). */
-  stopTask?(taskId: string): boolean
+  stopTask?(taskId: string): Promise<boolean>
   /** The process is gone: requests still waiting fail. */
   closed(): void
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { WorkflowRun } from '@shared/workflow-run'
 import { launchedRun, WorkflowWatcher } from './workflows'
 
-// Shapes measured on Claude Code 2.1.322 (PRD §6.18).
+// Shapes measured on Claude Code 2.1.322 (PRD §6.20).
 const root = '/Users/me/.claude/projects'
 const transcript = `${root}/-repo/sess-1.jsonl`
 const runDir = `${root}/-repo/sess-1/subagents/workflows/wf_abcdef12`

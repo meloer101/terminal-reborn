@@ -99,9 +99,19 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         : null,
     [workflowPrompt, answering, answer]
   )
-  const stopWorkflow = useCallback((run: WorkflowRun) => {
-    if (run.taskId) void window.tr.gui.stopTask(sessionId, run.taskId).catch(() => false)
-  }, [sessionId])
+  const stopWorkflow = useCallback(
+    (run: WorkflowRun) => {
+      if (!run.taskId) return
+      setSendError(null)
+      void window.tr.gui
+        .stopTask(sessionId, run.taskId)
+        .catch(() => false)
+        .then((ok) => {
+          if (!ok) setSendError(`没有停住 workflow「${run.name}」`)
+        })
+    },
+    [sessionId]
+  )
 
   const send = useCallback(
     (text: string, attachments: readonly string[]) => {

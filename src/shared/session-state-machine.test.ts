@@ -734,6 +734,14 @@ describe('a workflow run behind an ended turn (PRD F25)', () => {
     expect(s).toMatchObject({ status: 'done_unread', currentAction: undefined, background: undefined })
   })
 
+  it('the idle title and the idle heal leave it running; Stop takes the run line it already knows', () => {
+    let s = run(make('idle'), [promptSubmit, ev(runOf('running', 1)), ev({ type: 'stop', workflows: 1 })])
+    expect(s.currentAction).toBe('workflow · 改写 1 / 2')
+    s = reduce(s, { type: 'title', title: '✳ Claude Code' }, T0 + 100)
+    s = reduce(s, { type: 'tick' }, T0 + 100 + CLAUDE_IDLE_HEAL_MS + 1)
+    expect(s.status).toBe('running')
+  })
+
   it('a new prompt drops the background line; a session without a run ignores workflow lists', () => {
     const s = run(make('idle'), [promptSubmit, ev({ type: 'stop', workflows: 1 }), promptSubmit])
     expect(s).toMatchObject({ status: 'running', background: undefined })

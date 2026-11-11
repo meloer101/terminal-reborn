@@ -147,6 +147,8 @@ export interface SessionState {
    * runs end (a `workflows` event) or a new turn starts.
    */
   background?: string
+  /** The latest live workflow run's line from the last `workflows` list (whether or not a turn ran): what Stop shows. */
+  runLine?: string
 }
 
 export function initialState(
@@ -351,7 +353,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
       const finished = { ...touched, currentAction: undefined, toolAction: undefined, lastReply: replyLine(event.message), finishedAt: now }
       // A workflow run goes on behind the ended turn (PRD F25): still running until it ends.
       if (event.workflows) {
-        const background = state.background ?? 'workflow'
+        const background = state.background ?? state.runLine ?? 'workflow'
         const asks = state.asks.filter((a) => a.agent !== '')
         if (asks.length > 0) return { ...finished, background, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running', action: background } }
         return { ...finished, background, status: 'running', currentAction: background, asks: NO_ASKS, under: undefined }
@@ -364,20 +366,22 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     }
 
     case 'workflows': {
-      if (state.background === undefined) return state
       const live = event.runs.filter(isLiveRun)
-      if (live.length > 0) {
-        const background = workflowLine(live[live.length - 1]!, now)
-        if (background === state.background) return state
-        if (state.status === 'running') return { ...state, background, currentAction: background }
-        if (state.status === 'needs_you' && state.under?.status === 'running') return { ...state, background, under: { status: 'running', action: background } }
-        return { ...state, background }
+      const runLine = live.length > 0 ? workflowLine(live[live.length - 1]!, now) : undefined
+      if (state.background === undefined) return runLine === state.runLine ? state : { ...state, runLine }
+      const base: SessionState = { ...state, runLine }
+      if (runLine !== undefined) {
+        if (runLine === state.background) return base
+        if (state.status === 'running') return { ...base, background: runLine, currentAction: runLine }
+        if (state.status === 'needs_you' && state.under?.status === 'running') return { ...base, background: runLine, under: { status: 'running', action: runLine } }
+        return { ...base, background: runLine }
       }
-      // The last run ended: the turn's work is done (Claude wakes the main thread to read it, which starts a new turn).
+      // The last run ended: the turn's work is done. Claude also wakes the main thread to read it (UserPromptSubmit
+      // source system), which starts a new turn whatever came first.
       const status: SessionStatus = state.viewing ? 'idle' : 'done_unread'
-      if (state.status === 'running') return { ...state, background: undefined, status, currentAction: undefined, toolAction: undefined, finishedAt: now, lastActivityAt: now }
-      if (state.status === 'needs_you') return { ...state, background: undefined, under: { status } }
-      return { ...state, background: undefined }
+      if (state.status === 'running') return { ...base, background: undefined, status, currentAction: undefined, toolAction: undefined, finishedAt: now, lastActivityAt: now }
+      if (state.status === 'needs_you') return { ...base, background: undefined, under: { status } }
+      return { ...base, background: undefined }
     }
 
     case 'stop-failure': {
@@ -762,7 +766,8 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         if (healed !== state) return healed
       }
       // Only Claude's `✳` title is known to mean idle; another agent's plain title may stay up through a long turn.
-      if (state.kind === 'claude' && state.status === 'running' && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
+      // A workflow behind the ended turn keeps it running: its agents' calls do not touch lastEventAt (PRD F25).
+      if (state.kind === 'claude' && state.status === 'running' && state.background === undefined && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
         return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
       }
       return state
