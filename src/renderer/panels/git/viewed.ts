@@ -1,4 +1,4 @@
-// 已看 marks of Git · 变更 (合入链路 v2, PRD v1.169, Figma 73A) by worktree path, saved with the workspace
+// 已看 marks of Git · 变更 (合入链路 v2, PRD v1.170, Figma 73A) by worktree path, saved with the workspace
 // (`workspace.json` › reviewMarks, see ../../state/persistence; validated on load by sanitizeReviewMarks). A save is asked
 // for on every change; persistence coalesces them and main debounces the write.
 import { create } from 'zustand'

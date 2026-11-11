@@ -1,4 +1,4 @@
-// 合入链路 v2 (PRD v1.169, Figma section 73) end to end: the merge chain in Git · 变更 on real repositories with a local
+// 合入链路 v2 (PRD v1.170, Figma section 73) end to end: the merge chain in Git · 变更 on real repositories with a local
 // bare remote, the fake hook agent (e2e/fake-hook-claude.ts; the test plays it by writing the handoff file, e2e/ship.ts)
 // and a fake gh (e2e/fake-gh.ts). Two launches:
 //   gh signed out — origin's fetch URL says github.com (never fetched), its push URL is a bare repository:

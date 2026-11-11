@@ -9,7 +9,7 @@ import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { sameContext, type ContextUsage } from '@shared/session-meta'
 import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
-import type { ChatItem } from '@shared/transcript-chat'
+import type { ChatItem, KeepImage } from '@shared/transcript-chat'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
 import { createAcpDriver } from './acp-driver'
@@ -65,6 +65,8 @@ export interface GuiHostDeps<O extends GuiOwner> {
   /** The process ended or was stopped. */
   ended(sessionId: string, agent: CliAgent): void
   image(path: string): Promise<ImageBlock | null>
+  /** Keeps a message's inline pictures as files (Figma 71A); without it the chat draws none of them. */
+  keepImage?: KeepImage
   clientVersion: string
   /** Events of a session are sent together at most this often (default 16 ms). */
   batchMs?: number
@@ -158,7 +160,8 @@ class GuiSession<O extends GuiOwner> {
       ...(launchPermission ? { launchPermission } : {}),
       ...(resume ? { resume } : {}),
       ...(this.launch.model ? { model: this.launch.model } : {}),
-      ...(answered && answered.length > 0 ? { answered: new Set(answered) } : {})
+      ...(answered && answered.length > 0 ? { answered: new Set(answered) } : {}),
+      ...(this.deps.keepImage ? { keepImage: this.deps.keepImage } : {})
     }
     if (this.protocol === 'claude-stream') return createClaudeDriver(io, options)
     if (this.protocol === 'codex-app-server') return createCodexDriver(io, options)

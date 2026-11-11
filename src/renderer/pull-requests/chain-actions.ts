@@ -1,4 +1,4 @@
-// The one place every chain action runs from (合入链路 v2, PRD v1.169): Git · 变更's buttons, its ⋯ menu and ⌘K's Git
+// The one place every chain action runs from (合入链路 v2, PRD v1.170): Git · 变更's buttons, its ⋯ menu and ⌘K's Git
 // group call runChainCommand with the worktree and what to do. It reads the worktree's state again (preflight, change
 // list, ticks, PR), refuses with the chain's reason when the action cannot run now (said in the zone's notice line), and
 // otherwise starts the Ship run, opens the sheet, or puts the hand-off into the agent's input line (never pressing Enter).

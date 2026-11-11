@@ -1,4 +1,4 @@
-// Failures in plain words (合入链路 v2, PRD v1.169): what git or gh printed when a step failed, read as one of a few
+// Failures in plain words (合入链路 v2, PRD v1.170): what git or gh printed when a step failed, read as one of a few
 // kinds the user can act on, with the chain action that gets them unstuck. Pure; ship / PR results carry the answer.
 // Wavi runs git without a terminal, so a login or key passphrase prompt cannot appear: those kinds point at the terminal
 // and Wavi does not try to recover them itself.

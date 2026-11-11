@@ -126,7 +126,7 @@ export interface PrStatus {
    *  Merged PRs (合入链路 v2): the local head when polled, `remoteAhead` false. */
   local?: { head: string; remoteAhead: boolean }
   /**
-   * The last poll failed (合入链路 v2, PRD v1.169): what gh said, in words, and since when (epoch ms) the polls have
+   * The last poll failed (合入链路 v2, PRD v1.170): what gh said, in words, and since when (epoch ms) the polls have
    * been failing. `pr` is then the last status that was read, shown as stale, not as current. Absent when the last poll
    * worked.
    */

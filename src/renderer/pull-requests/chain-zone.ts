@@ -1,4 +1,4 @@
-// What Git · 变更's exit zone, its ⋯ menu and ⌘K show of the merge chain (合入链路 v2, PRD v1.169, Figma 73B–73H): the
+// What Git · 变更's exit zone, its ⋯ menu and ⌘K show of the merge chain (合入链路 v2, PRD v1.170, Figma 73B–73H): the
 // state line (glyph tone, the strong part and the rest of the sentence), the files it is about, the menu's fixed list
 // with each blocked item's reason, and the chain actions ⌘K offers. Pure; the chain itself is src/shared/ship-chain.ts.
 import type { ConfirmOptions } from '@shared/lifecycle'

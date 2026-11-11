@@ -8,8 +8,9 @@
 
 ## 当前位置
 
-- 2026-11-11：合入链路 v2 三轮审阅修复（PRD v1.169 变更记录 ⑩ ⑪，§6.19）：有 upstream 配置就算推送过；基线推到基线自己的远程；同步 / 拉取只 fetch 要用的 ref；中止 会丢东西时先确认；Wavi 跑的 git 固定参数、一律英文输出；勾选在运行中锁住；运行重载后不重复提交（出口 A 也是）；交给 agent 的文字以「（来自 Wavi）」开头、审阅不算它们；同步写它实际用的 ref；失败按主进程留下的全部输出分类（stderr 留末尾 8 KiB）；Figma 73 补了 73K1–73K9。没在真实 GitHub 上跑过。见「进行中：多 agent」的「合入链路 v2」。
-- 2026-11-10：合入链路 v2（PRD v1.169，Figma 73 `1150:53245`，待作者确认）：Git · 变更 的状态行写卡在哪、主按钮是下一步，⋯ 列全部操作和挡住的原因；新增提交…（勾选文件）、同步 <base>、拉取、推送、继续 / 中止；git / gh 失败说人话并只给一个往下走的按钮；只有 github.com 和 gh 登录过的主机算 GitHub；PR 查询失败写 `查询失败`；文件「已看」标记；全部合并后「归档…」；⌘K 的 Git 组；内置审阅带上用户在会话里提的要求。分支 jacoy/github-exploration。见「进行中：多 agent」的「合入链路 v2」。
+- 2026-11-11：合入链路 v2 三轮审阅修复（PRD v1.170 变更记录 ⑩ ⑪，§6.19）：有 upstream 配置就算推送过；基线推到基线自己的远程；同步 / 拉取只 fetch 要用的 ref；中止 会丢东西时先确认；Wavi 跑的 git 固定参数、一律英文输出；勾选在运行中锁住；运行重载后不重复提交（出口 A 也是）；交给 agent 的文字以「（来自 Wavi）」开头、审阅不算它们；同步写它实际用的 ref；失败按主进程留下的全部输出分类（stderr 留末尾 8 KiB）；Figma 73 补了 73K1–73K9。没在真实 GitHub 上跑过。见「进行中：多 agent」的「合入链路 v2」。
+- 2026-11-10：合入链路 v2（PRD v1.170，Figma 73 `1150:53245`，待作者确认）：Git · 变更 的状态行写卡在哪、主按钮是下一步，⋯ 列全部操作和挡住的原因；新增提交…（勾选文件）、同步 <base>、拉取、推送、继续 / 中止；git / gh 失败说人话并只给一个往下走的按钮；只有 github.com 和 gh 登录过的主机算 GitHub；PR 查询失败写 `查询失败`；文件「已看」标记；全部合并后「归档…」；⌘K 的 Git 组；内置审阅带上用户在会话里提的要求。分支 jacoy/github-exploration。见「进行中：多 agent」的「合入链路 v2」。
+- 2026-11-10：GUI 对话里发出的图片留在你的消息上（PRD v1.169，Figma 71A）：气泡上方 64 的缩略图；Claude / Pi / Codex 的图片字节由主进程存成附件目录里的文件，重开 app、续上会话后照样显示。
 - 2026-11-09：GUI 对话里连续的工具调用收成一行摘要（PRD v1.168，Figma 70′B / 70C）：「读取了 2 个文件，运行了 1 条命令 ›」，点开看每一行；agent 的文字、子 agent、派活图、等你确认的调用不收。
 - 2026-11-09：设置 · 额度 加 token 统计（PRD v1.167，Figma 69″）：周 / 月 / 年 / 全部的 token、API 等价、会话、连续天数，每天或每月的柱、过去一年的热力图、按 agent / 模型 / 项目 / 小时的份额；只读本机日志（Claude、Codex、OpenCode、Pi、Grok），每家标自己的起点，Wavi 不另存。
 - 2026-11-09：GUI 派活方的对话里画出派活（PRD v1.166，Figma 68′）：`wavi run` 的位置是扇出图（也是确认），输入框上方是派活条，派活报告是报告卡、不再是用户气泡。
@@ -152,12 +153,12 @@
 - [ ] 作者在真实仓库各走一遍出口 A / B 和一次自动修复
 - [ ] Figma 后再做：审阅自动时机收成一项「出口前自动审」、换对比基线
 
-合入链路 v2（2026-11-10，2026-11-11 三轮审阅修复；PRD v1.169 / §6.19，Figma 73 `1150:53245`；来源见 PRD v1.169 变更记录：用户 issue、HN / Reddit 和 Orca、T3 Code、Paseo 的源码；Wavi 自己的仓库没有 issue，没有一手反馈）
+合入链路 v2（2026-11-10，2026-11-11 三轮审阅修复；PRD v1.170 / §6.19，Figma 73 `1150:53245`；来源见 PRD v1.170 变更记录：用户 issue、HN / Reddit 和 Orca、T3 Code、Paseo 的源码；Wavi 自己的仓库没有 issue，没有一手反馈）
 - [x] 链路状态是一个纯函数：`src/shared/ship-chain.ts` 的 `shipChain`（规则 a–g，状态行、主按钮、另一步、⋯ 的全部操作和原因；勾选数和变更列表的 HEAD 也是输入），`exit-model.ts` 改成它的适配层，手机协议不变；创建 PR 在 agent 写之前就按 gh / 远程挡住
 - [x] 失败说人话：`src/shared/git-failures.ts` 按步骤把 git / gh 输出分成十几类，每类一句话和唯一的下一步（拉取 / 交给 agent / 改为创建 PR / 提交… / 重试 / 没有）；所有出口、PR 和查询结果都带上
 - [x] 主进程：预检补齐链路要的字段（gh、远程在不在 GitHub、停着的操作和没解决的文件、落后基线、merge-tree 冲突、是否推送过、和远程分支的领先 / 落后、基线推到哪个远程、拉取拉哪个）；`ship:sync`（只 fetch 基线和分支自己的 ref → 快进基线 → merge-tree 预检 → 没推送过的 rebase、推送过的 merge，从不推送）、`ship:pull`（只 fetch 分支推到的 ref，只快进）、`ship:operation`（继续 / 中止，中止会丢东西时先确认）；推送没推送过的分支 `push -u`；只有 github.com 和 gh 登录过的主机算 GitHub；PR 查询失败保留上次的 PR 并记 `PrStatus.error`；已合并的 PR 只在本地还在它的 head 上时算合并；原来吞掉的错误返回或写日志
 - [x] 两轮审阅修复（2026-11-11，commit 8a59b3e 和之后的改动；第一轮 50 条修了 49 条，第二轮 27 条修了 26 条、1 条部分修复）：有 upstream 配置就算推送过；基线推到基线自己的远程（`baseRemoteFor`），本地合并面板写「合并后推送到 <远程>」，基线跟踪别名分支时不推；Wavi 的 merge / rebase / fetch / push 固定参数，git 和 gh 一律英文输出（PRD §6.19）；中止 前确认；已提交行的 stamp 带 blob（symlink、子模块这类 mode 不是 100644 的行升级后 stamp 变一次，它们的「已看」重置一次）；「合并 PR #N…」等 PR 的详情；运行中勾选框锁住，写说明的 agent 被告知勾选了哪些文件；运行记住开始时的 tip 和它的提交；交给 agent 的文字以「（来自 Wavi）」开头、≤ 800 字、命令里的 ref 按 shell 引用；推送保护和签名规则单独成类；手机的出口按 Mac 的勾选
-- [x] 第三轮审阅修复（2026-11-11，PRD v1.169 变更记录 ⑪）：拉取 时远程分支已被删写「<远程> 上已经没有分支 <分支>」、HEAD 不动；gh 正常退出却读不出 PR 详情时记 `PrStatus.error`「没能读到 PR #N 的详情」；同步 的第二步和冲突交给 agent 的命令写主进程实际用的 ref（`onto` / `ontoRef`：`rebase 到 origin/main`、`git rebase refs/remotes/origin/main`），远程分叉的说明拉 `refs/heads/<分支>`；基线没跟上时「拉取 <base>」一步画成 ⓘ、原因单独一行（73K1）；「远程有本地没有的提交 · N 个」（按远程跟踪 ref 数得出、PR 查询没另报时）；状态行写着和基线冲突时 PR 行不再写「和基线冲突」；预检还在跑时按钮和菜单写基线分支名，开着的 ⋯ 菜单跟着链路原地更新；锁住时没勾的框照常（73K3）；hook 输出和扫一眼的输入框有内描边（73K2）；git / gh 失败按主进程留下的全部输出分类（stdout 加 stderr 的末尾 8 KiB；只显示末尾 40 行），出口 A 的 rebase 失败按 git 的完整输出分类（签名等用那一类的话）；出口 A 的运行重载后主进程拒绝提交时认出自己已做的提交、接着合并，超过 2 MB 被截断的 diff 不当证据（`diffSinceWithCut`）；后台写 PR 文字按 `baseRemoteFor` 对比基线；PR 未解决评论、审阅块的发现、浏览器控制台错误、错误条的「让 agent 修复」也以「（来自 Wavi）」开头；同任务多解汇报里的命令按基于的 ref 写（远程分支是 `refs/remotes/…`）
+- [x] 第三轮审阅修复（2026-11-11，PRD v1.170 变更记录 ⑪）：拉取 时远程分支已被删写「<远程> 上已经没有分支 <分支>」、HEAD 不动；gh 正常退出却读不出 PR 详情时记 `PrStatus.error`「没能读到 PR #N 的详情」；同步 的第二步和冲突交给 agent 的命令写主进程实际用的 ref（`onto` / `ontoRef`：`rebase 到 origin/main`、`git rebase refs/remotes/origin/main`），远程分叉的说明拉 `refs/heads/<分支>`；基线没跟上时「拉取 <base>」一步画成 ⓘ、原因单独一行（73K1）；「远程有本地没有的提交 · N 个」（按远程跟踪 ref 数得出、PR 查询没另报时）；状态行写着和基线冲突时 PR 行不再写「和基线冲突」；预检还在跑时按钮和菜单写基线分支名，开着的 ⋯ 菜单跟着链路原地更新；锁住时没勾的框照常（73K3）；hook 输出和扫一眼的输入框有内描边（73K2）；git / gh 失败按主进程留下的全部输出分类（stdout 加 stderr 的末尾 8 KiB；只显示末尾 40 行），出口 A 的 rebase 失败按 git 的完整输出分类（签名等用那一类的话）；出口 A 的运行重载后主进程拒绝提交时认出自己已做的提交、接着合并，超过 2 MB 被截断的 diff 不当证据（`diffSinceWithCut`）；后台写 PR 文字按 `baseRemoteFor` 对比基线；PR 未解决评论、审阅块的发现、浏览器控制台错误、错误条的「让 agent 修复」也以「（来自 Wavi）」开头；同任务多解汇报里的命令按基于的 ref 写（远程分支是 `refs/remotes/…`）
 - [x] Git · 变更：状态行代替置灰按钮的悬停、⋯ 菜单、提交…（勾选文件，没人写时自己写说明）、同步 / 拉取 / 推送 / 继续 / 中止、失败步骤下的一句话和一个按钮、出口 A 用仓库的合并方式、全部合并后「归档…」（不自动）、`#N ? 查询失败`（侧栏、总览、PR 行）、⇧⌘M 只执行出口和「合并 PR #N…」
 - [x] 已看：每个文件行的 ○ / ✓ / ◉ 标记、`已看 N / M`、「未看」筛选，按 worktree 存在 workspace.json 的 `reviewMarks`（PRD F5）
 - [x] ⌘K 的 Git 组：当前 worktree 现在能执行的链路操作，加「审阅全部改动」「打开 PR #N」
@@ -238,7 +239,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 来源：2026-10-24 读了 T3 Code（pingdotgg/t3code @ d53873b6）的源码、issue 和 discussion，结论见 PRD v1.68。按下面的顺序做；每一条都写了它做到哪一步、Wavi 怎么做。
 
 1. 一键提交 / 推送 / PR（PRD F16 v1.68）。T3 是一个按钮按 git 状态换文字，一路跑完提交、推送、建 PR，提交说明和 PR 正文由小模型写、不提示花额度；stacked PR 只读 GitHub 原生的 stack。
-   - [x] 一期（2026-10-24，PRD F16 v1.68）：Git · 变更的按钮文字跟着状态走（有未提交改动 →「提交、推送并创建 PR」，已有 PR 时为「提交并推送」；没有未提交改动、有没推送的提交 →「推送并创建 PR」/「推送」；没有可做的 →「打开 PR #N」）。面板多一段「提交」：勾选文件、编辑提交说明，提交前看得到会写进去什么；然后按顺序提交 → 推送 → 创建 PR，每一步写明进度，git hook 失败时显示它的输出；远程分支有本地没有的提交时写明原因、不推送。主进程 `commitWorktree` / `pushBranch`（`src/main/pull-requests.ts`），按钮逻辑 `ship-model.ts`（2026-10-27 删除；现在是 `src/shared/ship-chain.ts`，`exit-model.ts` 是适配层，PRD v1.169）；测试：`src/main/pull-requests.test.ts`（真实 git 仓库：只提交勾选的、hook 失败带输出、冲突 / 基线 / 分离 HEAD 拒绝、被拒的推送）、`ship-model.test.ts`（2026-10-27 一起删除）、e2e `pull-requests.spec.ts`「提交并推送」（现在是「提交并推送到 PR #13」那条），两种主题截图 `test-results/pull-requests/ship-sheet-*.png`
+   - [x] 一期（2026-10-24，PRD F16 v1.68）：Git · 变更的按钮文字跟着状态走（有未提交改动 →「提交、推送并创建 PR」，已有 PR 时为「提交并推送」；没有未提交改动、有没推送的提交 →「推送并创建 PR」/「推送」；没有可做的 →「打开 PR #N」）。面板多一段「提交」：勾选文件、编辑提交说明，提交前看得到会写进去什么；然后按顺序提交 → 推送 → 创建 PR，每一步写明进度，git hook 失败时显示它的输出；远程分支有本地没有的提交时写明原因、不推送。主进程 `commitWorktree` / `pushBranch`（`src/main/pull-requests.ts`），按钮逻辑 `ship-model.ts`（2026-10-27 删除；现在是 `src/shared/ship-chain.ts`，`exit-model.ts` 是适配层，PRD v1.170）；测试：`src/main/pull-requests.test.ts`（真实 git 仓库：只提交勾选的、hook 失败带输出、冲突 / 基线 / 分离 HEAD 拒绝、被拒的推送）、`ship-model.test.ts`（2026-10-27 一起删除）、e2e `pull-requests.spec.ts`「提交并推送」（现在是「提交并推送到 PR #13」那条），两种主题截图 `test-results/pull-requests/ship-sheet-*.png`
      - ~~Figma 补面板的「提交」一段和按钮的几种文字（现在沿用 22A 的组件）~~（面板 v1.78 取消；提交… 和链路按钮的文字画在 Figma 73B / 73F，2026-11-10，待作者确认）
    - [x] 二期 AI 写（2026-10-24，PRD F16 v1.68）：面板里「AI 写」/「AI 写标题和正文」另起一次本机 Claude / Codex（默认 Haiku），写好填进框里；悬停写明模型和额度，谁来写、模型和“打开面板时自动写”（默认关）在设置 · 自动化 · PR。`src/shared/ship-writer.ts`、`src/main/pr-writer.ts`；测试 `ship-writer.test.ts`、`pr-writer.test.ts`（假 claude / codex，只在测试目录里找 CLI）、e2e「提交并推送」里点一次 AI 写
    - [ ] 三期：stacked PR。会话基于另一个会话的分支开出来时，PR 的 base 就是那个分支；图谱画出 stack；合并 stack 用 GitHub 的接口；级联 rebase 先用 merge-tree 预检
@@ -324,6 +325,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 派活的子会话开成 GUI（PRD v1.163）：`childUi`（`src/shared/dispatch.ts`）、`wavi run --ui`、`addBackgroundSession` 带界面、等「开始」的请求存界面；单测覆盖规则和存盘
 - [x] GUI 派活可视化（PRD v1.166，Figma 68′）：`src/renderer/gui/Dispatch.tsx`（扇出图、派活条、报告卡和通知），`src/renderer/dispatch/view.ts`（两处共用的视图），`src/shared/dispatch.ts` 读回 `wavi run` 的回答、报告和通知；e2e `gui-dispatch.spec.ts`（假 Claude 真跑 `wavi run`，两种主题截图在 `test-results/gui-dispatch/`）
 - [x] GUI 工具调用收成一行（PRD v1.168，Figma 70′B / 70C）：`src/renderer/gui/model.ts` 的 `stepParts` / `groupView`，`Feed.tsx` 的 `ToolGroup`；e2e 在 `gui-session.spec.ts` 的工具行一项。没测：运行中那一组的样子（转圈、后接正在跑的调用）只有单测，没在真界面截图；MCP 的摘要只写工具名（ChatItem 没有服务名）。
+- [x] GUI 发出的图片留在消息上（PRD v1.169，Figma 71A）：`ChatItem` 用户消息加 `attachments`；`KeepImage`（`transcript-chat.ts`）由 `src/main/files.ts` `keepInlineImage` 实现，经 `DriverOptions.keepImage` 和读历史传进 Claude / Codex / Pi 的解析，ACP 发出时带附件路径、`session/load` 回放的图片块存成文件；`Feed.tsx` 复用输入框的 `Attachment`；e2e `gui-session.spec.ts` 粘贴一张图发出后气泡上方是 `sent-*.png`。没测：真 Claude / Codex / Pi / ACP agent 发图后的样子（只有假 Claude 和单测）；ACP 续上会话时的图片
 - [ ] GUI 派活可视化没做 / 没测：派活条里关掉出错的那一件（Figma 68′D）；⌘↵ 开始；真 agent（Claude / Codex / ACP 各家）在 GUI 里派活跑一遍；子会话是 GUI 时的节点和报告（e2e 只测了 CLI 子会话）
 - [x] GUI 会话的 context（PRD v1.164 / §6.17）：`DriverIO.context`，Claude 回复 usage + 结果里的窗口、Codex `thread/tokenUsage/updated`、ACP `usage_update`、Pi `get_session_stats`（解析在 `src/shared/session-meta.ts`）；真 app 测过 Claude / Codex / Pi，Grok 1.0.77 不报
 - [ ] 没测：真 agent 下 GUI 派活方开出 GUI 子会话、子会话 `wavi report` 回到 GUI 派活方（只有单测）；GUI 会话不跑 setup 脚本（F4「准备」），派出的 GUI 子会话同样不跑
@@ -452,7 +454,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
 - [x] B24 接了鼠标的 Mac（系统设置「显示滚动条：始终」）上每个终端右边多一条滚动条颜色的竖带（2026-10-30）：xterm 6 自己画滚动条，但它的 `.xterm-viewport` 仍是 `overflow-y: scroll` 且铺满整个终端，原生轨道（10px）贴在终端右边缘。全局去掉这个原生滚动条（`src/renderer/styles/base.css`），设置预览里同样的规则合并进来。用 `::-webkit-scrollbar` 强制常驻滚动条实测：修复前 viewport 占 10px、右边缘是轨道色，修复后 0px、和终端底色一致，滚轮翻 scrollback 不受影响
 - [x] B25 squash 合并到 main 之后底部仍出「合并到 main 并推送」，再点会让 agent 重写提交说明、往 main 写空提交（2026-10-30，PRD v1.101）：按提交数分支仍领先；改为按内容判断（合进基线后的树等于基线的树），出口预检和合并预检都用它
 - [x] B26 Git · 图谱一个提交上有多个 ref 胶囊、右侧栏变窄时，每个胶囊都缩成只剩边框和半个图标，提交说明也被挤没（2026-10-30）：胶囊各自 `flex-shrink`、提交说明 `flex-basis: 0`。胶囊合进最多占半行的 `.pills`，放不下的换到被裁掉的第二行、整个隐藏；`Pills`（`GraphView.tsx`）在宽度变化时把组宽收到第一行最后一个胶囊（向上取整，否则小数宽度会把它也挤下去）
-- [ ] B27 「合并到 main 并推送」写死 squash，squash 后分支不是基线的祖先、提交图和「领先 N」把它当成没合并（2026-10-30，PRD v1.105）：方式跟随仓库（GitHub 设置或第一次选后记住），squash 后分支移到 squash 提交上。主进程、共享层和出口 A 取用仓库的方式（`exitMethod`：仓库的默认方式，不允许时取第一个允许的，没有 GitHub 设置时 squash；步骤标签写方式；2026-11-10，PRD v1.169）已完成；「合并方式」一行、第一次选并记住方式的界面等 Figma 第 43 节定稿
+- [ ] B27 「合并到 main 并推送」写死 squash，squash 后分支不是基线的祖先、提交图和「领先 N」把它当成没合并（2026-10-30，PRD v1.105）：方式跟随仓库（GitHub 设置或第一次选后记住），squash 后分支移到 squash 提交上。主进程、共享层和出口 A 取用仓库的方式（`exitMethod`：仓库的默认方式，不允许时取第一个允许的，没有 GitHub 设置时 squash；步骤标签写方式；2026-11-10，PRD v1.170）已完成；「合并方式」一行、第一次选并记住方式的界面等 Figma 第 43 节定稿
 - ~~B12 选项条文案和焦点~~：PromptBar 已在 v1.2 取消
 - ~~B14 浅色主题配渐变背景时文字看不清~~：渐变 / 图片背景已取消
 
@@ -496,7 +498,7 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
 - [ ] F6 右键：合并到基线 · 基于基线 rebase · 新建 worktree · 删除 worktree（F4 合并面板已有，待接到图谱右键）
 - [ ] F6 / F17 Git 后续：每个 worktree 的未提交行 / 脏标记、点提交看详情、聚焦分支高亮、同一仓库的多个 worktree 共用图谱状态、`--no-textconv` 等仓库配置隔离、旧版 git 的 `-z` 兼容、分支 + 未提交合并 diff
 - [x] F16 PR / CI 状态（2026-10-20，PRD v1.51，提前于外部验证到期做掉）：只用用户自己的 `gh` 登录，主进程低频查有 upstream 的分支（checks 进行中 1 分钟、打开 3 分钟、其余 10 分钟，失败退避、限流全部暂停 15 分钟）；侧栏会话行和总览 PR 列显示 `#123 ✓` / `#13 草稿 ◌` / `#9 已合并`，会话头没放（Figma 17 没有位置）；没有 gh 时只在“创建 PR”上方给一行提示。CI 失败时“让 agent 修复”把失败的检查名和 `--log-failed` 末尾按 §6.9 引用、放进输入行不按回车。外部来源：竞品（Orca、Superset、Conductor、Claude Code 桌面版、Codex app、Copilot app）都有 PR / CI 闭环，Claude Code 桌面版有 CI 栏，o#9512（应用内看 PR，15 👍）；用户更愿意复用 gh 登录而不是给 GitHub OAuth 大权限。测试：`src/main/pull-requests.test.ts`（假 gh + 临时仓库，真推送到本地 bare 仓库）、`src/shared/pull-requests.test.ts`、e2e `pull-requests.spec.ts`（截图在 `test-results/pull-requests/`）。还没在真实 GitHub 仓库上走一遍创建和修复
-- [x] 创建 PR（2026-10-20）：Git · 变更底部的按钮启用——从没推送过的分支先确认再 `git push -u`，然后 `gh pr create`（标题 = 会话名，正文 = 提交说明），在内置浏览器打开；已有打开的 PR 时变成“打开 PR #N”（2026-10-21 起点了出口就算同意推送、不再确认，PRD v1.63；2026-10-27 起标题和正文由 agent 写，PRD v1.78；2026-11-10 起 Mac 上「打开 PR #N」不再是底部按钮，是 PR 行的链接和 ⌘K 的「打开 PR #N」，手机上仍是出口，PRD v1.169）
+- [x] 创建 PR（2026-10-20）：Git · 变更底部的按钮启用——从没推送过的分支先确认再 `git push -u`，然后 `gh pr create`（标题 = 会话名，正文 = 提交说明），在内置浏览器打开；已有打开的 PR 时变成“打开 PR #N”（2026-10-21 起点了出口就算同意推送、不再确认，PRD v1.63；2026-10-27 起标题和正文由 agent 写，PRD v1.78；2026-11-10 起 Mac 上「打开 PR #N」不再是底部按钮，是 PR 行的链接和 ⌘K 的「打开 PR #N」，手机上仍是出口，PRD v1.170）
 
 ### M6 · 深化（持续）→ v1.0
 完成标准：PRD §1.3 的指标全部达标，没有 P0 / P1 缺陷。

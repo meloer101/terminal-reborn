@@ -1,4 +1,4 @@
-// Review progress (合入链路 v2, PRD v1.169): an 已看 mark on every file row of Git · 变更, `已看 5 / 12` in its header.
+// Review progress (合入链路 v2, PRD v1.170): an 已看 mark on every file row of Git · 变更, `已看 5 / 12` in its header.
 // A mark remembers the file's diff fingerprint (`stamp`) when it was set; once the diff changes the mark no longer
 // counts (the row reads 看过后又改了) until it is set again; it is dropped when the row leaves the list. Marks live in
 // workspace.json per worktree path. Pure.

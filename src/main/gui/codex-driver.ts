@@ -13,7 +13,7 @@ import { isImagePath, withPaths } from './launch'
 const HANDSHAKE_TIMEOUT_MS = 60_000
 
 export function createCodexDriver(io: DriverIO, options: DriverOptions): GuiDriver {
-  const normalizer = createCodexNormalizer(options.cwd)
+  const normalizer = createCodexNormalizer(options.cwd, undefined, options.keepImage)
   const rpc = new RpcClient(io.write, false)
   /** Prompt id → the server request's own id (number or string), to answer with. */
   const requestIds = new Map<string, unknown>()

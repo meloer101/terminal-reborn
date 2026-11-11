@@ -826,7 +826,7 @@ describe('risks', () => {
   })
 })
 
-// ── 合入链路 v2 (PRD v1.169) ─────────────────────────────────────────────────────────────────────────────────────
+// ── 合入链路 v2 (PRD v1.170) ─────────────────────────────────────────────────────────────────────────────────────
 
 /** The same line of a.txt changed on main (pushed) and on feat: landing feat on main conflicts. */
 function conflicting(options: { github?: boolean } = { github: false }) {

@@ -1,4 +1,4 @@
-// 已看 marks in Git · 变更 (合入链路 v2, PRD v1.169, Figma 73A) on a real worktree with three uncommitted files: marking
+// 已看 marks in Git · 变更 (合入链路 v2, PRD v1.170, Figma 73A) on a real worktree with three uncommitted files: marking
 // two viewed reads `已看 2 / 3` (an open file folds when it is marked), the 未看 filter lists the one left, the marks
 // survive a relaunch (workspace.json › reviewMarks), and a viewed file changed on disk reads 看过后又改了 and no longer
 // counts. Screenshots of the right sidebar go to REVIEW_PROGRESS_SHOTS (default test-results/review-progress/):

@@ -249,6 +249,12 @@ describe('a sent message shows at once', () => {
     expect(withPendingSend([...items, user('u2', '再改一下')], pending).map((i) => i.id)).toEqual(['u1', 'x1', 'u2'])
     expect(withPendingSend(items, null)).toBe(items)
   })
+
+  it('carries the pictures sent with it; other files go in its text (Figma 71A)', () => {
+    const pending = { id: 'pending-1', text: '看图', users: 0, at: 5, attachments: ['/tmp/a.png', '/tmp/notes.md', '/tmp/b.HEIC'] }
+    expect(withPendingSend([], pending)).toEqual([{ kind: 'user', id: 'pending-1', at: 5, text: '看图', images: 1, attachments: ['/tmp/a.png'] }])
+    expect(withPendingSend([], { ...pending, attachments: ['/tmp/notes.md'] })[0]).not.toHaveProperty('attachments')
+  })
 })
 
 describe('chat layout (Figma 51A)', () => {

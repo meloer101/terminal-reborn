@@ -1,4 +1,4 @@
-// The merge chain's state (合入链路 v2, PRD v1.169): one answer to "where is this worktree stuck and what can be done".
+// The merge chain's state (合入链路 v2, PRD v1.170): one answer to "where is this worktree stuck and what can be done".
 // From what the app already knows (the ship preflight, the PR poll, the change list, the worktree's sessions) it gives
 // the state line, the primary and secondary move, and every chain action in a fixed order with the reason it cannot
 // run now. Pure; Git · 变更, the phone (PRD F22) and ⌘K read it. Rules, first match decides (a–g):

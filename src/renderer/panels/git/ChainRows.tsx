@@ -1,4 +1,4 @@
-// Git · 变更's merge chain rows (合入链路 v2, PRD v1.169, Figma 73B–73G): the state line — a glyph, the sentence's strong
+// Git · 变更's merge chain rows (合入链路 v2, PRD v1.170, Figma 73B–73G): the state line — a glyph, the sentence's strong
 // part and the rest — with the files it is about under it, and the exits: the chain's second move and its primary
 // (⇧⌘M), then ⋯ with every chain action in a fixed order, a blocked one disabled with its reason in the trailing slot.
 // Every action goes through pull-requests/chain-actions.ts, the same function ⌘K calls.

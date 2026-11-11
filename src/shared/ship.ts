@@ -10,7 +10,7 @@ import type { HandoffKind } from './ship-handoff'
 export type ShipExitKind = 'main' | 'pr'
 
 /**
- * A merge, rebase or cherry-pick that stopped in the worktree (合入链路 v2, PRD v1.169): 继续 / 中止 apply to it, and
+ * A merge, rebase or cherry-pick that stopped in the worktree (合入链路 v2, PRD v1.170): 继续 / 中止 apply to it, and
  * while files are unresolved the conflicts go to the agent. A revert in progress is not reported here.
  */
 export interface ShipOperation {
@@ -49,7 +49,7 @@ export type ShipPreflight =
       /** The merge methods the repository allows on GitHub and its default (PRD F16 v1.105); null when there are no
        *  GitHub settings to go by (no GitHub remote, no gh, or gh could not tell): the user picks, Wavi remembers. */
       mergeMethods: RepoMergeMethods | null
-      // ── 合入链路 v2 (PRD v1.169), read by src/shared/ship-chain.ts ─────────────────────────────────────────────────
+      // ── 合入链路 v2 (PRD v1.170), read by src/shared/ship-chain.ts ─────────────────────────────────────────────────
       /** The branch's tip commit (a merged PR counts as this branch only while the tip is the PR's head). */
       head: string
       /** Whether gh is installed and logged in, as main last checked. */
@@ -232,7 +232,7 @@ export const SHIP_IPC = {
   operation: 'ship:operation'
 } as const
 
-// --- 合入链路 v2 (PRD v1.169): 同步 / 拉取 / 继续 · 中止 (src/main/ship.ts, members of ShipApi) ----------------------
+// --- 合入链路 v2 (PRD v1.170): 同步 / 拉取 / 继续 · 中止 (src/main/ship.ts, members of ShipApi) ----------------------
 
 /**
  * 同步 <base>: fetch; fast-forward the local base when its checkout is clean; then bring the base into the branch —

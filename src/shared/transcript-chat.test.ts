@@ -238,6 +238,19 @@ describe('Claude transcript → chat', () => {
       line({ type: 'user', message: { content: [{ type: 'text', text: '[Image #1] 按钮被挡住了' }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } }] } })
     ])
     expect(items[0]).toMatchObject({ kind: 'user', text: '[Image #1] 按钮被挡住了', images: 1 })
+    expect(items[0]).not.toHaveProperty('attachments')
+  })
+
+  it('keeps the photos sent with a prompt as files for the chat to draw (Figma 71A)', () => {
+    const kept: string[] = []
+    const p = createChatParser('claude', () => 0, (image) => {
+      kept.push(`${image.mediaType} ${image.data}`)
+      return image.mediaType === 'image/png' ? `/tmp/sent-${image.data}.png` : null
+    })
+    const image = (mediaType: string, data: string): object => ({ type: 'image', source: { type: 'base64', media_type: mediaType, data } })
+    p.push(line({ type: 'user', message: { content: [{ type: 'text', text: '看图' }, image('image/png', 'AAAA'), image('image/heic', 'BBBB'), image('image/png', 'CCCC')] } }))
+    expect(kept).toEqual(['image/png AAAA', 'image/heic BBBB', 'image/png CCCC'])
+    expect(p.items[0]).toMatchObject({ kind: 'user', text: '看图', images: 3, attachments: ['/tmp/sent-AAAA.png', '/tmp/sent-CCCC.png'] })
   })
 
   it('leaves out thinking with no text (signature only, display omitted): there is nothing to open', () => {

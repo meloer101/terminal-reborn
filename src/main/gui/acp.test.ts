@@ -7,10 +7,16 @@ const fold = (events: GuiEvent[], state: GuiState = emptyGuiState()) => events.r
 const chunk = (sessionUpdate: string, text: string) => ({ sessionUpdate, content: { type: 'text', text } })
 
 describe('createAcpNormalizer', () => {
+  it('names the files of the pictures a message carries (Figma 71A)', () => {
+    const s = fold(createAcpNormalizer('/repo', () => 3).sent('m1', 'look', 1, ['/tmp/a.png']))
+    expect(s.items[0]).toMatchObject({ kind: 'user', images: 1, attachments: ['/tmp/a.png'] })
+  })
+
   it('streams chunks live and finishes the block when a tool call or the prompt end arrives', () => {
     const n = createAcpNormalizer('/repo', () => 3)
     let s = fold(n.sent('m1', 'fix it', 0))
     expect(s).toMatchObject({ busy: true, items: [{ kind: 'user', id: 'm1', text: 'fix it' }] })
+    expect(s.items[0]).not.toHaveProperty('attachments')
     s = fold([...n.update(chunk('agent_thought_chunk', 'Look')), ...n.update(chunk('agent_thought_chunk', 'ing'))], s)
     expect(s.live).toEqual({ kind: 'thinking', text: 'Looking' })
     s = fold(n.update(chunk('agent_message_chunk', 'On it.')), s)
@@ -91,6 +97,13 @@ describe('createAcpNormalizer', () => {
     s = fold(n.promptDone('cancelled'), s)
     expect(s.prompts).toEqual([])
     expect(s.items.at(-1)).toMatchObject({ kind: 'system', text: '已中断' })
+  })
+
+  it('keeps the pictures of a replayed message as files (session/load, Figma 71A)', () => {
+    const n = createAcpNormalizer('/repo', () => 0, (image) => `/kept/${image.data}.png`)
+    let s = fold(n.update(chunk('user_message_chunk', '看图')))
+    s = fold(n.update({ sessionUpdate: 'user_message_chunk', content: { type: 'image', data: 'AAAA', mimeType: 'image/png' } }), s)
+    expect(s.items).toEqual([{ kind: 'user', id: 'u0', at: 0, text: '看图', images: 1, attachments: ['/kept/AAAA.png'] }])
   })
 
   it('joins the chunks of one replayed message into one bubble (session/load)', () => {
