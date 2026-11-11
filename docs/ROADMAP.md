@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-11：F25 Ultracode（PRD v1.173，Figma 74）：GUI 输入框里用户自己打开的 Ultracode 开关（不记住、续上后是关的）；Workflow 调用画成运行卡（确认、phase 进度、token、停止、五种结束状态）；侧栏会话下一行 workflow 和它的 phase；workflow 在后台跑时会话仍是运行中；终端 Claude 的会话头读出 Ultracode。`src/shared/workflow-run.ts`、`src/main/hooks/workflows.ts`、`src/main/gui/claude-stream.ts`、`src/renderer/gui/WorkflowCard.tsx`；单元测试 + e2e `gui-workflow.spec.ts`（假 Claude）。没在真 CLI 上跑过（要花额度，待作者同意）；其余 agent 和手机端没做。
 - 2026-11-11：卡片离窗口的上、下、右边各留 6，红绿灯和侧栏顶行下移 6（PRD v1.172，Figma 75A）：卡片所有的角统一圆角 10，去掉落在窗口角上的 16；侧栏收起时左边也留 6；全屏也留 6（作者没说，待确认）。
 - 2026-11-11：合入链路 v2 三轮审阅修复（PRD v1.170 变更记录 ⑩ ⑪，§6.19）：有 upstream 配置就算推送过；基线推到基线自己的远程；同步 / 拉取只 fetch 要用的 ref；中止 会丢东西时先确认；Wavi 跑的 git 固定参数、一律英文输出；勾选在运行中锁住；运行重载后不重复提交（出口 A 也是）；交给 agent 的文字以「（来自 Wavi）」开头、审阅不算它们；同步写它实际用的 ref；失败按主进程留下的全部输出分类（stderr 留末尾 8 KiB）；Figma 73 补了 73K1–73K9。没在真实 GitHub 上跑过。见「进行中：多 agent」的「合入链路 v2」。
 - 2026-11-10：合入链路 v2（PRD v1.170，Figma 73 `1150:53245`，待作者确认）：Git · 变更 的状态行写卡在哪、主按钮是下一步，⋯ 列全部操作和挡住的原因；新增提交…（勾选文件）、同步 <base>、拉取、推送、继续 / 中止；git / gh 失败说人话并只给一个往下走的按钮；只有 github.com 和 gh 登录过的主机算 GitHub；PR 查询失败写 `查询失败`；文件「已看」标记；全部合并后「归档…」；⌘K 的 Git 组；内置审阅带上用户在会话里提的要求。见「进行中：多 agent」的「合入链路 v2」。
@@ -380,6 +381,19 @@ iPhone 上用 GUI 操作 Mac 上 Wavi 里的会话（PRD F22 v1.112）。作者 
 - [x] S2 空闲态（2026-11-01，PRD v1.124，Figma 47′）：没有要显示的会话时不立刻结束，换成「空闲」，安静 30 分钟后结束；只接着已有的卡片。测试 `ActivityStateTests`；模拟器对替身 Mac 看过紧凑和展开态，锁屏没截图。App 挂起时到点结束要等 S4
 - [ ] S3 蓝牙后台更新：先实测后台被蓝牙唤醒时能否更新灵动岛；Mac 端 `@stoprocent/bleno`
 - [ ] S4 APNs（取代原 P4 的 Expo push）：Mac 直发，.p8 存 Mac 钥匙串；通知和灵动岛的 start / update / end
+
+## 进行中：F25 Ultracode（2026-11-11 定）
+
+PRD F25 / §6.20，Figma 74（`1177:54922`）。
+- [x] 共享模型：三种来源（stream-json 行、结束快照、journal）读成同一个 run（`src/shared/workflow-run.ts`）
+- [x] 终端会话：hook 后读 run 的 journal 和结束快照（`src/main/hooks/workflows.ts`），workflow 里的 agent 不再算 subagent
+- [x] 会话状态：Stop 的 `background_tasks` 里还有 workflow 时保持运行中，run 结束后变已完成
+- [x] GUI：Ultracode 开关（只在 `ultracodeAvailable` 时出现，不记住）、Workflow 确认画在运行卡上、运行卡、停止（`stop_task`）
+- [x] 侧栏：workflow 行和 phase 行，点了收起；终端 Claude 会话头的 Ultracode
+- [x] e2e `gui-workflow.spec.ts`（假 Claude：开关、确认、运行、侧栏、停止，两种主题截图）
+- [ ] 真 CLI 实测一次（要花额度，待作者同意）：Wavi 启动的会话里 workflow agent 的 hook 是否带 `agent_id`、`background_tasks` 实际值、`-p` 下 `task_*` 的节奏、各权限模式下 Workflow 是否自动放行
+- [ ] 其余 agent 的同类模式（Copilot `--fleet`、Droid missions、Kimi `/swarm`、Grok workflow、Antigravity `/boost`、CodeBuddy teams、Cline `/team`），14 家本机没装
+- [ ] 手机端显示 workflow
 
 ## 已完成
 
