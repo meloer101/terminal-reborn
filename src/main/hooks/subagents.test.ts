@@ -219,7 +219,7 @@ describe('on disk', () => {
     const sent: SubagentInfo[][] = []
     const watcher = new SubagentWatcher((_id, _agent, items) => sent.push(items), { dirs: { claudeProjects: [projects], codexHome: tmp } })
     watcher.observe('s1', 'claude', 'PreToolUse', { transcript_path: join(projects, '-repo', 'sess-1.jsonl'), agent_id: 'ab1' })
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(sent).toEqual([[{ id: 'ab1', title: 'Map ship/merge code paths', model: 'Fable 5.1' }]])
+    // Real file reads: waited for, not timed (a busy machine in a full run takes longer than a fixed wait).
+    await expect.poll(() => sent, { timeout: 5_000 }).toEqual([[{ id: 'ab1', title: 'Map ship/merge code paths', model: 'Fable 5.1' }]])
   })
 })
