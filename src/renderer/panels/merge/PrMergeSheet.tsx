@@ -79,6 +79,8 @@ export function PrMergeSheet({ target, status, targetSwitch }: { target: MergeTa
       return
     }
     const lines: CheckLine[] = [{ tone: result.outcome === 'merged' ? 'ok' : 'working', text: result.message }]
+    // The local base could not be brought up to the merged remote base (合入链路 v2): said with the result.
+    if (result.baseNotCaughtUp) lines.push({ tone: 'warn', text: result.baseNotCaughtUp })
     if (archive && !target.isMain && ids[0]) {
       if (result.outcome === 'merged') {
         const archiveTarget = archiveTargetFor(ids[0])

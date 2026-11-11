@@ -85,6 +85,8 @@ function setup() {
       'test\tRun npm test\t2026-10-20T17:15:15.9713790Z ##[error]Process completed with exit code 1.'
     ].join('\n')
   )
+  // #13's head is jacob/wip as pushed. (#7's details are written by exit B, once the head it pushes is known.)
+  gh.setPlainDetails(13, git(paths['jacob/wip']!, 'rev-parse', 'HEAD').trim(), { draft: true })
   const ciHead = git(paths['jacob/ci']!, 'rev-parse', 'HEAD').trim()
   const author = (login: string, bot = false) => ({ login, __typename: bot ? 'Bot' : 'User' })
   gh.setDetails(12, {
@@ -286,6 +288,9 @@ test.describe('F16 PR / CI status', () => {
     await block.getByRole('checkbox', { name: '草稿' }).click()
     await expect(block.getByRole('checkbox', { name: '草稿' })).toHaveAttribute('aria-checked', 'true')
     await shoot('ship-glance-pr')
+    // Nothing to commit: the run pushes the branch as it is, so that is #7's head on GitHub once it exists.
+    const navHead = repo.git(repo.paths['jacob/nav']!, 'rev-parse', 'HEAD').trim()
+    repo.gh.setPlainDetails(7, navHead)
     await block.getByRole('button', { name: /^推送并创建 PR/ }).click()
 
     await expect(panel().getByRole('textbox', { name: '地址' })).toHaveValue('https://github.com/acme/widget/pull/7', WITHIN)
@@ -293,6 +298,8 @@ test.describe('F16 PR / CI status', () => {
     const dialogs = await app.evaluate(() => (globalThis as unknown as { __trDialogs: { requests: { message: string }[] } }).__trDialogs.requests.map((r) => r.message))
     expect(dialogs).not.toContain('把分支 jacob/nav 推送到 origin？')
     expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/nav').trim()).toBe(repo.git(repo.paths['jacob/nav']!, 'rev-parse', 'HEAD').trim())
+    // The head the fake reports for #7 is the one that was pushed.
+    expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/nav').trim()).toBe(navHead)
     const call = repo.gh.calls().find((c) => c[0] === 'pr' && c[1] === 'create')!
     expect(call).toEqual(expect.arrayContaining(['--repo=github.com/acme/widget', '--head=jacob/nav', '--base=main', '--title=导航吸顶', '--draft']))
     expect(call.join('\n')).toContain('--body=- 导航滚动时吸在顶部\n- 加了测试')
@@ -445,6 +452,8 @@ test.describe('F16 PR / CI status', () => {
     expect(repo.git(wip, 'log', '-1', '--format=%s').trim()).toBe('Export wip')
     expect(repo.git(repo.bare, 'rev-parse', 'refs/heads/jacob/wip').trim()).toBe(repo.git(wip, 'rev-parse', 'HEAD').trim())
     expect(repo.git(wip, 'status', '--porcelain').trim()).toBe('')
+    // GitHub now has the pushed commit as #13's head.
+    repo.gh.setPlainDetails(13, repo.git(wip, 'rev-parse', 'HEAD').trim(), { draft: true })
     await expect(panel().getByRole('textbox', { name: '地址' })).toHaveValue(/\/pull\/13$/, WITHIN)
     await showChanges()
   })
@@ -466,7 +475,7 @@ test.describe('F16 PR / CI status', () => {
     await row('s-ci').click()
     await showChanges()
     // GitHub threads are not drawn on the diff any more.
-    const file = panel().locator('[data-path="ci.ts"][data-group="committed"] button')
+    const file = panel().locator('[data-path="ci.ts"][data-group="committed"] button[aria-expanded]')
     await expect(file).toBeVisible(WITHIN)
     if ((await file.getAttribute('aria-expanded')) !== 'true') await file.click()
     await expect(panel().locator('[data-owner="committed:ci.ts"][data-line="1"]')).toBeVisible()

@@ -1,15 +1,82 @@
 // The Ship block (PRD F16 v1.78, Figma 29C / 29D / 29H): the exit's title line, its steps with a glyph column
 // (◌ working · ✓ done · ○ pending · ✗ failed), and — once the agent has written the text — a last look at it in
-// editable fields. It takes the place of the facts and the footer in Git · 变更. ⌘↵ goes ahead, Esc cancels.
-import { Check } from 'lucide-react'
+// editable fields. It takes the place of the facts and the footer in Git · 变更. ⌘↵ goes ahead, Esc cancels. A failed
+// step says what git said in plain words (合入链路 v2, Figma 73E), and the footer offers the one way on: 同步 / 拉取 /
+// 提交… (the chain's own action), 改为创建 PR, 交给 <agent> (into its input line, never sent), 重试, or only 取消.
+import { ArrowDown, ArrowUp, Check, CircleAlert, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
-import { cancelShip, editShip, handConflictsToAgent, retryShip, submitShip, switchToPr, useShips } from './ship-runner'
-import { glanceFields, STEP_GLYPH_NAME, stepGlyph, submitBlocker, submitLabel, type ShipState } from './ship-flow'
+import { CHAIN_LABEL, CHAIN_TEXT, type ChainActionId } from '@shared/ship-chain'
+import type { ShipKind } from '@shared/ship'
+import { runChainCommand } from './chain-actions'
+import { agentLabel } from '../panels/merge/model'
+import {
+  cancelShip,
+  editShip,
+  handConflictsToAgent,
+  hasHandoffText,
+  retryShip,
+  shipCanRetry,
+  shipFinished,
+  submitShip,
+  switchToPr,
+  useShipHandoffSession,
+  useShips
+} from './ship-runner'
+import {
+  baseNotCaughtUp,
+  failureOutput,
+  failureWay,
+  glanceFields,
+  heldBeforeStart,
+  STEP_GLYPH_NAME,
+  stepGlyph,
+  submitBlocker,
+  submitLabel,
+  titleIcon,
+  type FailureWay,
+  type ShipState
+} from './ship-flow'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './ShipBlock.module.css'
 
-export function ShipBlock({ worktree, base, hasSession }: { worktree: string; base: string; hasSession: boolean }) {
+const TITLE_ICON: Record<ShipKind | 'push', LucideIcon> = {
+  main: GitMerge,
+  pr: GitPullRequest,
+  'push-pr': GitPullRequest,
+  push: ArrowUp,
+  commit: GitCommitHorizontal,
+  sync: RefreshCw,
+  pull: ArrowDown
+}
+
+/** The label of a chain action a failure leads to (Figma 73E1: 同步 main). */
+function chainLabel(id: ChainActionId, base: string): string {
+  switch (id) {
+    case 'commit':
+      return CHAIN_LABEL.commit
+    case 'sync':
+      return CHAIN_LABEL.sync(base)
+    case 'pull':
+      return CHAIN_LABEL.pull
+    case 'push':
+      return CHAIN_LABEL.push
+    case 'pr':
+      return CHAIN_LABEL.createPr
+    case 'main':
+      return CHAIN_LABEL.mergePush(base)
+    case 'merge-pr':
+      return CHAIN_LABEL.mergePr(null)
+    case 'archive':
+      return CHAIN_LABEL.archive
+  }
+}
+
+export function ShipBlock({ worktree, base }: { worktree: string; base: string }) {
   const state = useShips((s) => s.byWorktree[worktree])
+  // 交给 <agent> types into the session the run started with: it names and enables the button.
+  const handoffSession = useShipHandoffSession(worktree)
+  const hasSession = handoffSession !== null
+  const handoffAgent = handoffSession ? agentLabel(handoffSession.kind) : null
   const ref = useRef<HTMLDivElement>(null)
   const titleId = useId()
   // The block takes the keyboard, so ⌘↵ and Esc work without a click.
@@ -20,12 +87,27 @@ export function ShipBlock({ worktree, base, hasSession }: { worktree: string; ba
   // After a failed run the text stays editable: a commit hook may want a different message.
   const showFields = state.stage === 'glance' || failedInRun
   const blocker = showFields ? submitBlocker(state) : null
-  const running = state.stage === 'running' && state.error === null
+  // Every step went through and the block stays to say something (同步 whose base could not catch up): only 关闭.
+  const finished = shipFinished(state)
+  const running = state.stage === 'running' && state.error === null && !finished
+  const way: FailureWay = state.error ? failureWay(state.error) : null
+  const handoff = way?.kind === 'handoff' && hasHandoffText(state.error)
+  // 重试 / ⌘↵: the failure's way on, or a failed commit whose message is still editable (beside its own way on).
+  const canRetry = shipCanRetry(state)
   const goAhead = (): void => {
     if (state.error) {
-      if (!blocker) retryShip(worktree)
+      if (canRetry && !blocker) retryShip(worktree)
     } else if (state.stage === 'glance' && !blocker) submitShip(worktree)
   }
+  const follow = (id: ChainActionId): void => {
+    cancelShip(worktree)
+    void runChainCommand(worktree, id)
+  }
+  const Icon = TITLE_ICON[titleIcon(state)]
+  // 同步's pre-check found conflicts: nothing was started, so the step is held (ⓘ, the reason in its place), not failed.
+  const held = heldBeforeStart(state)
+  const behind = baseNotCaughtUp(state)
+  const fields = showFields ? glanceFields(state) : []
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.nativeEvent.isComposing || event.defaultPrevented) return
@@ -52,43 +134,95 @@ export function ShipBlock({ worktree, base, hasSession }: { worktree: string; ba
     >
       <div className={styles.body}>
         <p id={titleId} className={styles.title}>
+          <span className={styles.titleIcon} aria-hidden>
+            <Icon size={16} strokeWidth={1.75} />
+          </span>
           {state.title}
         </p>
         <ol className={styles.steps}>
-          {state.steps.map((step) => (
-            <li key={step.id} className={styles.step} data-state={step.state} data-step={step.id}>
-              {step.state === 'working' ? (
-                // ◌ is all but invisible in the UI font; the session spinner is the app's one "in progress" sign.
-                <span className={styles.glyph}>
-                  <StatusGlyph status="running" />
+          {state.steps.map((step) =>
+            step.id === held?.step ? (
+              <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
+                <span className={styles.glyph} role="img" aria-label="没有开始">
+                  <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
                 </span>
-              ) : (
-                <span className={styles.glyph} role="img" aria-label={STEP_GLYPH_NAME[step.state]}>
-                  {stepGlyph(step.state)}
+                <span className={styles.stepBody} role="alert">
+                  <span className={styles.stepText}>{held.text}</span>
+                  {/* A hand-off that could not be typed says why under it. */}
+                  {state.error!.message !== held.text && <span className={styles.failureText}>{state.error!.message}</span>}
                 </span>
-              )}
-              <span className={styles.stepBody}>
-                <span className={styles.stepText}>
-                  {step.label}
-                  {step.note && <span className={styles.stepNote}> · {step.note}</span>}
+              </li>
+            ) : step.id === behind?.step ? (
+              // 拉取 <base> whose base could not catch up did not happen as its label says (Figma 73K1): held, the
+              // reason on its own row.
+              <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
+                <span className={styles.glyph} role="img" aria-label="没有完成">
+                  <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
                 </span>
-                {state.error?.step === step.id && <StepFailure state={state} worktree={worktree} hasSession={hasSession} />}
-              </span>
-            </li>
-          ))}
+                <span className={styles.stepBody}>
+                  <span className={styles.stepText}>{step.label}</span>
+                  <span className={styles.failureText}>{behind.reason}</span>
+                </span>
+              </li>
+            ) : (
+              <li key={step.id} className={styles.step} data-state={step.state} data-step={step.id}>
+                {step.state === 'working' ? (
+                  // ◌ is all but invisible in the UI font; the session spinner is the app's one "in progress" sign.
+                  <span className={styles.glyph}>
+                    <StatusGlyph status="running" />
+                  </span>
+                ) : (
+                  <span className={styles.glyph} role="img" aria-label={STEP_GLYPH_NAME[step.state]}>
+                    {stepGlyph(step.state)}
+                  </span>
+                )}
+                <span className={styles.stepBody}>
+                  <span className={styles.stepText}>
+                    {step.label}
+                    {step.note && <span className={styles.stepNote}> · {step.note}</span>}
+                  </span>
+                  {state.error?.step === step.id && <StepFailure state={state} />}
+                </span>
+              </li>
+            )
+          )}
         </ol>
-        {showFields && <Fields state={state} worktree={worktree} base={base} />}
+        {fields.length > 0 && <Fields state={state} worktree={worktree} base={base} />}
       </div>
       <div className={styles.footer}>
         <button type="button" className={styles.ghost} disabled={running} onClick={() => cancelShip(worktree)}>
-          取消
+          {finished ? '关闭' : '取消'}
         </button>
         <span className={styles.spacer} />
         {state.error ? (
-          <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
-            重试
-            {showFields && <span className={styles.shortcut}>⌘↵</span>}
-          </button>
+          <>
+            {/* A failed commit's own way on sits beside 重试, which is then the primary (⌘↵). */}
+            {way?.kind === 'create-pr' ? (
+              <button type="button" className={canRetry ? styles.ghost : styles.primary} onClick={() => switchToPr(worktree)}>
+                改为创建 PR
+              </button>
+            ) : way?.kind === 'chain' ? (
+              <button type="button" className={canRetry ? styles.ghost : styles.primary} data-way={way.id} onClick={() => follow(way.id)}>
+                {chainLabel(way.id, base)}
+              </button>
+            ) : handoff ? (
+              <button
+                type="button"
+                className={canRetry ? styles.ghost : styles.primary}
+                disabled={!hasSession}
+                title={hasSession ? undefined : CHAIN_TEXT.noAgent}
+                onClick={() => void handConflictsToAgent(worktree)}
+              >
+                {CHAIN_LABEL.handoff(handoffAgent)}
+              </button>
+            ) : null}
+            {canRetry && (
+              <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
+                重试
+                {showFields && <span className={styles.shortcut}>⌘↵</span>}
+              </button>
+            )}
+          </>
         ) : (
           state.stage === 'glance' && (
             <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
@@ -102,27 +236,15 @@ export function ShipBlock({ worktree, base, hasSession }: { worktree: string; ba
   )
 }
 
-/** Under the failed step: what went wrong, what git printed, and the way out that fits. */
-function StepFailure({ state, worktree, hasSession }: { state: ShipState; worktree: string; hasSession: boolean }) {
+/** Under the failed step: what went wrong in plain words and, for a hook or a repository rule, what it printed (Figma
+ *  73E). Without an agent session 交给 agent is disabled; no caption says so (the button carries it). */
+function StepFailure({ state }: { state: ShipState }) {
   const error = state.error!
+  const output = failureOutput(error)
   return (
     <span className={styles.failure} role="alert">
       <span className={styles.failureText}>{error.message}</span>
-      {error.output && <pre className={styles.output}>{error.output}</pre>}
-      {((error.conflicts && hasSession) || error.pushRefused) && (
-        <span className={styles.failureActions}>
-          {error.conflicts && hasSession && (
-            <button type="button" className={styles.ghost} onClick={() => void handConflictsToAgent(worktree)}>
-              交给 {state.agent} 解
-            </button>
-          )}
-          {error.pushRefused && (
-            <button type="button" className={styles.ghost} onClick={() => switchToPr(worktree)}>
-              改为创建 PR
-            </button>
-          )}
-        </span>
-      )}
+      {output && <pre className={styles.output}>{output}</pre>}
     </span>
   )
 }

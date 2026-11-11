@@ -188,6 +188,12 @@ export interface GitFileChange {
   nested?: boolean
   /** 未提交 only: an untracked file too large to count or diff. */
   tooLarge?: boolean
+  /**
+   * A cheap fingerprint of the file's diff (合入链路 v2, review progress): status + added + removed + size + mtime of
+   * the working file, joined by main. A 已看 mark is dropped when it changes (src/shared/review-progress.ts). Absent
+   * until main fills it; then a mark falls back to status + line counts.
+   */
+  stamp?: string
 }
 
 export interface GitChanges {
@@ -205,6 +211,9 @@ export interface GitChanges {
   untrackedOmitted: number
   /** `base...HEAD`: what this branch committed since it left the base. */
   committed: GitFileChange[]
+  /** The commit HEAD was at when the list was read (the merge chain matches the preflight to it); null without a
+   *  commit; absent from an older main. */
+  head?: string | null
 }
 
 export type GitDiffScope = 'uncommitted' | 'committed'

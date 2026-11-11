@@ -127,7 +127,7 @@ test.describe('F5 并排 diff', () => {
     await setWindowSize(app, page, 1440, 900)
     await expect(page.locator('[data-region="terminal"] .xterm').first()).toBeVisible({ timeout: 20_000 })
     await panel().getByRole('tab', { name: /^变更/ }).click()
-    const file = panel().locator('[data-path="MobileNav.tsx"][data-group="committed"] button')
+    const file = panel().locator('[data-path="MobileNav.tsx"][data-group="committed"] button[aria-expanded]')
     if ((await file.getAttribute('aria-expanded')) !== 'true') await file.click()
     await expect(rows().first()).toBeVisible()
   })

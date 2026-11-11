@@ -1,5 +1,6 @@
 // Inline review comments on Git · 变更 (PRD F5, Figma 03): what one comment is, how they are validated when the
 // workspace file is read, and the one prompt they become when sent to the worktree's agent. Pure.
+import { WAVI_TEXT_MARK } from './pull-requests'
 
 export type CommentGroup = 'uncommitted' | 'committed'
 /** Which line numbers `line` / `endLine` count: the new file's (added and context lines) or the old one's (removed). */
@@ -143,4 +144,10 @@ export function reviewPrompt(comments: readonly ReviewComment[]): string {
     return [`${index + 1}. ${where}`, ...quote, `   ${note}`].join('\n')
   })
   return `请按下面的审阅意见修改代码（行号是 diff 里的行号）：\n\n${items.join('\n\n')}\n\n改完后告诉我改了什么。`
+}
+
+/** The review block's findings as a prompt: Wavi's background reviewer wrote them, so the text carries WAVI_TEXT_MARK and
+ *  the built-in review does not read it as the user's request (the user's own comments go as reviewPrompt). */
+export function findingsPrompt(findings: readonly ReviewComment[]): string {
+  return `${WAVI_TEXT_MARK}${reviewPrompt(findings)}`
 }

@@ -32,7 +32,15 @@ const briefFor = (group: Pick<AttemptGroup, 'prompt' | 'base' | 'members'>, pare
   attemptBrief({ task: group.prompt, parentTitle, count: group.members.length, branch, base: group.base })
 
 /** Adds the members, opens the overview on them and starts the launch. Returns the group's id. */
-export function runAttemptPlan(projectId: ProjectId, base: string, prompt: string, members: readonly AttemptMemberPlan[], parent: AttemptParent): string | null {
+/** `baseRef`: `base`'s full ref (attemptBaseRef), for the report's comparison command. */
+export function runAttemptPlan(
+  projectId: ProjectId,
+  base: string,
+  baseRef: string,
+  prompt: string,
+  members: readonly AttemptMemberPlan[],
+  parent: AttemptParent
+): string | null {
   const ids: SessionId[] = []
   const placed: AttemptMemberPlan[] = []
   for (const member of members) {
@@ -45,7 +53,7 @@ export function runAttemptPlan(projectId: ProjectId, base: string, prompt: strin
     placed.push(member)
   }
   if (ids.length === 0) return null
-  const group: AttemptGroup = { id: newGroupId(), prompt, base, createdAt: Date.now(), members: ids, reportTo: parent.id }
+  const group: AttemptGroup = { id: newGroupId(), prompt, base, baseRef, createdAt: Date.now(), members: ids, reportTo: parent.id }
   for (const [i, id] of ids.entries()) {
     const member = placed[i]!
     // On the command line the CLI submits it itself; nothing is typed into a starting TUI (PRD F21).

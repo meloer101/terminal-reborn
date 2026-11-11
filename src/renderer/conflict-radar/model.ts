@@ -4,26 +4,11 @@
 import type { RadarMark, RadarTarget, RadarWorktree } from '@shared/conflict-radar'
 import type { MergeConflict } from '@shared/git-merge'
 import type { Project, Session, Worktree } from '@shared/types'
-import { conflictReason, MAX_PROMPT_CHARS } from '../panels/merge/model'
+import { conflictReason, rebaseInstruction } from '@shared/ship-chain'
 
-const MAX_PROMPT_FILES = 10
-
+/** 让 agent rebase: the shared instruction (src/shared/ship-chain.ts), which the merge chain's 同步 hand-off builds on. */
 export function rebasePrompt(self: Pick<RadarWorktree, 'base' | 'branch' | 'behind' | 'baseConflicts' | 'uncommitted'>): string {
-  const head = `${self.base} 已经合入了别的改动，${self.branch} 落后 ${self.behind} 个提交。`
-  const commit = self.uncommitted ? '先提交当前的改动，再' : ''
-  const tail = `请在当前 worktree 里${commit}运行 GIT_EDITOR=true git rebase ${self.base}，有冲突就解决后 git add 并 GIT_EDITOR=true git rebase --continue，确认构建和测试通过，完成后告诉我。`
-  const total = self.baseConflicts.length
-  if (total === 0) return `${head}预计不会冲突。${tail}`
-  const lead = 'rebase 时会冲突：'
-  const files: string[] = []
-  for (const conflict of self.baseConflicts.slice(0, MAX_PROMPT_FILES)) {
-    const next = [...files, `${conflict.path}（${conflictReason(conflict)}）`]
-    const more = next.length < total ? ` 等 ${total} 个文件` : ''
-    if (files.length > 0 && head.length + lead.length + next.join('、').length + more.length + 1 + tail.length > MAX_PROMPT_CHARS) break
-    files.push(next[next.length - 1]!)
-  }
-  const more = files.length < total ? ` 等 ${total} 个文件` : ''
-  return `${head}${lead}${files.join('、')}${more}。${tail}`
+  return rebaseInstruction({ base: self.base, branch: self.branch, behind: self.behind, conflicts: self.baseConflicts, uncommitted: self.uncommitted })
 }
 
 /**

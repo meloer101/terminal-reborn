@@ -334,7 +334,7 @@ test.describe('同任务多解 + 广播', () => {
     await expect.poll(() => typed(project), WITHIN).toContain('[Wavi 同任务多解汇报]')
     expect(count(typed(project), '[Wavi 同任务多解汇报]')).toBe(1)
     expect(typed(project)).toContain('改成两步了。')
-    expect(typed(project)).toContain('git diff main...<分支>')
+    expect(typed(project)).toContain('git diff refs/heads/main...<分支>')
     await expect(strip).toHaveCount(0)
     await page.keyboard.press('Meta+Shift+A')
     await expect(overview()).toBeVisible()

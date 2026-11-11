@@ -79,7 +79,8 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
     const view = el.ownerDocument.defaultView ?? window
     const at = placeMenu(size, placement, { width: view.innerWidth, height: view.innerHeight })
     setPosition({ ...at, origin: originToward(anchorOf(placement), at, size) })
-  }, [placement])
+    // Entries that change while the menu is open (updateMenu) may change its size.
+  }, [placement, entries])
 
   // Only once placed: a visibility:hidden panel cannot take focus.
   const placed = position !== null
@@ -178,6 +179,11 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
           </span>
         )}
         <span className={styles.label}>{entry.label}</span>
+        {entry.type === 'item' && entry.detail && (
+          <span className={styles.detail} title={entry.detail}>
+            {entry.detail}
+          </span>
+        )}
         {entry.type === 'item' && entry.accelerator && (
           <span className={styles.shortcut} aria-hidden>
             {formatAccelerator(entry.accelerator)}

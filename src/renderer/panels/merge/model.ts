@@ -1,8 +1,9 @@
 // What the merge sheet (PRD F4, Figma 05) says about a precheck, its options and a result. Pure.
-import type { GitOperation, MergeBlocker, MergeConflict, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
+import type { GitOperation, MergeBlocker, MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
 import type { AgentKind, Session } from '@shared/types'
 import { checksText, checksVerdict, type TurnCheckView } from '@shared/turn-checks'
 import { shortAgentName } from '@shared/agents'
+import { conflictReason, MAX_PROMPT_CHARS, mergeConflictPrompt } from '@shared/ship-chain'
 
 /** `muted`: a plain fact, neither good nor bad (还没有自己的提交). */
 export type CheckTone = 'ok' | 'warn' | 'error' | 'working' | 'muted'
@@ -126,19 +127,8 @@ export function testBlocksMerge(state: MergeTestState | null, hasTest: boolean):
   return state?.status !== 'passed'
 }
 
-const CONFLICT_TYPE: Record<string, string> = {
-  content: '两边都改了同一处',
-  'add/add': '两边都新增了这个文件',
-  'modify/delete': '一边修改、一边删除',
-  'rename/delete': '一边重命名、一边删除',
-  'rename/rename': '两边重命名成不同的名字',
-  'file/directory': '一边是文件、一边是文件夹',
-  binary: '二进制文件两边都改了'
-}
-
-export function conflictReason(conflict: MergeConflict): string {
-  return CONFLICT_TYPE[conflict.type] ?? conflict.type
-}
+// How a file conflicts and the hand-off length cap live with the merge chain's hand-offs (src/shared/ship-chain.ts).
+export { conflictReason, MAX_PROMPT_CHARS }
 
 /** Methods the sheet offers, with why one is off. */
 export function methodOptions(check: MergePrecheck): { value: MergeMethod; label: string; disabled: boolean }[] {
@@ -172,27 +162,13 @@ export function agentSessionFor<T extends Pick<Session, 'id' | 'kind'>>(sessions
   return agents.find((s) => s.id === activeId) ?? agents[0] ?? null
 }
 
-const MAX_PROMPT_FILES = 10
-/** Below Claude's paste-placeholder threshold (PRD §6.9), so the whole text stays readable in the input line. */
-export const MAX_PROMPT_CHARS = 800
-
 /**
  * One line put into the agent's input line (not sent; the user reads it and presses Enter): merge the base in,
- * resolve, commit, without an editor. Files are listed while the text stays within MAX_PROMPT_CHARS.
+ * resolve, commit, without an editor — the merge chain's builder (src/shared/ship-chain.ts): names quoted as data, the
+ * base as one shell word of its full ref, the files listed while the text stays within MAX_PROMPT_CHARS.
  */
 export function conflictPrompt(check: Pick<MergePrecheck, 'base' | 'branch' | 'conflicts'>): string {
-  const head = `把 ${check.branch} 合并到 ${check.base} 会冲突：`
-  const tail = `请在当前 worktree 里运行 GIT_EDITOR=true git merge ${check.base}，解决这些冲突，确认构建和测试通过后提交合并结果，完成后告诉我。`
-  const total = check.conflicts.length
-  const files: string[] = []
-  for (const conflict of check.conflicts.slice(0, MAX_PROMPT_FILES)) {
-    const next = [...files, `${conflict.path}（${conflictReason(conflict)}）`]
-    const more = next.length < total ? ` 等 ${total} 个文件` : ''
-    if (files.length > 0 && head.length + next.join('、').length + more.length + 1 + tail.length > MAX_PROMPT_CHARS) break
-    files.push(next[next.length - 1]!)
-  }
-  const more = files.length < total ? ` 等 ${total} 个文件` : ''
-  return `${head}${files.join('、')}${more}。${tail}`
+  return mergeConflictPrompt({ base: check.base, branch: check.branch, conflicts: check.conflicts })
 }
 
 export function agentLabel(kind: AgentKind): string {
@@ -208,14 +184,20 @@ export function turnChecksLine(view: TurnCheckView, kind: AgentKind): CheckLine 
   return { tone, text, ...(view.kinds.length > 0 ? { meta: checksText(view) } : {}) }
 }
 
-/** Lines after a merge: the commit, the push, the worktree removal. */
+/** The sheet's push switch: the remote the base is pushed to (the precheck's, which main pushes to). */
+export function pushSwitchLabel(check: Pick<MergePrecheck, 'pushRemote'>): string {
+  return check.pushRemote ? `合并后推送到 ${check.pushRemote}` : '合并后推送'
+}
+
+/** Lines after a merge: the commit, the push (to `remote`, the precheck's pushRemote), the worktree removal. */
 export function resultLines(
   result: Extract<MergeResult, { ok: true }>,
   base: string,
-  removal: 'removed' | string | null
+  removal: 'removed' | string | null,
+  remote = 'origin'
 ): CheckLine[] {
   const lines: CheckLine[] = [{ tone: 'ok', text: `已合并到 ${base}`, meta: result.commit.slice(0, 7) }]
-  if (result.push === '') lines.push({ tone: 'ok', text: `已推送到 origin/${base}` })
+  if (result.push === '') lines.push({ tone: 'ok', text: `已推送到 ${remote}/${base}` })
   else if (result.push !== null) lines.push({ tone: 'warn', text: `推送失败：${result.push}` })
   if (removal === 'removed') lines.push({ tone: 'ok', text: '已删除 worktree，分支保留' })
   else if (removal) lines.push({ tone: 'warn', text: `没能删除 worktree：${removal}` })

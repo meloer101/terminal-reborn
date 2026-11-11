@@ -227,6 +227,9 @@ export function fixNote(text: string | null, maxLines = 3, maxChars = 240): stri
   return joined.length > maxChars ? `${joined.slice(0, maxChars - 1)}…` : joined
 }
 
+/** The PR line's fact for GitHub's merge state dirty. */
+export const PR_CONFLICT_FACT = '和基线冲突'
+
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: 'Squash', merge: 'Merge', rebase: 'Rebase' }
 
 /** Whether 通过后合并 is on for this PR: GitHub auto-merge, or already queued. */
@@ -262,7 +265,7 @@ export function prLineParts(
   if (details) {
     if (details.reviewDecision === 'review-required') parts.push('需要审批')
     else if (details.reviewDecision === 'changes-requested') parts.push('要求修改')
-    if (details.mergeState === 'dirty') parts.push('和基线冲突')
+    if (details.mergeState === 'dirty') parts.push(PR_CONFLICT_FACT)
   }
   return { parts, checks: 2 }
 }

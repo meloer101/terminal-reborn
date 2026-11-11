@@ -5,11 +5,29 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
+vi.setConfig({ testTimeout: 60_000 })
+
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-git-merge-')))
 
 const roots = new Set<string>()
 vi.mock('./workspace-store', () => ({ isProjectRoot: (path: string) => roots.has(path) }))
 vi.mock('electron', () => ({ ipcMain: { handle: () => {}, on: () => {} } }))
+/** Runs once right before the next `merge --ff-only` git runs (something else moving the base in that moment). */
+let beforeFastForward: (() => void) | null = null
+vi.mock('./git/run', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./git/run')>()
+  return {
+    ...real,
+    runGit: (cwd: string, args: readonly string[], options?: Parameters<typeof real.runGit>[2]) => {
+      if (beforeFastForward && args.includes('--ff-only')) {
+        const run = beforeFastForward
+        beforeFastForward = null
+        run()
+      }
+      return real.runGit(cwd, args, options)
+    }
+  }
+})
 
 const { mergePrecheck, mergeWorktree } = await import('./git-merge')
 
@@ -111,6 +129,26 @@ describe('mergePrecheck', () => {
     expect(() => git(wt, 'rebase', 'main')).toThrow()
     expect((await mergePrecheck(root, wt)).blocker).toEqual({ kind: 'busy', where: 'worktree', operation: 'rebase' })
     git(wt, 'rebase', '--abort')
+  })
+
+  it('blocks while a rebase of the base is stopped in a checkout whose HEAD is detached, and moves nothing', async () => {
+    const { root, wt } = setup()
+    commit(root, 'b.txt', 'b\n', 'second on main')
+    commit(wt, 'c.txt', 'c\n', 'add c')
+    // `git rebase -i HEAD~1` stopped at an edit: the main checkout is detached, main is still the branch being rewritten.
+    execFileSync('git', ['-c', 'rebase.abbreviateCommands=false', 'rebase', '-i', 'HEAD~1'], { cwd: root, env: { ...process.env, GIT_SEQUENCE_EDITOR: "sed -i.bak 's/^pick /edit /'" }, stdio: 'ignore' })
+    expect(git(root, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe('HEAD')
+    const before = sha(root, 'refs/heads/main')
+    const check = await mergePrecheck(root, wt)
+    expect(check).toMatchObject({ baseCheckout: null, blocker: { kind: 'busy', where: 'base', operation: 'rebase' } })
+    expect(await mergeWorktree({ root, worktree: wt, method: 'merge', head: check.head, baseHead: check.baseHead, push: false })).toMatchObject({
+      ok: false,
+      reason: 'blocked',
+      blocker: { kind: 'busy', where: 'base', operation: 'rebase' }
+    })
+    expect(sha(root, 'refs/heads/main')).toBe(before)
+    git(root, 'rebase', '--continue')
+    expect((await mergePrecheck(root, wt)).blocker).toBeNull()
   })
 })
 
@@ -320,6 +358,115 @@ describe('mergeWorktree', () => {
     const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
     expect(result).toMatchObject({ ok: true, push: '' })
     expect(git(remote, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+  })
+
+  it('pushes the base to the repository\'s only remote when it is not called origin', async () => {
+    const { root, wt } = setup()
+    const remote = join(base, `remote-${counter}.git`)
+    git(base, 'init', '-q', '--bare', remote)
+    git(root, 'remote', 'add', 'upstream', remote)
+    git(root, 'push', '-q', 'upstream', 'main')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    // hasOrigin (the sheet's push switch) means "has a remote to push to", whatever it is called.
+    expect(await mergePrecheck(root, wt)).toMatchObject({ hasOrigin: true })
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: '' })
+    expect(git(remote, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+  })
+
+  it('pushes to the branch\'s own upstream remote when the repository has several and none is origin', async () => {
+    const { root, wt } = setup()
+    const mine = join(base, `mine-${counter}.git`)
+    const other = join(base, `other-${counter}.git`)
+    git(base, 'init', '-q', '--bare', mine)
+    git(base, 'init', '-q', '--bare', other)
+    git(root, 'remote', 'add', 'fork', mine)
+    git(root, 'remote', 'add', 'upstream', other)
+    git(root, 'push', '-q', 'fork', 'main')
+    git(root, 'push', '-q', 'upstream', 'main')
+    git(wt, 'push', '-q', '-u', 'fork', 'feat')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: '' })
+    expect(git(mine, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+    expect(git(other, 'rev-parse', 'main').trim()).not.toBe(sha(root, 'main'))
+  })
+
+  it('pushes the base to the remote the base tracks, not to the fork the branch was published to, and names it', async () => {
+    const { root, wt } = setup()
+    const project = join(base, `project-${counter}.git`)
+    const fork = join(base, `fork-${counter}.git`)
+    git(base, 'init', '-q', '--bare', project)
+    git(base, 'init', '-q', '--bare', fork)
+    git(root, 'remote', 'add', 'origin', project)
+    git(root, 'remote', 'add', 'myfork', fork)
+    git(root, 'push', '-q', '-u', 'origin', 'main')
+    git(root, 'push', '-q', 'myfork', 'main')
+    git(wt, 'push', '-q', '-u', 'myfork', 'feat')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const forkMain = git(fork, 'rev-parse', 'main').trim()
+    expect(await mergePrecheck(root, wt)).toMatchObject({ hasOrigin: true, pushRemote: 'origin' })
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: '' })
+    expect(git(project, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+    expect(git(fork, 'rev-parse', 'main').trim()).toBe(forkMain)
+  })
+
+  it('pushes the base to origin, not to the fork the branch was published to, when the base has no upstream', async () => {
+    const { root, wt } = setup()
+    const project = join(base, `project-${counter}.git`)
+    const fork = join(base, `fork-${counter}.git`)
+    git(base, 'init', '-q', '--bare', project)
+    git(base, 'init', '-q', '--bare', fork)
+    git(root, 'remote', 'add', 'origin', project)
+    git(root, 'remote', 'add', 'myfork', fork)
+    // Pushed without -u, as a repository created locally and then published often is.
+    git(root, 'push', '-q', 'origin', 'main')
+    git(root, 'push', '-q', 'myfork', 'main')
+    git(wt, 'push', '-q', '-u', 'myfork', 'feat')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const forkMain = git(fork, 'rev-parse', 'main').trim()
+    expect(await mergePrecheck(root, wt)).toMatchObject({ pushRemote: 'origin' })
+    expect(await mergeWorktree(await request(root, wt, 'merge', { push: true }))).toMatchObject({ ok: true, push: '' })
+    expect(git(project, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+    expect(git(fork, 'rev-parse', 'main').trim()).toBe(forkMain)
+  })
+
+  it('does not push a base that tracks a branch of another name there, and keeps the merge', async () => {
+    const { root, wt } = setup()
+    const project = join(base, `project-${counter}.git`)
+    git(base, 'init', '-q', '--bare', project)
+    git(root, 'remote', 'add', 'origin', project)
+    git(root, 'push', '-q', '-u', 'origin', 'main:master')
+    const fork = join(base, `fork-${counter}.git`)
+    git(base, 'init', '-q', '--bare', fork)
+    git(root, 'remote', 'add', 'myfork', fork)
+    git(wt, 'push', '-q', '-u', 'myfork', 'feat')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const master = git(project, 'rev-parse', 'master').trim()
+    expect(await mergePrecheck(root, wt)).toMatchObject({ pushRemote: 'origin' })
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: 'main 跟踪的是 origin/master，不是同名分支，没有推送' })
+    expect(git(root, 'log', '-1', '--format=%s', 'main').trim()).toBe("Merge branch 'feat'")
+    expect(git(project, 'for-each-ref', 'refs/heads/main').trim()).toBe('')
+    expect(git(project, 'rev-parse', 'master').trim()).toBe(master)
+    expect(git(fork, 'for-each-ref', 'refs/heads/main').trim()).toBe('')
+  })
+
+  it('answers a base that moved between its check and the fast-forward as stale, not as diverged', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const before = sha(root, 'main')
+    beforeFastForward = () => commit(root, 'd.txt', 'd\n', 'committed on main meanwhile')
+    expect(await mergeWorktree(await request(root, wt, 'merge'))).toEqual({ ok: false, reason: 'stale', rebased: false })
+    expect(git(root, 'log', '-1', '--format=%s', 'main').trim()).toBe('committed on main meanwhile')
+    expect(sha(root, 'main^')).toBe(before)
+  })
+
+  it('names no remote to push to when there is none', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    expect(await mergePrecheck(root, wt)).toMatchObject({ hasOrigin: false, pushRemote: null })
   })
 
   it('rejects malformed requests', async () => {

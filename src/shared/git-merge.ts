@@ -62,8 +62,10 @@ export interface MergePrecheck {
   /** The base's upstream (e.g. origin/main) and how many commits it has that the base does not. */
   upstream: string | null
   upstreamAhead: number
-  /** Whether there is an `origin` remote to push to. */
+  /** Whether there is a remote to push the base to (`pushRemote`, whatever it is called). */
   hasOrigin: boolean
+  /** The remote a push of the base goes to (the base's own upstream remote first, see main's baseRemoteFor); null without one. */
+  pushRemote: string | null
   blocker: MergeBlocker | null
 }
 
@@ -106,6 +108,8 @@ export type MergeResult =
       ok: false
       reason: MergeFailure
       message?: string
+      /** Everything git printed when a git run failed (main only: the ship chain classifies it; not sent to the renderer). */
+      output?: string
       blocker?: MergeBlocker
       conflicts?: MergeConflict[]
       /** Rebase only: the branch was rebased onto the base but the base could not be moved. */

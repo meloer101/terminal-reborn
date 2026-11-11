@@ -5,11 +5,13 @@ import type { Project, ProjectId, Session, SessionId, SessionStatus, Worktree, W
 import { STATUS_LABEL } from '@shared/session-status'
 import { SHORTCUTS } from '@shared/shortcuts'
 import type { PersistedRightPanel as PanelView, SidebarGroupBy } from '@shared/workspace-file'
+import type { ChainCommand, PaletteGitAction } from '../pull-requests/chain-zone'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
 import { matchFields, type MatchField, type Range } from './match'
 
-/** `history`: archived worktrees (PRD F15), restored by picking them. */
-export type PaletteSection = 'sessions' | 'actions' | 'history'
+/** `history`: archived worktrees (PRD F15), restored by picking them. `git`: the merge chain's actions for the active
+ *  session's worktree (合入链路 v2, Figma 73H). */
+export type PaletteSection = 'git' | 'sessions' | 'actions' | 'history'
 
 export type ActionId =
   | 'new-session'
@@ -26,12 +28,33 @@ export type ActionId =
   | 'theme-dark'
   | 'theme-light'
 
-export type ActionIcon = 'plus' | 'folder-plus' | 'sidebar' | 'overview' | 'panel' | 'monitor' | 'moon' | 'sun' | 'archive' | 'compare' | 'clock'
+export type ActionIcon =
+  | 'plus'
+  | 'folder-plus'
+  | 'sidebar'
+  | 'overview'
+  | 'panel'
+  | 'monitor'
+  | 'moon'
+  | 'sun'
+  | 'archive'
+  | 'compare'
+  | 'clock'
+  | 'commit'
+  | 'sync'
+  | 'pull'
+  | 'push'
+  | 'pr'
+  | 'merge'
+  | 'review'
+  | 'link'
 
 export type PaletteTarget =
   | { type: 'session'; sessionId: SessionId }
   | { type: 'action'; action: ActionId }
   | { type: 'archived'; worktreeId: WorktreeId }
+  /** A chain command for a worktree, run as Git · 变更's buttons run it. */
+  | { type: 'chain'; worktreePath: string; sessionId: SessionId; command: ChainCommand }
 
 export interface PaletteEntry {
   id: string
@@ -46,6 +69,8 @@ export interface PaletteEntry {
   icon?: ActionIcon
   /** Session needs the user: recolors the subtitle like the sidebar row. */
   attention?: boolean
+  /** The section's heading when it is not the section's own name (`Git · session-cookie`). */
+  sectionTitle?: string
   /** Electron accelerator of the same command outside the palette, drawn at the row's end. */
   shortcut?: string
   fields: MatchField[]
@@ -65,6 +90,50 @@ export interface PaletteInput {
   collapsedStatusGroups?: readonly SessionStatus[]
   /** For 历史's "3 天前归档". */
   now?: number
+  /** The merge chain's runnable actions for the active session's worktree (CommandPalette.tsx works them out). */
+  git?: PaletteGit | null
+}
+
+export interface PaletteGit {
+  /** The group's name after `Git · ` (the worktree's branch). */
+  name: string
+  worktreePath: string
+  sessionId: SessionId
+  actions: PaletteGitAction[]
+}
+
+const GIT_ICON: Partial<Record<ChainCommand, ActionIcon>> = {
+  commit: 'commit',
+  sync: 'sync',
+  pull: 'pull',
+  push: 'push',
+  pr: 'pr',
+  main: 'merge',
+  'merge-pr': 'merge',
+  archive: 'archive',
+  review: 'review',
+  'open-pr': 'link'
+}
+
+/** ⌘K's Git group (Figma 73H): what the active session's worktree can do now; the primary carries ⇧⌘M. */
+export function buildGitEntries(input: Pick<PaletteInput, 'git'>): PaletteEntry[] {
+  const git = input.git
+  if (!git) return []
+  return git.actions.map((a) => ({
+    id: `git:${a.command}`,
+    section: 'git',
+    sectionTitle: `Git · ${git.name}`,
+    target: { type: 'chain', worktreePath: git.worktreePath, sessionId: git.sessionId, command: a.command },
+    title: a.label,
+    subtitle: a.detail,
+    icon: GIT_ICON[a.command] ?? 'panel',
+    ...(a.primary && (a.command === 'main' || a.command === 'pr' || a.command === 'merge-pr') ? { shortcut: SHORTCUTS['merge-worktree'] } : {}),
+    fields: [
+      { key: 'title', text: a.label, weight: 3 },
+      { key: 'subtitle', text: a.detail, weight: 1.5 },
+      { key: 'keywords', text: `git ${git.name} ${a.command}`, weight: 1 }
+    ]
+  }))
 }
 
 export interface RankedEntry {
@@ -217,7 +286,7 @@ export function buildHistoryEntries(input: PaletteInput): PaletteEntry[] {
 }
 
 export function buildEntries(input: PaletteInput): PaletteEntry[] {
-  return [...buildSessionEntries(input), ...buildActionEntries(input), ...buildHistoryEntries(input)]
+  return [...buildGitEntries(input), ...buildSessionEntries(input), ...buildActionEntries(input), ...buildHistoryEntries(input)]
 }
 
 /**
@@ -232,9 +301,10 @@ export function rankEntries(entries: readonly PaletteEntry[], query: string): Ra
     const match = matchFields(query, entry.fields)
     if (match) ranked.push({ entry, score: match.score, ranges: match.ranges })
   }
-  const best: Record<PaletteSection, number> = { sessions: -1, actions: -1, history: -1 }
+  const best: Record<PaletteSection, number> = { git: -1, sessions: -1, actions: -1, history: -1 }
   for (const r of ranked) best[r.entry.section] = Math.max(best[r.entry.section], r.score)
-  const sectionRank = (s: PaletteSection) => (s === 'sessions' ? 0 : s === 'actions' ? 1 : 2)
+  // The active worktree's Git group leads on ties and the empty query (Figma 73H).
+  const sectionRank = (s: PaletteSection) => (s === 'git' ? -1 : s === 'sessions' ? 0 : s === 'actions' ? 1 : 2)
   // Array.prototype.sort is stable, so equal scores keep their urgency / declaration order.
   return ranked.sort(
     (a, b) =>

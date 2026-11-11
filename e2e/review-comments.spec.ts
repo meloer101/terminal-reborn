@@ -51,7 +51,7 @@ test.describe('F5 inline review comments', () => {
   }
   const openFile = async () => {
     await panel().getByRole('tab', { name: /^变更/ }).click()
-    const file = panel().locator('[data-path="nav.ts"][data-group="committed"] button')
+    const file = panel().locator('[data-path="nav.ts"][data-group="committed"] button[aria-expanded]')
     if ((await file.getAttribute('aria-expanded')) !== 'true') await file.click()
     await expect(line(1)).toBeVisible()
   }
