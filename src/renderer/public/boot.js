@@ -40,7 +40,10 @@
   }
   const valid = layout && ['left', 'top', 'right', 'bottom', 'anchorY'].every((k) => Number.isFinite(layout[k]))
   // Without a mirror: the default sidebar (264); the card sits GAP in from the window's other edges (Figma 75).
-  const inset = valid ? layout : { left: 264, top: GAP, right: GAP, bottom: GAP }
+  // A mirror saved before Figma 75 has the card flush with the window's top, right and bottom: it sits GAP in from them now.
+  const inset = valid
+    ? { ...layout, top: Math.max(layout.top, GAP), right: Math.max(layout.right, GAP), bottom: Math.max(layout.bottom, GAP) }
+    : { left: 264, top: GAP, right: GAP, bottom: GAP }
   const card = { left: inset.left, top: inset.top, right: innerWidth - inset.right, bottom: innerHeight - inset.bottom }
   let ax = (card.left + card.right) / 2
   let ay = valid ? card.top + layout.anchorY : (card.top + card.bottom) / 2 - 60

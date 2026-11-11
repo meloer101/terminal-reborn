@@ -15,7 +15,7 @@ export interface GuiPaneProps {
   cwd: string
   agent: AgentKind
   active: boolean
-  /** Where it is shown in this window's area, with the card's corners (split/model.ts paneCorners); undefined = not here. */
+  /** Where it is shown in this window's area (split/model.ts); undefined = not here. */
   rect: Rect | undefined
   /** Shown somewhere, kept running or started eagerly: its agent should be up. */
   wanted: boolean
