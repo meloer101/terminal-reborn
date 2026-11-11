@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-11：窗口材质合并成「玻璃」和「实色」两项，底层不透明度只剩一个值、默认 30%（PRD v1.174，Figma 66′）：旧设置自动迁移。还没在作者的真机上确认默认 30%，也没在 macOS 26 以前的系统上试过。
 - 2026-11-11：F25 Ultracode（PRD v1.173，Figma 74）：GUI 输入框里用户自己打开的 Ultracode 开关（不记住、续上后是关的）；Workflow 调用画成运行卡（确认、phase 进度、token、停止、五种结束状态）；侧栏会话下一行 workflow 和它的 phase；workflow 在后台跑时会话仍是运行中；终端 Claude 的会话头读出 Ultracode。`src/shared/workflow-run.ts`、`src/main/hooks/workflows.ts`、`src/main/gui/claude-stream.ts`、`src/renderer/gui/WorkflowCard.tsx`；单元测试 + e2e `gui-workflow.spec.ts`（假 Claude）。没在真 CLI 上跑过（要花额度，待作者同意）；其余 agent 和手机端没做。
 - 2026-11-11：卡片离窗口的上、下、右边各留 6，红绿灯和侧栏顶行下移 6（PRD v1.172，Figma 75A）：卡片所有的角统一圆角 10，去掉落在窗口角上的 16；侧栏收起时左边也留 6；全屏也留 6（作者没说，待确认）。
 - 2026-11-11：合入链路 v2 三轮审阅修复（PRD v1.170 变更记录 ⑩ ⑪，§6.19）：有 upstream 配置就算推送过；基线推到基线自己的远程；同步 / 拉取只 fetch 要用的 ref；中止 会丢东西时先确认；Wavi 跑的 git 固定参数、一律英文输出；勾选在运行中锁住；运行重载后不重复提交（出口 A 也是）；交给 agent 的文字以「（来自 Wavi）」开头、审阅不算它们；同步写它实际用的 ref；失败按主进程留下的全部输出分类（stderr 留末尾 8 KiB）；Figma 73 补了 73K1–73K9。没在真实 GitHub 上跑过。见「进行中：多 agent」的「合入链路 v2」。

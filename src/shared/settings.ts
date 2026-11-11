@@ -61,12 +61,10 @@ export interface ChatAppearance {
 }
 
 /**
- * 窗口 · 材质 (PRD §5 v1.127, Figma 51E / 51F): macOS 26's Liquid Glass, or the older frosted vibrancy; 实色 (v1.139,
- * Figma 57) is an opaque window in the softer solid palette.
+ * 窗口 · 材质 (PRD §5 v1.174, Figma 66′): 玻璃 shows the desktop through the window (macOS 26's Liquid Glass, vibrancy
+ * before it: main/appearance.ts picks); 实色 (v1.139, Figma 57) is an opaque window in the softer solid palette.
  */
-export type WindowMaterial = 'liquid' | 'frosted' | 'solid'
-/** The materials the desktop shows through, each with its own 窗口底层不透明度. */
-export type GlassMaterial = Exclude<WindowMaterial, 'solid'>
+export type WindowMaterial = 'glass' | 'solid'
 
 export interface AppearanceSettings {
   theme: ThemePreference
@@ -91,13 +89,10 @@ export interface AppearanceSettings {
   screenReader: boolean
   /** GUI sessions (Figma 51D). */
   chat: ChatAppearance
-  /** The window's base layer. Before macOS 26 it is always frosted. */
+  /** The window's base layer. */
   windowMaterial: WindowMaterial
-  /**
-   * 窗口底层不透明度: the theme's color over the base layer (the sidebar's), 0 (none) – 1, one value per material so
-   * switching keeps each one's look.
-   */
-  shellOpacity: Record<GlassMaterial, number>
+  /** 窗口底层不透明度: the theme's color over the glass (the sidebar's), 0 (none) – 1. 实色 has none. */
+  shellOpacity: number
 }
 
 /** TR_PORT blocks (PRD F4 · 脚本与端口): worktree n gets `base + 10n` … `+ 9`. */
@@ -211,10 +206,9 @@ export interface AppSettings {
   schedules: ScheduleSettings
 }
 
-/** An appearance patch; its nested objects (chat, shellOpacity) merge one level deeper. */
-export type AppearancePatch = Partial<Omit<AppearanceSettings, 'chat' | 'shellOpacity'>> & {
+/** An appearance patch; its nested object (chat) merges one level deeper. */
+export type AppearancePatch = Partial<Omit<AppearanceSettings, 'chat'>> & {
   chat?: Partial<ChatAppearance>
-  shellOpacity?: Partial<Record<GlassMaterial, number>>
 }
 
 export interface SettingsPatch {
@@ -246,9 +240,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     terminalOpacity: 1,
     screenReader: false,
     chat: { width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' },
-    windowMaterial: 'liquid',
-    // Liquid Glass shows untinted (PRD §5 v1.95); the frosted shell keeps a theme tint about as strong as before.
-    shellOpacity: { liquid: 0, frosted: 0.6 }
+    windowMaterial: 'glass',
+    // A light theme tint (PRD §5 v1.174, Figma 66′): untinted Liquid Glass leaves the sidebar's secondary text faint on a bright desktop.
+    shellOpacity: 0.3
   },
   ports: { base: DEFAULT_PORT_BASE, autoOpen: true },
   review: {
@@ -314,10 +308,16 @@ function chat(value: unknown): ChatAppearance {
   }
 }
 
-function shellOpacity(value: unknown): Record<GlassMaterial, number> {
-  const d = DEFAULT_SETTINGS.appearance.shellOpacity
-  const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
-  return { liquid: percent(num(v.liquid, d.liquid, LIMITS.shellOpacity)), frosted: percent(num(v.frosted, d.frosted, LIMITS.shellOpacity)) }
+/** 'liquid' and 'frosted' are what windowMaterial was called before v1.174; any other value is 玻璃 unless it is 'solid'. */
+const windowMaterial = (value: unknown): WindowMaterial => (value === 'solid' ? 'solid' : 'glass')
+
+/**
+ * Before v1.174 there was one value per material ({ liquid, frosted }): the one of the material that was chosen carries
+ * over. 实色 had no glass chosen, so the liquid one does, which was the default look.
+ */
+function shellOpacity(value: unknown, legacyMaterial: unknown): number {
+  const picked = isRecord(value) ? (legacyMaterial === 'frosted' ? value.frosted : value.liquid) : value
+  return percent(num(picked, DEFAULT_SETTINGS.appearance.shellOpacity, LIMITS.shellOpacity))
 }
 
 function num(value: unknown, fallback: number, range: { min: number; max: number }): number {
@@ -369,8 +369,8 @@ function appearance(value: unknown): AppearanceSettings {
     terminalOpacity: Math.round(num(v.terminalOpacity, d.terminalOpacity, LIMITS.terminalOpacity) * 100) / 100,
     screenReader: typeof v.screenReader === 'boolean' ? v.screenReader : d.screenReader,
     chat: chat(v.chat),
-    windowMaterial: v.windowMaterial === 'frosted' || v.windowMaterial === 'solid' ? v.windowMaterial : d.windowMaterial,
-    shellOpacity: shellOpacity(v.shellOpacity)
+    windowMaterial: windowMaterial(v.windowMaterial),
+    shellOpacity: shellOpacity(v.shellOpacity, v.windowMaterial)
   }
 }
 
@@ -466,8 +466,7 @@ function mergeAppearance(current: AppearanceSettings, patch: Record<string, unkn
   return {
     ...current,
     ...patch,
-    chat: isRecord(patch.chat) ? { ...current.chat, ...patch.chat } : current.chat,
-    shellOpacity: isRecord(patch.shellOpacity) ? { ...current.shellOpacity, ...patch.shellOpacity } : current.shellOpacity
+    chat: isRecord(patch.chat) ? { ...current.chat, ...patch.chat } : current.chat
   }
 }
 
