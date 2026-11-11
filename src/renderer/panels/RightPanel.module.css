@@ -1,5 +1,5 @@
-/* Right panel card (Figma 28G / 55C): at the same level as the terminal's, against the window's top, right and bottom
-   edges. The active session's tools are its top row, the view's own first row (PaneHeader, the browser's address bar)
+/* Right panel card (Figma 28G / 75C): at the same level as the terminal's, --card-gap in from the window's top, right and
+   bottom edges. The active session's tools are its top row, the view's own first row (PaneHeader, the browser's address bar)
    the next. No dividers inside. */
 .card {
   position: relative;
@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-window) var(--radius-edge) var(--radius-edge) var(--radius-window);
+  border-radius: var(--radius-window);
   background: var(--bg-app);
   box-shadow: var(--card-shadow);
   color: var(--text-primary);

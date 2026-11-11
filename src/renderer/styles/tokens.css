@@ -20,10 +20,8 @@
   --radius-xs: 2px;
   --radius-sm: 3px;
   --radius-md: 5px;
+  /* A card's corner: the window's own radius (main/appearance.ts GLASS_RADIUS, 16) less --card-gap (PRD §5 窗口留边, Figma 75). */
   --radius-window: 10px;
-  /* A card's corner that sits in one of the window's own corners (PRD §5 主区贴边, Figma 55): the window's radius
-     (main/appearance.ts GLASS_RADIUS). Full screen has square corners (AppShell). */
-  --radius-edge: 16px;
   /* Glass overlays (PRD §5, Figma 15): sheet 16 · its menus 12 · their primary button 8. */
   --radius-sheet: 16px;
   --radius-popover: 12px;
@@ -40,9 +38,9 @@
   --indent-tree: 32px;
   /* Main never gets narrower; the right panel floats over it instead (B13). */
   --main-min-width: 560px;
-  /* Glass shell (PRD §5 玻璃外壳, Figma 28 / 55): cards (terminal panes, right panel, overview) reach the window's top,
-     right and bottom edges; this much glass stays between two of them. Their corner is --radius-window, or
-     --radius-edge in a corner of the window. */
+  /* Glass shell (PRD §5 玻璃外壳, Figma 28 / 75): cards (terminal panes, right panel, overview) sit this far in from the
+     window's top, right and bottom edges (the left one too while the sidebar is hidden) and from each other. The
+     traffic lights and the sidebar's top row (Sidebar.module.css) sit this much lower, on the cards' header row. */
   --card-gap: 6px;
   /* The sidebar footer's bottom padding (its last row, 设置). */
   --card-gap-bottom: var(--space-12);

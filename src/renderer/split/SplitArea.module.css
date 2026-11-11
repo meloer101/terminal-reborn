@@ -131,6 +131,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: var(--radius-window);
   background: var(--bg-app);
   box-shadow: var(--card-edge), var(--card-shadow);
 }

@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-11：卡片离窗口的上、下、右边各留 6，红绿灯和侧栏顶行下移 6（PRD v1.172，Figma 75A）：卡片所有的角统一圆角 10，去掉落在窗口角上的 16；侧栏收起时左边也留 6；全屏也留 6（作者没说，待确认）。
 - 2026-11-11：合入链路 v2 三轮审阅修复（PRD v1.170 变更记录 ⑩ ⑪，§6.19）：有 upstream 配置就算推送过；基线推到基线自己的远程；同步 / 拉取只 fetch 要用的 ref；中止 会丢东西时先确认；Wavi 跑的 git 固定参数、一律英文输出；勾选在运行中锁住；运行重载后不重复提交（出口 A 也是）；交给 agent 的文字以「（来自 Wavi）」开头、审阅不算它们；同步写它实际用的 ref；失败按主进程留下的全部输出分类（stderr 留末尾 8 KiB）；Figma 73 补了 73K1–73K9。没在真实 GitHub 上跑过。见「进行中：多 agent」的「合入链路 v2」。
 - 2026-11-10：合入链路 v2（PRD v1.170，Figma 73 `1150:53245`，待作者确认）：Git · 变更 的状态行写卡在哪、主按钮是下一步，⋯ 列全部操作和挡住的原因；新增提交…（勾选文件）、同步 <base>、拉取、推送、继续 / 中止；git / gh 失败说人话并只给一个往下走的按钮；只有 github.com 和 gh 登录过的主机算 GitHub；PR 查询失败写 `查询失败`；文件「已看」标记；全部合并后「归档…」；⌘K 的 Git 组；内置审阅带上用户在会话里提的要求。见「进行中：多 agent」的「合入链路 v2」。
 - 2026-11-10：GUI 对话里发出的图片留在你的消息上（PRD v1.169，Figma 71A）：气泡上方 64 的缩略图；Claude / Pi / Codex 的图片字节由主进程存成附件目录里的文件，重开 app、续上会话后照样显示。
@@ -317,7 +318,7 @@ PR 闭环（2026-10-21 定，PRD F16 / F13 v1.63；排在第三批之前；外�
 - [x] 第二阶段 · 子 agent 原处展开（PRD v1.153，Figma 59J）：文字 / 思考 / 工具项加 `parent`，工具项加 `ms`；Claude 实时流里带 `parent_tool_use_id` 的消息挂到 Agent 行下（transcript 里没有父 id 的照旧丢弃）；`feedBlocks` 按 `parent` 分组，Agent 行运行中展开、完成后收起，行尾用时；Codex `collabAgentToolCall` 成一行「子 agent」（按生成的类型，未实测）；e2e `gui-session.spec.ts` 加子 agent（25 个）
 - [x] 第二阶段 · 独立 review（architecture-reviewer，7 条全部属实已修）：Codex 一次改多个文件的确认卡片列出每个文件并保留理由（权限请求加 `files`）；`lineDiff`、`rel` 移到 `transcript-chat.ts`，Claude 转换器不再依赖 ACP 模块；计划行之后仍能找到「等你确认」的工具行；Codex 的改动缓存在改完、确认后和一轮结束时清掉；`model.ts` 只给图标名；发给手机的条目去掉整条命令。作者 2026-11-07 定：两轮之间保持 52（悬停操作行留位，v1.132）；Codex rollout 的 `update_plan` 读成任务清单、Codex 审批没有理由时显示文件路径，两处都保留
 - [x] 后台任务通知和分割线（PRD v1.154 / v1.155，作者 2026-11-08 报告）：`<task-notification>` 用户行解析成一行系统文字「后台任务「名字」已完成」（`transcript-chat.ts` `taskNotice`）；对话 Markdown 的 `---` 只留空白、表格只留表头一条线
-- [x] 对话卡片的圆角跟随位置（作者 2026-11-08 报告）：`GuiPane` 用上 `paneCorners` 算好的圆角，贴着窗口角的角和终端卡片一样，全屏时为直角（隐藏侧栏时四个角都是）；e2e `gui-session.spec.ts` 检查侧栏显示 / 隐藏 × 全屏 / 非全屏
+- [x] 对话卡片的圆角跟随位置（作者 2026-11-08 报告）：`GuiPane` 用上 `paneCorners` 算好的圆角，贴着窗口角的角和终端卡片一样，全屏时为直角（隐藏侧栏时四个角都是）；e2e `gui-session.spec.ts` 检查侧栏显示 / 隐藏 × 全屏 / 非全屏（PRD v1.172 起被取代：所有卡片的角都是 10，`paneCorners` 已删。）
 - [x] GUI 会话的标题（PRD v1.157，作者 2026-11-08 报告）：Claude GUI 的用户消息带 `origin: {kind: "human"}`（`claude-driver.ts`），斜杠命令 / skill 开头也会命名；Codex 读 `thread.name` 和 `thread/name/updated`，ACP 读 `session_info_update`，经 `DriverIO.title` → `agent-title`；单测 `host.test.ts`，真实 app 里 Claude（普通文字、skill 开头）、Grok、Cursor 都拿到了标题
 - [x] Figma 65 输入框和空会话（PRD v1.158，分支 jacoy/gui-composer-65）：选择器进框、去掉「格式」按钮；模式一个列表（询问 / 接受编辑 / 自动 / 计划）；快速（Claude `supportsFastMode` + `apply_flag_settings`，Codex `priority` service tier）；空会话欢迎语「让我们在 <项目> 中开工吧」、滚轮换项目、模型菜单先选 agent；每个 agent 记住上次的选择（workspace.json `guiPicks`）；e2e `gui-session.spec.ts` 25 个、新 `gui-switch.spec.ts` 3 个；独立 review 9 条（Major 4、Minor 5）全部属实已修
 - [x] 空会话的 agent 菜单列出每家的模型（PRD v1.159）：`src/main/gui/catalog.ts` 只握手不开对话（Claude `initialize`、Codex `model/list`、Grok ACP `initialize`、`cursor-agent models`、Pi `--mode rpc --no-session`），`gui.models` IPC；加载中 / 失败重试；Pi 列为已装（要 pi-acp）；本机五家实测、会话文件数不变

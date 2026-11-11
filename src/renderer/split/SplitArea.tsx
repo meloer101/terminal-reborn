@@ -21,7 +21,7 @@ import { IconButton } from '../ui/IconButton'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { pressSession } from './drag'
 import './font-zoom'
-import { dropLabel, paneCorners, pickerRows, stackHandles } from './model'
+import { dropLabel, pickerRows, stackHandles } from './model'
 import { setSplitGeometry, useSessionDrag, type SessionDrag } from './store'
 import styles from './SplitArea.module.css'
 
@@ -67,9 +67,9 @@ export function SplitArea() {
   const placements = useMemo(
     () =>
       Object.fromEntries(
-        panes.filter((p) => p.id !== PICKER_PANE).map((p): [string, PanePlacement] => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height, radius: paneCorners(p, size) }])
+        panes.filter((p) => p.id !== PICKER_PANE).map((p): [string, PanePlacement] => [p.id, { x: p.x, y: p.y, width: p.width, height: p.height }])
       ),
-    [panes, size]
+    [panes]
   )
   const many = panes.length > 1
 
@@ -78,7 +78,7 @@ export function SplitArea() {
       {windowKey === MAIN_WINDOW ? <TerminalArea placements={placements} /> : <PaneHosts placements={placements} />}
       {panes.map((p) =>
         p.id === PICKER_PANE ? (
-          <PanePicker key={PICKER_PANE} rect={p} radius={paneCorners(p, size)} top={p.y === 0} lead={p.x === 0 && p.y === 0} />
+          <PanePicker key={PICKER_PANE} rect={p} top={p.y === 0} lead={p.x === 0 && p.y === 0} />
         ) : (
           <PaneHeader key={p.id} rect={p} focused={p.id === activeId && !picking} many={many} />
         )
@@ -193,7 +193,7 @@ const usePickerFocus = create<{ focused: boolean }>(() => ({ focused: false }))
 const useClockNow = (): number => useSyncExternalStore(subscribeClock, () => Math.floor(Date.now() / 15_000) * 15_000)
 
 /** ⌘D / ⇧⌘D's new pane (Figma 21G): the sessions not shown yet, filtered as you type; ↵ shows one, Esc cancels. */
-function PanePicker({ rect, radius, top, lead }: { rect: PaneBox; radius: string; top: boolean; lead: boolean }) {
+function PanePicker({ rect, top, lead }: { rect: PaneBox; top: boolean; lead: boolean }) {
   const [filter, setFilter] = useState('')
   const [at, setAt] = useState(0)
   const now = useClockNow()
@@ -229,7 +229,7 @@ function PanePicker({ rect, radius, top, lead }: { rect: PaneBox; radius: string
   return (
     <section
       className={styles.picker}
-      style={{ ...box(rect), borderRadius: radius }}
+      style={box(rect)}
       data-pane-id={PICKER_PANE}
       aria-label="选择这一格显示的会话"
       onKeyDown={onKeyDown}

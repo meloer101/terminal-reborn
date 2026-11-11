@@ -1,6 +1,6 @@
 // What the split's panes show besides terminals (PRD F20 · Figma 21): the new pane's session list after ⌘D / ⇧⌘D,
 // and the words on a drop target. Pure.
-import { hasPane, type Rect, type Size, type SplitDrop, type SplitHandle, type SplitNode } from '@shared/split-layout'
+import { hasPane, type SplitDrop, type SplitHandle, type SplitNode } from '@shared/split-layout'
 import type { Project, Session, SessionId, Worktree } from '@shared/types'
 import { buildOverview, type OverviewRow } from '../overview/model'
 import { buildSidebarGroups, visibleSessionIds } from '../sidebar/model'
@@ -41,20 +41,4 @@ export function dropLabel(drop: SplitDrop, dragged: SessionId, root: SplitNode |
  */
 export function stackHandles(handles: readonly SplitHandle[]): SplitHandle[] {
   return [...handles].sort((a, b) => b.path.length - a.path.length)
-}
-
-/**
- * A pane card's corners, as CSS (Figma 55): the cards reach the window's top, right and bottom edges, so a corner that
- * sits in a corner of the area is in a corner of the window, given the right panel or the sidebar is not beside it.
- * Those take AppShell's --radius-lead (left) / --radius-trail (right); the rest are --radius-window.
- */
-export function paneCorners(pane: Rect, area: Size): string {
-  const top = pane.y < 1
-  const left = pane.x < 1
-  const right = pane.x + pane.width > area.width - 1
-  const bottom = pane.y + pane.height > area.height - 1
-  const card = 'var(--radius-window)'
-  const lead = (at: boolean): string => (at ? 'var(--radius-lead)' : card)
-  const trail = (at: boolean): string => (at ? 'var(--radius-trail)' : card)
-  return [lead(top && left), trail(top && right), trail(bottom && right), lead(bottom && left)].join(' ')
 }
