@@ -5,6 +5,7 @@ import { randomInt } from 'node:crypto'
 import type { GuiAnswer, GuiEvent, GuiPermission } from '@shared/gui-chat'
 import type { ContextUsage } from '@shared/session-meta'
 import type { KeepImage } from '@shared/transcript-chat'
+import type { WorkflowRun } from '@shared/workflow-run'
 
 export type Rec = Record<string, unknown>
 export const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -33,6 +34,8 @@ export interface DriverIO {
    * null when the agent says it does not know right now (just compacted).
    */
   context(context: ContextUsage | null): void
+  /** Claude's workflow runs, the whole list each time one changes (ultracode, PRD F25): the run card and the sidebar. */
+  workflows?(runs: WorkflowRun[]): void
   /** A turn ended (status: Stop / StopFailure for the agents without hooks). */
   turnEnd(outcome: { failed: boolean; message?: string }): void
   /** The handshake failed; shown above the composer. */

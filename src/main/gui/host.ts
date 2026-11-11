@@ -10,6 +10,7 @@ import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { sameContext, type ContextUsage } from '@shared/session-meta'
 import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
 import type { ChatItem, KeepImage } from '@shared/transcript-chat'
+import type { WorkflowRun } from '@shared/workflow-run'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
 import { createAcpDriver } from './acp-driver'
@@ -106,6 +107,8 @@ class GuiSession<O extends GuiOwner> {
   private title: string | undefined
   /** The latest context reading (undefined: none yet); sent again after a replay and to a new owner, as the title is. */
   private context: ContextUsage | null | undefined
+  /** Claude's workflow runs (PRD F25), the latest list; sent again after a replay and to a new owner, as context is. */
+  private workflows: WorkflowRun[] | undefined
 
   constructor(
     readonly launch: GuiLaunch,
@@ -148,6 +151,10 @@ class GuiSession<O extends GuiOwner> {
       fail: (reason) => this.fail(reason),
       title: (raw) => this.named(raw),
       context: (context) => this.measured(context),
+      workflows: (runs) => {
+        this.workflows = runs
+        this.status([{ type: 'workflows', runs }])
+      },
       image: (path) => this.deps.image(path),
       relaunch: (change) => this.onRelaunch(change)
     }
@@ -280,6 +287,7 @@ class GuiSession<O extends GuiOwner> {
     this.tracker = tracker
     // Claude's hooks carry no context under -p: it comes from here for every protocol.
     if (this.context !== undefined) this.status([{ type: 'context', context: this.context }])
+    if (this.workflows) this.status([{ type: 'workflows', runs: this.workflows }])
     if (!this.synthStatus) return
     const out: AgentEvent[] = []
     if (this.state.busy) {
@@ -421,6 +429,7 @@ class GuiSession<O extends GuiOwner> {
     // A title that came while no window owned the session (reload, window closed) went nowhere: the new owner gets it.
     if (this.title) this.status([{ type: 'agent-title', title: this.title }])
     if (this.context !== undefined) this.status([{ type: 'context', context: this.context }])
+    if (this.workflows) this.status([{ type: 'workflows', runs: this.workflows }])
     return this.snapshot()
   }
 
