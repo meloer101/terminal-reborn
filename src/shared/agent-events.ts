@@ -5,6 +5,7 @@ import type { ContextUsage } from './session-meta'
 import type { TodoItem } from './todo-progress'
 import type { TurnChecks } from './turn-checks'
 import type { SessionId } from './types'
+import type { WorkflowRun } from './workflow-run'
 
 export type { AllowAlwaysScope } from './permission-scope'
 
@@ -28,8 +29,12 @@ export type AgentEvent =
   | { type: 'subagent-stop'; agentId: string }
   /** Notification hook, classified. 'permission' / 'question' mean the TUI is waiting on the user. */
   | { type: 'notification'; kind: 'permission' | 'question' | 'idle' | 'other'; message: string }
-  /** `message` is the agent's last reply of the turn (Claude / Codex `last_assistant_message`), possibly truncated. */
-  | { type: 'stop'; message?: string }
+  /**
+   * `message` is the agent's last reply of the turn (Claude / Codex `last_assistant_message`), possibly truncated.
+   * `workflows`: Claude workflow runs still going behind the ended turn (Stop `background_tasks`, PRD F25): the
+   * session stays 运行中 until they end.
+   */
+  | { type: 'stop'; message?: string; workflows?: number }
   /**
    * The turn ended on an API error (Claude StopFailure). `reason` is Claude's error kind (`rate_limit`, `overloaded`,
    * `authentication_failed`, …); `rate_limit` also covers transient 429s, so a plan-limit stop needs the plan usage
@@ -66,6 +71,14 @@ export type AgentEvent =
    * [] when none (PRD F24, Figma 67I′). Display only: Wavi never changes them. Not activity.
    */
   | { type: 'crons'; items: SessionCron[] }
+  /**
+   * Claude's workflow runs in the session (ultracode, PRD F25, Figma 74): the whole list each time one changes, read by
+   * main from the run's own files after hooks (terminal) or from stream-json (GUI). Ended runs stay listed until the
+   * conversation restarts. Not activity, except that the last live run ending settles a session left 运行中 by it.
+   */
+  | { type: 'workflows'; runs: WorkflowRun[] }
+  /** Whether ultracode is on in this Claude session (PRD F25): read from the TUI's screen or the transcript. Display only. */
+  | { type: 'ultracode'; on: boolean }
   /**
    * The model, effort and permission mode the agent reports (Claude statusLine `model.id` / `effort.level`, SessionStart
    * `model`, `permission_mode` on prompt and stop hooks; Codex `model`), for the phone's 会话设置 (PRD F22 v1.144). Only

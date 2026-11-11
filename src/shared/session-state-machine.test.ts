@@ -704,3 +704,40 @@ describe('codex titles', () => {
     expect(reduce(make('running'), { type: 'tick' }, T0 + CODEX_IDLE_HEAL_MS * 10).status).toBe('running')
   })
 })
+
+describe('a workflow run behind an ended turn (PRD F25)', () => {
+  const runOf = (status: 'running' | 'completed', done: number): AgentEvent => ({
+    type: 'workflows',
+    runs: [
+      {
+        key: 'wf_abcdef12',
+        name: 'auth',
+        status,
+        phases: [{ title: '改写' }],
+        agents: [
+          { label: 'a', phase: 0, state: done > 0 ? 'done' : 'running' },
+          { label: 'b', phase: 0, state: 'running' }
+        ]
+      }
+    ]
+  })
+
+  it('stays running after Stop, says where the run is, and settles when the run ends', () => {
+    let s = run(make('idle'), [promptSubmit, toolStart('Workflow'), ev({ type: 'stop', message: '在后台跑', workflows: 1 })])
+    expect(s).toMatchObject({ status: 'running', currentAction: 'workflow', lastReply: '在后台跑' })
+    // Claude's idle prompt notification and the idle heal do not end it while the run goes.
+    s = run(s, [notification('idle')])
+    expect(s.status).toBe('running')
+    s = run(s, [ev(runOf('running', 1))])
+    expect(s.currentAction).toBe('workflow · 改写 1 / 2')
+    s = run(s, [ev(runOf('completed', 1))])
+    expect(s).toMatchObject({ status: 'done_unread', currentAction: undefined, background: undefined })
+  })
+
+  it('a new prompt drops the background line; a session without a run ignores workflow lists', () => {
+    const s = run(make('idle'), [promptSubmit, ev({ type: 'stop', workflows: 1 }), promptSubmit])
+    expect(s).toMatchObject({ status: 'running', background: undefined })
+    const idle = run(make('idle'), [ev(runOf('running', 0))])
+    expect(idle.status).toBe('idle')
+  })
+})

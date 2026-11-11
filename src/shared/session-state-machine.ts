@@ -6,6 +6,7 @@ import type { AgentEvent } from './agent-events'
 import type { AgentMarker } from './agent-launch'
 import { blockedAction, blockedReasonOf, readScreen, type BlockedReason } from './startup-screen'
 import { toolCallKey } from './tool-call'
+import { isLiveRun, workflowLine } from './workflow-run'
 import type { AgentKind, AgentPhase, SessionStatus } from './types'
 
 /**
@@ -140,6 +141,12 @@ export interface SessionState {
    * A busy frame from before the dialog, parsed late, comes before this is set and is ignored.
    */
   dialogSeen?: boolean
+  /**
+   * The main turn ended but a Claude workflow run goes on behind it (PRD F25): what the session row says while it does
+   * (「workflow · 改写 2 / 6」). The session stays `running` — no idle title, footer or idle heal settles it — until the
+   * runs end (a `workflows` event) or a new turn starts.
+   */
+  background?: string
 }
 
 export function initialState(
@@ -262,6 +269,7 @@ function withAsks(state: SessionState, asks: Ask[]): SessionState {
  * idle, or what a finished turn left underneath its asks (unread reply, error).
  */
 function settledIdle(state: SessionState): SessionState {
+  if (state.background !== undefined) return { ...state, status: 'running', currentAction: state.background, toolAction: undefined, asks: NO_ASKS, under: undefined }
   const under = state.status === 'needs_you' ? state.under : undefined
   const status: SessionStatus = under && (under.status === 'done_unread' || under.status === 'error') ? under.status : 'idle'
   return { ...state, status, currentAction: status === 'error' ? under?.action : undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
@@ -288,10 +296,11 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         : touched
 
     case 'prompt-submit': {
-      // A new turn: a dialog of the main thread cannot be up while a prompt is sent. A subagent's still may be.
+      // A new turn: a dialog of the main thread cannot be up while a prompt is sent. A subagent's still may be. A
+      // workflow behind the last turn is this turn's to report again at its Stop.
       const asks = state.asks.filter((a) => a.agent !== '')
-      if (asks.length === 0) return { ...running(state, now, undefined), lastReply: undefined }
-      return { ...touched, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running' }, toolAction: undefined, lastReply: undefined }
+      if (asks.length === 0) return { ...running(state, now, undefined), lastReply: undefined, background: undefined }
+      return { ...touched, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running' }, toolAction: undefined, lastReply: undefined, background: undefined }
     }
 
     case 'tool-start': {
@@ -340,11 +349,35 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
 
     case 'stop': {
       const finished = { ...touched, currentAction: undefined, toolAction: undefined, lastReply: replyLine(event.message), finishedAt: now }
+      // A workflow run goes on behind the ended turn (PRD F25): still running until it ends.
+      if (event.workflows) {
+        const background = state.background ?? 'workflow'
+        const asks = state.asks.filter((a) => a.agent !== '')
+        if (asks.length > 0) return { ...finished, background, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running', action: background } }
+        return { ...finished, background, status: 'running', currentAction: background, asks: NO_ASKS, under: undefined }
+      }
       const status: SessionStatus = state.viewing ? 'idle' : 'done_unread'
       // A background subagent may still wait on the user after the main turn ended.
       const asks = state.asks.filter((a) => a.agent !== '')
-      if (asks.length > 0) return { ...finished, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status } }
-      return { ...finished, status, asks: NO_ASKS, under: undefined }
+      if (asks.length > 0) return { ...finished, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status }, background: undefined }
+      return { ...finished, status, asks: NO_ASKS, under: undefined, background: undefined }
+    }
+
+    case 'workflows': {
+      if (state.background === undefined) return state
+      const live = event.runs.filter(isLiveRun)
+      if (live.length > 0) {
+        const background = workflowLine(live[live.length - 1]!, now)
+        if (background === state.background) return state
+        if (state.status === 'running') return { ...state, background, currentAction: background }
+        if (state.status === 'needs_you' && state.under?.status === 'running') return { ...state, background, under: { status: 'running', action: background } }
+        return { ...state, background }
+      }
+      // The last run ended: the turn's work is done (Claude wakes the main thread to read it, which starts a new turn).
+      const status: SessionStatus = state.viewing ? 'idle' : 'done_unread'
+      if (state.status === 'running') return { ...state, background: undefined, status, currentAction: undefined, toolAction: undefined, finishedAt: now, lastActivityAt: now }
+      if (state.status === 'needs_you') return { ...state, background: undefined, under: { status } }
+      return { ...state, background: undefined }
     }
 
     case 'stop-failure': {
@@ -357,7 +390,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     case 'session-end':
       // /clear and /resume end the old conversation and start another a moment later (SessionStart revives it).
       if (event.reason === 'clear' || event.reason === 'resume') {
-        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
+        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined, background: undefined }
       }
       // Only the PTY exiting is final: a SessionStart after this (a new agent in the same shell) revives the session.
       return {
@@ -367,6 +400,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         toolAction: undefined,
         asks: NO_ASKS,
         under: undefined,
+        background: undefined,
         ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
       }
 
@@ -379,6 +413,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     case 'subagents':
     case 'agent-settings':
     case 'crons':
+    case 'ultracode':
       // A name or a metric, not activity: it can arrive well after the turn ended (and statusLine runs on its own).
       return state
   }
