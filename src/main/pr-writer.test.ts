@@ -7,8 +7,6 @@ import { join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 
-vi.setConfig({ testTimeout: 60_000 })
-
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-writer-')))
 const bin = join(base, 'bin')
 const log = join(base, 'log')

@@ -5,8 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
-vi.setConfig({ testTimeout: 60_000 })
-
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-git-merge-')))
 
 const roots = new Set<string>()
