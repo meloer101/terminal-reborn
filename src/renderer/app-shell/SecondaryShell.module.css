@@ -2,7 +2,7 @@
 .empty {
   position: absolute;
   inset: calc(-1 * var(--titlebar-height)) 0 0;
-  border-radius: var(--radius-lead) var(--radius-trail) var(--radius-trail) var(--radius-lead);
+  border-radius: var(--radius-window);
   box-shadow: var(--card-edge), var(--card-shadow);
   display: flex;
   flex-direction: column;

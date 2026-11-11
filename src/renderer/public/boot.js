@@ -16,6 +16,8 @@
   const FORMED = 1100
   /** The dotted mark's size (px); the welcome page's mark rests at 36. */
   const MARK = 96
+  /** The glass between the card and the window's top, right and bottom edges (= --card-gap). */
+  const GAP = 6
 
   const read = (key) => {
     try {
@@ -37,8 +39,8 @@
     layout = null
   }
   const valid = layout && ['left', 'top', 'right', 'bottom', 'anchorY'].every((k) => Number.isFinite(layout[k]))
-  // Without a mirror: the default sidebar (264); the card reaches the window's other edges (Figma 55).
-  const inset = valid ? layout : { left: 264, top: 0, right: 0, bottom: 0 }
+  // Without a mirror: the default sidebar (264); the card sits GAP in from the window's other edges (Figma 75).
+  const inset = valid ? layout : { left: 264, top: GAP, right: GAP, bottom: GAP }
   const card = { left: inset.left, top: inset.top, right: innerWidth - inset.right, bottom: innerHeight - inset.bottom }
   let ax = (card.left + card.right) / 2
   let ay = valid ? card.top + layout.anchorY : (card.top + card.bottom) / 2 - 60
@@ -57,11 +59,7 @@
   const cardEl = document.createElement('div')
   cardEl.className = 'card'
   // Insets, not a size: the window can still change size while this is up (restored to full screen, fitted to the screen).
-  // A corner in one of the window's corners takes the window's radius, as in AppShell (--radius-lead / --radius-trail).
-  const corner = (inWindowCorner) => (inWindowCorner ? 'var(--radius-edge)' : 'var(--radius-window)')
-  const lead = corner(inset.left < 1)
-  const trail = corner(inset.right < 1)
-  cardEl.style.cssText = `left:${inset.left}px;top:${inset.top}px;right:${inset.right}px;bottom:${inset.bottom}px;border-radius:${lead} ${trail} ${trail} ${lead}`
+  cardEl.style.cssText = `left:${inset.left}px;top:${inset.top}px;right:${inset.right}px;bottom:${inset.bottom}px;border-radius:var(--radius-window)`
   el.appendChild(cardEl)
 
   let worker = null

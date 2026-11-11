@@ -5,29 +5,14 @@
   background: transparent;
 }
 
-/* The cards reach the window's top, right and bottom edges (PRD §5 主区贴边, Figma 55). A corner of a card that sits in
-   a corner of the window takes the window's radius: the right ones unless the right panel is docked beside main, the
-   left ones once the sidebar is hidden. Full screen has square corners. */
+/* The cards sit --card-gap in from the window's top, right and bottom edges (PRD §5 窗口留边, Figma 75), the left one
+   too once the sidebar is hidden, so a card's corner never lands on the window's own. */
 .shell {
-  --radius-lead: var(--radius-window);
-  --radius-trail: var(--radius-edge);
   position: relative;
   display: flex;
   overflow: hidden;
   height: 100%;
   background: var(--glass-shell);
-}
-
-.shell[data-fullscreen='true'] {
-  --radius-edge: 0px;
-}
-
-.shell[data-sidebar='closed'] {
-  --radius-lead: var(--radius-edge);
-}
-
-.surface:has(> .panel[data-mode='docked']) {
-  --radius-trail: var(--radius-window);
 }
 
 /* 全屏背景 (PRD v1.97, Figma 38): full screen leaves no desktop behind the window for the glass to show, so the shell
@@ -88,6 +73,12 @@
   flex: 1;
   min-width: 0;
   display: flex;
+  /* The glass between the cards and the window's edges; the left edge is the sidebar column's. */
+  padding: var(--card-gap) var(--card-gap) var(--card-gap) 0;
+}
+
+.shell[data-sidebar='closed'] .surface {
+  padding-left: var(--card-gap);
 }
 
 .main {
@@ -141,7 +132,7 @@
 }
 
 /* The panel at its full width (its left edge leads while the drawer is narrower: it slides in from the right): a card
-   (panels/RightPanel) --card-gap from main, against the window's top, right and bottom edges. */
+   (panels/RightPanel) --card-gap from main; the surface's padding keeps it --card-gap from the window's edges. */
 .panelInner {
   position: relative;
   flex: none;
@@ -154,11 +145,12 @@
    darken the window's glass). */
 .panel[data-mode='overlay'] {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: var(--card-gap);
+  right: var(--card-gap);
+  bottom: var(--card-gap);
   z-index: 10;
   max-width: calc(100% - var(--space-40));
+  border-radius: var(--radius-window);
   background: var(--float-bg);
   box-shadow: var(--shadow-glass-menu);
 }
