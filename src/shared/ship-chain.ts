@@ -9,7 +9,8 @@
 //   d. merged (PR merged, or the branch's work is in the base) and clean → 已经全部合并, 归档…
 //   e. nothing of its own and clean → nothing at all
 //   f. landing on the base would conflict → 同步 <base> (提交… first while tracked files are uncommitted)
-//   g. the two exits: 合并到 <base> 并推送 and 创建 PR, the remembered (else suggested) one first
+//   g. the two exits: 合并到 <base> 并推送 and 创建 PR, the remembered (else suggested) one first; only the first when
+//      the remote is not on GitHub
 import { archiveBlocker } from './archive'
 import type { GitChanges } from './git-graph/log'
 import type { MergeConflict } from './git-merge'
@@ -398,8 +399,9 @@ export function shipChain(input: ChainInput): ChainState {
     return state('conflicts', { tone: 'blocked', text: CHAIN_TEXT.baseConflicts(base, conflicts.length) }, next)
   }
 
-  // g. The two exits; without a remote only 合并到 <base>.
-  if (pf.remote === null) {
+  // g. The two exits; without a remote only 合并到 <base>, and with one that is not on GitHub only 合并到 <base> 并推送
+  // (no PR is possible there: the ⋯ menu's 创建 PR says why, the state line does not repeat it for every repository).
+  if (pf.remote === null || pf.remoteOnGitHub === false) {
     const next = move('main')
     return state('exits', headlineOf(next), next)
   }

@@ -57,7 +57,7 @@ export interface GitFailure {
 }
 
 export interface GitFailureContext {
-  /** The worktree's base branch (a rejected push of the base points at 同步, a protected one is named). */
+  /** The worktree's base branch (a rejected push of the base offers no way on, a protected one is named). */
   base: string
   remote: string | null
 }
@@ -158,8 +158,10 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
   // 改为创建 PR only answers a refused push; a PR that GitHub will not merge is already the way round the protection.
   if (PROTECTED.test(text)) return fail('protected-branch', `${PROTECTED_REF.exec(text)?.[1] ?? context.base} 受保护`, step === 'push' ? 'create-pr' : null)
   if (NON_FF.test(text)) {
+    // The base itself refused (exit A's push): 同步 brings the base into the branch, 拉取 moves the branch; neither
+    // repairs a local base that diverged from its remote, so nothing in Wavi is offered.
     const ref = REJECTED.exec(text)?.[1]
-    return fail('non-fast-forward', CHAIN_TEXT.remoteAhead, ref === context.base ? 'sync' : 'pull')
+    return fail('non-fast-forward', CHAIN_TEXT.remoteAhead, ref === context.base ? null : 'pull')
   }
   if (DIVERGED.test(text)) return fail('diverged', CHAIN_TEXT.diverged, 'handoff')
   if (PRE_RECEIVE.test(text)) return fail('pre-receive-hook', '远程的 pre-receive hook 拒绝了推送', 'handoff')

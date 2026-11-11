@@ -322,10 +322,19 @@ describe('shipChain · g. the two exits', () => {
     expect(state.second).toBeNull()
   })
 
-  it('blocks 创建 PR before anything is written when the remote is not on GitHub or gh is not usable', () => {
-    const notGitHub = shipChain(input({ preflight: ok({ remoteOnGitHub: false }), remembered: 'pr' }))
-    expect(notGitHub.next).toEqual({ id: 'pr', label: '创建 PR', blocker: '远程不在 GitHub 上' })
-    expect(notGitHub.headline).toEqual({ tone: 'blocked', text: '远程不在 GitHub 上' })
+  it('offers only 合并到 base 并推送 when the remote is not on GitHub: no PR, no state line about it', () => {
+    for (const remembered of ['pr', 'main', null] as const) {
+      const state = shipChain(input({ preflight: ok({ remoteOnGitHub: false, suggested: 'pr' }), remembered }))
+      expect(state.stage).toBe('exits')
+      expect(state.next).toEqual({ id: 'main', label: '合并到 main 并推送', blocker: null })
+      expect(state.second).toBeNull()
+      expect(state.headline).toBeNull()
+      // The ⋯ menu still lists 创建 PR, disabled with the reason.
+      expect(action(state, 'pr').blocker).toBe('远程不在 GitHub 上')
+    }
+  })
+
+  it('blocks 创建 PR before anything is written when gh is not usable', () => {
     expect(action(shipChain(input({ gh: 'missing' })), 'pr').blocker).toBe('创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login')
     expect(action(shipChain(input({ gh: 'signed-out' })), 'pr').blocker).toBe('gh 还没有登录：在终端运行 gh auth login 后可以创建 PR')
     expect(action(shipChain(input({ preflight: ok({ gh: 'missing' }) })), 'pr').blocker).toBe(CHAIN_TEXT.ghMissing)

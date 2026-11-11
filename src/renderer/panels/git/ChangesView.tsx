@@ -9,8 +9,9 @@
 // 审阅全部改动 on the left while no review shows, the merge chain's moves on the right and ⋯ with all of them
 // (合入链路 v2, Figma 73B–73G; the chain's state line above). An exit opens the Ship block; ⇧⌘M runs the primary when
 // it is an exit (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N…. 未提交 rows carry a
-// checkbox (73F1): the exits and 提交… commit only the ticked files.
-import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from 'lucide-react'
+// checkbox (73F1): the exits and 提交… commit only the ticked files. Every row ends with its 已看 mark (73A, viewed.ts);
+// the header's 未看 filter (GitView) lists only what is left to read.
+import { Check, ChevronDown, ChevronRight, Circle, CircleCheck, CircleDot, MessageSquare, Minus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
@@ -37,7 +38,7 @@ import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { registerPrimaryExit } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, endsOpenFile, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, endsOpenFile, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow, type ViewMark } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsLine, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
@@ -47,7 +48,8 @@ import { agentName } from '../../pull-requests/auto-fix'
 import { usePrStatus, usePullRequests } from '../../pull-requests/store'
 import { commentTarget, discardComments, sendComments } from './comments'
 import { ChainAbort, ChainButtons, ChainHeadlineRow } from './ChainRows'
-import { setAllTicked, toggleFile, toggleTicked, type RootGit } from './store'
+import { setAllTicked, toggleFile, toggleTicked, toggleViewedRow, type RootGit } from './store'
+import { useViewed } from './viewed'
 import { offsetsOf, useViewport, visibleRange } from './virtual'
 import styles from './GitView.module.css'
 
@@ -82,9 +84,14 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   )
   const prStatus = usePrStatus(worktree.path)
   const prLive = livePr(prStatus)
+  const marks = useViewed((s) => s.byWorktree[root])
+  const unviewedOnly = git.unviewedOnly
   const items = useMemo(
-    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout, git.unticked) : []),
-    [changes, git.expanded, git.diffs, comments, place, layout, git.unticked]
+    () =>
+      changes
+        ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout, git.unticked, { marks: marks ?? {}, unviewedOnly })
+        : [],
+    [changes, git.expanded, git.diffs, comments, place, layout, git.unticked, marks, unviewedOnly]
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -178,6 +185,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         {stickyItem?.kind === 'file' && (
           <div className={styles.stickyFile} data-testid="sticky-file" role="presentation" style={{ transform: `translateY(${stickyShift}px)` }}>
             <FileRow item={stickyItem} pinned onToggle={() => fold(sticky!, stickyItem.key)} />
+            <ViewMarkButton mark={stickyItem.mark} path={stickyItem.change.path} onToggle={() => toggleViewedRow(root, stickyItem.key)} />
           </div>
         )}
         <div className={styles.filesCanvas} style={{ height: offsets[items.length] }}>
@@ -322,6 +330,7 @@ function Item({
             </button>
           )}
           <FileRow item={item} onToggle={() => toggleFile(root, item.key)} />
+          <ViewMarkButton mark={item.mark} path={item.change.path} onToggle={() => toggleViewedRow(root, item.key)} />
         </div>
       )
     }
@@ -399,6 +408,23 @@ function FileRow({ item, onToggle, pinned = false }: { item: Extract<ChangeItem,
         </span>
       )}
       <FileCounts change={change} />
+    </button>
+  )
+}
+
+const VIEW_MARK: Record<ViewMark, { label: string; Icon: typeof Circle }> = {
+  unviewed: { label: '未看', Icon: Circle },
+  viewed: { label: '已看', Icon: CircleCheck },
+  stale: { label: '看过后又改了', Icon: CircleDot }
+}
+
+/** The 已看 mark at the end of a file row (Figma 73A): ○ 未看, ✓ 已看, ◉ 看过后又改了 — told apart by shape. A click marks
+ *  the row viewed at its current diff (an open file folds) or, when viewed, unmarks it. */
+function ViewMarkButton({ mark, path, onToggle }: { mark: ViewMark; path: string; onToggle: () => void }) {
+  const { label, Icon } = VIEW_MARK[mark]
+  return (
+    <button type="button" className={styles.viewMark} aria-label={label} title={`${label} · ${path}`} data-mark={mark} onClick={onToggle}>
+      <Icon size={16} strokeWidth={1.75} aria-hidden />
     </button>
   )
 }

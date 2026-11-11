@@ -411,7 +411,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
                   disabled={!shown.hasOrigin || busy}
                   onChange={setPush}
                   label="合并后推送到 origin"
-                  note={shown.hasOrigin ? null : '没有 origin 远程仓库'}
+                  note={shown.hasOrigin ? null : '没有远程仓库'}
                 />
               </div>
             </div>

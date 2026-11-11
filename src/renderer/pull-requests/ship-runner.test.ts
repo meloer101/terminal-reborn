@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ShipMainResult } from '@shared/ship'
+import { failureWay } from './ship-flow'
 
 vi.mock('../lifecycle/agent-up', () => ({ ensureAgentUp: async () => true }))
 vi.mock('../review/background', () => ({
@@ -104,10 +105,12 @@ describe('合并到 main 并推送 after its push failed', () => {
     expect(shipToMain).toHaveBeenCalledWith(expect.objectContaining({ method: 'merge' }))
   })
 
-  it('a push refused by a remote that moved shows git’s words in plain language and 同步 main (Figma 73E1)', async () => {
-    const failure = { kind: 'non-fast-forward' as const, message: '远程有本地没有的提交', next: 'sync' as const, tail: '! [rejected] main -> main (fetch first)' }
+  it('a push of the base refused by a remote that moved shows git’s words in plain language and offers only 取消', async () => {
+    // 同步 cannot repair a local base that diverged from its remote, and 重试 would be refused the same way.
+    const failure = { kind: 'non-fast-forward' as const, message: '远程有本地没有的提交', next: null, tail: '! [rejected] main -> main (fetch first)' }
     await shipUntilPushFails({ ok: true, commit: 'c1', pushed: false, pushError: '推送到 origin 失败', failure })
     expect(state().error).toMatchObject({ step: 'push', message: '远程有本地没有的提交', failure })
+    expect(failureWay(state().error!)).toBeNull()
     expect(state().steps.map((s) => [s.id, s.state])).toEqual([
       ['write', 'done'],
       ['commit', 'done'],

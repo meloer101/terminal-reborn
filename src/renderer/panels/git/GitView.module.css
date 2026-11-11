@@ -53,9 +53,12 @@
 }
 
 .aheadBehind {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font: var(--text-caption);
   color: var(--text-tertiary);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -340,7 +343,8 @@ button.pill:hover {
   align-items: center;
   gap: var(--space-8);
   width: 100%;
-  padding: var(--space-8) calc(var(--space-16) - var(--space-6)) var(--space-8) calc(var(--space-8) + var(--space-20));
+  /* Right: 10 to the row's edge, the 16 已看 mark, 8 before it (Figma 73A). */
+  padding: var(--space-8) calc(var(--space-16) - var(--space-6) + var(--space-16) + var(--space-8)) var(--space-8) calc(var(--space-8) + var(--space-20));
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -591,6 +595,70 @@ button.pill:hover {
 .fileItem > .tick {
   top: calc(var(--space-8) + 1px);
   left: var(--space-8);
+}
+
+/* The 已看 mark (Figma 73A): 16, 10 from the row's right edge, over the row's own padding like the checkbox; ○ / ✓ / ◉
+   differ by shape, all in the text colour. The hit area is 24. */
+.viewMark {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-4);
+  right: calc(var(--space-16) - var(--space-6) - var(--space-4));
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.viewMark:hover {
+  background: var(--bg-hover);
+}
+
+.viewMark:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* 未看 K in the header (Figma 73A): a segment of its own, selected while the filter is on. */
+.viewedCount {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.viewedFilter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0 var(--space-8) 0 var(--space-4);
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.viewedFilter:hover {
+  color: var(--text-primary);
+}
+
+.viewedFilter[aria-pressed='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.viewedFilter:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .groupHeader > .tick {

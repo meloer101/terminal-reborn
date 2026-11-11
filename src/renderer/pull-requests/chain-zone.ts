@@ -108,8 +108,8 @@ export interface PaletteGitFacts {
 }
 
 /**
- * ⌘K's Git group for the active session's worktree (73H): only the chain actions that can run now, then 审阅全部改动 and
- * 打开 PR #N when they apply.
+ * ⌘K's Git group for the active session's worktree (73H): only the chain actions that can run now (归档… only once the
+ * branch is merged), then 审阅全部改动 and 打开 PR #N when they apply.
  */
 export function paletteGitActions(chain: ChainState, facts: PaletteGitFacts): PaletteGitAction[] {
   const detail = (id: ChainActionId): string => {
@@ -127,7 +127,8 @@ export function paletteGitActions(chain: ChainState, facts: PaletteGitFacts): Pa
     }
   }
   const out: PaletteGitAction[] = chain.actions
-    .filter((a) => a.blocker === null)
+    // 归档… is offered once the work is merged, not for every worktree whose sessions are idle.
+    .filter((a) => a.blocker === null && (a.id !== 'archive' || chain.stage === 'merged'))
     .map((a) => ({ command: a.id, label: a.label, detail: detail(a.id), primary: chain.next?.id === a.id }))
   if (facts.reviewFiles !== null && facts.reviewFiles > 0) out.push({ command: 'review', label: '审阅全部改动', detail: `${facts.reviewFiles} 个文件`, primary: false })
   if (facts.pr !== null) out.push({ command: 'open-pr', label: `打开 PR #${facts.pr}`, detail: '', primary: false })

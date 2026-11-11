@@ -3,11 +3,13 @@
 // and a fake gh (e2e/fake-gh.ts). Two launches:
 //   gh signed out — origin's fetch URL says github.com (never fetched), its push URL is a bare repository:
 //     jacob/tidy — one commit, two uncommitted files: 创建 PR blocked before anything is written, exit A still runs
-//   gh ready — project `demo` (origin is a bare repository, not GitHub) and project `widget` (origin on github.com):
+//   gh ready — project `demo` (origin is a bare repository, not GitHub: only 合并到 main 并推送, no state line about it)
+//   and project `widget` (origin on github.com):
 //     jacob/pick     three uncommitted files: ⌘K's Git group, 提交… commits only the ticked ones
-//     jacob/sync     never pushed, main moved past it without conflicts: ⋯ → 同步 main rebases it
+//     jacob/sync     never pushed, main moved past it without conflicts: ⋯ → 同步 main rebases it; ⋯ → 推送 publishes it
 //     jacob/conflict never pushed, edits README.md as main did: 和 main 会冲突, 同步 main → 交给 Claude (no Enter)
 //     jacob/rebase   a rebase left stopped on README.md: 中止 restores the branch
+//     jacob/resume   a rebase whose conflict was resolved and staged outside the app: 继续 finishes it
 //     jacob/push     pushed, a local commit, the remote branch moved meanwhile: 推送 is refused, 拉取 is offered
 //     jacob/done     fast-forwarded into main: 已经全部合并到 main, 归档… opens the sheet
 //     widget jacob/pr  PR #12 open; gh's PR list starts failing: `#12 ? 查询失败` in the sidebar and the PR line
@@ -178,12 +180,14 @@ test.describe('合入链路 v2 · gh ready', () => {
   gitIn(project, 'push', '-q', '-u', 'origin', 'main')
 
   const wt = (name: string) => join(fake.root, `wt-${name}`)
-  for (const name of ['pick', 'sync', 'conflict', 'rebase', 'push', 'done']) addWorktree(project, wt(name), `jacob/${name}`)
+  const names = ['pick', 'sync', 'conflict', 'rebase', 'resume', 'push', 'done']
+  for (const name of names) addWorktree(project, wt(name), `jacob/${name}`)
   commitIn(wt('pick'), 'pick.ts', 'export {}\n', 'Add pick')
   for (const name of ['a', 'b', 'c']) writeFileSync(join(wt('pick'), `${name}.ts`), `export const ${name} = 1\n`)
   commitIn(wt('sync'), 'sync.ts', 'export const sync = 1\n', 'Add sync')
   commitIn(wt('conflict'), 'README.md', '# demo\nfrom the branch\n', 'Branch edits README')
   commitIn(wt('rebase'), 'README.md', '# demo\nfrom the rebase branch\n', 'Rebase branch edits README')
+  commitIn(wt('resume'), 'README.md', '# demo\nfrom the resume branch\n', 'Resume branch edits README')
   commitIn(wt('done'), 'done.ts', 'export const done = 1\n', 'Add done')
   // jacob/done lands on main by fast-forward; then main moves on.
   gitIn(project, 'merge', '-q', '--ff-only', 'jacob/done')
@@ -197,6 +201,14 @@ test.describe('合入链路 v2 · gh ready', () => {
     // The conflict is the point.
   }
   const rebaseHead = gitIn(wt('rebase'), 'rev-parse', 'jacob/rebase').trim()
+  // jacob/resume stops on README.md too; the conflict is resolved and staged outside the app.
+  try {
+    gitIn(wt('resume'), 'rebase', 'main')
+  } catch {
+    // The conflict is the point.
+  }
+  writeFileSync(join(wt('resume'), 'README.md'), '# demo\nfrom main\nfrom the resume branch\n')
+  gitIn(wt('resume'), 'add', 'README.md')
   // jacob/push: pushed, then a local commit; another clone moves the remote branch.
   commitIn(wt('push'), 'push.ts', 'export const push = 1\n', 'Add push')
   gitIn(wt('push'), 'push', '-q', '-u', 'origin', 'jacob/push')
@@ -219,12 +231,23 @@ test.describe('合入链路 v2 · gh ready', () => {
   gh.setPrs('jacob/pr', [{ number: 12, state: 'OPEN', checks: [{ name: 'test', status: 'COMPLETED', conclusion: 'SUCCESS' }] }])
 
   const agents: Record<string, FakeAgentFolder> = {}
-  for (const name of ['pick', 'sync', 'conflict', 'rebase', 'push', 'done']) agents[name] = fake.folder(`wt-${name}`)
+  for (const name of names) agents[name] = fake.folder(`wt-${name}`)
   agents.pr = fake.folder('wt-pr')
 
   let app: ElectronApplication
   let page: Page
   const kit = pageKit(() => page)
+  /** B1: the zone offers only 合并到 main 并推送, says nothing about GitHub; ⋯'s 创建 PR is disabled with the reason. */
+  const notOnGitHub = async () => {
+    await expect(kit.panel().getByRole('button', { name: /^合并到 main 并推送/ })).toBeEnabled(WITHIN)
+    await expect(kit.panel().getByRole('button', { name: /^创建 PR/ })).toHaveCount(0)
+    await expect(kit.headline()).toHaveCount(0)
+    await kit.panel().getByTestId('chain-menu').click()
+    await expect(kit.menuItem(/^创建 PR/)).toHaveAttribute('aria-disabled', 'true')
+    await expect(kit.menuItem(/^创建 PR/)).toContainText('远程不在 GitHub 上')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu')).toHaveCount(0)
+  }
 
   test.beforeAll(async () => {
     const worktree = (name: string) => ({ id: `w-${name}`, projectId: 'p1', branch: `jacob/${name}`, path: wt(name), isMain: false, baseBranch: 'main' })
@@ -239,7 +262,7 @@ test.describe('合入链路 v2 · gh ready', () => {
         ],
         worktrees: [
           { id: 'w-main', projectId: 'p1', branch: 'main', path: project, isMain: true },
-          ...['pick', 'sync', 'conflict', 'rebase', 'push', 'done'].map(worktree),
+          ...names.map(worktree),
           { id: 'w-widget', projectId: 'p2', branch: 'main', path: widget, isMain: true },
           { id: 'w-pr', projectId: 'p2', branch: 'jacob/pr', path: prPath, isMain: false, baseBranch: 'main' }
         ],
@@ -248,9 +271,10 @@ test.describe('合入链路 v2 · gh ready', () => {
           session('sync', '跟上主干', 2),
           session('conflict', '改 README', 3),
           session('rebase', '变基中', 4),
-          session('push', '推送被拒', 5),
-          session('done', '已合并', 6),
-          session('pr', '有 PR', 7)
+          session('resume', '冲突已解决', 5),
+          session('push', '推送被拒', 6),
+          session('done', '已合并', 7),
+          session('pr', '有 PR', 8)
         ],
         activeSessionId: 's-pick',
         sidebarCollapsed: false,
@@ -276,8 +300,8 @@ test.describe('合入链路 v2 · gh ready', () => {
     const header = kit.panel().getByRole('checkbox', { name: /全部未提交的文件|不提交未提交的文件/ })
     await expect(header).toHaveAttribute('aria-checked', 'mixed')
     await expect(kit.panel()).toContainText('3 个文件 · 勾选 2 个')
-    // The preflight is in (a remote that is not on GitHub blocks 创建 PR, said on the state line).
-    await expect(kit.headline()).toContainText('远程不在 GitHub 上', WITHIN)
+    // The preflight is in: a remote that is not on GitHub offers only 合并到 main 并推送, with no state line about it.
+    await notOnGitHub()
     await kit.panel().getByTestId('chain-menu').click()
     await kit.menuItem(/^提交…/).click()
     await expect(kit.ship()).toContainText('提交 2 个文件')
@@ -315,7 +339,7 @@ test.describe('合入链路 v2 · gh ready', () => {
 
   test('(c) ⋯ → 同步 main rebases a branch that was never pushed', async () => {
     await kit.open('s-sync')
-    await expect(kit.headline()).toContainText('远程不在 GitHub 上', WITHIN)
+    await notOnGitHub()
     await kit.panel().getByTestId('chain-menu').click()
     const sync = kit.menuItem(/^同步 main/)
     await expect(sync).not.toHaveAttribute('aria-disabled', 'true', WITHIN)
@@ -339,6 +363,22 @@ test.describe('合入链路 v2 · gh ready', () => {
     await kit.shoot('c')
   })
 
+  test('(j) ⋯ → 推送 publishes a branch that was never pushed', async () => {
+    await kit.open('s-sync')
+    await notOnGitHub()
+    await kit.panel().getByTestId('chain-menu').click()
+    await kit.menuItem(/^推送/).click()
+    await expect.poll(() => {
+      try {
+        return gitIn(bare, 'rev-parse', 'refs/heads/jacob/sync').trim()
+      } catch {
+        return ''
+      }
+    }, WITHIN).toBe(gitIn(wt('sync'), 'rev-parse', 'HEAD').trim())
+    await expect(kit.ship()).toHaveCount(0, WITHIN)
+    expect(gitIn(wt('sync'), 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}').trim()).toBe('origin/jacob/sync')
+  })
+
   test('(d) 和 main 会冲突: 同步 main starts nothing and 交给 Claude puts the rebase into the input line without Enter', async () => {
     await kit.open('s-conflict')
     await expect.poll(() => agents.conflict!.pid(), WITHIN).not.toBeNull()
@@ -348,6 +388,9 @@ test.describe('合入链路 v2 · gh ready', () => {
     await kit.shoot('d-headline')
     await kit.panel().getByRole('button', { name: /^同步 main/ }).click()
     await expect(kit.ship().getByRole('alert')).toContainText('rebase 会冲突 · README.md', WITHIN)
+    // Nothing was started: the step is held (ⓘ), not failed, and its reason takes the step's place (Figma 73D2).
+    await expect(kit.ship().locator('[data-step="merge"]')).toHaveAttribute('data-state', 'held')
+    await expect(kit.ship().locator('[data-step="merge"]')).not.toContainText('rebase 到 main')
     await kit.shoot('d')
     expect(gitIn(wt('conflict'), 'rev-parse', 'HEAD').trim()).toBe(before)
     await kit.ship().getByRole('button', { name: '交给 Claude' }).click()
@@ -371,11 +414,29 @@ test.describe('合入链路 v2 · gh ready', () => {
     await expect(kit.headline()).not.toContainText('rebase 进行中', WITHIN)
   })
 
+  test('(k) a rebase whose conflicts were resolved outside the app: 继续 and 中止; 继续 finishes it (Figma 73D4)', async () => {
+    await kit.open('s-resume')
+    await expect(kit.headline()).toContainText('rebase 进行中 · 冲突都解决了', WITHIN)
+    await expect(kit.headline()).toHaveAttribute('data-tone', 'ok')
+    const cont = kit.panel().getByRole('button', { name: '继续', exact: true })
+    await expect(cont).toBeEnabled()
+    await expect(kit.panel().getByRole('button', { name: '中止', exact: true })).toBeEnabled()
+    await kit.shoot('k')
+    await cont.click()
+    await expect.poll(() => gitIn(wt('resume'), 'rev-parse', '--abbrev-ref', 'HEAD').trim(), WITHIN).toBe('jacob/resume')
+    expect(gitIn(wt('resume'), 'status', '--porcelain').trim()).toBe('')
+    gitIn(wt('resume'), 'merge-base', '--is-ancestor', 'main', 'jacob/resume')
+    expect(gitIn(wt('resume'), 'show', 'HEAD:README.md')).toBe('# demo\nfrom main\nfrom the resume branch\n')
+    // Rebased onto main and clean: the exits are back, with nothing to say on the state line.
+    await expect(kit.headline()).toHaveCount(0, WITHIN)
+    await expect(kit.panel().getByRole('button', { name: /^合并到 main 并推送/ })).toBeEnabled()
+  })
+
   test('(f) a push refused by a remote that moved: the step says so and offers 拉取', async () => {
     commitIn(other, 'elsewhere.ts', 'export {}\n', 'Pushed from elsewhere')
     gitIn(other, 'push', '-q', 'origin', 'jacob/push')
     await kit.open('s-push')
-    await expect(kit.headline()).toContainText('远程不在 GitHub 上', WITHIN)
+    await notOnGitHub()
     await kit.panel().getByTestId('chain-menu').click()
     await kit.menuItem(/^推送/).click()
     const alert = kit.ship().getByRole('alert')

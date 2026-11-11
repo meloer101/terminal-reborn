@@ -45,7 +45,7 @@ function exitsOf(chain: ChainState, input: ChainInput): Exits {
     if (input.local.uncommitted > 0 || input.pr.unpushed) return { primary: { kind: 'push-pr', number, label: pr.label, blocker: pr.blocker }, secondary: null }
     return { primary: { kind: 'open-pr', number, label: `打开 PR #${number}`, blocker: null }, secondary: null }
   }
-  if (preflight.remote === null) return { primary: main, secondary: null }
+  if (preflight.remote === null || preflight.remoteOnGitHub === false) return { primary: main, secondary: null }
   return both(input.remembered ?? preflight.suggested)
 }
 

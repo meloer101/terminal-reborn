@@ -3,20 +3,33 @@
 // editable fields. It takes the place of the facts and the footer in Git · 变更. ⌘↵ goes ahead, Esc cancels. A failed
 // step says what git said in plain words (合入链路 v2, Figma 73E), and the footer offers the one way on: 同步 / 拉取 /
 // 提交… (the chain's own action), 改为创建 PR, 交给 <agent> (into its input line, never sent), 重试, or only 取消.
-import { ArrowDown, Check, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type LucideIcon } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, CircleAlert, GitCommitHorizontal, GitMerge, GitPullRequest, RefreshCw, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { CHAIN_LABEL, CHAIN_TEXT, type ChainActionId } from '@shared/ship-chain'
 import type { ShipKind } from '@shared/ship'
 import { runChainCommand } from './chain-actions'
 import { cancelShip, editShip, handConflictsToAgent, handoffText, retryShip, submitShip, switchToPr, useShips } from './ship-runner'
-import { failureOutput, failureWay, glanceFields, STEP_GLYPH_NAME, stepGlyph, submitBlocker, submitLabel, type FailureWay, type ShipState } from './ship-flow'
+import {
+  failureOutput,
+  failureWay,
+  glanceFields,
+  heldBeforeStart,
+  STEP_GLYPH_NAME,
+  stepGlyph,
+  submitBlocker,
+  submitLabel,
+  titleIcon,
+  type FailureWay,
+  type ShipState
+} from './ship-flow'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import styles from './ShipBlock.module.css'
 
-const TITLE_ICON: Record<ShipKind, LucideIcon> = {
+const TITLE_ICON: Record<ShipKind | 'push', LucideIcon> = {
   main: GitMerge,
   pr: GitPullRequest,
   'push-pr': GitPullRequest,
+  push: ArrowUp,
   commit: GitCommitHorizontal,
   sync: RefreshCw,
   pull: ArrowDown
@@ -79,7 +92,10 @@ export function ShipBlock({
     cancelShip(worktree)
     void runChainCommand(worktree, id)
   }
-  const Icon = TITLE_ICON[state.kind]
+  const Icon = TITLE_ICON[titleIcon(state)]
+  // 同步's pre-check found conflicts: nothing was started, so the step is held (ⓘ, the reason in its place), not failed.
+  const held = heldBeforeStart(state)
+  const fields = showFields ? glanceFields(state) : []
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.nativeEvent.isComposing || event.defaultPrevented) return
@@ -112,29 +128,43 @@ export function ShipBlock({
           {state.title}
         </p>
         <ol className={styles.steps}>
-          {state.steps.map((step) => (
-            <li key={step.id} className={styles.step} data-state={step.state} data-step={step.id}>
-              {step.state === 'working' ? (
-                // ◌ is all but invisible in the UI font; the session spinner is the app's one "in progress" sign.
-                <span className={styles.glyph}>
-                  <StatusGlyph status="running" />
+          {state.steps.map((step) =>
+            step.id === held?.step ? (
+              <li key={step.id} className={styles.step} data-state="held" data-step={step.id}>
+                <span className={styles.glyph} role="img" aria-label="没有开始">
+                  <CircleAlert size={16} strokeWidth={1.75} aria-hidden />
                 </span>
-              ) : (
-                <span className={styles.glyph} role="img" aria-label={STEP_GLYPH_NAME[step.state]}>
-                  {stepGlyph(step.state)}
+                <span className={styles.stepBody} role="alert">
+                  <span className={styles.stepText}>{held.text}</span>
+                  {/* A hand-off that could not be typed says why under it. */}
+                  {state.error!.message !== held.text && <span className={styles.failureText}>{state.error!.message}</span>}
+                  {handoff && !hasSession && <span className={styles.failureNote}>{CHAIN_TEXT.noAgent}</span>}
                 </span>
-              )}
-              <span className={styles.stepBody}>
-                <span className={styles.stepText}>
-                  {step.label}
-                  {step.note && <span className={styles.stepNote}> · {step.note}</span>}
+              </li>
+            ) : (
+              <li key={step.id} className={styles.step} data-state={step.state} data-step={step.id}>
+                {step.state === 'working' ? (
+                  // ◌ is all but invisible in the UI font; the session spinner is the app's one "in progress" sign.
+                  <span className={styles.glyph}>
+                    <StatusGlyph status="running" />
+                  </span>
+                ) : (
+                  <span className={styles.glyph} role="img" aria-label={STEP_GLYPH_NAME[step.state]}>
+                    {stepGlyph(step.state)}
+                  </span>
+                )}
+                <span className={styles.stepBody}>
+                  <span className={styles.stepText}>
+                    {step.label}
+                    {step.note && <span className={styles.stepNote}> · {step.note}</span>}
+                  </span>
+                  {state.error?.step === step.id && <StepFailure state={state} noAgent={handoff && !hasSession} />}
                 </span>
-                {state.error?.step === step.id && <StepFailure state={state} noAgent={handoff && !hasSession} />}
-              </span>
-            </li>
-          ))}
+              </li>
+            )
+          )}
         </ol>
-        {showFields && <Fields state={state} worktree={worktree} base={base} />}
+        {fields.length > 0 && <Fields state={state} worktree={worktree} base={base} />}
       </div>
       <div className={styles.footer}>
         <button type="button" className={styles.ghost} disabled={running} onClick={() => cancelShip(worktree)}>

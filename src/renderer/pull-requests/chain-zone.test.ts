@@ -131,9 +131,18 @@ describe('paletteGitActions (73H)', () => {
       ['推送', 'session-cookie → origin', false],
       ['创建 PR', '', true],
       ['合并到 main 并推送', '', false],
-      ['归档…', '', false],
       ['审阅全部改动', '12 个文件', false]
     ])
     expect(paletteGitActions(chain, { ticked: 3, behind: 4, branch: 'b', remote: 'origin', reviewFiles: null, pr: 7 }).at(-1)).toMatchObject({ command: 'open-pr', label: '打开 PR #7' })
+  })
+
+  it('offers 归档… only once the branch is merged', () => {
+    const facts = { ticked: 0, behind: null, branch: 'b', remote: 'origin', reviewFiles: null, pr: null }
+    const merged = shipChain(input({ local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }, preflight({ merged: true, uncommitted: 0 })))
+    expect(merged.stage).toBe('merged')
+    expect(paletteGitActions(merged, facts).map((r) => r.label)).toContain('归档…')
+    const open = shipChain(input())
+    expect(open.actions.find((a) => a.id === 'archive')?.blocker).toBeNull()
+    expect(paletteGitActions(open, facts).map((r) => r.label)).not.toContain('归档…')
   })
 })

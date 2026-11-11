@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, pruneUnticked, tickedPaths, tickState, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, pruneUnticked, tickedPaths, tickState, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex, toggleMark } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -73,6 +73,74 @@ describe('changeItems', () => {
     ])
     expect(items[0]).toMatchObject({ meta: '5 个文件' })
     expect(items.at(-1)).toMatchObject({ title: '已提交', meta: '没有可对比的基线分支' })
+  })
+})
+
+describe('已看 marks in the list (合入链路 v2, Figma 73A)', () => {
+  const data = changes({
+    uncommitted: [file('a.ts', { stamp: 'a1' }), file('b.ts', { stamp: 'b1' })],
+    committed: [file('a.ts', { stamp: 'c1' }), file('d.ts')]
+  })
+  const marks = { 'uncommitted:a.ts': 'a1', 'uncommitted:b.ts': 'old', 'committed:a.ts': 'c1' }
+  const rowsOf = (items: ReturnType<typeof changeItems>) =>
+    items.map((i) => (i.kind === 'group' ? i.title : i.kind === 'file' ? `${i.key}=${i.mark}` : i.kind))
+
+  it('gives every file row its mark: viewed at its diff, stale after the diff changed, else unviewed', () => {
+    expect(rowsOf(changeItems(data, new Set(), {}, [], null, 'unified', null, { marks, unviewedOnly: false }))).toEqual([
+      '未提交',
+      'uncommitted:a.ts=viewed',
+      'uncommitted:b.ts=stale',
+      '已提交',
+      'committed:a.ts=viewed',
+      'committed:d.ts=unviewed'
+    ])
+    // Without marks every row is unviewed.
+    expect(rowsOf(changeItems(data, new Set(), {})).filter((r) => r.includes('='))).toEqual([
+      'uncommitted:a.ts=unviewed',
+      'uncommitted:b.ts=unviewed',
+      'committed:a.ts=unviewed',
+      'committed:d.ts=unviewed'
+    ])
+  })
+
+  it('lists only unviewed and stale rows under 未看; the group headers stay, with no caption once all are viewed', () => {
+    expect(rowsOf(changeItems(data, new Set(), {}, [], null, 'unified', null, { marks, unviewedOnly: true }))).toEqual([
+      '未提交',
+      'uncommitted:b.ts=stale',
+      '已提交',
+      'committed:d.ts=unviewed'
+    ])
+    const all = { ...marks, 'uncommitted:b.ts': 'b1', 'committed:d.ts': 'M:1:1:' }
+    expect(rowsOf(changeItems(data, new Set(), {}, [], null, 'unified', null, { marks: all, unviewedOnly: true }))).toEqual(['未提交', '已提交'])
+  })
+
+  it('hides an open viewed file with its diff under 未看', () => {
+    const key = changeKey('uncommitted', 'a.ts')
+    const diffs = { [key]: { kind: 'ready' as const, binary: false, truncated: 0, rows: [{ kind: 'add' as const, old: null, new: 1, text: 'x' }] } }
+    const items = changeItems(data, new Set([key]), diffs, [], null, 'unified', null, { marks, unviewedOnly: true })
+    expect(items.some((i) => i.kind === 'diff')).toBe(false)
+  })
+})
+
+describe('toggleMark', () => {
+  const file = { key: 'committed:a.ts', stamp: 's1' }
+
+  it('marks a file viewed and folds it when it is open', () => {
+    const expanded = new Set(['committed:a.ts', 'committed:b.ts'])
+    const next = toggleMark({}, expanded, file)
+    expect(next.marks).toEqual({ 'committed:a.ts': 's1' })
+    expect(next.expanded).toEqual(new Set(['committed:b.ts']))
+  })
+
+  it('unmarks a viewed file and leaves what is open alone', () => {
+    const expanded = new Set(['committed:a.ts'])
+    const next = toggleMark({ 'committed:a.ts': 's1' }, expanded, file)
+    expect(next.marks).toEqual({})
+    expect(next.expanded).toBe(expanded)
+  })
+
+  it('marks a stale file viewed again', () => {
+    expect(toggleMark({ 'committed:a.ts': 'old' }, new Set(), file).marks).toEqual({ 'committed:a.ts': 's1' })
   })
 })
 

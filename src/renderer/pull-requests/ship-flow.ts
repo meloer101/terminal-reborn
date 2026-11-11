@@ -5,7 +5,7 @@ import type { GitFailure, GitFailureNext } from '@shared/git-failures'
 import type { MergeMethod } from '@shared/git-merge'
 import type { RepoMergeMethods } from '@shared/pull-requests'
 import type { FlowStep, ShipError, ShipExitKind, ShipKind, ShipMainResult, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
-import { MAX_PROMPT_CHARS, type ChainActionId } from '@shared/ship-chain'
+import { CHAIN_LABEL, MAX_PROMPT_CHARS, type ChainActionId } from '@shared/ship-chain'
 
 export type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from '@shared/ship'
 import type { Session } from '@shared/types'
@@ -373,6 +373,24 @@ export function failurePrompt(input: { step: string; failure: Pick<GitFailure, '
 export function divergedPrompt(input: { branch: string; remote: string }): string {
   const { branch, remote } = input
   return `${remote}/${branch} 和本地的 ${branch} 各有对方没有的提交。请在当前 worktree 里运行 GIT_EDITOR=true git pull --no-rebase ${remote} ${branch}，有冲突就解决后 git add 并 GIT_EDITOR=true git merge --continue，确认构建和测试通过，完成后告诉我。不要推送。`
+}
+
+/** The icon of the block's title: a run's kind, or `push` for the chain's plain 推送 (a push-pr run with no PR). */
+export function titleIcon(state: Pick<ShipState, 'kind' | 'title'>): ShipKind | 'push' {
+  return state.kind === 'push-pr' && state.title === CHAIN_LABEL.push ? 'push' : state.kind
+}
+
+/**
+ * The step 同步 stopped at before starting anything: its pre-check found conflicts (Figma 73D2), so the step is held,
+ * not failed — it shows the state line's ⓘ and, in place of its label, what would conflict (`rebase 会冲突 · a.ts`).
+ * null for anything else.
+ */
+export function heldBeforeStart(state: Pick<ShipState, 'kind' | 'error' | 'steps'>): { step: StepId; text: string } | null {
+  const error = state.error
+  const files = error?.conflicts ?? []
+  if (state.kind !== 'sync' || !error || error.failure || files.length === 0) return null
+  const label = state.steps.find((s) => s.id === error.step)?.label ?? ''
+  return { step: error.step, text: syncConflictText(label.startsWith('rebase') ? 'rebase' : 'merge', files) }
 }
 
 /** 同步's pre-check found conflicts (Figma 73D2): `rebase 会冲突 · store.ts、DESIGN.md`. */

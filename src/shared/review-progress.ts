@@ -1,6 +1,7 @@
 // Review progress (合入链路 v2, PRD v1.169): an 已看 mark on every file row of Git · 变更, `已看 5 / 12` in its header.
 // A mark remembers the file's diff fingerprint (`stamp`) when it was set; once the diff changes the mark no longer
-// counts and is dropped. Marks live in workspace.json per worktree path. Pure.
+// counts (the row reads 看过后又改了) until it is set again; it is dropped when the row leaves the list. Marks live in
+// workspace.json per worktree path. Pure.
 import type { GitChanges, GitFileChange } from './git-graph/log'
 
 export type ChangeGroup = 'uncommitted' | 'committed'
@@ -46,7 +47,7 @@ export function reviewFiles(changes: Pick<GitChanges, 'uncommitted' | 'committed
 export interface ViewedState {
   /** Rows whose mark matches their diff. */
   viewed: Set<string>
-  /** Rows marked at an older diff: no longer viewed (pruneMarks drops them). */
+  /** Rows marked at an older diff: no longer viewed (看过后又改了). */
   stale: Set<string>
   /** viewed.size, the header's `已看 done / total`. */
   done: number
@@ -73,10 +74,13 @@ export function toggleViewed(marks: Readonly<ViewedMarks>, file: ReviewFile): Vi
   return next
 }
 
-/** Drops the marks of rows no longer in the change list and of diffs that changed; the same object when none goes. */
+/**
+ * Drops the marks of rows no longer in the change list; the same object when none goes. A row whose diff changed keeps
+ * its mark: it is stale (看过后又改了) until it is marked again.
+ */
 export function pruneMarks(marks: ViewedMarks, files: readonly ReviewFile[]): ViewedMarks {
-  const stamps = new Map(files.map((f) => [f.key, f.stamp]))
-  const kept = Object.entries(marks).filter(([key, stamp]) => stamps.get(key) === stamp)
+  const listed = new Set(files.map((f) => f.key))
+  const kept = Object.entries(marks).filter(([key]) => listed.has(key))
   return kept.length === Object.keys(marks).length ? marks : Object.fromEntries(kept)
 }
 

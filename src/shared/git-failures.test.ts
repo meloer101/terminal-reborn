@@ -158,8 +158,8 @@ describe('classifyGitFailure', () => {
     expect(classifyGitFailure('pr-create', NON_FF_BRANCH, ctx)).toMatchObject({ kind: 'non-fast-forward', next: 'pull' })
   })
 
-  it('points a rejected push of the base itself at 同步', () => {
-    expect(classifyGitFailure('push', FETCH_FIRST_BASE, ctx)).toMatchObject({ kind: 'non-fast-forward', message: '远程有本地没有的提交', next: 'sync' })
+  it('offers no way on for a rejected push of the base itself: 同步 cannot repair a local base that diverged', () => {
+    expect(classifyGitFailure('push', FETCH_FIRST_BASE, ctx)).toMatchObject({ kind: 'non-fast-forward', message: '远程有本地没有的提交', next: null })
   })
 
   it('names the protected branch and offers 创建 PR, before the hook rule matches', () => {

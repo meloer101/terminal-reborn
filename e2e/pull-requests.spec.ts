@@ -466,7 +466,7 @@ test.describe('F16 PR / CI status', () => {
     await row('s-ci').click()
     await showChanges()
     // GitHub threads are not drawn on the diff any more.
-    const file = panel().locator('[data-path="ci.ts"][data-group="committed"] button')
+    const file = panel().locator('[data-path="ci.ts"][data-group="committed"] button[aria-expanded]')
     await expect(file).toBeVisible(WITHIN)
     if ((await file.getAttribute('aria-expanded')) !== 'true') await file.click()
     await expect(panel().locator('[data-owner="committed:ci.ts"][data-line="1"]')).toBeVisible()

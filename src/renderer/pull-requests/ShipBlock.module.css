@@ -3,7 +3,6 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
   max-height: 60vh;
   padding: var(--space-8) 0 0;
   outline: none;
@@ -76,6 +75,15 @@
 
 .step[data-state='failed'] .glyph {
   color: var(--status-error);
+}
+
+/* A step held before it started (同步's pre-check found conflicts, Figma 73D2): the state line's ⓘ in the text colour. */
+.step[data-state='held'] .glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1lh;
+  color: var(--text-primary);
 }
 
 .step[data-state='pending'] .stepText {
@@ -242,13 +250,13 @@
   outline-offset: 2px;
 }
 
+/* The buttons follow the last line directly: 12 above them, as a 28-high row's 6 plus the footer's 6 (Figma 73D2 / 73E1). */
 .footer {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  padding: calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2))
-    calc(var(--space-12) + var(--space-2));
+  padding: var(--space-12) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-12) + var(--space-2));
 }
 
 .spacer {

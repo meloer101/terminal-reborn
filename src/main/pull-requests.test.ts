@@ -624,15 +624,27 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, message: '处于分离 HEAD：先切到一个分支再提交' })
   })
 
-  it('pushes a pushed branch to its upstream, and refuses one that was never pushed', async () => {
+  it('publishes a branch that was never pushed to the resolved remote, with an upstream (推送 said so)', async () => {
+    const fresh = setup()
+    const result = await pushBranch({ root: fresh.root, worktree: fresh.wt })
+    expect(result).toMatchObject({ ok: true, outcome: 'pushed', message: '已推送到 origin/feat' })
+    expect(git(fresh.bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(fresh.wt, 'rev-parse', 'HEAD').trim())
+    expect(git(fresh.wt, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}').trim()).toBe('origin/feat')
+    // The base itself is never pushed from here.
+    expect(await pushBranch({ root: fresh.root, worktree: fresh.root })).toMatchObject({ ok: false, message: '这是基线分支本身：Wavi 不往基线分支推送' })
+    // A repository without a remote says so.
+    const lonely = setup()
+    git(lonely.root, 'remote', 'remove', 'origin')
+    expect(await pushBranch({ root: lonely.root, worktree: lonely.wt })).toMatchObject({ ok: false, message: '没有远程仓库，没法推送分支' })
+  })
+
+  it('pushes a pushed branch to its upstream', async () => {
     const { root, wt, bare } = pushedWithPr()
     expect(await pushBranch({ root, worktree: wt })).toEqual({ ok: true, outcome: 'pushed', message: '没有要推送的提交' })
     commit(wt, 'd.txt', 'd\n', 'One more')
     expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: true, outcome: 'pushed', message: '已推送到 origin/feat' })
     expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
     expect(await pushBranch({ root, worktree: root })).toMatchObject({ ok: false, message: '这是基线分支本身：Wavi 不往基线分支推送' })
-    const fresh = setup()
-    expect(await pushBranch({ root: fresh.root, worktree: fresh.wt })).toMatchObject({ ok: false, message: '分支还没有推送过：用「创建 PR」推送' })
     // Someone else pushed to the branch: git refuses, and Wavi says what to do instead of git's words.
     const other = join(base, `other-${counter}`)
     git(base, 'clone', '-q', '-b', 'feat', bare, other)

@@ -583,7 +583,8 @@ describe('shipToMain', () => {
     expect(refused('remote: error: GH013: Repository rule violations found for refs/heads/main.')).toMatchObject({ pushRefused: true, failure: { kind: 'protected-branch' } })
     const behind = refused(' ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs')
     expect(behind).not.toHaveProperty('pushRefused')
-    expect(behind).toMatchObject({ failure: { kind: 'non-fast-forward', message: '远程有本地没有的提交', next: 'sync' } })
+    // 同步 cannot repair a local base that diverged from its remote: no way on is offered.
+    expect(behind).toMatchObject({ failure: { kind: 'non-fast-forward', message: '远程有本地没有的提交', next: null } })
     expect(pushFailure('c1', 'main', 'fatal: Could not read from remote repository.', 'upstream')).toMatchObject({ pushError: expect.stringMatching(/^推送到 upstream 失败/) })
   })
 })

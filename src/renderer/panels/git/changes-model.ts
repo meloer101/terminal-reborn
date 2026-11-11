@@ -7,7 +7,7 @@ import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { CommentSide, ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
 
-import { changeKey, type ChangeGroup } from '@shared/review-progress'
+import { changeKey, fileStamp, toggleViewed, type ChangeGroup, type ReviewFile, type ViewedMarks } from '@shared/review-progress'
 
 /** Moved to src/shared/review-progress.ts (已看 marks key rows the same way); kept here for the panel's imports. */
 export { changeKey, type ChangeGroup }
@@ -100,7 +100,8 @@ export function splitAnchors(row: SplitRow): Array<{ side: CommentSide; line: nu
 export type ChangeItem =
   /** `group` on 未提交 while its files can be ticked: the header's checkbox ticks or clears them all. */
   | { kind: 'group'; title: string; meta: string; group?: ChangeGroup }
-  | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number }
+  /** `mark`: the row's 已看 mark (合入链路 v2, Figma 73A). */
+  | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number; mark: ViewMark }
   | { kind: 'diff'; key: string; group: ChangeGroup; path: string; row: DiffRow }
   | { kind: 'split'; key: string; group: ChangeGroup; path: string; row: SplitRow }
   /** A comment the user wrote. `split`: drawn on the new (right) half of a 并排 diff. */
@@ -132,6 +133,36 @@ export function codeBetween(rows: readonly DiffRow[], side: CommentSide, from: n
     .map((row) => row.text)
 }
 
+/** A row's 已看 mark: ○ not viewed, ✓ viewed at its current diff, ◉ viewed before its diff changed (看过后又改了). */
+export type ViewMark = 'unviewed' | 'viewed' | 'stale'
+
+/** The 已看 marks the list draws, and the header's 未看 filter (only unviewed and stale rows are listed). */
+export interface ReviewView {
+  marks: Readonly<ViewedMarks>
+  unviewedOnly: boolean
+}
+
+export function viewMarkOf(marks: Readonly<ViewedMarks>, key: string, stamp: string): ViewMark {
+  const mark = marks[key]
+  return mark === undefined ? 'unviewed' : mark === stamp ? 'viewed' : 'stale'
+}
+
+/**
+ * The mark button of a row: marks it at its current diff (folding it when it is open; it can still be opened) or, when
+ * it is viewed, unmarks it. `expanded` is the same set when nothing folds.
+ */
+export function toggleMark(
+  marks: Readonly<ViewedMarks>,
+  expanded: ReadonlySet<string>,
+  file: ReviewFile
+): { marks: ViewedMarks; expanded: ReadonlySet<string> } {
+  const next = toggleViewed(marks, file)
+  if (next[file.key] !== file.stamp || !expanded.has(file.key)) return { marks: next, expanded }
+  const folded = new Set(expanded)
+  folded.delete(file.key)
+  return { marks: next, expanded: folded }
+}
+
 export function changeItems(
   changes: GitChanges,
   expanded: ReadonlySet<string>,
@@ -140,18 +171,23 @@ export function changeItems(
   draft: DraftPlace | null = null,
   layout: DiffLayout = 'unified',
   /** 未提交 paths left out of the next commit (合入链路 v2, Figma 73A / 73F1); null: the rows have no checkboxes. */
-  unticked: ReadonlySet<string> | null = null
+  unticked: ReadonlySet<string> | null = null,
+  /** 已看 marks and the 未看 filter; null: no marks (every row unviewed). */
+  review: ReviewView | null = null
 ): ChangeItem[] {
   const split = layout === 'split' ? ({ split: true } as const) : {}
   const items: ChangeItem[] = []
   const files = (group: ChangeGroup, list: GitFileChange[]) => {
     for (const change of list) {
       const key = changeKey(group, change.path)
+      const mark = review ? viewMarkOf(review.marks, key, fileStamp(change)) : 'unviewed'
+      // 未看 lists what is left to read: unviewed rows and those that changed since.
+      if (review?.unviewedOnly && mark === 'viewed') continue
       const open = expanded.has(key)
       // Review findings are not list rows (see the header); only what the user wrote sits under a line.
       const own = comments.filter((c) => c.origin !== 'review' && c.group === group && c.path === change.path)
       const draftHere = draft && draft.group === group && draft.path === change.path ? draft : null
-      items.push({ kind: 'file', group, change, key, open, comments: own.length })
+      items.push({ kind: 'file', group, change, key, open, comments: own.length, mark })
       if (!open) continue
       const reason = noDiffReason(change)
       if (reason) {

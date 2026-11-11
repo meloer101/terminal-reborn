@@ -253,7 +253,8 @@ test.describe('F13 review block · F16 exit A', () => {
 
     const alert = ship().getByRole('alert')
     await expect(alert).toContainText('rebase 会冲突 · README.md', WITHIN)
-    await expect(ship().locator('[data-step="merge"]')).toHaveAttribute('data-state', 'failed')
+    // Nothing was started: the step is held (ⓘ), not failed (Figma 73D2).
+    await expect(ship().locator('[data-step="merge"]')).toHaveAttribute('data-state', 'held')
     expect(repo.git(repo.conflict, 'rev-parse', 'HEAD').trim()).toBe(head)
     // The hand-off is the block's one way on (Figma 73D2), named by the session's agent.
     const handOff = ship().getByRole('button', { name: '交给 Claude' })

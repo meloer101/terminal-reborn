@@ -14,7 +14,9 @@ import {
   type GitLogPage,
   type GitLogScope
 } from '@shared/git-graph/log'
-import { changedSince, changeKey, noDiffReason, pruneUnticked, tickable, type ChangeGroup, type DiffView } from './changes-model'
+import { fileStamp } from '@shared/review-progress'
+import { changedSince, changeKey, noDiffReason, pruneUnticked, tickable, toggleMark, type ChangeGroup, type DiffView } from './changes-model'
+import { marksOf, pruneViewed, setMarks } from './viewed'
 
 export type GitTab = 'graph' | 'changes'
 
@@ -49,6 +51,8 @@ export interface RootGit {
   /** 未提交 paths the user unticked (合入链路 v2): left out of 提交… and the exits. Not persisted; pruned when a path
    *  leaves the list. */
   unticked: ReadonlySet<string>
+  /** The header's 未看 filter (Figma 73A): only unviewed and stale rows are listed. Not persisted. */
+  unviewedOnly: boolean
 }
 
 const EMPTY: RootGit = {
@@ -64,7 +68,8 @@ const EMPTY: RootGit = {
   changesError: null,
   expanded: new Set(),
   diffs: {},
-  unticked: new Set()
+  unticked: new Set(),
+  unviewedOnly: false
 }
 
 export const useGit = create<{ roots: Record<string, RootGit> }>()(() => ({ roots: {} }))
@@ -219,6 +224,7 @@ export async function loadChanges(root: string, options?: { base: string | undef
       try {
         const changes = await api().changes(root, bases.get(root))
         patch(root, (c) => ({ changes, changesError: null, unticked: pruneUnticked(c.unticked, changes?.uncommitted ?? []) }))
+        if (changes) pruneViewed(root, changes)
         refreshOpenDiffs(root, before ?? null)
       } catch (error) {
         patch(root, { changes: null, changesError: errorMessage(error) })
@@ -293,6 +299,18 @@ export function toggleTicked(root: string, path: string): void {
 export function setAllTicked(root: string, ticked: boolean): void {
   patch(root, (c) => ({ unticked: ticked ? new Set() : new Set((c.changes?.uncommitted ?? []).filter(tickable).map((f) => f.path)) }))
 }
+
+/** A row's 已看 mark (Figma 73A): marks it at its current diff (an open file folds) or unmarks it. */
+export function toggleViewedRow(root: string, key: string): void {
+  const found = changeFor(gitOf(root).changes, key)
+  if (!found) return
+  const next = toggleMark(marksOf(root), gitOf(root).expanded, { key, stamp: fileStamp(found.change) })
+  setMarks(root, next.marks)
+  if (next.expanded !== gitOf(root).expanded) patch(root, { expanded: next.expanded })
+}
+
+/** The header's 未看 filter. */
+export const setUnviewedOnly = (root: string, on: boolean): void => patch(root, { unviewedOnly: on })
 
 /** 全部收起 (the Git pane's ⋯ menu): every open file folds. */
 export function collapseAll(root: string): void {

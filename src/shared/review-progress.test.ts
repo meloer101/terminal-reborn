@@ -80,9 +80,14 @@ describe('toggleViewed', () => {
 describe('pruneMarks', () => {
   const files = [{ key: 'committed:a.ts', stamp: '1' }]
 
-  it('drops marks of files no longer in the change list and of diffs that changed', () => {
+  it('drops marks of files no longer in the change list', () => {
     expect(pruneMarks({ 'committed:a.ts': '1', 'committed:gone.ts': '2' }, files)).toEqual({ 'committed:a.ts': '1' })
-    expect(pruneMarks({ 'committed:a.ts': 'old' }, files)).toEqual({})
+  })
+
+  it('keeps the mark of a file whose diff changed, so the row reads 看过后又改了', () => {
+    const marks = { 'committed:a.ts': 'old' }
+    expect(pruneMarks(marks, files)).toBe(marks)
+    expect(viewedState(files, pruneMarks(marks, files)).stale).toEqual(new Set(['committed:a.ts']))
   })
 
   it('returns the same object when nothing goes (no store update)', () => {

@@ -171,7 +171,9 @@ async function fetchRemotes(top: string, base: string): Promise<string | null> {
     await git(top, ['fetch', '--all', '--prune', '--quiet'], { timeout: FETCH_TIMEOUT_MS, env: await pushEnv(top) })
     return null
   } catch (error) {
-    return classifyGitFailure('fetch', errorText(error), { base, remote: null }).message
+    const message = classifyGitFailure('fetch', errorText(error), { base, remote: null }).message
+    console.error(`[worktree-create] fetch before branching off ${base} failed; the branch starts from local refs:`, message)
+    return message
   }
 }
 
@@ -284,6 +286,7 @@ export async function createWorktree(raw: unknown): Promise<WorktreeCreateResult
     () => null,
     (error: unknown) => `没能记下基线分支 ${request.base}：${errorText(error) || 'git config 失败'}`
   )
+  if (baseNotSaved) console.error(`[worktree-create] branch.${request.branch}.base not written:`, baseNotSaved)
   const copyFailures = request.prepare ? await copyIncluded(top, path) : 0
   return { ok: true, path, copyFailures, ...(fetchFailed ? { fetchFailed } : {}), ...(baseNotSaved ? { baseNotSaved } : {}) }
 }

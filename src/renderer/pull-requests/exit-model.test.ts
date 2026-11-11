@@ -143,10 +143,10 @@ describe('shipExits', () => {
       expect(shipExits(state(ok({ gh: 'ready' }))).secondary?.blocker).toBeNull()
     })
 
-    it('when the remote is not on GitHub, leaving 合并到 main open', () => {
-      const { primary, secondary } = shipExits(state(ok({ remoteOnGitHub: false })))
+    it('when the remote is not on GitHub: only 合并到 main is offered', () => {
+      const { primary, secondary } = shipExits(state(ok({ remoteOnGitHub: false }), { remembered: 'pr' }))
       expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: null })
-      expect(secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '远程不在 GitHub 上' })
+      expect(secondary).toBeNull()
     })
   })
 
@@ -188,7 +188,8 @@ describe('exitPlan', () => {
     expect(signedOut.exits.primary.kind).toBe('pr')
     expect(signedOut.blocker(signedOut.exits.primary)).toBe('gh 还没有登录：在终端运行 gh auth login 后可以创建 PR')
     const elsewhere = plan({ preflight: ok({ remoteOnGitHub: false }) })
-    expect(elsewhere.blocker(elsewhere.exits.secondary!)).toBe('远程不在 GitHub 上')
+    expect(elsewhere.exits.secondary).toBeNull()
+    expect(elsewhere.chain.actions.find((a) => a.id === 'pr')?.blocker).toBe('远程不在 GitHub 上')
     expect(elsewhere.blocker(elsewhere.exits.primary)).toBeNull()
   })
 

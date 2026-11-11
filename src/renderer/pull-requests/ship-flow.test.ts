@@ -8,7 +8,9 @@ import {
   failureOutput,
   failurePrompt,
   failureWay,
+  heldBeforeStart,
   isExitRun,
+  titleIcon,
   syncConflictText,
   withoutWriter,
   writeFailedToGlance,
@@ -316,6 +318,32 @@ describe('合入链路 v2 runs (Figma 73D–73F)', () => {
 
   it('only the two exits are remembered as the repository’s choice', () => {
     expect(['main', 'pr', 'push-pr', 'commit', 'sync', 'pull'].filter((k) => isExitRun(k as ShipState['kind']))).toEqual(['main', 'pr'])
+  })
+})
+
+describe('the block’s title icon and a step held before it started', () => {
+  it('draws a plain 推送 with the push icon, a push to a PR with the PR icon', () => {
+    expect(titleIcon(startState(input({ kind: 'push-pr' }), '推送'))).toBe('push')
+    expect(titleIcon(startState(input({ kind: 'push-pr' }), '推送到 PR #7'))).toBe('push-pr')
+    expect(titleIcon(startState(input({ kind: 'push-pr', uncommitted: true }), '提交并推送到 PR #7'))).toBe('push-pr')
+    expect(titleIcon(startState(input({ kind: 'sync' }), '同步 main'))).toBe('sync')
+  })
+
+  it('holds 同步’s rebase / merge step when the pre-check found conflicts (nothing was started, Figma 73D2)', () => {
+    const running = startState(input({ kind: 'sync' }), '同步 main')
+    const held = fail(complete(running, 'sync'), { step: 'merge', message: syncConflictText('rebase', ['a.ts']), conflicts: ['a.ts'] })
+    expect(heldBeforeStart(held)).toEqual({ step: 'merge', text: 'rebase 会冲突 · a.ts' })
+    // The words stay when a hand-off that failed replaced the error's message.
+    expect(heldBeforeStart({ ...held, error: { ...held.error!, message: '没能交给 agent：x' } })?.text).toBe('rebase 会冲突 · a.ts')
+    const merging = startState(input({ kind: 'sync', syncMode: 'merge' }), '同步 main')
+    expect(heldBeforeStart(fail(merging, { step: 'merge', message: 'x', conflicts: ['a.ts', 'b/c.ts'] }))?.text).toBe('合并会冲突 · a.ts、c.ts')
+    // A rebase that git started and that failed is a failure, not a hold.
+    const failed = fail(complete(running, 'sync'), { step: 'merge', message: 'x', failure: { kind: 'unknown', message: 'x', next: null, tail: '' } })
+    expect(heldBeforeStart(failed)).toBeNull()
+    // 合并到 main stopping on conflicts is a failure of a step that ran.
+    const main = fail(startState(input({ kind: 'main' }), 'm'), { step: 'merge', message: 'x', conflicts: ['a.ts'] })
+    expect(heldBeforeStart(main)).toBeNull()
+    expect(heldBeforeStart(running)).toBeNull()
   })
 })
 

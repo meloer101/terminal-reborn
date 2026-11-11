@@ -17,6 +17,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { hostWindowFor } from './app-windows'
 import { classifyGitFailure, type GitFailure, type GitFailureContext, type GitStep } from '@shared/git-failures'
 import { mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch } from '@shared/git-worktrees'
+import { CHAIN_TEXT } from '@shared/ship-chain'
 import {
   cleanFailedLog,
   ghResolvedRemote,
@@ -66,6 +67,7 @@ import {
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { confirm } from './confirm'
+import { remoteFor } from './git/remote'
 import { git, GIT_TIMEOUT_MS, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pushEnv, refExists, runProcess, searchPath, type Ran } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
@@ -726,8 +728,10 @@ function outputTail(ran: Ran): string {
 }
 
 /**
- * Pushes a session's branch to the upstream it already has — 提交并推送 / 推送 when its PR is open. Refuses when the
- * remote branch has commits the local one has not (the push would be rejected; pull or rebase first).
+ * Pushes a session's branch — 提交并推送 / 推送 to its open PR, or the chain's 推送. A branch with an upstream goes to
+ * it; one never pushed is published to the chain's remote with an upstream (`git push -u <remote> <branch>`: the user
+ * clicked 推送). Never the base. Refuses when the remote branch has commits the local one has not (the push would be
+ * rejected; pull or rebase first).
  */
 export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
   const target = parsePrTarget(raw)
@@ -741,7 +745,11 @@ export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
     const { cwd, branch, base } = info
     if (!branch) return refused('处于分离 HEAD，没有分支可以推送')
     if (!base || base === branch) return refused('这是基线分支本身：Wavi 不往基线分支推送')
-    if (!info.remote || !info.remoteRef) return refused('分支还没有推送过：用「创建 PR」推送')
+    if (!info.remote || !info.remoteRef) {
+      const published = await publishBranch(cwd, branch, base)
+      if (published.ok) await refreshAfterCreate(target.worktree)
+      return published
+    }
     // As of the last fetch; a remote that moved since makes git refuse the push below, and that is said too.
     const counts = await pushCounts(cwd, branch, { remote: info.remote, remoteRef: info.remoteRef })
     const behind = `${info.remote} 上的分支有本地没有的提交：先拉取或 rebase，再推送`
@@ -760,6 +768,21 @@ export async function pushBranch(raw: unknown): Promise<PrWriteResult> {
   } finally {
     creating.delete(target.worktree)
   }
+}
+
+/** 推送 of a branch never pushed: `git push -u <remote> <branch>` to the remote the chain pushes to (remoteFor). */
+async function publishBranch(cwd: string, branch: string, base: string): Promise<PrWriteResult> {
+  const remote = await remoteFor(cwd, branch, base)
+  if (!remote) return { ok: false, reason: 'blocked', message: CHAIN_TEXT.noRemotePush }
+  const pushed = await git(cwd, ['push', '--quiet', '--set-upstream', '--', remote, `refs/heads/${branch}:refs/heads/${branch}`], {
+    timeout: PUSH_TIMEOUT_MS,
+    env: await pushEnv(cwd)
+  })
+  if (pushed.code !== 0) {
+    const failure = classified('push', pushed, { base, remote })
+    return { ok: false, reason: failure.kind === 'non-fast-forward' ? 'blocked' : 'failed', message: failure.message, failure }
+  }
+  return { ok: true, outcome: 'pushed', message: `已推送到 ${remote}/${branch}` }
 }
 
 async function refreshAfterCreate(worktree: string): Promise<void> {
