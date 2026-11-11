@@ -75,6 +75,14 @@ export function useSessionPr(sessionId: string): PullRequestInfo | null {
   return usePr(useWorkspace((s) => worktreePathOf(s, sessionId)))
 }
 
+/** The PR of a session's worktree and the last poll's error (合入链路 v2), while gh is ready. */
+export function useSessionPrStatus(sessionId: string): PrStatus | null {
+  return usePrStatus(useWorkspace((s) => worktreePathOf(s, sessionId)))
+}
+
+/** 查询失败 (Figma 73I): what a PR tag and the PR line say while the PR poll fails. */
+export const PR_QUERY_FAILED = '查询失败'
+
 export function setPrBusy(worktree: string, busy: PrBusy | null): void {
   usePullRequests.setState((s) => {
     const next = { ...s.busy }

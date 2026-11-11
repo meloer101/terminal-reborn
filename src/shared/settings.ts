@@ -61,7 +61,7 @@ export interface ChatAppearance {
 }
 
 /**
- * 窗口 · 材质 (PRD §5 v1.169, Figma 66′): 玻璃 shows the desktop through the window (macOS 26's Liquid Glass, vibrancy
+ * 窗口 · 材质 (PRD §5 v1.173, Figma 66′): 玻璃 shows the desktop through the window (macOS 26's Liquid Glass, vibrancy
  * before it: main/appearance.ts picks); 实色 (v1.139, Figma 57) is an opaque window in the softer solid palette.
  */
 export type WindowMaterial = 'glass' | 'solid'
@@ -241,7 +241,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     screenReader: false,
     chat: { width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' },
     windowMaterial: 'glass',
-    // A light theme tint (PRD §5 v1.169, Figma 66′): untinted Liquid Glass leaves the sidebar's secondary text faint on a bright desktop.
+    // A light theme tint (PRD §5 v1.173, Figma 66′): untinted Liquid Glass leaves the sidebar's secondary text faint on a bright desktop.
     shellOpacity: 0.3
   },
   ports: { base: DEFAULT_PORT_BASE, autoOpen: true },
@@ -308,11 +308,11 @@ function chat(value: unknown): ChatAppearance {
   }
 }
 
-/** 'liquid' and 'frosted' are what windowMaterial was called before v1.169; any other value is 玻璃 unless it is 'solid'. */
+/** 'liquid' and 'frosted' are what windowMaterial was called before v1.173; any other value is 玻璃 unless it is 'solid'. */
 const windowMaterial = (value: unknown): WindowMaterial => (value === 'solid' ? 'solid' : 'glass')
 
 /**
- * Before v1.169 there was one value per material ({ liquid, frosted }): the one of the material that was chosen carries
+ * Before v1.173 there was one value per material ({ liquid, frosted }): the one of the material that was chosen carries
  * over. 实色 had no glass chosen, so the liquid one does, which was the default look.
  */
 function shellOpacity(value: unknown, legacyMaterial: unknown): number {

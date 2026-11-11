@@ -113,7 +113,6 @@ const MONTHS = ['1 月', '2 月', '3 月', '4 月', '5 月', '6 月', '7 月', '
 
 export function UsageHeatmap({ heat }: { heat: Heatmap }) {
   const weeks = Math.ceil(heat.days.length / 7)
-  const column = (day: number): number => Math.floor(heat.days.findIndex((d) => d.day >= day) / 7)
   const monthCols: { col: number; label: string }[] = []
   heat.days.forEach((d, i) => {
     const date = new Date(d.day)
@@ -133,13 +132,6 @@ export function UsageHeatmap({ heat }: { heat: Heatmap }) {
         </span>
       </div>
       <div className={styles.heat} style={{ ['--weeks' as string]: weeks }}>
-        <div className={styles.heatMarks}>
-          {heat.starts.map((s) => (
-            <span key={s.agent} className={styles.heatStart} style={{ ['--col' as string]: column(s.at) }}>
-              {agentName(s.agent)} {startLabel(s.at)}
-            </span>
-          ))}
-        </div>
         <div className={styles.heatMonths}>
           {monthCols
             .filter((m, i) => i === 0 || m.col - monthCols[i - 1]!.col >= 3)
@@ -164,11 +156,6 @@ export function UsageHeatmap({ heat }: { heat: Heatmap }) {
               data-level={d.level ?? 'none'}
               title={d.level === null ? `${monthDayCn(d.day)} · 没有记录` : `${monthDayCn(d.day)} · ${formatTokens(d.tokens)}`}
             />
-          ))}
-        </div>
-        <div className={styles.heatLines} aria-hidden>
-          {heat.starts.map((s) => (
-            <span key={s.agent} className={styles.heatLine} style={{ ['--col' as string]: column(s.at) }} />
           ))}
         </div>
       </div>

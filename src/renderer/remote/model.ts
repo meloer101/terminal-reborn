@@ -5,7 +5,7 @@ import type { GuiModelCatalog, GuiPicks } from '@shared/gui-chat'
 import type { RemoteAgentModels, RemoteSession, RemoteShip, RemoteShipField, RemoteWindowSessions } from '@shared/remote'
 import type { SessionSettings } from '@shared/session-settings'
 import type { Project, Session, Worktree } from '@shared/types'
-import { glanceFields, submitBlocker, submitLabel, type ShipState } from '../pull-requests/ship-flow'
+import { glanceFields, submitBlocker, submitLabel, type ShipKind, type ShipState } from '../pull-requests/ship-flow'
 
 /** Local folders never go to the phone (PRD F22): a worktree's or project's path in a message becomes `.` / the folder name. */
 export function hidePaths(text: string, folders: readonly string[]): string {
@@ -15,6 +15,9 @@ export function hidePaths(text: string, folders: readonly string[]): string {
   }
   return out
 }
+
+/** The runs the phone protocol knows: 合入链路 v2's `commit` / `sync` runs stay off the phone until it learns them. */
+export const shownOnPhone = (kind: ShipKind): kind is RemoteShip['kind'] => kind === 'main' || kind === 'pr' || kind === 'push-pr'
 
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
 
@@ -29,7 +32,8 @@ export function remoteShip(state: ShipState, folders: readonly string[] = []): R
   const text = (value: string, max: number) => clip(hidePaths(value, folders), max)
   const blocker = submitBlocker(state)
   return {
-    kind: state.kind,
+    // remoteSessions passes only runs shownOnPhone; the fallback keeps the type without a cast.
+    kind: shownOnPhone(state.kind) ? state.kind : 'push-pr',
     title: clip(state.title, 300),
     agent: clip(state.agent, 100),
     stage: state.stage,
@@ -77,7 +81,7 @@ export function remoteSessions(
     if (own) row.settings = own
     const ship = shipping.ships[w.path]
     const root = data.projects.find((p) => p.id === w.projectId)?.rootPath ?? ''
-    if (ship) row.ship = remoteShip(ship, [w.path, root])
+    if (ship && shownOnPhone(ship.kind)) row.ship = remoteShip(ship, [w.path, root])
     const ending = shipping.endings[w.path]
     if (ending && !ship) row.shipNotice = clip(hidePaths(ending, [w.path, root]), 300)
     out.sessions.push(row)

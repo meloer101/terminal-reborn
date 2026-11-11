@@ -25,10 +25,8 @@ import { closeTerminalSearch } from './search-store'
 import { TerminalSearch } from './TerminalSearch'
 import styles from './TerminalArea.module.css'
 
-/** Where a shown terminal's card goes: its pane, header row included (Figma 55), and the card's corners as CSS. */
-export interface PanePlacement extends Rect {
-  radius: string
-}
+/** Where a shown terminal's card goes: its pane, header row included (Figma 55). */
+export type PanePlacement = Rect
 
 interface PaneProps {
   sessionId: SessionId
@@ -48,7 +46,7 @@ interface PaneProps {
 }
 
 const place = (rect: PanePlacement | undefined): CSSProperties | undefined =>
-  rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height, borderRadius: rect.radius }
+  rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
 
 /** The find bar floats over the terminal below the pane's header. */
 const belowHeader = (rect: Rect): CSSProperties => ({
@@ -192,8 +190,7 @@ function samePaneProps(a: PaneProps, b: PaneProps): boolean {
     a.rect?.x === b.rect?.x &&
     a.rect?.y === b.rect?.y &&
     a.rect?.width === b.rect?.width &&
-    a.rect?.height === b.rect?.height &&
-    a.rect?.radius === b.rect?.radius
+    a.rect?.height === b.rect?.height
   )
 }
 

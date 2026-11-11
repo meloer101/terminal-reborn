@@ -1,8 +1,12 @@
 // The process runner every git and gh call goes through: what callers read when a command fails, stops or floods.
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ ipcMain: { handle: () => {} } }))
-const { gitText, lastLines, runGit, runProcess } = await import('./run')
+const { gitEnv, gitText, lastLines, pinned, runGit, runProcess } = await import('./run')
 
 const shell = (script: string, options: { timeout?: number; maxStdout?: number; input?: string } = {}) =>
   runProcess('/bin/sh', ['-c', script], { cwd: '/', env: process.env, timeout: options.timeout ?? 5_000, ...options })
@@ -28,6 +32,34 @@ describe('runProcess', () => {
   })
 })
 
+describe('pinned.push', () => {
+  it('keeps the user’s submodule check: a commit pointing at a submodule commit no remote has is not pushed', async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'tr-run-')))
+    try {
+      const sh = (cwd: string, ...args: string[]) =>
+        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'protocol.file.allow=always', ...args], { cwd, stdio: 'pipe' }).toString()
+      for (const name of ['sub.git', 'top.git']) sh(dir, 'init', '-q', '--bare', '-b', 'main', name)
+      sh(dir, 'clone', '-q', join(dir, 'sub.git'), 'sub')
+      sh(join(dir, 'sub'), 'commit', '-q', '--allow-empty', '-m', 'sub one')
+      sh(join(dir, 'sub'), 'push', '-q', 'origin', 'main')
+      sh(dir, 'clone', '-q', join(dir, 'top.git'), 'top')
+      const top = join(dir, 'top')
+      sh(top, 'submodule', 'add', '-q', join(dir, 'sub.git'), 'sm')
+      sh(top, 'commit', '-q', '-m', 'add sm')
+      sh(top, 'push', '-q', 'origin', 'main')
+      sh(join(top, 'sm'), 'commit', '-q', '--allow-empty', '-m', 'sub two, not pushed')
+      sh(top, 'commit', '-q', '-am', 'bump sm')
+      sh(top, 'config', 'push.recurseSubmodules', 'check')
+      const ran = await runGit(top, pinned.push('--quiet', '--', 'origin', 'refs/heads/main:refs/heads/main'))
+      expect(ran.code).not.toBe(0)
+      expect(ran.stderr).toMatch(/submodule/i)
+      expect(sh(top, 'rev-parse', 'origin/main').trim()).toBe(sh(top, 'rev-parse', 'HEAD~1').trim())
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('git', () => {
   it('runs git without a credential prompt, and gitText rejects with its last lines unless the code is allowed', async () => {
     expect((await runGit('/', ['--version'])).stdout).toMatch(/^git version/)
@@ -35,5 +67,45 @@ describe('git', () => {
     await expect(gitText('/', ['rev-parse', '--git-dir'], { ok: [128] })).resolves.toBe('')
     await expect(gitText('/', ['rev-parse', '--git-dir'], { message: () => 'custom' })).rejects.toThrow('custom')
     expect(lastLines('a\nb\nc\nd', 2)).toBe('c d')
+  })
+})
+
+describe('git speaks English', () => {
+  // The failure classes and the parsers read git's English words; hooks inherit the same locale (VS Code's git does so too).
+  const english = { LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8', LANGUAGE: 'en' }
+
+  it('gives every git process an English UTF-8 locale that no caller can override', () => {
+    const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, LANGUAGE: process.env.LANGUAGE }
+    Object.assign(process.env, { LANG: 'zh_CN.UTF-8', LC_ALL: 'zh_CN.UTF-8', LANGUAGE: 'zh_CN' })
+    try {
+      expect(gitEnv()).toMatchObject(english)
+      expect(gitEnv({ LANG: 'de_DE.UTF-8', LC_ALL: 'de_DE.UTF-8', GIT_EDITOR: 'true' })).toMatchObject({ ...english, GIT_EDITOR: 'true' })
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
+  })
+
+  // Only a git built with gettext and its Chinese catalogue (Homebrew's) translates; Apple's git prints English anyway.
+  const zh = { ...process.env, LC_ALL: 'zh_CN.UTF-8', LANG: 'zh_CN.UTF-8', LANGUAGE: 'zh_CN' }
+  let translated = false
+  try {
+    execFileSync('git', ['rev-parse', '--git-dir'], { cwd: '/', env: zh, stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch (error) {
+    translated = /[\u4e00-\u9fff]/.test(String((error as { stderr?: Buffer }).stderr ?? ''))
+  }
+  it.skipIf(!translated)('prints English under a Chinese login locale (skipped: this machine’s git has no Chinese translations)', async () => {
+    const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, LANGUAGE: process.env.LANGUAGE }
+    Object.assign(process.env, { LANG: 'zh_CN.UTF-8', LC_ALL: 'zh_CN.UTF-8', LANGUAGE: 'zh_CN' })
+    try {
+      expect((await runGit('/', ['rev-parse', '--git-dir'])).stderr).toMatch(/not a git repository/)
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
   })
 })

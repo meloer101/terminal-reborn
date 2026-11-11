@@ -55,6 +55,13 @@ describe('createClaudeStreamNormalizer', () => {
     expect(state.items[1]).toMatchObject({ kind: 'tool', name: 'Edit', arg: 'notes.txt', state: 'ok', diff: { path: 'notes.txt', added: 1, removed: 1 } })
   })
 
+  it('keeps the pictures of a message Claude replays as files (Figma 71A)', () => {
+    const n = createClaudeStreamNormalizer('/repo', () => 0, (image) => `/kept/${image.data}.png`)
+    const content = [{ type: 'text', text: '看图' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }]
+    const state = n.push({ type: 'user', uuid: 'u1', timestamp: at, isReplay: true, parent_tool_use_id: null, message: { role: 'user', content } }).reduce(applyGuiEvent, emptyGuiState())
+    expect(state.items[0]).toMatchObject({ kind: 'user', text: '看图', images: 1, attachments: ['/kept/AAAA.png'] })
+  })
+
   it("keeps a subagent's stream out of the live block and its messages under the Agent call (Figma 59J)", () => {
     const { state } = run([
       assistant([{ type: 'tool_use', id: 'toolu_agent', name: 'Agent', input: { description: '查 SameSite', prompt: 'look' } }]),

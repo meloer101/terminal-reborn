@@ -13,6 +13,7 @@ import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
 import { GUI_IPC, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
+import { keepInlineImage } from '../files'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
 import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hookScriptPath, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
 import { defaultAgentDataDirs } from '../hooks/agent-title'
@@ -98,15 +99,15 @@ async function history(agent: CliAgent, cwd: string, agentSessionId: string) {
   const dirs = defaultAgentDataDirs()
   if (agent === 'claude') {
     const path = claudeTranscriptFor(cwd, agentSessionId, dirs)
-    return path ? readTranscript({ agent: 'claude', path }) : null
+    return path ? readTranscript({ agent: 'claude', path }, keepInlineImage) : null
   }
   if (agent === 'codex') {
     const path = await codexRolloutFor(agentSessionId, dirs.codexHome)
-    return path ? readTranscript({ agent: 'codex', path }) : null
+    return path ? readTranscript({ agent: 'codex', path }, keepInlineImage) : null
   }
   if (agent === 'pi') {
     const path = await piSessionFileFor(agentSessionId, piSessionsDir(), cwd)
-    return path ? readPiHistory(path, cwd) : null
+    return path ? readPiHistory(path, cwd, keepInlineImage) : null
   }
   return null
 }
@@ -149,6 +150,7 @@ const host = new GuiHost<WebContents>({
     setGuiSession(sessionId, false)
   },
   image: readImage,
+  keepImage: keepInlineImage,
   clientVersion: app.getVersion()
 })
 

@@ -30,7 +30,7 @@ describe('misc formatting', () => {
   })
 })
 
-describe('MATERIAL_OPTIONS (PRD v1.169, Figma 66′)', () => {
+describe('MATERIAL_OPTIONS (PRD v1.173, Figma 66′)', () => {
   it('offers 玻璃 and 实色 on every macOS; the engine behind 玻璃 is not a choice', () => {
     expect(MATERIAL_OPTIONS.map((o) => o.label)).toEqual(['玻璃', '实色'])
     expect(MATERIAL_OPTIONS.map((o) => o.value)).toEqual(['glass', 'solid'])

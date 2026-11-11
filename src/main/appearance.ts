@@ -1,5 +1,5 @@
 // Main-side appearance effects (PRD §4 F7): native theme, and the window's glass for every window. On macOS 26 the
-// window is transparent over Liquid Glass (NSGlassEffectView); 窗口 · 材质 「玻璃」 (v1.169; before it 「液态玻璃」 and
+// window is transparent over Liquid Glass (NSGlassEffectView); 窗口 · 材质 「玻璃」 (v1.173; before it 「液态玻璃」 and
 // 「磨砂玻璃」) shows it, and 「实色」 lays native vibrancy over it (PRD §5 v1.127: `setVibrancy('sidebar')` covers the glass,
 // `setVibrancy(null)` shows it again — measured, no window to recreate). Before macOS 26 the shell is always vibrancy.
 // The renderer tints either with --glass-shell at the user's 窗口底层不透明度 (appearance/map.ts). 「实色」 (v1.139)

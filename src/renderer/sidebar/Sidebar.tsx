@@ -133,7 +133,7 @@ export function Sidebar() {
   return (
     <>
       <div className={styles.titlebar}>
-        {/* Native traffic lights (hiddenInset, x=16 y=11) sit over this gap. */}
+        {/* Native traffic lights (hiddenInset, x=16 y=17) sit over this gap. */}
         <div className={styles.trafficLights} aria-hidden />
         <IconButton label="会话分组" aria-haspopup="menu" onClick={(e) => void chooseGroupBy(e.currentTarget)}>
           <ListTree {...ICON} />

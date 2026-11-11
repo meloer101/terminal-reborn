@@ -1376,6 +1376,16 @@
   color: var(--text-primary);
 }
 
+/* A sent file's name has no × to make room for (Figma 71D). */
+.attachment[data-fixed] {
+  padding-right: var(--space-8);
+}
+
+/* Figma 71A: a sent message's pictures, over its bubble and right-aligned with it, wrapping from the right. */
+.sentPictures {
+  justify-content: flex-end;
+}
+
 .thumb {
   position: relative;
   width: 64px;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FixRun } from './auto-fix-brakes'
 import type { PendingStart } from './dispatch'
+import { GIT_FAILURE_KINDS } from './git-failures'
 import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedShipRun } from './saved-runs'
 import type { ShipState } from './ship'
 
@@ -74,6 +75,45 @@ describe('sanitizeShipRuns', () => {
     expect(sanitizeShipRuns([shipRun, { ...shipRun, ctx: { ...shipRun.ctx, worktree: '/code/gone' } }], worktrees)).toEqual([shipRun])
     const failed = { ...shipRun, merged: 'abc1234', state: { ...shipState, error: { step: 'push', message: 'offline', pushRefused: true }, failedIn: 'running' } }
     expect(sanitizeShipRuns([failed], worktrees)).toEqual([failed])
+  })
+
+  it('keeps 合入链路 v2 runs (提交 / 同步 / 拉取), the merge method and a classified failure with its hand-off', () => {
+    const failure = { kind: 'commit-hook', message: 'pre-commit hook 没通过', next: 'handoff', tail: 'lint failed' }
+    const commit = {
+      ...shipRun,
+      kind: 'commit',
+      ctx: { ...shipRun.ctx, method: 'rebase' },
+      state: { ...shipState, kind: 'commit', error: { step: 'commit', message: 'pre-commit hook 没通过', failure, prompt: '提交时 hook 没通过' }, failedIn: 'running' }
+    }
+    const sync = { ...shipRun, kind: 'sync', state: { ...shipState, kind: 'sync', steps: [{ id: 'sync', label: '拉取 main', state: 'done' }] } }
+    const pull = { ...shipRun, kind: 'pull', state: { ...shipState, kind: 'pull', steps: [{ id: 'sync', label: '拉取 origin/feat', state: 'working' }] } }
+    expect(sanitizeShipRuns([commit], worktrees)).toEqual([commit])
+    expect(sanitizeShipRuns([sync], worktrees)).toEqual([sync])
+    expect(sanitizeShipRuns([pull], worktrees)).toEqual([pull])
+    // An unknown method is dropped, the run kept. L10: so is a failure that does not validate (a newer build's): the run
+    // keeps its commit, message and step.
+    expect(sanitizeShipRuns([{ ...shipRun, ctx: { ...shipRun.ctx, method: 'octopus' } }], worktrees)).toEqual([shipRun])
+    const newer = { ...commit, commit: 'abc1234', state: { ...commit.state, error: { ...commit.state.error, failure: { ...failure, next: 'deploy' } } } }
+    const { failure: _dropped, ...withoutFailure } = commit.state.error
+    expect(sanitizeShipRuns([newer], worktrees)).toEqual([{ ...newer, state: { ...commit.state, error: withoutFailure } }])
+  })
+
+  // Review findings 15 / 16: the tip a run started from and the commit it made come back; anything else is dropped.
+  it('keeps the start tip and the run’s commit when they are hashes', () => {
+    const run = { ...shipRun, commit: 'abc1234', ctx: { ...shipRun.ctx, head: '0123456789abcdef0123456789abcdef01234567' } }
+    expect(sanitizeShipRuns([run], worktrees)).toEqual([run])
+    expect(sanitizeShipRuns([{ ...shipRun, ctx: { ...shipRun.ctx, head: 'HEAD~1' } }], worktrees)).toEqual([shipRun])
+    expect(sanitizeShipRuns([{ ...shipRun, commit: 'not a hash' }], worktrees)).toEqual([])
+  })
+
+  // Review finding 45: every failure kind git-failures.ts classifies comes back (identity was missing from a copy).
+  it('keeps a failure of every kind git-failures.ts knows', () => {
+    for (const kind of GIT_FAILURE_KINDS) {
+      const failure = { kind, message: 'm', next: null, tail: '' }
+      const run = { ...shipRun, state: { ...shipState, error: { step: 'commit', message: 'm', failure }, failedIn: 'running' } }
+      expect(sanitizeShipRuns([run], worktrees)).toEqual([run])
+    }
+    expect(GIT_FAILURE_KINDS).toContain('identity')
   })
 
   it('drops a run whose state is not one the block can draw', () => {

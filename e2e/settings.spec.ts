@@ -428,7 +428,7 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   // 外观 · 窗口: the material (macOS 26) and each material's own base-layer opacity.
   await showTab(settings, '外观')
   const windowSection = settings.getByRole('region', { name: '窗口' })
-  // PRD v1.169 (Figma 66′): 玻璃 and 实色 only, one 窗口底层不透明度 that starts at 30%.
+  // PRD v1.173 (Figma 66′): 玻璃 and 实色 only, one 窗口底层不透明度 that starts at 30%.
   await expect(windowSection.getByRole('radio')).toHaveText(['玻璃', '实色'])
   expect(await look()).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.3 })
   expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('color-mix(in srgb, var(--glass-shell-color) 30%, transparent)')

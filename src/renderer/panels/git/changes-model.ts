@@ -4,10 +4,14 @@
 // line (PRD F13 v1.78, Figma 29B2).
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
+import type { ShipOperation } from '@shared/ship'
 import type { CommentSide, ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
 
-export type ChangeGroup = 'uncommitted' | 'committed'
+import { changeKey, fileStamp, toggleViewed, type ChangeGroup, type ReviewFile, type ViewedMarks } from '@shared/review-progress'
+
+/** Moved to src/shared/review-progress.ts (已看 marks key rows the same way); kept here for the panel's imports. */
+export { changeKey, type ChangeGroup }
 
 /** Files with more changed lines than this are not diffed in the panel (open them in an editor instead). */
 export const MAX_DIFF_LINES = 20_000
@@ -19,8 +23,6 @@ export const MAX_DIFF_LINES = 20_000
  * any more, so no row is folded today).
  */
 export const ITEM_HEIGHT = { group: 32, file: 32, diff: 20, split: 20, note: 28, comment: 68, editor: 124 } as const
-
-export const changeKey = (group: ChangeGroup, path: string): string => `${group}:${path}`
 
 export type NoDiffReason = 'nested' | 'large' | 'binary'
 
@@ -97,8 +99,10 @@ export function splitAnchors(row: SplitRow): Array<{ side: CommentSide; line: nu
 }
 
 export type ChangeItem =
-  | { kind: 'group'; title: string; meta: string }
-  | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number }
+  /** `group` on 未提交 while its files can be ticked: the header's checkbox ticks or clears them all. */
+  | { kind: 'group'; title: string; meta: string; group?: ChangeGroup }
+  /** `mark`: the row's 已看 mark (合入链路 v2, Figma 73A). */
+  | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number; mark: ViewMark }
   | { kind: 'diff'; key: string; group: ChangeGroup; path: string; row: DiffRow }
   | { kind: 'split'; key: string; group: ChangeGroup; path: string; row: SplitRow }
   /** A comment the user wrote. `split`: drawn on the new (right) half of a 并排 diff. */
@@ -130,24 +134,61 @@ export function codeBetween(rows: readonly DiffRow[], side: CommentSide, from: n
     .map((row) => row.text)
 }
 
+/** A row's 已看 mark: ○ not viewed, ✓ viewed at its current diff, ◉ viewed before its diff changed (看过后又改了). */
+export type ViewMark = 'unviewed' | 'viewed' | 'stale'
+
+/** The 已看 marks the list draws, and the header's 未看 filter (only unviewed and stale rows are listed). */
+export interface ReviewView {
+  marks: Readonly<ViewedMarks>
+  unviewedOnly: boolean
+}
+
+export function viewMarkOf(marks: Readonly<ViewedMarks>, key: string, stamp: string): ViewMark {
+  const mark = marks[key]
+  return mark === undefined ? 'unviewed' : mark === stamp ? 'viewed' : 'stale'
+}
+
+/**
+ * The mark button of a row: marks it at its current diff (folding it when it is open; it can still be opened) or, when
+ * it is viewed, unmarks it. `expanded` is the same set when nothing folds.
+ */
+export function toggleMark(
+  marks: Readonly<ViewedMarks>,
+  expanded: ReadonlySet<string>,
+  file: ReviewFile
+): { marks: ViewedMarks; expanded: ReadonlySet<string> } {
+  const next = toggleViewed(marks, file)
+  if (next[file.key] !== file.stamp || !expanded.has(file.key)) return { marks: next, expanded }
+  const folded = new Set(expanded)
+  folded.delete(file.key)
+  return { marks: next, expanded: folded }
+}
+
 export function changeItems(
   changes: GitChanges,
   expanded: ReadonlySet<string>,
   diffs: Readonly<Record<string, DiffView>>,
   comments: readonly ReviewComment[] = [],
   draft: DraftPlace | null = null,
-  layout: DiffLayout = 'unified'
+  layout: DiffLayout = 'unified',
+  /** 未提交 paths left out of the next commit (合入链路 v2, Figma 73A / 73F1); null: the rows have no checkboxes. */
+  unticked: ReadonlySet<string> | null = null,
+  /** 已看 marks and the 未看 filter; null: no marks (every row unviewed). */
+  review: ReviewView | null = null
 ): ChangeItem[] {
   const split = layout === 'split' ? ({ split: true } as const) : {}
   const items: ChangeItem[] = []
   const files = (group: ChangeGroup, list: GitFileChange[]) => {
     for (const change of list) {
       const key = changeKey(group, change.path)
+      const mark = review ? viewMarkOf(review.marks, key, fileStamp(change)) : 'unviewed'
+      // 未看 lists what is left to read: unviewed rows and those that changed since.
+      if (review?.unviewedOnly && mark === 'viewed') continue
       const open = expanded.has(key)
       // Review findings are not list rows (see the header); only what the user wrote sits under a line.
       const own = comments.filter((c) => c.origin !== 'review' && c.group === group && c.path === change.path)
       const draftHere = draft && draft.group === group && draft.path === change.path ? draft : null
-      items.push({ kind: 'file', group, change, key, open, comments: own.length })
+      items.push({ kind: 'file', group, change, key, open, comments: own.length, mark })
       if (!open) continue
       const reason = noDiffReason(change)
       if (reason) {
@@ -197,7 +238,11 @@ export function changeItems(
   }
   // An empty 未提交 is not shown: nothing to say there.
   const count = changes.uncommitted.length + changes.untrackedOmitted
-  if (count > 0) items.push({ kind: 'group', title: '未提交', meta: `${count} 个文件` })
+  if (count > 0) {
+    const ticked = unticked ? tickedPaths(changes.uncommitted, unticked).length : count
+    const meta = `${count} 个文件${unticked && ticked < count ? ` · 勾选 ${ticked} 个` : ''}`
+    items.push({ kind: 'group', title: '未提交', meta, ...(unticked ? { group: 'uncommitted' as const } : {}) })
+  }
   files('uncommitted', changes.uncommitted)
   if (changes.untrackedOmitted > 0) {
     items.push({ kind: 'note', key: 'untracked-omitted', text: `还有 ${changes.untrackedOmitted} 个未跟踪文件没有列出` })
@@ -211,16 +256,64 @@ export function changeItems(
   return items
 }
 
-/**
- * Whether the worktree has no branch of its own to merge or propose: the project's main checkout while it has its base
- * out (on the base itself the base is its upstream), no base, or a detached HEAD. A feature branch checked out in the
- * main checkout merges and opens PRs like any worktree's (PRD F4 / F16).
- */
-export function onOwnBase(isMain: boolean, changes: Pick<GitChanges, 'branch' | 'base'>): boolean {
-  if (!isMain) return false
-  const { branch, base } = changes
-  return !branch || !base || base === branch || base === `origin/${branch}`
+// --- which 未提交 files go into the next commit (合入链路 v2) ---------------------------------------------------------
+// Every row starts ticked; the panel keeps the paths the user unticked (so a file that appears is ticked), per worktree.
+
+/** A row that can be ticked: a nested repository is not committed from here. */
+export const tickable = (change: Pick<GitFileChange, 'nested'>): boolean => !change.nested
+
+/** The paths 提交… and the exits commit: the tickable rows that are not unticked. */
+export function tickedPaths(uncommitted: readonly GitFileChange[], unticked: ReadonlySet<string>): string[] {
+  return uncommitted.filter((c) => tickable(c) && !unticked.has(c.path)).map((c) => c.path)
 }
+
+/** While a Ship run that commits is open its checkboxes show what it commits: the tickable rows not among its `paths`. */
+export function runUnticked(uncommitted: readonly GitFileChange[], paths: readonly string[]): ReadonlySet<string> {
+  const committing = new Set(paths)
+  return new Set(uncommitted.filter((c) => tickable(c) && !committing.has(c.path)).map((c) => c.path))
+}
+
+/**
+ * Whether the change list shows the branch as it is, so 已看 marks of rows that left it can go: not while a merge,
+ * rebase or cherry-pick is stopped (a rebase's detached HEAD lists only the commits replayed so far). `operation`: what
+ * the worktree's last preflight saw stopped, or null.
+ */
+export function marksSettled(changes: Pick<GitChanges, 'branch' | 'uncommitted'>, operation: ShipOperation | null | undefined): boolean {
+  return changes.branch !== null && !operation && !changes.uncommitted.some((c) => c.status === 'U')
+}
+
+/**
+ * When Git · 变更 asks for the exits' preflight again: gh, the counts, the PR, the branch head (an amend or a reset that
+ * keeps every count still moves it; null until the graph's first page names it), and a run opening or ending.
+ */
+export function preflightKey(parts: {
+  gh: string | null
+  changes: Pick<GitChanges, 'base' | 'ahead' | 'behind' | 'uncommitted'> | null | undefined
+  pr: { number: number; state: string; localHead: string | null; headOid: string | null } | null
+  head: string | null
+  shipping: boolean
+}): string {
+  const { changes, pr } = parts
+  return [parts.gh, changes?.base, changes?.ahead, changes?.behind, changes?.uncommitted.length, pr?.number, pr?.state, pr?.localHead, pr?.headOid, parts.head, parts.shipping].join(':')
+}
+
+/** The group header's checkbox: every tickable row ticked, none, or some. */
+export function tickState(uncommitted: readonly GitFileChange[], unticked: ReadonlySet<string>): 'all' | 'none' | 'mixed' {
+  const rows = uncommitted.filter(tickable)
+  const ticked = rows.filter((c) => !unticked.has(c.path)).length
+  return ticked === rows.length ? 'all' : ticked === 0 ? 'none' : 'mixed'
+}
+
+/** Unticked paths still in the list (a committed or reverted file leaves; the same path coming back starts ticked). */
+export function pruneUnticked(unticked: ReadonlySet<string>, uncommitted: readonly GitFileChange[]): ReadonlySet<string> {
+  if (unticked.size === 0) return unticked
+  const listed = new Set(uncommitted.map((c) => c.path))
+  const kept = [...unticked].filter((p) => listed.has(p))
+  return kept.length === unticked.size ? unticked : new Set(kept)
+}
+
+/** Moved to the merge chain (src/shared/ship-chain.ts); kept here for the panel's imports. */
+export { onOwnBase } from '@shared/ship-chain'
 
 export const itemHeight = (item: ChangeItem): number => ITEM_HEIGHT[item.kind]
 

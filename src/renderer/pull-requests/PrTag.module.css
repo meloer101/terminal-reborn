@@ -28,3 +28,8 @@
 .mark[data-checks='pending'] {
   color: var(--status-working);
 }
+
+/* The poll failed (Figma 73I1): the ? is a monochrome mark, text-primary as in the Git panel's PR line; the words say it. */
+.mark[data-checks='unknown'] {
+  color: var(--text-primary);
+}

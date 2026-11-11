@@ -24,6 +24,7 @@ import {
 } from '@shared/ship-writer'
 import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
+import { baseRemoteFor } from './git/remote'
 import { git, gitOut, refExists, searchPath } from './git/run'
 import { branchInfo, prTemplate, uncommittedFiles } from './pull-requests'
 import { isQuitting } from './quit'
@@ -155,7 +156,8 @@ export async function writeShipText(raw: unknown): Promise<WriteResult> {
   const settings = getSettings().pr
   const model = agent === 'claude' ? settings.writerClaudeModel : settings.writerCodexModel
 
-  const facts = await material(request, info.cwd, info.branch, info.base, info.remote ?? 'origin')
+  // The base as exit A and 创建 PR read it: on its own remote, not the one the branch was published to (a fork).
+  const facts = await material(request, info.cwd, info.branch, info.base, await baseRemoteFor(info.cwd, info.branch, info.base))
   if (!facts.diff.trim()) return fail(request.kind === 'commit' ? '勾选的文件没有改动' : '分支没有比基线新的改动')
 
   let dir: string | null = null

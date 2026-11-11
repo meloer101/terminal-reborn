@@ -18,6 +18,8 @@ export type MenuEntry =
       checked?: boolean
       /** Drawn like a disabled item but still chosen (an agent that is not installed: choosing it shows how to install it, Figma 58C). */
       muted?: boolean
+      /** A short fact in the trailing slot, caption and tertiary: why a disabled item cannot run now (Figma 73B). */
+      detail?: string
     }
   | {
       type: 'submenu'

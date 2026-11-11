@@ -47,20 +47,9 @@ export function registerPrimaryExit(worktreePath: string, run: () => void): () =
   }
 }
 
-/**
- * ⇧⌘M: the primary exit of Git · 变更 when that view is open on the active session's worktree and has one; else the
- * merge sheet (the PR's when the primary is 合并 PR #N…) for the worktree (nothing for the main checkout or without a session).
- */
-export function openMergeForActiveSession(): void {
-  const state = useWorkspace.getState()
-  const session = state.sessions.find((s) => s.id === state.activeSessionId)
-  const worktree = session ? state.worktrees.find((w) => w.id === session.worktreeId) : undefined
-  const project = worktree ? state.projects.find((p) => p.id === worktree.projectId) : undefined
-  if (!worktree || !project) return
-  const exit = primaryExits.get(worktree.path)
-  if (exit) return exit()
-  openMergeSheet(targetFor(project.rootPath, worktree))
-}
+/** What ⇧⌘M runs for the worktree while Git · 变更 is open on it (pull-requests/chain-actions.ts mergeShortcut), or
+ *  undefined. */
+export const primaryExitOf = (worktreePath: string): (() => void) | undefined => primaryExits.get(worktreePath)
 
 /** The target for a workspace worktree record (every record at the same path goes with it). */
 export function targetFor(root: string, worktree: { projectId: ProjectId; path: string; isMain: boolean }): MergeTarget {

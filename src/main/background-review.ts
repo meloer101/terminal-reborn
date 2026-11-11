@@ -19,6 +19,7 @@ import {
   decideReview,
   diffFileCount,
   DEFAULT_REVIEW_RULES,
+  parseAsked,
   diffHash,
   driveReview,
   emptyReviewMemory,
@@ -64,6 +65,8 @@ interface Job {
   /** HEAD when the diff was read ('' when unknown). */
   head: string
   plan: ReviewPlan
+  /** What the user asked of the agent (the request's `asked`), for the reviewer's prompt. */
+  asked: readonly string[]
   /** The previous review's summary, kept when an incremental review has nothing left to read. */
   previousMessage: string
   owner: WebContents
@@ -163,12 +166,20 @@ export function triggerAllowed(trigger: ReviewTrigger, settings: ReviewSettings)
 
 export function parseReviewRequest(raw: unknown): ReviewRequest {
   if (typeof raw !== 'object' || raw === null) throw new Error('invalid review request')
-  const { root, agent, trigger, base, force } = raw as Record<string, unknown>
+  const { root, agent, trigger, base, force, asked } = raw as Record<string, unknown>
   if (typeof root !== 'string' || !root.startsWith('/') || root.length > MAX_ROOT || root.includes('\0')) throw new Error('invalid worktree root')
   if (!AGENTS.has(agent)) throw new Error('invalid agent')
   if (!TRIGGERS.has(trigger)) throw new Error('invalid trigger')
   if (base !== undefined && (typeof base !== 'string' || base.length > 255)) throw new Error('invalid base')
-  return { root, agent: agent as ReviewAgent, trigger: trigger as ReviewTrigger, ...(typeof base === 'string' ? { base } : {}), ...(force === true ? { force: true } : {}) }
+  const prompts = parseAsked(asked)
+  return {
+    root,
+    agent: agent as ReviewAgent,
+    trigger: trigger as ReviewTrigger,
+    ...(typeof base === 'string' ? { base } : {}),
+    ...(force === true ? { force: true } : {}),
+    ...(prompts && prompts.length > 0 ? { asked: prompts } : {})
+  }
 }
 
 function rulesOf(settings: ReviewSettings): string {
@@ -269,6 +280,7 @@ async function drive(state: RootState, job: Job, cwd: string, settings: ReviewSe
       rules: rulesOf(settings),
       files: plan.files,
       diffText: plan.text,
+      asked: job.asked,
       hash: job.hash,
       ...(modelFor(agent, settings) ? { model: modelFor(agent, settings) } : {}),
       dismissed: new Set(resultsFile().get()[job.status.root]?.dismissed ?? []),
@@ -424,6 +436,7 @@ export async function startReview(owner: WebContents, raw: unknown): Promise<Rev
     hash,
     head,
     plan,
+    asked: request.asked ?? [],
     previousMessage: previous?.message ?? '',
     owner,
     cancelled: false,

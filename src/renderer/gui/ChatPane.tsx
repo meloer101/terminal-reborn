@@ -84,7 +84,7 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
     (text: string, attachments: readonly string[]) => {
       setSendError(null)
       if (!willQueue) {
-        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now() })
+        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now(), attachments })
         clearComposer(sessionId)
       }
       const undo = (reason: string): void => {

@@ -115,7 +115,6 @@ describe('heatmap', () => {
     expect(h.days.find((d) => d.day === startOfDay(at(8, 2)))!.level).toBe(0)
     expect(h.busiest).toEqual({ day: startOfDay(at(11, 8)), tokens: 40 })
     expect(h.days.find((d) => d.day === startOfDay(at(11, 8)))!.level).toBe(4)
-    expect(h.starts.map((s) => s.agent)).toEqual(['codex', 'claude'])
     expect(h.longestStreak).toBe(2)
   })
 

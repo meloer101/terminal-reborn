@@ -408,7 +408,7 @@ export interface AgentApi {
 
 export interface TrApi {
   platform: string
-  /** macOS 26 or later: 玻璃 (窗口 · 材质, PRD §5 v1.169) is Liquid Glass; before it, frosted vibrancy. */
+  /** macOS 26 or later: 玻璃 (窗口 · 材质, PRD §5 v1.173) is Liquid Glass; before it, frosted vibrancy. */
   liquidGlass: boolean
   /** User's home directory, for default cwd. */
   homeDir: string

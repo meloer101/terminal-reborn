@@ -3,7 +3,6 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
   max-height: 60vh;
   padding: var(--space-8) 0 0;
   outline: none;
@@ -19,9 +18,19 @@
 }
 
 .title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
   margin: 0;
   padding: 0 var(--space-16) 0 calc(var(--space-12) + var(--space-2));
   font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+/* What the run does, in the steps' glyph column (Figma 73D1 / 73E / 73F). */
+.titleIcon {
+  flex: none;
+  display: inline-flex;
   color: var(--text-primary);
 }
 
@@ -68,6 +77,15 @@
   color: var(--status-error);
 }
 
+/* A step held before it started (同步's pre-check found conflicts, Figma 73D2): the state line's ⓘ in the text colour. */
+.step[data-state='held'] .glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1lh;
+  color: var(--text-primary);
+}
+
 .step[data-state='pending'] .stepText {
   color: var(--text-tertiary);
 }
@@ -107,9 +125,10 @@
   gap: var(--space-4);
 }
 
+/* What went wrong, in plain words (Figma 73E): strong text under the ✗ step; the glyph carries the colour. */
 .failureText {
-  font: var(--text-caption);
-  color: var(--status-error);
+  font: var(--text-body-strong);
+  color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
 }
@@ -121,16 +140,13 @@
   overflow: auto;
   border-radius: var(--radius-md);
   background: var(--bg-inset);
+  /* Figma 73K2: an inner hairline, so the block has an edge where its fill is close to the Ship block's (light). */
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
   font: var(--text-mono-s);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
-}
-
-.failureActions {
-  display: flex;
-  gap: var(--space-8);
 }
 
 /* The glance: the text in fields, mono for the long ones. */
@@ -158,6 +174,8 @@
   border: 0;
   border-radius: var(--radius-md);
   background: var(--bg-selected);
+  /* Figma 73K2: an inner hairline (focus makes it stronger). */
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
   color: var(--text-primary);
   outline: none;
   user-select: text;
@@ -231,13 +249,13 @@
   outline-offset: 2px;
 }
 
+/* The buttons follow the last line directly: 12 above them, as a 28-high row's 6 plus the footer's 6 (Figma 73D2 / 73E1). */
 .footer {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  padding: calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2))
-    calc(var(--space-12) + var(--space-2));
+  padding: var(--space-12) calc(var(--space-8) + var(--space-2)) calc(var(--space-8) + var(--space-2)) calc(var(--space-12) + var(--space-2));
 }
 
 .spacer {

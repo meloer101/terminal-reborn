@@ -7,6 +7,7 @@ import { archiveRefName, type WorktreeArchive } from './archive'
 import { sanitizeAttemptGroups, type AttemptGroup } from './attempt-groups'
 import { isWorkdir, type Workdir } from './new-session'
 import { sanitizeReviewComments, type ReviewComment } from './review-comments'
+import { sanitizeReviewMarks, type ViewedMarks } from './review-progress'
 import { sanitizeSplit, sessionsIn, type SplitNode } from './split-layout'
 import type { AgentKind, Project, ScheduledBy, SessionStatus, SessionUi, TitleSource, Worktree } from './types'
 import { isScheduleId } from './schedule'
@@ -144,6 +145,9 @@ export interface WorkspaceFile {
   guiPicks?: Record<string, GuiPicks>
   /** Unsent inline review comments (PRD F5) by worktree path; only worktrees that exist. Absent when empty. */
   reviewComments?: Record<string, ReviewComment[]>
+  /** 已看 marks of Git · 变更's rows (合入链路 v2, review-progress.ts) by worktree path; only worktrees that exist. Absent
+   *  when none (and in every file written before marks existed). */
+  reviewMarks?: Record<string, ViewedMarks>
   /** The main area's split (PRD F20): two to four sessions, `activeSessionId` among them. Absent = one session. */
   split?: SplitNode
   /**
@@ -317,6 +321,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
   const worktreePaths = new Set(worktrees.map((w) => w.path))
   const fixRuns = sanitizeFixRuns(value.fixRuns, worktreePaths)
   const shipRuns = sanitizeShipRuns(value.shipRuns, worktreePaths)
+  const reviewMarks = sanitizeReviewMarks(value.reviewMarks, worktreePaths)
   const dispatch = sanitizeSavedDispatch(value.dispatch, sessionIds)
 
   const active = isString(value.activeSessionId) && sessionIds.has(value.activeSessionId)
@@ -367,6 +372,7 @@ function sanitizeBody(value: Record<string, unknown>, now: number): WorkspaceFil
     ...(Object.keys(newSessionUi).length > 0 ? { newSessionUi } : {}),
     ...(Object.keys(guiPicks).length > 0 ? { guiPicks } : {}),
     ...(Object.keys(reviewComments).length > 0 ? { reviewComments } : {}),
+    ...(Object.keys(reviewMarks).length > 0 ? { reviewMarks } : {}),
     ...(split ? { split } : {}),
     ...(windows.length > 0 ? { windows } : {}),
     ...(attemptGroups.length > 0 ? { attemptGroups } : {}),

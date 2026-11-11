@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-pr-')))
 const bin = join(base, 'bin')
@@ -22,9 +22,18 @@ printf '%s\\n' "---" "$@" >> "$d/calls"
 case "$1 $2" in
   "auth status")
     if [ -f "$d/signed-out" ]; then echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1; fi
-    echo "github.com: Logged in"; exit 0 ;;
+    if [ -f "$d/old-gh" ]; then
+      case "$*" in *--active*) echo "unknown flag: --active" >&2; echo "Usage:  gh auth status [flags]" >&2; exit 1 ;; esac
+      echo "github.com"; echo "  ✓ Logged in to github.com as t (oauth_token)" >&2
+      [ -f "$d/hosts" ] && while read h; do echo "$h" >&2; echo "  ✓ Logged in to $h as t (oauth_token)" >&2; done < "$d/hosts"
+      exit 0
+    fi
+    echo "github.com"; echo "  ✓ Logged in to github.com account t (keyring)"
+    [ -f "$d/hosts" ] && while read h; do echo "$h"; echo "  ✓ Logged in to $h account t (keyring)"; done < "$d/hosts"
+    exit 0 ;;
   "pr list")
     if [ -f "$d/rate-limit" ]; then echo "GraphQL: API rate limit exceeded for user ID 1." >&2; exit 1; fi
+    if [ -f "$d/list-fail" ]; then cat "$d/list-fail" >&2; exit 1; fi
     cat "$d/pr-list.json" 2>/dev/null || echo '[]'; exit 0 ;;
   "pr create")
     [ -f "$d/after-create.json" ] && cp "$d/after-create.json" "$d/pr-list.json"
@@ -35,6 +44,8 @@ case "$1 $2" in
     if [ -f "$d/merge-fail" ]; then cat "$d/merge-fail" >&2; exit 1; fi
     [ -f "$d/after-merge.json" ] && cp "$d/after-merge.json" "$d/pr-list.json"
     exit 0 ;;
+  "env locale")
+    echo "$LC_ALL|$LANG|$LANGUAGE"; exit 0 ;;
   "api graphql")
     case "$*" in
       *"--input -"*)
@@ -43,6 +54,7 @@ case "$1 $2" in
         if [ -f "$d/mutation-fail" ] && grep -qF '"threads":[{' "$d/input-$n"; then cat "$d/mutation-fail" >&2; exit 1; fi
         echo '{"data":{}}'; exit 0 ;;
     esac
+    if [ -f "$d/details-fail" ]; then cat "$d/details-fail" >&2; exit 1; fi
     cat "$d/graphql.json" 2>/dev/null || echo '{"data":null}'; exit 0 ;;
 esac
 echo "unknown command $*" >&2
@@ -66,7 +78,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, mergePullRequest, prDraft, pushBranch, statusesFor, unwatch, watchTargets } =
+const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, gh, ghLoggedInHosts, gitHubRepoFromUrl, mergePullRequest, prDraft, pushBranch, statusesFor, unwatch, watchTargets } =
   await import('./pull-requests')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -80,7 +92,7 @@ const commit = (cwd: string, file: string, text: string, message: string) => {
 
 let counter = 0
 /** main (pushed) and a worktree on `feat` with two commits, not pushed. */
-function setup(): { root: string; wt: string; bare: string } {
+function setup(url = 'https://github.com/acme/widget.git'): { root: string; wt: string; bare: string } {
   const n = ++counter
   const root = join(base, `repo-${n}`)
   const bare = join(base, `bare-${n}.git`)
@@ -88,7 +100,7 @@ function setup(): { root: string; wt: string; bare: string } {
   git(base, 'init', '-q', '--bare', '-b', 'main', bare)
   git(root, 'init', '-q', '-b', 'main')
   commit(root, 'a.txt', 'a\n', 'init')
-  git(root, 'remote', 'add', 'origin', 'https://github.com/acme/widget.git')
+  git(root, 'remote', 'add', 'origin', url)
   git(root, 'config', 'remote.origin.pushurl', bare)
   git(root, 'push', '-q', '-u', 'origin', 'main')
   roots.add(root)
@@ -186,7 +198,7 @@ function pushedWithPr(details: Partial<Parameters<typeof detailsJson>[0]> = {}) 
 }
 
 beforeEach(() => {
-  for (const name of ['calls', 'signed-out', 'rate-limit', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail'])
+  for (const name of ['calls', 'signed-out', 'rate-limit', 'list-fail', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail', 'hosts', 'old-gh', 'details-fail'])
     rmSync(join(ghDir, name), { force: true })
   for (const name of readdirSync(ghDir)) if (name.startsWith('input-')) rmSync(join(ghDir, name), { force: true })
   confirmAnswer.mockReset()
@@ -206,6 +218,51 @@ describe('gh', () => {
     delete process.env.TR_GH
     rmSync(join(ghDir, 'signed-out'))
     expect(await detectGh(true)).toBe('ready')
+  })
+
+  it('runs gh, and the git it runs, in English whatever the login locale', async () => {
+    const saved = { LC_ALL: process.env.LC_ALL, LANG: process.env.LANG, LANGUAGE: process.env.LANGUAGE }
+    Object.assign(process.env, { LC_ALL: 'zh_CN.UTF-8', LANG: 'zh_CN.UTF-8', LANGUAGE: 'zh_CN' })
+    try {
+      expect(await detectGh(true)).toBe('ready')
+      expect((await gh(['env', 'locale'])).stdout.trim()).toBe('en_US.UTF-8|en_US.UTF-8|en')
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
+  })
+})
+
+describe('gh · the hosts it is logged in to', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('reads both shapes of gh auth status, and an older gh that has no --active', () => {
+    expect([...ghLoggedInHosts('github.com\n  ✓ Logged in to github.com account t (keyring)\nGHE.example.com\n  ✓ Logged in to GHE.example.com account t (keyring)')]).toEqual(['github.com', 'ghe.example.com'])
+    expect([...ghLoggedInHosts('github.com\n  ✓ Logged in to github.com as t (oauth_token)\n  ✓ Git operations for github.com configured to use https protocol.')]).toEqual(['github.com'])
+    expect([...ghLoggedInHosts('You are not logged into any GitHub hosts.')]).toEqual([])
+  })
+
+  it('takes a GitHub Enterprise host from an older gh that rejects --active', async () => {
+    writeFileSync(join(ghDir, 'old-gh'), '')
+    writeFileSync(join(ghDir, 'hosts'), 'ghe.example.com\n')
+    expect(await detectGh(true)).toBe('ready')
+    expect(ghCalls('auth status').map((call) => call.join(' '))).toEqual(['auth status --active', 'auth status'])
+    expect(await gitHubRepoFromUrl('git@ghe.example.com:acme/widget.git')).toMatchObject({ host: 'ghe.example.com', owner: 'acme', name: 'widget' })
+  })
+
+  it('asks gh again for a host it did not know, at most once every 10 minutes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    expect(await detectGh(true)).toBe('ready')
+    writeFileSync(join(ghDir, 'hosts'), 'ghe.example.com\n')
+    // Logged in after the last probe: found once the hosts are 10 minutes old.
+    expect(await gitHubRepoFromUrl('git@ghe.example.com:acme/widget.git')).toBeNull()
+    vi.setSystemTime(Date.now() + 10 * 60_000)
+    expect(await gitHubRepoFromUrl('git@ghe.example.com:acme/widget.git')).toMatchObject({ host: 'ghe.example.com' })
+    const probes = ghCalls('auth status').length
+    expect(await gitHubRepoFromUrl('https://gitlab.com/acme/widget.git')).toBeNull()
+    expect(ghCalls('auth status')).toHaveLength(probes)
   })
 })
 
@@ -238,6 +295,32 @@ describe('status', () => {
     await checkWorktree(wt)
     expect(w.sent).toHaveLength(1)
     expect(statusesFor(w)).toHaveLength(1)
+    unwatch(w)
+  })
+
+  it('does not poll a GitLab remote through gh, and refuses to create a PR there', async () => {
+    const { root, wt } = setup('https://gitlab.com/acme/widget.git')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    await detectGh(true)
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ branch: 'feat', pr: null })
+    expect(await createPullRequest({ root, worktree: wt, title: 't' })).toMatchObject({ ok: false, reason: 'blocked', message: '远程仓库 origin 不在 GitHub 上' })
+    expect(ghCalls('pr list')).toHaveLength(0)
+    expect(ghCalls('pr create')).toHaveLength(0)
+    unwatch(w)
+  })
+
+  it('polls a GitHub Enterprise host gh is logged in to, with that host in --repo', async () => {
+    writeFileSync(join(ghDir, 'hosts'), 'ghe.example.com\n')
+    await detectGh(true)
+    const { root, wt } = setup('git@ghe.example.com:acme/widget.git')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7 } })
+    expect(ghCalls('pr list')[0]).toContain('--repo=ghe.example.com/acme/widget')
     unwatch(w)
   })
 
@@ -318,6 +401,32 @@ describe('创建 PR', () => {
     expect(git(wt, 'rev-parse', '--abbrev-ref', '@{u}').trim()).toBe('origin/feat')
   })
 
+  it('pushes to the remote the preflight names: the base\'s upstream remote when there is no origin', async () => {
+    const n = ++counter
+    const root = join(base, `repo-${n}`)
+    const project = join(base, `project-${n}.git`)
+    const fork = join(base, `fork-${n}.git`)
+    mkdirSync(root)
+    git(base, 'init', '-q', '--bare', '-b', 'main', project)
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(root, 'init', '-q', '-b', 'main')
+    commit(root, 'a.txt', 'a\n', 'init')
+    git(root, 'remote', 'add', 'upstream', 'https://github.com/acme/widget.git')
+    git(root, 'config', 'remote.upstream.pushurl', project)
+    git(root, 'remote', 'add', 'fork', 'https://github.com/me/widget.git')
+    git(root, 'config', 'remote.fork.pushurl', fork)
+    git(root, 'push', '-q', '-u', 'upstream', 'main')
+    roots.add(root)
+    const wt = join(base, `wt-${n}`)
+    git(root, 'worktree', 'add', '-q', '-b', 'feat', wt)
+    git(root, 'config', 'branch.feat.base', 'main')
+    commit(wt, 'b.txt', 'b\n', 'Make nav sticky')
+    expect(await prDraft({ root, worktree: wt })).toMatchObject({ ok: true, remote: 'upstream' })
+    writeFileSync(join(ghDir, 'after-create.json'), prJson({ statusCheckRollup: [] }))
+    expect(await createPullRequest({ root, worktree: wt, title: 't', pushApproved: true })).toMatchObject({ ok: true, number: 7 })
+    expect(git(project, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
+  })
+
   it('refuses the base branch, a branch with nothing new, a missing gh and bad input', async () => {
     const { root, wt } = setup()
     expect(await createPullRequest({ root, worktree: root, title: 't' })).toMatchObject({ ok: false, reason: 'blocked', message: '这是基线分支本身，没有可以提 PR 的改动' })
@@ -375,6 +484,8 @@ describe('合并 PR (PRD F16 v1.63)', () => {
     writeFileSync(join(ghDir, 'after-merge.json'), prJson({ state: 'MERGED' }))
     const result = await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: true })
     expect(result).toMatchObject({ ok: true, outcome: 'merged', message: '已合并 PR #7' })
+    // The fetch of the merged base cannot reach "GitHub" here (https is off): the result says the base did not follow.
+    expect(result).toMatchObject({ baseNotCaughtUp: expect.stringMatching(/^没能获取 origin\/main：/) })
     const merge = ghCalls('pr merge')[0]!
     expect(merge).toEqual(['pr', 'merge', '7', '--repo=github.com/acme/widget', '--squash', `--match-head-commit=${head}`])
     expect(merge).toEqual(expect.arrayContaining(['7', '--squash', `--match-head-commit=${head}`]))
@@ -411,6 +522,32 @@ describe('合并 PR (PRD F16 v1.63)', () => {
     expect(ghCalls('pr merge')[0]).toEqual(expect.arrayContaining(['--merge', `--match-head-commit=${head}`, '--auto']))
     expect(await cancelMerge({ root, worktree: wt })).toMatchObject({ ok: true, outcome: 'cancelled' })
     expect(ghCalls('pr merge')[1]).toEqual(expect.arrayContaining(['--disable-auto']))
+    unwatch(w)
+  })
+
+  it('classifies a failed auto-merge cancel with the worktree\'s real base', async () => {
+    const { root, wt, w } = pushedWithPr({ autoMergeAllowed: true })
+    git(root, 'branch', 'release', 'main')
+    git(root, 'config', 'branch.feat.base', 'release')
+    await checkWorktree(wt)
+    writeFileSync(join(ghDir, 'merge-fail'), 'remote: Changes must be made through a pull request.')
+    expect(await cancelMerge({ root, worktree: wt })).toMatchObject({ ok: false, failure: { kind: 'protected-branch', message: 'release 受保护' } })
+    unwatch(w)
+  })
+
+  it('words what GitHub said when it does not merge, classified', async () => {
+    const { root, wt, w } = pushedWithPr()
+    writeFileSync(join(ghDir, 'merge-fail'), 'GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)')
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({
+      ok: false,
+      reason: 'failed',
+      message: 'GitHub 没有合并：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)',
+      failure: { kind: 'unknown', message: '合并 PR 失败：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)' }
+    })
+    writeFileSync(join(ghDir, 'merge-fail'), 'error connecting to api.github.com')
+    expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({
+      failure: { kind: 'network', message: '连不上 GitHub：检查网络后重试' }
+    })
     unwatch(w)
   })
 
@@ -534,7 +671,12 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     git(root, 'config', 'core.hooksPath', hooks)
     writeFileSync(join(wt, 'b.txt'), 'b2\n')
     const head = git(wt, 'rev-parse', 'HEAD').trim()
-    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, reason: 'failed', output: 'lint: 2 problems in b.txt' })
+    expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({
+      ok: false,
+      reason: 'failed',
+      output: 'lint: 2 problems in b.txt',
+      failure: { kind: 'unknown', message: '提交失败：lint: 2 problems in b.txt', tail: 'lint: 2 problems in b.txt' }
+    })
     expect(git(wt, 'rev-parse', 'HEAD').trim()).toBe(head)
   })
 
@@ -562,22 +704,38 @@ describe('提交 / 推送 (PRD F16 v1.68)', () => {
     expect(await commitWorktree({ root, worktree: wt, message: 'x', paths: ['b.txt'] })).toMatchObject({ ok: false, message: '处于分离 HEAD：先切到一个分支再提交' })
   })
 
-  it('pushes a pushed branch to its upstream, and refuses one that was never pushed', async () => {
+  it('publishes a branch that was never pushed to the resolved remote, with an upstream (推送 said so)', async () => {
+    const fresh = setup()
+    const result = await pushBranch({ root: fresh.root, worktree: fresh.wt })
+    expect(result).toMatchObject({ ok: true, outcome: 'pushed', message: '已推送到 origin/feat' })
+    expect(git(fresh.bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(fresh.wt, 'rev-parse', 'HEAD').trim())
+    expect(git(fresh.wt, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}').trim()).toBe('origin/feat')
+    // The base itself is never pushed from here.
+    expect(await pushBranch({ root: fresh.root, worktree: fresh.root })).toMatchObject({ ok: false, message: '这是基线分支本身：Wavi 不往基线分支推送' })
+    // A repository without a remote says so.
+    const lonely = setup()
+    git(lonely.root, 'remote', 'remove', 'origin')
+    expect(await pushBranch({ root: lonely.root, worktree: lonely.wt })).toMatchObject({ ok: false, message: '没有远程仓库，没法推送分支' })
+  })
+
+  it('pushes a pushed branch to its upstream', async () => {
     const { root, wt, bare } = pushedWithPr()
     expect(await pushBranch({ root, worktree: wt })).toEqual({ ok: true, outcome: 'pushed', message: '没有要推送的提交' })
     commit(wt, 'd.txt', 'd\n', 'One more')
     expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: true, outcome: 'pushed', message: '已推送到 origin/feat' })
     expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
     expect(await pushBranch({ root, worktree: root })).toMatchObject({ ok: false, message: '这是基线分支本身：Wavi 不往基线分支推送' })
-    const fresh = setup()
-    expect(await pushBranch({ root: fresh.root, worktree: fresh.wt })).toMatchObject({ ok: false, message: '分支还没有推送过：用「创建 PR」推送' })
     // Someone else pushed to the branch: git refuses, and Wavi says what to do instead of git's words.
     const other = join(base, `other-${counter}`)
     git(base, 'clone', '-q', '-b', 'feat', bare, other)
     commit(other, 'e.txt', 'e\n', 'From elsewhere')
     git(other, 'push', '-q', 'origin', 'feat')
     commit(wt, 'f.txt', 'f\n', 'Mine')
-    expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: false, message: 'origin 上的分支有本地没有的提交：先拉取或 rebase，再推送' })
+    expect(await pushBranch({ root, worktree: wt })).toMatchObject({
+      ok: false,
+      message: 'origin 上的分支有本地没有的提交：先拉取或 rebase，再推送',
+      failure: { kind: 'non-fast-forward', message: '远程有本地没有的提交', next: 'pull' }
+    })
   })
 })
 
@@ -599,16 +757,229 @@ describe('catching up the base after a merge (v1.65)', () => {
     git(base, 'clone', '-q', bare, other)
     commit(other, 'merged.txt', 'm\n', 'Merge pull request #7')
     git(other, 'push', '-q', 'origin', 'main')
-    await catchUpBase(root, 'origin', 'main')
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: true })
     expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: false })
 
     commit(other, 'more.txt', 'x\n', 'Another merge')
     git(other, 'push', '-q', 'origin', 'main')
     writeFileSync(join(root, 'a.txt'), 'local edit\n')
     const before = git(root, 'rev-parse', 'main').trim()
-    await catchUpBase(root, 'origin', 'main')
+    // Says why instead of returning quietly (合入链路 v2).
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: false, message: 'main 的工作区有未提交的改动，没有快进到 origin/main' })
     expect(git(root, 'rev-parse', 'main').trim()).toBe(before)
     expect(git(root, 'rev-parse', 'origin/main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+  })
+
+  it('says why when the base diverged, when nobody has it out it moves the ref, and a failed fetch is classified', async () => {
+    const { root, bare } = setup()
+    git(root, 'remote', 'set-url', 'origin', bare)
+    const other = join(base, `clone-${Date.now()}-b`)
+    git(base, 'clone', '-q', bare, other)
+    commit(other, 'merged.txt', 'm\n', 'Merge pull request #7')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'checkout', '-q', '--detach')
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: true })
+    expect(git(root, 'rev-parse', 'refs/heads/main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+
+    commit(other, 'more.txt', 'x\n', 'Another merge')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'update-ref', 'refs/heads/main', git(root, 'commit-tree', '-p', 'main', '-m', 'local only', 'main^{tree}').trim())
+    const before = git(root, 'rev-parse', 'main').trim()
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: false, message: 'main 和 origin/main 各有对方没有的提交，没法快进' })
+    expect(git(root, 'rev-parse', 'main').trim()).toBe(before)
+
+    git(root, 'remote', 'set-url', 'origin', join(base, 'gone.git'))
+    expect(await catchUpBase(root, 'origin', 'main')).toMatchObject({ ok: false, message: '没能获取 origin/main：没有远程仓库，没法拉取', failure: { kind: 'no-remote' } })
+  })
+})
+
+describe('catching up the base after a PR merged, with the branch published to a fork', () => {
+  /** main tracks origin (a local bare repository); feat is published to the fork `me`, which "GitHub" says it is. */
+  function forked() {
+    const made = setup()
+    git(made.root, 'remote', 'set-url', 'origin', made.bare)
+    git(made.root, 'config', '--unset', 'remote.origin.pushurl')
+    const fork = join(base, `fork-${counter}.git`)
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(made.root, 'remote', 'add', 'me', 'https://github.com/me/widget.git')
+    git(made.root, 'config', 'remote.me.pushurl', fork)
+    git(made.root, 'config', 'protocol.https.allow', 'never')
+    git(made.wt, 'push', '-q', '-u', 'me', 'feat')
+    const head = git(made.wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ statusCheckRollup: [{ __typename: 'CheckRun', name: 'test', status: 'COMPLETED', conclusion: 'SUCCESS' }] }))
+    writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: head }))
+    /** GitHub merging the PR: a new commit on origin's main. */
+    const mergeOnGitHub = () => {
+      const other = join(base, `clone-${++counter}`)
+      git(base, 'clone', '-q', made.bare, other)
+      commit(other, 'merged.txt', 'm\n', 'Merge pull request #7')
+      git(other, 'push', '-q', 'origin', 'main')
+    }
+    return { ...made, mergeOnGitHub }
+  }
+
+  it('after 合并 PR: from the remote the base tracks, not the fork', async () => {
+    const { root, wt, bare, mergeOnGitHub } = forked()
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    mergeOnGitHub()
+    writeFileSync(join(ghDir, 'after-merge.json'), prJson({ state: 'MERGED' }))
+    const result = await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })
+    expect(result).toMatchObject({ ok: true, outcome: 'merged' })
+    expect(result).not.toHaveProperty('baseNotCaughtUp')
+    expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+    unwatch(w)
+  })
+
+  it('after a merge the poll sees: from the remote the base tracks, not the fork', async () => {
+    const { root, wt, bare, mergeOnGitHub } = forked()
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7, state: 'open' } })
+    mergeOnGitHub()
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ state: 'MERGED' }))
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7, state: 'merged' } })
+    expect(git(root, 'rev-parse', 'main').trim()).toBe(git(bare, 'rev-parse', 'main').trim())
+    unwatch(w)
+  })
+})
+
+describe('catching up a base that is being rebased', () => {
+  it('leaves the base alone while a rebase of it is stopped in its checkout, and says why', async () => {
+    const { root, bare } = setup()
+    git(root, 'remote', 'set-url', 'origin', bare)
+    commit(root, 'b.txt', 'b\n', 'second')
+    git(root, 'push', '-q', 'origin', 'main')
+    const other = join(base, `clone-${Date.now()}-rb`)
+    git(base, 'clone', '-q', bare, other)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    // `git rebase -i HEAD~1` stopped at an edit: HEAD is detached, main is still the branch being rewritten.
+    // Pinned: a global rebase.abbreviateCommands writes `p`, which the sed would not turn into an edit.
+    execFileSync('git', ['-c', 'rebase.abbreviateCommands=false', 'rebase', '-i', 'HEAD~1'], { cwd: root, env: { ...process.env, GIT_SEQUENCE_EDITOR: "sed -i.bak 's/^pick /edit /'" }, stdio: 'ignore' })
+    const before = git(root, 'rev-parse', 'refs/heads/main').trim()
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: false, message: 'main 有进行中的 rebase，没有快进到 origin/main' })
+    expect(git(root, 'rev-parse', 'refs/heads/main').trim()).toBe(before)
+    git(root, 'rebase', '--continue')
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: true })
+  })
+})
+
+describe('status · a failed poll (合入链路 v2)', () => {
+  it('keeps the last PR, says what went wrong and since when, and clears it once a poll works', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    // Readable details: an open PR whose details cannot be read is itself an error state.
+    writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: git(wt, 'rev-parse', 'HEAD').trim() }))
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    const good = await checkWorktree(wt)
+    expect(good?.pr?.number).toBe(7)
+    expect(good).not.toHaveProperty('error')
+
+    writeFileSync(join(ghDir, 'list-fail'), 'error connecting to api.github.com\ncheck your internet connection or https://githubstatus.com')
+    const first = await checkWorktree(wt)
+    expect(first).toMatchObject({ pr: { number: 7 }, error: { message: '连不上 GitHub：检查网络后重试' } })
+    expect(first?.checkedAt).toBe(good?.checkedAt)
+    expect(w.sent.at(-1)).toEqual(first)
+    const sent = w.sent.length
+    const second = await checkWorktree(wt)
+    // Still failing: the same sentence since the same time, not sent again.
+    expect(second?.error).toEqual(first?.error)
+    expect(w.sent).toHaveLength(sent)
+
+    writeFileSync(join(ghDir, 'list-fail'), 'GraphQL: Something went wrong while executing your query.')
+    expect((await checkWorktree(wt))?.error).toEqual({ message: '读取 PR 状态失败：GraphQL: Something went wrong while executing your query.', since: first!.error!.since })
+
+    rmSync(join(ghDir, 'list-fail'))
+    const back = await checkWorktree(wt)
+    expect(back).toMatchObject({ pr: { number: 7 } })
+    expect(back).not.toHaveProperty('error')
+    expect(w.sent.at(-1)).toEqual(back)
+    unwatch(w)
+  })
+
+  // R64: the PR is listed but its details never come: 合并 PR #N… says why instead of 正在检查… for as long as it fails.
+  it('says it when the PR’s details cannot be read and none are known', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    writeFileSync(join(ghDir, 'details-fail'), 'GraphQL: Resource protected by organization SAML enforcement.')
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    const failed = await checkWorktree(wt)
+    expect(failed).toMatchObject({ pr: { number: 7 }, error: { message: '读取 PR 状态失败：GraphQL: Resource protected by organization SAML enforcement.' } })
+    expect(failed?.pr).not.toHaveProperty('details')
+    expect(w.sent.at(-1)).toEqual(failed)
+    rmSync(join(ghDir, 'details-fail'))
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: head }))
+    const back = await checkWorktree(wt)
+    expect(back?.pr?.details).toBeDefined()
+    expect(back).not.toHaveProperty('error')
+    unwatch(w)
+  })
+
+  // gh exits 0 but its answer is not a PR's details (pullRequest null, a field missing): the same error state as a failed call.
+  it('says it when gh answers but the PR’s details cannot be read from it', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    writeFileSync(join(ghDir, 'graphql.json'), JSON.stringify({ data: { repository: { pullRequest: null } } }))
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    const failed = await checkWorktree(wt)
+    expect(failed).toMatchObject({ pr: { number: 7 }, error: { message: '没能读到 PR #7 的详情' } })
+    expect(failed?.pr).not.toHaveProperty('details')
+    expect(w.sent.at(-1)).toEqual(failed)
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'graphql.json'), detailsJson({ headOid: head }))
+    const back = await checkWorktree(wt)
+    expect(back?.pr?.details).toBeDefined()
+    expect(back).not.toHaveProperty('error')
+    unwatch(w)
+  })
+
+  it('reads all of what gh printed, not its last lines', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'list-fail'), 'error connecting to api.github.com\ncheck your internet connection or https://githubstatus.com\nretry 1 of 3\nretry 2 of 3\nretry 3 of 3\ngave up')
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: null, error: { message: '连不上 GitHub：检查网络后重试' } })
+    rmSync(join(ghDir, 'list-fail'))
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    writeFileSync(join(ghDir, 'details-fail'), 'error connecting to api.github.com\nretry 1 of 3\nretry 2 of 3\nretry 3 of 3\ngave up')
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7 }, error: { message: '连不上 GitHub：检查网络后重试' } })
+    unwatch(w)
+  })
+
+  it('says it when the very first poll fails', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'list-fail'), 'HTTP 502: Bad Gateway')
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ worktree: wt, branch: 'feat', pr: null, error: { message: '读取 PR 状态失败：HTTP 502: Bad Gateway' } })
+    unwatch(w)
+  })
+})
+
+describe('status · a merged PR (合入链路 v2)', () => {
+  it('carries the merged head and the local head, so new work after the merge is not taken as merged', async () => {
+    const { root, wt } = setup()
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const head = git(wt, 'rev-parse', 'HEAD').trim()
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson({ state: 'MERGED', headRefOid: head }))
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7, state: 'merged', headOid: head }, local: { head, remoteAhead: false } })
+    commit(wt, 'after.txt', 'a\n', 'After the merge')
+    expect((await checkWorktree(wt))?.local).toEqual({ head: git(wt, 'rev-parse', 'HEAD').trim(), remoteAhead: false })
+    expect(ghCalls('pr list')[0]).toContain('--json=number,state,isDraft,url,title,isCrossRepository,headRepositoryOwner,headRefOid,statusCheckRollup')
+    unwatch(w)
   })
 })
 

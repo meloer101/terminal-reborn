@@ -91,7 +91,7 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
   const material = shownMaterial(a, liquidGlass)
   return {
     vars: {
-      // 窗口底层不透明度 (PRD §5 v1.127, one value since v1.169): the theme's shell color over the base layer. 实色 (v1.139)
+      // 窗口底层不透明度 (PRD §5 v1.127, one value since v1.173): the theme's shell color over the base layer. 实色 (v1.139)
       // covers the base layer with it: nothing of the desktop shows.
       '--glass-shell': material === 'solid' ? 'var(--glass-shell-color)' : over('var(--glass-shell-color)', a.shellOpacity),
       // 对话 (Figma 51D): GUI sessions read these (gui/Chat.module.css).

@@ -7,6 +7,8 @@ import { checksText, turnCheckView } from '@shared/turn-checks'
 import type { Project, Session, Worktree } from '@shared/types'
 import { archiveTargetFor, archiveWorktree, blockerFor } from '../archive/actions'
 import { commentTarget } from '../panels/git/comments'
+import { tickedPaths } from '../panels/git/changes-model'
+import { gitOf } from '../panels/git/store'
 import { exitPlan, shipContextFor, type ExitPlan, type ShipExit } from '../pull-requests/exit-model'
 import { cancelShip, editShip, handConflictsToAgent, readRemembered, retryShip, startShip, submitShip, switchToPr, useShips } from '../pull-requests/ship-runner'
 import { submitBlocker } from '../pull-requests/ship-flow'
@@ -55,8 +57,18 @@ async function planFor(place: Place) {
     .catch((error: unknown) => ({ ok: false, message: errorText(error) }))
   const pr = usePullRequests.getState()
   const prStatus = pr.gh === 'ready' ? (pr.byWorktree[worktree.path] ?? null) : null
-  const plan = exitPlan({ preflight, remembered: readRemembered(project.rootPath), prStatus, changes, isMain: worktree.isMain, projectRoot: project.rootPath })
-  return { changes, preflight, plan }
+  // The Mac's checkboxes hold for the phone too: unticked files stay in the working tree (as chain-actions.ts reads them).
+  const ticked = tickedPaths(changes.uncommitted, gitOf(worktree.path).unticked)
+  const plan = exitPlan({
+    preflight,
+    remembered: readRemembered(project.rootPath),
+    prStatus,
+    changes,
+    isMain: worktree.isMain,
+    projectRoot: project.rootPath,
+    ticked: ticked.length
+  })
+  return { changes, preflight, plan, ticked }
 }
 
 function phoneExit(place: Place, exit: ShipExit, plan: ExitPlan, stopped: boolean): RemoteExit {
@@ -99,7 +111,7 @@ export async function remoteExits(sessionId: string): Promise<RemoteResult> {
 async function start(place: Place, kind: 'main' | 'pr' | 'push-pr'): Promise<RemoteResult> {
   const found = await planFor(place)
   if (!found) return remoteFail('不是 git 仓库')
-  const { changes, preflight, plan } = found
+  const { changes, preflight, plan, ticked } = found
   const exit = [plan.exits.primary, plan.exits.secondary].find((e) => e?.kind === kind)
   if (!exit || plan.nothingToShip) return remoteFail('这个出口现在不能用')
   if (useShips.getState().byWorktree[place.worktree.path]) return remoteFail('这个 worktree 已经有一个出口在进行')
@@ -121,10 +133,13 @@ async function start(place: Place, kind: 'main' | 'pr' | 'push-pr'): Promise<Rem
       agentSession: agent?.id ?? null,
       openIn: session.id,
       checksLine: checks ? `这一轮的检查：${checksText(checks)}` : null,
-      settings: { review: settings.review, pr: settings.pr }
+      settings: { review: settings.review, pr: settings.pr },
+      ticked
     }),
     exit.kind === 'open-pr' ? 'push-pr' : exit.kind,
-    exit.label
+    exit.label,
+    // The tip the run starts from and where the base goes: the preflight just read, as the desktop's commands pass it.
+    { head: preflight.head, ...(preflight.baseRemote !== undefined ? { baseRemote: preflight.baseRemote } : {}) }
   )
   return { ok: true }
 }

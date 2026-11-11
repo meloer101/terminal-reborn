@@ -159,7 +159,7 @@ describe('设置 · 手机 (PRD F22)', () => {
 })
 
 describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 51)', () => {
-  it('starts as GUI sessions look today: narrow column, system UI font, 14 px, opaque, no avatar; glass with a 30% tint (v1.169)', () => {
+  it('starts as GUI sessions look today: narrow column, system UI font, 14 px, opaque, no avatar; glass with a 30% tint (v1.173)', () => {
     expect(DEFAULT_SETTINGS.appearance.chat).toEqual({ width: 'narrow', latinFont: '', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 14, opacity: 1, avatar: '' })
     expect(DEFAULT_SETTINGS.appearance.windowMaterial).toBe('glass')
     expect(DEFAULT_SETTINGS.appearance.shellOpacity).toBe(0.3)
@@ -196,7 +196,7 @@ describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 
     expect(next.appearance.windowMaterial).toBe('glass')
   })
 
-  it('reads settings from before v1.169: 液态玻璃 and 磨砂玻璃 become 玻璃 and keep the opacity of the one that was chosen', () => {
+  it('reads settings from before v1.173: 液态玻璃 and 磨砂玻璃 become 玻璃 and keep the opacity of the one that was chosen', () => {
     const read = (windowMaterial: string, shellOpacity: object) => sanitizeSettings({ appearance: { windowMaterial, shellOpacity } }).appearance
     expect(read('frosted', { liquid: 0, frosted: 0.6 })).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.6 })
     expect(read('liquid', { liquid: 0.2, frosted: 0.6 })).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.2 })

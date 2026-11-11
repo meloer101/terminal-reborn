@@ -67,7 +67,18 @@ export type WorktreeCreateRefusal =
   | 'git'
 
 export type WorktreeCreateResult =
-  | { ok: true; path: string; /** Files `.worktreeinclude` asked for that could not be copied. */ copyFailures: number }
+  | {
+      ok: true
+      path: string
+      /** Files `.worktreeinclude` asked for that could not be copied. */
+      copyFailures: number
+      /** The fetch before branching off failed (why, in words): the branch started from the local refs, which may be
+       *  behind the remote. */
+      fetchFailed?: string
+      /** `branch.<name>.base` could not be written (why): the merge and the Worktree view compare against the project's
+       *  main branch instead of the chosen base. */
+      baseNotSaved?: string
+    }
   | { ok: false; reason: WorktreeCreateRefusal; message?: string }
 
 export const MAX_INCLUDE_LISTED = 20

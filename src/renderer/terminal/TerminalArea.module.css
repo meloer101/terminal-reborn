@@ -4,8 +4,7 @@
 }
 
 /* Each terminal is a card (Figma 28 / 55): the agent's CLI, with its pane's header (SplitArea) over the top row. The
-   background is the terminal's own (theme, picked or imported), never the shell's. The corners come with the placement
-   (split/model.ts paneCorners). */
+   background is the terminal's own (theme, picked or imported), never the shell's. */
 .pane {
   /* How far the header reaches over the grid; xterm-surface reads it to keep text clear of the header until there is
      more than a screen of it, then lets it scroll under. */

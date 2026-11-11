@@ -91,6 +91,22 @@
   color: var(--text-tertiary);
 }
 
+/* Why a disabled item cannot run now (Figma 73B): the label keeps its room, the reason takes what is left. */
+.detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: var(--space-16);
+  overflow: hidden;
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item:has(.detail) .label {
+  flex: 1 0 auto;
+}
+
 .item[aria-disabled='true'] .shortcut {
   color: var(--text-disabled);
 }
