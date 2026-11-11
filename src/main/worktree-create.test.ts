@@ -5,9 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-// Dozens of git processes per test: more than the default 5 s when the whole suite runs at once.
-vi.setConfig({ testTimeout: 60_000 })
-
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-worktree-create-')))
 const home = join(base, 'home')
 

@@ -9,9 +9,6 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BaseCi } from '@shared/ship'
 
-// Dozens of git processes per test: more than the default 5 s when the whole suite runs at once.
-vi.setConfig({ testTimeout: 60_000 })
-
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-ship-')))
 const bin = join(base, 'bin')
 const ghDir = join(base, 'gh')
