@@ -77,8 +77,6 @@ export type AgentEvent =
    * conversation restarts. Not activity, except that the last live run ending settles a session left 运行中 by it.
    */
   | { type: 'workflows'; runs: WorkflowRun[] }
-  /** Whether ultracode is on in this Claude session (PRD F25): read from the TUI's screen or the transcript. Display only. */
-  | { type: 'ultracode'; on: boolean }
   /**
    * The model, effort and permission mode the agent reports (Claude statusLine `model.id` / `effort.level`, SessionStart
    * `model`, `permission_mode` on prompt and stop hooks; Codex `model`), for the phone's 会话设置 (PRD F22 v1.144). Only
