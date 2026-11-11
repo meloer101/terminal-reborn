@@ -14,8 +14,13 @@ type Rec = Record<string, unknown>
 const isRec = (value: unknown): value is Rec => typeof value === 'object' && value !== null && !Array.isArray(value)
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
 
-/** A journal holds every agent's result; the snapshot every row. Read whole, up to this much. */
+/** The snapshot holds every row: read whole, up to this much. */
 const MAX_BYTES = 8 * 1024 * 1024
+/**
+ * The journal holds every agent's result and only grows: it is read on from where the last read stopped, this much at a
+ * time, and only each line's few fields are kept.
+ */
+const JOURNAL_CHUNK = 1024 * 1024
 /** Hooks of a running run's agents come many a second: its journal is read at most this often. */
 const READ_EVERY_MS = 1_500
 /** A snapshot not written yet when the run's end is heard: read again this many times, this far apart. */
@@ -26,6 +31,8 @@ const MAX_RUNS = 10
 
 export interface WorkflowFiles {
   read(path: string, maxBytes: number): Promise<string | null>
+  /** Up to `maxBytes` from byte `offset`; null when the file cannot be read. */
+  readFrom(path: string, offset: number, maxBytes: number): Promise<Buffer | null>
   list(dir: string): Promise<string[]>
 }
 
@@ -38,6 +45,19 @@ export const nodeWorkflowFiles: WorkflowFiles = {
       const buffer = Buffer.alloc(Math.min(size, maxBytes))
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
       return buffer.subarray(0, bytesRead).toString('utf8')
+    } catch {
+      return null
+    } finally {
+      await handle?.close().catch(() => undefined)
+    }
+  },
+  async readFrom(path, offset, maxBytes) {
+    let handle: Awaited<ReturnType<typeof open>> | undefined
+    try {
+      handle = await open(path, 'r')
+      const buffer = Buffer.alloc(maxBytes)
+      const { bytesRead } = await handle.read(buffer, 0, maxBytes, offset)
+      return buffer.subarray(0, bytesRead)
     } catch {
       return null
     } finally {
@@ -61,6 +81,23 @@ interface Run {
   readAt: number
   /** Snapshot re-reads left once the end was heard. */
   endRetries: number
+  /** The journal: bytes read so far (whole lines), and its lines cut to the fields the run needs. */
+  offset: number
+  lines: string[]
+  /** A line longer than a chunk is being skipped (one agent's huge result): drop up to its end. */
+  skipping: boolean
+}
+
+/** A journal line with only what `runFromJournal` reads (a result's payload can be megabytes). */
+function compactLine(line: string): string | null {
+  try {
+    const entry: unknown = JSON.parse(line)
+    if (!isRec(entry) || typeof entry.type !== 'string') return null
+    const { type, key, agentId, label, phase } = entry
+    return JSON.stringify({ type, key, agentId, label, phase })
+  } catch {
+    return null
+  }
 }
 
 interface Tracked {
@@ -144,7 +181,10 @@ export class WorkflowWatcher {
           ended: false,
           reading: false,
           readAt: -Infinity,
-          endRetries: END_RETRIES
+          endRetries: END_RETRIES,
+          offset: 0,
+          lines: [],
+          skipping: false
         })
         this.publish(sessionId, tracked)
       }
@@ -181,7 +221,10 @@ export class WorkflowWatcher {
         ended: false,
         reading: false,
         readAt: -Infinity,
-        endRetries: 0
+        endRetries: 0,
+        offset: 0,
+        lines: [],
+        skipping: false
       }
       tracked.runs.set(runId, entry)
       void this.read(sessionId, tracked, entry)
@@ -204,9 +247,8 @@ export class WorkflowWatcher {
           next = null // being written
         }
       }
-      if (!next) {
-        const journal = await this.files.read(join(base, 'subagents', 'workflows', runId, 'journal.jsonl'), MAX_BYTES)
-        if (journal !== null) next = runFromJournal(journal, { runId, name: entry.run.name, phases: entry.phases })
+      if (!next && (await this.readJournal(join(base, 'subagents', 'workflows', runId, 'journal.jsonl'), entry))) {
+        next = runFromJournal(entry.lines.join('\n'), { runId, name: entry.run.name, phases: entry.phases })
       }
     } finally {
       entry.reading = false
@@ -222,6 +264,35 @@ export class WorkflowWatcher {
       this.schedule(() => {
         if (this.sessions.get(sessionId) === tracked && tracked.runs.get(runId) === entry && !entry.ended && !entry.reading) void this.read(sessionId, tracked, entry)
       }, END_RETRY_MS)
+    }
+  }
+
+  /** Reads the journal on from where it stopped; false when it cannot be read (not there yet). */
+  private async readJournal(path: string, entry: Run): Promise<boolean> {
+    for (;;) {
+      const chunk = await this.files.readFrom(path, entry.offset, JOURNAL_CHUNK)
+      if (!chunk) return false
+      const end = chunk.lastIndexOf(0x0a)
+      if (end < 0) {
+        // No whole line yet: a line being written, or one longer than a chunk (skipped to its end).
+        if (chunk.length === JOURNAL_CHUNK) {
+          entry.offset += chunk.length
+          entry.skipping = true
+          continue
+        }
+        return true
+      }
+      const text = chunk.subarray(0, end).toString('utf8').split('\n')
+      if (entry.skipping) {
+        text.shift()
+        entry.skipping = false
+      }
+      for (const line of text) {
+        const kept = line.trim() ? compactLine(line) : null
+        if (kept) entry.lines.push(kept)
+      }
+      entry.offset += end + 1
+      if (chunk.length < JOURNAL_CHUNK) return true
     }
   }
 

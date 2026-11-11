@@ -22,7 +22,11 @@ function setup(files: Record<string, string>, dirs: Record<string, string[]> = {
   const timers: (() => void)[] = []
   const watcher = new WorkflowWatcher((_id, _agent, runs) => sent.push(runs), {
     dirs: { claudeProjects: [root], codexHome: '/nowhere' },
-    files: { read: async (path) => files[path] ?? null, list: async (dir) => dirs[dir] ?? [] },
+    files: {
+      read: async (path) => files[path] ?? null,
+      readFrom: async (path, offset, max) => (path in files ? Buffer.from(files[path]!).subarray(offset, offset + max) : null),
+      list: async (dir) => dirs[dir] ?? []
+    },
     now: () => now,
     schedule: (fn) => void timers.push(fn),
     skip: (id) => id === 'gui'
@@ -46,7 +50,7 @@ describe('WorkflowWatcher', () => {
     const { sent, hook, settle, tick } = setup(files)
     hook('PostToolUse', launch)
     expect(sent.at(-1)).toMatchObject([{ key: 'wf_abcdef12', toolUseId: 'toolu_1', name: 'auth', status: 'running', agents: [] }])
-    files[`${runDir}/journal.jsonl`] = ['{"type":"launched"}', started('k1', 'a1', '登录', '改写'), started('k2', 'a2', '刷新', '改写')].join('\n')
+    files[`${runDir}/journal.jsonl`] = ['{"type":"launched"}', started('k1', 'a1', '登录', '改写'), started('k2', 'a2', '刷新', '改写'), ''].join('\n')
     tick(2_000)
     hook('PreToolUse', { agent_id: 'a1', agent_type: 'workflow-subagent', tool_name: 'Read' })
     await settle()
@@ -56,10 +60,15 @@ describe('WorkflowWatcher', () => {
     ])
     // Many hooks a second: the journal is read at most every 1.5 s.
     const count = sent.length
-    files[`${runDir}/journal.jsonl`] += '\n{"type":"result","key":"k1","agentId":"a1"}'
+    // A result line carries the agent's whole answer: only its key fields are kept, and only new bytes are read.
+    files[`${runDir}/journal.jsonl`] += `${JSON.stringify({ type: 'result', key: 'k1', agentId: 'a1', result: 'x'.repeat(200_000) })}\n`
     hook('PostToolUse', { agent_id: 'a1', agent_type: 'workflow-subagent', tool_name: 'Read' })
     await settle()
     expect(sent).toHaveLength(count)
+    tick(2_000)
+    hook('PostToolUse', { agent_id: 'a2', agent_type: 'workflow-subagent', tool_name: 'Read' })
+    await settle()
+    expect(sent.at(-1)![0]!.agents.map((a) => a.state)).toEqual(['done', 'running'])
     files[snapshotPath] = JSON.stringify({
       runId: 'wf_abcdef12',
       workflowName: 'auth',
@@ -75,7 +84,7 @@ describe('WorkflowWatcher', () => {
   })
 
   it('reads again a few times when the end is heard before the snapshot is written', async () => {
-    const files: Record<string, string> = { [`${runDir}/journal.jsonl`]: started('k1', 'a1', '登录', '改写') }
+    const files: Record<string, string> = { [`${runDir}/journal.jsonl`]: `${started('k1', 'a1', '登录', '改写')}\n` }
     const { sent, hook, settle, fire } = setup(files)
     hook('PostToolUse', launch)
     hook('Stop')
@@ -88,7 +97,7 @@ describe('WorkflowWatcher', () => {
   })
 
   it('finds a run it missed the launch of from a workflow agent’s hook; skips GUI sessions; clears on a new conversation', async () => {
-    const files = { [`${runDir}/journal.jsonl`]: started('k1', 'a1', '登录', '改写') }
+    const files = { [`${runDir}/journal.jsonl`]: `${started('k1', 'a1', '登录', '改写')}\n` }
     const { sent, hook, settle } = setup(files, { [`${root}/-repo/sess-1/subagents/workflows`]: ['wf_abcdef12', 'junk'] })
     hook('PreToolUse', { agent_id: 'a1', agent_type: 'workflow-subagent' }, 'gui')
     await settle()
