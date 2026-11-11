@@ -27,7 +27,9 @@ printf '%s\\n' "$@" > "$d/call-$$"
 case "$1 $2" in
   "auth status")
     if [ -f "$d/signed-out" ]; then echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1; fi
-    echo "github.com: Logged in"; exit 0 ;;
+    echo "github.com"; echo "  ✓ Logged in to github.com account t (keyring)"
+    [ -f "$d/hosts" ] && while read h; do echo "$h"; echo "  ✓ Logged in to $h account t (keyring)"; done < "$d/hosts"
+    exit 0 ;;
   "pr list")
     cat "$d/pr-list.json" 2>/dev/null || echo '[]'; exit 0 ;;
   "run view")
@@ -100,7 +102,7 @@ let counter = 0
  * main (pushed to a bare remote) and a worktree on `feat` with one commit, not pushed. `github`: the remote's fetch
  * URL names GitHub; `remote: false`: no remote at all.
  */
-function setup(options: { github?: boolean; remote?: boolean } = {}): { root: string; wt: string; bare: string } {
+function setup(options: { github?: boolean; remote?: boolean; url?: string } = {}): { root: string; wt: string; bare: string } {
   const n = ++counter
   const root = join(base, `repo-${n}`)
   const bare = join(base, `bare-${n}.git`)
@@ -110,7 +112,7 @@ function setup(options: { github?: boolean; remote?: boolean } = {}): { root: st
   commit(root, 'a.txt', 'one\ntwo\nthree\n', 'init')
   if (options.remote !== false) {
     if (options.github !== false) {
-      git(root, 'remote', 'add', 'origin', 'https://github.com/acme/widget.git')
+      git(root, 'remote', 'add', 'origin', options.url ?? 'https://github.com/acme/widget.git')
       git(root, 'config', 'remote.origin.pushurl', bare)
       git(root, 'config', 'protocol.https.allow', 'never')
     } else {
@@ -809,6 +811,24 @@ describe('preflight · the chain fields', () => {
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, remoteOnGitHub: true, gh: 'ready' })
     const none = setup({ remote: false })
     expect(await shipPreflight({ root: none.root, worktree: none.wt })).toMatchObject({ ok: true, remote: null, remoteOnGitHub: null })
+  })
+
+  it('does not take a GitLab or Bitbucket remote for GitHub, and never asks gh about it', async () => {
+    for (const url of ['https://gitlab.com/acme/widget.git', 'git@bitbucket.org:acme/widget.git']) {
+      const { root, wt } = setup({ url })
+      git(wt, 'push', '-q', '-u', 'origin', 'feat')
+      expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, remote: 'origin', remoteOnGitHub: false, baseProtected: null, mergeMethods: null })
+    }
+    expect(calls().filter((call) => call[0] !== 'auth')).toEqual([])
+  })
+
+  it('takes a GitHub Enterprise host gh is logged in to for GitHub, and only that host', async () => {
+    writeGh('hosts', 'ghe.example.com\n')
+    await detectGh(true)
+    const ghe = setup({ url: 'git@ghe.example.com:acme/widget.git' })
+    expect(await shipPreflight({ root: ghe.root, worktree: ghe.wt })).toMatchObject({ ok: true, remoteOnGitHub: true })
+    const other = setup({ url: 'https://git.example.org/acme/widget.git' })
+    expect(await shipPreflight({ root: other.root, worktree: other.wt })).toMatchObject({ ok: true, remoteOnGitHub: false })
   })
 
   it('counts a branch whose commits reached the base by fast-forward as merged, and a branch with none of its own as not', async () => {

@@ -25,6 +25,8 @@ export type GitFailureKind =
   | 'auth'
   /** The commit could not be signed (the key needs its passphrase, gpg is missing). */
   | 'signing'
+  /** git does not know who the committer is (no user.name / user.email). */
+  | 'identity'
   | 'no-remote'
   /** gh: the remote is not on a GitHub host it knows. */
   | 'not-github'
@@ -95,12 +97,14 @@ const NAMED_HOOK = new RegExp(`\\b(pre-push|${COMMIT_HOOKS}) hook\\b(?! declined
 /** The pre-commit framework's report of a failed hook. */
 const PRE_COMMIT_FRAMEWORK = /^- hook id: /m
 
-const PROTECTED = /GH006|GH013|protected branch|repository rule violations|not allowed to push code to protected branch/i
+const PROTECTED =
+  /GH006|GH013|protected branch|branch protection|repository rule violations|Changes must be made through a pull request|required status checks?/i
 const PROTECTED_REF = /(?:Protected branch update failed for|Repository rule violations found for) refs\/heads\/([^\s.]+(?:\.[^\s.]+)*)/
 const REJECTED = /^\s*! \[rejected\]\s+\S+ -> (\S+) \((?:non-fast-forward|fetch first)\)/m
 const NON_FF = /\((?:non-fast-forward|fetch first)\)|Updates were rejected because the (?:tip of your current branch is behind|remote contains work)/
 const DIVERGED = /Not possible to fast-forward|Diverging branches can't be fast-forwarded|have diverged/i
 const PRE_RECEIVE = /pre-receive hook declined/
+const IDENTITY = /Please tell me who you are|empty ident name|unable to auto-detect email address/i
 const SIGNING = /gpg failed to sign|signing failed|error: Load key|incorrect passphrase|cannot run gpg|No secret key|failed to write commit object/i
 const AUTH =
   /Authentication failed|Permission denied \(publickey|could not read (?:Username|Password)|terminal prompts disabled|Host key verification failed|Repository not found|The requested URL returned error: 40[13]|Permission to \S+ denied/i
@@ -146,10 +150,13 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
   if (hook === 'pre-push') return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
   if (hook && new RegExp(`^(?:${COMMIT_HOOKS})$`).test(hook)) return fail('commit-hook', `${hook} hook 没通过`, 'handoff')
 
+  if (COMMIT_STEPS.has(step) && IDENTITY.test(text)) return fail('identity', 'git 还不知道提交者是谁：在终端里设置 user.name 和 user.email', null)
+
   // The same key words mean a commit that could not be signed, or a push whose SSH key wants its passphrase.
   if (COMMIT_STEPS.has(step) && SIGNING.test(text)) return fail('signing', '提交签名需要口令', null)
 
-  if (PROTECTED.test(text)) return fail('protected-branch', `${PROTECTED_REF.exec(text)?.[1] ?? context.base} 受保护`, 'create-pr')
+  // 改为创建 PR only answers a refused push; a PR that GitHub will not merge is already the way round the protection.
+  if (PROTECTED.test(text)) return fail('protected-branch', `${PROTECTED_REF.exec(text)?.[1] ?? context.base} 受保护`, step === 'push' ? 'create-pr' : null)
   if (NON_FF.test(text)) {
     const ref = REJECTED.exec(text)?.[1]
     return fail('non-fast-forward', CHAIN_TEXT.remoteAhead, ref === context.base ? 'sync' : 'pull')
@@ -169,6 +176,10 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
     return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
   }
 
+  // A commit that failed for no reason git names is most often a repository hook that does not name itself: the agent
+  // can read the output and fix what the hook wants.
+  const next: GitFailureNext = step === 'commit' ? 'handoff' : null
   const line = summaryLine(tail)
-  return fail('unknown', line ? `${STEP_WORD[step]}失败：${line}` : `${STEP_WORD[step]}失败`, null)
+  const word = /[A-Za-z0-9]$/.test(STEP_WORD[step]) ? `${STEP_WORD[step]} ` : STEP_WORD[step]
+  return fail('unknown', line ? `${word}失败：${line}` : `${word}失败`, next)
 }

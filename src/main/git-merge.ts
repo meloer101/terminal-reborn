@@ -29,6 +29,7 @@ import {
 import { hadOwnCommits, mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
 import { gitAvailable } from './git-graph'
+import { remoteFor } from './git/remote'
 import { lastLines, pushEnv, runGit } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
@@ -213,6 +214,8 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
   const base = parseBaseConfig(baseConfig)[entry.branch] ?? mainBranch
   if (!base || base === entry.branch) return done(isMain ? { kind: 'main' } : { kind: 'no-base' })
   check.base = base
+  // The sheet's push switch: a remote to push to (see remoteFor), not only one called origin.
+  check.hasOrigin = (await remoteFor(realRoot, entry.branch, base)) !== null
 
   const [head, baseHead] = await Promise.all([commitOf(realRoot, `refs/heads/${entry.branch}`), commitOf(realRoot, `refs/heads/${base}`)])
   if (!baseHead) return done({ kind: 'base-missing', base })
@@ -324,7 +327,7 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
     .map((subject) => ({ subject, body: subject }))
 }
 
-/** Pushes the local base to `remote` (origin unless the caller knows better); '' when it went through, else what git
+/** Pushes the local base to `remote`; '' when it went through, else what git
  *  printed (its whole stderr, so the failure can be classified). */
 export async function pushBase(realRoot: string, base: string, remote = 'origin'): Promise<string> {
   const ran = await runGit(realRoot, ['push', '--quiet', '--', remote, `refs/heads/${base}:refs/heads/${base}`], {
@@ -370,8 +373,8 @@ const merging = new Set<string>()
 
 /**
  * Merges the worktree's branch into its base with the chosen method (PRD F4). Never leaves a half-done merge. `remote`
- * (main's callers, never the renderer): where `push` sends the base — default origin when the repository has one; null
- * pushes nowhere.
+ * (main's callers, never the renderer): where `push` sends the base — default `remoteFor` (the branch's upstream remote,
+ * origin, the base's, the only one); null pushes nowhere.
  */
 export async function mergeWorktree(raw: unknown, options: { remote?: string | null } = {}): Promise<MergeResult> {
   const request = parseMergeRequest(raw)
@@ -423,7 +426,7 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
       throw error
     }
     if (request.method === 'squash') await moveBranchTo(worktreePath, check.branch, check.head, commit)
-    const remote = options.remote !== undefined ? options.remote : check.hasOrigin ? 'origin' : null
+    const remote = options.remote !== undefined ? options.remote : request.push ? await remoteFor(realRoot, check.branch, check.base) : null
     const push = request.push && remote ? await pushBase(realRoot, check.base, remote) : null
     return { ok: true, commit, push }
   } catch (error) {

@@ -322,6 +322,38 @@ describe('mergeWorktree', () => {
     expect(git(remote, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
   })
 
+  it('pushes the base to the repository\'s only remote when it is not called origin', async () => {
+    const { root, wt } = setup()
+    const remote = join(base, `remote-${counter}.git`)
+    git(base, 'init', '-q', '--bare', remote)
+    git(root, 'remote', 'add', 'upstream', remote)
+    git(root, 'push', '-q', 'upstream', 'main')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    // hasOrigin (the sheet's push switch) means "has a remote to push to", whatever it is called.
+    expect(await mergePrecheck(root, wt)).toMatchObject({ hasOrigin: true })
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: '' })
+    expect(git(remote, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+  })
+
+  it('pushes to the branch\'s own upstream remote when the repository has several and none is origin', async () => {
+    const { root, wt } = setup()
+    const mine = join(base, `mine-${counter}.git`)
+    const other = join(base, `other-${counter}.git`)
+    git(base, 'init', '-q', '--bare', mine)
+    git(base, 'init', '-q', '--bare', other)
+    git(root, 'remote', 'add', 'fork', mine)
+    git(root, 'remote', 'add', 'upstream', other)
+    git(root, 'push', '-q', 'fork', 'main')
+    git(root, 'push', '-q', 'upstream', 'main')
+    git(wt, 'push', '-q', '-u', 'fork', 'feat')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: '' })
+    expect(git(mine, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+    expect(git(other, 'rev-parse', 'main').trim()).not.toBe(sha(root, 'main'))
+  })
+
   it('rejects malformed requests', async () => {
     const { root, wt } = setup()
     expect(await mergeWorktree({ root, worktree: wt, method: 'octopus', head: 'x', baseHead: 'y', push: false })).toMatchObject({ ok: false, reason: 'invalid' })

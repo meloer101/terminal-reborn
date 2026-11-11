@@ -119,6 +119,8 @@ export async function gh(args: string[], options: { cwd?: string; tail?: number;
 
 // ── is gh usable ────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** The hosts gh is logged in to (`gh auth status`), lower case: a GitHub Enterprise host is on GitHub only while gh knows it. */
+let ghHosts: ReadonlySet<string> = new Set()
 let ghState: GhState = 'checking'
 let ghBin: string | null = null
 let ghCheckedAt = 0
@@ -139,6 +141,7 @@ export function detectGh(force = false): Promise<GhState> {
   if (!force && (ghState === 'ready' || (ghState !== 'checking' && Date.now() - ghCheckedAt < GH_RECHECK_MS))) return Promise.resolve(ghState)
   ghProbe = (async () => {
     let next: GhState
+    let hosts: ReadonlySet<string> = new Set()
     if (process.env.TR_GH === 'off') {
       ghBin = null
       next = 'missing'
@@ -148,10 +151,13 @@ export function detectGh(force = false): Promise<GhState> {
       else {
         // `--active` (gh ≥ 2.40) ignores other accounts' trouble; an older gh rejects the flag, which reads as ready.
         const ran = await gh(['auth', 'status', '--active'], { timeout: 15_000 })
-        next = ran.code !== 0 && isSignedOut(`${ran.stdout}\n${ran.stderr}`) ? 'signed-out' : 'ready'
+        const printed = `${ran.stdout}\n${ran.stderr}`
+        next = ran.code !== 0 && isSignedOut(printed) ? 'signed-out' : 'ready'
+        hosts = new Set([...printed.matchAll(/Logged in to (\S+) account/g)].map((m) => m[1]!.toLowerCase()))
       }
     }
     ghCheckedAt = Date.now()
+    ghHosts = hosts
     const changed = next !== ghState
     ghState = next
     if (changed) broadcastGh(next)
@@ -211,13 +217,22 @@ export async function branchInfo(target: PrTarget): Promise<BranchInfo | null> {
   return { cwd, branch, base, remote: tracked?.remote ?? null, remoteRef: tracked?.remoteRef ?? null }
 }
 
+/** `url` as a GitHub repository: github.com or a host gh is logged in to; null for GitLab, Bitbucket and the like. */
+export async function gitHubRepoFromUrl(url: string): Promise<GitHubRepo | null> {
+  const repo = repoFromRemoteUrl(url.trim())
+  if (!repo) return null
+  if (repo.host === 'github.com') return repo
+  await detectGh()
+  return ghHosts.has(repo.host) ? repo : null
+}
+
 /** Where the PR lives (gh's set-default remote, else the branch's remote) and, in a fork workflow, the head's owner. */
 export async function prRepoFor(cwd: string, remote: string): Promise<{ repo: GitHubRepo; headOwner: string | null } | null> {
   const [url, resolved] = await Promise.all([gitOut(cwd, ['remote', 'get-url', '--', remote]), gitOut(cwd, ['config', '--get-regexp', '^remote\\..*\\.gh-resolved$'])])
-  const head = repoFromRemoteUrl(url.trim())
+  const head = await gitHubRepoFromUrl(url)
   if (!head) return null
   const baseRemote = ghResolvedRemote(resolved)
-  const repo = baseRemote && baseRemote !== remote ? repoFromRemoteUrl((await gitOut(cwd, ['remote', 'get-url', '--', baseRemote])).trim()) : head
+  const repo = baseRemote && baseRemote !== remote ? await gitHubRepoFromUrl(await gitOut(cwd, ['remote', 'get-url', '--', baseRemote])) : head
   if (!repo) return null
   const same = repo.host === head.host && repo.owner.toLowerCase() === head.owner.toLowerCase() && repo.name.toLowerCase() === head.name.toLowerCase()
   return { repo, headOwner: same ? null : head.owner }
@@ -952,7 +967,10 @@ export async function cancelMerge(raw: unknown): Promise<PrWriteResult> {
   const pr = entry.status?.pr
   if (!pr || !entry.repo) return writeBlocked('这个分支没有打开的 PR')
   const ran = await gh(['pr', 'merge', String(pr.number), `--repo=${repoArg(entry.repo)}`, '--disable-auto'])
-  if (ran.code !== 0) return writeFailed('没能取消自动合并', ran, 'pr-merge', { base: 'main', remote: null })
+  if (ran.code !== 0) {
+    const info = await branchInfo(entry.target)
+    return writeFailed('没能取消自动合并', ran, 'pr-merge', { base: info?.base ?? '基线', remote: info?.remote ?? null })
+  }
   await checkEntry(entry)
   return { ok: true, outcome: 'cancelled', message: `已取消 PR #${pr.number} 的自动合并` }
 }

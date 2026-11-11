@@ -19,7 +19,6 @@ import {
   parsePrTarget,
   parseRepoMergeMethods,
   REPO_MERGE_QUERY,
-  repoFromRemoteUrl,
   summarizeChecks,
   type ChecksSummary,
   type GitHubRepo,
@@ -44,8 +43,9 @@ import { CHAIN_TEXT } from '@shared/ship-chain'
 import { HANDOFF_FILES } from '@shared/ship-handoff'
 import { parseDiffSinceRequest, parseHandoffRequest, parsePushBaseRequest, parseShipMainRequest, parseShipOperationRequest } from '@shared/ship-requests'
 import { baseMergeCheck, mergePrecheck, mergeTreeConflicts, mergeWorktree, pushBase } from './git-merge'
+import { remoteFor, remotesOf } from './git/remote'
 import { git, gitEnv, gitOut, lastLines, NO_OPTIONAL_LOCKS, pushEnv, refExists, searchPath, type Ran } from './git/run'
-import { branchInfo, catchUpBase, commitWorktree, detectGh, failedLogs, gh, ghPausedUntil, openPrNumber, pauseGhForRateLimit, prRepoFor, uncommittedFiles } from './pull-requests'
+import { branchInfo, catchUpBase, commitWorktree, detectGh, failedLogs, gh, ghPausedUntil, gitHubRepoFromUrl, openPrNumber, pauseGhForRateLimit, prRepoFor, uncommittedFiles } from './pull-requests'
 import { isProjectRoot } from './workspace-store'
 
 const FETCH_TIMEOUT_MS = 60_000
@@ -79,23 +79,6 @@ async function realOrSelf(path: string): Promise<string> {
 async function countCommits(cwd: string, range: string): Promise<number | null> {
   const ran = await git(cwd, ['rev-list', '--count', range, '--'])
   return ran.code === 0 ? Number(ran.stdout.trim()) || 0 : null
-}
-
-async function remotesOf(cwd: string): Promise<string[]> {
-  return (await gitOut(cwd, ['remote'])).split('\n').map((r) => r.trim()).filter(Boolean)
-}
-
-/**
- * The remote the chain pushes to and fetches from: the branch's upstream remote, else `origin`, else the base's
- * upstream remote, else the repository's only remote; null without one.
- */
-async function remoteFor(cwd: string, branch: string, base: string | null = null): Promise<string | null> {
-  const remoteOf = (ref: string): Promise<string> => gitOut(cwd, ['for-each-ref', '--format=%(upstream:remotename)', ref]).then((out) => out.trim())
-  const [remotes, own, baseOwn] = await Promise.all([remotesOf(cwd), remoteOf(`refs/heads/${branch}`), base ? remoteOf(`refs/heads/${base}`) : Promise.resolve('')])
-  if (own && own !== '.' && remotes.includes(own)) return own
-  if (remotes.includes('origin')) return 'origin'
-  if (baseOwn && baseOwn !== '.' && remotes.includes(baseOwn)) return baseOwn
-  return remotes.length === 1 ? remotes[0]! : null
 }
 
 /**
@@ -872,7 +855,7 @@ async function startBaseCi(input: { root: string; worktree: string; cwd: string;
   const old = watches.get(input.worktree)
   if (old?.timer) clearTimeout(old.timer)
   watches.delete(input.worktree)
-  const repo = repoFromRemoteUrl((await gitOut(input.cwd, ['remote', 'get-url', '--', input.remote])).trim())
+  const repo = await gitHubRepoFromUrl(await gitOut(input.cwd, ['remote', 'get-url', '--', input.remote]))
   if (!repo) return
   const { cwd: _cwd, remote: _remote, ...rest } = input
   const watch: Watch = { ...rest, repo, startedAt: Date.now(), lastPoll: 0, failures: 0, answered: false, timer: null, inFlight: null, ci: null }
@@ -935,7 +918,7 @@ export async function baseFailing(raw: unknown): Promise<string[] | null> {
       const upstream = await baseUpstream(info.cwd, info.base)
       const remote = upstream?.remote ?? ((await remotesOf(info.cwd)).includes('origin') ? 'origin' : null)
       if (!remote) return null
-      repo = repoFromRemoteUrl((await gitOut(info.cwd, ['remote', 'get-url', '--', remote])).trim())
+      repo = await gitHubRepoFromUrl(await gitOut(info.cwd, ['remote', 'get-url', '--', remote]))
       sha = (await gitOut(info.cwd, ['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}/${info.base}`])).trim()
     }
     if (!repo || !isSha(sha)) return null

@@ -262,6 +262,57 @@ describe('classifyGitFailure', () => {
     expect(classifyGitFailure('fetch', '', ctx)).toMatchObject({ kind: 'unknown', message: '获取远程失败', tail: '' })
     expect(classifyGitFailure('commit', 'nothing added', ctx).message).toBe('提交失败：nothing added')
   })
+
+  it('puts a space between a Latin step word and 失败', () => {
+    expect(classifyGitFailure('pr-merge', 'GraphQL: odd', ctx).message).toBe('合并 PR 失败：GraphQL: odd')
+    expect(classifyGitFailure('pr-create', 'error: odd', ctx).message).toBe('创建 PR 失败：odd')
+    expect(classifyGitFailure('rebase', 'error: odd', ctx).message).toBe('rebase 失败：odd')
+    expect(classifyGitFailure('pr-merge', '', ctx).message).toBe('合并 PR 失败')
+    expect(classifyGitFailure('push', 'error: odd', ctx).message).toBe('推送失败：odd')
+  })
+
+  it.each([
+    'remote: error: Changes must be made through a pull request.',
+    ' ! [remote rejected] main -> main (protected branch hook declined)',
+    'remote: error: Required status check "test" is expected.',
+    'remote: error: required status checks are failing',
+    'remote: error: push blocked by branch protection rules',
+    'remote: error: GH006: Protected branch update failed for refs/heads/main.',
+    'remote: error: GH013: Repository rule violations found for refs/heads/main.',
+    'remote: GitLab: You are not allowed to push code to protected branches on this project.'
+  ])('reads %j as a protected branch', (output) => {
+    expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'protected-branch', next: 'create-pr' })
+  })
+
+  it('offers 改为创建 PR only for a refused push, not for a PR GitHub will not merge', () => {
+    const output = 'GraphQL: Required status check "test" is expected. (mergePullRequest)'
+    expect(classifyGitFailure('pr-merge', output, ctx)).toMatchObject({ kind: 'protected-branch', next: null })
+  })
+
+  it('keeps an unnamed failure at the commit step unknown, with the output handed to the agent', () => {
+    expect(classifyGitFailure('commit', 'error: odd hook output', ctx)).toMatchObject({ kind: 'unknown', next: 'handoff', tail: 'error: odd hook output' })
+    expect(classifyGitFailure('commit', '', ctx)).toMatchObject({ kind: 'unknown', next: 'handoff' })
+    for (const step of ['push', 'pull', 'merge', 'rebase', 'pr-create', 'pr-merge', 'fetch', 'pr-status'] as const) {
+      expect(classifyGitFailure(step, 'error: odd', ctx)).toMatchObject({ kind: 'unknown', next: null })
+    }
+  })
+
+  it('says when git does not know who the committer is', () => {
+    const message = 'git 还不知道提交者是谁：在终端里设置 user.name 和 user.email'
+    const tell = `Author identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+fatal: unable to auto-detect email address (got 'm@host.(none)')`
+    expect(classifyGitFailure('commit', tell, ctx)).toEqual({ kind: 'identity', message, next: null, tail: tell })
+    expect(classifyGitFailure('commit', 'fatal: empty ident name (for <m@host>) not allowed', ctx)).toMatchObject({ kind: 'identity', message, next: null })
+    expect(classifyGitFailure('merge', tell, ctx).kind).toBe('identity')
+  })
 })
 
 describe('failureTail', () => {

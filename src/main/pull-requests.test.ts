@@ -22,7 +22,9 @@ printf '%s\\n' "---" "$@" >> "$d/calls"
 case "$1 $2" in
   "auth status")
     if [ -f "$d/signed-out" ]; then echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1; fi
-    echo "github.com: Logged in"; exit 0 ;;
+    echo "github.com"; echo "  ✓ Logged in to github.com account t (keyring)"
+    [ -f "$d/hosts" ] && while read h; do echo "$h"; echo "  ✓ Logged in to $h account t (keyring)"; done < "$d/hosts"
+    exit 0 ;;
   "pr list")
     if [ -f "$d/rate-limit" ]; then echo "GraphQL: API rate limit exceeded for user ID 1." >&2; exit 1; fi
     if [ -f "$d/list-fail" ]; then cat "$d/list-fail" >&2; exit 1; fi
@@ -81,7 +83,7 @@ const commit = (cwd: string, file: string, text: string, message: string) => {
 
 let counter = 0
 /** main (pushed) and a worktree on `feat` with two commits, not pushed. */
-function setup(): { root: string; wt: string; bare: string } {
+function setup(url = 'https://github.com/acme/widget.git'): { root: string; wt: string; bare: string } {
   const n = ++counter
   const root = join(base, `repo-${n}`)
   const bare = join(base, `bare-${n}.git`)
@@ -89,7 +91,7 @@ function setup(): { root: string; wt: string; bare: string } {
   git(base, 'init', '-q', '--bare', '-b', 'main', bare)
   git(root, 'init', '-q', '-b', 'main')
   commit(root, 'a.txt', 'a\n', 'init')
-  git(root, 'remote', 'add', 'origin', 'https://github.com/acme/widget.git')
+  git(root, 'remote', 'add', 'origin', url)
   git(root, 'config', 'remote.origin.pushurl', bare)
   git(root, 'push', '-q', '-u', 'origin', 'main')
   roots.add(root)
@@ -187,7 +189,7 @@ function pushedWithPr(details: Partial<Parameters<typeof detailsJson>[0]> = {}) 
 }
 
 beforeEach(() => {
-  for (const name of ['calls', 'signed-out', 'rate-limit', 'list-fail', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail'])
+  for (const name of ['calls', 'signed-out', 'rate-limit', 'list-fail', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail', 'hosts'])
     rmSync(join(ghDir, name), { force: true })
   for (const name of readdirSync(ghDir)) if (name.startsWith('input-')) rmSync(join(ghDir, name), { force: true })
   confirmAnswer.mockReset()
@@ -239,6 +241,32 @@ describe('status', () => {
     await checkWorktree(wt)
     expect(w.sent).toHaveLength(1)
     expect(statusesFor(w)).toHaveLength(1)
+    unwatch(w)
+  })
+
+  it('does not poll a GitLab remote through gh, and refuses to create a PR there', async () => {
+    const { root, wt } = setup('https://gitlab.com/acme/widget.git')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    await detectGh(true)
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ branch: 'feat', pr: null })
+    expect(await createPullRequest({ root, worktree: wt, title: 't' })).toMatchObject({ ok: false, reason: 'blocked', message: '远程仓库 origin 不在 GitHub 上' })
+    expect(ghCalls('pr list')).toHaveLength(0)
+    expect(ghCalls('pr create')).toHaveLength(0)
+    unwatch(w)
+  })
+
+  it('polls a GitHub Enterprise host gh is logged in to, with that host in --repo', async () => {
+    writeFileSync(join(ghDir, 'hosts'), 'ghe.example.com\n')
+    await detectGh(true)
+    const { root, wt } = setup('git@ghe.example.com:acme/widget.git')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    writeFileSync(join(ghDir, 'pr-list.json'), prJson())
+    const w = watcher()
+    watchTargets(w, [{ root, worktree: wt }])
+    expect(await checkWorktree(wt)).toMatchObject({ pr: { number: 7 } })
+    expect(ghCalls('pr list')[0]).toContain('--repo=ghe.example.com/acme/widget')
     unwatch(w)
   })
 
@@ -417,6 +445,16 @@ describe('合并 PR (PRD F16 v1.63)', () => {
     unwatch(w)
   })
 
+  it('classifies a failed auto-merge cancel with the worktree\'s real base', async () => {
+    const { root, wt, w } = pushedWithPr({ autoMergeAllowed: true })
+    git(root, 'branch', 'release', 'main')
+    git(root, 'config', 'branch.feat.base', 'release')
+    await checkWorktree(wt)
+    writeFileSync(join(ghDir, 'merge-fail'), 'remote: Changes must be made through a pull request.')
+    expect(await cancelMerge({ root, worktree: wt })).toMatchObject({ ok: false, failure: { kind: 'protected-branch', message: 'release 受保护' } })
+    unwatch(w)
+  })
+
   it('words what GitHub said when it does not merge, classified', async () => {
     const { root, wt, w } = pushedWithPr()
     writeFileSync(join(ghDir, 'merge-fail'), 'GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)')
@@ -424,7 +462,7 @@ describe('合并 PR (PRD F16 v1.63)', () => {
       ok: false,
       reason: 'failed',
       message: 'GitHub 没有合并：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)',
-      failure: { kind: 'unknown', message: '合并 PR失败：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)' }
+      failure: { kind: 'unknown', message: '合并 PR 失败：GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)' }
     })
     writeFileSync(join(ghDir, 'merge-fail'), 'error connecting to api.github.com')
     expect(await mergePullRequest({ root, worktree: wt, method: 'squash', when: 'now', deleteRemoteBranch: false })).toMatchObject({
