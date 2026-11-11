@@ -115,7 +115,6 @@ export interface HeatDay {
 export interface Heatmap {
   /** 53 columns × 7 rows (Monday first), oldest first; the last column ends on today's week (days after today omitted). */
   days: HeatDay[]
-  starts: { agent: StatsAgent; at: number }[]
   longestStreak: number
   busiest: { day: number; tokens: number } | null
 }
@@ -343,11 +342,7 @@ export function heatmap(data: UsageDataset, now: number): Heatmap {
     h.level = Math.max(1, Math.ceil((atOrBelow(h.tokens) / sorted.length) * 4)) as 1 | 2 | 3 | 4
     if (!busiest || h.tokens > busiest.tokens) busiest = { day: h.day, tokens: h.tokens }
   }
-  const starts = STATS_AGENTS.flatMap((agent) => {
-    const at = data.firstAt[agent]
-    return at !== undefined && at >= first ? [{ agent, at }] : []
-  }).sort((a, b) => a.at - b.at)
-  return { days, starts, longestStreak: longestRun(totals, Math.max(first, recordFrom === Infinity ? today + DAY : recordFrom), today), busiest }
+  return { days, longestStreak: longestRun(totals, Math.max(first, recordFrom === Infinity ? today + DAY : recordFrom), today), busiest }
 }
 
 /** `4.82 亿` / `3,650 万` / `8,200`, split so the number and the unit can be set apart. */

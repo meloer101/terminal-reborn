@@ -161,7 +161,8 @@ describe('GuiHost · Claude stream-json', () => {
     await until(() => texts(stateOf(h, 'c3')).includes('text:Hello: first') && !stateOf(h, 'c3').busy)
     expect(await h.host.setConfig('c3', 'model', 'haiku')).toBe(true)
     expect(await h.host.setConfig('c3', 'model', 'gpt')).toBe(false)
-    expect(stateOf(h, 'c3').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=haiku', 'permission=ask', 'plan=off'])
+    // The fake says ultracode can be on (get_settings applied.ultracodeAvailable, PRD F25): its switch is offered, off.
+    expect(stateOf(h, 'c3').config.map((c) => `${c.id}=${c.current}`)).toEqual(['model=haiku', 'permission=ask', 'plan=off', 'ultracode=off'])
 
     await h.host.send('c3', { text: 'look', attachments: ['/tmp/shot.png', '/tmp/notes.md'] })
     await until(() => texts(stateOf(h, 'c3')).some((t) => t.startsWith('text:Hello: look')) && !stateOf(h, 'c3').busy)

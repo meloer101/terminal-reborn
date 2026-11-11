@@ -6,6 +6,7 @@ import type { AgentEvent } from './agent-events'
 import type { AgentMarker } from './agent-launch'
 import { blockedAction, blockedReasonOf, readScreen, type BlockedReason } from './startup-screen'
 import { toolCallKey } from './tool-call'
+import { isLiveRun, workflowLine } from './workflow-run'
 import type { AgentKind, AgentPhase, SessionStatus } from './types'
 
 /**
@@ -140,6 +141,14 @@ export interface SessionState {
    * A busy frame from before the dialog, parsed late, comes before this is set and is ignored.
    */
   dialogSeen?: boolean
+  /**
+   * The main turn ended but a Claude workflow run goes on behind it (PRD F25): what the session row says while it does
+   * (「workflow · 改写 2 / 6」). The session stays `running` — no idle title, footer or idle heal settles it — until the
+   * runs end (a `workflows` event) or a new turn starts.
+   */
+  background?: string
+  /** The latest live workflow run's line from the last `workflows` list (whether or not a turn ran): what Stop shows. */
+  runLine?: string
 }
 
 export function initialState(
@@ -262,6 +271,7 @@ function withAsks(state: SessionState, asks: Ask[]): SessionState {
  * idle, or what a finished turn left underneath its asks (unread reply, error).
  */
 function settledIdle(state: SessionState): SessionState {
+  if (state.background !== undefined) return { ...state, status: 'running', currentAction: state.background, toolAction: undefined, asks: NO_ASKS, under: undefined }
   const under = state.status === 'needs_you' ? state.under : undefined
   const status: SessionStatus = under && (under.status === 'done_unread' || under.status === 'error') ? under.status : 'idle'
   return { ...state, status, currentAction: status === 'error' ? under?.action : undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
@@ -288,10 +298,11 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         : touched
 
     case 'prompt-submit': {
-      // A new turn: a dialog of the main thread cannot be up while a prompt is sent. A subagent's still may be.
+      // A new turn: a dialog of the main thread cannot be up while a prompt is sent. A subagent's still may be. A
+      // workflow behind the last turn is this turn's to report again at its Stop.
       const asks = state.asks.filter((a) => a.agent !== '')
-      if (asks.length === 0) return { ...running(state, now, undefined), lastReply: undefined }
-      return { ...touched, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running' }, toolAction: undefined, lastReply: undefined }
+      if (asks.length === 0) return { ...running(state, now, undefined), lastReply: undefined, background: undefined }
+      return { ...touched, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running' }, toolAction: undefined, lastReply: undefined, background: undefined }
     }
 
     case 'tool-start': {
@@ -340,11 +351,37 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
 
     case 'stop': {
       const finished = { ...touched, currentAction: undefined, toolAction: undefined, lastReply: replyLine(event.message), finishedAt: now }
+      // A workflow run goes on behind the ended turn (PRD F25): still running until it ends.
+      if (event.workflows) {
+        const background = state.background ?? state.runLine ?? 'workflow'
+        const asks = state.asks.filter((a) => a.agent !== '')
+        if (asks.length > 0) return { ...finished, background, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status: 'running', action: background } }
+        return { ...finished, background, status: 'running', currentAction: background, asks: NO_ASKS, under: undefined }
+      }
       const status: SessionStatus = state.viewing ? 'idle' : 'done_unread'
       // A background subagent may still wait on the user after the main turn ended.
       const asks = state.asks.filter((a) => a.agent !== '')
-      if (asks.length > 0) return { ...finished, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status } }
-      return { ...finished, status, asks: NO_ASKS, under: undefined }
+      if (asks.length > 0) return { ...finished, status: 'needs_you', asks, currentAction: askLabel(asks), under: { status }, background: undefined }
+      return { ...finished, status, asks: NO_ASKS, under: undefined, background: undefined }
+    }
+
+    case 'workflows': {
+      const live = event.runs.filter(isLiveRun)
+      const runLine = live.length > 0 ? workflowLine(live[live.length - 1]!, now) : undefined
+      if (state.background === undefined) return runLine === state.runLine ? state : { ...state, runLine }
+      const base: SessionState = { ...state, runLine }
+      if (runLine !== undefined) {
+        if (runLine === state.background) return base
+        if (state.status === 'running') return { ...base, background: runLine, currentAction: runLine }
+        if (state.status === 'needs_you' && state.under?.status === 'running') return { ...base, background: runLine, under: { status: 'running', action: runLine } }
+        return { ...base, background: runLine }
+      }
+      // The last run ended: the turn's work is done. Claude also wakes the main thread to read it (UserPromptSubmit
+      // source system), which starts a new turn whatever came first.
+      const status: SessionStatus = state.viewing ? 'idle' : 'done_unread'
+      if (state.status === 'running') return { ...base, background: undefined, status, currentAction: undefined, toolAction: undefined, finishedAt: now, lastActivityAt: now }
+      if (state.status === 'needs_you') return { ...base, background: undefined, under: { status } }
+      return { ...base, background: undefined }
     }
 
     case 'stop-failure': {
@@ -357,7 +394,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
     case 'session-end':
       // /clear and /resume end the old conversation and start another a moment later (SessionStart revives it).
       if (event.reason === 'clear' || event.reason === 'resume') {
-        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
+        return { ...touched, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined, background: undefined }
       }
       // Only the PTY exiting is final: a SessionStart after this (a new agent in the same shell) revives the session.
       return {
@@ -367,6 +404,7 @@ function reduceEvent(state: SessionState, event: AgentEvent, now: number): Sessi
         toolAction: undefined,
         asks: NO_ASKS,
         under: undefined,
+        background: undefined,
         ...(state.phase ? { phase: 'exited' as const, phaseSince: now, blocked: undefined } : {})
       }
 
@@ -728,7 +766,8 @@ function reduceSignal(state: SessionState, signal: Signal, now: number): Session
         if (healed !== state) return healed
       }
       // Only Claude's `✳` title is known to mean idle; another agent's plain title may stay up through a long turn.
-      if (state.kind === 'claude' && state.status === 'running' && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
+      // A workflow behind the ended turn keeps it running: its agents' calls do not touch lastEventAt (PRD F25).
+      if (state.kind === 'claude' && state.status === 'running' && state.background === undefined && state.titleIdle && now - state.lastEventAt >= CLAUDE_IDLE_HEAL_MS) {
         return { ...state, status: 'idle', currentAction: undefined, toolAction: undefined, asks: NO_ASKS, under: undefined }
       }
       return state

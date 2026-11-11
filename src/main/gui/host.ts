@@ -9,7 +9,8 @@ import { agentName, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, launchPermissionOf } from '@shared/gui-agents'
 import { sameContext, type ContextUsage } from '@shared/session-meta'
 import { applyGuiEvent, emptyGuiState, GUI_IPC, guiCanEdit, type GuiAnswer, type GuiConfigOption, type GuiEvent, type GuiLaunch, type GuiOpenResult, type GuiPermission, type GuiProtocol, type GuiSendResult, type GuiState } from '@shared/gui-chat'
-import type { ChatItem } from '@shared/transcript-chat'
+import type { ChatItem, KeepImage } from '@shared/transcript-chat'
+import type { WorkflowRun } from '@shared/workflow-run'
 import type { PipeAttach, PipeHandlers, PipeLink } from '../pty/pipes'
 import type { PipeExit } from '../../pty-host/pipe-host'
 import { createAcpDriver } from './acp-driver'
@@ -65,6 +66,8 @@ export interface GuiHostDeps<O extends GuiOwner> {
   /** The process ended or was stopped. */
   ended(sessionId: string, agent: CliAgent): void
   image(path: string): Promise<ImageBlock | null>
+  /** Keeps a message's inline pictures as files (Figma 71A); without it the chat draws none of them. */
+  keepImage?: KeepImage
   clientVersion: string
   /** Events of a session are sent together at most this often (default 16 ms). */
   batchMs?: number
@@ -104,6 +107,8 @@ class GuiSession<O extends GuiOwner> {
   private title: string | undefined
   /** The latest context reading (undefined: none yet); sent again after a replay and to a new owner, as the title is. */
   private context: ContextUsage | null | undefined
+  /** Claude's workflow runs (PRD F25), the latest list; sent again after a replay and to a new owner, as context is. */
+  private workflows: WorkflowRun[] | undefined
 
   constructor(
     readonly launch: GuiLaunch,
@@ -146,6 +151,10 @@ class GuiSession<O extends GuiOwner> {
       fail: (reason) => this.fail(reason),
       title: (raw) => this.named(raw),
       context: (context) => this.measured(context),
+      workflows: (runs) => {
+        this.workflows = runs
+        this.status([{ type: 'workflows', runs }])
+      },
       image: (path) => this.deps.image(path),
       relaunch: (change) => this.onRelaunch(change)
     }
@@ -158,7 +167,8 @@ class GuiSession<O extends GuiOwner> {
       ...(launchPermission ? { launchPermission } : {}),
       ...(resume ? { resume } : {}),
       ...(this.launch.model ? { model: this.launch.model } : {}),
-      ...(answered && answered.length > 0 ? { answered: new Set(answered) } : {})
+      ...(answered && answered.length > 0 ? { answered: new Set(answered) } : {}),
+      ...(this.deps.keepImage ? { keepImage: this.deps.keepImage } : {})
     }
     if (this.protocol === 'claude-stream') return createClaudeDriver(io, options)
     if (this.protocol === 'codex-app-server') return createCodexDriver(io, options)
@@ -277,6 +287,7 @@ class GuiSession<O extends GuiOwner> {
     this.tracker = tracker
     // Claude's hooks carry no context under -p: it comes from here for every protocol.
     if (this.context !== undefined) this.status([{ type: 'context', context: this.context }])
+    if (this.workflows) this.status([{ type: 'workflows', runs: this.workflows }])
     if (!this.synthStatus) return
     const out: AgentEvent[] = []
     if (this.state.busy) {
@@ -418,6 +429,7 @@ class GuiSession<O extends GuiOwner> {
     // A title that came while no window owned the session (reload, window closed) went nowhere: the new owner gets it.
     if (this.title) this.status([{ type: 'agent-title', title: this.title }])
     if (this.context !== undefined) this.status([{ type: 'context', context: this.context }])
+    if (this.workflows) this.status([{ type: 'workflows', runs: this.workflows }])
     return this.snapshot()
   }
 
@@ -473,6 +485,10 @@ class GuiSession<O extends GuiOwner> {
 
   interrupt(): boolean {
     return !this.exited && this.driver.interrupt()
+  }
+
+  async stopTask(taskId: string): Promise<boolean> {
+    return !this.exited && ((await this.driver.stopTask?.(taskId)) ?? false)
   }
 
   setConfig(optionId: string, value: string): Promise<boolean> {
@@ -584,6 +600,10 @@ export class GuiHost<O extends GuiOwner> {
 
   interrupt(sessionId: string): boolean {
     return this.sessions.get(sessionId)?.interrupt() ?? false
+  }
+
+  stopTask(sessionId: string, taskId: string): Promise<boolean> {
+    return this.sessions.get(sessionId)?.stopTask(taskId) ?? Promise.resolve(false)
   }
 
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean> {

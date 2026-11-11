@@ -94,7 +94,7 @@ async function report(group: AttemptGroup, members: readonly Member[]): Promise<
       }
     })
   )
-  const text = attemptReportText({ base: group.base, members: reports })
+  const text = attemptReportText({ base: group.base, ...(group.baseRef ? { baseRef: group.baseRef } : {}), members: reports })
   const exited = parent.phase === 'exited' || parent.status === 'exited'
   const result = exited ? 'failed' : await deliverTo(parent, text)
   if (result === 'delivered') return

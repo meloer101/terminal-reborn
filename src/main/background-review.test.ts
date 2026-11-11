@@ -76,6 +76,13 @@ describe('parseReviewRequest / triggerAllowed', () => {
     expect(() => parseReviewRequest({ root: '/w', agent: 'codex', trigger: 'cron' })).toThrow()
   })
 
+  it('takes the asked prompts as an optional array of text, and rejects any other shape', () => {
+    const ok = { root: '/w', agent: 'claude', trigger: 'manual' }
+    expect(parseReviewRequest({ ...ok, asked: ['加一个登录页'] })).toEqual({ ...ok, asked: ['加一个登录页'] })
+    expect(parseReviewRequest({ ...ok, asked: [] })).toEqual(ok)
+    for (const bad of ['加一个登录页', [1], null, [{}]]) expect(() => parseReviewRequest({ ...ok, asked: bad })).toThrow('invalid asked')
+  })
+
   it('runs automatic triggers only when their switch is on and the built-in reviewer is chosen', () => {
     const off = DEFAULT_SETTINGS.review
     expect(triggerAllowed('manual', off)).toBe(true)
@@ -120,6 +127,21 @@ describe('startReview', { timeout: 15_000 }, () => {
     expect(await startReview(o as never, { root, agent: 'claude', trigger: 'manual' })).toMatchObject({ phase: 'done', cached: true, found: 1 })
     expect(latestReview(root)).toMatchObject({ phase: 'done', hash: done.hash, found: 1, costUsd: 0.039 })
     expect(latestReview(join(base, 'never-reviewed'))).toBeNull()
+  })
+
+  it('puts the user\'s requests in the prompt, and a different asked does not make the same diff a new review', async () => {
+    const root = repo('asked')
+    writeFileSync(join(root, 'a.ts'), 'export const a = 2\n')
+    fake('claude', `printf '%s' '${claudeJson([])}'`)
+    const o = owner()
+    await startReview(o as never, { root, agent: 'claude', trigger: 'manual', asked: ['把 a 改成 2', '不要动别的文件'] })
+    const done = await settled(o, root)
+    expect(done.phase).toBe('done')
+    const stdin = readFileSync(join(bin, 'claude.stdin'), 'utf8')
+    expect(stdin).toContain('```text\n[1]\n把 a 改成 2\n[2]\n不要动别的文件\n```')
+    expect(stdin.indexOf('[1]')).toBeLessThan(stdin.indexOf('```diff'))
+    const again = await startReview(o as never, { root, agent: 'claude', trigger: 'manual', asked: ['换一句话'] })
+    expect(again).toMatchObject({ phase: 'done', cached: true })
   })
 
   it('does not land a finding the user ignored before, and says how many were left out', async () => {

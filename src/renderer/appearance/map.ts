@@ -2,7 +2,7 @@
 // for the terminal layers and <html> data attributes. No DOM access, so it is unit tested.
 // The terminal color comes from the theme (--term-bg: white in light mode, near-black in dark) unless the user chose
 // or imported one (PRD F7 v1.71): then --term-bg is set on <html> to it and xterm gets the matching customTheme.
-import type { AppearanceSettings, ChatAppearance, ChatWidth, WindowMaterial } from '@shared/settings'
+import type { AppearanceSettings, ChatAppearance, ChatWidth } from '@shared/settings'
 import { buildCustomTheme } from '../terminal/appearance'
 import type { TerminalAppearance } from '../terminal/surface'
 
@@ -75,9 +75,11 @@ export function chatFontStack(c: Pick<ChatAppearance, 'latinFont' | 'cjkFont'>):
   return `${latin}, ${quote(c.cjkFont)}, var(--font-ui)`
 }
 
-/** The window material actually shown: Liquid Glass needs macOS 26 (main/appearance.ts); 实色 works everywhere. */
-export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liquidGlass: boolean): WindowMaterial =>
-  a.windowMaterial === 'liquid' ? (liquidGlass ? 'liquid' : 'frosted') : a.windowMaterial
+/** What the window is made of, named on <html data-material>: 玻璃 is Liquid Glass on macOS 26 (main/appearance.ts), frosted vibrancy before it. */
+export type ShownMaterial = 'liquid' | 'frosted' | 'solid'
+
+export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liquidGlass: boolean): ShownMaterial =>
+  a.windowMaterial === 'solid' ? 'solid' : liquidGlass ? 'liquid' : 'frosted'
 
 /** A theme color at `opacity` over what is behind it; fully opaque is the color itself, none is transparent. */
 const over = (color: string, opacity: number): string =>
@@ -89,9 +91,9 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
   const material = shownMaterial(a, liquidGlass)
   return {
     vars: {
-      // 窗口底层不透明度 (PRD §5 v1.127): the theme's shell color over the base layer, per material. 实色 (v1.139) covers
-      // the base layer with it: nothing of the desktop shows.
-      '--glass-shell': material === 'solid' ? 'var(--glass-shell-color)' : over('var(--glass-shell-color)', a.shellOpacity[material]),
+      // 窗口底层不透明度 (PRD §5 v1.127, one value since v1.174): the theme's shell color over the base layer. 实色 (v1.139)
+      // covers the base layer with it: nothing of the desktop shows.
+      '--glass-shell': material === 'solid' ? 'var(--glass-shell-color)' : over('var(--glass-shell-color)', a.shellOpacity),
       // 对话 (Figma 51D): GUI sessions read these (gui/Chat.module.css).
       '--chat-column': CHAT_COLUMN[chat.width],
       '--chat-font': chatFontStack(chat),

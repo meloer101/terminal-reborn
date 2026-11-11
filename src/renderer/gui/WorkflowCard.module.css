@@ -1,0 +1,200 @@
+/* A workflow run in a GUI chat (Figma 74A–C): a bg/section block, rows of phases and agents with the numbers in fixed
+   right-hand columns. Type and spacing come from the chat (Chat.module.css --type-step / --type-code). */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-window);
+  background: var(--bg-section);
+  font: var(--type-step);
+  color: var(--text-primary);
+}
+
+.head,
+.row,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.head {
+  min-height: 24px;
+}
+
+.mark {
+  flex-shrink: 0;
+  color: var(--text-primary);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--type-code);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status,
+.count {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.status[data-outcome='failed'],
+.status[data-outcome='partly-failed'] {
+  color: var(--status-error);
+}
+
+.status[data-outcome='ask'] {
+  color: var(--status-attention);
+}
+
+.count {
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.mono {
+  flex-shrink: 0;
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* One right edge for every time in the card, whatever its width (排队, 0:58, 11:20). */
+.time {
+  flex-shrink: 0;
+  width: 44px;
+  font: var(--type-code);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.phases,
+.agents {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phases {
+  gap: var(--space-2);
+}
+
+.phases .row {
+  min-height: 26px;
+}
+
+.agents .row {
+  min-height: 24px;
+  padding-left: var(--space-20);
+}
+
+.phase {
+  flex-shrink: 0;
+}
+
+.phaseIdle {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.index {
+  flex-shrink: 0;
+  width: 14px;
+  font: var(--type-code);
+  color: var(--text-tertiary);
+}
+
+.detail,
+.agent,
+.agentIdle {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--text-caption);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.detail,
+.agent {
+  color: var(--text-secondary);
+}
+
+.agentIdle {
+  color: var(--text-tertiary);
+}
+
+.agentError {
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  font: var(--type-code);
+  color: var(--status-error);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.error,
+.reason {
+  margin: 0;
+  font: var(--type-code);
+  overflow-wrap: anywhere;
+}
+
+.error {
+  color: var(--status-error);
+}
+
+.reason {
+  color: var(--text-secondary);
+}
+
+.actions {
+  padding-top: var(--space-6);
+}
+
+.button,
+.primary {
+  height: 24px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.button {
+  flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.button:hover {
+  background: var(--bg-selected);
+}
+
+.primary {
+  background: var(--fill-primary);
+  color: var(--text-inverse);
+}
+
+.button:disabled,
+.primary:disabled {
+  opacity: 0.5;
+}

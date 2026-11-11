@@ -1,4 +1,5 @@
 // What an errored session offers next (phase 2b): the error in one line, "让 agent 修复" and a retry. Pure.
+import { WAVI_TEXT_MARK } from '@shared/pull-requests'
 import type { Session } from '@shared/types'
 import type { LaunchIssue } from './launch-issues'
 import { AGENT_NAME } from './present'
@@ -37,7 +38,8 @@ export function errorNextSteps(session: ErrorView, issue?: LaunchIssue, limitNot
 
 /** The prompt "让 agent 修复" sends: one line, so the send protocol treats it as typed text. */
 export function fixPrompt(summary: string): string {
-  return `刚才出错了（${summary}）。请先找出原因并修复，然后继续之前的任务。`
+  // The error line is the agent's or the app's, not the user's: marked so the review never reads it as what was asked.
+  return `${WAVI_TEXT_MARK}刚才出错了（${summary}）。请先找出原因并修复，然后继续之前的任务。`
 }
 
 /** What "重试" sends when the agent is up but its turn failed. */

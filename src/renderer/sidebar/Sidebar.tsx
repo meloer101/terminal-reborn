@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useRef, type KeyboardEvent, type PointerEvent } from 'react'
+import { Fragment, useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { Clock, Folder, Gauge, LayoutList, ListTree, PanelLeft, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { MAIN_WINDOW, shownIn } from '@shared/window-layout'
@@ -22,7 +22,8 @@ import { SessionRow } from './SessionRow'
 import { SubagentRow } from './SubagentRow'
 import { useSessionMeta } from '../session-meta/store'
 import type { SubagentInfo } from '@shared/agent-events'
-import { adjacentSessionId, buildSidebarGroups, visibleSessionIds } from './model'
+import { adjacentSessionId, buildSidebarGroups, visibleSessionIds, workflowItems, type SideItem } from './model'
+import type { WorkflowRun } from '@shared/workflow-run'
 import './shortcuts-runtime'
 import styles from './Sidebar.module.css'
 import { formatAccelerator } from '../ui/menu-model'
@@ -100,13 +101,39 @@ export function Sidebar() {
   const onRowPress = useCallback((e: PointerEvent<HTMLElement>, id: string) => pressSession(e, id, 'sidebar'), [])
 
   // Only the subagent lists: the context readings that change every second elsewhere in session-meta do not rebuild rows.
-  const subagents = useSessionMeta(
+  const subagentLists = useSessionMeta(
     useShallow((s) => {
       const out: Record<string, SubagentInfo[]> = {}
       for (const [id, metrics] of Object.entries(s.bySession)) if (metrics.subagents) out[id] = metrics.subagents
       return out
     })
   )
+  // Figma 74D: Claude's workflow runs hang under their session before its subagents; a run's row folds its phases.
+  const runLists = useSessionMeta(
+    useShallow((s) => {
+      const out: Record<string, WorkflowRun[]> = {}
+      for (const [id, metrics] of Object.entries(s.bySession)) if (metrics.workflows) out[id] = metrics.workflows
+      return out
+    })
+  )
+  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
+  const toggleRun = useCallback((rowId: string) => {
+    const key = rowId.slice('workflow:'.length)
+    setFolded((now) => {
+      const next = new Set(now)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
+  }, [])
+  const subagents = useMemo(() => {
+    const out: Record<string, SideItem[]> = { ...subagentLists }
+    for (const [id, runs] of Object.entries(runLists)) {
+      const unread = sessions.find((s) => s.id === id)?.status === 'done_unread'
+      const lines = workflowItems(runs, { unread, folded })
+      if (lines.length > 0) out[id] = [...lines, ...(subagentLists[id] ?? [])]
+    }
+    return out
+  }, [subagentLists, runLists, sessions, folded])
   const groups = useMemo(
     () => buildSidebarGroups({ projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups }),
     [projects, worktrees, sessions, collapsedProjectIds, subagents, groupBy, collapsedStatusGroups]
@@ -133,7 +160,7 @@ export function Sidebar() {
   return (
     <>
       <div className={styles.titlebar}>
-        {/* Native traffic lights (hiddenInset, x=16 y=11) sit over this gap. */}
+        {/* Native traffic lights (hiddenInset, x=16 y=17) sit over this gap. */}
         <div className={styles.trafficLights} aria-hidden />
         <IconButton label="会话分组" aria-haspopup="menu" onClick={(e) => void chooseGroupBy(e.currentTarget)}>
           <ListTree {...ICON} />
@@ -197,7 +224,7 @@ export function Sidebar() {
                   onSelect={setActiveSession}
                   onContextMenu={onRowContextMenu}
                 />
-                {row.after?.map((sub) => <SubagentRow key={sub.id} row={sub} onSelect={setActiveSession} />)}
+                {row.after?.map((sub) => <SubagentRow key={sub.id} row={sub} onSelect={setActiveSession} onToggle={toggleRun} />)}
               </Fragment>
             ))}
             {group.kind === 'project' && !group.collapsed && group.sessionCount === 0 && (

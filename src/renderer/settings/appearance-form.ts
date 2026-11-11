@@ -76,15 +76,11 @@ export const CHAT_SIZE_OPTIONS: ReadonlyArray<{ value: string; label: string }> 
   (_, i) => String(LIMITS.chatFontSize.min + i)
 ).map((size) => ({ value: size, label: size }))
 
-const MATERIAL_OPTIONS: ReadonlyArray<{ value: WindowMaterial; label: string }> = [
-  { value: 'liquid', label: '液态玻璃' },
-  { value: 'frosted', label: '磨砂玻璃' },
+/** 材质 (Figma 66′): the engine behind 玻璃 (Liquid Glass or vibrancy) is the window's business, not a choice. */
+export const MATERIAL_OPTIONS: ReadonlyArray<{ value: WindowMaterial; label: string }> = [
+  { value: 'glass', label: '玻璃' },
   { value: 'solid', label: '实色' }
 ]
-
-/** 材质 (Figma 57C): Liquid Glass only where the window has it (macOS 26). */
-export const materialOptions = (liquidGlass: boolean): ReadonlyArray<{ value: WindowMaterial; label: string }> =>
-  liquidGlass ? MATERIAL_OPTIONS : MATERIAL_OPTIONS.filter((o) => o.value !== 'liquid')
 
 /** 对话's English font menu: the system UI font first ('' in settings), then the proportional families. */
 export const SYSTEM_UI_FONT = '跟随系统'

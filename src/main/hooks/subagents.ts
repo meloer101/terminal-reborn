@@ -146,6 +146,8 @@ export class SubagentWatcher {
     // Only the session's own transcript locates its subagents folder; a subagent's own one (if a hook ever names it) does not.
     if (transcript && !transcript.includes(`${sep}subagents${sep}`)) tracked.transcript = transcript
     const id = subagentIdOf(payload)
+    // A workflow's agents are the run's, listed under its WorkflowRow (workflows.ts), not one row each (PRD F25).
+    if (payload.agent_type === 'workflow-subagent') return
     if (event === 'SessionStart' || event === 'SessionEnd') {
       // A new, cleared or resumed conversation, or the agent quit: whatever ran belongs to a transcript no longer live.
       tracked.subs.clear()

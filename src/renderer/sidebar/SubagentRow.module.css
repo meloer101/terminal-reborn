@@ -108,3 +108,16 @@
   border-left: 1px solid var(--border-default);
   pointer-events: none;
 }
+
+/* Figma 74D: a workflow run's name is its script's (mono); its phases sit one column in, without a tick of their own. */
+.row[data-kind='workflow'] .title {
+  font: var(--text-mono-s);
+}
+
+.row[data-kind='phase'] {
+  padding-left: calc(var(--row-text-inset) + var(--space-16));
+}
+
+.row[data-kind='phase']::before {
+  border-top: 0;
+}

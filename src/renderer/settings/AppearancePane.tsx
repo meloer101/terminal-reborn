@@ -3,9 +3,8 @@
 import type { ReactNode } from 'react'
 import { FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
-import { shownMaterial } from '../appearance/map'
 import { PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
-import { THEME_OPTIONS, formatPercent, isPageDefault, materialOptions, pageDefaults } from './appearance-form'
+import { MATERIAL_OPTIONS, THEME_OPTIONS, formatPercent, isPageDefault, pageDefaults } from './appearance-form'
 import styles from './AppearancePane.module.css'
 
 const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
@@ -65,7 +64,7 @@ function WindowPreview() {
 }
 
 export function AppearancePane({ appearance, update }: { appearance: AppearanceSettings; update: (patch: AppearancePatch) => void }) {
-  const material = shownMaterial(appearance, window.tr.liquidGlass)
+  const solid = appearance.windowMaterial === 'solid'
   return (
     <PreviewPage
       title="外观"
@@ -79,26 +78,26 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
 
       <Section title="窗口">
         <Row label="材质" id="windowMaterial">
-          <Segmented label="材质" value={material} options={materialOptions(window.tr.liquidGlass)} onChange={(windowMaterial) => update({ windowMaterial })} />
+          <Segmented label="材质" value={appearance.windowMaterial} options={MATERIAL_OPTIONS} onChange={(windowMaterial) => update({ windowMaterial })} />
         </Row>
         {/* 实色 (Figma 57C) has no base layer to show through. */}
-        {material !== 'solid' && (
+        {!solid && (
           <Row label="窗口底层不透明度" id="shellOpacity">
             <Slider
               label="窗口底层不透明度"
-              value={appearance.shellOpacity[material]}
+              value={appearance.shellOpacity}
               min={LIMITS.shellOpacity.min}
               max={LIMITS.shellOpacity.max}
               step={0.01}
               format={formatPercent}
-              onCommit={(value) => update({ shellOpacity: { [material]: value } })}
+              onCommit={(shellOpacity) => update({ shellOpacity })}
             />
           </Row>
         )}
       </Section>
 
       {/* 实色 (Figma 57C) draws no field in full screen, so there is nothing to choose. */}
-      {material !== 'solid' && (
+      {!solid && (
         <Section title="全屏背景">
           <ThemeSwatches
             label="全屏背景"

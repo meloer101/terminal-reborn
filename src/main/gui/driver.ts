@@ -4,6 +4,8 @@
 import { randomInt } from 'node:crypto'
 import type { GuiAnswer, GuiEvent, GuiPermission } from '@shared/gui-chat'
 import type { ContextUsage } from '@shared/session-meta'
+import type { KeepImage } from '@shared/transcript-chat'
+import type { WorkflowRun } from '@shared/workflow-run'
 
 export type Rec = Record<string, unknown>
 export const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -32,6 +34,8 @@ export interface DriverIO {
    * null when the agent says it does not know right now (just compacted).
    */
   context(context: ContextUsage | null): void
+  /** Claude's workflow runs, the whole list each time one changes (ultracode, PRD F25): the run card and the sidebar. */
+  workflows?(runs: WorkflowRun[]): void
   /** A turn ended (status: Stop / StopFailure for the agents without hooks). */
   turnEnd(outcome: { failed: boolean; message?: string }): void
   /** The handshake failed; shown above the composer. */
@@ -59,6 +63,8 @@ export interface DriverOptions {
   plan?: boolean
   /** An ACP agent whose permission mode is a launch argument: which of 自动 / 计划 its arguments offer. */
   launchPermission?: { auto: boolean; plan: boolean }
+  /** Keeps the pictures a message carries inline as files, for the chat to draw them (Figma 71A). */
+  keepImage?: KeepImage
 }
 
 export interface GuiDriver {
@@ -72,6 +78,8 @@ export interface GuiDriver {
   answer(answer: GuiAnswer): boolean
   interrupt(): boolean
   setConfig(id: string, value: string): Promise<boolean>
+  /** Stops one of the agent's background tasks (Claude `stop_task`: a workflow run's 停止, PRD F25). */
+  stopTask?(taskId: string): Promise<boolean>
   /** The process is gone: requests still waiting fail. */
   closed(): void
 }

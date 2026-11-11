@@ -53,9 +53,12 @@
 }
 
 .aheadBehind {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font: var(--text-caption);
   color: var(--text-tertiary);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -315,7 +318,7 @@ button.pill:hover {
   display: flex;
   align-items: baseline;
   gap: var(--space-6);
-  padding: var(--space-12) calc(var(--space-12) + var(--space-2)) var(--space-4);
+  padding: var(--space-12) calc(var(--space-12) + var(--space-2)) var(--space-4) calc(var(--space-12) + var(--space-2) + var(--space-20));
   white-space: nowrap;
 }
 
@@ -340,7 +343,8 @@ button.pill:hover {
   align-items: center;
   gap: var(--space-8);
   width: 100%;
-  padding: var(--space-8) calc(var(--space-16) - var(--space-6)) var(--space-8) var(--space-6);
+  /* Right: 10 to the row's edge, the 16 已看 mark, 8 before it (Figma 73A). */
+  padding: var(--space-8) calc(var(--space-16) - var(--space-6) + var(--space-16) + var(--space-8)) var(--space-8) calc(var(--space-8) + var(--space-20));
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -534,6 +538,144 @@ button.pill:hover {
 .shortcut {
   font: var(--text-mono-s);
   opacity: 0.55;
+}
+
+/* ⋯ at the footer's end (Figma 73B): every chain action. */
+.moreButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.moreButton:hover,
+.moreButton[aria-expanded='true'] {
+  background: var(--bg-selected);
+}
+
+.moreButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* 未提交 checkboxes (合入链路 v2, Figma 73A / 73F1): every row and group header keeps a 20 slot before its text, so
+   paths and titles stay in one column whether a row can be ticked or not; the box sits in the slot over the row. */
+.tick {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-inverse);
+}
+
+.tick[aria-checked='true'],
+.tick[aria-checked='mixed'] {
+  border-color: var(--fill-primary);
+  background: var(--fill-primary);
+}
+
+/* While a Ship run is open the boxes show what it commits and do not change (Figma 73K3): the ticked ones muted, still
+   filled; an unticked one keeps its normal border. */
+.tick:disabled {
+  cursor: default;
+}
+
+.tick:disabled[aria-checked='true'],
+.tick:disabled[aria-checked='mixed'] {
+  border-color: var(--text-tertiary);
+  background: var(--text-tertiary);
+}
+
+.tick:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.fileItem > .tick {
+  top: calc(var(--space-8) + 1px);
+  left: var(--space-8);
+}
+
+/* The 已看 mark (Figma 73A): 16, 10 from the row's right edge, over the row's own padding like the checkbox; ○ / ✓ / ◉
+   differ by shape, all in the text colour. The hit area is 24. */
+.viewMark {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-4);
+  right: calc(var(--space-16) - var(--space-6) - var(--space-4));
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.viewMark:hover {
+  background: var(--bg-hover);
+}
+
+.viewMark:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* 未看 K in the header (Figma 73A): a segment of its own, selected while the filter is on. */
+.viewedCount {
+  flex: none;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.viewedFilter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0 var(--space-8) 0 var(--space-4);
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.viewedFilter:hover {
+  color: var(--text-primary);
+}
+
+.viewedFilter[aria-pressed='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.viewedFilter:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.groupHeader > .tick {
+  top: calc(var(--space-12) + 1px);
+  left: calc(var(--space-12) + var(--space-2));
 }
 
 /* Inline review comments (F5, Figma 03) ------------------------------------------------------------------------ */

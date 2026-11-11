@@ -17,11 +17,14 @@ import { AgentIcon } from '../ui/AgentIcon'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { ansiSpans } from './ansi'
 import { ChatMarkdown } from './ChatMarkdown'
+import { Attachment } from './Composer'
 import { ComposerEditor, insertNewline, type CaretContext } from './ComposerEditor'
 import { CopyButton } from './CopyButton'
 import { DispatchGraph, WaviMessageView } from './Dispatch'
 import { DiffBlock, diffText } from './DiffBlock'
 import { TodoList } from './Todos'
+import { WorkflowCard, type WorkflowAsk } from './WorkflowCard'
+import type { WorkflowRun } from '@shared/workflow-run'
 import {
   blockHas,
   composerKey,
@@ -97,9 +100,46 @@ interface FeedProps {
   canEdit: boolean
   /** Asks again from `messageId` with `text`; the reason when it did not. */
   onEdit(messageId: string, text: string): Promise<string | null>
+  /** Claude's workflow runs (PRD F25): drawn as a card at their Workflow call. */
+  workflows?: readonly WorkflowRun[]
+  /** The Workflow call waiting on the user: its card is the ask (Figma 74A). */
+  workflowAsk?: WorkflowAsk | null
+  onStopWorkflow?(run: WorkflowRun): void
 }
 
-export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit }: FeedProps) {
+/** What the run cards of the feed draw: by Workflow call, the ask, and 停止. */
+interface WorkflowSlot {
+  byTool: ReadonlyMap<string, WorkflowRun>
+  ask: WorkflowAsk | null
+  onStop?(run: WorkflowRun): void
+}
+
+/** A run's shape, once per run object (each list from main is new objects; renders in between reuse them). */
+const runShapes = new WeakMap<WorkflowRun, string>()
+function runShape(run: WorkflowRun): string {
+  let shape = runShapes.get(run)
+  if (shape === undefined) runShapes.set(run, (shape = JSON.stringify(run)))
+  return shape
+}
+
+/** What a block draws of the runs: the memo compares this, not the map. */
+function workflowKey(block: FeedBlock, slot: WorkflowSlot, waitingTool: string | null): string {
+  if (block.kind !== 'steps') return ''
+  const parts: string[] = []
+  for (const item of block.items) {
+    if (item.kind !== 'tool' || item.name !== 'Workflow') continue
+    const run = slot.byTool.get(item.id)
+    if (run) parts.push(runShape(run))
+    if (item.id === waitingTool && slot.ask) parts.push(`ask:${slot.ask.id}:${slot.ask.pending}`)
+  }
+  return parts.join('|')
+}
+
+export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit, onEdit, workflows, workflowAsk, onStopWorkflow }: FeedProps) {
+  const slot = useMemo<WorkflowSlot>(
+    () => ({ byTool: new Map((workflows ?? []).flatMap((run) => (run.toolUseId ? [[run.toolUseId, run] as const] : []))), ask: workflowAsk ?? null, onStop: onStopWorkflow }),
+    [workflows, workflowAsk, onStopWorkflow]
+  )
   const blocks = useMemo(() => feedBlocks(items), [items])
   const starts = useMemo(() => turnStarts(blocks), [blocks])
   const ends = useMemo(() => turnEnds(blocks, busy || live !== null), [blocks, busy, live])
@@ -173,6 +213,8 @@ export function Feed({ sessionId, agent, items, live, waitingTool, busy, canEdit
                 waitingTool={block.kind === 'steps' && waitingTool !== null && blockHas(block, waitingTool) ? waitingTool : null}
                 dispatch={dispatch}
                 dispatchShape={dispatchKey(block, dispatch)}
+                workflow={slot}
+                workflowShape={workflowKey(block, slot, waitingTool)}
               />
             </AgentTurn>
           )
@@ -192,7 +234,8 @@ const Block = memo(
     sessionId,
     block,
     waitingTool,
-    dispatch
+    dispatch,
+    workflow
   }: {
     sessionId: SessionId
     block: FeedBlock
@@ -200,6 +243,9 @@ const Block = memo(
     dispatch: ReadonlyMap<string, DispatchRow>
     /** What the block draws of `dispatch` (dispatchKey): the memo compares this, not the map. */
     dispatchShape: string
+    workflow: WorkflowSlot
+    /** What it draws of the runs (workflowKey). */
+    workflowShape: string
   }) {
     if (block.kind === 'steps') {
       return (
@@ -208,13 +254,19 @@ const Block = memo(
               you stay out, and the calls the graph draws are not there to split a run. */}
           {stepParts(
             block.items.filter((item) => dispatch.get(item.id)?.kind !== 'merged'),
-            (item) => dispatch.has(item.id) || item.id === waitingTool
+            (item) => dispatch.has(item.id) || item.id === waitingTool || (item.kind === 'tool' && item.name === 'Workflow')
           ).map((part) => {
             if (part.kind === 'group') return <ToolGroup key={part.key} items={part.items} nested={block.nested} />
             const { item } = part
             const row = dispatch.get(item.id)
             if (row?.kind === 'graph') return <DispatchGraph key={item.id} parentId={sessionId} ids={row.ids} />
             if (row?.kind === 'merged') return null
+            // Figma 74: a Workflow call is its run's card — the ask before it runs, then the run.
+            if (item.kind === 'tool' && item.name === 'Workflow') {
+              const run = workflow.byTool.get(item.id)
+              const ask = item.id === waitingTool ? workflow.ask : null
+              if (run || ask) return <WorkflowCard key={item.id} {...(run ? { run } : {})} {...(ask ? { ask } : {})} {...(workflow.onStop ? { onStop: workflow.onStop } : {})} />
+            }
             return item.kind === 'thinking' ? <Thinking key={item.id} item={item} /> : <Tool key={item.id} item={item} nested={block.nested} waitingTool={waitingTool} />
           })}
         </div>
@@ -232,7 +284,13 @@ const Block = memo(
         return null
     }
   },
-  (a, b) => a.sessionId === b.sessionId && a.waitingTool === b.waitingTool && a.dispatchShape === b.dispatchShape && sameBlock(a.block, b.block)
+  (a, b) =>
+    a.sessionId === b.sessionId &&
+    a.waitingTool === b.waitingTool &&
+    a.dispatchShape === b.dispatchShape &&
+    a.workflowShape === b.workflowShape &&
+    a.workflow.onStop === b.workflow.onStop &&
+    sameBlock(a.block, b.block)
 )
 
 const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean => !!b && a.length === b.length && a.every((item, i) => item === b[i])
@@ -282,11 +340,13 @@ interface UserMessageProps {
 
 /**
  * 51A: what the user sent, as Markdown, with their picture beside it when they set one (设置 · 外观 · 对话). 54A: time ·
- * copy · edit under it on hover; 54C: editing, a text box in its place.
+ * copy · edit under it on hover; 54C: editing, a text box in its place. 71A: the pictures sent with it over the bubble
+ * (71C: no bubble when it had no words; 71D: a file that is gone shows its name).
  */
 const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable, editing, onStartEdit, onCancel, onSave }: UserMessageProps) {
   const { header, body } = userBubble(item.text)
   const markdown = useMemo(() => userMarkdown(body), [body])
+  const pictures = item.attachments ?? []
   return (
     <div className={styles.userRow} data-item={item.id} data-faded={faded || undefined}>
       <div className={styles.userColumn}>
@@ -294,10 +354,19 @@ const UserMessage = memo(function UserMessage({ sessionId, item, faded, editable
           <InlineEdit text={item.text} onCancel={onCancel} onSave={(text) => onSave(item.id, text)} />
         ) : (
           <>
-            <div className={styles.bubble}>
-              {header && <span className={styles.bubbleHeader}>{header}</span>}
-              <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
-            </div>
+            {pictures.length > 0 && (
+              <ul className={`${styles.attachments} ${styles.sentPictures}`} aria-label="图片" data-testid="gui-message-pictures">
+                {pictures.map((path, i) => (
+                  <Attachment key={`${i}:${path}`} path={path} />
+                ))}
+              </ul>
+            )}
+            {(item.text.trim() || pictures.length === 0) && (
+              <div className={styles.bubble}>
+                {header && <span className={styles.bubbleHeader}>{header}</span>}
+                <ChatMarkdown sessionId={sessionId} text={markdown} className={styles.bubbleText} />
+              </div>
+            )}
             <div className={styles.messageActions} data-testid="gui-message-actions">
               <span className={styles.messageTime}>{timeOf(item.at)}</span>
               <CopyButton text={item.text} />

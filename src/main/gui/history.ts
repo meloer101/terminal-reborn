@@ -8,7 +8,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { open, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
-import { createChatParser, type ChatItem } from '@shared/transcript-chat'
+import { createChatParser, type ChatItem, type KeepImage } from '@shared/transcript-chat'
 import { claudeTranscriptPath, type AgentDataDirs } from '../hooks/agent-title'
 import { currentBranch, resumePointOf } from './claude-rewind'
 import { piBranchMessages, piHistoryItems } from './pi-rpc'
@@ -125,9 +125,9 @@ export async function piSessionFileFor(sessionId: string, sessionsDir: string, c
 }
 
 /** A Pi session file's conversation (its active branch). */
-export async function readPiHistory(path: string, cwd: string): Promise<ChatItem[] | null> {
+export async function readPiHistory(path: string, cwd: string, keep?: KeepImage): Promise<ChatItem[] | null> {
   const lines = await readLines(path)
-  return lines ? piHistoryItems(piBranchMessages(lines), cwd) : null
+  return lines ? piHistoryItems(piBranchMessages(lines), cwd, keep) : null
 }
 
 /** A transcript's lines (its newest READ_BYTES); null when it cannot be read. */
@@ -159,12 +159,15 @@ const parseRow = (line: string): Record<string, unknown> | null => {
   }
 }
 
-/** Every chat item of a transcript; for Claude only its current branch (an edit leaves the cut turns in the file). */
-export async function readTranscript(source: TranscriptSource): Promise<ChatItem[] | null> {
+/**
+ * Every chat item of a transcript; for Claude only its current branch (an edit leaves the cut turns in the file).
+ * `keepImage` keeps the pictures sent inline as files.
+ */
+export async function readTranscript(source: TranscriptSource, keepImage?: KeepImage): Promise<ChatItem[] | null> {
   const lines = await readLines(source.path)
   if (!lines) return null
   const keep = source.agent === 'claude' ? currentBranch(lines.map(parseRow)) : null
-  const parser = createChatParser(source.agent)
+  const parser = createChatParser(source.agent, undefined, keepImage)
   lines.forEach((line, i) => {
     if (!keep || keep[i]) parser.push(line)
   })

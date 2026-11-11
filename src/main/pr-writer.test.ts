@@ -175,6 +175,47 @@ describe('AI 写 (PRD F16 v1.68)', () => {
     }
   })
 
+  // The base is read where exit A reads it (baseRemoteFor): a branch published to a fork, no remote called origin.
+  it('writes the PR text against the base on its own remote, not the remote the branch was published to', async () => {
+    n++
+    const root = join(base, `repo-${n}`)
+    const up = join(base, `up-${n}.git`)
+    const fork = join(base, `fork-${n}.git`)
+    mkdirSync(root)
+    git(base, 'init', '-q', '--bare', '-b', 'main', up)
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(root, 'init', '-q', '-b', 'main')
+    writeFileSync(join(root, 'a.txt'), 'a\n')
+    git(root, 'add', '.')
+    git(root, 'commit', '-q', '-m', 'feat(core): start')
+    git(root, 'remote', 'add', 'upstream', up)
+    git(root, 'remote', 'add', 'fork', fork)
+    git(root, 'push', '-q', '-u', 'upstream', 'main')
+    git(root, 'push', '-q', 'fork', 'main')
+    roots.add(root)
+    // The base moved on upstream; the fork's copy of it did not.
+    const other = join(base, `other-${n}`)
+    git(base, 'clone', '-q', up, other)
+    writeFileSync(join(other, 'u.txt'), 'u\n')
+    git(other, 'add', '.')
+    git(other, 'commit', '-q', '-m', 'feat(core): upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'fetch', '-q', 'upstream')
+    git(root, 'fetch', '-q', 'fork')
+    const wt = join(base, `wt-${n}`)
+    git(root, 'worktree', 'add', '-q', '--no-track', '-b', 'feat', wt, 'upstream/main')
+    git(root, 'config', 'branch.feat.base', 'main')
+    writeFileSync(join(wt, 'b.txt'), 'b\n')
+    git(wt, 'add', '.')
+    git(wt, 'commit', '-q', '-m', 'feat(nav): add b')
+    git(wt, 'push', '-q', '-u', 'fork', 'feat')
+    writeFileSync(join(log, 'codex-answer'), JSON.stringify({ title: 'Add b', body: '- b' }))
+    expect(await writeShipText({ root, worktree: wt, kind: 'pr', agent: 'codex', paths: [] })).toMatchObject({ ok: true, kind: 'pr' })
+    const prompt = readFileSync(join(log, 'codex-stdin'), 'utf8')
+    expect(prompt).toContain('<branch-commits>\n- feat(nav): add b\n</branch-commits>')
+    expect(prompt).not.toContain('u.txt')
+  })
+
   it('says what went wrong, and refuses the base branch, files without changes and bad input', async () => {
     const { root, wt } = setup()
     writeFileSync(join(wt, 'a.txt'), 'x\n')

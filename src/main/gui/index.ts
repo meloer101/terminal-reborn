@@ -11,8 +11,10 @@ import type { HookAgent } from '@shared/agent-events'
 import { isCliAgent, type CliAgent } from '@shared/agents'
 import { AGENT_GUI, NO_GUI_REASON } from '@shared/gui-agents'
 import { GUI_IPC, type GuiCatalogResult, type GuiLaunch, type GuiLiveSession, type GuiOpenResult, type GuiSendResult } from '@shared/gui-chat'
+import { GUI_TASK_ID } from '@shared/workflow-run'
 import type { HookJournalEntry } from '../../pty-host/protocol'
 import { agentVersion } from '../agents-installed'
+import { keepInlineImage } from '../files'
 import { dispatchLaunchFor, setGuiDelivery } from '../dispatch'
 import { adoptAgentSession, emitGuiAgentEvent, endAgentSession, hookScriptPath, hooksViaDaemon, prepareAgentLaunch, setGuiSession } from '../hooks'
 import { defaultAgentDataDirs } from '../hooks/agent-title'
@@ -98,15 +100,15 @@ async function history(agent: CliAgent, cwd: string, agentSessionId: string) {
   const dirs = defaultAgentDataDirs()
   if (agent === 'claude') {
     const path = claudeTranscriptFor(cwd, agentSessionId, dirs)
-    return path ? readTranscript({ agent: 'claude', path }) : null
+    return path ? readTranscript({ agent: 'claude', path }, keepInlineImage) : null
   }
   if (agent === 'codex') {
     const path = await codexRolloutFor(agentSessionId, dirs.codexHome)
-    return path ? readTranscript({ agent: 'codex', path }) : null
+    return path ? readTranscript({ agent: 'codex', path }, keepInlineImage) : null
   }
   if (agent === 'pi') {
     const path = await piSessionFileFor(agentSessionId, piSessionsDir(), cwd)
-    return path ? readPiHistory(path, cwd) : null
+    return path ? readPiHistory(path, cwd, keepInlineImage) : null
   }
   return null
 }
@@ -149,6 +151,7 @@ const host = new GuiHost<WebContents>({
     setGuiSession(sessionId, false)
   },
   image: readImage,
+  keepImage: keepInlineImage,
   clientVersion: app.getVersion()
 })
 
@@ -202,6 +205,11 @@ export function registerGuiHandlers(): void {
   ipcMain.handle(GUI_IPC.interrupt, (event, rawId: unknown): boolean => {
     const id = owned(event.sender, rawId)
     return id !== null && host.interrupt(id)
+  })
+
+  ipcMain.handle(GUI_IPC.stopTask, async (event, rawId: unknown, rawTask: unknown): Promise<boolean> => {
+    const id = owned(event.sender, rawId)
+    return id !== null && typeof rawTask === 'string' && GUI_TASK_ID.test(rawTask) && host.stopTask(id, rawTask)
   })
 
   ipcMain.handle(GUI_IPC.setConfig, (event, rawId: unknown, rawOption: unknown, rawValue: unknown): Promise<boolean> => {

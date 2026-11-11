@@ -368,7 +368,7 @@ test.describe('session metrics: todo · context · usage', () => {
   test('with the right panel open the tools sit above it (the todo item and the vendor drop at 480), the branch stays', async () => {
     await header().getByRole('button', { name: 'Git', exact: true }).click()
     await expect(page.locator('[data-region="panel"]')).toBeVisible()
-    // Figma 28G: the session's tools stay at the window's right edge, in the row above the panel.
+    // Figma 28G: the session's tools stay at the window's right side, in the row above the panel.
     const tools = page.locator('[data-region="panel"] header')
     await expect(header().getByTestId('todo-chip')).toHaveCount(0)
     await expect.poll(() => tools.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(720)
@@ -386,7 +386,7 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect(card).toBeVisible()
     // It springs open; drag only once it has settled at its default width.
     await expect.poll(async () => Math.round((await card.boundingBox())!.width)).toBe(480)
-    await expect.poll(async () => card.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(0)
+    await expect.poll(async () => card.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(6)
     const tools = page.locator('[data-region="panel"] header')
     // At the default width every chip is there: todo, context and the account's usage.
     await expect(tools.getByTestId('context-chip')).toBeVisible()

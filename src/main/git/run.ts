@@ -105,9 +105,41 @@ export const lastLines = (text: string, lines = 3, max = 500): string => text.tr
 /** The app's PATH with EXTRA_PATH after it. */
 export const appPath = (): string => [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...EXTRA_PATH].join(delimiter)
 
-/** git's environment: never a credential prompt, the app's PATH; `extra` wins. */
+/**
+ * git always speaks English: the failure classes (src/shared/git-failures.ts) and the parsers read its words, and a
+ * gettext-built git (Homebrew's) translates them under a Chinese login locale. UTF-8, so non-ASCII paths still work;
+ * the hooks git runs inherit it, as under VS Code's git. gh gets it too: `gh pr create` / `gh pr merge` run git, and
+ * their output is classified the same way.
+ */
+export const ENGLISH_LOCALE: Readonly<Record<string, string>> = { LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8', LANGUAGE: 'en' }
+
+/** git's environment: never a credential prompt, the app's PATH; `extra` wins, except over the English locale. */
 export function gitEnv(extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  return { ...process.env, GIT_TERMINAL_PROMPT: '0', PATH: appPath(), ...extra }
+  return { ...process.env, GIT_TERMINAL_PROMPT: '0', PATH: appPath(), ...extra, ...ENGLISH_LOCALE }
+}
+
+/**
+ * Arguments for Wavi's own merges, rebases, fetches and pushes with what the user's git config would change about them
+ * pinned on the command line (git-config: merge.ff / autoStash / log, branch.<name>.mergeOptions, rebase.autoStash /
+ * updateRefs / rebaseMerges / backend, fetch.prune / pruneTags / recurseSubmodules, remote.<name>.prune / pruneTags /
+ * tagOpt, push.followTags / pushOption, submodule.recurse; rebase.autoSquash applies to interactive rebases only, which
+ * Wavi never runs). Signing (commit.gpgSign, push.gpgSign, merge.verifySignatures) and hooks stay the user's, and so
+ * does push.recurseSubmodules: `check` refuses, and `on-demand` pushes first, a commit pointing at submodule commits no
+ * remote has, which a pinned `no` would push anyway. Wavi never runs `git pull` (it fetches and merges `--ff-only`), so
+ * pull.ff / pull.rebase never apply.
+ */
+export const pinned = {
+  /** The caller says --ff, --ff-only or --no-ff. */
+  merge: (...args: string[]): string[] => ['-c', 'merge.autoStash=false', 'merge', '--no-squash', '--commit', '--no-log', ...args],
+  rebase: (...args: string[]): string[] => [
+    ...['-c', 'rebase.autoStash=false', '-c', 'rebase.updateRefs=false', '-c', 'rebase.rebaseMerges=false', '-c', 'rebase.backend=merge'],
+    'rebase',
+    '--no-autosquash',
+    '--no-autostash',
+    ...args
+  ],
+  fetch: (...args: string[]): string[] => ['fetch', '--no-prune', '--no-prune-tags', '--no-recurse-submodules', '--no-tags', ...args],
+  push: (...args: string[]): string[] => ['-c', 'push.pushOption=', 'push', '--no-follow-tags', ...args]
 }
 
 export interface GitOptions {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, marksSettled, noDiffReason, onOwnBase, preflightKey, pruneUnticked, runUnticked, tickedPaths, tickState, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex, toggleMark } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -73,6 +73,74 @@ describe('changeItems', () => {
     ])
     expect(items[0]).toMatchObject({ meta: '5 个文件' })
     expect(items.at(-1)).toMatchObject({ title: '已提交', meta: '没有可对比的基线分支' })
+  })
+})
+
+describe('已看 marks in the list (合入链路 v2, Figma 73A)', () => {
+  const data = changes({
+    uncommitted: [file('a.ts', { stamp: 'a1' }), file('b.ts', { stamp: 'b1' })],
+    committed: [file('a.ts', { stamp: 'c1' }), file('d.ts')]
+  })
+  const marks = { 'uncommitted:a.ts': 'a1', 'uncommitted:b.ts': 'old', 'committed:a.ts': 'c1' }
+  const rowsOf = (items: ReturnType<typeof changeItems>) =>
+    items.map((i) => (i.kind === 'group' ? i.title : i.kind === 'file' ? `${i.key}=${i.mark}` : i.kind))
+
+  it('gives every file row its mark: viewed at its diff, stale after the diff changed, else unviewed', () => {
+    expect(rowsOf(changeItems(data, new Set(), {}, [], null, 'unified', null, { marks, unviewedOnly: false }))).toEqual([
+      '未提交',
+      'uncommitted:a.ts=viewed',
+      'uncommitted:b.ts=stale',
+      '已提交',
+      'committed:a.ts=viewed',
+      'committed:d.ts=unviewed'
+    ])
+    // Without marks every row is unviewed.
+    expect(rowsOf(changeItems(data, new Set(), {})).filter((r) => r.includes('='))).toEqual([
+      'uncommitted:a.ts=unviewed',
+      'uncommitted:b.ts=unviewed',
+      'committed:a.ts=unviewed',
+      'committed:d.ts=unviewed'
+    ])
+  })
+
+  it('lists only unviewed and stale rows under 未看; the group headers stay, with no caption once all are viewed', () => {
+    expect(rowsOf(changeItems(data, new Set(), {}, [], null, 'unified', null, { marks, unviewedOnly: true }))).toEqual([
+      '未提交',
+      'uncommitted:b.ts=stale',
+      '已提交',
+      'committed:d.ts=unviewed'
+    ])
+    const all = { ...marks, 'uncommitted:b.ts': 'b1', 'committed:d.ts': 'M:1:1:' }
+    expect(rowsOf(changeItems(data, new Set(), {}, [], null, 'unified', null, { marks: all, unviewedOnly: true }))).toEqual(['未提交', '已提交'])
+  })
+
+  it('hides an open viewed file with its diff under 未看', () => {
+    const key = changeKey('uncommitted', 'a.ts')
+    const diffs = { [key]: { kind: 'ready' as const, binary: false, truncated: 0, rows: [{ kind: 'add' as const, old: null, new: 1, text: 'x' }] } }
+    const items = changeItems(data, new Set([key]), diffs, [], null, 'unified', null, { marks, unviewedOnly: true })
+    expect(items.some((i) => i.kind === 'diff')).toBe(false)
+  })
+})
+
+describe('toggleMark', () => {
+  const file = { key: 'committed:a.ts', stamp: 's1' }
+
+  it('marks a file viewed and folds it when it is open', () => {
+    const expanded = new Set(['committed:a.ts', 'committed:b.ts'])
+    const next = toggleMark({}, expanded, file)
+    expect(next.marks).toEqual({ 'committed:a.ts': 's1' })
+    expect(next.expanded).toEqual(new Set(['committed:b.ts']))
+  })
+
+  it('unmarks a viewed file and leaves what is open alone', () => {
+    const expanded = new Set(['committed:a.ts'])
+    const next = toggleMark({ 'committed:a.ts': 's1' }, expanded, file)
+    expect(next.marks).toEqual({})
+    expect(next.expanded).toBe(expanded)
+  })
+
+  it('marks a stale file viewed again', () => {
+    expect(toggleMark({ 'committed:a.ts': 'old' }, new Set(), file).marks).toEqual({ 'committed:a.ts': 's1' })
   })
 })
 
@@ -248,5 +316,68 @@ describe('stickyFileIndex / endsOpenFile', () => {
   it('marks the last line of an open file, not the file row of a closed one', () => {
     expect(list.map((_, i) => endsOpenFile(list, i)).lastIndexOf(true)).toBe(11)
     expect(endsOpenFile(list, 12)).toBe(false)
+  })
+})
+
+describe('ticked files (合入链路 v2, Figma 73F1)', () => {
+  const list = [file('a.ts'), file('b.ts'), file('vendor', { nested: true, added: null, removed: null })]
+
+  it('every tickable row starts ticked; unticked paths stay out; a nested repository is never committed', () => {
+    expect(tickedPaths(list, new Set())).toEqual(['a.ts', 'b.ts'])
+    expect(tickedPaths(list, new Set(['b.ts']))).toEqual(['a.ts'])
+  })
+
+  it('the header reads all, none or mixed', () => {
+    expect(tickState(list, new Set())).toBe('all')
+    expect(tickState(list, new Set(['a.ts']))).toBe('mixed')
+    expect(tickState(list, new Set(['a.ts', 'b.ts']))).toBe('none')
+  })
+
+  it('forgets paths that left the list, and keeps the same set when nothing left', () => {
+    const unticked = new Set(['a.ts', 'gone.ts'])
+    expect([...pruneUnticked(unticked, list)]).toEqual(['a.ts'])
+    const same = new Set(['a.ts'])
+    expect(pruneUnticked(same, list)).toBe(same)
+  })
+
+  // Review finding 13: while a Ship run is open the checkboxes show what it commits (its paths), not later clicks.
+  it('a run’s selection: the rows it does not commit read as unticked, a file that appeared since among them', () => {
+    const rows = [...list, file('c.ts')]
+    expect([...runUnticked(rows, ['a.ts'])].sort()).toEqual(['b.ts', 'c.ts'])
+    expect(tickedPaths(rows, runUnticked(rows, ['a.ts']))).toEqual(['a.ts'])
+  })
+
+  it('the 未提交 header counts the ticked files and carries the checkbox only when rows can be ticked', () => {
+    const data = changes({ uncommitted: [file('a.ts'), file('b.ts'), file('c.ts')] })
+    expect(changeItems(data, new Set(), {}, [], null, 'unified', new Set(['c.ts']))[0]).toEqual({
+      kind: 'group',
+      title: '未提交',
+      meta: '3 个文件 · 勾选 2 个',
+      group: 'uncommitted'
+    })
+    expect(changeItems(data, new Set(), {}, [], null, 'unified', new Set())[0]).toMatchObject({ meta: '3 个文件', group: 'uncommitted' })
+    expect(changeItems(data, new Set(), {}, [])[0]).toEqual({ kind: 'group', title: '未提交', meta: '3 个文件' })
+  })
+})
+
+// Review finding 19: a stopped merge / rebase / cherry-pick shows a partial branch; its marks are not pruned meanwhile.
+describe('marksSettled', () => {
+  it('holds while an operation is stopped: a rebase’s detached HEAD, unmerged files, or the preflight naming one', () => {
+    expect(marksSettled(changes(), null)).toBe(true)
+    expect(marksSettled(changes({ branch: null }), null)).toBe(false)
+    expect(marksSettled(changes({ uncommitted: [file('a.ts', { status: 'U' })] }), null)).toBe(false)
+    expect(marksSettled(changes(), { kind: 'merge', unresolved: [] })).toBe(false)
+    expect(marksSettled(changes(), { kind: 'cherry-pick', unresolved: [] })).toBe(false)
+  })
+})
+
+// Review finding 49: an amend or a reset that keeps every count still asks for the preflight again.
+describe('preflightKey', () => {
+  const parts = { gh: 'ready', changes: changes(), pr: null, head: 'aaa', shipping: false }
+  it('changes with the branch head, not only with the counts', () => {
+    expect(preflightKey(parts)).toBe(preflightKey({ ...parts }))
+    expect(preflightKey({ ...parts, head: 'bbb' })).not.toBe(preflightKey(parts))
+    expect(preflightKey({ ...parts, changes: changes({ ahead: 3 }) })).not.toBe(preflightKey(parts))
+    expect(preflightKey({ ...parts, shipping: true })).not.toBe(preflightKey(parts))
   })
 })

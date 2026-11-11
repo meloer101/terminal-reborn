@@ -6,6 +6,7 @@
 
 import type { CliAgent } from './agents'
 import type { ChatItem, FileDiff } from './transcript-chat'
+import type { WorkflowPhase } from './workflow-run'
 
 export type GuiProtocol = 'claude-stream' | 'codex-app-server' | 'pi-rpc' | 'acp'
 
@@ -44,6 +45,11 @@ export type GuiPrompt =
       diff?: FileDiff
       /** A change to several files: each one (`diff` is the first). Codex's file approval. */
       files?: FileDiff[]
+      /**
+       * Claude's Workflow call (ultracode, PRD F25, Figma 74A): the run's name and the phases its script declares. The
+       * chat asks on the run card at the call itself, not in a card over the composer.
+       */
+      workflow?: { name: string; phases: WorkflowPhase[] }
     }
   | { kind: 'question'; id: string; questions: GuiQuestion[] }
   | { kind: 'plan'; id: string; plan: string }
@@ -60,7 +66,7 @@ export type GuiAnswer =
  */
 export interface GuiConfigOption {
   id: string
-  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'fast' | 'other'
+  category: 'model' | 'mode' | 'thought_level' | 'permission' | 'plan' | 'fast' | 'ultracode' | 'other'
   label: string
   current: string
   values: { value: string; label: string }[]
@@ -119,6 +125,22 @@ export const fastOption = (on: boolean, hint?: string): GuiConfigOption => ({
     { value: 'on', label: '开' }
   ],
   ...(hint ? { hint } : {})
+})
+
+/**
+ * Figma 74A: Ultracode, for a Claude session whose model and account can (`get_settings` `ultracodeAvailable`). Only the
+ * user turns it on, for this session only: never remembered as a pick, off again when the conversation is resumed
+ * (PRD F25: a run can spend many times a normal turn's tokens).
+ */
+export const ultracodeOption = (on: boolean): GuiConfigOption => ({
+  id: 'ultracode',
+  category: 'ultracode',
+  label: 'Ultracode',
+  current: on ? 'on' : 'off',
+  values: [
+    { value: 'off', label: '关' },
+    { value: 'on', label: '开' }
+  ]
 })
 
 /**
@@ -287,6 +309,8 @@ export interface GuiApi {
   send(sessionId: string, message: { text: string; attachments: string[] }): Promise<GuiSendResult>
   answer(sessionId: string, answer: GuiAnswer): Promise<boolean>
   interrupt(sessionId: string): Promise<boolean>
+  /** Stops a background task of the agent: a Claude workflow run's 停止 (PRD F25, Figma 74B). */
+  stopTask(sessionId: string, taskId: string): Promise<boolean>
   setConfig(sessionId: string, optionId: string, value: string): Promise<boolean>
   /** Edits a queued message; an empty text removes it. */
   editQueued(sessionId: string, queuedId: string, text: string): Promise<boolean>
@@ -308,6 +332,7 @@ export const GUI_IPC = {
   send: 'gui:send',
   answer: 'gui:answer',
   interrupt: 'gui:interrupt',
+  stopTask: 'gui:stop-task',
   setConfig: 'gui:set-config',
   editQueued: 'gui:edit-queued',
   edit: 'gui:edit',
@@ -361,8 +386,8 @@ export function applyGuiEvent(state: GuiState, event: GuiEvent): GuiState {
 
 /** The pickers shown under the composer, in a fixed order whatever order the agent lists them in. */
 export function composerPickers(config: readonly GuiConfigOption[]): GuiConfigOption[] {
-  // Figma 56 / 65: model · effort, 权限 and 计划 (one 模式 button), 快速, then the agent's own mode and anything else.
-  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'fast', 'mode', 'other']
+  // Figma 56 / 65 / 74A: model · effort, 权限 and 计划 (one 模式 button), 快速, Ultracode, then the agent's own mode and anything else.
+  const order: GuiConfigOption['category'][] = ['model', 'thought_level', 'permission', 'plan', 'fast', 'ultracode', 'mode', 'other']
   return config.filter((o) => o.values.length > 1).sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
 }
 

@@ -47,6 +47,9 @@ describe('normalizeHook · lifecycle events (real payloads)', () => {
         { schedule: '0 17 * * *', recurring: false, prompt: '' }
       ]
     })
+    // A workflow still running behind the turn (background_tasks, 2.1.322; PRD F25) keeps the session running.
+    const behind = { ...fx.Stop, background_tasks: [{ id: 'w1', type: 'workflow', status: 'running', name: 'auth' }, { id: 'b1', type: 'local_bash', status: 'running' }, { id: 'w0', type: 'workflow', status: 'completed' }] }
+    expect(claude('Stop', behind).events[0]).toEqual({ type: 'stop', message: 'OK', workflows: 1 })
     const { session_crons: _crons, ...older } = fx.Stop
     expect(claude('Stop', older).events).toEqual([{ type: 'stop', message: 'OK' }])
   })

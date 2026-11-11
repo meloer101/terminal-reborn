@@ -1,12 +1,15 @@
 // Background review in the window (PRD F13): each worktree's latest status from main, the comments it lands in
 // Git · 变更, and the turn signals main needs for 一轮结束且有新提交时. Main runs the reviewer; nothing here types into
 // a session.
-import { headlessAgent } from '@shared/agents'
+import { headlessAgent, type HeadlessAgent } from '@shared/agents'
 import { create } from 'zustand'
 import { formatReviewStats, type ReviewAgent, type ReviewStatus, type ReviewTrigger } from '@shared/background-review'
 import type { AgentEventEnvelope } from '@shared/agent-events'
 import { landReviewComments } from '../state/review-comments'
 import { useWorkspace } from '../state/workspace'
+import { promptsOf } from '../attempts/sources'
+import { guiStateOf } from '../gui/store'
+import { guiUserTexts, withAsked } from './asked'
 
 /** A worktree's latest review as the window keeps it: the comments themselves live in the comment store. */
 export type ReviewState = Omit<ReviewStatus, 'comments'> & {
@@ -46,9 +49,21 @@ function restoreSavedReview(root: string, cancelledAt: number): void {
   })
 }
 
+/** The prompts of the first `agent` session in the worktree that has any. */
+function askedFor(root: string, agent: HeadlessAgent): string[] {
+  const { sessions, worktrees } = useWorkspace.getState()
+  const ids = new Set(worktrees.filter((w) => w.path === root).map((w) => w.id))
+  for (const session of sessions) {
+    if (session.kind !== agent || !ids.has(session.worktreeId)) continue
+    const asked = session.ui === 'gui' ? guiUserTexts(guiStateOf(session.id).items) : [...promptsOf(session.id)]
+    if (asked.length > 0) return asked
+  }
+  return []
+}
+
 /** `force`: 重审, also when this exact diff was reviewed before. */
 export async function startBackgroundReview(root: string, agent: ReviewAgent, trigger: ReviewTrigger, base?: string, force = false): Promise<ReviewStatus> {
-  const status = await window.tr.review.start({ root, agent, trigger, ...(base ? { base } : {}), ...(force ? { force: true } : {}) })
+  const status = await window.tr.review.start(withAsked({ root, agent, trigger, ...(base ? { base } : {}), ...(force ? { force: true } : {}) }, askedFor(root, agent)))
   acceptReviewStatus(status)
   return status
 }

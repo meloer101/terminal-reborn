@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type AppearanceSettings } from '@shared/settings'
-import { RESET_KEYS, displayFamily, fontSizeOptions, formatPercent, isPageDefault, materialOptions, pageDefaults, previewCaption } from './appearance-form'
+import { RESET_KEYS, displayFamily, fontSizeOptions, formatPercent, isPageDefault, MATERIAL_OPTIONS, pageDefaults, previewCaption } from './appearance-form'
 
 describe('previewCaption', () => {
   it('matches the Figma caption', () => {
@@ -30,10 +30,10 @@ describe('misc formatting', () => {
   })
 })
 
-describe('materialOptions (PRD v1.139, Figma 57C)', () => {
-  it('offers Liquid Glass only where the window has it; 实色 everywhere', () => {
-    expect(materialOptions(true).map((o) => o.label)).toEqual(['液态玻璃', '磨砂玻璃', '实色'])
-    expect(materialOptions(false).map((o) => o.label)).toEqual(['磨砂玻璃', '实色'])
+describe('MATERIAL_OPTIONS (PRD v1.174, Figma 66′)', () => {
+  it('offers 玻璃 and 实色 on every macOS; the engine behind 玻璃 is not a choice', () => {
+    expect(MATERIAL_OPTIONS.map((o) => o.label)).toEqual(['玻璃', '实色'])
+    expect(MATERIAL_OPTIONS.map((o) => o.value)).toEqual(['glass', 'solid'])
   })
 })
 

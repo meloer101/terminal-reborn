@@ -7,6 +7,7 @@ import {
   nextAttentionSessionId,
   sameRow,
   sameSubagent,
+  workflowItems,
   sessionForShortcut,
   visibleSessionIds
 } from './model'
@@ -378,5 +379,35 @@ describe('按状态 view (PRD §3.3, Figma 53C)', () => {
       groupBy: 'status'
     })
     expect(visibleSessionIds(archived)).not.toContain('a-run')
+  })
+})
+
+describe('workflow runs under their session (PRD F25, Figma 74D)', () => {
+  const run = (status: 'running' | 'completed', key = 'wf_abcdef12'): import('@shared/workflow-run').WorkflowRun => ({
+    key,
+    name: 'auth',
+    status,
+    phases: [{ title: '调研' }, { title: '改写' }, { title: '核对' }],
+    agents: [
+      { label: 'a', phase: 0, state: 'done' },
+      { label: 'b', phase: 1, state: 'done' },
+      { label: 'c', phase: 1, state: status === 'running' ? 'running' : 'done' }
+    ]
+  })
+
+  it('lists a live run with the current phase and its phases; folded, only the run', () => {
+    const lines = workflowItems([run('running')], { unread: false, folded: new Set() })
+    expect(lines.map((l) => [l.kind, l.title, l.glyph, l.right])).toEqual([
+      ['workflow', 'auth', 'running', '1 / 2'],
+      ['phase', '调研', 'done_unread', '1 / 1'],
+      ['phase', '改写', 'running', '1 / 2'],
+      ['phase', '核对', 'idle', '—']
+    ])
+    expect(workflowItems([run('running')], { unread: false, folded: new Set(['wf_abcdef12']) })).toHaveLength(1)
+  })
+
+  it('keeps an ended run only while the turn is unread', () => {
+    expect(workflowItems([run('completed')], { unread: true, folded: new Set() })[0]).toMatchObject({ glyph: 'done_unread', right: '3 / 3' })
+    expect(workflowItems([run('completed')], { unread: false, folded: new Set() })).toEqual([])
   })
 })

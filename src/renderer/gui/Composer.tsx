@@ -6,7 +6,7 @@
 // Before anything is said (`switchable`) the model menu lists the agents first, each with its models (Figma 65B).
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, X, Zap } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronRight, Gauge, ListTodo, Pencil, Plus, Shield, ShieldCheck, Square, Workflow, X, Zap } from 'lucide-react'
 import { agentName, type CliAgent } from '@shared/agents'
 import { guiAdapterOf } from '@shared/gui-agents'
 import { matchCommands, type GuiCatalogResult, type GuiCommand, type GuiConfigOption } from '@shared/gui-chat'
@@ -178,7 +178,22 @@ export const Composer = memo(function Composer({ sessionId, agent, cwd, busy, co
             <Plus {...ICON} />
           </button>
           {shown.map((button) =>
-            button.toggle ? (
+            button.toggle && button.options[0]?.category === 'ultracode' ? (
+              // Ultracode (Figma 74A): named, since only its name says what it costs; pressed while on. Only the user
+              // turns it on, for this session (PRD F25).
+              <button
+                key={button.key}
+                type="button"
+                className={styles.picker}
+                aria-pressed={button.toggle.on}
+                title={button.toggle.on ? 'Ultracode 开着：每个任务都编排多个 agent 并行做' : 'Ultracode：每个任务都编排多个 agent 并行做'}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void setConfig(button.options[0]!.id, button.toggle!.on ? 'off' : 'on')}
+              >
+                <Workflow {...SMALL} />
+                <span>{button.label}</span>
+              </button>
+            ) : button.toggle ? (
               // 快速 (Figma 65): the mark only, pressed while on; the tooltip says why it is not taking effect.
               <button
                 key={button.key}
@@ -265,12 +280,15 @@ function buttonMark(button: PickerButton, agent: AgentKind): ReactNode {
   return null
 }
 
-/** 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name. */
-function Attachment({ path, remove }: { path: string; remove(): void }) {
+/**
+ * 50C: a picture as a 64 px thumbnail (× on hover), any other file — or a picture that cannot be read — as its name.
+ * 71A / 71D: the same over a sent message's bubble, without ×.
+ */
+export function Attachment({ path, remove }: { path: string; remove?: () => void }) {
   const [broken, setBroken] = useState(false)
   const url = broken ? null : thumbnailUrl(path)
   const name = path.slice(path.lastIndexOf('/') + 1)
-  const button = (
+  const button = remove && (
     <button type="button" className={styles.attachmentRemove} aria-label={`移除 ${path}`} onClick={remove}>
       <X size={12} strokeWidth={1.75} aria-hidden />
     </button>
@@ -284,7 +302,7 @@ function Attachment({ path, remove }: { path: string; remove(): void }) {
     )
   }
   return (
-    <li className={styles.attachment} title={path}>
+    <li className={styles.attachment} title={path} data-fixed={remove ? undefined : 'true'}>
       <span className={styles.attachmentName}>{name}</span>
       {button}
     </li>

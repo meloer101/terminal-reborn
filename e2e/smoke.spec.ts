@@ -62,7 +62,7 @@ test('the sidebar resizes from its right edge (200–480) and main follows', asy
   await expect.poll(width).toBe(480)
   // A narrower window shows less of the saved width, so main keeps its minimum.
   await setWindowSize(app, page, 1000, 700)
-  await expect.poll(width).toBe(440)
+  await expect.poll(width).toBe(434)
   expect(Math.round((await main.boundingBox())!.width)).toBe(560)
   await setWindowSize(app, page, 1440, 900)
   await expect.poll(width).toBe(480)

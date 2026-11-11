@@ -1,9 +1,10 @@
 // Main-side appearance effects (PRD §4 F7): native theme, and the window's glass for every window. On macOS 26 the
-// window is transparent over Liquid Glass (NSGlassEffectView); 窗口 · 材质 「磨砂玻璃」 lays native vibrancy over it
-// (PRD §5 v1.127: `setVibrancy('sidebar')` covers the glass, `setVibrancy(null)` shows it again — measured, no window
-// to recreate). Before macOS 26 the shell is always vibrancy. The renderer tints either with --glass-shell at the
-// user's 窗口底层不透明度 (appearance/map.ts). 「实色」 (v1.139) takes the vibrancy path too, covering the Liquid Glass (which
-// cannot be removed); the renderer paints the shell opaque over it, which keeps the window's rounded corners.
+// window is transparent over Liquid Glass (NSGlassEffectView); 窗口 · 材质 「玻璃」 (v1.174; before it 「液态玻璃」 and
+// 「磨砂玻璃」) shows it, and 「实色」 lays native vibrancy over it (PRD §5 v1.127: `setVibrancy('sidebar')` covers the glass,
+// `setVibrancy(null)` shows it again — measured, no window to recreate). Before macOS 26 the shell is always vibrancy.
+// The renderer tints either with --glass-shell at the user's 窗口底层不透明度 (appearance/map.ts). 「实色」 (v1.139)
+// takes the vibrancy path because the Liquid Glass cannot be removed; the renderer paints the shell opaque over it,
+// which keeps the window's rounded corners.
 import { app, nativeTheme, type BrowserWindow } from 'electron'
 import liquidGlass from 'electron-liquid-glass'
 import { resolveTheme, windowBackgroundColor } from '@shared/appearance'
@@ -53,7 +54,7 @@ function applyToWindow(win: BrowserWindow, settings: AppSettings): void {
   win.setBackgroundColor(windowBackgroundColor(resolved, glass))
   if (!glass) return
   if (nativeGlass) attachGlass(win)
-  const liquid = nativeGlass && !unglassed.has(win) && settings.appearance.windowMaterial === 'liquid'
+  const liquid = nativeGlass && !unglassed.has(win) && settings.appearance.windowMaterial === 'glass'
   const next = liquid ? null : 'sidebar'
   if (vibrancy.has(win) && vibrancy.get(win) === next) return
   vibrancy.set(win, next)

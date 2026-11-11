@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SHORTCUTS } from '@shared/shortcuts'
 import type { Project, Session, Worktree } from '@shared/types'
 import { buildEntries, buildActionEntries, currentProject, rankEntries, stepIndex, type PaletteInput } from './entries'
 
@@ -208,5 +209,40 @@ describe('历史 (F15)', () => {
     expect(ids('侧边栏', { worktrees: archived })[0]).toBe('archived:w3')
     expect(ids('历史', { worktrees: archived })).toContain('archived:w3')
     expect(ids('sidebar-status', { worktrees: archived })[0]).toBe('archived:w3')
+  })
+})
+
+describe('the Git group (合入链路 v2, Figma 73H)', () => {
+  const git: PaletteInput['git'] = {
+    name: 'session-cookie',
+    worktreePath: '/a/1',
+    sessionId: 'running-old',
+    actions: [
+      { command: 'commit', label: '提交…', detail: '3 个文件', primary: false },
+      { command: 'sync', label: '同步 main', detail: '落后 4', primary: false },
+      { command: 'pr', label: '创建 PR', detail: '', primary: true },
+      { command: 'review', label: '审阅全部改动', detail: '12 个文件', primary: false }
+    ]
+  }
+
+  it('lists the chain actions first under Git · <branch>, each running its command for the worktree; the primary exit shows ⇧⌘M', () => {
+    const entries = buildEntries({ ...input(), git })
+    const first = entries.slice(0, 4)
+    expect(first.map((e) => [e.title, e.subtitle, e.sectionTitle])).toEqual([
+      ['提交…', '3 个文件', 'Git · session-cookie'],
+      ['同步 main', '落后 4', 'Git · session-cookie'],
+      ['创建 PR', '', 'Git · session-cookie'],
+      ['审阅全部改动', '12 个文件', 'Git · session-cookie']
+    ])
+    expect(first[0]!.target).toEqual({ type: 'chain', worktreePath: '/a/1', sessionId: 'running-old', command: 'commit' })
+    expect(first[2]!.shortcut).toBe(SHORTCUTS['merge-worktree'])
+    expect(first[0]!.shortcut).toBeUndefined()
+    // The empty query keeps the group on top; a query matching a session puts sessions first.
+    expect(rankEntries(entries, '')[0]!.entry.section).toBe('git')
+    expect(rankEntries(entries, '同步')[0]!.entry.id).toBe('git:sync')
+  })
+
+  it('is absent without a group', () => {
+    expect(buildEntries({ ...input(), git: null }).some((e) => e.section === 'git')).toBe(false)
   })
 })

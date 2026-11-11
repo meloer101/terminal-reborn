@@ -1,9 +1,11 @@
 // Git view (PRD F17 Git · 图谱 / 变更, Figma 13B / 13H / 13B2): header, the 图谱 / 变更 switch, and either the commit
-// graph of the whole repo or the active worktree's changes.
+// graph of the whole repo or the active worktree's changes. On 变更 the switch row also shows 已看 N / M and the 未看
+// filter (合入链路 v2, Figma 73A).
 import { ChevronDown, Ellipsis, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { compareByUrgency } from '@shared/session-status'
+import { reviewFiles, viewedState } from '@shared/review-progress'
 import type { GitLogScope } from '@shared/git-graph/log'
 import type { Worktree } from '@shared/types'
 import { SPLIT_MIN_PANEL_WIDTH, type DiffLayout } from '@shared/workspace-file'
@@ -29,8 +31,10 @@ import {
   setRemotes,
   setScope,
   setTab,
+  setUnviewedOnly,
   useGit
 } from './store'
+import { useViewed } from './viewed'
 import styles from './GitView.module.css'
 
 /** How often the graph checks whether a ref moved while it is on screen (linked worktrees' refs are not watched). */
@@ -110,6 +114,9 @@ function GitPane({ worktree }: { worktree: Worktree }) {
 
   const changeCount = git.changes ? new Set([...git.changes.uncommitted, ...git.changes.committed].map((c) => c.path)).size : null
   const onGraph = git.tab === 'graph'
+  // 已看 N / M and 未看 K (Figma 73A): every row of 变更, the same file in 未提交 and 已提交 counting twice.
+  const marks = useViewed((s) => s.byWorktree[root])
+  const viewed = useMemo(() => (git.changes ? viewedState(reviewFiles(git.changes), marks ?? {}) : null), [git.changes, marks])
 
   return (
     <>
@@ -181,6 +188,22 @@ function GitPane({ worktree }: { worktree: Worktree }) {
           </button>
         ) : (
           <>
+            {viewed && viewed.total > 0 && (
+              <>
+                <span className={styles.viewedCount} data-testid="viewed-count">
+                  已看 {viewed.done} / {viewed.total}
+                </span>
+                <button
+                  type="button"
+                  className={styles.viewedFilter}
+                  aria-pressed={git.unviewedOnly}
+                  data-testid="viewed-filter"
+                  onClick={() => setUnviewedOnly(root, !git.unviewedOnly)}
+                >
+                  未看 {viewed.total - viewed.done}
+                </button>
+              </>
+            )}
             {git.changes?.base && (
               <span className={styles.aheadBehind}>{compareLine(git.changes.base, git.changes.ahead, git.changes.behind)}</span>
             )}

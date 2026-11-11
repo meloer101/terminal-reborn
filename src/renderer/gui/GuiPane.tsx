@@ -15,8 +15,8 @@ export interface GuiPaneProps {
   cwd: string
   agent: AgentKind
   active: boolean
-  /** Where it is shown in this window's area, with the card's corners (split/model.ts paneCorners); undefined = not here. */
-  rect: ChatPlacement | undefined
+  /** Where it is shown in this window's area (split/model.ts); undefined = not here. */
+  rect: Rect | undefined
   /** Shown somewhere, kept running or started eagerly: its agent should be up. */
   wanted: boolean
   /** Restored and not started yet, or waiting for its worktree: nothing is opened until it is released. */
@@ -25,11 +25,7 @@ export interface GuiPaneProps {
   generation: number
 }
 
-/** TerminalArea's PanePlacement: a corner in a corner of the window takes the window's radius, square in full screen. */
-type ChatPlacement = Rect & { radius: string }
-
-const place = (rect: ChatPlacement | undefined): CSSProperties | undefined =>
-  rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height, borderRadius: rect.radius }
+const place = (rect: Rect | undefined): CSSProperties | undefined => rect && { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
 
 export const GuiPane = memo(function GuiPane({ sessionId, cwd, agent, active, rect, wanted, held, resumeAgentSessionId, generation }: GuiPaneProps) {
   const [everWanted, setEverWanted] = useState(wanted)
@@ -44,7 +40,7 @@ export const GuiPane = memo(function GuiPane({ sessionId, cwd, agent, active, re
 }, sameProps)
 
 /** The chat's card at `rect` (nothing when it is not shown here). */
-export function GuiCard({ sessionId, cwd, agent, active, rect }: { sessionId: SessionId; cwd: string; agent: AgentKind; active: boolean; rect: ChatPlacement | undefined }) {
+export function GuiCard({ sessionId, cwd, agent, active, rect }: { sessionId: SessionId; cwd: string; agent: AgentKind; active: boolean; rect: Rect | undefined }) {
   return (
     <div
       className={styles.pane}
@@ -73,7 +69,6 @@ function sameProps(a: GuiPaneProps, b: GuiPaneProps): boolean {
     a.rect?.x === b.rect?.x &&
     a.rect?.y === b.rect?.y &&
     a.rect?.width === b.rect?.width &&
-    a.rect?.height === b.rect?.height &&
-    a.rect?.radius === b.rect?.radius
+    a.rect?.height === b.rect?.height
   )
 }

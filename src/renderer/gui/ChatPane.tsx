@@ -20,6 +20,9 @@ import { Feed } from './Feed'
 import { TodoCard } from './Todos'
 import { DispatchStripGui } from './Dispatch'
 import { retargetGuiSession } from './launch'
+import { useSessionMeta } from '../session-meta/store'
+import type { WorkflowAsk } from './WorkflowCard'
+import type { WorkflowRun } from '@shared/workflow-run'
 import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
 import { ProjectChip } from './ProjectChip'
 import { addAttachments, clearComposer, notePick, setDraft, setGuiState, useGuiSessions } from './store'
@@ -79,12 +82,42 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
   const projectId = worktrees.find((w) => w.id === worktreeId)?.projectId
   // Figma 59J: the agent's current task list, above the composer.
   const todos = useMemo(() => currentTodos(state.items), [state.items])
+  // Figma 74: Claude's workflow runs, drawn at their Workflow calls; a Workflow ask is answered on that card.
+  const workflows = useSessionMeta((s) => s.bySession[sessionId]?.workflows)
+  const waitingTool = waitingToolId(state.items, state.prompts)
+  const workflowPrompt = prompt?.kind === 'permission' && prompt.workflow && waitingTool ? prompt : null
+  const workflowAsk = useMemo<WorkflowAsk | null>(
+    () =>
+      workflowPrompt?.workflow
+        ? {
+            id: workflowPrompt.id,
+            name: workflowPrompt.workflow.name,
+            phases: workflowPrompt.workflow.phases,
+            pending: answering === workflowPrompt.id,
+            answer: (allow) => answer({ kind: 'permission', id: workflowPrompt.id, optionId: allow ? 'allow_once' : 'reject_once' })
+          }
+        : null,
+    [workflowPrompt, answering, answer]
+  )
+  const stopWorkflow = useCallback(
+    (run: WorkflowRun) => {
+      if (!run.taskId) return
+      setSendError(null)
+      void window.tr.gui
+        .stopTask(sessionId, run.taskId)
+        .catch(() => false)
+        .then((ok) => {
+          if (!ok) setSendError(`没有停住 workflow「${run.name}」`)
+        })
+    },
+    [sessionId]
+  )
 
   const send = useCallback(
     (text: string, attachments: readonly string[]) => {
       setSendError(null)
       if (!willQueue) {
-        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now() })
+        setPending({ id: `pending-${Date.now()}`, text, users, at: Date.now(), attachments })
         clearComposer(sessionId)
       }
       const undo = (reason: string): void => {
@@ -199,16 +232,19 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
           agent={agent}
           items={items}
           live={state.live}
-          waitingTool={waitingToolId(state.items, state.prompts)}
+          waitingTool={waitingTool}
           busy={state.busy}
           canEdit={guiCanEdit(agent) && !prompt && state.queued.length === 0}
           onEdit={edit}
+          workflows={workflows}
+          workflowAsk={workflowAsk}
+          onStopWorkflow={stopWorkflow}
         />
       )}
       <div className={styles.dock}>
         {todos && <TodoCard todos={todos} />}
         <DispatchStripGui parentId={sessionId} />
-        {prompt && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
+        {prompt && !workflowAsk && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
         {state.queued.map((queued) => (
           <QueuedBar key={queued.id} sessionId={sessionId} id={queued.id} text={queued.text} />
         ))}

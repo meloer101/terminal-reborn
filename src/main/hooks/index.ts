@@ -15,6 +15,7 @@ import { cliAdapterLaunch } from './cli-adapters'
 import { CodexAccountClient, readClaudeAccountUsage } from './account-usage'
 import { AgentTitleWatcher } from './agent-title'
 import { SubagentWatcher } from './subagents'
+import { WorkflowWatcher } from './workflows'
 import { HookBridge, type BridgeEmitter } from './bridge'
 import { CodexConfigCache, prepareCodexHookConfig } from './codex-probe'
 import { CodexUsageWatcher } from './codex-usage'
@@ -315,6 +316,15 @@ const subagents = new SubagentWatcher((sessionId, agent, items) =>
   emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'subagents', items } })
 )
 
+/**
+ * Claude's workflow runs in each terminal session, read from the run's own files after hooks (ultracode, PRD F25). GUI
+ * sessions get theirs from stream-json (gui/claude-driver.ts).
+ */
+const workflows = new WorkflowWatcher(
+  (sessionId, agent, runs) => emitter.event({ sessionId, agent, at: Date.now(), event: { type: 'workflows', runs } }),
+  { skip: (sessionId) => guiSessions.has(sessionId) }
+)
+
 /** Context history and token spend per session, read from the agents' transcripts (Figma 18). */
 const transcripts = new TranscriptMeter()
 
@@ -358,7 +368,7 @@ async function start(): Promise<Runtime | null> {
   if (!relayHolds) console.warn('[hooks] the pty daemon answers permission relays before a phone could; nothing is held for the phone')
   if (target) {
     try {
-      const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, scripts })
+      const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, workflows, scripts })
       const supervisor = new DaemonHookEndpoint({
         target,
         settings: () => buildClaudeHookSettings(hookScriptPath()),
@@ -383,7 +393,7 @@ async function start(): Promise<Runtime | null> {
     })
     // No in-app answering UI: permission requests are announced and answered in the TUI; held only while a paired
     // phone is connected (PRD F22), and the TUI dialog shows meanwhile all the same.
-    const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, scripts })
+    const bridge = new HookBridge(emitter, { holdPermissions: holdsFor, titles, rollouts, transcripts, subagents, workflows, scripts })
     const supervisor = new HookSupervisor({
       dir,
       handler: (request) => route(bridge, request),

@@ -17,6 +17,14 @@ function ok(patch: Partial<Extract<ShipPreflight, { ok: true }>> = {}): ShipPref
     baseBehindUpstream: 0,
     openPr: null,
     mergeMethods: null,
+    head: 'c0ffee',
+    gh: 'ready',
+    remoteOnGitHub: true,
+    operation: null,
+    behindBase: 1,
+    baseConflicts: null,
+    pushed: false,
+    upstream: null,
     ...patch
   }
 }
@@ -39,7 +47,7 @@ describe('shipExits', () => {
   })
 
   it('puts the preflight failure on both exits, main first', () => {
-    const { primary, secondary } = shipExits(state({ ok: false, message: '不是 git 仓库' }, { remembered: 'pr' }))
+    const { primary, secondary } = shipExits(state({ ok: false, message: '不是 git 仓库', operation: null }, { remembered: 'pr' }))
     expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: '不是 git 仓库' })
     expect(secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '不是 git 仓库' })
   })
@@ -124,6 +132,24 @@ describe('shipExits', () => {
     })
   })
 
+  describe('blocks 创建 PR before the agent writes anything', () => {
+    it('when gh is missing or not logged in', () => {
+      expect(shipExits(state(ok({ gh: 'missing' }))).secondary).toEqual({ kind: 'pr', label: '创建 PR', blocker: '创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login' })
+      expect(shipExits(state(ok({ gh: 'signed-out' }), { remembered: 'pr' })).primary).toEqual({
+        kind: 'pr',
+        label: '创建 PR',
+        blocker: 'gh 还没有登录：在终端运行 gh auth login 后可以创建 PR'
+      })
+      expect(shipExits(state(ok({ gh: 'ready' }))).secondary?.blocker).toBeNull()
+    })
+
+    it('when the remote is not on GitHub: only 合并到 main is offered', () => {
+      const { primary, secondary } = shipExits(state(ok({ remoteOnGitHub: false }), { remembered: 'pr' }))
+      expect(primary).toEqual({ kind: 'main', label: '合并到 main 并推送', blocker: null })
+      expect(secondary).toBeNull()
+    })
+  })
+
   it('blocks the single main exit when there is nothing to ship and no remote', () => {
     expect(shipExits(state(ok({ remote: null, ahead: 0 }))).primary).toEqual({
       kind: 'main',
@@ -138,6 +164,15 @@ describe('exitPlan', () => {
   const pr = { number: 7, state: 'open' as const, url: 'https://github.com/o/r/pull/7', details: { headOid: 'aaa' } } as never
   const plan = (patch: Partial<Parameters<typeof exitPlan>[0]> = {}) =>
     exitPlan({ preflight: ok(), remembered: null, prStatus: null, changes, isMain: false, projectRoot: '/r', ...patch })
+
+  // R24: with an open PR, files nothing can tick (a nested repository) or that are unticked are not something to send.
+  it('opens the PR when no uncommitted file is ticked and nothing is unpushed', () => {
+    const prStatus = { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0 } as never
+    const nested = { ...changes, uncommitted: [{ path: 'vendor/x', status: '?', untracked: true, nested: true }] } as never
+    expect(plan({ preflight: ok({ openPr: 7, uncommitted: 1 }), prStatus, changes: nested, ticked: 0 }).exits.primary).toEqual({ kind: 'open-pr', number: 7, label: '打开 PR #7', blocker: null })
+    const one = { ...changes, uncommitted: [{ path: 'a.ts', status: 'M' }] } as never
+    expect(plan({ preflight: ok({ openPr: 7, uncommitted: 1 }), prStatus, changes: one, ticked: 1 }).exits.primary).toMatchObject({ kind: 'push-pr', label: '提交并推送到 PR #7' })
+  })
 
   it('offers both exits for a branch with work, and says what blocks them', () => {
     const p = plan()
@@ -155,12 +190,60 @@ describe('exitPlan', () => {
     expect(base.blocker(base.exits.primary)).toMatch(/基线分支/)
   })
 
+  it('gates 创建 PR on gh and the remote through the plan too', () => {
+    const missing = plan({ gh: 'missing' })
+    expect(missing.blocker(missing.exits.secondary!)).toBe('创建 PR 需要 GitHub CLI：装好 gh 后在终端运行 gh auth login')
+    const signedOut = plan({ preflight: ok({ gh: 'signed-out' }), remembered: 'pr' })
+    expect(signedOut.exits.primary.kind).toBe('pr')
+    expect(signedOut.blocker(signedOut.exits.primary)).toBe('gh 还没有登录：在终端运行 gh auth login 后可以创建 PR')
+    const elsewhere = plan({ preflight: ok({ remoteOnGitHub: false }) })
+    expect(elsewhere.exits.secondary).toBeNull()
+    expect(elsewhere.chain.actions.find((a) => a.id === 'pr')?.blocker).toBe('远程不在 GitHub 上')
+    expect(elsewhere.blocker(elsewhere.exits.primary)).toBeNull()
+  })
+
+  it('puts any exit behind the plan’s own blocker, an open-PR exit built by the caller too', () => {
+    const open = { kind: 'open-pr' as const, number: 7, label: '打开 PR #7', blocker: null }
+    expect(plan({ preflight: null }).blocker(open)).toBe('正在检查…')
+    expect(plan({ preflight: { ok: false, message: '不是 git 仓库', operation: null } }).blocker(open)).toBe('不是 git 仓库')
+    expect(plan().blocker(open)).toBeNull()
+  })
+
+  it('carries the chain state it is built on', () => {
+    expect(plan().chain.stage).toBe('exits')
+    expect(plan({ preflight: ok({ merged: true }) }).chain.next?.id).toBe('archive')
+  })
+
+  it('has nothing to ship once the PR is merged on GitHub, even before the base is pulled', () => {
+    // The branch is still at the merged PR's head (the preflight's `head`).
+    const merged = { number: 7, state: 'merged' as const, url: 'https://github.com/o/r/pull/7', headOid: 'c0ffee' } as never
+    expect(plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr: merged, checkedAt: 0 } }).nothingToShip).toBe(true)
+    // Commits after the merge are new work.
+    expect(plan({ preflight: ok({ head: 'beef00' }), prStatus: { worktree: '/w', branch: 'feat/x', pr: merged, checkedAt: 0 } }).nothingToShip).toBe(false)
+  })
+
   it('sees an open PR with nothing to push as idle, and one with a newer local head as unpushed', () => {
     const idle = plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'aaa', remoteAhead: false } } })
     expect(idle.idlePr?.number).toBe(7)
     const ahead = plan({ prStatus: { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'bbb', remoteAhead: false } } })
     expect(ahead.unpushed).toBe(true)
     expect(ahead.idlePr).toBeNull()
+  })
+
+  // Review finding 11: the phone decides push-or-open from the chain, not from the PR poll alone.
+  it('pushes to the PR when the chain sees unpushed commits the PR poll has not seen yet', () => {
+    const status = { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'aaa', remoteAhead: false } }
+    const p = plan({ preflight: ok({ openPr: 7, pushed: true, upstream: { ahead: 1, behind: 0 } }), prStatus: status })
+    expect(p.chain.next?.label).toBe('推送到 PR #7')
+    expect(p.unpushed).toBe(true)
+    expect(p.idlePr).toBeNull()
+    expect(p.exits.primary).toMatchObject({ kind: 'push-pr', number: 7, label: '推送到 PR #7', blocker: null })
+  })
+
+  it('passes the ticked files to the chain', () => {
+    const dirty = { ...changes, uncommitted: [{ path: 'a.ts', status: 'M' as const, added: 1, removed: 0 }] }
+    expect(plan({ changes: dirty, ticked: 0 }).chain.actions.find((a) => a.id === 'commit')?.blocker).toBe('没有勾选文件')
+    expect(plan({ changes: dirty }).chain.actions.find((a) => a.id === 'commit')?.blocker).toBeNull()
   })
 })
 
@@ -178,5 +261,22 @@ describe('shipContextFor', () => {
       settings: { review: {} as never, pr: {} as never }
     })
     expect(ctx).toMatchObject({ root: '/r', worktree: '/w', base: 'main', branch: 'feat/x', paths: ['a.ts'], openPr: null, sessionId: 's1' })
+  })
+
+  it('commits only the ticked paths (none: nothing to commit) and merges with the repository’s default method', () => {
+    const base = {
+      projectRoot: '/r',
+      worktreePath: '/w',
+      changes: { uncommitted: [{ path: 'a.ts', status: 'M' as const, added: 1, removed: 0 }, { path: 'b.ts', status: 'M' as const, added: 1, removed: 0 }] },
+      pr: null,
+      agentSession: 's1',
+      openIn: 's1',
+      checksLine: null,
+      settings: { review: {} as never, pr: {} as never }
+    }
+    const preflight = ok({ mergeMethods: { methods: ['merge', 'rebase'], defaultMethod: 'rebase' } }) as Extract<ShipPreflight, { ok: true }>
+    expect(shipContextFor({ ...base, preflight, ticked: ['b.ts'] })).toMatchObject({ paths: ['b.ts'], method: 'rebase' })
+    expect(shipContextFor({ ...base, preflight, ticked: [] }).paths).toBeNull()
+    expect(shipContextFor({ ...base, preflight: ok() as Extract<ShipPreflight, { ok: true }> }).method).toBe('squash')
   })
 })
