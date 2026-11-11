@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, pruneUnticked, tickedPaths, tickState, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -248,5 +248,39 @@ describe('stickyFileIndex / endsOpenFile', () => {
   it('marks the last line of an open file, not the file row of a closed one', () => {
     expect(list.map((_, i) => endsOpenFile(list, i)).lastIndexOf(true)).toBe(11)
     expect(endsOpenFile(list, 12)).toBe(false)
+  })
+})
+
+describe('ticked files (合入链路 v2, Figma 73F1)', () => {
+  const list = [file('a.ts'), file('b.ts'), file('vendor', { nested: true, added: null, removed: null })]
+
+  it('every tickable row starts ticked; unticked paths stay out; a nested repository is never committed', () => {
+    expect(tickedPaths(list, new Set())).toEqual(['a.ts', 'b.ts'])
+    expect(tickedPaths(list, new Set(['b.ts']))).toEqual(['a.ts'])
+  })
+
+  it('the header reads all, none or mixed', () => {
+    expect(tickState(list, new Set())).toBe('all')
+    expect(tickState(list, new Set(['a.ts']))).toBe('mixed')
+    expect(tickState(list, new Set(['a.ts', 'b.ts']))).toBe('none')
+  })
+
+  it('forgets paths that left the list, and keeps the same set when nothing left', () => {
+    const unticked = new Set(['a.ts', 'gone.ts'])
+    expect([...pruneUnticked(unticked, list)]).toEqual(['a.ts'])
+    const same = new Set(['a.ts'])
+    expect(pruneUnticked(same, list)).toBe(same)
+  })
+
+  it('the 未提交 header counts the ticked files and carries the checkbox only when rows can be ticked', () => {
+    const data = changes({ uncommitted: [file('a.ts'), file('b.ts'), file('c.ts')] })
+    expect(changeItems(data, new Set(), {}, [], null, 'unified', new Set(['c.ts']))[0]).toEqual({
+      kind: 'group',
+      title: '未提交',
+      meta: '3 个文件 · 勾选 2 个',
+      group: 'uncommitted'
+    })
+    expect(changeItems(data, new Set(), {}, [], null, 'unified', new Set())[0]).toMatchObject({ meta: '3 个文件', group: 'uncommitted' })
+    expect(changeItems(data, new Set(), {}, [])[0]).toEqual({ kind: 'group', title: '未提交', meta: '3 个文件' })
   })
 })

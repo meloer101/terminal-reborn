@@ -255,12 +255,12 @@ export type ShipChainApi = Pick<ShipApi, 'sync' | 'pull' | 'operation'>
 // --- the Ship block's state (Git · 变更, Figma 29C / 29D / 29H), saved with the workspace while a run is open ---------
 
 /**
- * `main`: 合并到 base 并推送; `pr`: 创建 PR; `push-pr`: the branch's PR is open, commit what is uncommitted and push.
- * 合入链路 v2 (not wired yet: ship-runner and saved-runs do not start or restore them): `commit`: 提交… alone (write →
- * glance → commit); `sync`: 同步 <base> (fetch, bring the base into the branch).
+ * `main`: 合并到 base 并推送; `pr`: 创建 PR; `push-pr`: the branch's PR is open (or, with none, 推送 alone), commit what
+ * is uncommitted and push. 合入链路 v2: `commit`: 提交… alone (write → glance → commit); `sync`: 同步 <base> (fetch, bring
+ * the base into the branch); `pull`: 拉取 (fast-forward the branch to its upstream).
  */
-export type ShipKind = 'main' | 'pr' | 'push-pr' | 'commit' | 'sync'
-/** `sync`: the fetch-and-merge (or rebase) step of a `sync` run (not wired yet). */
+export type ShipKind = 'main' | 'pr' | 'push-pr' | 'commit' | 'sync' | 'pull'
+/** `sync`: the fetch of a `sync` run, and the one step of a `pull` run (the rebase / merge of a `sync` run is `merge`). */
 export type StepId = 'review' | 'write' | 'commit' | 'merge' | 'push' | 'create' | 'sync'
 export type StepState = 'pending' | 'working' | 'done' | 'failed'
 /** writing: steps before the user sees the text; glance: the text is shown for a last look; running: Wavi's own steps. */
@@ -292,6 +292,10 @@ export interface ShipError {
   conflicts?: string[]
   /** The push of the base was refused (protection, a hook): 改为创建 PR. */
   pushRefused?: boolean
+  /** What git or gh said, classified (合入链路 v2): its message is shown, its `next` picks the one way on. */
+  failure?: GitFailure
+  /** What 交给 <agent> puts into the agent's input line (never sent): a conflict or a failure, worked out when it happened. */
+  prompt?: string
 }
 
 export interface ShipState {

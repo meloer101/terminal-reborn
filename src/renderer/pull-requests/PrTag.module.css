@@ -28,3 +28,8 @@
 .mark[data-checks='pending'] {
   color: var(--status-working);
 }
+
+/* The poll failed (Figma 73I1): the ? keeps the tag's colour; the words say it. */
+.mark[data-checks='unknown'] {
+  color: inherit;
+}

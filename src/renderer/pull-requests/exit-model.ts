@@ -8,6 +8,7 @@ import type { AppSettings } from '@shared/settings'
 import type { ShipExitKind, ShipPreflight } from '@shared/ship'
 import { chainInputFrom, onOwnBase, shipChain, type ChainActionId, type ChainInput, type ChainState } from '@shared/ship-chain'
 import type { Session, SessionId } from '@shared/types'
+import { exitMethod } from './ship-flow'
 import type { ShipContext } from './ship-runner'
 
 export { livePr, unpushedOf }
@@ -138,8 +139,10 @@ export function shipContextFor(input: {
   openIn: SessionId | null
   checksLine: string | null
   settings: Pick<AppSettings, 'review' | 'pr'>
+  /** The ticked 未提交 paths (合入链路 v2); omitted: every one (the phone has no checkboxes). */
+  ticked?: readonly string[]
 }): ShipContext {
-  const paths = input.changes.uncommitted.filter((c) => !c.nested).map((c) => c.path)
+  const paths = input.ticked ? [...input.ticked] : input.changes.uncommitted.filter((c) => !c.nested).map((c) => c.path)
   return {
     root: input.projectRoot,
     worktree: input.worktreePath,
@@ -151,6 +154,7 @@ export function shipContextFor(input: {
     openPr: input.pr ? { number: input.pr.number, url: input.pr.url } : null,
     checksLine: input.checksLine,
     settings: input.settings,
-    openIn: input.openIn
+    openIn: input.openIn,
+    method: exitMethod(input.preflight.mergeMethods)
   }
 }

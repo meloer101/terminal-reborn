@@ -178,11 +178,13 @@ test.describe('F17 right panel · Git', () => {
     await expect(files.locator('[data-path="notes.md"]')).toContainText('+1')
     // main is the base itself and has no upstream: nothing to compare against.
     await expect(files).toContainText('没有可对比的基线分支')
-    await files.locator('[data-path="src/app.ts"] button').click()
+    await files.locator('[data-path="src/app.ts"] button[aria-expanded]').click()
     await expect(files.locator('[data-owner="uncommitted:src/app.ts"][data-kind="add"]')).toHaveCount(2)
     await expect(files.locator('[data-owner="uncommitted:src/app.ts"][data-kind="del"]')).toHaveCount(1)
-    await expect(panel().getByRole('button', { name: /合并到/ })).toBeDisabled()
-    await expect(panel().getByRole('button', { name: '创建 PR' })).toBeDisabled()
+    // The main checkout on its base has nothing to merge (合入链路 v2): the state line says so, no exit is offered.
+    await expect(panel().getByTestId('chain-headline')).toContainText('项目主目录检出的是基线分支')
+    await expect(panel().getByRole('button', { name: /合并到/ })).toHaveCount(0)
+    await expect(panel().getByRole('button', { name: '创建 PR' })).toHaveCount(0)
     await panel().getByRole('tab', { name: '图谱' }).click()
   })
 
@@ -199,7 +201,7 @@ test.describe('F17 right panel · Git', () => {
     await expect(panel()).toContainText('对比 main · 领先 2')
     await expect(files).toContainText('2 个提交 · 对比 main')
     await expect(files.locator('[data-group="committed"]')).toHaveCount(1)
-    await files.locator('[data-path="src/mobile-nav.ts"] button').click()
+    await files.locator('[data-path="src/mobile-nav.ts"] button[aria-expanded]').click()
     await expect(files.locator('[data-owner="committed:src/mobile-nav.ts"][data-kind="add"]')).toHaveCount(9)
     await expect(panel().getByRole('button', { name: /合并到 main/ })).toBeVisible()
     await shoot('changes')
@@ -218,7 +220,7 @@ test.describe('F17 right panel · Git', () => {
     writeFileSync(join(linked, 'src', 'long.ts'), Array.from({ length: 120 }, (_, i) => `export const line${i} = ${i}`).join('\n') + '\n')
     await panel().getByRole('tab', { name: /^变更/ }).click()
     const files = panel().getByRole('list', { name: '改动的文件' })
-    const row = files.locator('[data-path="src/long.ts"] button')
+    const row = files.locator('[data-path="src/long.ts"] button[aria-expanded]')
     await expect(row).toBeVisible({ timeout: 10_000 })
     await row.click()
     await expect(files.locator('[data-owner="uncommitted:src/long.ts"][data-kind="add"]').first()).toBeVisible()
@@ -234,7 +236,7 @@ test.describe('F17 right panel · Git', () => {
     await expect(files.locator('[data-owner="uncommitted:src/long.ts"]')).toHaveCount(0)
 
     // 全部收起 in the pane's ⋯ menu folds every open file (mobile-nav.ts first: once long.ts opens it is out of the window).
-    const nav = files.locator('[data-path="src/mobile-nav.ts"] button')
+    const nav = files.locator('[data-path="src/mobile-nav.ts"] button[aria-expanded]')
     // The worktree test above may have left it open.
     if ((await nav.getAttribute('aria-expanded')) !== 'true') await nav.click()
     await expect(nav).toHaveAttribute('aria-expanded', 'true')

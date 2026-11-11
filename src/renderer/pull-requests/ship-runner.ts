@@ -4,6 +4,7 @@
 // block only draws it (ship-flow.ts is the pure part).
 import { create } from 'zustand'
 import { agentName, claudeOrCodex, hasHooks } from '@shared/agents'
+import type { GitFailure } from '@shared/git-failures'
 import { reviewEvidence, evidenceBlock, withEvidence } from '@shared/pull-requests'
 import type { PrTarget } from '@shared/pull-requests'
 import type { AppSettings } from '@shared/settings'
@@ -12,6 +13,8 @@ import { writerFor } from '@shared/ship-writer'
 import type { ReviewAgent } from '@shared/background-review'
 import type { SavedShipContext, SavedShipRun } from '@shared/saved-runs'
 import { DEFAULT_SETTINGS } from '@shared/settings'
+import type { ShipError, StepId } from '@shared/ship'
+import { agentHandoffPrompt } from '@shared/ship-chain'
 import type { Session, SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
 import { cancelBackgroundReview, startBackgroundReview, useBackgroundReview } from '../review/background'
@@ -27,9 +30,12 @@ import {
   complete,
   conflictPrompt,
   createFailureStep,
+  divergedPrompt,
   fail,
+  failurePrompt,
   formatCommit,
   interruptedShip,
+  isExitRun,
   mainFailureStep,
   markFailed,
   parseRemembered,
@@ -39,9 +45,12 @@ import {
   retry,
   setTexts,
   startState,
+  syncConflictText,
   toGlance,
   toRunning,
   waitNote,
+  withoutWriter,
+  writeFailedToGlance,
   WRITE_TIMEOUT_MS,
   type ShipKind,
   type ShipState,
@@ -64,6 +73,15 @@ interface Run {
   merged?: string
   /** Taken up after a reload: main may have committed or merged meanwhile, so the first retry asks before it acts. */
   resumed?: boolean
+  /** 同步: how far the branch is behind the base when it started (the hand-off names it); null when not known. */
+  behind?: number | null
+}
+
+/** What a run of 同步 needs beyond its context. */
+export interface ShipStartOptions {
+  /** A branch never pushed is rebased onto the base, a pushed one merges it (ShipPreflight.pushed). */
+  syncMode?: 'rebase' | 'merge'
+  behind?: number | null
 }
 
 const runs = new Map<string, Run>()
@@ -106,6 +124,7 @@ function reviewAgentOf(ctx: ShipContext): ReviewAgent | null {
 
 function reviewWanted(ctx: ShipContext, kind: ShipKind): boolean {
   const { review } = ctx.settings
+  if (kind !== 'main' && kind !== 'pr' && kind !== 'push-pr') return false
   if (review.mode !== 'builtin' || !reviewAgentOf(ctx)) return false
   return kind === 'main' ? review.beforeMerge || review.beforePush : review.beforePush
 }
@@ -121,6 +140,7 @@ export function readRemembered(root: string) {
 }
 
 function remember(root: string, kind: ShipKind): void {
+  if (!isExitRun(kind)) return
   try {
     localStorage.setItem(rememberedKey(root), rememberedKindOf(kind))
   } catch {
@@ -180,10 +200,10 @@ export function startShipRuns(): () => void {
 
 // --- starting and steering ----------------------------------------------------------------------------------------
 
-export function startShip(ctx: ShipContext, kind: ShipKind, title: string): void {
+export function startShip(ctx: ShipContext, kind: ShipKind, title: string, options: ShipStartOptions = {}): void {
   if (runs.has(ctx.worktree)) return
   const token = ++counter
-  runs.set(ctx.worktree, { ctx, kind, token, committed: false })
+  runs.set(ctx.worktree, { ctx, kind, token, committed: false, behind: options.behind ?? null })
   const state = startState(
     {
       kind,
@@ -192,7 +212,9 @@ export function startShip(ctx: ShipContext, kind: ShipKind, title: string): void
       branch: ctx.branch,
       remote: ctx.remote,
       review: reviewWanted(ctx, kind),
-      uncommitted: (ctx.paths?.length ?? 0) > 0
+      uncommitted: (ctx.paths?.length ?? 0) > 0,
+      ...(ctx.method ? { method: ctx.method } : {}),
+      ...(options.syncMode ? { syncMode: options.syncMode } : {})
     },
     title
   )
@@ -238,16 +260,25 @@ export function retryShip(worktree: string): void {
   if (patch(worktree, run.token, retry)) void drive(worktree, run.token)
 }
 
-/** 交给 agent 解: the conflicting files go into the agent's input line (no Enter) and the run ends. */
+/** What 交给 <agent> puts into the input line for a failed step: the text worked out when it failed, else the files. */
+export function handoffText(error: ShipError | null | undefined, base: string): string | null {
+  if (!error) return null
+  if (error.prompt) return error.prompt
+  if (error.conflicts && error.conflicts.length > 0) return conflictPrompt(base, error.conflicts)
+  return null
+}
+
+/** 交给 agent 解: the conflicting files, or a failure the agent can fix, go into the agent's input line (no Enter) and
+ *  the run ends. */
 export async function handConflictsToAgent(worktree: string): Promise<void> {
   const run = runs.get(worktree)
-  const files = current(worktree)?.error?.conflicts
-  if (!run || !files || !run.ctx.sessionId) return
-  const { sessionId, base } = run.ctx
+  const text = handoffText(current(worktree)?.error, run?.ctx.base ?? 'main')
+  if (!run || !text || !run.ctx.sessionId) return
+  const { sessionId } = run.ctx
   try {
     useWorkspace.getState().setActiveSession(sessionId)
     await ensureAgentUp(sessionId)
-    await insertIntoTerminal(sessionId, conflictPrompt(base, files))
+    await insertIntoTerminal(sessionId, text)
     useWorkspace.getState().requestTerminalFocus()
     cancelShip(worktree)
   } catch (error) {
@@ -298,11 +329,29 @@ async function writePhase(worktree: string, token: number): Promise<void> {
     if (patch(worktree, token, toRunning)) await runPhase(worktree, token)
     return
   }
-  patch(worktree, token, (s) => begin(s, 'write'))
-  const written = viaAgent(ctx) ? await writeWithAgent(worktree, token, ctx, kind) : await writeHeadless(worktree, token, ctx, kind)
+  const agent = viaAgent(ctx)
+  // 提交… needs no AI: with nobody to write, the user types the message (Figma 73F2).
+  if (kind === 'commit' && !agent && !(await headlessWriterInstalled(ctx))) {
+    patch(worktree, token, withoutWriter)
+    return
+  }
   if (!alive(worktree, token)) return
-  if (!written.ok) patch(worktree, token, (s) => fail(s, { step: 'write', message: written.message }))
+  patch(worktree, token, (s) => begin(s, 'write'))
+  const written = agent ? await writeWithAgent(worktree, token, ctx, kind) : await writeHeadless(worktree, token, ctx, kind)
+  if (!alive(worktree, token)) return
+  if (!written.ok) patch(worktree, token, (s) => (kind === 'commit' ? writeFailedToGlance(s, written.message) : fail(s, { step: 'write', message: written.message })))
   else patch(worktree, token, (s) => toGlance(s, written.texts))
+}
+
+/** Whether the CLI a headless write would run is installed (unknown counts as installed: the write says why it failed). */
+async function headlessWriterInstalled(ctx: ShipContext): Promise<boolean> {
+  const writer = writerFor(ctx.settings.pr, claudeOrCodex(sessionOf(ctx.sessionId)?.kind)).agent
+  try {
+    const found = await window.tr.app.detectAgents()
+    return found[writer] !== false
+  } catch {
+    return true
+  }
 }
 
 type Written = { ok: true; texts: ShipTexts } | { ok: false; message: string }
@@ -557,6 +606,9 @@ async function runPhase(worktree: string, token: number): Promise<void> {
   if (!run || !state) return
   try {
     if (run.kind === 'main') await runMain(worktree, token, run, state)
+    else if (run.kind === 'commit') await runCommit(worktree, token, run, state)
+    else if (run.kind === 'sync') await runSync(worktree, token, run)
+    else if (run.kind === 'pull') await runPull(worktree, token, run)
     else await runPr(worktree, token, run, state)
   } catch (error) {
     // The step working now, not the one at the start: a phase runs several steps.
@@ -568,6 +620,21 @@ async function runPhase(worktree: string, token: number): Promise<void> {
 
 const stepDone = (state: ShipState, id: string): boolean => state.steps.some((s) => s.id === id && s.state === 'done')
 
+/**
+ * A step's error with what git said (合入链路 v2): the classified failure's message (else Wavi's own), and, when the way
+ * on is 交给 <agent>, the text that goes into its input line.
+ */
+function stepError(state: ShipState, run: Run, step: StepId, message: string, failure: GitFailure | undefined, extra: Partial<ShipError> = {}): ShipError {
+  const label = state.steps.find((s) => s.id === step)?.label ?? step
+  const prompt =
+    failure?.next === 'handoff'
+      ? failure.kind === 'diverged'
+        ? divergedPrompt({ branch: run.ctx.branch, remote: run.ctx.remote ?? 'origin' })
+        : failurePrompt({ step: label, failure })
+      : undefined
+  return { step, message: failure?.message ?? message, ...extra, ...(failure ? { failure } : {}), ...(prompt ? { prompt } : {}) }
+}
+
 /** Exit A: commit what is uncommitted, squash into the base, push it — main does all three in one call. */
 async function runMain(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
@@ -576,7 +643,10 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     run.resumed = false
     const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
     if (!alive(worktree, token)) return
-    if (now?.ok && now.uncommitted === 0 && ctx.paths) run.committed = true
+    if (now?.ok && now.uncommitted === 0 && ctx.paths) {
+      run.committed = true
+      patch(worktree, token, (s) => (s.steps.some((step) => step.id === 'commit') ? complete(s, 'commit') : s))
+    }
     if (now?.ok && now.merged) {
       patch(worktree, token, (s) => complete(s, 'merge'))
       state = current(worktree) ?? state
@@ -590,30 +660,34 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
         root: ctx.root,
         worktree: ctx.worktree,
         message: state.texts.commit,
-        method: 'squash',
+        method: ctx.method ?? 'squash',
         paths: run.committed ? null : ctx.paths
       })
   if (!alive(worktree, token)) return
+  const hasCommit = state.steps.some((s) => s.id === 'commit')
   if (!result.ok) {
     if (result.reason === 'declined') {
       patch(worktree, token, backToGlance)
       return
     }
     if (result.committed) run.committed = true
-    patch(worktree, token, (s) =>
-      fail(s, {
-        step: mainFailureStep(result.step),
-        message: result.message,
-        ...(result.output ? { output: result.output } : {}),
-        ...(result.conflicts && result.conflicts.length > 0 ? { conflicts: result.conflicts } : {})
-      })
-    )
+    const step = mainFailureStep(result.step, state.steps)
+    patch(worktree, token, (s) => {
+      const committed = hasCommit && step !== 'commit' && (result.committed || run.committed) ? complete(s, 'commit') : s
+      return fail(
+        committed,
+        stepError(committed, run, step, result.message, result.failure, {
+          ...(result.output ? { output: result.output } : {}),
+          ...(result.conflicts && result.conflicts.length > 0 ? { conflicts: result.conflicts } : {})
+        })
+      )
+    })
     return
   }
-  if (!mergeDone) patch(worktree, token, (s) => complete(s, 'merge'))
+  if (!mergeDone) patch(worktree, token, (s) => complete(hasCommit ? complete(s, 'commit') : s, 'merge'))
   run.merged = result.commit
   if (result.pushError) {
-    patch(worktree, token, (s) => fail(s, { step: 'push', message: result.pushError!, ...(result.pushRefused ? { pushRefused: true } : {}) }))
+    patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', result.pushError!, result.failure, result.pushRefused ? { pushRefused: true } : {})))
     return
   }
   patch(worktree, token, (s) => complete(s, 'push', result.pushed ? undefined : '没有远程，没有推送'))
@@ -633,13 +707,7 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
     })
     if (!alive(worktree, token)) return
     if (!made.ok) {
-      patch(worktree, token, (s) =>
-        fail(s, {
-          step: 'commit',
-          message: made.message,
-          ...(made.output ? { output: made.output } : {})
-        })
-      )
+      patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
       return
     }
     patch(worktree, token, (s) => complete(s, 'commit', made.commit.slice(0, 7)))
@@ -649,7 +717,7 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
     const pushed = await window.tr.pr.push(target)
     if (!alive(worktree, token)) return
     if (!pushed.ok) {
-      patch(worktree, token, (s) => fail(s, { step: 'push', message: pushed.message }))
+      patch(worktree, token, (s) => fail(s, stepError(s, run, 'push', pushed.message, pushed.failure)))
       return
     }
     patch(worktree, token, (s) => complete(s, 'push'))
@@ -672,12 +740,9 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
       patch(worktree, token, backToGlance)
       return
     }
-    patch(worktree, token, (s) =>
-      fail(s, {
-        step: createFailureStep(created.message),
-        message: created.message
-      })
-    )
+    // gh pr create pushes first: a classified push failure names the push step.
+    const step = created.failure && created.failure.kind !== 'not-github' && created.failure.kind !== 'no-pr' && created.failure.kind !== 'unknown' ? 'push' : createFailureStep(created.message)
+    patch(worktree, token, (s) => fail(s, stepError(s, run, step, created.message, created.failure)))
     return
   }
   patch(worktree, token, (s) => complete(complete(s, 'push'), 'create'))
@@ -685,11 +750,69 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
   finish(worktree, token, created.number ? `已创建 PR #${created.number}` : '已创建 PR')
 }
 
-/** Everything went through: the exit is remembered for this repository and the block goes away. */
+/** 提交… (Figma 73F1): commit the ticked files with the message. */
+async function runCommit(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
+  const { ctx } = run
+  patch(worktree, token, (s) => begin(s, 'commit'))
+  const made = await window.tr.pr.commit({ root: ctx.root, worktree: ctx.worktree, message: state.texts.commit, paths: ctx.paths ?? [] })
+  if (!alive(worktree, token)) return
+  if (!made.ok) {
+    patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
+    return
+  }
+  patch(worktree, token, (s) => complete(s, 'commit', made.commit.slice(0, 7)))
+  finish(worktree, token, `已提交 · ${made.commit.slice(0, 7)}`)
+}
+
+/** 同步 <base> (Figma 73D1 / 73D2): main fetches, brings the base in, and on conflicts starts nothing. */
+async function runSync(worktree: string, token: number, run: Run): Promise<void> {
+  const { ctx } = run
+  patch(worktree, token, (s) => begin(s, 'sync'))
+  const result = await window.tr.ship.sync({ root: ctx.root, worktree: ctx.worktree })
+  if (!alive(worktree, token)) return
+  if (result.ok) {
+    patch(worktree, token, (s) => complete(complete(s, 'sync', result.baseNotCaughtUp), 'merge'))
+    finish(worktree, token, `已同步 ${ctx.base}`)
+    return
+  }
+  if (result.reason === 'blocked') {
+    patch(worktree, token, (s) => fail(s, { step: 'sync', message: result.message }))
+    return
+  }
+  if (result.reason === 'conflicts') {
+    const handoff = { base: ctx.base, branch: ctx.branch, behind: run.behind ?? null, conflicts: result.conflicts.length > 0 ? result.conflicts : result.files }
+    const prompt = agentHandoffPrompt(result.mode === 'rebase' ? { kind: 'sync-rebase', ...handoff } : { kind: 'sync-merge', ...handoff })
+    patch(worktree, token, (s) =>
+      fail(complete(s, 'sync', result.baseNotCaughtUp), { step: 'merge', message: syncConflictText(result.mode, result.files), conflicts: result.files, prompt })
+    )
+    return
+  }
+  // A fetch that failed stops at 拉取; the rest at the rebase / merge.
+  const { failure } = result
+  const atFetch = failure.kind === 'network' || failure.kind === 'auth' || failure.kind === 'no-remote'
+  patch(worktree, token, (s) => fail(atFetch ? s : complete(s, 'sync'), stepError(s, run, atFetch ? 'sync' : 'merge', failure.message, failure)))
+}
+
+/** 拉取: fast-forward the branch to its upstream. */
+async function runPull(worktree: string, token: number, run: Run): Promise<void> {
+  const { ctx } = run
+  patch(worktree, token, (s) => begin(s, 'sync'))
+  const result = await window.tr.ship.pull({ root: ctx.root, worktree: ctx.worktree })
+  if (!alive(worktree, token)) return
+  if (result.ok) {
+    patch(worktree, token, (s) => complete(s, 'sync'))
+    finish(worktree, token, `已拉取 ${ctx.remote ?? 'origin'}/${ctx.branch}`)
+    return
+  }
+  if (result.reason === 'blocked') patch(worktree, token, (s) => fail(s, { step: 'sync', message: result.message }))
+  else patch(worktree, token, (s) => fail(s, stepError(s, run, 'sync', result.failure.message, result.failure)))
+}
+
+/** Everything went through: an exit is remembered for this repository and the block goes away. */
 function finish(worktree: string, token: number, notice: string): void {
   const run = runs.get(worktree)
   if (!run || run.token !== token) return
-  remember(run.ctx.root, run.kind)
+  if (isExitRun(run.kind)) remember(run.ctx.root, run.kind)
   window.tr.pr.refresh(worktree)
   runs.delete(worktree)
   useShips.setState((s) => {

@@ -19,9 +19,19 @@
 }
 
 .title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
   margin: 0;
   padding: 0 var(--space-16) 0 calc(var(--space-12) + var(--space-2));
   font: var(--text-body-strong);
+  color: var(--text-primary);
+}
+
+/* What the run does, in the steps' glyph column (Figma 73D1 / 73E / 73F). */
+.titleIcon {
+  flex: none;
+  display: inline-flex;
   color: var(--text-primary);
 }
 
@@ -107,11 +117,17 @@
   gap: var(--space-4);
 }
 
+/* What went wrong, in plain words (Figma 73E): strong text under the ✗ step; the glyph carries the colour. */
 .failureText {
-  font: var(--text-caption);
-  color: var(--status-error);
+  font: var(--text-body-strong);
+  color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
+}
+
+.failureNote {
+  font: var(--text-caption);
+  color: var(--text-secondary);
 }
 
 .output {
@@ -126,11 +142,6 @@
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
-}
-
-.failureActions {
-  display: flex;
-  gap: var(--space-8);
 }
 
 /* The glance: the text in fields, mono for the long ones. */

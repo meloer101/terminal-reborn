@@ -3,8 +3,8 @@
 // commits and a package.json change; merges cleanly) and jacob/conflict (edits the README that main also edited).
 // Checks the review block (header, counts, summary, one row per finding, the P1 tag on the diff line, 发给 putting the
 // ticked findings into the input line without Enter), the facts row for a risk marker, the agent-command review mode,
-// a squash merge landing on main from the agent-written message, and a conflict that is put into the agent's input
-// line (sent only when the user presses Enter) with main untouched.
+// a squash merge landing on main from the agent-written message, and a branch that would conflict with main: 同步 main
+// starts nothing and puts the rebase into the agent's input line (sent only when the user presses Enter), main untouched.
 // Screenshots in both themes go to test-results/merge-chain/.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -240,22 +240,23 @@ test.describe('F13 review block · F16 exit A', () => {
     expect(repo.git(repo.project, 'branch', '--list', 'jacob/clean').trim()).toContain('jacob/clean')
   })
 
-  test('exit A on a conflicting branch: the files go into the agent’s input line, not sent; main does not move', async () => {
+  test('a branch that would conflict with main: 合并到 main is held, 同步 main starts nothing and puts the rebase into the input line, not sent; main does not move', async () => {
     await page.locator(`[data-region="sidebar"] [data-session-id="s-conflict"]`).click()
     await expect(page.locator('header h1')).toHaveText('改 README')
     await expect.poll(() => repo.agents.conflict.pid(), WITHIN).not.toBeNull()
     const before = repo.git(repo.project, 'rev-parse', 'main').trim()
+    const head = repo.git(repo.conflict, 'rev-parse', 'HEAD').trim()
     await panel().getByRole('tab', { name: /^变更/ }).click()
-    await panel().getByRole('button', { name: /^合并到 main( |$)/ }).click()
-    const file = await promptedPath(repo.agents.conflict, 'wt-conflict', 'commit')
-    agentWrites(repo.agents.conflict, file, 'docs: 改 README\n')
-    await expect(ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
-    await page.keyboard.press('Meta+Enter')
+    // 合入链路 v2 (Figma 73C3): the chain says so before anything runs, and 同步 main is the way on.
+    await expect(panel().getByTestId('chain-headline')).toContainText('和 main 会冲突 · 1 个文件', WITHIN)
+    await panel().getByRole('button', { name: /^同步 main/ }).click()
 
     const alert = ship().getByRole('alert')
-    await expect(alert).toContainText('1 个文件和 main 冲突', WITHIN)
+    await expect(alert).toContainText('rebase 会冲突 · README.md', WITHIN)
     await expect(ship().locator('[data-step="merge"]')).toHaveAttribute('data-state', 'failed')
-    const handOff = ship().getByRole('button', { name: '交给 Claude Code 解' })
+    expect(repo.git(repo.conflict, 'rev-parse', 'HEAD').trim()).toBe(head)
+    // The hand-off is the block's one way on (Figma 73D2), named by the session's agent.
+    const handOff = ship().getByRole('button', { name: '交给 Claude' })
     await expect(handOff).toBeVisible()
     await shoot('ship-conflict')
 
@@ -275,14 +276,14 @@ test.describe('F13 review block · F16 exit A', () => {
     repo.agents.conflict.step({ print: '\x1b[2J\x1b[H❯ ' })
     await expect.poll(screen, WITHIN).not.toContain('What do you want to do?')
 
-    await ship().getByRole('button', { name: '交给 Claude Code 解' }).click()
+    await ship().getByRole('button', { name: '交给 Claude' }).click()
     await expect(ship()).toHaveCount(0)
     // Put into the input line, not sent: the text arrives without an Enter after it until the user presses one.
-    await expect.poll(conflictTyped, WITHIN).toContain('合并到 main 时这些文件有冲突，请解决后提交：')
+    await expect.poll(conflictTyped, WITHIN).toContain('GIT_EDITOR=true git rebase main')
     await page.waitForTimeout(500)
-    expect(conflictTyped().endsWith('- README.md')).toBe(true)
+    expect(conflictTyped().endsWith('不要推送。')).toBe(true)
     await page.keyboard.press('Enter')
-    await expect.poll(conflictTyped, WITHIN).toMatch(/- README\.md<ENTER>\n$/)
+    await expect.poll(conflictTyped, WITHIN).toMatch(/不要推送。<ENTER>\n$/)
     expect(repo.git(repo.project, 'rev-parse', 'main').trim()).toBe(before)
   })
 })

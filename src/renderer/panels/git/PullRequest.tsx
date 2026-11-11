@@ -2,14 +2,14 @@
 // the base too (29J), with 让 Claude 处理 for comments nobody answered (29I), 让 Claude 修复 when the checks fail and
 // PR #N at the end — and the PR's facts for the zone's facts line. What went wrong last, or — without a usable gh — how
 // to get one, stands in; a muted notice (a receipt such as 已创建 PR #3) only while there is no PR to show.
-import { Check, CircleDashed, GitPullRequest, X } from 'lucide-react'
+import { Check, CircleDashed, CircleHelp, GitPullRequest, X } from 'lucide-react'
 import { prStateLabel, prThreadsPrompt, type PrThread } from '@shared/pull-requests'
 import { CHAIN_TEXT } from '@shared/ship-chain'
 import type { Session, SessionId, Worktree } from '@shared/types'
 import { fixWithAgent, openPullRequest } from '../../pull-requests/actions'
 import { actionableThreads } from '../../pull-requests/auto-fix'
 import { baseBrokenChecks, prHeadline } from '../../pull-requests/auto-fix-model'
-import { setPrNotice, usePr, usePullRequests } from '../../pull-requests/store'
+import { PR_QUERY_FAILED, setPrNotice, usePr, usePrStatus, usePullRequests } from '../../pull-requests/store'
 import { ensureAgentUp } from '../../lifecycle/agent-up'
 import { insertIntoTerminal } from '../../session-io'
 import { useWorkspace } from '../../state/workspace'
@@ -22,12 +22,15 @@ const GH_HINT = { missing: CHAIN_TEXT.ghMissing, 'signed-out': CHAIN_TEXT.ghSign
 /** The PR's headline and facts (Figma 29R), shared by the headline row and the zone's facts line. */
 export function usePrLines(worktree: Worktree) {
   const pr = usePr(worktree.path)
+  const error = usePrStatus(worktree.path)?.error ?? null
   const automation = usePullRequests((s) => s.automation[worktree.path])
   if (!pr) return null
   const live = pr.state === 'open' || pr.state === 'draft'
   const threads = live ? actionableThreads(pr) : []
+  // The poll failed (合入链路 v2, Figma 73I3): the last state read may be stale, so the line says so and why.
+  if (error) return { pr, live, threads: [], headline: PR_QUERY_FAILED, facts: [error.message], failed: true }
   const broken = automation?.number === pr.number ? baseBrokenChecks(automation) : []
-  return { pr, live, threads, ...prHeadline(pr, prStateLabel(pr.state), threads.length, { name: worktree.baseBranch ?? 'main', checks: broken }) }
+  return { pr, live, threads, failed: false, ...prHeadline(pr, prStateLabel(pr.state), threads.length, { name: worktree.baseBranch ?? 'main', checks: broken }) }
 }
 
 const MARK = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
@@ -37,11 +40,25 @@ const MARK = { size: 16, strokeWidth: 1.75, 'aria-hidden': true } as const
  * agent actions it calls for and `PR #N` at the end (opens it in the built-in browser). Notices and the gh hint stand
  * in while there is no PR to show.
  */
-export function PrStatusLine({ worktree, onBase, target, openIn }: { worktree: Worktree; onBase: boolean; target: Session | null; openIn: SessionId | null }) {
+export function PrStatusLine({
+  worktree,
+  onBase,
+  target,
+  openIn,
+  ghHint = true
+}: {
+  worktree: Worktree
+  onBase: boolean
+  target: Session | null
+  openIn: SessionId | null
+  /** Say how to get gh while there is no PR (false: the chain's state line already says it). */
+  ghHint?: boolean
+}) {
   const gh = usePullRequests((s) => s.gh)
   const busy = usePullRequests((s) => s.busy[worktree.path])
   const notice = usePullRequests((s) => s.notice[worktree.path])
   const lines = usePrLines(worktree)
+  const error = usePrStatus(worktree.path)?.error ?? null
   const automation = usePullRequests((s) => s.automation[worktree.path])
   const noticeRow = notice && (
     <p className={styles.reviewStatus} data-tone={notice.tone} role="status" data-testid={lines ? 'pr-notice' : 'pr-status'}>
@@ -51,8 +68,22 @@ export function PrStatusLine({ worktree, onBase, target, openIn }: { worktree: W
     </p>
   )
   if (notice && !lines) return noticeRow
+  // No PR known yet and the poll fails: only this line says so (Figma 73I3; the sidebar tag needs a PR).
+  if (!lines && error && !onBase) {
+    return (
+      <p className={ci.headline} role="status" data-testid="pr-status" title={error.message}>
+        <span className={ci.mark}>
+          <CircleHelp {...MARK} />
+        </span>
+        <span className={ci.headlineText}>
+          {PR_QUERY_FAILED}
+          <span className={ci.headlineRest}>{error.message}</span>
+        </span>
+      </p>
+    )
+  }
   if (!lines) {
-    if (onBase || (gh !== 'missing' && gh !== 'signed-out')) return null
+    if (onBase || !ghHint || (gh !== 'missing' && gh !== 'signed-out')) return null
     return (
       <p className={styles.reviewStatus} data-tone="muted" role="status" data-testid="pr-status">
         <span className={styles.reviewStatusText} title={GH_HINT[gh]}>
@@ -61,9 +92,9 @@ export function PrStatusLine({ worktree, onBase, target, openIn }: { worktree: W
       </p>
     )
   }
-  const { pr, live, threads, headline } = lines
-  const checks = live ? pr.checks.state : 'none'
-  const Mark = checks === 'failing' ? X : checks === 'passing' ? Check : checks === 'pending' ? CircleDashed : GitPullRequest
+  const { pr, live, threads, headline, failed } = lines
+  const checks = live && !failed ? pr.checks.state : 'none'
+  const Mark = failed ? CircleHelp : checks === 'failing' ? X : checks === 'passing' ? Check : checks === 'pending' ? CircleDashed : GitPullRequest
   return (
     <>
     <p className={ci.headline} role="status" data-testid="pr-status">

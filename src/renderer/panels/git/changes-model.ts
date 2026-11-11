@@ -98,7 +98,8 @@ export function splitAnchors(row: SplitRow): Array<{ side: CommentSide; line: nu
 }
 
 export type ChangeItem =
-  | { kind: 'group'; title: string; meta: string }
+  /** `group` on 未提交 while its files can be ticked: the header's checkbox ticks or clears them all. */
+  | { kind: 'group'; title: string; meta: string; group?: ChangeGroup }
   | { kind: 'file'; group: ChangeGroup; change: GitFileChange; key: string; open: boolean; comments: number }
   | { kind: 'diff'; key: string; group: ChangeGroup; path: string; row: DiffRow }
   | { kind: 'split'; key: string; group: ChangeGroup; path: string; row: SplitRow }
@@ -137,7 +138,9 @@ export function changeItems(
   diffs: Readonly<Record<string, DiffView>>,
   comments: readonly ReviewComment[] = [],
   draft: DraftPlace | null = null,
-  layout: DiffLayout = 'unified'
+  layout: DiffLayout = 'unified',
+  /** 未提交 paths left out of the next commit (合入链路 v2, Figma 73A / 73F1); null: the rows have no checkboxes. */
+  unticked: ReadonlySet<string> | null = null
 ): ChangeItem[] {
   const split = layout === 'split' ? ({ split: true } as const) : {}
   const items: ChangeItem[] = []
@@ -198,7 +201,11 @@ export function changeItems(
   }
   // An empty 未提交 is not shown: nothing to say there.
   const count = changes.uncommitted.length + changes.untrackedOmitted
-  if (count > 0) items.push({ kind: 'group', title: '未提交', meta: `${count} 个文件` })
+  if (count > 0) {
+    const ticked = unticked ? tickedPaths(changes.uncommitted, unticked).length : count
+    const meta = `${count} 个文件${unticked && ticked < count ? ` · 勾选 ${ticked} 个` : ''}`
+    items.push({ kind: 'group', title: '未提交', meta, ...(unticked ? { group: 'uncommitted' as const } : {}) })
+  }
   files('uncommitted', changes.uncommitted)
   if (changes.untrackedOmitted > 0) {
     items.push({ kind: 'note', key: 'untracked-omitted', text: `还有 ${changes.untrackedOmitted} 个未跟踪文件没有列出` })
@@ -210,6 +217,32 @@ export function changeItems(
   })
   files('committed', changes.committed)
   return items
+}
+
+// --- which 未提交 files go into the next commit (合入链路 v2) ---------------------------------------------------------
+// Every row starts ticked; the panel keeps the paths the user unticked (so a file that appears is ticked), per worktree.
+
+/** A row that can be ticked: a nested repository is not committed from here. */
+export const tickable = (change: Pick<GitFileChange, 'nested'>): boolean => !change.nested
+
+/** The paths 提交… and the exits commit: the tickable rows that are not unticked. */
+export function tickedPaths(uncommitted: readonly GitFileChange[], unticked: ReadonlySet<string>): string[] {
+  return uncommitted.filter((c) => tickable(c) && !unticked.has(c.path)).map((c) => c.path)
+}
+
+/** The group header's checkbox: every tickable row ticked, none, or some. */
+export function tickState(uncommitted: readonly GitFileChange[], unticked: ReadonlySet<string>): 'all' | 'none' | 'mixed' {
+  const rows = uncommitted.filter(tickable)
+  const ticked = rows.filter((c) => !unticked.has(c.path)).length
+  return ticked === rows.length ? 'all' : ticked === 0 ? 'none' : 'mixed'
+}
+
+/** Unticked paths still in the list (a committed or reverted file leaves; the same path coming back starts ticked). */
+export function pruneUnticked(unticked: ReadonlySet<string>, uncommitted: readonly GitFileChange[]): ReadonlySet<string> {
+  if (unticked.size === 0) return unticked
+  const listed = new Set(uncommitted.map((c) => c.path))
+  const kept = [...unticked].filter((p) => listed.has(p))
+  return kept.length === unticked.size ? unticked : new Set(kept)
 }
 
 /** Moved to the merge chain (src/shared/ship-chain.ts); kept here for the panel's imports. */

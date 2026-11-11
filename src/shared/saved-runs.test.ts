@@ -76,6 +76,24 @@ describe('sanitizeShipRuns', () => {
     expect(sanitizeShipRuns([failed], worktrees)).toEqual([failed])
   })
 
+  it('keeps 合入链路 v2 runs (提交 / 同步 / 拉取), the merge method and a classified failure with its hand-off', () => {
+    const failure = { kind: 'commit-hook', message: 'pre-commit hook 没通过', next: 'handoff', tail: 'lint failed' }
+    const commit = {
+      ...shipRun,
+      kind: 'commit',
+      ctx: { ...shipRun.ctx, method: 'rebase' },
+      state: { ...shipState, kind: 'commit', error: { step: 'commit', message: 'pre-commit hook 没通过', failure, prompt: '提交时 hook 没通过' }, failedIn: 'running' }
+    }
+    const sync = { ...shipRun, kind: 'sync', state: { ...shipState, kind: 'sync', steps: [{ id: 'sync', label: '拉取 main', state: 'done' }] } }
+    const pull = { ...shipRun, kind: 'pull', state: { ...shipState, kind: 'pull', steps: [{ id: 'sync', label: '拉取 origin/feat', state: 'working' }] } }
+    expect(sanitizeShipRuns([commit], worktrees)).toEqual([commit])
+    expect(sanitizeShipRuns([sync], worktrees)).toEqual([sync])
+    expect(sanitizeShipRuns([pull], worktrees)).toEqual([pull])
+    // An unknown method is dropped, the run kept; a failure that does not validate drops the run.
+    expect(sanitizeShipRuns([{ ...shipRun, ctx: { ...shipRun.ctx, method: 'octopus' } }], worktrees)).toEqual([shipRun])
+    expect(sanitizeShipRuns([{ ...commit, state: { ...commit.state, error: { ...commit.state.error, failure: { ...failure, next: 'deploy' } } } }], worktrees)).toEqual([])
+  })
+
   it('drops a run whose state is not one the block can draw', () => {
     const bad = [
       { ...shipRun, kind: 'deploy' },

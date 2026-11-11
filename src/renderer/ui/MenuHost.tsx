@@ -178,6 +178,11 @@ function MenuPanel({ entries, placement, label, takeFocus, firstActive = false, 
           </span>
         )}
         <span className={styles.label}>{entry.label}</span>
+        {entry.type === 'item' && entry.detail && (
+          <span className={styles.detail} title={entry.detail}>
+            {entry.detail}
+          </span>
+        )}
         {entry.type === 'item' && entry.accelerator && (
           <span className={styles.shortcut} aria-hidden>
             {formatAccelerator(entry.accelerator)}

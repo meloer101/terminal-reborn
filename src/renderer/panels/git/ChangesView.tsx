@@ -6,17 +6,16 @@
 // the agent's input line together. Below: the ship zone (a block of its own fill, no dividers, every row 28 high): the
 // base's CI, the PR headline with PR #N, one facts line (this turn's checks, risk markers, the PR's facts, what its
 // switches do), the switches, then either the decision surface of a stopped 自动修复 (29G / 29J) or the footer —
-// 审阅全部改动 on the left while no review shows, the two exits on the right (合并到 base 并推送 / 创建 PR, or for a
-// branch whose PR is open, 合并 PR…). An exit opens the Ship block; ⇧⌘M runs the primary exit (merge/store.ts), or
-// opens the PR merge sheet when the primary is 合并 PR #N….
-import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react'
+// 审阅全部改动 on the left while no review shows, the merge chain's moves on the right and ⋯ with all of them
+// (合入链路 v2, Figma 73B–73G; the chain's state line above). An exit opens the Ship block; ⇧⌘M runs the primary when
+// it is an exit (merge/store.ts), or opens the PR merge sheet when the primary is 合并 PR #N…. 未提交 rows carry a
+// checkbox (73F1): the exits and 提交… commit only the ticked files.
+import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitFileChange } from '@shared/git-graph/log'
 import type { PrTarget } from '@shared/pull-requests'
-import { checksText } from '@shared/turn-checks'
 import type { ShipPreflight } from '@shared/ship'
-import { SHORTCUTS } from '@shared/shortcuts'
 import type { Worktree } from '@shared/types'
 import type { DiffLayout } from '@shared/workspace-file'
 import { commentPicked } from '@shared/review-comments'
@@ -25,27 +24,30 @@ import { ReviewBlock, useReviewShown } from '../../review/ReviewBlock'
 import { ReviewButton } from '../../review/ReviewButton'
 import { ReviewMarker } from '../../review/ReviewMarker'
 import { markKey, useReviewMarks } from '../../review/marks'
-import { openPullRequest } from '../../pull-requests/actions'
-import { exitPlan, livePr, shipContextFor, type ShipExit } from '../../pull-requests/exit-model'
-import { readRemembered, startShip, useShips } from '../../pull-requests/ship-runner'
+import { chainPlace, chainPlanOf, runChainCommand } from '../../pull-requests/chain-actions'
+import { loadPreflight, useChainStore } from '../../pull-requests/chain-store'
+import { zoneFiles, zoneHeadline } from '../../pull-requests/chain-zone'
+import { livePr } from '../../pull-requests/exit-model'
+import { useShips } from '../../pull-requests/ship-runner'
 import { ShipBlock } from '../../pull-requests/ShipBlock'
-import { formatAccelerator } from '../../ui/menu-model'
+import { useRadarMark } from '../../conflict-radar/store'
 import { useActiveSession, useWorkspace } from '../../state/workspace'
 import { useSettings } from '../../settings/useSettings'
 import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
-import { openMergeSheet, registerPrimaryExit, targetFor } from '../merge/store'
+import { registerPrimaryExit } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, endsOpenFile, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
+import { changeItems, endsOpenFile, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsLine, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
 import { PrStatusLine, usePrLines } from './PullRequest'
 import { FixStopFooter, PrAutomationRow, useAgentOf, usePrAutomationWords, useStoppedFix } from './PrRows'
 import { agentName } from '../../pull-requests/auto-fix'
-import { usePrStatus } from '../../pull-requests/store'
+import { usePrStatus, usePullRequests } from '../../pull-requests/store'
 import { commentTarget, discardComments, sendComments } from './comments'
-import { toggleFile, type RootGit } from './store'
+import { ChainAbort, ChainButtons, ChainHeadlineRow } from './ChainRows'
+import { setAllTicked, toggleFile, toggleTicked, type RootGit } from './store'
 import { offsetsOf, useViewport, visibleRange } from './virtual'
 import styles from './GitView.module.css'
 
@@ -53,22 +55,16 @@ const STATUS_LABEL: Record<GitFileChange['status'], string> = { M: '已修改', 
 /** Items rendered beyond each edge of the viewport. */
 const OVERSCAN = 20
 
-/** The exits' preflight (Figma 29A): asked on mount and again whenever `key` (the git state and the PR's) changes. */
+/** The exits' preflight (Figma 29A): asked on mount and again whenever `key` (the git state and the PR's) changes or the
+ *  chain is bumped (继续 / 中止); kept per worktree (chain-store.ts) so ⌘K reads the same. */
 function usePreflight(target: PrTarget | null, key: string): ShipPreflight | null {
-  const [preflight, setPreflight] = useState<ShipPreflight | null>(null)
   const root = target?.root
   const worktree = target?.worktree
+  const generation = useChainStore((s) => (worktree ? (s.generation[worktree] ?? 0) : 0))
+  const preflight = useChainStore((s) => (worktree ? (s.preflights[worktree] ?? null) : null))
   useEffect(() => {
-    if (!root || !worktree) return
-    let live = true
-    window.tr.ship
-      .preflight({ root, worktree })
-      .then((next) => live && setPreflight(next))
-      .catch((error: unknown) => live && setPreflight({ ok: false, message: error instanceof Error ? error.message : String(error) }))
-    return () => {
-      live = false
-    }
-  }, [root, worktree, key])
+    if (root && worktree) void loadPreflight({ root, worktree })
+  }, [root, worktree, key, generation])
   return root && worktree ? preflight : null
 }
 
@@ -87,8 +83,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const prStatus = usePrStatus(worktree.path)
   const prLive = livePr(prStatus)
   const items = useMemo(
-    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout) : []),
-    [changes, git.expanded, git.diffs, comments, place, layout]
+    () => (changes ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout, git.unticked) : []),
+    [changes, git.expanded, git.diffs, comments, place, layout, git.unticked]
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -112,11 +108,15 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   // The preflight and the risk markers follow the change list and the PR.
   const prTarget: PrTarget | null = projectRoot ? { root: projectRoot, worktree: worktree.path } : null
   const local = prStatus?.local
-  const gitKey = [changes?.base, changes?.ahead, changes?.behind, changes?.uncommitted.length, prLive?.number, prLive?.state, local?.head, prLive?.details?.headOid].join(':')
+  // The chain reads gh from its store (re-render when it changes); the preflight's GitHub facts (protection, merge
+  // methods) need gh, so it is asked again once gh is known.
+  const gh = usePullRequests((s) => s.gh)
+  // A run that ends (同步, 拉取, 提交…) changes what the preflight reads even when the counts stay.
+  const gitKey = [gh, changes?.base, changes?.ahead, changes?.behind, changes?.uncommitted.length, prLive?.number, prLive?.state, local?.head, prLive?.details?.headOid, shipping].join(':')
   const changeKey = changes ? [...changes.committed, ...changes.uncommitted].map((c) => `${c.path}:${c.added}:${c.removed}`).join('|') : ''
   const preflight = usePreflight(prTarget, gitKey)
   const risks = useRisks(prTarget, changeKey)
-  const remembered = useMemo(() => (projectRoot ? readRemembered(projectRoot) : null), [projectRoot, shipping]) // eslint-disable-line react-hooks/exhaustive-deps
+  useRadarMark(projectRoot, worktree.path)
 
   if (changes === undefined) return <p className={styles.empty}>正在读取改动…</p>
   if (changes === null) return <p className={styles.empty}>{git.changesError ? `无法读取改动：${git.changesError}` : '不是 git 仓库'}</p>
@@ -126,12 +126,17 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const count = mine.length
   const picked = mine.filter(commentPicked).length
   const sessionId = active?.session.id ?? null
-  const plan = exitPlan({ preflight, remembered, prStatus, changes, isMain: worktree.isMain, projectRoot })
-  const { exits, idlePr, onBase, nothingToShip } = plan
+  const chainAt = chainPlace(worktree.path)
+  const chainPlan = chainAt ? chainPlanOf(chainAt, { preflight, changes, prStatus, unticked: git.unticked }) : null
+  const chain = chainPlan?.chain ?? null
+  const onBase = chainPlan?.plan.onBase ?? false
+  const idle = !shipping && !stopped
+  // Ticking is for files that can be committed now: not while an operation or a stuck state holds every action.
+  const ticks = chain !== null && chain.stage !== 'operation' && chain.stage !== 'stuck' ? git.unticked : null
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
-    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} end={endsOpenFile(items, i)} />)
+    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} end={endsOpenFile(items, i)} ticks={ticks} />)
   }
   // The open file whose row scrolled away is pinned to the top: one click folds it and lands on its row (Figma 29L).
   const sticky = stickyFileIndex(items, offsets, viewport.top)
@@ -147,53 +152,23 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
 
   const reviewSession = target?.id ?? reviewer
   const baseName = preflight?.ok ? preflight.base : (changes.base ?? 'main')
-  const exitBlocker = plan.blocker
-  const go = (exit: ShipExit): void => {
-    if (exit.kind === 'open-pr') {
-      if (prLive) openPullRequest(sessionId, prLive.url)
-      return
-    }
-    if (!projectRoot || !preflight?.ok) return
-    startShip(
-      shipContextFor({
-        projectRoot,
-        worktreePath: worktree.path,
-        preflight,
-        changes,
-        pr: prLive,
-        agentSession: target?.id ?? null,
-        openIn: sessionId,
-        checksLine: turnChecks ? `这一轮的检查：${checksText(turnChecks)}` : null,
-        settings: { review: settings.review, pr: settings.pr }
-      }),
-      exit.kind,
-      exit.label
-    )
-  }
-  const exitButton = (exit: ShipExit, primary: boolean) => {
-    const blocker = exitBlocker(exit)
-    return (
-      <button
-        key={exit.kind}
-        type="button"
-        className={primary ? styles.primaryButton : styles.ghostButton}
-        disabled={blocker !== null}
-        title={blocker ?? undefined}
-        onClick={() => go(exit)}
-      >
-        {exit.label}
-        {primary && <span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>}
-      </button>
-    )
-  }
+  const next = chain?.next ?? null
+  const exitNext = next !== null && (next.id === 'main' || next.id === 'pr')
+  const headline = chain && idle ? zoneHeadline(chain) : null
+  const files = chain && headline ? zoneFiles(chain, preflight, null) : []
+  const nothing = chain === null || chain.stage === 'empty'
+  const runnable = chain?.actions.some((a) => a.blocker === null) ?? false
 
-  // ⇧⌘M runs the primary exit while it is on screen; a PR to merge keeps the PR merge sheet (its button opens it). A
-  // stopped fix's answers replace the exits, so the shortcut does nothing until it is answered.
-  const shortcutExit = shipping || stopped
+  // ⇧⌘M runs the primary while it is an exit that can run; 合并 PR #N… keeps the PR merge sheet (merge/store.ts opens
+  // it), as do a merged, empty or stuck worktree. A stopped fix's answers replace the exits, and the chain's other
+  // moves (同步, 交给 agent, 继续) are clicked: the shortcut does nothing then.
+  const shortcutExit = !idle
     ? () => undefined
-    : !nothingToShip && !idlePr && !onBase
-      ? () => (exitBlocker(exits.primary) === null ? go(exits.primary) : undefined)
-      : null
+    : exitNext && next.blocker === null
+      ? () => void runChainCommand(worktree.path, next.id, sessionId)
+      : next === null || next.id === 'merge-pr' || chain?.stage === 'merged' || chain?.stage === 'stuck'
+        ? null
+        : () => undefined
 
   return (
     <>
@@ -211,7 +186,8 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
       </div>
       <div className={styles.shipZone}>
         <BaseCiRows worktree={worktree} openIn={sessionId} />
-        <PrStatusLine worktree={worktree} onBase={onBase} target={target} openIn={sessionId} />
+        <PrStatusLine worktree={worktree} onBase={onBase} target={target} openIn={sessionId} ghHint={headline === null} />
+        {headline && <ChainHeadlineRow headline={headline} files={files} />}
         {/* While shipping, the change's own facts give way to the Ship block; the PR's stay. */}
         <FactsLine
           risks={shipping ? [] : risks}
@@ -221,11 +197,11 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
         {shipping ? (
-          <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} />
+          <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} handoffAgent={target ? agentLabel(target.kind) : null} />
         ) : stopped ? (
           <FixStopFooter scope={stopped.scope} worktreePath={worktree.path} run={stopped.run} agent={fixAgent} note={stopped.note} attempts={stopped.attempts} />
         ) : (
-          (count > 0 || !nothingToShip) && (
+          (count > 0 || !nothing || runnable) && (
             <div className={styles.footer}>
               {count > 0 ? (
                 <>
@@ -253,31 +229,16 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
                     放弃
                   </button>
                 </>
+              ) : chain?.second?.id === 'abort' ? (
+                <ChainAbort chain={chain} worktreePath={worktree.path} idle={idle} />
               ) : (
                 // 审阅全部改动 would repeat the block's 重审; the agent's own command (让 agent 审阅) is another action.
                 reviewer &&
+                chain?.stage !== 'merged' &&
                 (!reviewShown || settings.review.mode === 'agent-command') && <ReviewButton sessionId={reviewer} className={styles.ghostButton} />
               )}
               <span className={styles.spacer} />
-              {!nothingToShip &&
-                (idlePr ? (
-                  <>
-                    <button
-                      type="button"
-                      className={styles.primaryButton}
-                      disabled={onBase || !projectRoot}
-                      title={onBase ? '项目主目录检出的是基线分支，没有要合并的分支' : undefined}
-                      onClick={() => projectRoot && openMergeSheet(targetFor(projectRoot, worktree))}
-                    >
-                      合并 PR #{idlePr.number}…<span className={styles.shortcut}>{formatAccelerator(SHORTCUTS['merge-worktree'])}</span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {exits.secondary && exitButton(exits.secondary, false)}
-                    {exitButton(exits.primary, true)}
-                  </>
-                ))}
+              {chain && <ChainButtons chain={chain} worktreePath={worktree.path} openIn={sessionId} shortcut={exitNext || next?.id === 'merge-pr'} idle={idle} />}
             </div>
           )
         )}
@@ -302,23 +263,68 @@ function itemKey(item: ChangeItem, index: number): string {
   return `${item.kind}:${item.key}:${index}`
 }
 
-function Item({ root, git, item, top, draft, end }: { root: string; git: RootGit; item: ChangeItem; top: number; draft: CommentDraft | null; end: boolean }) {
+function Item({
+  root,
+  git,
+  item,
+  top,
+  draft,
+  end,
+  ticks
+}: {
+  root: string
+  git: RootGit
+  item: ChangeItem
+  top: number
+  draft: CommentDraft | null
+  end: boolean
+  /** The unticked 未提交 paths while rows can be ticked; null: no checkboxes. */
+  ticks: ReadonlySet<string> | null
+}) {
   const style = { top }
   const edge = end || undefined
   switch (item.kind) {
-    case 'group':
+    case 'group': {
+      const state = item.group && ticks ? tickState(git.changes?.uncommitted ?? [], ticks) : null
       return (
         <div className={styles.groupHeader} style={style} role="presentation">
+          {state && (
+            <button
+              type="button"
+              role="checkbox"
+              className={styles.tick}
+              aria-checked={state === 'all' ? true : state === 'none' ? false : 'mixed'}
+              aria-label={state === 'all' ? '不提交未提交的文件' : '提交全部未提交的文件'}
+              onClick={() => setAllTicked(root, state !== 'all')}
+            >
+              {state === 'all' ? <Check size={10} strokeWidth={2.5} aria-hidden /> : state === 'mixed' ? <Minus size={10} strokeWidth={2.5} aria-hidden /> : null}
+            </button>
+          )}
           <span className={styles.groupTitle}>{item.title}</span>
           <span className={styles.groupMeta}>{item.meta}</span>
         </div>
       )
-    case 'file':
+    }
+    case 'file': {
+      const ticked = ticks && item.group === 'uncommitted' && tickable(item.change) ? !ticks.has(item.change.path) : null
       return (
         <div role="listitem" className={styles.fileItem} style={style} data-path={item.change.path} data-group={item.group} data-end={edge}>
+          {ticked !== null && (
+            <button
+              type="button"
+              role="checkbox"
+              className={styles.tick}
+              aria-checked={ticked}
+              aria-label={`提交 ${item.change.path}`}
+              onClick={() => toggleTicked(root, item.change.path)}
+            >
+              {ticked && <Check size={10} strokeWidth={2.5} aria-hidden />}
+            </button>
+          )}
           <FileRow item={item} onToggle={() => toggleFile(root, item.key)} />
         </div>
       )
+    }
     case 'diff': {
       const view = git.diffs[item.key]
       const rows = () => (view?.kind === 'ready' ? view.rows : [])

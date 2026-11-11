@@ -6,6 +6,8 @@ import { emptyQueue, type ChildReport, type HeldItem, type PendingStart, type Re
 import { isCliAgent } from './agents'
 import { parseCreateRequest } from './new-session'
 import type { RiskMarker } from './risk-markers'
+import type { GitFailure, GitFailureKind, GitFailureNext } from './git-failures'
+import type { MergeMethod } from './git-merge'
 import type { FlowStep, ShipError, ShipKind, ShipStage, ShipState, ShipTexts, StepId, StepState } from './ship'
 import type { SessionId } from './types'
 
@@ -99,6 +101,8 @@ export interface SavedShipContext {
   openPr: { number: number; url: string } | null
   checksLine: string | null
   openIn: SessionId | null
+  /** 合并到 main 并推送's merge method (合入链路 v2: the repository's default, else squash); absent in older files. */
+  method?: MergeMethod
 }
 
 /** An open Ship block: its context, its state, and what main already did (commit, merge). */
@@ -111,8 +115,32 @@ export interface SavedShipRun {
   state: ShipState
 }
 
-const SHIP_KINDS: ReadonlySet<unknown> = new Set(['main', 'pr', 'push-pr'])
-const STEP_IDS: ReadonlySet<unknown> = new Set(['review', 'write', 'commit', 'merge', 'push', 'create'])
+const SHIP_KINDS: ReadonlySet<unknown> = new Set(['main', 'pr', 'push-pr', 'commit', 'sync', 'pull'])
+const STEP_IDS: ReadonlySet<unknown> = new Set(['review', 'write', 'commit', 'merge', 'push', 'create', 'sync'])
+const METHODS: ReadonlySet<unknown> = new Set(['squash', 'merge', 'rebase'])
+const FAILURE_KINDS: ReadonlySet<unknown> = new Set([
+  'non-fast-forward',
+  'diverged',
+  'protected-branch',
+  'pre-receive-hook',
+  'pre-push-hook',
+  'commit-hook',
+  'auth',
+  'signing',
+  'no-remote',
+  'not-github',
+  'no-pr',
+  'network',
+  'dirty',
+  'conflicts',
+  'unknown'
+])
+const FAILURE_NEXT: ReadonlySet<unknown> = new Set(['commit', 'sync', 'pull', 'push', 'pr', 'main', 'merge-pr', 'archive', 'handoff', 'create-pr', null])
+
+function sanitizeFailure(raw: unknown): GitFailure | null {
+  if (!isRecord(raw) || !FAILURE_KINDS.has(raw.kind) || !isText(raw.message, 4096) || !FAILURE_NEXT.has(raw.next) || !isText(raw.tail)) return null
+  return { kind: raw.kind as GitFailureKind, message: raw.message, next: raw.next as GitFailureNext, tail: raw.tail }
+}
 const STEP_STATES: ReadonlySet<unknown> = new Set(['pending', 'working', 'done', 'failed'])
 const STAGES: ReadonlySet<unknown> = new Set(['writing', 'glance', 'running'])
 const isRelative = (v: unknown): v is string => isText(v, 4096) && v !== '' && !v.startsWith('/') && !v.split('/').includes('..')
@@ -135,7 +163,19 @@ function sanitizeContext(raw: unknown): SavedShipContext | null {
     if (!isRecord(raw.openPr) || !isCount(raw.openPr.number) || !isText(raw.openPr.url, 4096)) return null
     openPr = { number: raw.openPr.number, url: raw.openPr.url }
   }
-  return { root: raw.root, worktree: raw.worktree, sessionId, base: raw.base, branch: raw.branch, remote, paths, openPr, checksLine, openIn }
+  return {
+    root: raw.root,
+    worktree: raw.worktree,
+    sessionId,
+    base: raw.base,
+    branch: raw.branch,
+    remote,
+    paths,
+    openPr,
+    checksLine,
+    openIn,
+    ...optional('method', METHODS.has(raw.method) ? (raw.method as MergeMethod) : undefined)
+  }
 }
 
 function sanitizeShipState(raw: unknown): ShipState | null {
@@ -155,12 +195,16 @@ function sanitizeShipState(raw: unknown): ShipState | null {
     if (!isRecord(e) || !STEP_IDS.has(e.step) || !isText(e.message, 4096)) return null
     const conflicts = e.conflicts === undefined ? undefined : textList(e.conflicts, 10_000)
     if (conflicts === null) return null
+    const failure = e.failure === undefined ? undefined : sanitizeFailure(e.failure)
+    if (failure === null) return null
     error = {
       step: e.step as StepId,
       message: e.message,
       ...optional('output', isText(e.output) ? e.output : undefined),
       ...optional('conflicts', conflicts),
-      ...optional('pushRefused', e.pushRefused === true ? true : undefined)
+      ...optional('pushRefused', e.pushRefused === true ? true : undefined),
+      ...optional('failure', failure),
+      ...optional('prompt', isText(e.prompt, 4096) ? e.prompt : undefined)
     }
   }
   if (raw.failedIn !== null && !STAGES.has(raw.failedIn)) return null

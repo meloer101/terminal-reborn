@@ -14,7 +14,7 @@ import {
   type GitLogPage,
   type GitLogScope
 } from '@shared/git-graph/log'
-import { changedSince, changeKey, noDiffReason, type ChangeGroup, type DiffView } from './changes-model'
+import { changedSince, changeKey, noDiffReason, pruneUnticked, tickable, type ChangeGroup, type DiffView } from './changes-model'
 
 export type GitTab = 'graph' | 'changes'
 
@@ -46,6 +46,9 @@ export interface RootGit {
   /** Open files in 变更, as `${group}:${path}`. */
   expanded: ReadonlySet<string>
   diffs: Record<string, DiffView>
+  /** 未提交 paths the user unticked (合入链路 v2): left out of 提交… and the exits. Not persisted; pruned when a path
+   *  leaves the list. */
+  unticked: ReadonlySet<string>
 }
 
 const EMPTY: RootGit = {
@@ -60,7 +63,8 @@ const EMPTY: RootGit = {
   changes: undefined,
   changesError: null,
   expanded: new Set(),
-  diffs: {}
+  diffs: {},
+  unticked: new Set()
 }
 
 export const useGit = create<{ roots: Record<string, RootGit> }>()(() => ({ roots: {} }))
@@ -214,7 +218,7 @@ export async function loadChanges(root: string, options?: { base: string | undef
       const before = gitOf(root).changes
       try {
         const changes = await api().changes(root, bases.get(root))
-        patch(root, { changes, changesError: null })
+        patch(root, (c) => ({ changes, changesError: null, unticked: pruneUnticked(c.unticked, changes?.uncommitted ?? []) }))
         refreshOpenDiffs(root, before ?? null)
       } catch (error) {
         patch(root, { changes: null, changesError: errorMessage(error) })
@@ -274,6 +278,20 @@ export function toggleFile(root: string, key: string): void {
   expanded.add(key)
   patch(root, (current) => ({ expanded, diffs: { ...current.diffs, [key]: current.diffs[key] ?? { kind: 'loading' } } }))
   void loadDiff(root, key)
+}
+
+/** Ticks or unticks one 未提交 file (合入链路 v2). */
+export function toggleTicked(root: string, path: string): void {
+  patch(root, (c) => {
+    const unticked = new Set(c.unticked)
+    if (!unticked.delete(path)) unticked.add(path)
+    return { unticked }
+  })
+}
+
+/** The 未提交 header's checkbox: ticks every file, or unticks every one. */
+export function setAllTicked(root: string, ticked: boolean): void {
+  patch(root, (c) => ({ unticked: ticked ? new Set() : new Set((c.changes?.uncommitted ?? []).filter(tickable).map((f) => f.path)) }))
 }
 
 /** 全部收起 (the Git pane's ⋯ menu): every open file folds. */

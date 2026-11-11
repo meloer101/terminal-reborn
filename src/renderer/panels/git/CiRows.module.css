@@ -42,6 +42,35 @@
   color: var(--status-working);
 }
 
+/* The merge chain's state line (合入链路 v2, Figma 73C–73G): a blocked or informing glyph keeps the text's colour; done
+   is the one coloured mark. */
+.mark[data-tone='blocked'],
+.mark[data-tone='info'] {
+  color: var(--text-primary);
+}
+
+.mark[data-tone='ok'] {
+  color: var(--status-done);
+}
+
+.mark[data-tone='working'] {
+  color: var(--status-working);
+}
+
+/* How to get past it, after the strong part (73C1). */
+.headlineRest {
+  margin-left: var(--space-8);
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+/* The files the state line is about (73C3, 73D3), mono on the 36 column. */
+.files {
+  composes: facts;
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
 .headlineText,
 .facts,
 .question {

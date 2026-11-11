@@ -3,8 +3,9 @@
 // and turns after-create-<branch>.json into that branch's list) and `run view` (log-failed.txt), and logs each call.
 // PRD F16 v1.63: `api graphql` answers the PR details query from graphql-<number>.json and takes mutations on stdin
 // (saved as input-<n>.json); `pr merge` is logged and succeeds. PRD F16 v1.78: `api repos/…` answers the base's branch
-// protection (200 / 404) and the check runs of a pushed base commit.
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+// protection (200 / 404) and the check runs of a pushed base commit. 合入链路 v2: a `signed-out` file makes `auth status`
+// say gh is not logged in; a `fail-pr-list` file makes `pr list` fail as an unreachable GitHub does.
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const FAKE_GH = `#!/bin/sh
@@ -13,8 +14,12 @@ printf '%s\\n' "---" "$@" >> "$d/calls"
 head=""
 for a in "$@"; do case "$a" in --head=*) head=$(printf '%s' "\${a#--head=}" | tr '/:' '__');; esac; done
 case "$1 $2" in
-  "auth status") echo "github.com: Logged in"; exit 0 ;;
-  "pr list") cat "$d/pr-$head.json" 2>/dev/null || echo '[]'; exit 0 ;;
+  "auth status")
+    if [ -f "$d/signed-out" ]; then echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1; fi
+    echo "github.com: Logged in"; exit 0 ;;
+  "pr list")
+    if [ -f "$d/fail-pr-list" ]; then echo "error connecting to api.github.com" >&2; exit 1; fi
+    cat "$d/pr-$head.json" 2>/dev/null || echo '[]'; exit 0 ;;
   "pr create")
     [ -f "$d/after-create-$head.json" ] && cp "$d/after-create-$head.json" "$d/pr-$head.json"
     cat "$d/create-url"; exit 0 ;;
@@ -104,6 +109,10 @@ export function fakeGh(bin: string, dir: string) {
         })
       ),
     setFailedLog: (text: string) => writeFileSync(join(dir, 'log-failed.txt'), text),
+    /** gh says it is not logged in (true) or logged in (false, the default). */
+    setSignedOut: (on: boolean) => (on ? writeFileSync(join(dir, 'signed-out'), '') : rmSync(join(dir, 'signed-out'), { force: true })),
+    /** `gh pr list` fails as when GitHub cannot be reached (true), or answers (false, the default). */
+    setPrListFails: (on: boolean) => (on ? writeFileSync(join(dir, 'fail-pr-list'), '') : rmSync(join(dir, 'fail-pr-list'), { force: true })),
     /** What PR_DETAILS_QUERY returns for PR `number` (the `data` object). */
     setDetails: (number: number, data: unknown) => writeFileSync(join(dir, `graphql-${number}.json`), JSON.stringify({ data })),
     /** The GraphQL mutations sent on stdin so far. */

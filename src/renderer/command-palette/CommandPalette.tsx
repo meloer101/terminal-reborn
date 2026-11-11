@@ -1,7 +1,29 @@
 // ⌘K command palette (PRD F8): jump to any session or run a common action. Renders nothing while
 // closed. Open/close state and the global ⌘K shortcut live in palette-store.ts.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { ArchiveRestore, Clock, FolderPlus, GitCompareArrows, LayoutList, Monitor, Moon, PanelLeft, PanelRight, Plus, Search, Sun, type LucideIcon } from 'lucide-react'
+import {
+  ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
+  Bot,
+  Clock,
+  ExternalLink,
+  FolderPlus,
+  GitCommitHorizontal,
+  GitCompareArrows,
+  GitMerge,
+  GitPullRequest,
+  LayoutList,
+  Monitor,
+  Moon,
+  PanelLeft,
+  PanelRight,
+  Plus,
+  RefreshCw,
+  Search,
+  Sun,
+  type LucideIcon
+} from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspace } from '../state/workspace'
 import { formatAccelerator } from '../ui/menu-model'
@@ -12,6 +34,7 @@ import { decidePaletteKey } from './keys'
 import type { Range } from './match'
 import { closeCommandPalette, usePaletteOpen } from './palette-store'
 import { runEntry } from './run'
+import { useGitGroup } from './useGitGroup'
 
 const ICON = { size: 16, strokeWidth: 1.75 } as const
 
@@ -26,10 +49,18 @@ const ACTION_ICONS: Record<ActionIcon, LucideIcon> = {
   sun: Sun,
   archive: ArchiveRestore,
   compare: GitCompareArrows,
-  clock: Clock
+  clock: Clock,
+  commit: GitCommitHorizontal,
+  sync: RefreshCw,
+  pull: ArrowDown,
+  push: ArrowUp,
+  pr: GitPullRequest,
+  merge: GitMerge,
+  review: Bot,
+  link: ExternalLink
 }
 
-const SECTION_TITLE: Record<PaletteSection, string> = { sessions: '会话', actions: '操作', history: '历史' }
+const SECTION_TITLE: Record<PaletteSection, string> = { git: 'Git', sessions: '会话', actions: '操作', history: '历史' }
 
 function Highlight({ text, ranges }: { text: string; ranges?: Range[] }): ReactNode {
   if (!ranges || ranges.length === 0) return text
@@ -51,7 +82,7 @@ function Highlight({ text, ranges }: { text: string; ranges?: Range[] }): ReactN
 /** Sessions highlight inside "project · action"; ranges refer to the individual source fields, so map them here. */
 function subtitleRanges(item: RankedEntry): Range[] | undefined {
   const { entry, ranges } = item
-  if (entry.section === 'actions') return ranges.subtitle
+  if (entry.section === 'actions' || entry.section === 'git') return ranges.subtitle
   // Subtitle is "<project> · <action or branch>"; re-find the matched fields' text inside it.
   const out: Range[] = []
   for (const key of ['project', 'action', 'branch'] as const) {
@@ -92,7 +123,8 @@ function Sheet() {
 
   // Opened fresh each time, so 历史's "N 天前" is as of opening.
   const [openedAt] = useState(() => Date.now())
-  const entries = useMemo(() => buildEntries({ ...input, now: openedAt }), [input, openedAt])
+  const git = useGitGroup()
+  const entries = useMemo(() => buildEntries({ ...input, now: openedAt, git }), [input, openedAt, git])
   const results = useMemo(() => rankEntries(entries, query), [entries, query])
   const index = Math.min(selected, Math.max(results.length - 1, 0))
   const optionId = (i: number) => `${listId}-${i}`
@@ -181,7 +213,7 @@ function Sheet() {
               <div key={entry.id} role="presentation">
                 {header && (
                   <div className={styles.section} aria-hidden="true">
-                    {SECTION_TITLE[entry.section]}
+                    {entry.sectionTitle ?? SECTION_TITLE[entry.section]}
                   </div>
                 )}
                 <div

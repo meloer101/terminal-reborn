@@ -236,4 +236,21 @@ describe('shipContextFor', () => {
     })
     expect(ctx).toMatchObject({ root: '/r', worktree: '/w', base: 'main', branch: 'feat/x', paths: ['a.ts'], openPr: null, sessionId: 's1' })
   })
+
+  it('commits only the ticked paths (none: nothing to commit) and merges with the repository’s default method', () => {
+    const base = {
+      projectRoot: '/r',
+      worktreePath: '/w',
+      changes: { uncommitted: [{ path: 'a.ts', status: 'M' as const, added: 1, removed: 0 }, { path: 'b.ts', status: 'M' as const, added: 1, removed: 0 }] },
+      pr: null,
+      agentSession: 's1',
+      openIn: 's1',
+      checksLine: null,
+      settings: { review: {} as never, pr: {} as never }
+    }
+    const preflight = ok({ mergeMethods: { methods: ['merge', 'rebase'], defaultMethod: 'rebase' } }) as Extract<ShipPreflight, { ok: true }>
+    expect(shipContextFor({ ...base, preflight, ticked: ['b.ts'] })).toMatchObject({ paths: ['b.ts'], method: 'rebase' })
+    expect(shipContextFor({ ...base, preflight, ticked: [] }).paths).toBeNull()
+    expect(shipContextFor({ ...base, preflight: ok() as Extract<ShipPreflight, { ok: true }> }).method).toBe('squash')
+  })
 })
