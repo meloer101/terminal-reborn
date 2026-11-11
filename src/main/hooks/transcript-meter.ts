@@ -8,6 +8,7 @@
 // The files are only read — incrementally, from where the last read stopped — and only inside the agents' own data
 // directories. Nothing here is persisted: after an app restart a session's history is read again from its file.
 import { open } from 'node:fs/promises'
+import { claudeOrCodex, hasOwnAdapter, type ClaudeOrCodex } from '@shared/agents'
 import type { HookAgent } from '@shared/agent-events'
 import type { ContextHistory, ContextPoint, SessionSpend, UsageVendor } from '@shared/session-meta'
 import { claudeUsage, codexTokenCount, entryTime, isRec, type JsonRec } from '@shared/usage-records'
@@ -212,7 +213,7 @@ export class TranscriptMeter {
   }
 
   observe(sessionId: string, agent: HookAgent, event: string, payload: unknown): void {
-    if ((agent !== 'claude' && agent !== 'codex') || !isRec(payload)) return
+    if (!hasOwnAdapter(agent) || !isRec(payload)) return
     const raw = payload.transcript_path
     const path = agent === 'claude' ? claudeTranscriptPath(raw, this.dirs) : codexRolloutPath(raw, this.dirs)
     let tracked = this.sessions.get(sessionId)
@@ -236,10 +237,11 @@ export class TranscriptMeter {
   }
 
   /** Where the session's conversation is written, while it runs (the phone's chat view reads it, PRD F22). */
-  sourceOf(sessionId: string): { agent: 'claude' | 'codex'; path: string } | null {
+  sourceOf(sessionId: string): { agent: ClaudeOrCodex; path: string } | null {
     const tracked = this.sessions.get(sessionId)
-    if (!tracked || !tracked.path || tracked.detachedAt !== undefined || (tracked.agent !== 'claude' && tracked.agent !== 'codex')) return null
-    return { agent: tracked.agent, path: tracked.path }
+    const agent = claudeOrCodex(tracked?.agent)
+    if (!tracked || !tracked.path || tracked.detachedAt !== undefined || !agent) return null
+    return { agent, path: tracked.path }
   }
 
   /** The session's PTY ended. Its history goes; its spend stays for the windows it was in. */

@@ -1,5 +1,6 @@
 // Background code review (PRD F13, measurements in §6.10). Pure: how a diff is split, how the
 // reviewer CLI is invoked, and how its JSON becomes F5 comments. Nothing here starts a process.
+import { headlessAgent, type HeadlessAgent } from './agents'
 import { clipCode, sanitizeReviewComments, type CommentGroup, type CommentSide, type ReviewComment, type ReviewSeverity } from './review-comments'
 import { isWaviText } from './ship-chain'
 
@@ -8,7 +9,8 @@ export const CLAUDE_PROMPT_CHAR_LIMIT = 2_900_000
 /** Codex 0.142.5 opens a turn at this many user-prompt characters; one more is `input_too_large`. */
 export const CODEX_PROMPT_CHAR_LIMIT = 1_048_576
 
-export type ReviewAgent = 'claude' | 'codex'
+/** The CLIs that can review: the ones Wavi runs headless (agents.ts). */
+export type ReviewAgent = HeadlessAgent
 
 export function promptCharLimit(agent: ReviewAgent): number {
   return agent === 'claude' ? CLAUDE_PROMPT_CHAR_LIMIT : CODEX_PROMPT_CHAR_LIMIT
@@ -1010,9 +1012,10 @@ function sanitizeCounts(value: unknown): Partial<Record<ReviewSeverity, number>>
 
 function sanitizeRecord(value: unknown, root: string): ReviewRecord | null {
   if (!isRec(value)) return null
-  const { hash, agent, trigger, message, startedAt, endedAt, found } = value
+  const { hash, trigger, message, startedAt, endedAt, found } = value
   if (typeof hash !== 'string' || !/^[0-9a-f]{8,64}$/.test(hash)) return null
-  if (agent !== 'claude' && agent !== 'codex') return null
+  const agent = headlessAgent(value.agent)
+  if (!agent) return null
   if (!TRIGGER_SET.has(trigger) || !finite(startedAt) || !finite(endedAt) || !finite(found) || found < 0) return null
   return {
     hash,

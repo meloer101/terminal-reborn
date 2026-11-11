@@ -11,8 +11,9 @@
 // idle main thread when they finish (UserPromptSubmit, source "system"). Codex: no Notification, SubagentStop or
 // StopFailure; SessionStart only at the first prompt; its own dialog blinks `Action Required` in the title; Esc on
 // that dialog or a failed request ends the turn with no Stop.
+import type { ClaudeOrCodex } from './agents'
 
-export type SimAgentKind = 'claude' | 'codex'
+export type SimAgentKind = ClaudeOrCodex
 /** What the session really is: `idle` = waiting for the user's next prompt (Wavi may say idle or done_unread). */
 export type Truth = 'running' | 'needs_you' | 'idle' | 'error' | 'exited'
 

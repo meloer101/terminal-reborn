@@ -2,6 +2,7 @@
 // (the default) it starts a read-only background review of all the worktree's changes, shown in the review block at
 // the top of Git · 变更 (label 审阅全部改动), and turns into 取消审阅 while it runs. With 审阅方式 · agent 自带命令 it types the agent's own review command into the session,
 // disabled with the reason as its tooltip while the agent cannot take it.
+import { headlessAgent } from '@shared/agents'
 import { useEffect, useState } from 'react'
 import type { SessionId } from '@shared/types'
 import { agentLabel } from '../panels/merge/model'
@@ -26,8 +27,8 @@ export function ReviewButton({ sessionId, className }: { sessionId: SessionId; c
     return () => window.clearTimeout(timer)
   }, [failure])
 
-  if (!session || !worktree || !loaded || (session.kind !== 'claude' && session.kind !== 'codex')) return null
-  const agent = session.kind
+  const agent = headlessAgent(session?.kind)
+  if (!session || !worktree || !loaded || !agent) return null
 
   if (settings.review.mode === 'agent-command') {
     const blocker = reviewBlocker(session)

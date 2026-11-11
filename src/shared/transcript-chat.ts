@@ -2,6 +2,7 @@
 // JSONL in ~/.claude/projects, Codex's rollout. What each line holds is in PRD §6.16 (measured on Claude 2.1.286–2.1.316
 // and Codex 0.142–0.166). Neither format is documented, so a line of a type not listed below becomes an `unknown` item
 // instead of breaking the conversation. Pure and incremental: a parser takes lines as they are appended.
+import type { ClaudeOrCodex } from './agents'
 
 export interface DiffHunk {
   oldStart: number
@@ -413,7 +414,7 @@ export function inlineOfDataUrl(url: unknown): InlineImage | null {
 }
 
 /** A parser for one session's transcript. `agent` picks the format; `keep` keeps its inline pictures. */
-export function createChatParser(agent: 'claude' | 'codex', now: () => number = Date.now, keep?: KeepImage): ChatParser {
+export function createChatParser(agent: ClaudeOrCodex, now: () => number = Date.now, keep?: KeepImage): ChatParser {
   return agent === 'claude' ? claudeParser(now, keep) : codexParser(now, keep)
 }
 

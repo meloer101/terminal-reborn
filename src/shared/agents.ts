@@ -68,6 +68,8 @@ export interface AgentSpec {
   minStatusVersion?: string
   /** Environment for this launch only (e.g. a per-launch folder trust that writes nothing). */
   env?: Readonly<Record<string, string>>
+  /** 新建会话 lists it even when it is not on PATH (the session then says it is missing). */
+  listedWhenMissing?: true
 }
 
 const spec = (s: AgentSpec): AgentSpec => s
@@ -82,7 +84,8 @@ export const AGENT_SPECS: Readonly<Record<CliAgent, AgentSpec>> = {
     prompt: { kind: 'argv', separator: true },
     resumeById: ['--resume', '{id}'],
     continueLatest: ['--continue'],
-    modelFlag: '--model'
+    modelFlag: '--model',
+    listedWhenMissing: true
   }),
   codex: spec({
     id: 'codex',
@@ -93,7 +96,8 @@ export const AGENT_SPECS: Readonly<Record<CliAgent, AgentSpec>> = {
     prompt: { kind: 'argv', separator: true },
     resumeById: ['resume', '{id}'],
     continueLatest: ['resume', '--last'],
-    modelFlag: '-m'
+    modelFlag: '-m',
+    listedWhenMissing: true
   }),
   opencode: spec({
     id: 'opencode',
@@ -308,21 +312,44 @@ export function isCliAgent(value: unknown): value is CliAgent {
  * Agents whose turns Wavi sees through hooks injected at launch (a Stop when a turn ends): what 自动修复 and Ship's
  * writing need of the agent they hand work to.
  */
-export function hasHooks(kind: string | null | undefined): kind is CliAgent {
-  return isCliAgent(kind) && AGENT_SPECS[kind].status === 'hooks'
+export function hasHooks(kind: unknown): kind is HooksAgent {
+  return (HOOK_AGENTS as readonly unknown[]).includes(kind)
 }
+
+/** The CLIs whose `status` is `hooks`, as a type (agent-capabilities.test.ts keeps the two in step). */
+export const HOOK_AGENTS = ['claude', 'codex', 'gemini', 'qwen', 'pi'] as const satisfies readonly CliAgent[]
+export type HooksAgent = (typeof HOOK_AGENTS)[number]
 
 /** The agent as buttons and messages name it (让 … 修复, 交给 … 解决): Claude, as the product always said; any other by its label. */
 export function shortAgentName(kind: CliAgent | 'shell'): string {
   return kind === 'claude' || kind === 'shell' ? 'Claude' : AGENT_SPECS[kind].label
 }
 
-/** Claude Code and Codex: the two CLIs with plan usage, dispatch, background review and the send profiles. */
-export type ClaudeOrCodex = 'claude' | 'codex'
+// ── What Wavi does with a CLI beyond running it ─────────────────────────────────────────────────────────────────
+// Ask these instead of naming agents (`kind === 'claude' || kind === 'codex'`; agent-capabilities.test.ts holds the
+// line): a CLI that gains one is added to its list here, not at every place that asks.
 
-export function claudeOrCodex(kind: string | null | undefined): ClaudeOrCodex | null {
-  return kind === 'claude' || kind === 'codex' ? kind : null
-}
+const pick = <T extends CliAgent>(list: readonly T[], kind: unknown): T | null =>
+  (list as readonly unknown[]).includes(kind) ? (kind as T) : null
+
+/** Vendors whose plan usage (5 h / weekly windows) Wavi reads (F11): quota chips, limit resume, schedules' quota check. */
+export const USAGE_VENDORS = ['claude', 'codex'] as const satisfies readonly CliAgent[]
+export type UsageVendor = (typeof USAGE_VENDORS)[number]
+export const usageVendor = (kind: unknown): UsageVendor | null => pick(USAGE_VENDORS, kind)
+
+/** CLIs Wavi runs one-shot on its own with structured output: background review (F13) and commit / PR text (F16). */
+export const HEADLESS_AGENTS = ['claude', 'codex'] as const satisfies readonly CliAgent[]
+export type HeadlessAgent = (typeof HEADLESS_AGENTS)[number]
+export const headlessAgent = (kind: unknown): HeadlessAgent | null => pick(HEADLESS_AGENTS, kind)
+
+/**
+ * Claude Code and Codex have their own adapters instead of a row's defaults: launch (agent-launch.ts), title and
+ * dialog rules (session-state-machine.ts), send timing (send-protocol.ts), pasted paths (attachments.ts).
+ */
+export const OWN_ADAPTER_AGENTS = ['claude', 'codex'] as const satisfies readonly CliAgent[]
+export type ClaudeOrCodex = (typeof OWN_ADAPTER_AGENTS)[number]
+export const claudeOrCodex = (kind: unknown): ClaudeOrCodex | null => pick(OWN_ADAPTER_AGENTS, kind)
+export const hasOwnAdapter = (kind: unknown): kind is ClaudeOrCodex => claudeOrCodex(kind) !== null
 
 /** The name a session of this kind shows ('终端' for a plain shell). */
 export function agentName(kind: CliAgent | 'shell'): string {

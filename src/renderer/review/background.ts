@@ -1,6 +1,7 @@
 // Background review in the window (PRD F13): each worktree's latest status from main, the comments it lands in
 // Git · 变更, and the turn signals main needs for 一轮结束且有新提交时. Main runs the reviewer; nothing here types into
 // a session.
+import { headlessAgent, type HeadlessAgent } from '@shared/agents'
 import { create } from 'zustand'
 import { formatReviewStats, type ReviewAgent, type ReviewStatus, type ReviewTrigger } from '@shared/background-review'
 import type { AgentEventEnvelope } from '@shared/agent-events'
@@ -49,7 +50,7 @@ function restoreSavedReview(root: string, cancelledAt: number): void {
 }
 
 /** The prompts of the first `agent` session in the worktree that has any. */
-function askedFor(root: string, agent: 'claude' | 'codex'): string[] {
+function askedFor(root: string, agent: HeadlessAgent): string[] {
   const { sessions, worktrees } = useWorkspace.getState()
   const ids = new Set(worktrees.filter((w) => w.path === root).map((w) => w.id))
   for (const session of sessions) {
@@ -86,9 +87,10 @@ export function cancelBackgroundReview(root: string): void {
 function agentRoot(sessionId: string): { root: string; agent: ReviewAgent } | null {
   const state = useWorkspace.getState()
   const session = state.sessions.find((s) => s.id === sessionId)
-  if (!session || (session.kind !== 'claude' && session.kind !== 'codex')) return null
+  const agent = headlessAgent(session?.kind)
+  if (!session || !agent) return null
   const worktree = state.worktrees.find((w) => w.id === session.worktreeId)
-  return worktree ? { root: worktree.path, agent: session.kind } : null
+  return worktree ? { root: worktree.path, agent } : null
 }
 
 function onAgentEvent({ sessionId, event }: AgentEventEnvelope): void {

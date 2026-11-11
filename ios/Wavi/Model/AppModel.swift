@@ -271,13 +271,13 @@ final class AppModel {
     conversation = current
   }
 
-  private struct Page: Decodable {
+  struct Page: Codable {
     let items: [ChatItem]
     let start: Int
     let total: Int
   }
 
-  private struct Snapshot: Decodable {
+  struct Snapshot: Codable {
     let projects: [RemoteProject]
     let sessions: [RemoteSession]
     let prompts: [RemotePrompt]?

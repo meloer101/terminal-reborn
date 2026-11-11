@@ -3,7 +3,7 @@
 // The state lives here, per worktree, so the Ship block can close and open (图谱 ↔ 变更) without losing a run; the
 // block only draws it (ship-flow.ts is the pure part).
 import { create } from 'zustand'
-import { agentName, claudeOrCodex, hasHooks } from '@shared/agents'
+import { agentName, hasHooks, headlessAgent } from '@shared/agents'
 import type { GitFailure } from '@shared/git-failures'
 import { reviewEvidence, evidenceBlock, withEvidence } from '@shared/pull-requests'
 import type { PrTarget } from '@shared/pull-requests'
@@ -148,11 +148,11 @@ const WRITER_NAME = { claude: 'Claude', codex: 'Codex' } as const
 export function agentLabelFor(ctx: Pick<ShipContext, 'sessionId' | 'settings'>): string {
   const session = sessionOf(ctx.sessionId)
   if (session && canTakeMessage(session, hasHooks(session.kind))) return agentName(session.kind)
-  return WRITER_NAME[writerFor(ctx.settings.pr, claudeOrCodex(session?.kind)).agent]
+  return WRITER_NAME[writerFor(ctx.settings.pr, headlessAgent(session?.kind)).agent]
 }
 
 function reviewAgentOf(ctx: ShipContext): ReviewAgent | null {
-  return claudeOrCodex(sessionOf(ctx.sessionId)?.kind)
+  return headlessAgent(sessionOf(ctx.sessionId)?.kind)
 }
 
 function reviewWanted(ctx: ShipContext, kind: ShipKind): boolean {
@@ -398,7 +398,7 @@ async function writePhase(worktree: string, token: number): Promise<void> {
 
 /** Whether the CLI a headless write would run is installed (unknown counts as installed: the write says why it failed). */
 async function headlessWriterInstalled(ctx: ShipContext): Promise<boolean> {
-  const writer = writerFor(ctx.settings.pr, claudeOrCodex(sessionOf(ctx.sessionId)?.kind)).agent
+  const writer = writerFor(ctx.settings.pr, headlessAgent(sessionOf(ctx.sessionId)?.kind)).agent
   try {
     const found = await window.tr.app.detectAgents()
     return found[writer] !== false
@@ -615,7 +615,7 @@ async function awaitTexts(
 
 /** Sessions that cannot take a message: the same texts from a headless run of the user's Claude / Codex (AI 写). */
 async function writeHeadless(worktree: string, token: number, ctx: ShipContext, kind: ShipKind): Promise<Written> {
-  const writer = writerFor(ctx.settings.pr, claudeOrCodex(sessionOf(ctx.sessionId)?.kind))
+  const writer = writerFor(ctx.settings.pr, headlessAgent(sessionOf(ctx.sessionId)?.kind))
   const paths = ctx.paths ?? []
   const base = {
     root: ctx.root,

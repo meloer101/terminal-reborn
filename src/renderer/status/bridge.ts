@@ -1,5 +1,6 @@
 // Wires the StatusController to the real world: the workspace store, window.tr signals,
 // terminal titles, window focus and one shared timer.
+import { hasOwnAdapter } from '@shared/agents'
 import { confirmLabels } from '@shared/dispatch'
 import { PROGRAM_STATUS_REPLY, ProgramStatusScanner } from '@shared/program-status'
 import type { SessionId } from '@shared/types'
@@ -107,7 +108,7 @@ export function startStatusBridge(): () => void {
         if (!outputSubscriptions.has(session.id)) {
           // OSC 7501 (the CLIs beyond Claude and Codex, which have hooks): answer the query at once — before the
           // terminal's own DA1 reply, which xterm writes only once it parses the chunk — and feed the reports.
-          const programStatus = session.kind === 'claude' || session.kind === 'codex' ? null : new ProgramStatusScanner()
+          const programStatus = hasOwnAdapter(session.kind) ? null : new ProgramStatusScanner()
           const sessionId = session.id
           const entry: { unsubscribe(): void; timer: ReturnType<typeof setTimeout> | null } = {
             timer: null,

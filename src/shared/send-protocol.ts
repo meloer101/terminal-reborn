@@ -2,6 +2,7 @@
 // Evidence for every constant below: PRD §6.9 (Claude Code 2.1.296, Codex 0.142.5).
 // Pure and synchronous: this file only decides WHAT to write; send-executor.ts performs it.
 
+import { claudeOrCodex, type ClaudeOrCodex } from './agents'
 import { resumeScreen } from './limit-resume'
 import type { AgentKind } from './types'
 
@@ -45,7 +46,7 @@ export interface AgentSendProfile {
   preEnterDelayMs: number
 }
 
-export const AGENT_PROFILES: Record<'claude' | 'codex', AgentSendProfile> = {
+export const AGENT_PROFILES: Record<ClaudeOrCodex, AgentSendProfile> = {
   // Claude Code 2.1.296: >800 chars or >=3 newlines -> `[Pasted text #N]` / `[Pasted text #N +K lines]`.
   // A placeholder paste reaches the model wrapped in `<pasted_content id="…">…</pasted_content id="…">`.
   claude: { placeholderOverChars: 800, placeholderAtNewlines: 3, placeholderNeedle: '[Pasted text', preEnterDelayMs: 60 },
@@ -61,7 +62,8 @@ export const AGENT_PROFILES: Record<'claude' | 'codex', AgentSendProfile> = {
 export const GENERIC_SEND_PROFILE: AgentSendProfile = { placeholderOverChars: Number.POSITIVE_INFINITY, placeholderAtNewlines: null, placeholderNeedle: null, preEnterDelayMs: 150 }
 
 export function sendProfile(agent: Exclude<AgentKind, 'shell'>): AgentSendProfile {
-  return agent === 'claude' || agent === 'codex' ? AGENT_PROFILES[agent] : GENERIC_SEND_PROFILE
+  const own = claudeOrCodex(agent)
+  return own ? AGENT_PROFILES[own] : GENERIC_SEND_PROFILE
 }
 
 /** Gap between the `/` keystroke and the bracketed paste carrying the rest of a slash command. */
@@ -269,6 +271,7 @@ export function detectBlockingDialog(screen: string): BlockingDialog | null {
  */
 export function sendRefusal(agent: AgentKind | undefined, screen: string): string | null {
   if (detectBlockingDialog(screen)) return '终端里有确认框，请先在终端中处理'
-  if ((agent === 'claude' || agent === 'codex') && resumeScreen(agent, screen) === 'dialog') return '终端里有选择框，请先在终端中处理'
+  const own = claudeOrCodex(agent)
+  if (own && resumeScreen(own, screen) === 'dialog') return '终端里有选择框，请先在终端中处理'
   return null
 }

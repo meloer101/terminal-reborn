@@ -19,7 +19,7 @@ import { everyWindow, windowOf } from '../app-shell/windows-runtime'
 import { moveSessionToNewWindow } from '../split/commands'
 import { noteKeyCommand } from './key-commands'
 import { useWorkspace, windowEffects } from './workspace'
-import { projectOfSession } from './workspace-model'
+import { newProjectAgent, projectOfSession } from './workspace-model'
 
 /**
  * Opens a folder as a project: a known one selects its latest session (or starts `kind` when it has none),
@@ -37,11 +37,11 @@ export function openProjectPath(path: string, kind: AgentKind = 'claude'): Sessi
   return useWorkspace.getState().addSession(projectId, kind)
 }
 
-/** "打开项目… ⌘O": pick a folder, then openProjectPath. */
-export async function openProjectInteractive(kind: AgentKind = 'claude'): Promise<SessionId | null> {
+/** "打开项目… ⌘O": pick a folder, then openProjectPath (`kind` unset: the agent used last, newProjectAgent). */
+export async function openProjectInteractive(kind?: AgentKind): Promise<SessionId | null> {
   if (isNewSessionSheetOpen()) return null
-  const path = await window.tr.ui.pickFolder()
-  return path ? openProjectPath(path, kind) : null
+  const [path, installed] = await Promise.all([window.tr.ui.pickFolder(), kind ? null : installedAgents()])
+  return path ? openProjectPath(path, kind ?? newProjectAgent(useWorkspace.getState().sessions, installed)) : null
 }
 
 /**

@@ -12,7 +12,7 @@ const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-review-')))
 const bin = join(base, 'bin')
 let review: ReviewSettings = { ...DEFAULT_SETTINGS.review }
 
-vi.mock('electron', () => ({ app: { on: () => {} }, ipcMain: { handle: () => {}, on: () => {} } }))
+vi.mock('electron', () => ({ app: { on: () => {} }, ipcMain: { handle: vi.fn(), on: vi.fn() } }))
 vi.mock('./settings', () => ({ getSettings: () => ({ ...DEFAULT_SETTINGS, review }) }))
 vi.mock('./agents-installed', async (original) => ({
   ...(await original<typeof import('./agents-installed')>()),
@@ -291,5 +291,25 @@ describe('startReview', { timeout: 15_000 }, () => {
     const done = await settled(o, root)
     expect(done).toMatchObject({ phase: 'done', trigger: 'turn', message: '看过了' })
     review = { ...DEFAULT_SETTINGS.review }
+  })
+})
+
+describe('IPC handlers', () => {
+  it('only review and look up workspace folders', async () => {
+    const { ipcMain } = await import('electron')
+    const { registerBackgroundReviewHandlers } = await import('./background-review')
+    const { addWorkspaceDirSource } = await import('./workspace-store')
+    const { REVIEW_IPC } = await import('@shared/background-review')
+    registerBackgroundReviewHandlers()
+    // ipcMain.handle turns a handler's synchronous throw into a rejected invoke; do the same here.
+    const invoke = (channel: string, ...args: unknown[]): Promise<unknown> =>
+      Promise.resolve().then(() =>
+        (vi.mocked(ipcMain.handle).mock.calls.find(([c]) => c === channel)?.[1] as unknown as (...a: unknown[]) => unknown)({ sender: owner() }, ...args)
+      )
+    const root = repo('ipc-outside')
+    await expect(invoke(REVIEW_IPC.start, { root, agent: 'claude', trigger: 'manual' })).rejects.toThrow('not a workspace folder')
+    await expect(invoke(REVIEW_IPC.latest, root)).resolves.toBeNull()
+    addWorkspaceDirSource(() => [root])
+    await expect(invoke(REVIEW_IPC.start, { root, agent: 'claude', trigger: 'manual' })).resolves.toMatchObject({ root })
   })
 })

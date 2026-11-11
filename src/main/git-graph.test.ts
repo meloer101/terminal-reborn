@@ -265,3 +265,30 @@ describe('sshCommandFor', () => {
     expect(sshCommandFor({ GIT_SSH: '/usr/local/bin/myssh' }, '')).toBeNull()
   })
 })
+
+describe('IPC handlers', () => {
+  it('only act on workspace folders', async () => {
+    const { ipcMain } = await import('electron')
+    const { registerGitGraphHandlers } = await import('./git-graph')
+    const { addWorkspaceDirSource } = await import('./workspace-store')
+    const { IPC } = await import('@shared/ipc')
+    registerGitGraphHandlers()
+    // ipcMain.handle turns a handler's synchronous throw into a rejected invoke; do the same here.
+    const handler =
+      (channel: string) =>
+      (...args: unknown[]): Promise<unknown> =>
+        Promise.resolve().then(() =>
+          (vi.mocked(ipcMain.handle).mock.calls.find(([c]) => c === channel)?.[1] as unknown as (...a: unknown[]) => unknown)(...args)
+        )
+    const r = repo()
+    r.write('a.txt', 'a\n')
+    r.commit('one')
+    await expect(handler(IPC.gitFetch)({}, r.dir)).rejects.toThrow('not a workspace folder')
+    await expect(handler(IPC.gitChanges)({}, r.dir, 'main')).rejects.toThrow('not a workspace folder')
+    await expect(handler(IPC.gitLog)({}, logRequest(r.dir))).rejects.toThrow('not a workspace folder')
+    await expect(handler(IPC.gitSignature)({}, r.dir)).resolves.toBe('')
+    addWorkspaceDirSource(() => [r.dir])
+    await expect(handler(IPC.gitLog)({}, logRequest(r.dir))).resolves.not.toBeNull()
+    await expect(handler(IPC.gitSignature)({}, r.dir)).resolves.not.toBe('')
+  })
+})

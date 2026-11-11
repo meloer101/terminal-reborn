@@ -2,10 +2,11 @@
 // agents' own logs on this Mac say about token use by week / month / year / all. Opening the page asks every account once
 // (main keeps its own limits) and scans the logs (main's worker, cached while the app runs). The sidebar's 额度 and ⇧⌘U
 // open settings here. 额度提醒 lives here too.
+import { USAGE_VENDORS } from '@shared/agents'
 import { useEffect, useMemo, useState } from 'react'
 import { CLI_AGENTS, type CliAgent } from '@shared/agents'
 import type { AgentAvailability } from '@shared/ipc'
-import { orderByTightest, vendorStatus, VENDOR_LABEL, windowKey, type UsageVendor } from '@shared/session-meta'
+import { orderByTightest, vendorStatus, VENDOR_LABEL, windowKey } from '@shared/session-meta'
 import type { AlertSettings } from '@shared/settings'
 import { heatmap, isStatsAgent, usageView, type StatsPeriod, type UsageDataset } from '@shared/usage-stats'
 import { useMetaNow } from '../session-meta/MetaChips'
@@ -16,7 +17,6 @@ import { Row, Section, Toggle } from './controls'
 import { Breakdowns, Kpis, UsageChart, UsageHeatmap } from './usage/UsageStats'
 import styles from './UsagePane.module.css'
 
-const PLAN_VENDORS: readonly UsageVendor[] = ['claude', 'codex']
 const PERIODS: { value: StatsPeriod; label: string }[] = [
   { value: 'week', label: '周' },
   { value: 'month', label: '月' },
@@ -53,7 +53,7 @@ export function UsagePane({ alerts, updateAlerts }: { alerts: AlertSettings | nu
 
   // A plan vendor is listed when its CLI is installed or its account said anything.
   const planRows = orderByTightest(
-    PLAN_VENDORS.filter((v) => found?.[v] || usage[v] || (accounts[v] && accounts[v].state !== 'missing')).map((vendor) => ({ vendor })),
+    USAGE_VENDORS.filter((v) => found?.[v] || usage[v] || (accounts[v] && accounts[v].state !== 'missing')).map((vendor) => ({ vendor })),
     usage,
     now
   )

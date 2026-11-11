@@ -4,6 +4,7 @@
 // when their switch in 设置 · 自动化 · 代码审阅 is on. Nothing here ever types into the coding session.
 // Finished results and the findings the user ignored are saved in `review-results.json` (v1.63), so a restart neither
 // reviews the same diff again nor lands an ignored finding again.
+import { headlessAgent } from '@shared/agents'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -48,6 +49,7 @@ import { buildPtyEnv } from '../pty-host/env'
 import { executableOnPath } from './agents-installed'
 import { headCommit, reviewDiff } from './git-graph'
 import { getSettings } from './settings'
+import { isWorkspaceDir } from './workspace-store'
 import { gitText, NO_OPTIONAL_LOCKS } from './git/run'
 import { killGroup, searchPath } from './git/run'
 
@@ -57,7 +59,6 @@ const KILL_GRACE_MS = 1000
 const MAX_STDOUT = 16 * 1024 * 1024
 const MAX_STDERR = 8 * 1024
 const MAX_ROOT = 4096
-const AGENTS: ReadonlySet<unknown> = new Set<ReviewAgent>(['claude', 'codex'])
 const TRIGGERS: ReadonlySet<unknown> = new Set<ReviewTrigger>(['manual', 'merge', 'push', 'turn'])
 
 interface Job {
@@ -168,13 +169,14 @@ export function parseReviewRequest(raw: unknown): ReviewRequest {
   if (typeof raw !== 'object' || raw === null) throw new Error('invalid review request')
   const { root, agent, trigger, base, force, asked } = raw as Record<string, unknown>
   if (typeof root !== 'string' || !root.startsWith('/') || root.length > MAX_ROOT || root.includes('\0')) throw new Error('invalid worktree root')
-  if (!AGENTS.has(agent)) throw new Error('invalid agent')
+  const reviewer = headlessAgent(agent)
+  if (!reviewer) throw new Error('invalid agent')
   if (!TRIGGERS.has(trigger)) throw new Error('invalid trigger')
   if (base !== undefined && (typeof base !== 'string' || base.length > 255)) throw new Error('invalid base')
   const prompts = parseAsked(asked)
   return {
     root,
-    agent: agent as ReviewAgent,
+    agent: reviewer,
     trigger: trigger as ReviewTrigger,
     ...(typeof base === 'string' ? { base } : {}),
     ...(force === true ? { force: true } : {}),
@@ -510,10 +512,15 @@ export async function turnEnded(owner: WebContents, root: string, agent: ReviewA
   await startReview(owner, { root, agent, trigger: 'turn' }).catch(() => {})
 }
 
-const isRoot = (value: unknown): value is string => typeof value === 'string' && value.startsWith('/') && value.length <= MAX_ROOT && !value.includes('\0')
+/** A workspace folder (worktree or project root), as every other folder IPC requires. */
+const isRoot = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith('/') && value.length <= MAX_ROOT && !value.includes('\0') && isWorkspaceDir(value)
 
 export function registerBackgroundReviewHandlers(): void {
-  ipcMain.handle(REVIEW_IPC.start, (event, raw: unknown) => startReview(event.sender, raw))
+  ipcMain.handle(REVIEW_IPC.start, (event, raw: unknown) => {
+    if (!isRoot(typeof raw === 'object' && raw !== null ? (raw as { root?: unknown }).root : undefined)) throw new Error('not a workspace folder')
+    return startReview(event.sender, raw)
+  })
   ipcMain.on(REVIEW_IPC.cancel, (_event, root: unknown) => {
     if (isRoot(root)) cancelReview(root)
   })
@@ -521,7 +528,8 @@ export function registerBackgroundReviewHandlers(): void {
     if (isRoot(root)) void turnStarted(root)
   })
   ipcMain.on(REVIEW_IPC.turnEnded, (event, root: unknown, agent: unknown) => {
-    if (isRoot(root) && AGENTS.has(agent)) void turnEnded(event.sender, root, agent as ReviewAgent)
+    const reviewer = headlessAgent(agent)
+    if (isRoot(root) && reviewer) void turnEnded(event.sender, root, reviewer)
   })
   ipcMain.handle(REVIEW_IPC.latest, (_event, root: unknown) => (isRoot(root) ? latestReview(root) : null))
   ipcMain.on(REVIEW_IPC.dismiss, (_event, root: unknown, keys: unknown, undo: unknown) => {

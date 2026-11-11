@@ -4,8 +4,9 @@
 // - Codex: the last `token_count` event of its rollout JSONL (`info.last_token_usage`, `info.model_context_window`,
 //   `rate_limits.primary / secondary` with `window_minutes`), and `codex app-server`'s `account/rateLimits/read`.
 // Main parses with these; the renderer selects and formats with the helpers further down.
+import type { UsageVendor } from './agents'
 
-export type UsageVendor = 'claude' | 'codex'
+export type { UsageVendor }
 
 /** How full the session's context window is, and what the CLI says about it (Figma 18 ContextPopover). */
 export interface ContextUsage {

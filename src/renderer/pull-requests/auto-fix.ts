@@ -304,8 +304,25 @@ async function handleStop(c: FixCtx): Promise<void> {
   handling.add(id)
   try {
     const target = targetOf(c)
-    const diff = (await window.tr.ship.diffSince({ ...target, since: run.since }).catch(() => null)) ?? ''
-    const note = fixNote(await window.tr.ship.readHandoff({ ...target, kind: 'fix' }).catch(() => null))
+    // Without the diff the brakes cannot judge the fix (an empty one would read as 没有进展): stop and say why.
+    const diffRead = await window.tr.ship.diffSince({ ...target, since: run.since }).then(
+      (text) => ({ ok: true as const, text: text ?? '' }),
+      (error: unknown) => {
+        console.warn('[auto-fix] could not read the fix diff', error)
+        return { ok: false as const }
+      }
+    )
+    if (!diffRead.ok) {
+      if (read(c.scope, c.worktree)?.run === run) stopWith(c, '自动修复已停：没能读到这次修复的改动')
+      return
+    }
+    const diff = diffRead.text
+    const note = fixNote(
+      await window.tr.ship.readHandoff({ ...target, kind: 'fix' }).catch((error: unknown) => {
+        console.warn('[auto-fix] could not read the fix note', error)
+        return null
+      })
+    )
     const decision = brakeDecision({
       fixDiff: diff,
       failureKey: run.key,
@@ -433,7 +450,7 @@ export function stopFix(scope: FixScope, worktreePath: string): void {
   const run = state?.run
   if (!state || run?.kind !== 'fixing') return
   write(scope, worktreePath, { ...state, run: null, stopped: '自动修复已停：你停下了它' })
-  void interruptAgent(run.sessionId).catch(() => undefined)
+  void interruptAgent(run.sessionId).catch((error: unknown) => console.warn('[auto-fix] 停下 could not interrupt the agent', error))
 }
 
 // ── the loop ────────────────────────────────────────────────────────────────────────────────────────────────────

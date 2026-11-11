@@ -1,6 +1,7 @@
 // 额度恢复后继续 (PRD F11): a plan limit stopped an agent's turn, and the user asked Wavi to type 继续 into that session
 // once the limit resets. Pure: which sessions the limit stopped, when the send is due, whether the usage and the screen
 // allow it, and the copy. The renderer's limit-resume bridge owns the timer and the send. Measurements: PRD §6.6 / §6.7.
+import { usageVendor } from './agents'
 import { formatClock, VENDOR_LABEL, type UsageVendor, type UsageWindow, type VendorUsage } from './session-meta'
 import type { AgentKind, AgentPhase, SessionStatus } from './types'
 
@@ -97,11 +98,12 @@ export interface LimitStop {
 
 export function limitStop(input: LimitStopInput): LimitStop | null {
   const { session } = input
-  if (input.offPlan || (session.kind !== 'claude' && session.kind !== 'codex')) return null
+  const vendor = usageVendor(session.kind)
+  if (input.offPlan || !vendor) return null
   if (!stoppedLikeLimit(session, input.failure)) return null
   const reset = latestReset(bindingWindows(input.usage, input.failure?.message, input.now))
   if (!reset) return null
-  return { vendor: session.kind, resetsAt: reset.at, window: reset.window }
+  return { vendor, resetsAt: reset.at, window: reset.window }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-10：架构评估的修复：Git 视图和后台审阅的 IPC 只接受 workspace 目录；token 检查也算 `rgb()` 等颜色函数；自动修复和建 worktree 的 4 处静默失败改成记日志；「这家 CLI 能做什么」收进 `agents.ts`（PRD v1.169：批量操作对每家 agent 生效、⌘O 启动最近用过的 agent）；renderer 分层规则（ui/styles → state → 功能 → app-shell，现有 33 处列入基线只减不增）；手机与 Mac 的消息契约测试
 - 2026-11-11：窗口材质合并成「玻璃」和「实色」两项，底层不透明度只剩一个值、默认 30%（PRD v1.174，Figma 66′）：旧设置自动迁移。还没在作者的真机上确认默认 30%，也没在 macOS 26 以前的系统上试过。
 - 2026-11-11：F25 Ultracode（PRD v1.173，Figma 74）：GUI 输入框里用户自己打开的 Ultracode 开关（不记住、续上后是关的）；Workflow 调用画成运行卡（确认、phase 进度、token、停止、五种结束状态）；侧栏会话下一行 workflow 和它的 phase；workflow 在后台跑时会话仍是运行中；终端 Claude 的会话头读出 Ultracode。`src/shared/workflow-run.ts`、`src/main/hooks/workflows.ts`、`src/main/gui/claude-stream.ts`、`src/renderer/gui/WorkflowCard.tsx`；单元测试 + e2e `gui-workflow.spec.ts`（假 Claude）。没在真 CLI 上跑过（要花额度，待作者同意）；其余 agent 和手机端没做。
 - 2026-11-11：卡片离窗口的上、下、右边各留 6，红绿灯和侧栏顶行下移 6（PRD v1.172，Figma 75A）：卡片所有的角统一圆角 10，去掉落在窗口角上的 16；侧栏收起时左边也留 6；全屏也留 6（作者没说，待确认）。

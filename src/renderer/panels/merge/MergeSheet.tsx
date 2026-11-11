@@ -2,6 +2,7 @@
 // work, an upstream the base has not pulled), then the method (Squash · Merge · Rebase) and two options (remove the
 // worktree, push the base to its remote). With conflicts the only way forward is the worktree's agent: the instructions go into its
 // input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
+import { headlessAgent } from '@shared/agents'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
 import type { MergeMethod, MergePrecheck, MergeResult } from '@shared/git-merge'
@@ -196,7 +197,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
   // sheet is ready, 推送前 when 推送到 origin is ticked; 先审阅 starts it by hand. Main skips a diff it already reviewed.
   const { settings, loaded: settingsLoaded } = useSettings()
   const builtin = settings.review.mode === 'builtin'
-  const reviewAgent = agent && (agent.kind === 'claude' || agent.kind === 'codex') ? agent.kind : null
+  const reviewAgent = headlessAgent(agent?.kind)
   const review = useBackgroundReview((s) => s.byRoot[target.worktreePath])
   const reviewComments = useReviewComments((s) => s.byRoot[target.worktreePath])
   const autoTrigger = !settingsLoaded || !builtin ? null : settings.review.beforeMerge ? 'merge' : settings.review.beforePush && willPush ? 'push' : null

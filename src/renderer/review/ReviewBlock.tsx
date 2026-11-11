@@ -2,6 +2,7 @@
 // 发给 <agent> on the same row, the reviewer's conclusion (one line when there are findings, two otherwise), then the
 // findings — tag, title and location under it; tick to send, click to open it in the diff — the first three and
 // 其余 N 条. The finding last opened stays marked while its file is open.
+import { headlessAgent } from '@shared/agents'
 import { Check, ChevronDown, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReviewComment } from '@shared/review-comments'
@@ -60,7 +61,7 @@ export function ReviewBlock({ sessionId, root }: { sessionId: SessionId; root: s
   const activeShown = opened && expandedFiles?.has(changeKey(opened.group, opened.path)) ? opened.id : null
   if (!view) return null
 
-  const agent = session?.kind === 'claude' || session?.kind === 'codex' ? session.kind : null
+  const agent = headlessAgent(session?.kind)
   const reviewAgain = (): void => {
     if (!agent) return
     setBusy('review')

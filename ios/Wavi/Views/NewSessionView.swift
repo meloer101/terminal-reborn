@@ -20,15 +20,15 @@ struct NewSessionView: View {
   @State private var busy = false
   @State private var error: String?
 
-  private struct Info: Decodable {
+  struct Info: Codable {
     let info: NewSessionInfo
     let agents: [String]
   }
 
-  private struct Created: Decodable { let session: String? }
+  struct Created: Codable { let session: String? }
 
-  private struct AgentModels: Decodable {
-    struct Model: Decodable { let value: String; let label: String }
+  struct AgentModels: Codable {
+    struct Model: Codable { let value: String; let label: String }
     /// nil from a Mac older than v1.161's row: an empty list then means no row.
     let gui: Bool?
     let models: [Model]

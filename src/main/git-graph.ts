@@ -30,7 +30,7 @@ import { stampDiffGroup, untrackedFileDiff } from '@shared/background-review'
 import { changeStamp } from '@shared/review-progress'
 import { looksBinary, MAX_PREVIEW_BYTES } from '@shared/worktree-files'
 import { appPath, gitEnv, NO_OPTIONAL_LOCKS, pushEnv, runProcess } from './git/run'
-import { isInside, normalizeRelative } from './worktree-files'
+import { isInside, normalizeRelative, workspaceFolder } from './worktree-files'
 
 const GIT_TIMEOUT_MS = 15_000
 const FETCH_TIMEOUT_MS = 60_000
@@ -490,11 +490,23 @@ export async function headCommit(root: string): Promise<string> {
   }
 }
 
+/** A request whose `root` is a workspace folder (throws otherwise), as every other folder IPC requires. */
+function workspaceRequest(request: unknown): unknown {
+  workspaceFolder(typeof request === 'object' && request !== null ? (request as { root?: unknown }).root : undefined)
+  return request
+}
+
 export function registerGitGraphHandlers(): void {
   ipcMain.handle(IPC.gitAvailable, () => gitAvailable())
-  ipcMain.handle(IPC.gitLog, (_event, request: unknown) => logPage(request))
-  ipcMain.handle(IPC.gitSignature, (_event, root: unknown) => signature(root).catch(() => ''))
-  ipcMain.handle(IPC.gitFetch, (_event, root: unknown) => fetchAll(root))
-  ipcMain.handle(IPC.gitChanges, (_event, root: unknown, base: unknown) => changes(root, base))
-  ipcMain.handle(IPC.gitFileDiff, (_event, request: unknown) => fileDiff(request))
+  ipcMain.handle(IPC.gitLog, (_event, request: unknown) => logPage(workspaceRequest(request)))
+  ipcMain.handle(IPC.gitSignature, async (_event, root: unknown) => {
+    try {
+      return await signature(workspaceFolder(root))
+    } catch {
+      return ''
+    }
+  })
+  ipcMain.handle(IPC.gitFetch, (_event, root: unknown) => fetchAll(workspaceFolder(root)))
+  ipcMain.handle(IPC.gitChanges, (_event, root: unknown, base: unknown) => changes(workspaceFolder(root), base))
+  ipcMain.handle(IPC.gitFileDiff, (_event, request: unknown) => fileDiff(workspaceRequest(request)))
 }

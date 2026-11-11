@@ -7,6 +7,7 @@
 // - Codex 0.142.5: only a paste that is exactly one path becomes an image, and only escaped or quoted when it has
 //   spaces. So each path is its own paste, with a space typed between; it handles them in order.
 // - A shell, or an agent we cannot name, gets one paste like Terminal.app.
+import type { ClaudeOrCodex } from '@shared/agents'
 import { inputLineText } from '@shared/send-protocol'
 import type { ImageExtension } from '@shared/ipc'
 
@@ -30,7 +31,7 @@ export function insertablePath(path: string): boolean {
  * What to write to the PTY for `paths`: the input-line text (bracketed pastes when the program takes them) with a
  * space after, ready for the user to keep typing. Empty when no path is usable.
  */
-export function attachmentInput(paths: readonly string[], agent: 'claude' | 'codex' | null, bracketed: boolean): string {
+export function attachmentInput(paths: readonly string[], agent: ClaudeOrCodex | null, bracketed: boolean): string {
   const words = paths.filter(insertablePath).map(shellEscapePath)
   if (words.length === 0) return ''
   if (agent === 'codex') return words.map((word) => inputLineText(word, bracketed)).join(' ') + ' '

@@ -2,6 +2,7 @@
 // group call runChainCommand with the worktree and what to do. It reads the worktree's state again (preflight, change
 // list, ticks, PR), refuses with the chain's reason when the action cannot run now (said in the zone's notice line), and
 // otherwise starts the Ship run, opens the sheet, or puts the hand-off into the agent's input line (never pressing Enter).
+import { headlessAgent } from '@shared/agents'
 import type { GitChanges } from '@shared/git-graph/log'
 import type { PrStatus } from '@shared/pull-requests'
 import type { ShipPreflight } from '@shared/ship'
@@ -167,9 +168,9 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
     return
   }
   if (command === 'review') {
-    const agent = place.agent
-    if (agent?.kind !== 'claude' && agent?.kind !== 'codex') return say(path, CHAIN_TEXT.noAgent)
-    await startBackgroundReview(path, agent.kind, 'manual', worktree.baseBranch).catch((error: unknown) => say(path, `没能开始审阅：${errorText(error)}`))
+    const reviewer = headlessAgent(place.agent?.kind)
+    if (!reviewer) return say(path, CHAIN_TEXT.noAgent)
+    await startBackgroundReview(path, reviewer, 'manual', worktree.baseBranch).catch((error: unknown) => say(path, `没能开始审阅：${errorText(error)}`))
     return
   }
   if (useShips.getState().byWorktree[path]) return

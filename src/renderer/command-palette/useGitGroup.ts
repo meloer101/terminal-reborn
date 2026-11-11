@@ -1,6 +1,7 @@
 // ⌘K's Git group (合入链路 v2, Figma 73H): the merge chain of the active session's worktree, read from the same stores
 // Git · 变更 reads (asked again when the palette opens), as the actions that can run now. Null while there is nothing
 // to offer (no worktree, a run already open, the state still unknown).
+import { headlessAgent } from '@shared/agents'
 import { useEffect, useState } from 'react'
 import type { GitChanges } from '@shared/git-graph/log'
 import { useGit } from '../panels/git/store'
@@ -51,7 +52,7 @@ export function useGitGroup(): PaletteGit | null {
   if (!place) return null
   const { chain, ticked } = chainPlanOf(place, { preflight, changes, prStatus, unticked: kept?.unticked ?? new Set() })
   const agent = place.agent
-  const reviewable = settings.review.mode === 'builtin' && (agent?.kind === 'claude' || agent?.kind === 'codex') && !reviewing
+  const reviewable = settings.review.mode === 'builtin' && headlessAgent(agent?.kind) !== null && !reviewing
   const files = new Set([...changes.uncommitted, ...changes.committed].map((c) => c.path)).size
   const actions = paletteGitActions(chain, {
     ticked: ticked.length,
