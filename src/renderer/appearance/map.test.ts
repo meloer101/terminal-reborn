@@ -77,32 +77,34 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     expect(vars['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 85%, transparent)')
   })
 
-  it('reads as today by default: 720 column, system UI font first, 14 / 22, opaque card, untinted Liquid Glass', () => {
+  it('reads as today by default: 720 column, system UI font first, 14 / 22, opaque card, glass tinted 30%', () => {
     const vars = toAppearanceDom(base, true).vars
     expect(vars['--chat-column']).toBe('720px')
     expect(vars['--chat-font']).toBe('-apple-system, BlinkMacSystemFont, "PingFang SC", var(--font-ui)')
     expect(vars['--chat-leading']).toBe('22px')
     expect(vars['--tr-chat-bg']).toBe('var(--bg-app)')
-    expect(vars['--glass-shell']).toBe('transparent')
+    expect(vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 30%, transparent)')
   })
 
-  it('tints the base layer by the material shown: frosted before macOS 26 whatever was chosen', () => {
-    const a = { ...base, windowMaterial: 'liquid' as const, shellOpacity: { liquid: 0.2, frosted: 0.6 } }
+  it('tints the glass by the one opacity: Liquid Glass on macOS 26, frosted before it, the same tint on both', () => {
+    const a = { ...base, windowMaterial: 'glass' as const, shellOpacity: 0.2 }
+    const tint = 'color-mix(in srgb, var(--glass-shell-color) 20%, transparent)'
     expect(shownMaterial(a, true)).toBe('liquid')
-    expect(toAppearanceDom(a, true).vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 20%, transparent)')
+    expect(toAppearanceDom(a, true).vars['--glass-shell']).toBe(tint)
     expect(shownMaterial(a, false)).toBe('frosted')
-    expect(toAppearanceDom(a, false).vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 60%, transparent)')
-    expect(toAppearanceDom({ ...a, windowMaterial: 'frosted', shellOpacity: { liquid: 0, frosted: 1 } }, true).vars['--glass-shell']).toBe('var(--glass-shell-color)')
+    expect(toAppearanceDom(a, false).vars['--glass-shell']).toBe(tint)
+    expect(toAppearanceDom({ ...a, shellOpacity: 1 }, true).vars['--glass-shell']).toBe('var(--glass-shell-color)')
+    expect(toAppearanceDom({ ...a, shellOpacity: 0 }, true).vars['--glass-shell']).toBe('transparent')
   })
 
   it('实色 (PRD v1.139, Figma 57): an opaque shell on every macOS, named on <html> for the softened tokens', () => {
-    const a = { ...base, windowMaterial: 'solid' as const, shellOpacity: { liquid: 0, frosted: 0.6 } }
+    const a = { ...base, windowMaterial: 'solid' as const, shellOpacity: 0.6 }
     expect(shownMaterial(a, true)).toBe('solid')
     expect(shownMaterial(a, false)).toBe('solid')
     const dom = toAppearanceDom(a, false)
     expect(dom.vars['--glass-shell']).toBe('var(--glass-shell-color)')
     expect(dom.attrs['data-material']).toBe('solid')
-    expect(toAppearanceDom({ ...a, windowMaterial: 'liquid' }, false).attrs['data-material']).toBe('frosted')
+    expect(toAppearanceDom({ ...a, windowMaterial: 'glass' }, false).attrs['data-material']).toBe('frosted')
   })
 
   it('实色 makes everything solid (Figma 66): the terminal and chat cards ignore their opacity, which stays saved', () => {
@@ -116,7 +118,7 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     expect(vars['--tr-term-surface']).toBe('var(--term-bg)')
     expect(vars['--tr-term-ring']).toBe('transparent')
     // Back on glass, the saved values apply again.
-    const glass = toAppearanceDom({ ...a, windowMaterial: 'frosted' }, true).vars
+    const glass = toAppearanceDom({ ...a, windowMaterial: 'glass' }, true).vars
     expect(glass['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 70%, transparent)')
     expect(glass['--tr-term-ring']).toBe('color-mix(in srgb, var(--term-bg) 60%, transparent)')
   })
