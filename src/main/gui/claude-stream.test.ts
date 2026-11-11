@@ -62,6 +62,16 @@ describe('createClaudeStreamNormalizer', () => {
     expect(state.items[0]).toMatchObject({ kind: 'user', text: '看图', images: 1, attachments: ['/kept/AAAA.png'] })
   })
 
+  it('leaves out the skill text Claude adds after a Skill call (stream-json marks it isSynthetic, 2.1.322)', () => {
+    const { state } = run([
+      { type: 'user', uuid: 'u1', timestamp: at, isReplay: true, parent_tool_use_id: null, message: { role: 'user', content: 'Use the hello skill.' } },
+      assistant([{ type: 'tool_use', id: 'toolu_s', name: 'Skill', input: { skill: 'hello' } }]),
+      { type: 'user', timestamp: at, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_s', content: 'Launching skill: hello' }] } },
+      { type: 'user', uuid: 'u2', timestamp: at, isSynthetic: true, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'text', text: 'Base directory for this skill: /x\n\nSay HI.' }] } }
+    ])
+    expect(state.items.filter((i) => i.kind === 'user').map((i) => (i.kind === 'user' ? i.text : ''))).toEqual(['Use the hello skill.'])
+  })
+
   it("keeps a subagent's stream out of the live block and its messages under the Agent call (Figma 59J)", () => {
     const { state } = run([
       assistant([{ type: 'tool_use', id: 'toolu_agent', name: 'Agent', input: { description: '查 SameSite', prompt: 'look' } }]),

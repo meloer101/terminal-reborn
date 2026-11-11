@@ -78,13 +78,15 @@ export interface ClaudeStreamNormalizer {
 }
 
 /**
- * The transcript parser reads camelCase fields and `isSidechain`; stream-json has their snake_case twins. A subagent's
+ * The transcript parser reads camelCase fields, `isMeta` and `isSidechain`; stream-json has its own names. A subagent's
  * messages keep the id of the Agent / Task call they belong to (`parentToolUseId`): they show under its row (Figma 59J).
  */
 export function asTranscriptLine(message: Rec, cwd: string): Rec {
   const line: Rec = { ...message, cwd }
   if ('tool_use_result' in message) line.toolUseResult = message.tool_use_result
   if (typeof message.thinking_duration_ms === 'number') line.thinkingDurationMs = message.thinking_duration_ms
+  // A skill's text after a Skill call or a `/skill`: `isMeta` in the transcript, `isSynthetic` in stream-json.
+  if (message.isSynthetic === true) line.isMeta = true
   if (typeof message.parent_tool_use_id === 'string') {
     line.isSidechain = true
     line.parentToolUseId = message.parent_tool_use_id
