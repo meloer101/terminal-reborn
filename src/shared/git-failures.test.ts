@@ -189,6 +189,15 @@ describe('classifyGitFailure', () => {
     expect(classifyGitFailure('commit', PRE_COMMIT_FRAMEWORK, ctx)).toMatchObject({ kind: 'commit-hook', message: 'pre-commit hook 没通过' })
   })
 
+  it('reads a pre-commit framework report on a push as the pre-push hook', () => {
+    const output = `mypy.....................................................................Failed
+- hook id: mypy
+- exit code: 1
+error: failed to push some refs to 'github.com:o/r.git'`
+    expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'pre-push-hook', message: 'pre-push hook 没通过', next: 'handoff' })
+    expect(classifyGitFailure('pr-create', output, ctx)).toMatchObject({ kind: 'pre-push-hook' })
+  })
+
   it('says a push or fetch needs a login, without trying to recover', () => {
     for (const output of Object.values(AUTH)) {
       expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'auth', message: '推送需要登录：在终端里运行一次 git push', next: null })
@@ -281,7 +290,36 @@ describe('classifyGitFailure', () => {
     'remote: error: GH013: Repository rule violations found for refs/heads/main.',
     'remote: GitLab: You are not allowed to push code to protected branches on this project.'
   ])('reads %j as a protected branch', (output) => {
-    expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'protected-branch', next: 'create-pr' })
+    expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'protected-branch' })
+  })
+
+  it.each([
+    ' ! [remote rejected] main -> main (protected branch hook declined)',
+    'remote: error: GH006: Protected branch update failed for refs/heads/main.',
+    'remote: error: GH013: Repository rule violations found for refs/heads/main.'
+  ])('offers 改为创建 PR for %j, a refusal of the base itself', (output) => {
+    expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'protected-branch', message: 'main 受保护', next: 'create-pr' })
+  })
+
+  it('offers nothing for a protection refusal whose ref cannot be read', () => {
+    for (const output of ['remote: error: Changes must be made through a pull request.', 'remote: error: push blocked by branch protection rules']) {
+      expect(classifyGitFailure('push', output, ctx)).toMatchObject({ kind: 'protected-branch', next: null })
+    }
+  })
+
+  it('says a rule refused the session branch itself, without offering 改为创建 PR (a PR pushes the same commits)', () => {
+    const secret = `remote: error: GH013: Repository rule violations found for refs/heads/wavi/fix-login.
+remote: - GITHUB PUSH PROTECTION
+remote:   Push cannot contain secrets
+To github.com:o/r.git
+ ! [remote rejected] wavi/fix-login -> wavi/fix-login (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:o/r.git'`
+    const failure = classifyGitFailure('push', secret, ctx)
+    expect(failure).toMatchObject({ kind: 'protected-branch', message: 'wavi/fix-login 被仓库规则拒绝', next: null })
+    expect(failure.tail).toContain('Push cannot contain secrets')
+    expect(classifyGitFailure('pr-create', secret, ctx)).toMatchObject({ message: 'wavi/fix-login 被仓库规则拒绝', next: null })
+    const signed = ' ! [remote rejected] feat -> feat (push declined due to repository rule violations)\nremote: - Commits must have verified signatures.'
+    expect(classifyGitFailure('push', `remote: error: GH013: Repository rule violations found.\n${signed}`, ctx)).toMatchObject({ message: 'feat 被仓库规则拒绝', next: null })
   })
 
   it('offers 改为创建 PR only for a refused push, not for a PR GitHub will not merge', () => {
@@ -295,6 +333,25 @@ describe('classifyGitFailure', () => {
     for (const step of ['push', 'pull', 'merge', 'rebase', 'pr-create', 'pr-merge', 'fetch', 'pr-status'] as const) {
       expect(classifyGitFailure(step, 'error: odd', ctx)).toMatchObject({ kind: 'unknown', next: null })
     }
+  })
+
+  it('reads only what can happen to a local commit at the commit step; anything else goes to the agent', () => {
+    const outputs = [
+      'dial tcp 127.0.0.1:5432: connect: connection refused',
+      'psql: error: connection to server on socket failed: Connection refused',
+      "warning: unable to access '/Users/u/.config/git/ignore': Permission denied\nerror: odd",
+      'Authentication failed for the test database',
+      "fatal: 'origin' does not appear to be a git repository",
+      'remote: error: GH006: Protected branch update failed for refs/heads/main.',
+      ' ! [rejected]        feat -> feat (non-fast-forward)',
+      'fatal: Not possible to fast-forward, aborting.',
+      'remote rejected (pre-receive hook declined)'
+    ]
+    for (const output of outputs) expect(classifyGitFailure('commit', output, ctx)).toMatchObject({ kind: 'unknown', next: 'handoff' })
+    expect(kind('commit', HUSKY8_PRE_COMMIT)).toBe('commit-hook')
+    expect(kind('commit', SIGNING.gpg)).toBe('signing')
+    expect(kind('commit', DIRTY)).toBe('dirty')
+    expect(kind('commit', CONFLICT)).toBe('conflicts')
   })
 
   it('says when git does not know who the committer is', () => {

@@ -15,7 +15,8 @@ import {
   type GitLogScope
 } from '@shared/git-graph/log'
 import { fileStamp } from '@shared/review-progress'
-import { changedSince, changeKey, noDiffReason, pruneUnticked, tickable, toggleMark, type ChangeGroup, type DiffView } from './changes-model'
+import { useChainStore } from '../../pull-requests/chain-store'
+import { changedSince, changeKey, marksSettled, noDiffReason, pruneUnticked, tickable, toggleMark, type ChangeGroup, type DiffView } from './changes-model'
 import { marksOf, pruneViewed, setMarks } from './viewed'
 
 export type GitTab = 'graph' | 'changes'
@@ -224,7 +225,7 @@ export async function loadChanges(root: string, options?: { base: string | undef
       try {
         const changes = await api().changes(root, bases.get(root))
         patch(root, (c) => ({ changes, changesError: null, unticked: pruneUnticked(c.unticked, changes?.uncommitted ?? []) }))
-        if (changes) pruneViewed(root, changes)
+        if (changes && marksSettled(changes, useChainStore.getState().preflights[root]?.operation)) pruneViewed(root, changes)
         refreshOpenDiffs(root, before ?? null)
       } catch (error) {
         patch(root, { changes: null, changesError: errorMessage(error) })

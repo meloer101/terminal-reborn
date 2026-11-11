@@ -220,6 +220,22 @@ describe('exitPlan', () => {
     expect(ahead.unpushed).toBe(true)
     expect(ahead.idlePr).toBeNull()
   })
+
+  // Review finding 11: the phone decides push-or-open from the chain, not from the PR poll alone.
+  it('pushes to the PR when the chain sees unpushed commits the PR poll has not seen yet', () => {
+    const status = { worktree: '/w', branch: 'feat/x', pr, checkedAt: 0, local: { head: 'aaa', remoteAhead: false } }
+    const p = plan({ preflight: ok({ openPr: 7, pushed: true, upstream: { ahead: 1, behind: 0 } }), prStatus: status })
+    expect(p.chain.next?.label).toBe('推送到 PR #7')
+    expect(p.unpushed).toBe(true)
+    expect(p.idlePr).toBeNull()
+    expect(p.exits.primary).toMatchObject({ kind: 'push-pr', number: 7, label: '推送到 PR #7', blocker: null })
+  })
+
+  it('passes the ticked files to the chain', () => {
+    const dirty = { ...changes, uncommitted: [{ path: 'a.ts', status: 'M' as const, added: 1, removed: 0 }] }
+    expect(plan({ changes: dirty, ticked: 0 }).chain.actions.find((a) => a.id === 'commit')?.blocker).toBe('没有勾选文件')
+    expect(plan({ changes: dirty }).chain.actions.find((a) => a.id === 'commit')?.blocker).toBeNull()
+  })
 })
 
 describe('shipContextFor', () => {

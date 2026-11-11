@@ -72,7 +72,7 @@ export function PrStatusLine({
   if (!lines && error && !onBase) {
     return (
       <p className={ci.headline} role="status" data-testid="pr-status" title={error.message}>
-        <span className={ci.mark}>
+        <span className={ci.mark} data-failed="">
           <CircleHelp {...MARK} />
         </span>
         <span className={ci.headlineText}>
@@ -98,7 +98,7 @@ export function PrStatusLine({
   return (
     <>
     <p className={ci.headline} role="status" data-testid="pr-status">
-      <span className={ci.mark} data-checks={checks}>
+      <span className={ci.mark} data-checks={checks} data-failed={failed ? '' : undefined}>
         <Mark {...MARK} />
       </span>
       <span className={ci.headlineText} title={headline}>

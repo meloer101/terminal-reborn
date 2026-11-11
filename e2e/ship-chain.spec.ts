@@ -10,9 +10,11 @@
 //     jacob/conflict never pushed, edits README.md as main did: 和 main 会冲突, 同步 main → 交给 Claude (no Enter)
 //     jacob/rebase   a rebase left stopped on README.md: 中止 restores the branch
 //     jacob/resume   a rebase whose conflict was resolved and staged outside the app: 继续 finishes it
+//     jacob/abort    the same, then 中止: it asks first; 取消 keeps the resolution, 中止 restores the branch
 //     jacob/push     pushed, a local commit, the remote branch moved meanwhile: 推送 is refused, 拉取 is offered
 //     jacob/done     fast-forwarded into main: 已经全部合并到 main, 归档… opens the sheet
 //     widget jacob/pr  PR #12 open; gh's PR list starts failing: `#12 ? 查询失败` in the sidebar and the PR line
+// Every case sets up the state it needs (ticks, the open session), so one runs alone (`-g`) as well as in order.
 // Screenshots of the right sidebar in both themes go to SHIP_CHAIN_SHOTS (default test-results/ship-chain/).
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
@@ -26,6 +28,9 @@ import { agentWrites, promptedPath, typedBy } from './ship'
 
 const SHOTS = process.env.SHIP_CHAIN_SHOTS ?? join(process.cwd(), 'test-results', 'ship-chain')
 const WITHIN = { timeout: 30_000 }
+
+/** Confirmations main records instead of showing (TR_E2E_DIALOGS, set by launchApp). */
+type Dialogs = { requests: Array<{ message: string; detail?: string; confirmLabel: string }>; answer: boolean }
 
 const gitIn = (cwd: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', '-c', 'commit.gpgsign=false', ...args], {
@@ -89,7 +94,16 @@ function pageKit(get: () => Page) {
     await tab.click()
   }
   const menuItem = (name: RegExp) => get().getByRole('menu').getByRole('menuitem', { name })
-  return { panel, ship, headline, shoot, open, menuItem }
+  /** The 未提交 header's checkbox. */
+  const tickAll = () => panel().getByRole('checkbox', { name: /全部未提交的文件|不提交未提交的文件/ })
+  /** Ticks exactly `paths` among the 未提交 rows, whatever was ticked before. */
+  const tickOnly = async (paths: string[]) => {
+    // all → none; some or none → all → none.
+    for (let i = 0; i < 2 && (await tickAll().getAttribute('aria-checked')) !== 'false'; i++) await tickAll().click()
+    await expect(tickAll()).toHaveAttribute('aria-checked', 'false')
+    for (const path of paths) await panel().getByRole('checkbox', { name: `提交 ${path}` }).click()
+  }
+  return { panel, ship, headline, shoot, open, menuItem, tickAll, tickOnly }
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -180,7 +194,7 @@ test.describe('合入链路 v2 · gh ready', () => {
   gitIn(project, 'push', '-q', '-u', 'origin', 'main')
 
   const wt = (name: string) => join(fake.root, `wt-${name}`)
-  const names = ['pick', 'sync', 'conflict', 'rebase', 'resume', 'push', 'done']
+  const names = ['pick', 'sync', 'conflict', 'rebase', 'resume', 'abort', 'push', 'done']
   for (const name of names) addWorktree(project, wt(name), `jacob/${name}`)
   commitIn(wt('pick'), 'pick.ts', 'export {}\n', 'Add pick')
   for (const name of ['a', 'b', 'c']) writeFileSync(join(wt('pick'), `${name}.ts`), `export const ${name} = 1\n`)
@@ -188,6 +202,7 @@ test.describe('合入链路 v2 · gh ready', () => {
   commitIn(wt('conflict'), 'README.md', '# demo\nfrom the branch\n', 'Branch edits README')
   commitIn(wt('rebase'), 'README.md', '# demo\nfrom the rebase branch\n', 'Rebase branch edits README')
   commitIn(wt('resume'), 'README.md', '# demo\nfrom the resume branch\n', 'Resume branch edits README')
+  commitIn(wt('abort'), 'README.md', '# demo\nfrom the abort branch\n', 'Abort branch edits README')
   commitIn(wt('done'), 'done.ts', 'export const done = 1\n', 'Add done')
   // jacob/done lands on main by fast-forward; then main moves on.
   gitIn(project, 'merge', '-q', '--ff-only', 'jacob/done')
@@ -209,6 +224,16 @@ test.describe('合入链路 v2 · gh ready', () => {
   }
   writeFileSync(join(wt('resume'), 'README.md'), '# demo\nfrom main\nfrom the resume branch\n')
   gitIn(wt('resume'), 'add', 'README.md')
+  // jacob/abort: the same, to be aborted with the resolution staged.
+  const abortHead = gitIn(wt('abort'), 'rev-parse', 'jacob/abort').trim()
+  try {
+    gitIn(wt('abort'), 'rebase', 'main')
+  } catch {
+    // The conflict is the point.
+  }
+  const abortResolved = '# demo\nfrom main\nfrom the abort branch\n'
+  writeFileSync(join(wt('abort'), 'README.md'), abortResolved)
+  gitIn(wt('abort'), 'add', 'README.md')
   // jacob/push: pushed, then a local commit; another clone moves the remote branch.
   commitIn(wt('push'), 'push.ts', 'export const push = 1\n', 'Add push')
   gitIn(wt('push'), 'push', '-q', '-u', 'origin', 'jacob/push')
@@ -237,6 +262,11 @@ test.describe('合入链路 v2 · gh ready', () => {
   let app: ElectronApplication
   let page: Page
   const kit = pageKit(() => page)
+  const dialogs = () => app.evaluate(() => (globalThis as unknown as { __trDialogs: Dialogs }).__trDialogs.requests)
+  const answerDialogs = (answer: boolean) =>
+    app.evaluate((_electron, value) => {
+      ;(globalThis as unknown as { __trDialogs: Dialogs }).__trDialogs.answer = value
+    }, answer)
   /** B1: the zone offers only 合并到 main 并推送, says nothing about GitHub; ⋯'s 创建 PR is disabled with the reason. */
   const notOnGitHub = async () => {
     await expect(kit.panel().getByRole('button', { name: /^合并到 main 并推送/ })).toBeEnabled(WITHIN)
@@ -274,7 +304,8 @@ test.describe('合入链路 v2 · gh ready', () => {
           session('resume', '冲突已解决', 5),
           session('push', '推送被拒', 6),
           session('done', '已合并', 7),
-          session('pr', '有 PR', 8)
+          session('pr', '有 PR', 8),
+          session('abort', '解决后中止', 9)
         ],
         activeSessionId: 's-pick',
         sidebarCollapsed: false,
@@ -295,10 +326,9 @@ test.describe('合入链路 v2 · gh ready', () => {
 
   test('(a) an unticked file stays out: 提交… commits only the ticked ones', async () => {
     await kit.open('s-pick')
-    await kit.panel().getByRole('checkbox', { name: '提交 c.ts' }).click()
+    await kit.tickOnly(['a.ts', 'b.ts'])
     await expect(kit.panel().getByRole('checkbox', { name: '提交 c.ts' })).toHaveAttribute('aria-checked', 'false')
-    const header = kit.panel().getByRole('checkbox', { name: /全部未提交的文件|不提交未提交的文件/ })
-    await expect(header).toHaveAttribute('aria-checked', 'mixed')
+    await expect(kit.tickAll()).toHaveAttribute('aria-checked', 'mixed')
     await expect(kit.panel()).toContainText('3 个文件 · 勾选 2 个')
     // The preflight is in: a remote that is not on GitHub offers only 合并到 main 并推送, with no state line about it.
     await notOnGitHub()
@@ -309,6 +339,12 @@ test.describe('合入链路 v2 · gh ready', () => {
     agentWrites(agents.pick!, file, 'feat: a and b\n')
     await expect(kit.ship()).toHaveAttribute('data-stage', 'glance', WITHIN)
     await expect(kit.ship().getByRole('textbox', { name: '提交说明' })).toHaveValue('feat: a and b')
+    // Review finding 13: while the run is open its selection is shown and cannot change.
+    for (const [path, ticked] of [['a.ts', 'true'], ['c.ts', 'false']] as const) {
+      await expect(kit.panel().getByRole('checkbox', { name: `提交 ${path}` })).toBeDisabled()
+      await expect(kit.panel().getByRole('checkbox', { name: `提交 ${path}` })).toHaveAttribute('aria-checked', ticked)
+    }
+    await expect(kit.tickAll()).toBeDisabled()
     await kit.shoot('a')
     await page.keyboard.press('Meta+Enter')
     await expect(kit.ship()).toHaveCount(0, WITHIN)
@@ -319,8 +355,9 @@ test.describe('合入链路 v2 · gh ready', () => {
   })
 
   test('(g) ⌘K lists the active worktree’s Git group; 提交… starts the run in Git · 变更', async () => {
-    // c.ts was left out of the last commit: tick it again, so 提交… can run.
-    await kit.panel().getByRole('checkbox', { name: '提交 c.ts' }).click()
+    await kit.open('s-pick')
+    // Only c.ts ticked, whatever ran before.
+    await kit.tickOnly(['c.ts'])
     await expect(kit.panel().getByRole('checkbox', { name: '提交 c.ts' })).toHaveAttribute('aria-checked', 'true')
     await page.keyboard.press('Meta+k')
     const palette = page.getByTestId('command-palette')
@@ -432,6 +469,34 @@ test.describe('合入链路 v2 · gh ready', () => {
     await expect(kit.panel().getByRole('button', { name: /^合并到 main 并推送/ })).toBeEnabled()
   })
 
+  // Review finding 36: 中止 that would throw away resolved conflicts asks first.
+  test('(l) 中止 after the conflicts were resolved asks first: 取消 keeps the resolution, 中止 restores the branch', async () => {
+    await kit.open('s-abort')
+    await expect(kit.headline()).toContainText('rebase 进行中 · 冲突都解决了', WITHIN)
+    const abort = kit.panel().getByRole('button', { name: '中止', exact: true })
+    const asked = (await dialogs()).length
+    await answerDialogs(false)
+    try {
+      await abort.click()
+      await expect.poll(async () => (await dialogs()).length, WITHIN).toBe(asked + 1)
+      expect((await dialogs()).at(-1)).toMatchObject({ message: '中止 rebase 会丢掉 1 个文件里已解决或改过的内容', detail: 'README.md', confirmLabel: '中止' })
+      // 取消: the rebase stays stopped with the resolution staged.
+      await page.waitForTimeout(500)
+      expect(gitIn(wt('abort'), 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe('HEAD')
+      expect(gitIn(wt('abort'), 'show', ':README.md')).toBe(abortResolved)
+      await expect(kit.headline()).toContainText('rebase 进行中 · 冲突都解决了')
+      // 中止: asked again, then the branch is back where it was.
+      await answerDialogs(true)
+      await abort.click()
+      await expect.poll(() => gitIn(wt('abort'), 'rev-parse', '--abbrev-ref', 'HEAD').trim(), WITHIN).toBe('jacob/abort')
+      expect((await dialogs()).length).toBe(asked + 2)
+      expect(gitIn(wt('abort'), 'rev-parse', 'HEAD').trim()).toBe(abortHead)
+      await expect(kit.headline()).not.toContainText('rebase 进行中', WITHIN)
+    } finally {
+      await answerDialogs(true)
+    }
+  })
+
   test('(f) a push refused by a remote that moved: the step says so and offers 拉取', async () => {
     commitIn(other, 'elsewhere.ts', 'export {}\n', 'Pushed from elsewhere')
     gitIn(other, 'push', '-q', 'origin', 'jacob/push')
@@ -472,6 +537,10 @@ test.describe('合入链路 v2 · gh ready', () => {
       .toBe('#12查询失败')
     await expect(tag).toHaveAttribute('data-error', '')
     await expect(kit.panel().getByTestId('pr-status')).toContainText('查询失败')
+    // Review finding 44: the ? is a monochrome mark, in the text colour of its line.
+    const mark = kit.panel().getByTestId('pr-status').locator('[data-failed]')
+    const [markColor, lineColor] = await mark.evaluate((el) => [getComputedStyle(el).color, getComputedStyle(el.parentElement!).color])
+    expect(markColor).toBe(lineColor)
     await expect(kit.panel().getByTestId('facts')).toContainText('连不上 GitHub：检查网络后重试')
     await kit.shoot('h')
     mkdirSync(SHOTS, { recursive: true })

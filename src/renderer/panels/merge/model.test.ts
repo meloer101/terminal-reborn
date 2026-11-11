@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MergePrecheck } from '@shared/git-merge'
-import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, nothingToMerge, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
+import { agentSessionFor, checkLines, conflictPrompt, failureText, MAX_PROMPT_CHARS, methodOptions, nothingToMerge, pushSwitchLabel, removeBlocker, resultLines, testBlocksMerge, testLine, turnChecksLine } from './model'
 import { turnCheckView } from '@shared/turn-checks'
 
 const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
@@ -16,6 +16,7 @@ const check = (patch: Partial<MergePrecheck> = {}): MergePrecheck => ({
   upstream: null,
   upstreamAhead: 0,
   hasOrigin: true,
+  pushRemote: 'origin',
   blocker: null,
   ...patch
 })
@@ -129,6 +130,13 @@ describe('texts', () => {
       '已删除 worktree，分支保留'
     ])
     expect(resultLines({ ok: true, commit: 'abcdef1234', push: 'rejected' }, 'main', null)[1]).toEqual({ tone: 'warn', text: '推送失败：rejected' })
+  })
+
+  // Review finding 39: the switch and the result line name the remote the base is pushed to, not a literal origin.
+  it('the push switch and the result line name the precheck’s remote', () => {
+    expect(pushSwitchLabel(check({ pushRemote: 'fork' }))).toBe('合并后推送到 fork')
+    expect(pushSwitchLabel(check({ pushRemote: null, hasOrigin: false }))).toBe('合并后推送到远程仓库')
+    expect(resultLines({ ok: true, commit: 'abcdef1234', push: '' }, 'main', null, 'github')[1]).toEqual({ tone: 'ok', text: '已推送到 github/main' })
   })
 
   it('failure text says when a rebase already happened', () => {

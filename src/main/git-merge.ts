@@ -29,8 +29,8 @@ import {
 import { hadOwnCommits, mainWorktreeIndex, parseBaseConfig, parseWorktreePorcelain, pickMainBranch, type PorcelainWorktree } from '@shared/git-worktrees'
 import { parseGitStatus } from '@shared/worktree-files'
 import { gitAvailable } from './git-graph'
-import { remoteFor } from './git/remote'
-import { lastLines, pushEnv, runGit } from './git/run'
+import { baseRemoteFor } from './git/remote'
+import { lastLines, pinned, pushEnv, runGit } from './git/run'
 import { isProjectRoot } from './workspace-store'
 
 const MAX_PATH = 4096
@@ -168,6 +168,7 @@ const EMPTY: MergePrecheck = {
   upstream: null,
   upstreamAhead: 0,
   hasOrigin: false,
+  pushRemote: null,
   blocker: null
 }
 
@@ -192,7 +193,7 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
   const worktreePath = reals[index]!
 
   const remotes = (await orEmpty(git(realRoot, ['remote']))).split('\n').map((r) => r.trim())
-  const check: MergePrecheck = { ...EMPTY, hasOrigin: remotes.includes('origin') }
+  const check: MergePrecheck = { ...EMPTY, hasOrigin: remotes.includes('origin'), pushRemote: remotes.includes('origin') ? 'origin' : null }
   const done = (blocker: MergeBlocker | null, tree: string | null = null): Inspection => ({
     check: { ...check, blocker },
     realRoot,
@@ -214,8 +215,9 @@ async function inspect(root: unknown, worktree: unknown): Promise<Inspection> {
   const base = parseBaseConfig(baseConfig)[entry.branch] ?? mainBranch
   if (!base || base === entry.branch) return done(isMain ? { kind: 'main' } : { kind: 'no-base' })
   check.base = base
-  // The sheet's push switch: a remote to push to (see remoteFor), not only one called origin.
-  check.hasOrigin = (await remoteFor(realRoot, entry.branch, base)) !== null
+  // The sheet's push switch: the remote the base is pushed to (see baseRemoteFor), not only one called origin.
+  check.pushRemote = await baseRemoteFor(realRoot, entry.branch, base)
+  check.hasOrigin = check.pushRemote !== null
 
   const [head, baseHead] = await Promise.all([commitOf(realRoot, `refs/heads/${entry.branch}`), commitOf(realRoot, `refs/heads/${base}`)])
   if (!baseHead) return done({ kind: 'base-missing', base })
@@ -303,7 +305,7 @@ async function advanceBase(inspection: Inspection, commit: string, expected: str
       commitOf(check.baseCheckout, 'HEAD')
     ])
     if (branch.trim() !== `refs/heads/${check.base}` || head !== expected) throw new StaleError()
-    await git(check.baseCheckout, ['merge', '--ff-only', '--no-edit', '--quiet', commit], { timeout: CHECKOUT_TIMEOUT_MS })
+    await git(check.baseCheckout, pinned.merge('--ff-only', '--no-edit', '--quiet', commit), { timeout: CHECKOUT_TIMEOUT_MS })
   } else {
     await git(realRoot, ['update-ref', '-m', `wavi: merge ${check.branch} into ${check.base}`, `refs/heads/${check.base}`, commit, expected])
   }
@@ -330,7 +332,7 @@ async function squashCommits(cwd: string, base: string, head: string, ahead: num
 /** Pushes the local base to `remote`; '' when it went through, else what git
  *  printed (its whole stderr, so the failure can be classified). */
 export async function pushBase(realRoot: string, base: string, remote = 'origin'): Promise<string> {
-  const ran = await runGit(realRoot, ['push', '--quiet', '--', remote, `refs/heads/${base}:refs/heads/${base}`], {
+  const ran = await runGit(realRoot, pinned.push('--quiet', '--', remote, `refs/heads/${base}:refs/heads/${base}`), {
     timeout: PUSH_TIMEOUT_MS,
     maxStdout: MAX_BUFFER,
     env: { GIT_EDITOR: 'true', ...(await pushEnv(realRoot)) }
@@ -373,8 +375,8 @@ const merging = new Set<string>()
 
 /**
  * Merges the worktree's branch into its base with the chosen method (PRD F4). Never leaves a half-done merge. `remote`
- * (main's callers, never the renderer): where `push` sends the base — default `remoteFor` (the branch's upstream remote,
- * origin, the base's, the only one); null pushes nowhere.
+ * (main's callers, never the renderer): where `push` sends the base — default the precheck's `pushRemote` (baseRemoteFor:
+ * the base's own upstream remote, else the branch's, origin, the only one); null pushes nowhere.
  */
 export async function mergeWorktree(raw: unknown, options: { remote?: string | null } = {}): Promise<MergeResult> {
   const request = parseMergeRequest(raw)
@@ -400,7 +402,7 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
     if (request.method === 'rebase') {
       if (check.behind > 0) {
         try {
-          await git(worktreePath, ['rebase', '--no-autostash', '--quiet', check.baseHead], { timeout: CHECKOUT_TIMEOUT_MS })
+          await git(worktreePath, pinned.rebase('--quiet', check.baseHead), { timeout: CHECKOUT_TIMEOUT_MS })
         } catch (error) {
           await orEmpty(git(worktreePath, ['rebase', '--abort']))
           return { ok: false, reason: 'conflict', message: errorText(error) }
@@ -426,7 +428,7 @@ export async function mergeWorktree(raw: unknown, options: { remote?: string | n
       throw error
     }
     if (request.method === 'squash') await moveBranchTo(worktreePath, check.branch, check.head, commit)
-    const remote = options.remote !== undefined ? options.remote : request.push ? await remoteFor(realRoot, check.branch, check.base) : null
+    const remote = options.remote !== undefined ? options.remote : request.push ? check.pushRemote : null
     const push = request.push && remote ? await pushBase(realRoot, check.base, remote) : null
     return { ok: true, commit, push }
   } catch (error) {

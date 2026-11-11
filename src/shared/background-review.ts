@@ -1,6 +1,7 @@
 // Background code review (PRD F13, measurements in §6.10). Pure: how a diff is split, how the
 // reviewer CLI is invoked, and how its JSON becomes F5 comments. Nothing here starts a process.
 import { clipCode, sanitizeReviewComments, type CommentGroup, type CommentSide, type ReviewComment, type ReviewSeverity } from './review-comments'
+import { isWaviText } from './ship-chain'
 
 /** Claude Code 2.1.303 still sends 2_900_000 characters; ~2_950_000 is a local `Prompt is too long`. */
 export const CLAUDE_PROMPT_CHAR_LIMIT = 2_900_000
@@ -283,15 +284,16 @@ const MAX_ASKED_RAW_EACH = 20_000
 const CONTROL_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
 
 /**
- * The requests the reviewer sees: control characters stripped, each trimmed and cut at MAX_ASKED_EACH, empty ones
- * dropped, then the newest that fit MAX_ASKED and MAX_ASKED_TOTAL, oldest first. Applying it twice changes nothing.
+ * The requests the reviewer sees: control characters stripped, each trimmed and cut at MAX_ASKED_EACH, empty ones and
+ * Wavi's own texts (isWaviText) dropped, then the newest that fit MAX_ASKED and MAX_ASKED_TOTAL, oldest first. Applying it twice changes nothing.
  */
 export function selectAsked(asked: readonly string[]): string[] {
   const kept: string[] = []
   let total = 0
   for (let i = asked.length - 1; i >= 0 && kept.length < MAX_ASKED; i--) {
     const text = (asked[i] ?? '').replace(CONTROL_CHARS, '').trim().slice(0, MAX_ASKED_EACH).trim()
-    if (!text) continue
+    // What Wavi put into the input line (a hand-off quoting git's or CI's output) or reported is not the user's request.
+    if (!text || isWaviText(text)) continue
     if (total + text.length > MAX_ASKED_TOTAL) break
     total += text.length
     kept.push(text)

@@ -8,7 +8,20 @@ import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
 import { CHAIN_LABEL, CHAIN_TEXT, type ChainActionId } from '@shared/ship-chain'
 import type { ShipKind } from '@shared/ship'
 import { runChainCommand } from './chain-actions'
-import { cancelShip, editShip, handConflictsToAgent, handoffText, retryShip, submitShip, switchToPr, useShips } from './ship-runner'
+import { agentLabel } from '../panels/merge/model'
+import {
+  cancelShip,
+  editShip,
+  handConflictsToAgent,
+  handoffText,
+  retryShip,
+  shipCanRetry,
+  shipFinished,
+  submitShip,
+  switchToPr,
+  useShipHandoffSession,
+  useShips
+} from './ship-runner'
 import {
   failureOutput,
   failureWay,
@@ -57,19 +70,12 @@ function chainLabel(id: ChainActionId, base: string): string {
   }
 }
 
-export function ShipBlock({
-  worktree,
-  base,
-  hasSession,
-  handoffAgent
-}: {
-  worktree: string
-  base: string
-  hasSession: boolean
-  /** The worktree's agent session as 交给 … names it (Claude, Codex, …); null without one. */
-  handoffAgent: string | null
-}) {
+export function ShipBlock({ worktree, base }: { worktree: string; base: string }) {
   const state = useShips((s) => s.byWorktree[worktree])
+  // 交给 <agent> types into the session the run started with: it names and enables the button.
+  const handoffSession = useShipHandoffSession(worktree)
+  const hasSession = handoffSession !== null
+  const handoffAgent = handoffSession ? agentLabel(handoffSession.kind) : null
   const ref = useRef<HTMLDivElement>(null)
   const titleId = useId()
   // The block takes the keyboard, so ⌘↵ and Esc work without a click.
@@ -80,12 +86,16 @@ export function ShipBlock({
   // After a failed run the text stays editable: a commit hook may want a different message.
   const showFields = state.stage === 'glance' || failedInRun
   const blocker = showFields ? submitBlocker(state) : null
-  const running = state.stage === 'running' && state.error === null
+  // Every step went through and the block stays to say something (同步 whose base could not catch up): only 关闭.
+  const finished = shipFinished(state)
+  const running = state.stage === 'running' && state.error === null && !finished
   const way: FailureWay = state.error ? failureWay(state.error) : null
   const handoff = way?.kind === 'handoff' && handoffText(state.error, base) !== null
+  // 重试 / ⌘↵: the failure's way on, or a failed commit whose message is still editable (beside its own way on).
+  const canRetry = shipCanRetry(state)
   const goAhead = (): void => {
     if (state.error) {
-      if (way?.kind === 'retry' && !blocker) retryShip(worktree)
+      if (canRetry && !blocker) retryShip(worktree)
     } else if (state.stage === 'glance' && !blocker) submitShip(worktree)
   }
   const follow = (id: ChainActionId): void => {
@@ -168,28 +178,32 @@ export function ShipBlock({
       </div>
       <div className={styles.footer}>
         <button type="button" className={styles.ghost} disabled={running} onClick={() => cancelShip(worktree)}>
-          取消
+          {finished ? '关闭' : '取消'}
         </button>
         <span className={styles.spacer} />
         {state.error ? (
-          way?.kind === 'retry' ? (
-            <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
-              重试
-              {showFields && <span className={styles.shortcut}>⌘↵</span>}
-            </button>
-          ) : way?.kind === 'create-pr' ? (
-            <button type="button" className={styles.primary} onClick={() => switchToPr(worktree)}>
-              改为创建 PR
-            </button>
-          ) : way?.kind === 'chain' ? (
-            <button type="button" className={styles.primary} data-way={way.id} onClick={() => follow(way.id)}>
-              {chainLabel(way.id, base)}
-            </button>
-          ) : handoff ? (
-            <button type="button" className={styles.primary} disabled={!hasSession} onClick={() => void handConflictsToAgent(worktree)}>
-              {CHAIN_LABEL.handoff(handoffAgent)}
-            </button>
-          ) : null
+          <>
+            {/* A failed commit's own way on sits beside 重试, which is then the primary (⌘↵). */}
+            {way?.kind === 'create-pr' ? (
+              <button type="button" className={canRetry ? styles.ghost : styles.primary} onClick={() => switchToPr(worktree)}>
+                改为创建 PR
+              </button>
+            ) : way?.kind === 'chain' ? (
+              <button type="button" className={canRetry ? styles.ghost : styles.primary} data-way={way.id} onClick={() => follow(way.id)}>
+                {chainLabel(way.id, base)}
+              </button>
+            ) : handoff ? (
+              <button type="button" className={canRetry ? styles.ghost : styles.primary} disabled={!hasSession} onClick={() => void handConflictsToAgent(worktree)}>
+                {CHAIN_LABEL.handoff(handoffAgent)}
+              </button>
+            ) : null}
+            {canRetry && (
+              <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>
+                重试
+                {showFields && <span className={styles.shortcut}>⌘↵</span>}
+              </button>
+            )}
+          </>
         ) : (
           state.stage === 'glance' && (
             <button type="button" className={styles.primary} disabled={blocker !== null} title={blocker ?? undefined} onClick={goAhead}>

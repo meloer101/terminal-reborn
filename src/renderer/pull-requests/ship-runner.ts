@@ -13,7 +13,7 @@ import { writerFor } from '@shared/ship-writer'
 import type { ReviewAgent } from '@shared/background-review'
 import type { SavedShipContext, SavedShipRun } from '@shared/saved-runs'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import type { ShipError, StepId } from '@shared/ship'
+import type { ShipError, ShipPreflight, StepId } from '@shared/ship'
 import { agentHandoffPrompt } from '@shared/ship-chain'
 import type { Session, SessionId } from '@shared/types'
 import { ensureAgentUp } from '../lifecycle/agent-up'
@@ -22,6 +22,7 @@ import { insertIntoTerminal, submitPrompt } from '../session-io'
 import { addSnapshotPart, initialWorkspaceFile, requestSave } from '../state/persistence'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
+import { useChainStore } from './chain-store'
 import {
   agentFree,
   backToGlance,
@@ -33,6 +34,7 @@ import {
   divergedPrompt,
   fail,
   failurePrompt,
+  failureWay,
   formatCommit,
   interruptedShip,
   isExitRun,
@@ -71,6 +73,8 @@ interface Run {
   committed: boolean
   /** The merge commit a shipToMain kept although its push failed: the retry pushes it (if the base still has it). */
   merged?: string
+  /** The commit this run made of `ctx.paths` (its hash), once known: a retry after a reload does not commit again. */
+  commit?: string
   /** Taken up after a reload: main may have committed or merged meanwhile, so the first retry asks before it acts. */
   resumed?: boolean
   /** 同步: how far the branch is behind the base when it started (the hand-off names it); null when not known. */
@@ -82,6 +86,8 @@ export interface ShipStartOptions {
   /** A branch never pushed is rebased onto the base, a pushed one merges it (ShipPreflight.pushed). */
   syncMode?: 'rebase' | 'merge'
   behind?: number | null
+  /** The branch's tip the run starts from (its preflight's `head`); default: the preflight Git · 变更 last read. */
+  head?: string
 }
 
 const runs = new Map<string, Run>()
@@ -99,6 +105,24 @@ function patch(worktree: string, token: number, fn: (state: ShipState) => ShipSt
     return state ? { byWorktree: { ...s.byWorktree, [worktree]: fn(state) } } : s
   })
   return true
+}
+
+/** The 未提交 paths the worktree's open run commits (null: none); undefined while no run is open. */
+export function useShipPaths(worktree: string): readonly string[] | null | undefined {
+  return useShips((s) => (s.byWorktree[worktree] ? (runs.get(worktree)?.ctx.paths ?? null) : undefined))
+}
+
+/** The agent session the run's 交给 <agent> types into: the one it started with, while it is still open; else null. */
+export function shipHandoffSession(worktree: string, sessions: readonly Session[] = useWorkspace.getState().sessions): Session | null {
+  const id = runs.get(worktree)?.ctx.sessionId
+  const session = id ? sessions.find((s) => s.id === id) : undefined
+  return session && session.kind !== 'shell' ? session : null
+}
+
+/** shipHandoffSession, for the Ship block (follows the sessions and the run). */
+export function useShipHandoffSession(worktree: string): Session | null {
+  useShips((s) => s.byWorktree[worktree])
+  return useWorkspace((s) => shipHandoffSession(worktree, s.sessions))
 }
 
 const sessionOf = (id: SessionId | null): Session | undefined => (id ? useWorkspace.getState().sessions.find((s) => s.id === id) : undefined)
@@ -157,7 +181,7 @@ export function savedShipRuns(): SavedShipRun[] {
     const state = current(worktree)
     if (!state) continue
     const { settings: _settings, ...ctx } = run.ctx
-    saved.push({ kind: run.kind, ctx, committed: run.committed, ...(run.merged ? { merged: run.merged } : {}), state })
+    saved.push({ kind: run.kind, ctx, committed: run.committed, ...(run.merged ? { merged: run.merged } : {}), ...(run.commit ? { commit: run.commit } : {}), state })
   }
   return saved
 }
@@ -168,6 +192,7 @@ export function restoreShipRuns(saved: readonly SavedShipRun[], settings: ShipCo
     if (runs.has(item.ctx.worktree)) continue
     const run: Run = { ctx: { ...item.ctx, settings }, kind: item.kind, token: ++counter, committed: item.committed, resumed: true }
     if (item.merged) run.merged = item.merged
+    if (item.commit) run.commit = item.commit
     runs.set(item.ctx.worktree, run)
     useShips.setState((s) => ({ byWorktree: { ...s.byWorktree, [item.ctx.worktree]: interruptedShip(item.state) } }))
   }
@@ -200,10 +225,17 @@ export function startShipRuns(): () => void {
 
 // --- starting and steering ----------------------------------------------------------------------------------------
 
+/** The branch tip the preflight Git · 变更 (or the command that starts a run) last read, when it is this branch's. */
+function knownHead(ctx: Pick<ShipContext, 'worktree' | 'branch'>): string | undefined {
+  const preflight = useChainStore.getState().preflights[ctx.worktree]
+  return preflight?.ok && preflight.branch === ctx.branch ? preflight.head : undefined
+}
+
 export function startShip(ctx: ShipContext, kind: ShipKind, title: string, options: ShipStartOptions = {}): void {
   if (runs.has(ctx.worktree)) return
   const token = ++counter
-  runs.set(ctx.worktree, { ctx, kind, token, committed: false, behind: options.behind ?? null })
+  const head = options.head ?? knownHead(ctx)
+  runs.set(ctx.worktree, { ctx: head ? { ...ctx, head } : ctx, kind, token, committed: false, behind: options.behind ?? null })
   const state = startState(
     {
       kind,
@@ -273,8 +305,9 @@ export function handoffText(error: ShipError | null | undefined, base: string): 
 export async function handConflictsToAgent(worktree: string): Promise<void> {
   const run = runs.get(worktree)
   const text = handoffText(current(worktree)?.error, run?.ctx.base ?? 'main')
-  if (!run || !text || !run.ctx.sessionId) return
-  const { sessionId } = run.ctx
+  const session = shipHandoffSession(worktree)
+  if (!run || !text || !session) return
+  const sessionId = session.id
   try {
     useWorkspace.getState().setActiveSession(sessionId)
     await ensureAgentUp(sessionId)
@@ -453,7 +486,9 @@ async function writeWithAgent(worktree: string, token: number, ctx: ShipContext,
       template,
       evidence: primary === 'pr' ? evidenceLines(ctx) : [],
       // Exit B with uncommitted work: the same message also asks for the commit message.
-      ...(wantsPr && slots.commit ? { commitPath: slots.commit } : {})
+      ...(wantsPr && slots.commit ? { commitPath: slots.commit } : {}),
+      // The commit takes the ticked files only: the message describes those.
+      ...(slots.commit && ctx.paths && ctx.paths.length > 0 ? { files: ctx.paths } : {})
     }
     // The agent may be busy with its own work: wait for it, and say so.
     await ensureAgentUp(sessionId)
@@ -618,6 +653,19 @@ async function runPhase(worktree: string, token: number): Promise<void> {
   }
 }
 
+/**
+ * 重试 / ⌘↵ applies: the failure's own way on is another try, or a commit failed while Wavi's steps ran — the message
+ * stays editable (a commit-msg hook, a fixed identity or key) and goes in as edited, nothing is written again.
+ */
+export function shipCanRetry(state: Pick<ShipState, 'error' | 'failedIn'>): boolean {
+  const { error } = state
+  if (!error) return false
+  return failureWay(error)?.kind === 'retry' || (state.failedIn === 'running' && error.step === 'commit')
+}
+
+/** Every step went through and the block stays to say something (同步 whose base could not catch up): only closing is left. */
+export const shipFinished = (state: Pick<ShipState, 'error' | 'steps'>): boolean => state.error === null && state.steps.every((s) => s.state === 'done')
+
 const stepDone = (state: ShipState, id: string): boolean => state.steps.some((s) => s.id === id && s.state === 'done')
 
 /**
@@ -635,6 +683,44 @@ function stepError(state: ShipState, run: Run, step: StepId, message: string, fa
   return { step, message: failure?.message ?? message, ...extra, ...(failure ? { failure } : {}), ...(prompt ? { prompt } : {}) }
 }
 
+/** Whether every file header of a diff names one of `paths` (as its new path), and there is at least one. */
+function onlyPaths(diff: string, paths: readonly string[]): boolean {
+  const headers = diff.split('\n').filter((line) => line.startsWith('diff --git '))
+  return headers.length > 0 && headers.every((line) => paths.some((path) => line.endsWith(` b/${path}`)))
+}
+
+/**
+ * After a reload: the commit of `ctx.paths` the run made while no window watched (main goes on without the window),
+ * decided from the commit, never from what is left uncommitted (unticked files stay). The hash it remembers; else,
+ * when it knows the tip it started from, a branch moved off that tip by a commit of only its files (`now` is the
+ * preflight read now). null: not made. undefined: an older saved run that knows neither (the caller's old check).
+ */
+async function landedCommit(run: Run, now: ShipPreflight | null): Promise<string | null | undefined> {
+  if (run.commit) return run.commit
+  const { ctx } = run
+  if (!ctx.head) return undefined
+  if (!ctx.paths || !now?.ok || now.head === ctx.head) return null
+  const diff = await window.tr.ship.diffSince({ root: ctx.root, worktree: ctx.worktree, since: ctx.head }).catch(() => null)
+  return diff !== null && onlyPaths(diff, ctx.paths) ? now.head : null
+}
+
+/** Before the commit step of a run taken up after a reload: the commit it made meanwhile is completed, not made again.
+ *  Whether it was found (the run goes on past the commit). */
+async function resumeCommit(worktree: string, token: number, run: Run, state: ShipState): Promise<boolean> {
+  if (!run.resumed || stepDone(state, 'commit')) return false
+  run.resumed = false
+  const { ctx } = run
+  // An older saved run knows neither its commit nor its start tip: it commits as before.
+  if (!run.commit && !ctx.head) return false
+  const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
+  const made = await landedCommit(run, now)
+  if (!made || !alive(worktree, token)) return false
+  run.commit = made
+  run.committed = true
+  patch(worktree, token, (s) => complete(s, 'commit', made.slice(0, 7)))
+  return true
+}
+
 /** Exit A: commit what is uncommitted, squash into the base, push it — main does all three in one call. */
 async function runMain(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
@@ -643,7 +729,11 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
     run.resumed = false
     const now = await window.tr.ship.preflight({ root: ctx.root, worktree: ctx.worktree }).catch(() => null)
     if (!alive(worktree, token)) return
-    if (now?.ok && now.uncommitted === 0 && ctx.paths) {
+    const made = ctx.paths && !run.committed ? await landedCommit(run, now) : null
+    if (!alive(worktree, token)) return
+    if (made) run.commit = made
+    // An older saved run (no start tip): nothing uncommitted means its commit went in.
+    if (made || (made === undefined && now?.ok && now.uncommitted === 0)) {
       run.committed = true
       patch(worktree, token, (s) => (s.steps.some((step) => step.id === 'commit') ? complete(s, 'commit') : s))
     }
@@ -698,7 +788,8 @@ async function runMain(worktree: string, token: number, run: Run, state: ShipSta
 async function runPr(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx, kind } = run
   const target: PrTarget = { root: ctx.root, worktree: ctx.worktree }
-  if (state.steps.some((s) => s.id === 'commit') && !stepDone(state, 'commit')) {
+  if (state.steps.some((s) => s.id === 'commit') && !stepDone(state, 'commit') && !(await resumeCommit(worktree, token, run, state))) {
+    if (!alive(worktree, token)) return
     patch(worktree, token, (s) => begin(s, 'commit'))
     const made = await window.tr.pr.commit({
       ...target,
@@ -710,8 +801,10 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
       patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
       return
     }
+    run.commit = made.commit
     patch(worktree, token, (s) => complete(s, 'commit', made.commit.slice(0, 7)))
   }
+  if (!alive(worktree, token)) return
   if (kind === 'push-pr') {
     patch(worktree, token, (s) => begin(s, 'push'))
     const pushed = await window.tr.pr.push(target)
@@ -753,6 +846,8 @@ async function runPr(worktree: string, token: number, run: Run, state: ShipState
 /** 提交… (Figma 73F1): commit the ticked files with the message. */
 async function runCommit(worktree: string, token: number, run: Run, state: ShipState): Promise<void> {
   const { ctx } = run
+  if (await resumeCommit(worktree, token, run, state)) return finish(worktree, token, `已提交 · ${run.commit!.slice(0, 7)}`)
+  if (!alive(worktree, token)) return
   patch(worktree, token, (s) => begin(s, 'commit'))
   const made = await window.tr.pr.commit({ root: ctx.root, worktree: ctx.worktree, message: state.texts.commit, paths: ctx.paths ?? [] })
   if (!alive(worktree, token)) return
@@ -760,6 +855,7 @@ async function runCommit(worktree: string, token: number, run: Run, state: ShipS
     patch(worktree, token, (s) => fail(s, stepError(s, run, 'commit', made.message, made.failure, made.output ? { output: made.output } : {})))
     return
   }
+  run.commit = made.commit
   patch(worktree, token, (s) => complete(s, 'commit', made.commit.slice(0, 7)))
   finish(worktree, token, `已提交 · ${made.commit.slice(0, 7)}`)
 }
@@ -772,7 +868,9 @@ async function runSync(worktree: string, token: number, run: Run): Promise<void>
   if (!alive(worktree, token)) return
   if (result.ok) {
     patch(worktree, token, (s) => complete(complete(s, 'sync', result.baseNotCaughtUp), 'merge'))
-    finish(worktree, token, `已同步 ${ctx.base}`)
+    // The local base could not catch up with its remote: the block stays, saying so on the step, until it is closed.
+    if (result.baseNotCaughtUp) window.tr.pr.refresh(worktree)
+    else finish(worktree, token, `已同步 ${ctx.base}`)
     return
   }
   if (result.reason === 'blocked') {

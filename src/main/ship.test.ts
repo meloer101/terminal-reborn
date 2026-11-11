@@ -83,7 +83,8 @@ vi.mock('@shared/risk-markers', () => ({
   }
 }))
 
-const { detectGh, checkWorktree, watchTargets, unwatch } = await import('./pull-requests')
+const { detectGh, checkWorktree, pushBranch, watchTargets, unwatch } = await import('./pull-requests')
+const { changes } = await import('./git-graph')
 const { baseCi, baseFailing, baseFailure, checkBaseCi, commitRollup, diffSince, discardSince, handoffSlot, pullWorktree, pushBaseAgain, pushFailure, readHandoffText, resetShip, shipOperation, shipPreflight, shipRisks, shipToMain, syncWorktree } = await import('./ship')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -581,6 +582,10 @@ describe('shipToMain', () => {
     const refused = (output: string) => pushFailure('c1', 'main', output)
     expect(refused('remote: error: GH006: Protected branch update failed for refs/heads/main.')).toMatchObject({ pushRefused: true, failure: { kind: 'protected-branch', next: 'create-pr' } })
     expect(refused('remote: error: GH013: Repository rule violations found for refs/heads/main.')).toMatchObject({ pushRefused: true, failure: { kind: 'protected-branch' } })
+    // Protection words without the refused ref: nothing says a PR would get round it.
+    const unread = refused('remote: error: Changes must be made through a pull request.')
+    expect(unread).not.toHaveProperty('pushRefused')
+    expect(unread.ok && unread.pushError).toMatch(/^推送到 origin 失败/)
     const behind = refused(' ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs')
     expect(behind).not.toHaveProperty('pushRefused')
     // 同步 cannot repair a local base that diverged from its remote: no way on is offered.
@@ -807,6 +812,32 @@ describe('preflight · the chain fields', () => {
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ pushed: true, upstream: { ahead: 0, behind: 0 } })
   })
 
+  it('takes a branch pushed with an upstream as pushed although git keeps no remote-tracking ref of it (single-branch clone)', async () => {
+    const { root, wt } = setup({ github: false })
+    git(root, 'config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    expect(git(root, 'for-each-ref', 'refs/remotes/origin/feat').trim()).toBe('')
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, pushed: true, upstream: null })
+  })
+
+  it('counts against origin/<base> when the local base is only behind it, as Git · 变更 does', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    const other = cloneOf(bare)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(root, 'fetch', '-q', 'origin')
+    const older = await shipPreflight({ root, worktree: wt })
+    const listed = await changes(wt, 'main')
+    expect(listed).toMatchObject({ baseRef: 'refs/remotes/origin/main', ahead: 1, behind: 1 })
+    expect(older).toMatchObject({ ok: true, ahead: 1, behindBase: 1, merged: false })
+    // A worktree started from origin/main has nothing of its own yet.
+    const fresh = join(base, `wt-fresh-${++counter}`)
+    git(root, 'worktree', 'add', '-q', '-b', 'fresh', fresh, 'origin/main')
+    git(root, 'config', 'branch.fresh.base', 'main')
+    expect(await changes(fresh, 'main')).toMatchObject({ ahead: 0, behind: 0 })
+    expect(await shipPreflight({ root, worktree: fresh })).toMatchObject({ ok: true, ahead: 0, behindBase: 0, merged: false })
+  })
+
   it('says a GitHub remote is on GitHub, and reports gh', async () => {
     const { root, wt } = setup()
     expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, remoteOnGitHub: true, gh: 'ready' })
@@ -889,6 +920,56 @@ describe('同步 <base>', () => {
     expect(sha(bare, 'feat')).toBe(pushed)
   })
 
+  it('merges the base the same way whatever the user git config says about merges and rebases', async () => {
+    const { root, wt } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const pushed = sha(wt, 'HEAD')
+    commit(root, 'm.txt', 'm\n', 'main moved on')
+    git(root, 'push', '-q', 'origin', 'main')
+    git(root, 'config', 'merge.ff', 'only')
+    git(root, 'config', 'branch.feat.mergeOptions', '--squash --no-commit')
+    git(root, 'config', 'merge.log', 'true')
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(git(wt, 'log', '-1', '--format=%P%n%B', 'HEAD').trim()).toBe(`${pushed} ${sha(root, 'main')}\nMerge branch 'main' into feat`)
+
+    const fresh = setup({ github: false })
+    commit(fresh.wt, 'c.txt', 'c\n', 'fixup! Make nav sticky')
+    commit(fresh.root, 'm.txt', 'm\n', 'main moved on')
+    git(fresh.root, 'config', 'rebase.autoSquash', 'true')
+    git(fresh.root, 'config', 'rebase.updateRefs', 'true')
+    git(fresh.wt, 'branch', 'side', 'HEAD~1')
+    const side = sha(fresh.wt, 'side')
+    expect(await syncWorktree({ root: fresh.root, worktree: fresh.wt })).toEqual({ ok: true })
+    expect(git(fresh.wt, 'log', '--format=%s', 'HEAD').trim().split('\n')).toEqual(['fixup! Make nav sticky', 'Make nav sticky', 'main moved on', 'init'])
+    expect(sha(fresh.wt, 'side')).toBe(side)
+  })
+
+  it('merges into a branch pushed with an upstream although git keeps no remote-tracking ref of it, never rebasing it', async () => {
+    const { root, wt } = setup({ github: false })
+    git(root, 'config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const pushed = sha(wt, 'HEAD')
+    commit(root, 'm.txt', 'm\n', 'main moved on')
+    git(root, 'push', '-q', 'origin', 'main')
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(git(wt, 'log', '-1', '--format=%P', 'HEAD').trim().split(' ')).toEqual([pushed, sha(root, 'main')])
+  })
+
+  it('fetches only the base and the branch, so a stale ref elsewhere on the remote cannot block it', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    const other = cloneOf(bare)
+    git(other, 'switch', '-q', '-c', 'foo/bar')
+    git(other, 'push', '-q', 'origin', 'foo/bar')
+    git(other, 'switch', '-q', 'main')
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    // A branch the remote deleted and replaced: a whole-remote fetch cannot create origin/foo/bar next to it.
+    git(root, 'update-ref', 'refs/remotes/origin/foo', sha(root, 'main'))
+    expect(() => git(root, 'fetch', '-q', 'origin')).toThrow()
+    expect(await syncWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(sha(root, 'main')).toBe(sha(bare, 'main'))
+  })
+
   it('fetches first and fast-forwards the clean base checkout to its upstream before bringing it in', async () => {
     const { root, wt, bare } = setup({ github: false })
     const other = cloneOf(bare)
@@ -965,7 +1046,7 @@ describe('同步 <base>', () => {
     git(root, 'remote', 'set-url', 'origin', join(base, 'gone.git'))
     const before = snapshot(wt)
     const result = await syncWorktree({ root, worktree: wt })
-    expect(result).toMatchObject({ ok: false, reason: 'failed', failure: { kind: 'no-remote', message: '没有远程仓库，没法拉取' } })
+    expect(result).toMatchObject({ ok: false, reason: 'failed', step: 'fetch', failure: { kind: 'no-remote', message: '没有远程仓库，没法拉取' } })
     expect(snapshot(wt)).toEqual(before)
   })
 
@@ -1000,6 +1081,29 @@ describe('拉取', () => {
     const result = await pullWorktree({ root, worktree: wt })
     expect(result).toMatchObject({ ok: false, reason: 'failed', failure: { kind: 'diverged', message: '远程分支和本地分叉', next: 'handoff' } })
     expect(sha(wt, 'HEAD')).toBe(mine)
+  })
+
+  it('fast-forwards a branch pushed with an upstream although git keeps no remote-tracking ref of it', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(root, 'config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main')
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    const other = cloneOf(bare)
+    git(other, 'checkout', '-q', 'feat')
+    commit(other, 'r.txt', 'r\n', 'from elsewhere')
+    git(other, 'push', '-q', 'origin', 'feat')
+    expect(await pullWorktree({ root, worktree: wt })).toEqual({ ok: true })
+    expect(sha(wt, 'HEAD')).toBe(sha(bare, 'feat'))
+  })
+
+  it('pushes no tags the user config would follow', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    git(wt, 'push', '-q', '-u', 'origin', 'feat')
+    commit(wt, 'c.txt', 'c\n', 'more')
+    git(wt, 'tag', '-a', '-m', 'v', 'v9')
+    git(root, 'config', 'push.followTags', 'true')
+    expect(await pushBranch({ root, worktree: wt })).toMatchObject({ ok: true })
+    expect(sha(bare, 'feat')).toBe(sha(wt, 'HEAD'))
+    expect(git(bare, 'tag').trim()).toBe('')
   })
 
   it('needs a branch that was pushed and a remote', async () => {
@@ -1059,6 +1163,36 @@ describe('继续 / 中止', () => {
     expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
   })
 
+  it('rebase: 中止 asks first when resolutions or other edits would be lost, and goes ahead when told to', async () => {
+    const { root, wt } = setup({ github: false })
+    commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
+    commit(wt, 'u.txt', 'u\n', 'feat adds u')
+    commit(root, 'a.txt', 'one\nMAIN\nthree\n', 'main edits a')
+    gitFails(wt, 'rebase', 'main')
+    writeFileSync(join(wt, 'b.txt'), 'edited while stopped\n')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['b.txt'] })
+    git(wt, 'checkout', '--', 'b.txt')
+    writeFileSync(join(wt, 'a.txt'), 'one\nFEAT + MAIN\nthree\n')
+    git(wt, 'add', 'a.txt')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: false, reason: 'confirm', files: ['a.txt'] })
+    expect(await shipOperation({ root, worktree: wt, action: 'abort', force: true })).toEqual({ ok: true })
+    expect(git(wt, 'symbolic-ref', '--short', 'HEAD').trim()).toBe('feat')
+  })
+
+  it('cherry-pick: 中止 does not count what git staged for the stopped commit itself', async () => {
+    const { root, wt } = setup({ github: false })
+    commit(wt, 'a.txt', 'one\nFEAT\nthree\n', 'feat edits a')
+    git(root, 'switch', '-q', '-c', 'pick')
+    writeFileSync(join(root, 'a.txt'), 'one\nPICK\nthree\n')
+    writeFileSync(join(root, 'clean.txt'), 'c\n')
+    git(root, 'add', '.')
+    git(root, 'commit', '-q', '-m', 'to pick')
+    git(root, 'switch', '-q', 'main')
+    gitFails(wt, 'cherry-pick', 'pick')
+    expect(await shipOperation({ root, worktree: wt, action: 'abort' })).toEqual({ ok: true })
+    expect(git(wt, 'status', '--porcelain', '--untracked-files=no').trim()).toBe('')
+  })
+
   it('refuses bad requests', async () => {
     const { root, wt } = setup({ github: false })
     expect(await shipOperation({ root, worktree: wt, action: 'skip' })).toEqual({ ok: false, reason: 'blocked', message: '请求无效' })
@@ -1085,6 +1219,21 @@ describe('合并到 base 并推送 · the preflight remote and every method', ()
       if (method === 'rebase') expect(subjects).toEqual(['Make nav sticky', 'main moved on', 'init'])
     })
   }
+
+  it('pushes the base to the remote the base tracks, not to the fork the branch was published to', async () => {
+    const { root, wt, bare } = setup({ github: false })
+    const fork = join(base, `fork-${++counter}.git`)
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(root, 'remote', 'add', 'myfork', fork)
+    git(root, 'push', '-q', 'myfork', 'main')
+    git(wt, 'push', '-q', '-u', 'myfork', 'feat')
+    const forkMain = sha(fork, 'main')
+    const result = await shipToMain({ root, worktree: wt, message: 'feat: b', method: 'merge', paths: null })
+    expect(result).toMatchObject({ ok: true, pushed: true })
+    expect(sha(bare, 'main')).toBe(sha(root, 'main'))
+    expect(sha(fork, 'main')).toBe(forkMain)
+    expect(await shipPreflight({ root, worktree: wt })).toMatchObject({ ok: true, remote: 'myfork', baseAheadOfUpstream: 0 })
+  })
 
   it('retries a push to that remote, and reads CI where it lives', async () => {
     const { root, wt, bare } = setup({ remote: false })

@@ -42,7 +42,8 @@ function exitsOf(chain: ChainState, input: ChainInput): Exits {
   if (!preflight.ok) return both('main')
   if (input.pr) {
     const { number } = input.pr
-    if (input.local.uncommitted > 0 || input.pr.unpushed) return { primary: { kind: 'push-pr', number, label: pr.label, blocker: pr.blocker }, secondary: null }
+    // The chain's own count: the PR poll can lag behind the preflight's remote branch.
+    if (input.local.uncommitted > 0 || chain.unpushed) return { primary: { kind: 'push-pr', number, label: pr.label, blocker: pr.blocker }, secondary: null }
     return { primary: { kind: 'open-pr', number, label: `打开 PR #${number}`, blocker: null }, secondary: null }
   }
   if (preflight.remote === null || preflight.remoteOnGitHub === false) return { primary: main, secondary: null }
@@ -57,7 +58,7 @@ export function shipExits(state: ExitState): Exits {
     preflight,
     remembered,
     local: { branch: ok?.branch ?? null, base: ok?.base ?? null, ahead: ok?.ahead ?? 0, uncommitted: ok?.uncommitted ?? 0, trackedUncommitted: ok?.uncommitted ?? 0 },
-    pr: ok?.openPr != null ? { number: ok.openPr, draft: false, unpushed, remoteAhead: false } : null,
+    pr: ok?.openPr != null ? { number: ok.openPr, draft: false, unpushed, remoteAhead: false, details: true, conflicting: false } : null,
     prMerged: false,
     isMain: false,
     // shipExits has no worktree to place: the plan (exitPlan) adds the project and base blockers.
@@ -87,6 +88,8 @@ export interface ExitInput {
   sessions?: readonly Pick<Session, 'status'>[]
   /** The conflict radar's files against the base. */
   radarConflicts?: readonly string[] | null
+  /** Ticked uncommitted files (Git · 变更's checkboxes); omitted: every one (the phone has no checkboxes). */
+  ticked?: number
 }
 
 export interface ExitPlan {
@@ -110,7 +113,8 @@ export function exitPlan(input: ExitInput): ExitPlan {
   const chainInput = chainInputFrom(input)
   const chain = shipChain(chainInput)
   const pr = livePr(prStatus)
-  const unpushed = unpushedOf(prStatus)
+  // The chain's: the PR poll's, or commits the preflight's remote branch lacks.
+  const unpushed = chain.unpushed
   const clean = changes.uncommitted.length === 0 && changes.untrackedOmitted === 0
   return {
     chain,

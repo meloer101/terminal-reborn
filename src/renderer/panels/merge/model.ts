@@ -196,14 +196,20 @@ export function turnChecksLine(view: TurnCheckView, kind: AgentKind): CheckLine 
   return { tone, text, ...(view.kinds.length > 0 ? { meta: checksText(view) } : {}) }
 }
 
-/** Lines after a merge: the commit, the push, the worktree removal. */
+/** The sheet's push switch: the remote the base is pushed to (the precheck's, which main pushes to). */
+export function pushSwitchLabel(check: Pick<MergePrecheck, 'pushRemote'>): string {
+  return check.pushRemote ? `合并后推送到 ${check.pushRemote}` : '合并后推送到远程仓库'
+}
+
+/** Lines after a merge: the commit, the push (to `remote`, the precheck's pushRemote), the worktree removal. */
 export function resultLines(
   result: Extract<MergeResult, { ok: true }>,
   base: string,
-  removal: 'removed' | string | null
+  removal: 'removed' | string | null,
+  remote = 'origin'
 ): CheckLine[] {
   const lines: CheckLine[] = [{ tone: 'ok', text: `已合并到 ${base}`, meta: result.commit.slice(0, 7) }]
-  if (result.push === '') lines.push({ tone: 'ok', text: `已推送到 origin/${base}` })
+  if (result.push === '') lines.push({ tone: 'ok', text: `已推送到 ${remote}/${base}` })
   else if (result.push !== null) lines.push({ tone: 'warn', text: `推送失败：${result.push}` })
   if (removal === 'removed') lines.push({ tone: 'ok', text: '已删除 worktree，分支保留' })
   else if (removal) lines.push({ tone: 'warn', text: `没能删除 worktree：${removal}` })

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
 import type { ReviewComment } from '@shared/review-comments'
 import type { DiffRow } from '@shared/git-graph/diff'
-import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, noDiffReason, onOwnBase, pruneUnticked, tickedPaths, tickState, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex, toggleMark } from './changes-model'
+import { changedSince, changeItems, changeKey, codeBetween, ITEM_HEIGHT, itemHeight, MAX_DIFF_LINES, marksSettled, noDiffReason, onOwnBase, preflightKey, pruneUnticked, runUnticked, tickedPaths, tickState, rowAnchor, splitAnchors, splitRows, endsOpenFile, stickyFileIndex, toggleMark } from './changes-model'
 
 const file = (path: string, extra: Partial<GitFileChange> = {}): GitFileChange => ({ path, status: 'M', added: 1, removed: 1, ...extra })
 
@@ -340,6 +340,13 @@ describe('ticked files (合入链路 v2, Figma 73F1)', () => {
     expect(pruneUnticked(same, list)).toBe(same)
   })
 
+  // Review finding 13: while a Ship run is open the checkboxes show what it commits (its paths), not later clicks.
+  it('a run’s selection: the rows it does not commit read as unticked, a file that appeared since among them', () => {
+    const rows = [...list, file('c.ts')]
+    expect([...runUnticked(rows, ['a.ts'])].sort()).toEqual(['b.ts', 'c.ts'])
+    expect(tickedPaths(rows, runUnticked(rows, ['a.ts']))).toEqual(['a.ts'])
+  })
+
   it('the 未提交 header counts the ticked files and carries the checkbox only when rows can be ticked', () => {
     const data = changes({ uncommitted: [file('a.ts'), file('b.ts'), file('c.ts')] })
     expect(changeItems(data, new Set(), {}, [], null, 'unified', new Set(['c.ts']))[0]).toEqual({
@@ -350,5 +357,27 @@ describe('ticked files (合入链路 v2, Figma 73F1)', () => {
     })
     expect(changeItems(data, new Set(), {}, [], null, 'unified', new Set())[0]).toMatchObject({ meta: '3 个文件', group: 'uncommitted' })
     expect(changeItems(data, new Set(), {}, [])[0]).toEqual({ kind: 'group', title: '未提交', meta: '3 个文件' })
+  })
+})
+
+// Review finding 19: a stopped merge / rebase / cherry-pick shows a partial branch; its marks are not pruned meanwhile.
+describe('marksSettled', () => {
+  it('holds while an operation is stopped: a rebase’s detached HEAD, unmerged files, or the preflight naming one', () => {
+    expect(marksSettled(changes(), null)).toBe(true)
+    expect(marksSettled(changes({ branch: null }), null)).toBe(false)
+    expect(marksSettled(changes({ uncommitted: [file('a.ts', { status: 'U' })] }), null)).toBe(false)
+    expect(marksSettled(changes(), { kind: 'merge', unresolved: [] })).toBe(false)
+    expect(marksSettled(changes(), { kind: 'cherry-pick', unresolved: [] })).toBe(false)
+  })
+})
+
+// Review finding 49: an amend or a reset that keeps every count still asks for the preflight again.
+describe('preflightKey', () => {
+  const parts = { gh: 'ready', changes: changes(), pr: null, head: 'aaa', shipping: false }
+  it('changes with the branch head, not only with the counts', () => {
+    expect(preflightKey(parts)).toBe(preflightKey({ ...parts }))
+    expect(preflightKey({ ...parts, head: 'bbb' })).not.toBe(preflightKey(parts))
+    expect(preflightKey({ ...parts, changes: changes({ ahead: 3 }) })).not.toBe(preflightKey(parts))
+    expect(preflightKey({ ...parts, shipping: true })).not.toBe(preflightKey(parts))
   })
 })

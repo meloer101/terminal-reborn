@@ -49,6 +49,11 @@
   color: var(--text-primary);
 }
 
+/* 查询失败 (Figma 73I3): a monochrome mark, so it takes the text colour, not grey. */
+.mark[data-failed] {
+  color: var(--text-primary);
+}
+
 .mark[data-tone='ok'] {
   color: var(--status-done);
 }

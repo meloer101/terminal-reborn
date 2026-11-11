@@ -1,8 +1,10 @@
 // What Git · 变更's exit zone, its ⋯ menu and ⌘K show of the merge chain (合入链路 v2, PRD v1.169, Figma 73B–73H): the
 // state line (glyph tone, the strong part and the rest of the sentence), the files it is about, the menu's fixed list
 // with each blocked item's reason, and the chain actions ⌘K offers. Pure; the chain itself is src/shared/ship-chain.ts.
-import type { ShipPreflight } from '@shared/ship'
-import type { ChainActionId, ChainState, ChainTone } from '@shared/ship-chain'
+import type { ConfirmOptions } from '@shared/lifecycle'
+import { livePr, type PrStatus } from '@shared/pull-requests'
+import type { ShipOperation, ShipOperationRequest, ShipOperationResult, ShipPreflight } from '@shared/ship'
+import { CHAIN_TEXT, type ChainActionId, type ChainState, type ChainTone } from '@shared/ship-chain'
 
 /** Every way into the chain from the zone, the ⋯ menu and ⌘K (pull-requests/chain-actions.ts runs them): a chain move,
  *  the local merge sheet (the menu's 合并到 <base>…), the built-in review and opening the PR. */
@@ -16,23 +18,47 @@ export interface ZoneHeadline {
   rest: string | null
 }
 
-/** 提交… with every 未提交 file unticked. */
-export const NO_TICKED = '没有勾选文件'
+/**
+ * 合并 PR #N… opens the PR merge sheet, which needs the open PR's details (without them the merge sheet is the local
+ * one, which would merge past the PR): why it cannot open now, or null. No status yet (gh not ready, not polled): checking.
+ */
+export function mergePrBlocker(status: PrStatus | null): string | null {
+  if (!status) return CHAIN_TEXT.checking
+  const pr = livePr(status)
+  if (!pr) return CHAIN_TEXT.noPr
+  return pr.details ? null : CHAIN_TEXT.checking
+}
+
+/** Files a confirmation names before the rest are counted. */
+const CONFIRM_FILES = 8
+
+/** 中止 of a rebase or cherry-pick that would lose these files' resolutions or edits: the native confirmation. */
+export function abortConfirmation(kind: ShipOperation['kind'], files: readonly string[]): ConfirmOptions {
+  const listed = files.slice(0, CONFIRM_FILES)
+  const more = files.length > listed.length ? [`等 ${files.length} 个文件`] : []
+  return {
+    message: `中止 ${kind} 会丢掉 ${files.length} 个文件里已解决或改过的内容`,
+    detail: [...listed, ...more].join('\n'),
+    confirmLabel: '中止',
+    cancelLabel: '取消',
+    destructive: true
+  }
+}
 
 /**
- * The chain as the zone uses it: 提交… is blocked while files are uncommitted but none is ticked (the chain counts
- * files, the panel knows the ticks). Applied once, so the buttons, the menu and ⌘K agree.
+ * 继续 / 中止 in main; a 中止 main refuses with `confirm` is asked about (abortConfirmation) and sent again with `force`
+ * only on 中止. null: the user kept the operation.
  */
-export function withTicks(chain: ChainState, ticked: number): ChainState {
-  const commit = chain.actions.find((a) => a.id === 'commit')
-  if (!commit || commit.blocker !== null || ticked > 0) return chain
-  const blocked = { ...commit, blocker: NO_TICKED }
-  return {
-    ...chain,
-    actions: chain.actions.map((a) => (a.id === 'commit' ? blocked : a)),
-    next: chain.next?.id === 'commit' ? { ...chain.next, blocker: NO_TICKED } : chain.next,
-    second: chain.second?.id === 'commit' ? { ...chain.second, blocker: NO_TICKED } : chain.second
-  }
+export async function runOperation(
+  request: ShipOperationRequest,
+  kind: ShipOperation['kind'],
+  send: (request: ShipOperationRequest) => Promise<ShipOperationResult>,
+  ask: (options: ConfirmOptions) => Promise<boolean>
+): Promise<ShipOperationResult | null> {
+  const result = await send(request)
+  if (result.ok || result.reason !== 'confirm' || request.action !== 'abort') return result
+  if (!(await ask(abortConfirmation(kind, result.files)))) return null
+  return send({ ...request, force: true })
 }
 
 /** 73D4: a stopped operation with every conflict resolved reads as such, on the ok tone. */

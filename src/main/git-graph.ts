@@ -272,10 +272,30 @@ async function stampedUncommitted(cwd: string, change: GitFileChange): Promise<G
   return { ...change, stamp: changeStamp({ status: change.status, added: change.added, removed: change.removed, size: info?.size ?? null, mtimeMs: info?.mtimeMs ?? null }) }
 }
 
-/** A committed file with its review stamp: its diff against the base does not depend on the working file. */
-const stampedCommitted = (change: GitFileChange): GitFileChange => ({
+/**
+ * The blob each committed file's diff ends at (the old side for a deletion), from `diff --raw --no-abbrev -z` output:
+ * equal line counts can hide a changed line, the blob cannot.
+ */
+export function committedBlobs(out: string): Map<string, string> {
+  const blobs = new Map<string, string>()
+  const fields = out.split('\0')
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i]
+    if (!field) continue
+    if (field.startsWith(':')) {
+      const [, , oldBlob = '', newBlob = '', status = ''] = field.slice(1).split(' ')
+      if (status.startsWith('R') || status.startsWith('C')) i++
+      const path = fields[++i] ?? ''
+      if (path) blobs.set(path, status.startsWith('D') ? oldBlob : newBlob)
+    } else if (field.split('\t')[2] === '') i += 2 // a numstat rename: its two paths follow
+  }
+  return blobs
+}
+
+/** A committed file with its review stamp: its diff against the base (counts and the blob it ends at), not the working file. */
+const stampedCommitted = (change: GitFileChange, blobs: ReadonlyMap<string, string>): GitFileChange => ({
   ...change,
-  stamp: changeStamp({ status: change.status, added: change.added, removed: change.removed, size: null, mtimeMs: null })
+  stamp: `${changeStamp({ status: change.status, added: change.added, removed: change.removed, size: null, mtimeMs: null })}:${blobs.get(change.path) ?? '-'}`
 })
 
 const listUntracked = async (cwd: string, path?: string) =>
@@ -290,6 +310,24 @@ function refFor(name: string, refs: readonly GitRef[]): string | null {
 
 const shortName = (ref: string) => ref.replace(/^refs\/(heads|remotes)\//, '')
 
+/** `refs/remotes/origin/<name>` when the local branch `name` (at `local`) differs from it (at `origin`) only by being behind. */
+async function originAhead(cwd: string, name: string, branch: string | null, local: string | null, origin: string | null): Promise<string | null> {
+  if (!local || !origin || local === origin || `origin/${name}` === branch) return null
+  const remote = `refs/remotes/origin/${name}`
+  return (await git(cwd, ['merge-base', '--is-ancestor', `refs/heads/${name}`, remote]).then(() => true, () => false)) ? remote : null
+}
+
+/**
+ * What 已提交 compares a local base branch against: `refs/heads/<base>`, or `refs/remotes/origin/<base>` when the local
+ * one is only behind it (a new worktree starts from there). The ship preflight counts against the same ref.
+ */
+export async function baseCompareRef(cwd: string, base: string, branch: string | null): Promise<string> {
+  const [local, origin] = await Promise.all(
+    [`refs/heads/${base}`, `refs/remotes/origin/${base}`].map((ref) => gitOrEmpty(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).then((out) => out.trim() || null))
+  )
+  return (await originAhead(cwd, base, branch, local ?? null, origin ?? null)) ?? `refs/heads/${base}`
+}
+
 /**
  * The base to compare 已提交 against: the session's base branch, else the default branch, else (on that branch
  * itself) its upstream. A local base that is behind its origin counterpart is replaced by the remote one. Bases
@@ -302,10 +340,7 @@ async function pickBase(cwd: string, branch: string | null, candidates: (string 
     if (!ref) continue
     const local = refs.find((r) => r.kind === 'local' && r.name === name)
     const upstream = refs.find((r) => r.kind === 'remote' && r.name === `origin/${name}`)
-    if (local && upstream && local.hash !== upstream.hash && `origin/${name}` !== branch) {
-      const remote = `refs/remotes/origin/${name}`
-      if (await git(cwd, ['merge-base', '--is-ancestor', ref, remote]).then(() => true, () => false)) ref = remote
-    }
+    if (local) ref = (await originAhead(cwd, name, branch, local.hash, upstream?.hash ?? null)) ?? ref
     if (await git(cwd, ['merge-base', ref, 'HEAD']).then(() => true, () => false)) return ref
   }
   return null
@@ -342,8 +377,9 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
   if (!baseRef) return { branch, base: null, baseRef: null, ahead: 0, behind: 0, uncommitted, untrackedOmitted, committed: [] }
   const [counts, committedOut] = await Promise.all([
     git(cwd, ['rev-list', '--left-right', '--count', `${baseRef}...HEAD`, '--']),
-    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--numstat', '-z', `${baseRef}...HEAD`, '--'])
+    git(cwd, ['diff', '--no-color', '--no-ext-diff', '-M', '--raw', '--no-abbrev', '--numstat', '-z', `${baseRef}...HEAD`, '--'])
   ])
+  const blobs = committedBlobs(committedOut)
   return {
     branch,
     base: shortName(baseRef),
@@ -351,7 +387,7 @@ export async function changes(root: unknown, base: unknown): Promise<GitChanges 
     ...parseLeftRight(counts),
     uncommitted,
     untrackedOmitted,
-    committed: parseRawNumstat(committedOut).map(stampedCommitted)
+    committed: parseRawNumstat(committedOut).map((change) => stampedCommitted(change, blobs))
   }
 }
 

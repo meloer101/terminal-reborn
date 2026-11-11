@@ -60,5 +60,6 @@ export function parseShipMainRequest(raw: unknown): ShipMainRequest | null {
 export function parseShipOperationRequest(raw: unknown): ShipOperationRequest | null {
   const target = parsePrTarget(raw)
   if (!target || !isRecord(raw)) return null
-  return raw.action === 'continue' || raw.action === 'abort' ? { ...target, action: raw.action } : null
+  if (raw.action !== 'continue' && raw.action !== 'abort') return null
+  return { ...target, action: raw.action, ...(raw.force === true ? { force: true as const } : {}) }
 }

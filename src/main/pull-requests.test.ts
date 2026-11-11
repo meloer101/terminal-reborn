@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'tr-pr-')))
 const bin = join(base, 'bin')
@@ -22,6 +22,12 @@ printf '%s\\n' "---" "$@" >> "$d/calls"
 case "$1 $2" in
   "auth status")
     if [ -f "$d/signed-out" ]; then echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1; fi
+    if [ -f "$d/old-gh" ]; then
+      case "$*" in *--active*) echo "unknown flag: --active" >&2; echo "Usage:  gh auth status [flags]" >&2; exit 1 ;; esac
+      echo "github.com"; echo "  ✓ Logged in to github.com as t (oauth_token)" >&2
+      [ -f "$d/hosts" ] && while read h; do echo "$h" >&2; echo "  ✓ Logged in to $h as t (oauth_token)" >&2; done < "$d/hosts"
+      exit 0
+    fi
     echo "github.com"; echo "  ✓ Logged in to github.com account t (keyring)"
     [ -f "$d/hosts" ] && while read h; do echo "$h"; echo "  ✓ Logged in to $h account t (keyring)"; done < "$d/hosts"
     exit 0 ;;
@@ -69,7 +75,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [], getFocusedWindow: () => null, fromWebContents: () => null }
 }))
 
-const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, mergePullRequest, prDraft, pushBranch, statusesFor, unwatch, watchTargets } =
+const { cancelMerge, catchUpBase, checkWorktree, ciFailure, commitWorktree, createPullRequest, detectGh, ghLoggedInHosts, gitHubRepoFromUrl, mergePullRequest, prDraft, pushBranch, statusesFor, unwatch, watchTargets } =
   await import('./pull-requests')
 
 const identity = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
@@ -189,7 +195,7 @@ function pushedWithPr(details: Partial<Parameters<typeof detailsJson>[0]> = {}) 
 }
 
 beforeEach(() => {
-  for (const name of ['calls', 'signed-out', 'rate-limit', 'list-fail', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail', 'hosts'])
+  for (const name of ['calls', 'signed-out', 'rate-limit', 'list-fail', 'pr-list.json', 'after-create.json', 'log-failed.txt', 'graphql.json', 'merge-fail', 'after-merge.json', 'mutation-fail', 'hosts', 'old-gh'])
     rmSync(join(ghDir, name), { force: true })
   for (const name of readdirSync(ghDir)) if (name.startsWith('input-')) rmSync(join(ghDir, name), { force: true })
   confirmAnswer.mockReset()
@@ -209,6 +215,37 @@ describe('gh', () => {
     delete process.env.TR_GH
     rmSync(join(ghDir, 'signed-out'))
     expect(await detectGh(true)).toBe('ready')
+  })
+})
+
+describe('gh · the hosts it is logged in to', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('reads both shapes of gh auth status, and an older gh that has no --active', () => {
+    expect([...ghLoggedInHosts('github.com\n  ✓ Logged in to github.com account t (keyring)\nGHE.example.com\n  ✓ Logged in to GHE.example.com account t (keyring)')]).toEqual(['github.com', 'ghe.example.com'])
+    expect([...ghLoggedInHosts('github.com\n  ✓ Logged in to github.com as t (oauth_token)\n  ✓ Git operations for github.com configured to use https protocol.')]).toEqual(['github.com'])
+    expect([...ghLoggedInHosts('You are not logged into any GitHub hosts.')]).toEqual([])
+  })
+
+  it('takes a GitHub Enterprise host from an older gh that rejects --active', async () => {
+    writeFileSync(join(ghDir, 'old-gh'), '')
+    writeFileSync(join(ghDir, 'hosts'), 'ghe.example.com\n')
+    expect(await detectGh(true)).toBe('ready')
+    expect(ghCalls('auth status').map((call) => call.join(' '))).toEqual(['auth status --active', 'auth status'])
+    expect(await gitHubRepoFromUrl('git@ghe.example.com:acme/widget.git')).toMatchObject({ host: 'ghe.example.com', owner: 'acme', name: 'widget' })
+  })
+
+  it('asks gh again for a host it did not know, at most once every 10 minutes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    expect(await detectGh(true)).toBe('ready')
+    writeFileSync(join(ghDir, 'hosts'), 'ghe.example.com\n')
+    // Logged in after the last probe: found once the hosts are 10 minutes old.
+    expect(await gitHubRepoFromUrl('git@ghe.example.com:acme/widget.git')).toBeNull()
+    vi.setSystemTime(Date.now() + 10 * 60_000)
+    expect(await gitHubRepoFromUrl('git@ghe.example.com:acme/widget.git')).toMatchObject({ host: 'ghe.example.com' })
+    const probes = ghCalls('auth status').length
+    expect(await gitHubRepoFromUrl('https://gitlab.com/acme/widget.git')).toBeNull()
+    expect(ghCalls('auth status')).toHaveLength(probes)
   })
 })
 
@@ -345,6 +382,32 @@ describe('创建 PR', () => {
     expect(git(bare, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
     expect(ghCalls('pr create')[0]).toContain('--head=feat')
     expect(git(wt, 'rev-parse', '--abbrev-ref', '@{u}').trim()).toBe('origin/feat')
+  })
+
+  it('pushes to the remote the preflight names: the base\'s upstream remote when there is no origin', async () => {
+    const n = ++counter
+    const root = join(base, `repo-${n}`)
+    const project = join(base, `project-${n}.git`)
+    const fork = join(base, `fork-${n}.git`)
+    mkdirSync(root)
+    git(base, 'init', '-q', '--bare', '-b', 'main', project)
+    git(base, 'init', '-q', '--bare', '-b', 'main', fork)
+    git(root, 'init', '-q', '-b', 'main')
+    commit(root, 'a.txt', 'a\n', 'init')
+    git(root, 'remote', 'add', 'upstream', 'https://github.com/acme/widget.git')
+    git(root, 'config', 'remote.upstream.pushurl', project)
+    git(root, 'remote', 'add', 'fork', 'https://github.com/me/widget.git')
+    git(root, 'config', 'remote.fork.pushurl', fork)
+    git(root, 'push', '-q', '-u', 'upstream', 'main')
+    roots.add(root)
+    const wt = join(base, `wt-${n}`)
+    git(root, 'worktree', 'add', '-q', '-b', 'feat', wt)
+    git(root, 'config', 'branch.feat.base', 'main')
+    commit(wt, 'b.txt', 'b\n', 'Make nav sticky')
+    expect(await prDraft({ root, worktree: wt })).toMatchObject({ ok: true, remote: 'upstream' })
+    writeFileSync(join(ghDir, 'after-create.json'), prJson({ statusCheckRollup: [] }))
+    expect(await createPullRequest({ root, worktree: wt, title: 't', pushApproved: true })).toMatchObject({ ok: true, number: 7 })
+    expect(git(project, 'rev-parse', 'refs/heads/feat').trim()).toBe(git(wt, 'rev-parse', 'HEAD').trim())
   })
 
   it('refuses the base branch, a branch with nothing new, a missing gh and bad input', async () => {
@@ -711,6 +774,26 @@ describe('catching up the base after a merge (v1.65)', () => {
 
     git(root, 'remote', 'set-url', 'origin', join(base, 'gone.git'))
     expect(await catchUpBase(root, 'origin', 'main')).toMatchObject({ ok: false, message: '没能获取 origin/main：没有远程仓库，没法拉取', failure: { kind: 'no-remote' } })
+  })
+})
+
+describe('catching up a base that is being rebased', () => {
+  it('leaves the base alone while a rebase of it is stopped in its checkout, and says why', async () => {
+    const { root, bare } = setup()
+    git(root, 'remote', 'set-url', 'origin', bare)
+    commit(root, 'b.txt', 'b\n', 'second')
+    git(root, 'push', '-q', 'origin', 'main')
+    const other = join(base, `clone-${Date.now()}-rb`)
+    git(base, 'clone', '-q', bare, other)
+    commit(other, 'up.txt', 'u\n', 'upstream work')
+    git(other, 'push', '-q', 'origin', 'main')
+    // `git rebase -i HEAD~1` stopped at an edit: HEAD is detached, main is still the branch being rewritten.
+    execFileSync('git', ['rebase', '-i', 'HEAD~1'], { cwd: root, env: { ...process.env, GIT_SEQUENCE_EDITOR: "sed -i.bak 's/^pick/edit/'" }, stdio: 'ignore' })
+    const before = git(root, 'rev-parse', 'refs/heads/main').trim()
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: false, message: 'main 有进行中的 rebase，没有快进到 origin/main' })
+    expect(git(root, 'rev-parse', 'refs/heads/main').trim()).toBe(before)
+    git(root, 'rebase', '--continue')
+    expect(await catchUpBase(root, 'origin', 'main')).toEqual({ ok: true, moved: true })
   })
 })
 

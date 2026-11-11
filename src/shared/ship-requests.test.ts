@@ -82,4 +82,10 @@ describe('parseShipOperationRequest', () => {
     expect(parseShipOperationRequest({ root: '/r', action: 'abort' })).toBeNull()
     expect(parseShipOperationRequest(null)).toBeNull()
   })
+
+  it('carries force only as true (中止 after the user said yes)', () => {
+    expect(parseShipOperationRequest({ ...target, action: 'abort', force: true })).toEqual({ ...target, action: 'abort', force: true })
+    expect(parseShipOperationRequest({ ...target, action: 'abort', force: 'yes' })).toEqual({ ...target, action: 'abort' })
+    expect(parseShipOperationRequest({ ...target, action: 'abort', force: false })).toEqual({ ...target, action: 'abort' })
+  })
 })

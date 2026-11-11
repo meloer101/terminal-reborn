@@ -39,6 +39,9 @@ export type GitFailureKind =
   | 'conflicts'
   | 'unknown'
 
+/** Every GitFailureKind (a Record, so a kind added to the type must be added here to compile): saved runs accept these. */
+export const GIT_FAILURE_KINDS = Object.keys({ 'non-fast-forward': 1, diverged: 1, 'protected-branch': 1, 'pre-receive-hook': 1, 'pre-push-hook': 1, 'commit-hook': 1, auth: 1, signing: 1, identity: 1, 'no-remote': 1, 'not-github': 1, 'no-pr': 1, network: 1, dirty: 1, conflicts: 1, unknown: 1 } satisfies Record<GitFailureKind, 1>) as readonly GitFailureKind[]
+
 /**
  * What gets the user on: a chain action (src/shared/ship-chain.ts), `handoff` (put the problem and the output tail into
  * the agent's input line, no Enter), `create-pr` (the run's 改为创建 PR), or null (nothing in Wavi; the message says
@@ -100,6 +103,8 @@ const PRE_COMMIT_FRAMEWORK = /^- hook id: /m
 const PROTECTED =
   /GH006|GH013|protected branch|branch protection|repository rule violations|Changes must be made through a pull request|required status checks?/i
 const PROTECTED_REF = /(?:Protected branch update failed for|Repository rule violations found for) refs\/heads\/([^\s.]+(?:\.[^\s.]+)*)/
+/** The ref a remote refused, from git's own line (`! [remote rejected] feat -> feat (…)`). */
+const REMOTE_REJECTED_REF = /! \[remote rejected\]\s+\S+ -> (\S+) \(/
 const REJECTED = /^\s*! \[rejected\]\s+\S+ -> (\S+) \((?:non-fast-forward|fetch first)\)/m
 const NON_FF = /\((?:non-fast-forward|fetch first)\)|Updates were rejected because the (?:tip of your current branch is behind|remote contains work)/
 const DIVERGED = /Not possible to fast-forward|Diverging branches can't be fast-forwarded|have diverged/i
@@ -145,8 +150,10 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
     if (NO_PR.test(text)) return fail('no-pr', CHAIN_TEXT.noPr, 'pr')
   }
 
-  // A hook that says its own name failed before git reached the remote or wrote the commit.
-  const hook = HUSKY.exec(text)?.[1] ?? NAMED_HOOK.exec(text)?.[1] ?? (PRE_COMMIT_FRAMEWORK.test(text) ? 'pre-commit' : null)
+  // A hook that says its own name failed before git reached the remote or wrote the commit. The pre-commit framework
+  // runs whichever hook it was installed for: on a push that is pre-push.
+  const frameworkHook = step === 'push' || step === 'pr-create' ? 'pre-push' : 'pre-commit'
+  const hook = HUSKY.exec(text)?.[1] ?? NAMED_HOOK.exec(text)?.[1] ?? (PRE_COMMIT_FRAMEWORK.test(text) ? frameworkHook : null)
   if (hook === 'pre-push') return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
   if (hook && new RegExp(`^(?:${COMMIT_HOOKS})$`).test(hook)) return fail('commit-hook', `${hook} hook 没通过`, 'handoff')
 
@@ -155,8 +162,20 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
   // The same key words mean a commit that could not be signed, or a push whose SSH key wants its passphrase.
   if (COMMIT_STEPS.has(step) && SIGNING.test(text)) return fail('signing', '提交签名需要口令', null)
 
-  // 改为创建 PR only answers a refused push; a PR that GitHub will not merge is already the way round the protection.
-  if (PROTECTED.test(text)) return fail('protected-branch', `${PROTECTED_REF.exec(text)?.[1] ?? context.base} 受保护`, step === 'push' ? 'create-pr' : null)
+  // A commit never reaches a remote: what a hook printed about networks, logins or remotes is the hook's own business.
+  if (step === 'commit') {
+    if (DIRTY.test(text)) return fail('dirty', CHAIN_TEXT.commitFirst, 'commit')
+    if (CONFLICTS.test(text)) return fail('conflicts', `和 ${context.base} 有冲突`, 'handoff')
+    return unknown(step, tail, 'handoff', fail)
+  }
+
+  if (PROTECTED.test(text)) {
+    // 改为创建 PR only answers a refused push of the base: a rule on the session's own branch (a secret, unsigned
+    // commits) refuses the PR's push of the same commits too, and a PR GitHub will not merge is already the way round.
+    const ref = PROTECTED_REF.exec(text)?.[1] ?? REMOTE_REJECTED_REF.exec(text)?.[1] ?? null
+    if (ref !== null && ref !== context.base) return fail('protected-branch', `${ref} 被仓库规则拒绝`, null)
+    return fail('protected-branch', `${context.base} 受保护`, step === 'push' && ref === context.base ? 'create-pr' : null)
+  }
   if (NON_FF.test(text)) {
     // The base itself refused (exit A's push): 同步 brings the base into the branch, 拉取 moves the branch; neither
     // repairs a local base that diverged from its remote, so nothing in Wavi is offered.
@@ -178,9 +197,14 @@ export function classifyGitFailure(step: GitStep, output: string, context: GitFa
     return fail('pre-push-hook', 'pre-push hook 没通过', 'handoff')
   }
 
-  // A commit that failed for no reason git names is most often a repository hook that does not name itself: the agent
-  // can read the output and fix what the hook wants.
-  const next: GitFailureNext = step === 'commit' ? 'handoff' : null
+  return unknown(step, tail, null, fail)
+}
+
+/**
+ * A failure no rule names, summed up by git's last error line. At the commit step it is most often a repository hook
+ * that does not name itself: the agent can read the output and fix what the hook wants (`next` handoff).
+ */
+function unknown(step: GitStep, tail: string, next: GitFailureNext, fail: (kind: GitFailureKind, message: string, next: GitFailureNext) => GitFailure): GitFailure {
   const line = summaryLine(tail)
   const word = /[A-Za-z0-9]$/.test(STEP_WORD[step]) ? `${STEP_WORD[step]} ` : STEP_WORD[step]
   return fail('unknown', line ? `${word}失败：${line}` : `${word}失败`, next)

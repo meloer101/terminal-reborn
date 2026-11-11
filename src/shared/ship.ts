@@ -25,7 +25,8 @@ export type ShipPreflight =
       ok: true
       branch: string
       base: string
-      /** The remote PRs and pushes go to; null when the repository has none (then only 合并到 main). */
+      /** The remote PRs and pushes of the branch go to; null when the repository has none (then only 合并到 main). The
+       *  base's protection and merge settings are read where the base is pushed (its own upstream remote first). */
       remote: string | null
       /** The base has branch protection or required reviews on GitHub; null when gh could not tell. */
       baseProtected: boolean | null
@@ -33,7 +34,8 @@ export type ShipPreflight =
       suggested: ShipExitKind
       /** Uncommitted paths in the worktree. */
       uncommitted: number
-      /** Commits on the branch the base lacks. */
+      /** Commits on the branch the base lacks. The base here and in `behindBase`, `merged` and `baseConflicts` is what
+       *  Git · 变更 compares against: origin/<base> when the local base is only behind it. */
       ahead: number
       /** The branch's work is already in the base: its commits' content (a squash merge leaves them ahead), or, with
        *  nothing ahead, commits it made itself that the base now has (a fast-forward; the merge sheet's 已经全部合并). */
@@ -62,10 +64,12 @@ export type ShipPreflight =
       /** Files that would conflict if the branch landed on the base now (`merge-tree --write-tree`); null when unknown
        *  (git older than 2.38, the check failed). */
       baseConflicts: string[] | null
-      /** The branch has an upstream or a same-named branch on `remote` (同步 merges then, never rebases). */
+      /** The branch has an upstream (configured, even without a remote-tracking ref) or a same-named branch on `remote`
+       *  (同步 merges then, never rebases). */
       pushed: boolean
       /** Against that remote branch as last fetched (no network call): commits the local branch has that it lacks
-       *  (`ahead`, 推送) and the other way round (`behind`, 拉取); null when the branch was never pushed. */
+       *  (`ahead`, 推送) and the other way round (`behind`, 拉取); null when the branch was never pushed, or when git
+       *  keeps no remote-tracking ref of it (a single-branch clone) so they cannot be known. */
       upstream: { ahead: number; behind: number } | null
     }
   | {
@@ -230,7 +234,8 @@ export type ShipSyncResult =
   /** Nothing ran (or what ran was aborted): these files would conflict. `mode` is what 同步 would have run, so the
    *  hand-off names the right steps; `conflicts` adds how each conflicts when the pre-check could tell (else []). */
   | { ok: false; reason: 'conflicts'; files: string[]; mode: 'rebase' | 'merge'; conflicts: MergeConflict[]; baseNotCaughtUp?: string }
-  | { ok: false; reason: 'failed'; failure: GitFailure }
+  /** `step: 'fetch'`: the fetch failed and nothing else ran (otherwise the rebase or merge failed). */
+  | { ok: false; reason: 'failed'; failure: GitFailure; step?: 'fetch' }
 
 /** 拉取: fast-forward the branch to its upstream, nothing else (a diverged branch fails as `diverged`). */
 export type ShipPullRequest = PrTarget
@@ -240,11 +245,16 @@ export type ShipPullResult = { ok: true } | { ok: false; reason: 'blocked'; mess
 /** 继续 / 中止 the merge, rebase or cherry-pick stopped in the worktree (`GIT_EDITOR=true`: no editor opens). */
 export interface ShipOperationRequest extends PrTarget {
   action: 'continue' | 'abort'
+  /** 中止 after the user said yes to losing `files` (a `confirm` answer). */
+  force?: true
 }
 
 export type ShipOperationResult =
   | { ok: true }
   | { ok: false; reason: 'blocked'; message: string }
+  /** 中止 of a rebase or cherry-pick ran nothing: it would lose these tracked files' resolutions or edits made since the
+   *  stop. Ask, then send the request again with `force`. A merge's 中止 keeps unrelated edits and never asks. */
+  | { ok: false; reason: 'confirm'; files: string[] }
   /** 继续 of a rebase stopped again on the next commit's conflicts. */
   | { ok: false; reason: 'conflicts'; files: string[] }
   | { ok: false; reason: 'failed'; failure: GitFailure }

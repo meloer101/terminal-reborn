@@ -29,7 +29,7 @@ import { chainPlace, chainPlanOf, runChainCommand } from '../../pull-requests/ch
 import { loadPreflight, useChainStore } from '../../pull-requests/chain-store'
 import { zoneFiles, zoneHeadline } from '../../pull-requests/chain-zone'
 import { livePr } from '../../pull-requests/exit-model'
-import { useShips } from '../../pull-requests/ship-runner'
+import { useShipPaths, useShips } from '../../pull-requests/ship-runner'
 import { ShipBlock } from '../../pull-requests/ShipBlock'
 import { useRadarMark } from '../../conflict-radar/store'
 import { useActiveSession, useWorkspace } from '../../state/workspace'
@@ -38,7 +38,7 @@ import { useTurnCheckView } from '../../turn-checks/TurnChecksTag'
 import { registerPrimaryExit } from '../merge/store'
 import { useReviewComments, type CommentDraft } from '../../state/review-comments'
 import { agentLabel } from '../merge/model'
-import { changeItems, endsOpenFile, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow, type ViewMark } from './changes-model'
+import { changeItems, endsOpenFile, preflightKey, runUnticked, tickable, tickState, itemHeight, rowAnchor, stickyFileIndex, type ChangeGroup, type ChangeItem, type DraftPlace, type SplitRow, type ViewMark } from './changes-model'
 import { CommentAddButton, CommentEditor, CommentRow } from './CommentRows'
 import { FactsLine, useRisks } from './FactsRows'
 import { BaseCiRows } from './BaseCiRow'
@@ -86,12 +86,19 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const prLive = livePr(prStatus)
   const marks = useViewed((s) => s.byWorktree[root])
   const unviewedOnly = git.unviewedOnly
+  // An open Ship run commits what was ticked when it started: its selection is shown, and the checkboxes are locked
+  // (a run that commits nothing — 同步, 拉取, 推送 — leaves the user's own ticks on show).
+  const runPaths = useShipPaths(worktree.path)
+  const unticked = useMemo(
+    () => (!runPaths || !changes ? git.unticked : runUnticked(changes.uncommitted, runPaths)),
+    [runPaths, changes, git.unticked]
+  )
   const items = useMemo(
     () =>
       changes
-        ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout, git.unticked, { marks: marks ?? {}, unviewedOnly })
+        ? changeItems(changes, git.expanded, git.diffs, comments ?? [], place, layout, unticked, { marks: marks ?? {}, unviewedOnly })
         : [],
-    [changes, git.expanded, git.diffs, comments, place, layout, git.unticked, marks, unviewedOnly]
+    [changes, git.expanded, git.diffs, comments, place, layout, unticked, marks, unviewedOnly]
   )
   const sessions = useWorkspace((s) => s.sessions)
   const worktrees = useWorkspace((s) => s.worktrees)
@@ -119,7 +126,13 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   // methods) need gh, so it is asked again once gh is known.
   const gh = usePullRequests((s) => s.gh)
   // A run that ends (同步, 拉取, 提交…) changes what the preflight reads even when the counts stay.
-  const gitKey = [gh, changes?.base, changes?.ahead, changes?.behind, changes?.uncommitted.length, prLive?.number, prLive?.state, local?.head, prLive?.details?.headOid, shipping].join(':')
+  const gitKey = preflightKey({
+    gh,
+    changes,
+    pr: prLive ? { number: prLive.number, state: prLive.state, localHead: local?.head ?? null, headOid: prLive.details?.headOid ?? null } : null,
+    head: git.graph?.meta.head ?? null,
+    shipping
+  })
   const changeKey = changes ? [...changes.committed, ...changes.uncommitted].map((c) => `${c.path}:${c.added}:${c.removed}`).join('|') : ''
   const preflight = usePreflight(prTarget, gitKey)
   const risks = useRisks(prTarget, changeKey)
@@ -139,11 +152,13 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
   const onBase = chainPlan?.plan.onBase ?? false
   const idle = !shipping && !stopped
   // Ticking is for files that can be committed now: not while an operation or a stuck state holds every action.
-  const ticks = chain !== null && chain.stage !== 'operation' && chain.stage !== 'stuck' ? git.unticked : null
+  const ticks = chain !== null && chain.stage !== 'operation' && chain.stage !== 'stuck' ? unticked : null
   const [first, last] = visibleRange(offsets, viewport.top, viewport.height, OVERSCAN)
   const rendered = []
   for (let i = first; i < last; i++) {
-    rendered.push(<Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} end={endsOpenFile(items, i)} ticks={ticks} />)
+    rendered.push(
+      <Item key={itemKey(items[i]!, i)} root={root} git={git} item={items[i]!} top={offsets[i]!} draft={draft} end={endsOpenFile(items, i)} ticks={ticks} locked={shipping} />
+    )
   }
   // The open file whose row scrolled away is pinned to the top: one click folds it and lands on its row (Figma 29L).
   const sticky = stickyFileIndex(items, offsets, viewport.top)
@@ -205,7 +220,7 @@ export function ChangesView({ root, git, worktree, layout }: { root: string; git
         />
         {prStatus && <PrAutomationRow worktreePath={worktree.path} status={prStatus} />}
         {shipping ? (
-          <ShipBlock worktree={worktree.path} base={baseName} hasSession={target !== null} handoffAgent={target ? agentLabel(target.kind) : null} />
+          <ShipBlock worktree={worktree.path} base={baseName} />
         ) : stopped ? (
           <FixStopFooter scope={stopped.scope} worktreePath={worktree.path} run={stopped.run} agent={fixAgent} note={stopped.note} attempts={stopped.attempts} />
         ) : (
@@ -278,7 +293,8 @@ function Item({
   top,
   draft,
   end,
-  ticks
+  ticks,
+  locked
 }: {
   root: string
   git: RootGit
@@ -288,6 +304,8 @@ function Item({
   end: boolean
   /** The unticked 未提交 paths while rows can be ticked; null: no checkboxes. */
   ticks: ReadonlySet<string> | null
+  /** A Ship run is open: the checkboxes show its selection and cannot change it. */
+  locked: boolean
 }) {
   const style = { top }
   const edge = end || undefined
@@ -303,6 +321,7 @@ function Item({
               className={styles.tick}
               aria-checked={state === 'all' ? true : state === 'none' ? false : 'mixed'}
               aria-label={state === 'all' ? '不提交未提交的文件' : '提交全部未提交的文件'}
+              disabled={locked}
               onClick={() => setAllTicked(root, state !== 'all')}
             >
               {state === 'all' ? <Check size={10} strokeWidth={2.5} aria-hidden /> : state === 'mixed' ? <Minus size={10} strokeWidth={2.5} aria-hidden /> : null}
@@ -324,6 +343,7 @@ function Item({
               className={styles.tick}
               aria-checked={ticked}
               aria-label={`提交 ${item.change.path}`}
+              disabled={locked}
               onClick={() => toggleTicked(root, item.change.path)}
             >
               {ticked && <Check size={10} strokeWidth={2.5} aria-hidden />}

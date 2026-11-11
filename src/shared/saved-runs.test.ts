@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FixRun } from './auto-fix-brakes'
 import type { PendingStart } from './dispatch'
+import { GIT_FAILURE_KINDS } from './git-failures'
 import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedShipRun } from './saved-runs'
 import type { ShipState } from './ship'
 
@@ -92,6 +93,24 @@ describe('sanitizeShipRuns', () => {
     // An unknown method is dropped, the run kept; a failure that does not validate drops the run.
     expect(sanitizeShipRuns([{ ...shipRun, ctx: { ...shipRun.ctx, method: 'octopus' } }], worktrees)).toEqual([shipRun])
     expect(sanitizeShipRuns([{ ...commit, state: { ...commit.state, error: { ...commit.state.error, failure: { ...failure, next: 'deploy' } } } }], worktrees)).toEqual([])
+  })
+
+  // Review findings 15 / 16: the tip a run started from and the commit it made come back; anything else is dropped.
+  it('keeps the start tip and the run’s commit when they are hashes', () => {
+    const run = { ...shipRun, commit: 'abc1234', ctx: { ...shipRun.ctx, head: '0123456789abcdef0123456789abcdef01234567' } }
+    expect(sanitizeShipRuns([run], worktrees)).toEqual([run])
+    expect(sanitizeShipRuns([{ ...shipRun, ctx: { ...shipRun.ctx, head: 'HEAD~1' } }], worktrees)).toEqual([shipRun])
+    expect(sanitizeShipRuns([{ ...shipRun, commit: 'not a hash' }], worktrees)).toEqual([])
+  })
+
+  // Review finding 45: every failure kind git-failures.ts classifies comes back (identity was missing from a copy).
+  it('keeps a failure of every kind git-failures.ts knows', () => {
+    for (const kind of GIT_FAILURE_KINDS) {
+      const failure = { kind, message: 'm', next: null, tail: '' }
+      const run = { ...shipRun, state: { ...shipState, error: { step: 'commit', message: 'm', failure }, failedIn: 'running' } }
+      expect(sanitizeShipRuns([run], worktrees)).toEqual([run])
+    }
+    expect(GIT_FAILURE_KINDS).toContain('identity')
   })
 
   it('drops a run whose state is not one the block can draw', () => {

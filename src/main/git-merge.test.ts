@@ -354,6 +354,32 @@ describe('mergeWorktree', () => {
     expect(git(other, 'rev-parse', 'main').trim()).not.toBe(sha(root, 'main'))
   })
 
+  it('pushes the base to the remote the base tracks, not to the fork the branch was published to, and names it', async () => {
+    const { root, wt } = setup()
+    const project = join(base, `project-${counter}.git`)
+    const fork = join(base, `fork-${counter}.git`)
+    git(base, 'init', '-q', '--bare', project)
+    git(base, 'init', '-q', '--bare', fork)
+    git(root, 'remote', 'add', 'origin', project)
+    git(root, 'remote', 'add', 'myfork', fork)
+    git(root, 'push', '-q', '-u', 'origin', 'main')
+    git(root, 'push', '-q', 'myfork', 'main')
+    git(wt, 'push', '-q', '-u', 'myfork', 'feat')
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    const forkMain = git(fork, 'rev-parse', 'main').trim()
+    expect(await mergePrecheck(root, wt)).toMatchObject({ hasOrigin: true, pushRemote: 'origin' })
+    const result = await mergeWorktree(await request(root, wt, 'merge', { push: true }))
+    expect(result).toMatchObject({ ok: true, push: '' })
+    expect(git(project, 'rev-parse', 'main').trim()).toBe(sha(root, 'main'))
+    expect(git(fork, 'rev-parse', 'main').trim()).toBe(forkMain)
+  })
+
+  it('names no remote to push to when there is none', async () => {
+    const { root, wt } = setup()
+    commit(wt, 'b.txt', 'b\n', 'add b')
+    expect(await mergePrecheck(root, wt)).toMatchObject({ hasOrigin: false, pushRemote: null })
+  })
+
   it('rejects malformed requests', async () => {
     const { root, wt } = setup()
     expect(await mergeWorktree({ root, worktree: wt, method: 'octopus', head: 'x', baseHead: 'y', push: false })).toMatchObject({ ok: false, reason: 'invalid' })

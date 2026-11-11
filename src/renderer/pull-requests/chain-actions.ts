@@ -22,7 +22,7 @@ import { insertIntoTerminal } from '../session-io'
 import { useWorkspace } from '../state/workspace'
 import { openPullRequest } from './actions'
 import { bumpChain, loadPreflight } from './chain-store'
-import { withTicks, type ChainCommand } from './chain-zone'
+import { mergePrBlocker, runOperation, type ChainCommand } from './chain-zone'
 import { exitPlan, shipContextFor, type ExitPlan } from './exit-model'
 import { commitTitle, divergedPrompt } from './ship-flow'
 import { readRemembered, startShip, useShips } from './ship-runner'
@@ -61,7 +61,7 @@ export interface ChainSources {
 
 export interface ChainPlan {
   plan: ExitPlan
-  /** The chain with the panel's ticks applied (提交… blocked with nothing ticked). */
+  /** The chain, with the panel's ticks as its input (an exit commits only ticked files; 提交… needs one). */
   chain: ChainState
   ticked: string[]
 }
@@ -71,6 +71,7 @@ export function chainPlanOf(place: ChainPlace, sources: ChainSources): ChainPlan
   const { worktree, project } = place
   const gh = usePullRequests.getState().gh
   const mark = markFor(useRadar.getState().byRoot[project.rootPath], worktree.path)
+  const ticked = tickedPaths(sources.changes.uncommitted, sources.unticked)
   const plan = exitPlan({
     preflight: sources.preflight,
     remembered: readRemembered(project.rootPath),
@@ -81,10 +82,11 @@ export function chainPlanOf(place: ChainPlace, sources: ChainSources): ChainPlan
     gh,
     agent: place.agent ? agentLabel(place.agent.kind) : null,
     sessions: place.sessions,
-    radarConflicts: mark ? mark.self.baseConflicts.map((c) => c.path) : null
+    radarConflicts: mark ? mark.self.baseConflicts.map((c) => c.path) : null,
+    // Files past the list's cap (untrackedOmitted) cannot be ticked or committed from the panel.
+    ticked: ticked.length
   })
-  const ticked = tickedPaths(sources.changes.uncommitted, sources.unticked)
-  return { plan, chain: withTicks(plan.chain, ticked.length), ticked }
+  return { plan, chain: plan.chain, ticked }
 }
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
@@ -122,11 +124,12 @@ async function handTo(place: ChainPlace, text: string): Promise<void> {
   }
 }
 
-/** The hand-off of the state the chain is stuck in: an operation's conflicts, or a branch diverged from its remote. */
+/** The hand-off of the state the chain is stuck in: an operation's conflicts, or a branch diverged from its remote
+ *  (with an open PR or without). */
 function stuckHandoff(chain: ChainState, preflight: ShipPreflight | null, branch: string): string | null {
   const operation = preflight?.operation
   if (chain.stage === 'operation' && operation) return agentHandoffPrompt({ kind: 'operation', operation: operation.kind, files: operation.unresolved })
-  if (chain.stage === 'pr' && preflight?.ok) return divergedPrompt({ branch, remote: preflight.remote ?? 'origin' })
+  if (chain.headline?.text === CHAIN_TEXT.diverged && preflight?.ok) return divergedPrompt({ branch, remote: preflight.remote ?? 'origin' })
   return null
 }
 
@@ -152,7 +155,12 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
   const path = worktree.path
   // The sheets and opening the PR need nothing read again.
   if (command === 'archive') return openArchiveSheet(worktree.id)
-  if (command === 'merge-sheet' || command === 'merge-pr') return openMergeSheet(targetFor(project.rootPath, worktree))
+  if (command === 'merge-sheet') return openMergeSheet(targetFor(project.rootPath, worktree))
+  if (command === 'merge-pr') {
+    // The sheet shows the PR's merge only with its details; without them it would be the local merge.
+    const blocker = mergePrBlocker(prStatusOf(path))
+    return blocker ? say(path, blocker) : openMergeSheet(targetFor(project.rootPath, worktree))
+  }
   if (command === 'open-pr') {
     const pr = prStatusOf(path)?.pr
     if (pr) openPullRequest(openIn ?? place.agent?.id ?? null, pr.url)
@@ -174,14 +182,17 @@ export async function runChainCommand(worktreePath: string, command: ChainComman
   const { preflight } = sources
 
   if (command === 'continue' || command === 'abort') {
-    const result = await window.tr.ship.operation({ root: project.rootPath, worktree: path, action: command }).catch((error: unknown) => ({
+    const kind = preflight?.operation?.kind ?? 'rebase'
+    const result = await runOperation({ root: project.rootPath, worktree: path, action: command }, kind, (request) => window.tr.ship.operation(request), (options) =>
+      window.tr.ui.confirm(options)
+    ).catch((error: unknown) => ({
       ok: false as const,
       reason: 'blocked' as const,
       message: errorText(error)
     }))
     void loadChanges(path)
     bumpChain(path)
-    if (!result.ok) say(path, result.reason === 'failed' ? result.failure.message : result.reason === 'conflicts' ? CHAIN_TEXT.operationConflicts(preflight?.operation?.kind ?? 'rebase', result.files.length) : result.message)
+    if (result && !result.ok) say(path, result.reason === 'failed' ? result.failure.message : result.reason === 'conflicts' ? CHAIN_TEXT.operationConflicts(kind, result.files.length) : result.reason === 'blocked' ? result.message : result.files.join('、'))
     return
   }
   if (command === 'handoff') {

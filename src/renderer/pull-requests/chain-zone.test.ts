@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ShipPreflight } from '@shared/ship'
 import { CHAIN_TEXT, shipChain, type ChainInput } from '@shared/ship-chain'
-import { NO_TICKED, paletteGitActions, shortReason, withTicks, zoneFiles, zoneHeadline, zoneMenu } from './chain-zone'
+import type { PrStatus, PullRequestInfo } from '@shared/pull-requests'
+import type { ShipOperationRequest, ShipOperationResult } from '@shared/ship'
+import { abortConfirmation, mergePrBlocker, paletteGitActions, runOperation, shortReason, zoneFiles, zoneHeadline, zoneMenu } from './chain-zone'
 
 type Ok = Extract<ShipPreflight, { ok: true }>
 
@@ -96,7 +98,7 @@ describe('zoneMenu (73B)', () => {
 
   it('while a PR is open: 推送到 PR #N and 合并 PR #N…, no 合并到 <base>…', () => {
     const pf = preflight({ openPr: 12, upstream: { ahead: 1, behind: 0 }, pushed: true })
-    const chain = shipChain(input({ pr: { number: 12, draft: false, unpushed: true, remoteAhead: false } }, pf))
+    const chain = shipChain(input({ pr: { number: 12, draft: false, unpushed: true, remoteAhead: false, details: true, conflicting: false } }, pf))
     const labels = zoneMenu(chain).map((m) => m.label)
     expect(labels).toContain('提交并推送到 PR #12')
     expect(labels).toContain('合并 PR #12…')
@@ -109,14 +111,13 @@ describe('zoneMenu (73B)', () => {
   })
 })
 
-describe('withTicks', () => {
-  it('blocks 提交… with 没有勾选文件 when files are uncommitted but none is ticked', () => {
-    const chain = withTicks(shipChain(input()), 0)
-    expect(chain.actions.find((a) => a.id === 'commit')!.blocker).toBe(NO_TICKED)
-    expect(withTicks(shipChain(input()), 1).actions.find((a) => a.id === 'commit')!.blocker).toBeNull()
+describe('ticks (the chain\'s `ticked` input)', () => {
+  it('blocks 提交… with 没有勾选文件 in the menu when files are uncommitted but none is ticked', () => {
+    expect(zoneMenu(shipChain(input({ ticked: 0 }))).find((m) => m.id === 'commit')!.blocker).toBe(CHAIN_TEXT.noTicked)
+    expect(zoneMenu(shipChain(input({ ticked: 1 }))).find((m) => m.id === 'commit')!.blocker).toBeNull()
     // The chain's own reason wins.
-    const clean = shipChain(input({ local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }, preflight({ uncommitted: 0 })))
-    expect(withTicks(clean, 0).actions.find((a) => a.id === 'commit')!.blocker).toBe(CHAIN_TEXT.nothingToCommit)
+    const clean = shipChain(input({ ticked: 0, local: { branch: 'b', base: 'main', ahead: 2, uncommitted: 0, trackedUncommitted: 0 } }, preflight({ uncommitted: 0 })))
+    expect(zoneMenu(clean).find((m) => m.id === 'commit')!.blocker).toBe(CHAIN_TEXT.nothingToCommit)
   })
 })
 
@@ -144,5 +145,61 @@ describe('paletteGitActions (73H)', () => {
     const open = shipChain(input())
     expect(open.actions.find((a) => a.id === 'archive')?.blocker).toBeNull()
     expect(paletteGitActions(open, facts).map((r) => r.label)).not.toContain('归档…')
+  })
+})
+
+// Review finding 8: 合并 PR #N… opens the PR merge sheet only, never the local one in its place.
+describe('mergePrBlocker', () => {
+  const pr = { number: 3, state: 'open', url: 'u', title: 't', checks: { state: 'none', total: 0, passed: 0, pending: 0, failing: [] } } as PullRequestInfo
+  const status = (patch: Partial<PullRequestInfo>): PrStatus => ({ worktree: '/w', branch: 'b', pr: { ...pr, ...patch }, checkedAt: 0 })
+  it('waits for the PR\'s details', () => {
+    expect(mergePrBlocker(status({}))).toBe(CHAIN_TEXT.checking)
+    expect(mergePrBlocker(status({ details: { headOid: 'a' } as never }))).toBeNull()
+    expect(mergePrBlocker(status({ state: 'merged', details: { headOid: 'a' } as never }))).toBe(CHAIN_TEXT.noPr)
+    expect(mergePrBlocker(null)).toBe(CHAIN_TEXT.checking)
+  })
+})
+
+// Review finding 2: 中止 that would lose resolved or edited files asks first.
+describe('runOperation', () => {
+  const target = { root: '/r', worktree: '/w' }
+  const sent: ShipOperationRequest[] = []
+  const fake = (answers: ShipOperationResult[]) => (request: ShipOperationRequest) => {
+    sent.push(request)
+    return Promise.resolve(answers.shift()!)
+  }
+
+  it('names what is lost, with 中止 / 取消', () => {
+    expect(abortConfirmation('rebase', ['a.ts', 'b.ts'])).toEqual({
+      message: '中止 rebase 会丢掉 2 个文件里已解决或改过的内容',
+      detail: 'a.ts\nb.ts',
+      confirmLabel: '中止',
+      cancelLabel: '取消',
+      destructive: true
+    })
+    const many = abortConfirmation('cherry-pick', Array.from({ length: 12 }, (_, i) => `f${i}.ts`))
+    expect(many.detail?.split('\n')).toHaveLength(9)
+    expect(many.detail?.endsWith('等 12 个文件')).toBe(true)
+  })
+
+  it('resends 中止 with force only when the user says 中止', async () => {
+    sent.length = 0
+    const asked: string[] = []
+    const yes = await runOperation({ ...target, action: 'abort' }, 'rebase', fake([{ ok: false, reason: 'confirm', files: ['a.ts'] }, { ok: true }]), async (o) => (asked.push(o.message), true))
+    expect(yes).toEqual({ ok: true })
+    expect(asked).toEqual(['中止 rebase 会丢掉 1 个文件里已解决或改过的内容'])
+    expect(sent).toEqual([{ ...target, action: 'abort' }, { ...target, action: 'abort', force: true }])
+
+    sent.length = 0
+    const no = await runOperation({ ...target, action: 'abort' }, 'rebase', fake([{ ok: false, reason: 'confirm', files: ['a.ts'] }]), async () => false)
+    expect(no).toBeNull()
+    expect(sent).toEqual([{ ...target, action: 'abort' }])
+  })
+
+  it('passes every other answer through', async () => {
+    sent.length = 0
+    const result = await runOperation({ ...target, action: 'continue' }, 'merge', fake([{ ok: false, reason: 'conflicts', files: ['x'] }]), async () => true)
+    expect(result).toEqual({ ok: false, reason: 'conflicts', files: ['x'] })
+    expect(sent).toHaveLength(1)
   })
 })

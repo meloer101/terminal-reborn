@@ -1,6 +1,6 @@
 // 合并到 <base> (PRD F4, Figma 05 19:814): the precheck as a short checklist (ahead, behind, conflicts, uncommitted
 // work, an upstream the base has not pulled), then the method (Squash · Merge · Rebase) and two options (remove the
-// worktree, push to origin). With conflicts the only way forward is the worktree's agent: the instructions go into its
+// worktree, push the base to its remote). With conflicts the only way forward is the worktree's agent: the instructions go into its
 // input line, unsent. Nothing is changed until 合并 is pressed. Glass sheet material as the new-session sheet (PRD §5).
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ArrowRight, CircleX, GitBranch } from 'lucide-react'
@@ -34,6 +34,7 @@ import {
   methodOptions,
   nothingToMerge,
   removeBlocker,
+  pushSwitchLabel,
   resultLines,
   testBlocksMerge,
   testLine,
@@ -249,7 +250,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
       }
     }
     if (attemptGroup) markGroupMerged(attemptGroup.groupId, attemptGroup.sessionId, ready.branch)
-    const lines = resultLines(result, ready.base, removal)
+    const lines = resultLines(result, ready.base, removal, ready.pushRemote ?? undefined)
     // 设置 · Worktree · 合并后自动归档 (PRD F15): a worktree the merge kept is folded away; its archive script runs
     // after the usual approval, and a failing one does not stop the archive.
     if (settings.archive.afterMerge && removal !== 'removed' && !target.isMain && ids[0]) {
@@ -410,7 +411,7 @@ function Sheet({ target, targetSwitch }: { target: MergeTarget; targetSwitch: Re
                   checked={willPush}
                   disabled={!shown.hasOrigin || busy}
                   onChange={setPush}
-                  label="合并后推送到 origin"
+                  label={pushSwitchLabel(shown)}
                   note={shown.hasOrigin ? null : '没有远程仓库'}
                 />
               </div>

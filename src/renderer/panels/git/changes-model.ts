@@ -4,6 +4,7 @@
 // line (PRD F13 v1.78, Figma 29B2).
 import type { DiffRow } from '@shared/git-graph/diff'
 import type { GitChanges, GitFileChange } from '@shared/git-graph/log'
+import type { ShipOperation } from '@shared/ship'
 import type { CommentSide, ReviewComment } from '@shared/review-comments'
 import type { DiffLayout } from '@shared/workspace-file'
 
@@ -264,6 +265,36 @@ export const tickable = (change: Pick<GitFileChange, 'nested'>): boolean => !cha
 /** The paths 提交… and the exits commit: the tickable rows that are not unticked. */
 export function tickedPaths(uncommitted: readonly GitFileChange[], unticked: ReadonlySet<string>): string[] {
   return uncommitted.filter((c) => tickable(c) && !unticked.has(c.path)).map((c) => c.path)
+}
+
+/** While a Ship run that commits is open its checkboxes show what it commits: the tickable rows not among its `paths`. */
+export function runUnticked(uncommitted: readonly GitFileChange[], paths: readonly string[]): ReadonlySet<string> {
+  const committing = new Set(paths)
+  return new Set(uncommitted.filter((c) => tickable(c) && !committing.has(c.path)).map((c) => c.path))
+}
+
+/**
+ * Whether the change list shows the branch as it is, so 已看 marks of rows that left it can go: not while a merge,
+ * rebase or cherry-pick is stopped (a rebase's detached HEAD lists only the commits replayed so far). `operation`: what
+ * the worktree's last preflight saw stopped, or null.
+ */
+export function marksSettled(changes: Pick<GitChanges, 'branch' | 'uncommitted'>, operation: ShipOperation | null | undefined): boolean {
+  return changes.branch !== null && !operation && !changes.uncommitted.some((c) => c.status === 'U')
+}
+
+/**
+ * When Git · 变更 asks for the exits' preflight again: gh, the counts, the PR, the branch head (an amend or a reset that
+ * keeps every count still moves it; null until the graph's first page names it), and a run opening or ending.
+ */
+export function preflightKey(parts: {
+  gh: string | null
+  changes: Pick<GitChanges, 'base' | 'ahead' | 'behind' | 'uncommitted'> | null | undefined
+  pr: { number: number; state: string; localHead: string | null; headOid: string | null } | null
+  head: string | null
+  shipping: boolean
+}): string {
+  const { changes, pr } = parts
+  return [parts.gh, changes?.base, changes?.ahead, changes?.behind, changes?.uncommitted.length, pr?.number, pr?.state, pr?.localHead, pr?.headOid, parts.head, parts.shipping].join(':')
 }
 
 /** The group header's checkbox: every tickable row ticked, none, or some. */
