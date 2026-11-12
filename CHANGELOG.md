@@ -4,6 +4,45 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-12
+
+Ultracode and a merge chain that says what comes next: turn Ultracode on yourself and watch each workflow run in the chat and the sidebar; Git · 变更 says where a worktree is stuck and what the next step is. Windows get one 玻璃 material, cards sit 6 px in from the window's edges, and pictures you send stay on your message.
+Ultracode 和会说下一步的合入链路：Ultracode 由你自己打开，每次 workflow 运行画在对话和侧栏里；Git · 变更 写出 worktree 卡在哪、下一步是什么。窗口材质合成一种「玻璃」，卡片离窗口边留 6 px，发出的图片留在你的消息上。
+
+### GUI sessions / GUI 会话
+- An Ultracode switch beside 快速 in the composer, for this session only and never turned on by Wavi; Workflow calls draw as run cards (confirm, phase progress, tokens, stop, how it ended), and running workflows show as rows under their session in the sidebar.
+  输入框「快速」右边的 Ultracode 开关，只对这个会话，Wavi 从不替你打开；Workflow 调用画成运行卡（确认、phase 进度、token、停止、结束状态），运行中的 workflow 在侧栏会话下面一行一行列出。
+- Pictures you send show as 64 px thumbnails above your bubble, and stay after a restart or a resumed session (Claude, Codex, Pi, ACP agents).
+  你发出的图片是气泡上方 64 px 的缩略图，重开 app、续上会话后照样在（Claude、Codex、Pi、ACP agent）。
+- The skill text Claude adds after a Skill call no longer shows as your message.
+  Skill 调用后 Claude 补进来的 skill 正文不再显示成你的消息。
+
+### Git / 合入
+- Git · 变更 has a status line that says where the worktree is stuck, a main button that is the next step, and a ⋯ menu with every action and why one is blocked; 提交… with ticked files, 同步 / 拉取 / 推送 / 继续 / 中止 in the app, git and gh failures in plain words with one next step.
+  Git · 变更 的状态行写卡在哪，主按钮就是下一步，⋯ 菜单列全部操作和挡住的原因；勾选文件的「提交…」，应用里的 同步 / 拉取 / 推送 / 继续 / 中止，git 和 gh 的失败用一句话说明并给一个下一步。
+- Mark files 已看 in the change list (`已看 N / M`, a 未看 filter); ⌘K has a Git group; the built-in review takes in what you asked for in the session.
+  变更列表按文件标「已看」（`已看 N / M`、「未看」筛选）；⌘K 加 Git 组；内置审阅带上你在会话里提的要求。
+
+### Agents / Agent
+- ⌘O on a project with no session starts the agent you used last (then the first CLI on PATH), not always Claude Code; batch 发送消息… and 停止 in 总览 reach every CLI agent.
+  ⌘O 打开还没有会话的项目时启动最近用过的 agent（没有就用 PATH 上的第一家），不再固定是 Claude Code；总览的批量「发送消息…」「停止」对每一家 CLI agent 生效。
+
+### Appearance / 外观
+- 窗口 · 材质 is 玻璃 or 实色, with one 窗口底层不透明度 (30 % by default); the opacity you set for the material you saw carries over, including before macOS 26, where the window showed 磨砂玻璃.
+  窗口 · 材质 只有「玻璃」和「实色」，窗口底层不透明度只有一个值（默认 30%）；你看到的那种材质的不透明度自动迁移，macOS 26 以前（窗口显示的是磨砂玻璃）也一样。
+- Cards sit 6 px in from the window's top, right and bottom edges with 10 px corners; the traffic lights and the sidebar's top row move down to match.
+  卡片离窗口的上、右、下边各留 6 px，圆角统一 10；红绿灯和侧栏顶行跟着下移。
+- Chevrons beside CJK text in tool summaries, thinking and subagent rows line up; the terminal card clips instead of scrolling under its header.
+  工具摘要、思考行和子 agent 行的箭头和中文对齐；终端卡片改为裁切，不再滚到 header 下面。
+
+### Settings / 设置
+- 设置 · 额度's heatmap drops the per-agent start lines and labels; each agent's start date stays in the legend.
+  设置 · 额度 的热力图去掉各 agent 的起始竖线和标签，起始日仍写在图例里。
+
+### Fixes / 修复
+- Git view and background-review IPC act only on workspace folders; failures that used to change what you see silently (auto-fix, creating a worktree) are logged or said.
+  Git 视图和后台审阅的 IPC 只接受 workspace 目录；以前静默改变界面的失败（自动修复、建 worktree）现在记日志或直接说明。
+
 ## [0.16.0] - 2026-11-10
 
 Scheduled tasks, dispatch you can see, and token statistics: tasks that open a session or message one on a schedule, even with Wavi closed; a GUI dispatcher's chat draws its `wavi run` children as a fan-out graph, and runs of tool calls fold into one row; 设置 · 额度 counts tokens by week, month and year from the agents' own logs.
