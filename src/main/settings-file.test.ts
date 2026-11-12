@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import { loadSettingsFile, SettingsWriter, type SettingsFs } from './settings-file'
+import { loadSettingsFile, SettingsWriter, withLegacyMaterialShown, type SettingsFs } from './settings-file'
 
 const PATH = '/data/settings.json'
 
@@ -47,6 +47,21 @@ describe('loadSettingsFile', () => {
   it('reads and sanitizes a valid file', () => {
     const { fs } = memoryFs({ [PATH]: JSON.stringify({ version: 1, appearance: { fontSize: 15 } }) })
     expect(loadSettingsFile(PATH, fs, () => 1, log).settings.appearance.fontSize).toBe(15)
+  })
+
+  it('keeps the opacity a user set before macOS 26, where a saved 液态玻璃 showed and saved as 磨砂玻璃 (PRD v1.174)', () => {
+    const old = { version: 1, appearance: { windowMaterial: 'liquid', shellOpacity: { liquid: 0, frosted: 0.45 } } }
+    const { fs } = memoryFs({ [PATH]: JSON.stringify(old) })
+    const before26 = loadSettingsFile(PATH, fs, () => 1, log, false).settings.appearance
+    expect(before26.windowMaterial).toBe('glass')
+    expect(before26.shellOpacity).toBe(0.45)
+    expect(loadSettingsFile(PATH, fs, () => 1, log, true).settings.appearance.shellOpacity).toBe(0)
+  })
+
+  it('leaves 实色 and an explicit 磨砂玻璃 as they were before macOS 26', () => {
+    expect(withLegacyMaterialShown({ appearance: { windowMaterial: 'solid' } }, false)).toEqual({ appearance: { windowMaterial: 'solid' } })
+    expect(withLegacyMaterialShown({ appearance: { windowMaterial: 'frosted' } }, false)).toEqual({ appearance: { windowMaterial: 'frosted' } })
+    expect(withLegacyMaterialShown({ version: 1 }, false)).toEqual({ version: 1 })
   })
 
   it('backs a corrupt file up as settings.json.bad-<ts> before falling back to defaults', () => {

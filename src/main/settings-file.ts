@@ -29,7 +29,28 @@ export interface LoadedSettings {
   backupPath?: string
 }
 
-export function loadSettingsFile(path: string, fs: SettingsFs = nodeSettingsFs, now: () => number = Date.now, log: Log = defaultLog): LoadedSettings {
+/** macOS 26 or later (Liquid Glass); the same test as `nativeGlass` in appearance.ts, which imports this module's user. */
+const systemHasLiquidGlass = (): boolean =>
+  process.platform === 'darwin' && typeof process.getSystemVersion === 'function' && Number(process.getSystemVersion().split('.')[0]) >= 26
+
+/**
+ * Before PRD v1.174 a saved 'liquid' showed as 磨砂玻璃 before macOS 26, and the opacity slider wrote
+ * `shellOpacity.frosted`; naming it 'frosted' lets the migration in sanitizeSettings carry that value over.
+ */
+export function withLegacyMaterialShown(raw: Record<string, unknown>, liquidGlass: boolean): Record<string, unknown> {
+  const appearance = raw.appearance
+  if (liquidGlass || typeof appearance !== 'object' || appearance === null) return raw
+  const a = appearance as Record<string, unknown>
+  return a.windowMaterial === 'liquid' ? { ...raw, appearance: { ...a, windowMaterial: 'frosted' } } : raw
+}
+
+export function loadSettingsFile(
+  path: string,
+  fs: SettingsFs = nodeSettingsFs,
+  now: () => number = Date.now,
+  log: Log = defaultLog,
+  liquidGlass: boolean = systemHasLiquidGlass()
+): LoadedSettings {
   let text: string
   try {
     text = fs.readFileSync(path)
@@ -45,7 +66,7 @@ export function loadSettingsFile(path: string, fs: SettingsFs = nodeSettingsFs, 
   } catch {
     // Falls through to the backup below.
   }
-  if (valid) return { settings: sanitizeSettings(raw) }
+  if (valid) return { settings: sanitizeSettings(withLegacyMaterialShown(raw as Record<string, unknown>, liquidGlass)) }
   const backupPath = `${path}.bad-${now()}`
   try {
     fs.renameSync(path, backupPath)
