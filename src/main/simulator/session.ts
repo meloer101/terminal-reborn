@@ -102,6 +102,14 @@ class DeviceSession {
 
   async repairInput(): Promise<boolean> {
     const ok = await SimHelper.repairInput(this.deps.runtime, this.udid)
+    if (ok) {
+      // serve-sim: the helper reconnects its guest services only when restarted.
+      const helper = this.helper
+      this.teardown()
+      await helper?.stop()
+      this.update({ phase: 'connecting', error: null })
+      if (this.viewers.size > 0) this.ensure()
+    }
     this.update({ inputBlocked: await this.deps.deviceHubHoldsInput(this.udid) })
     return ok
   }

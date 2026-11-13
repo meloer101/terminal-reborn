@@ -3,8 +3,9 @@
 // The terminals themselves are ordinary registry terminals (appearance, zoom, snapshots, reattach).
 import { panelTerminalsOf, parsePanelTerminalId } from '@shared/panel-terminal'
 import type { SessionId, Worktree, WorktreeId } from '@shared/types'
-import { forgetLiveSessions, loadLiveSessions, useLiveSessions } from '../../terminal/live-sessions'
+import { forgetLiveSessions, loadLiveSessions, takeReattach, useLiveSessions } from '../../terminal/live-sessions'
 import { disposeTerminal, ensureTerminal } from '../../terminal/registry'
+import { useWorkspace } from '../../state/workspace'
 import { addTab, adoptTabs, nextTabId, removeTab, setTabTitle, tabsOf } from './store'
 
 /** Where the shells run: the worktree's id (in their PTY ids) and folder (their cwd). */
@@ -39,11 +40,27 @@ export function openTab(worktree: PanelWorktree): SessionId {
   return id
 }
 
+/**
+ * Ends a daemon shell no terminal here has taken over (adopted after a reload but never shown): only the window that
+ * attached a process may end it, so it is attached first.
+ */
+function endDetached(id: SessionId): Promise<void> {
+  return window.tr.pty
+    .attach(id)
+    .then((attached) => {
+      if (attached && !attached.exit) window.tr.pty.kill(id)
+    })
+    .catch(() => {})
+}
+
 /** Closes the tab; a running shell is killed and its saved screen goes. */
 export function closeTab(id: SessionId): void {
   followed.get(id)?.()
   followed.delete(id)
+  // Still reattachable: no terminal ever started on the daemon's process, so disposing it alone would not end it.
+  const detached = takeReattach(id)
   disposeTerminal(id, true)
+  if (detached) void endDetached(id)
   // Never adopted again by a later mount.
   forgetLiveSessions([id])
   removeTab(id)
@@ -72,14 +89,13 @@ export async function closeWorktreeTabs(worktreeIds: readonly WorktreeId[]): Pro
   for (const worktreeId of ids) for (const id of tabsOf(worktreeId).ids) closeTab(id)
   const unseen = Object.keys(useLiveSessions.getState().live).filter((id) => ids.has(parsePanelTerminalId(id)?.worktreeId ?? ''))
   forgetLiveSessions(unseen)
-  await Promise.all(
-    unseen.map((id) =>
-      window.tr.pty
-        .attach(id)
-        .then((attached) => {
-          if (attached && !attached.exit) window.tr.pty.kill(id)
-        })
-        .catch(() => {})
-    )
-  )
+  await Promise.all(unseen.map(endDetached))
 }
+
+// However a worktree leaves the workspace (removed, its project removed), its shells end with it.
+useWorkspace.subscribe((state, prev) => {
+  if (state.worktrees === prev.worktrees) return
+  const kept = new Set(state.worktrees.map((w) => w.id))
+  const gone = prev.worktrees.filter((w) => !kept.has(w.id)).map((w) => w.id)
+  if (gone.length) void closeWorktreeTabs(gone)
+})

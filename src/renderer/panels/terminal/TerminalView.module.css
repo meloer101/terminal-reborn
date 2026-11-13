@@ -66,6 +66,10 @@
   visibility: visible;
 }
 
+.tab[data-active='true'] .close {
+  color: var(--text-secondary);
+}
+
 .close:hover {
   color: var(--text-primary);
 }

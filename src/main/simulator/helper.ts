@@ -18,7 +18,8 @@ function launcher(watchStdin: boolean): string {
     'process.defaultApp = true;',
     ...(watchStdin
       ? [
-          "const end = () => process.kill(process.pid, 'SIGTERM');",
+          // The whole process group: anything serve-sim started ends with it.
+          "const end = () => { try { process.kill(-process.pid, 'SIGTERM') } catch { process.kill(process.pid, 'SIGTERM') } };",
           "process.stdin.on('end', end);",
           "process.stdin.on('error', end);",
           'process.stdin.resume();',
@@ -27,6 +28,16 @@ function launcher(watchStdin: boolean): string {
       : []),
     "import(require('node:url').pathToFileURL(cli).href).catch((e) => { console.error(e); process.exit(1); });"
   ].join('\n')
+}
+
+/** Signals the helper's whole process group (it leads one: spawned detached), falling back to the process alone. */
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) return
+  try {
+    process.kill(-child.pid, signal)
+  } catch {
+    child.kill(signal)
+  }
 }
 
 const START_TIMEOUT_MS = 30_000
@@ -104,7 +115,9 @@ export class SimHelper {
     const port = await freePort()
     const child = spawn(runtime.execPath, ['-e', launcher(true), runtime.cliPath, ...cliArgs(udid, port)], {
       env: { ...runtime.env, ELECTRON_RUN_AS_NODE: '1' },
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Its own process group, so a stop or a start timeout ends whatever the CLI started too.
+      detached: true
     })
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
     let stderr = ''
@@ -118,7 +131,7 @@ export class SimHelper {
       let out = ''
       const fail = (message: string) => {
         clearTimeout(timer)
-        child.kill('SIGKILL')
+        signalGroup(child, 'SIGKILL')
         reject(new Error(message))
       }
       const timer = setTimeout(() => fail('serve-sim did not start in time'), START_TIMEOUT_MS)
@@ -155,8 +168,8 @@ export class SimHelper {
     if (!this.owned || this.stopping) return this.exited
     this.stopping = true
     if (this.child.exitCode !== null || this.child.signalCode !== null) return
-    this.child.kill('SIGTERM')
-    const timer = setTimeout(() => this.child.kill('SIGKILL'), STOP_GRACE_MS)
+    signalGroup(this.child, 'SIGTERM')
+    const timer = setTimeout(() => signalGroup(this.child, 'SIGKILL'), STOP_GRACE_MS)
     await this.exited
     clearTimeout(timer)
   }

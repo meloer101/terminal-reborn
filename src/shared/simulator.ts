@@ -375,55 +375,67 @@ function indexOf(haystack: Uint8Array, needle: readonly number[], from: number):
  * usable Content-Length is dropped (the parser looks for the next boundary).
  */
 export class MjpegParser {
-  private buffer: Uint8Array = new Uint8Array(0)
-  /** Bytes of the current part's body still to come; -1 while looking for a header. */
-  private bodyLength = -1
+  /** Bytes before a part's body: where the next boundary and header are looked for (small). */
+  private pending: Uint8Array = new Uint8Array(0)
+  /** The current part's body, allocated once from its Content-Length and filled as chunks arrive. */
+  private body: Uint8Array | null = null
+  private filled = 0
 
   push(chunk: Uint8Array): Uint8Array[] {
-    this.append(chunk)
     const frames: Uint8Array[] = []
+    let input = chunk
     for (;;) {
-      if (this.bodyLength < 0) {
-        const start = indexOf(this.buffer, BOUNDARY_PREFIX, 0)
-        if (start < 0) {
-          // Keep a trailing "-" that may start the next boundary.
-          this.buffer = this.buffer.subarray(Math.max(0, this.buffer.length - 1))
-          break
-        }
-        const end = indexOf(this.buffer, CRLFCRLF, start)
-        if (end < 0) {
-          if (this.buffer.length - start > MAX_HEADER_BYTES) this.buffer = this.buffer.subarray(start + 2)
-          else this.buffer = this.buffer.subarray(start)
-          break
-        }
-        const header = new TextDecoder().decode(this.buffer.subarray(start, end))
-        const length = /\r\ncontent-length:\s*(\d+)/i.exec(header)
-        const n = length ? Number(length[1]) : NaN
-        if (!Number.isSafeInteger(n) || n <= 0 || n > MAX_FRAME_BYTES) {
-          this.buffer = this.buffer.subarray(start + 2)
-          continue
-        }
-        this.buffer = this.buffer.subarray(end + 4)
-        this.bodyLength = n
+      if (this.body) {
+        // Each body byte is copied exactly once, however small the chunks (a frame is ~350 KB).
+        const take = Math.min(input.length, this.body.length - this.filled)
+        this.body.set(input.subarray(0, take), this.filled)
+        this.filled += take
+        input = input.subarray(take)
+        if (this.filled < this.body.length) break
+        frames.push(this.body)
+        this.body = null
+        if (input.length === 0) break
       }
-      if (this.buffer.length < this.bodyLength) break
-      frames.push(this.buffer.slice(0, this.bodyLength))
-      this.buffer = this.buffer.subarray(this.bodyLength)
-      this.bodyLength = -1
+      this.pending = concat(this.pending, input)
+      const start = indexOf(this.pending, BOUNDARY_PREFIX, 0)
+      if (start < 0) {
+        // Keep a trailing "-" that may start the next boundary.
+        this.pending = this.pending.subarray(Math.max(0, this.pending.length - 1))
+        break
+      }
+      const end = indexOf(this.pending, CRLFCRLF, start)
+      if (end < 0) {
+        if (this.pending.length - start > MAX_HEADER_BYTES) this.pending = this.pending.subarray(start + 2)
+        else {
+          this.pending = this.pending.subarray(start)
+          break
+        }
+        input = this.pending
+        this.pending = new Uint8Array(0)
+        continue
+      }
+      const header = new TextDecoder().decode(this.pending.subarray(start, end))
+      const length = /\r\ncontent-length:\s*(\d+)/i.exec(header)
+      const n = length ? Number(length[1]) : NaN
+      input = this.pending.subarray(Number.isSafeInteger(n) && n > 0 && n <= MAX_FRAME_BYTES ? end + 4 : start + 2)
+      this.pending = new Uint8Array(0)
+      if (Number.isSafeInteger(n) && n > 0 && n <= MAX_FRAME_BYTES) {
+        this.body = new Uint8Array(n)
+        this.filled = 0
+      }
+      if (input.length === 0 && !this.body) break
     }
     return frames
   }
+}
 
-  private append(chunk: Uint8Array): void {
-    if (this.buffer.length === 0) {
-      this.buffer = chunk
-      return
-    }
-    const next = new Uint8Array(this.buffer.length + chunk.length)
-    next.set(this.buffer, 0)
-    next.set(chunk, this.buffer.length)
-    this.buffer = next
-  }
+function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
+  if (a.length === 0) return b
+  if (b.length === 0) return a
+  const next = new Uint8Array(a.length + b.length)
+  next.set(a, 0)
+  next.set(b, a.length)
+  return next
 }
 
 // ── IPC ──────────────────────────────────────────────────────────────────────

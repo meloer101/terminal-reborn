@@ -238,13 +238,24 @@ function useInput(canvasRef: RefObject<HTMLCanvasElement | null>, drawnRef: RefO
       const anchor = rawPoint(drawn.inputOrientation, at.x, at.y)
       sim.scroll({ dx: delta.dx, dy: delta.dy, x: anchor.x, y: anchor.y })
     }
+    // Keys sent down: each gets exactly one up, even when ⌘ is held at its release or the canvas loses the keyboard.
+    const pressed = new Set<number>()
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.repeat) return
       const usage = hidUsageForCode(event.code)
       if (usage === null) return
+      if (event.type === 'keydown') {
+        // ⌘ shortcuts stay the Mac's.
+        if (event.metaKey || event.repeat || pressed.has(usage)) return
+        pressed.add(usage)
+        sim.key('down', usage)
+      } else if (pressed.delete(usage)) sim.key('up', usage)
+      else return
       event.preventDefault()
       event.stopPropagation()
-      sim.key(event.type === 'keydown' ? 'down' : 'up', usage)
+    }
+    const releaseAll = () => {
+      for (const usage of pressed) sim.key('up', usage)
+      pressed.clear()
     }
 
     canvas.addEventListener('pointerdown', onDown)
@@ -254,7 +265,10 @@ function useInput(canvasRef: RefObject<HTMLCanvasElement | null>, drawnRef: RefO
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('keydown', onKey)
     canvas.addEventListener('keyup', onKey)
+    canvas.addEventListener('blur', releaseAll)
     return () => {
+      releaseAll()
+      canvas.removeEventListener('blur', releaseAll)
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
       canvas.removeEventListener('pointerup', onUp)

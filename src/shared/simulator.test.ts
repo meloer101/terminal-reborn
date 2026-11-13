@@ -14,7 +14,10 @@ import {
   rawPoint,
   ROTATE_RIGHT,
   HID_EDGE_BOTTOM,
-  HID_EDGE_LEFT
+  HID_EDGE_LEFT,
+  MAX_FRAME_BYTES,
+  HID_EDGE_TOP,
+  HID_EDGE_RIGHT
 } from './simulator'
 
 const A = 'D08CB4F0-C5A9-47B3-B65E-B395108FF267'
@@ -112,6 +115,23 @@ describe('MjpegParser', () => {
     }
   })
 
+  it('resyncs after a header that never ends and a part that claims too much', () => {
+    const endless = enc.encode('--frame\r\nContent-Type: image/jpeg\r\n' + 'x'.repeat(2000))
+    const huge = enc.encode(`--frame\r\nContent-Length: ${MAX_FRAME_BYTES + 1}\r\n\r\n`)
+    const parser = new MjpegParser()
+    const frames = [...parser.push(endless), ...parser.push(huge), ...parser.push(part(jpegA)), ...parser.push(part(jpegB))]
+    expect(frames).toEqual([jpegA, jpegB])
+  })
+
+  it('assembles a native-size frame from small chunks byte for byte', () => {
+    const big = new Uint8Array(360_000).map((_, i) => (i * 31) & 0xff)
+    const stream = concat(part(big), part(jpegB))
+    const parser = new MjpegParser()
+    const frames: Uint8Array[] = []
+    for (let i = 0; i < stream.length; i += 16_384) frames.push(...parser.push(stream.subarray(i, i + 16_384)))
+    expect(frames).toEqual([big, jpegB])
+  })
+
   it('skips a preamble and a part without a Content-Length', () => {
     const bad = enc.encode('--frame\r\nContent-Type: image/jpeg\r\n\r\nxx\r\n')
     const frames = new MjpegParser().push(concat(enc.encode('HTTP junk\r\n'), bad, part(jpegB)))
@@ -173,6 +193,25 @@ describe('geometry', () => {
     expect(rawDelta('portrait_upside_down', 0.1, 0.2)).toEqual({ dx: -0.1, dy: -0.2 })
     expect(rawBottomEdge(null)).toBe(HID_EDGE_BOTTOM)
     expect(rawBottomEdge('landscape_right')).toBe(HID_EDGE_LEFT)
+  })
+
+  it('moves a scroll the same way as the points it starts and ends on, in every orientation', () => {
+    const orientations = ['portrait', 'portrait_upside_down', 'landscape_left', 'landscape_right', null] as const
+    for (const o of orientations) {
+      const from = rawPoint(o, 0.4, 0.3)
+      const to = rawPoint(o, 0.4 + 0.1, 0.3 + 0.2)
+      const delta = rawDelta(o, 0.1, 0.2)
+      expect(delta.dx).toBeCloseTo(to.x - from.x)
+      expect(delta.dy).toBeCloseTo(to.y - from.y)
+    }
+    expect(rawPoint('portrait_upside_down', 0.25, 0.75)).toEqual({ x: 0.75, y: 0.25 })
+    expect(rawBottomEdge('portrait_upside_down')).toBe(HID_EDGE_TOP)
+    expect(rawBottomEdge('landscape_left')).toBe(HID_EDGE_RIGHT)
+    expect(displayGeometry(1206, 2622, 'portrait_upside_down')).toEqual({
+      display: { width: 1206, height: 2622 },
+      rotation: 180,
+      inputOrientation: 'portrait_upside_down'
+    })
   })
 
   it('rotates clockwise through all four orientations', () => {
