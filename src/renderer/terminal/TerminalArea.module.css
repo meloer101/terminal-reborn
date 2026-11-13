@@ -120,9 +120,10 @@
   background: linear-gradient(to bottom, color-mix(in srgb, var(--term-bg) 80%, transparent) 0%, color-mix(in srgb, var(--term-bg) 50%, transparent) 70%, transparent 100%);
 }
 
-/* Breathing room lives on xterm's own element, which the fit addon subtracts. */
+/* Breathing room lives on xterm's own element, which the fit addon subtracts. A host elsewhere (the right panel's 终端
+   view) sets its own through --term-padding. */
 .host :global(.xterm) {
-  padding: var(--space-12) var(--space-16);
+  padding: var(--term-padding, var(--space-12) var(--space-16));
   height: 100%;
 }
 

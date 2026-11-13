@@ -412,6 +412,8 @@ export interface TrApi {
   liquidGlass: boolean
   /** User's home directory, for default cwd. */
   homeDir: string
+  /** Name of the user's login shell (`zsh`), which a plain terminal runs: the 终端 view's tab label until the shell sets a title. */
+  shellName: string
   pty: PtyApi
   files: FilesApi
   ui: UiApi

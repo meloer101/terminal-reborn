@@ -1,5 +1,6 @@
 // Links clicked in a session's terminal (PRD F17), like Claude's desktop app: a URL opens in the built-in browser
 // (the page of the session's worktree), a file path in the 文件 view's read-only preview.
+import { isPanelTerminalId, parsePanelTerminalId } from '@shared/panel-terminal'
 import type { SessionId } from '@shared/types'
 import { setNotice } from '../panels/browser/store'
 import { runFileAction, type FileTarget } from '../panels/files/actions'
@@ -29,14 +30,17 @@ export function resolveSessionPaths(sessionId: SessionId, paths: readonly string
   return root ? window.tr.worktree.resolveLinks(root, paths) : Promise.resolve(paths.map(() => null))
 }
 
+/** The folder of the session's worktree; a shell of the right panel's 终端 view names its worktree in its id. */
 export function worktreeOf(sessionId: SessionId): string | undefined {
   const state = useWorkspace.getState()
-  const session = state.sessions.find((s) => s.id === sessionId)
-  return state.worktrees.find((w) => w.id === session?.worktreeId)?.path
+  const worktreeId = parsePanelTerminalId(sessionId)?.worktreeId ?? state.sessions.find((s) => s.id === sessionId)?.worktreeId
+  return state.worktrees.find((w) => w.id === worktreeId)?.path
 }
 
 /** Shows the session (it may be in the overview) so its right panel is the one that opens. */
 function showSession(sessionId: SessionId): void {
+  // A link in the right panel's 终端 view: the panel already follows the active session's worktree, and the shell is no session.
+  if (isPanelTerminalId(sessionId)) return
   const state = useWorkspace.getState()
   if (state.activeSessionId !== sessionId || state.mainView !== 'session') state.setActiveSession(sessionId)
 }

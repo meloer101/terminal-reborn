@@ -61,6 +61,8 @@ const api: TrApi = {
   // The same test as main/appearance.ts `nativeGlass` (getSystemVersion works in a sandboxed preload).
   liquidGlass: process.platform === 'darwin' && Number(process.getSystemVersion().split('.')[0]) >= 26,
   homeDir: process.env.HOME ?? '/',
+  // The pty host's default (pty-host/env.ts resolveShell): an absolute $SHELL, else zsh.
+  shellName: (process.env.SHELL?.startsWith('/') && process.env.SHELL.split('/').pop()) || 'zsh',
   pty: {
     spawn: (options) => ipcRenderer.invoke(IPC.ptySpawn, options),
     live: () => ipcRenderer.invoke(IPC.ptyLive),
