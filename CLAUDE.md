@@ -31,7 +31,8 @@ In a fresh worktree run `npm install` first. While developing, run `npm run type
 | `src/renderer/terminal/` | `TerminalSurface` + xterm implementation | `pty-terminal` |
 | `src/renderer/composer/` | Input box | `composer` |
 | `src/renderer/sidebar/` | Status sidebar | `sidebar-ui` |
-| `src/renderer/panels/` | Right panel (changes / graph) | later milestones |
+| `src/renderer/panels/` | Right panel views: browser, git, worktree, files, terminal (panel shells, `src/shared/panel-terminal.ts`), simulator | integrator |
+| `src/main/simulator/`, `src/shared/simulator.ts` | iOS 模拟器 view's main side: `simctl`, one serve-sim helper per device on 127.0.0.1, MJPEG frames to the page over a MessagePort, input to the helper's `/ws` (PRD F17 v1.176) | integrator |
 | `src/main/hooks/`, `resources/hooks/`, `src/shared/agent-launch.ts` | Per-launch Claude hooks → `AgentEvent` / `PendingPrompt` (M2) | `hooks-bridge` |
 | `src/renderer/status/`, `src/shared/session-state-machine.ts`, `src/shared/current-action.ts` | Live status, notifications, Dock badge (M2) | `session-status` |
 | `src/renderer/prompt-bar/`, `src/shared/question-keys.ts` | Permission / question bar (M2) | `prompt-bar` |

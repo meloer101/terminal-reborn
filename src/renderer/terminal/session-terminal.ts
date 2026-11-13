@@ -1,4 +1,5 @@
 // Binds one XtermSurface to one PTY session through window.tr.pty.
+import { isPanelTerminalId } from '@shared/panel-terminal'
 import { AGENT_SPECS, type CliAgent } from '@shared/agents'
 import { AGENT_MARKER_OSC, parseAgentMarker } from '@shared/agent-launch'
 import { parseScriptMarker, SCRIPT_MARKER_OSC } from '@shared/script-launch'
@@ -100,7 +101,8 @@ export class SessionTerminal {
     if (this.disposed) return
 
     // Paint the last screen right away; the process below takes a few seconds to draw anything.
-    const snapshot = await window.tr.terminalSnapshots.load(id).catch(() => null)
+    // A right-panel shell's id is reused by a later run's new shell, so an old screen under that id is not this one's.
+    const snapshot = isPanelTerminalId(id) ? null : await window.tr.terminalSnapshots.load(id).catch(() => null)
     if (this.disposed) return
     if (snapshot) await this.surface.restore(snapshot)
     if (this.disposed) return
@@ -291,9 +293,9 @@ export class SessionTerminal {
     this.snapshotQuiet.touch()
   }
 
-  /** Saves what the terminal shows, if it changed since the last save. */
+  /** Saves what the terminal shows, if it changed since the last save. Never for a right-panel shell (never read). */
   saveSnapshot(): void {
-    if (!this.dirty || this.disposed) return
+    if (!this.dirty || this.disposed || isPanelTerminalId(this.sessionId)) return
     const snapshot = this.surface.snapshot()
     if (!snapshot) return
     this.dirty = false

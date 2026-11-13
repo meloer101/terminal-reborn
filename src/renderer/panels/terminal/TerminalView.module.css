@@ -1,0 +1,93 @@
+/* 终端 view (Figma 76A 1199:57263 / 76B 1200:57912). */
+
+/* Tabs (1199:57559): only with two or more shells; 26 high, 8 in from the card's left, 2 apart, 6 above the terminal. */
+.tabs {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+  padding: 0 var(--space-8) var(--space-6);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  max-width: 200px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+}
+
+.tab:hover {
+  color: var(--text-secondary);
+}
+
+.tab[data-active='true'] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+/* The label is the tab's click target: 10 in, 6 to the ×. */
+.label {
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-6) 0 calc(var(--space-8) + var(--space-2));
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: var(--text-mono-s);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* The ×: the shown tab always has it, the others on hover. Its place is kept, so a hovered tab never grows. */
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-6);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  visibility: hidden;
+}
+
+.tab[data-active='true'] .close,
+.tab:hover .close,
+.close:focus-visible {
+  visibility: visible;
+}
+
+.tab[data-active='true'] .close {
+  color: var(--text-secondary);
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+/* The terminal (1199:57567): the rest of the card, its grid 6 down and 14 in. */
+.body {
+  /* xterm's padding on the shared host class (TerminalArea.module.css); no pane header runs over this grid. */
+  --term-padding: var(--space-6) calc(var(--space-12) + var(--space-2));
+  --term-headroom: 0px;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: clip;
+  background: var(--tr-terminal-backdrop, var(--term-bg));
+  user-select: text;
+  cursor: text;
+}
+
+.host[data-shown='false'] {
+  display: none;
+}

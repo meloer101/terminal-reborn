@@ -1,5 +1,6 @@
 // Module-level registry of live terminals, keyed by session id. Terminals outlive React re-renders.
 import type { SendIo } from '@shared/send-protocol'
+import { isPanelTerminalId } from '@shared/panel-terminal'
 import { LIMITS } from '@shared/settings'
 import type { FontSizeStep } from '@shared/shortcuts'
 import type { AgentKind, SessionId } from '@shared/types'
@@ -145,10 +146,13 @@ export function disposeTerminal(sessionId: SessionId, forget = false): void {
   terminals.delete(sessionId)
 }
 
-/** Disposes terminals whose sessions no longer exist, with their saved screens. */
+/**
+ * Disposes terminals whose sessions no longer exist, with their saved screens. The right panel's shells are no
+ * sessions (@shared/panel-terminal): their view closes them.
+ */
 export function pruneTerminals(liveSessionIds: ReadonlySet<SessionId>): void {
   for (const id of [...terminals.keys()]) {
-    if (!liveSessionIds.has(id)) disposeTerminal(id, true)
+    if (!liveSessionIds.has(id) && !isPanelTerminalId(id)) disposeTerminal(id, true)
   }
 }
 

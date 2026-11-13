@@ -388,9 +388,9 @@ test.describe('session metrics: todo · context · usage', () => {
     await expect.poll(async () => Math.round((await card.boundingBox())!.width)).toBe(480)
     await expect.poll(async () => card.evaluate((el) => Math.round(window.innerWidth - el.getBoundingClientRect().right))).toBe(6)
     const tools = page.locator('[data-region="panel"] header')
-    // At the default width every chip is there: todo, context and the account's usage.
+    // At the default width the account's usage has already gone for the six view icons (Figma 76A); the context stays.
     await expect(tools.getByTestId('context-chip')).toBeVisible()
-    await expect(tools.getByTestId('usage-chip-claude')).toBeVisible()
+    await expect(tools.getByTestId('usage-chip-claude')).toBeHidden()
     const handle = page.locator('[data-region="panel"]').getByRole('separator', { name: '调整右侧栏宽度' })
     // Drag the panel's left edge so the panel is `width` wide (it springs, so poll until it settles). A slow runner can
     // drop a drag, so it is dragged again until the width is there.
@@ -416,7 +416,11 @@ test.describe('session metrics: todo · context · usage', () => {
         const toolLeft = Math.min(...[...toolbar.children].filter(visible).map((c) => c.getBoundingClientRect().left), Infinity)
         return chipRight === -Infinity ? -1 : Math.round(chipRight - toolLeft)
       })
-    for (const width of [440, 400]) {
+    // Wider than 524 every chip is there: todo, context and the account's usage.
+    await widen(560)
+    await expect(tools.getByTestId('usage-chip-claude')).toBeVisible()
+    expect(await overlap(), 'chips overlap the tools at 560').toBeLessThanOrEqual(0)
+    for (const width of [500, 440, 400]) {
       await widen(width)
       expect(await overlap(), `chips overlap the tools at ${width}`).toBeLessThanOrEqual(0)
     }

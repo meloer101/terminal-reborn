@@ -10,6 +10,7 @@ import { installedAgents } from '../../new-session/sheet-store'
 import { openSettings } from '../../settings/SettingsDialog'
 import { useWorkspace } from '../../state/workspace'
 import { disposeTerminal } from '../../terminal/registry'
+import { closeWorktreeTabs } from '../terminal/actions'
 import { popupMenu, type MenuAnchor } from '../../ui/menu'
 import { cleanupPlan, COLLAPSED, deleteBlocker, keptText, tildePath, type WorktreeRow } from './model'
 import { patchRoot, worktreesOf } from './store'
@@ -79,6 +80,8 @@ export async function removeWorktreeWithSessions(
   const ids = new Set(worktreeIds)
   const sessions = useWorkspace.getState().sessions.filter((s) => ids.has(s.worktreeId))
   for (const session of sessions) disposeTerminal(session.id, true)
+  // The 终端 view's shells in it too.
+  await closeWorktreeTabs(worktreeIds)
   const result = await window.tr.gitWorktrees.remove(root, path, force)
   const state = useWorkspace.getState()
   if (result.ok) state.forgetWorktrees([...worktreeIds])

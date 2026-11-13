@@ -7,6 +7,7 @@
 // starts by itself, resuming, when it is first viewed; set AUTO_START_ON_VIEW to false when the buttons ship.
 import { useEffect } from 'react'
 import { create } from 'zustand'
+import { parsePanelTerminalId } from '@shared/panel-terminal'
 import type { SessionId } from '@shared/types'
 import { adoptGuiSessions } from '../gui/launch'
 import { loadLiveSessions, useLiveSessions } from '../terminal/live-sessions'
@@ -112,11 +113,14 @@ export function useSessionStartup(): void {
 /**
  * Agents that kept running while the app was closed are `ready` (or `exited`, when they ended meanwhile) instead of
  * `not-started`. A process whose session no longer exists in the workspace has no way to be seen or closed: end it.
+ * A running shell of the right panel's 终端 view whose worktree is still there (not archived) is its view's to reattach.
  */
 function adoptLiveSessions(): void {
   const { live } = useLiveSessions.getState()
   const workspace = useWorkspace.getState()
   for (const info of Object.values(live)) {
+    const panelWorktree = parsePanelTerminalId(info.sessionId)?.worktreeId
+    if (!info.exited && workspace.worktrees.some((w) => w.id === panelWorktree && !w.archived)) continue
     const session = workspace.sessions.find((s) => s.id === info.sessionId)
     if (!session) {
       void window.tr.pty.attach(info.sessionId).then((attached) => {

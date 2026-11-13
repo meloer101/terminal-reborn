@@ -97,6 +97,34 @@ test.describe('F15 archive', () => {
   })
 
   test('归档 stops the session, runs the archive script, keeps the work on a private ref and folds the worktree away', async () => {
+    // A shell in the right panel's 终端 view, left running with the panel closed: archiving ends it too.
+    const panelIcon = () => page.locator('header').getByRole('group', { name: '右侧栏' }).getByRole('button', { name: '终端' })
+    const pidFile = join(repo.root, 'panel-shell.pid')
+    await panelIcon().click()
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(
+            (cmd) => (globalThis as unknown as { tr: { pty: { write(id: string, data: string): void } } }).tr.pty.write('panel-w-nav-1', cmd),
+            `echo $$ > '${pidFile}'\r`
+          )
+          return existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() !== ''
+        },
+        { timeout: 30_000, intervals: [1_000] }
+      )
+      .toBe(true)
+    const shellPid = Number(readFileSync(pidFile, 'utf8').trim())
+    const alive = () => {
+      try {
+        process.kill(shellPid, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+    expect(alive()).toBe(true)
+    await panelIcon().click()
+
     await sidebar().locator('[data-session-id="s-nav"]').click({ button: 'right' })
     await page.getByRole('menu').getByRole('menuitem', { name: '归档 worktree…' }).click()
     await expect(sheet()).toBeVisible()
@@ -112,6 +140,7 @@ test.describe('F15 archive', () => {
     await expect(sheet()).toHaveCount(0, WITHIN)
     await expect(sidebar().locator('[data-session-id="s-nav"]')).toHaveCount(0)
     expect(readFileSync(join(repo.root, 'archive-ran.txt'), 'utf8')).toBe('archived\n')
+    await expect.poll(alive, { timeout: 5_000 }).toBe(false)
     expect(refs()).toMatch(/^refs\/wavi\/archive\//)
     // The folder is left as it was.
     expect(readFileSync(join(repo.wt, 'notes.md'), 'utf8')).toBe('todo\n')

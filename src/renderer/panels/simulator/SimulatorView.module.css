@@ -1,0 +1,229 @@
+/* iOS 模拟器 view — Figma 76C (1201:57385) / 76D (1202:57473). Header rows come from RightPanel.module.css. */
+
+/* The header's context slot: the device picker, flush with the title's 8 gap. */
+.context {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+/* Device picker: device · runtime in tertiary mono and a chevron; 选择设备 in caption. Opens the device menu. */
+.picker {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  margin-left: calc(-1 * var(--space-4));
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: var(--text-mono-s);
+  -webkit-app-region: no-drag;
+}
+
+.picker[data-empty='true'] {
+  font: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.picker:hover,
+.picker[data-menu-open] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.picker:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.pickerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Device Hub row (76D): 36 high under the header, alert · text · 修复输入. */
+.notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 36px;
+  padding: 0 var(--space-8) 0 calc(var(--space-12) + var(--space-2));
+  color: var(--text-primary);
+  font: var(--text-caption);
+}
+
+.noticeText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Button · Secondary · S (9:33): 24 high, hairline, caption in primary. */
+.secondary {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--text-caption);
+  white-space: nowrap;
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.secondary:disabled {
+  color: var(--text-disabled);
+}
+
+.secondary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Button · Ghost · S (9:30): 24 high, 8 side padding, caption in secondary; in a row it shows on hover / focus. */
+.ghost {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.row:hover .ghost,
+.row:focus-within .ghost {
+  opacity: 1;
+}
+
+.ghost:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.ghost:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* 需要 Xcode (76D): title and its one action, centred in the card. */
+.center {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  padding: var(--space-24);
+}
+
+.centerTitle {
+  margin: 0;
+  font: var(--text-body-strong);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-16);
+  font: var(--text-caption);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* 选择设备 (76D): runtime labels in tertiary mono, 28-high rows, 6 side inset. */
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-6) var(--space-8);
+}
+
+.runtime {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin: 0;
+  padding: 0 var(--space-8);
+  font: var(--text-mono-s);
+  color: var(--text-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 28px;
+  padding: 0 var(--space-4) 0 var(--space-8);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: var(--text-body);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The screen (76C): fills the rest of the card; the canvas draws the frame fitted inside a 12 inset. */
+.well {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.canvas:focus {
+  outline: none;
+}
+
+/* Before a frame (正在启动, a failure): the screen's shape, raised, its words centred. */
+.placeholder {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  font: var(--text-caption);
+  text-align: center;
+}

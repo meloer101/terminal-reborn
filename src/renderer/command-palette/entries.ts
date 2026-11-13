@@ -240,7 +240,7 @@ export function buildActionEntries(input: PaletteInput): PaletteEntry[] {
     action('schedules', '定时任务', 'clock', 'schedule scheduled task cron loop automation 定时 dingshi renwu'),
     action('toggle-overview', input.mainView === 'overview' ? '关闭总览' : '打开总览', 'overview', 'overview dashboard status board 状态 看板 zonglan'),
     action('toggle-sidebar', '切换侧栏', 'sidebar', 'toggle sidebar'),
-    action('toggle-right-panel', input.rightPanel ? '关闭右侧栏' : '打开右侧栏', 'panel', 'right panel files git browser worktree 文件 youcelan'),
+    action('toggle-right-panel', input.rightPanel ? '关闭右侧栏' : '打开右侧栏', 'panel', 'right panel files git browser worktree terminal shell ios simulator 文件 终端 模拟器 youcelan'),
     action('theme-system', '主题：跟随系统', 'monitor', 'theme system auto appearance'),
     action('theme-dark', '主题：深色', 'moon', 'theme dark appearance'),
     action('theme-light', '主题：浅色', 'sun', 'theme light appearance')

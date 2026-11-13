@@ -7,6 +7,7 @@ import type { ProjectId, WorktreeId } from '@shared/types'
 import { useWorkspace } from '../state/workspace'
 import { disposeTerminal } from '../terminal/registry'
 import { forgetLiveSessions } from '../terminal/live-sessions'
+import { closeWorktreeTabs } from '../panels/terminal/actions'
 
 export interface ArchiveTarget {
   projectId: ProjectId
@@ -66,6 +67,8 @@ export async function archiveWorktree(
   const gui = new Set(useWorkspace.getState().sessions.filter((s) => s.ui === 'gui').map((s) => s.id))
   await Promise.all(sessionIds.filter((id) => gui.has(id)).map((id) => window.tr.gui.stop(id).catch(() => {})))
   forgetLiveSessions(sessionIds)
+  // The right panel's 终端 shells end before the archive script runs in their folder.
+  await closeWorktreeTabs(target.worktreeIds)
 
   options.onStep?.('script')
   const info = await window.tr.repoScripts.get(target.worktreePath).catch(() => null)

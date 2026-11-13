@@ -8,6 +8,7 @@ import { DISPATCH_IPC } from '@shared/dispatch'
 import { REMOTE_IPC } from '@shared/remote'
 import { SCHEDULE_IPC } from '@shared/schedule'
 import { GUI_IPC, type GuiEvent } from '@shared/gui-chat'
+import { SIM_PORT_MESSAGE, SIMULATOR_IPC } from '@shared/simulator'
 import { IPC, type PtyExit, type TerminalSnapshot, type TrApi } from '@shared/ipc'
 import type { HostRestartedEvent } from '@shared/lifecycle'
 import { isMenuCommand } from '@shared/shortcuts'
@@ -61,6 +62,8 @@ const api: TrApi = {
   // The same test as main/appearance.ts `nativeGlass` (getSystemVersion works in a sandboxed preload).
   liquidGlass: process.platform === 'darwin' && Number(process.getSystemVersion().split('.')[0]) >= 26,
   homeDir: process.env.HOME ?? '/',
+  // The pty host's default (pty-host/env.ts resolveShell): an absolute $SHELL, else zsh.
+  shellName: (process.env.SHELL?.startsWith('/') && process.env.SHELL.split('/').pop()) || 'zsh',
   pty: {
     spawn: (options) => ipcRenderer.invoke(IPC.ptySpawn, options),
     live: () => ipcRenderer.invoke(IPC.ptyLive),
@@ -182,6 +185,19 @@ const api: TrApi = {
     merge: (request) => ipcRenderer.invoke(IPC.gitWorktreesMerge, request)
   },
   browser: browserApi,
+  simulator: {
+    list: () => ipcRenderer.invoke(SIMULATOR_IPC.list),
+    show: (udid) => ipcRenderer.send(SIMULATOR_IPC.show, udid),
+    hide: () => ipcRenderer.send(SIMULATOR_IPC.hide),
+    touch: (touch) => ipcRenderer.send(SIMULATOR_IPC.touch, touch),
+    scroll: (scroll) => ipcRenderer.send(SIMULATOR_IPC.scroll, scroll),
+    key: (phase, usage) => ipcRenderer.send(SIMULATOR_IPC.key, phase, usage),
+    home: () => ipcRenderer.send(SIMULATOR_IPC.home),
+    rotate: () => ipcRenderer.send(SIMULATOR_IPC.rotate),
+    repairInput: () => ipcRenderer.invoke(SIMULATOR_IPC.repairInput),
+    openXcodeInAppStore: () => ipcRenderer.send(SIMULATOR_IPC.openXcodeInAppStore),
+    onScreen: (listener) => listen(SIMULATOR_IPC.screen, listener)
+  },
   schedules: {
     list: () => ipcRenderer.invoke(SCHEDULE_IPC.list),
     create: (draft, createdBy) => ipcRenderer.invoke(SCHEDULE_IPC.create, draft, createdBy),
@@ -286,3 +302,7 @@ const api: TrApi = {
 }
 
 contextBridge.exposeInMainWorld('tr', api)
+
+// The simulator's frame port (SimulatorApi.show): a MessagePort cannot cross contextBridge, so it goes to the page's
+// own world with window.postMessage, Electron's documented route; the page takes it when the data is SIM_PORT_MESSAGE.
+ipcRenderer.on(SIMULATOR_IPC.port, (event) => window.postMessage(SIM_PORT_MESSAGE, '*', event.ports))

@@ -28,7 +28,14 @@ export const DEFAULT_SESSION_TITLE: Record<AgentKind, string> = {
 }
 
 /** The right panel's views as the panel and the session header name them. */
-export const PANEL_VIEW_LABEL: Record<PersistedRightPanel, string> = { browser: '浏览器', git: 'Git', worktree: 'Worktree', files: '文件' }
+export const PANEL_VIEW_LABEL: Record<PersistedRightPanel, string> = {
+  browser: '浏览器',
+  git: 'Git',
+  worktree: 'Worktree',
+  files: '文件',
+  terminal: '终端',
+  simulator: 'iOS 模拟器'
+}
 
 export type MakeId = (prefix: string) => string
 

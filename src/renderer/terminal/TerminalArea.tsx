@@ -3,7 +3,7 @@
 // switching sessions. The main area places the shown ones (PRD F20: one per pane of a split); moving between
 // panes only moves the element, never the terminal. A secondary window's panes (F20 · 多窗口) borrow the terminal into
 // that window's document (PaneHosts): the same xterm, the same PTY stream, only its DOM moves.
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import type { Rect } from '@shared/split-layout'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentKind, SessionId, Worktree } from '@shared/types'
@@ -56,16 +56,38 @@ const belowHeader = (rect: Rect): CSSProperties => ({
   height: Math.max(0, rect.height - HEADER_HEIGHT)
 })
 
-const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
-  const hostRef = useRef<HTMLDivElement>(null)
-  // The overview may show this terminal in its own host for a while (borrow.ts).
-  const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
-  const placed = rect !== undefined
-  const shown = placed || borrowedHost !== null
-  // Spawn lazily: nothing is created until the session has been shown once (a live process is attached at once).
-  const [everActive, setEverActive] = useState(placed || live)
-  if ((shown || live) && !everActive) setEverActive(true)
+/**
+ * The class of the element a terminal is attached to: xterm's padding (--term-padding), CJK glyph widths and the
+ * terminal's colours around the grid. It fills its nearest positioned box.
+ */
+export const terminalHostClass = styles.host
 
+/** What a host needs to show a session's terminal (TerminalPane's props, a tab of the right panel's 终端 view). */
+export interface TerminalHostState {
+  /** The terminal may exist: it was shown once, or its process is live. Until then nothing is created. */
+  everActive: boolean
+  /** Not to be started yet (TerminalPane's `held`): no terminal is created or attached. */
+  held: boolean
+  /** A host on screen shows it now. */
+  shown: boolean
+  cwd: string
+  agent: AgentKind
+  resumeAgentSessionId: string | undefined
+  /** Changes whenever the session is started again. */
+  generation: number
+}
+
+/**
+ * Shows a session's terminal in `hostRef` (or `borrowedHost`, the overview's): creates and attaches it, tells the PTY
+ * host whether it is shown, gives the WebGL context back while it is hidden, shows it before paint and refits the grid
+ * when the host resizes. TerminalArea's panes and the right panel's 终端 view (panels/terminal) both use it.
+ */
+export function useTerminalHost(
+  sessionId: SessionId,
+  hostRef: RefObject<HTMLDivElement | null>,
+  borrowedHost: HTMLElement | null,
+  { everActive, held, shown, cwd, agent, resumeAgentSessionId, generation }: TerminalHostState
+): void {
   useEffect(() => {
     const host = borrowedHost ?? hostRef.current
     if (!everActive || held || !host) return
@@ -76,7 +98,7 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
     // task; it does not need the borrowed window to produce a frame. Session switches do not
     // re-run this effect. The layout effect below shows a terminal that is already in its host.
     if (host.offsetParent !== null) getXtermSurface(sessionId)?.setVisible(true)
-  }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation, borrowedHost])
+  }, [everActive, held, sessionId, cwd, agent, resumeAgentSessionId, generation, borrowedHost, hostRef])
 
   // A hidden terminal's process gets far less output in flight, so a shown one's echo never queues behind it. After
   // the attach effect above, which creates the terminal in the same commit; `generation` too, because a restart
@@ -84,13 +106,6 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
   useEffect(() => {
     if (everActive && !held) setTerminalShown(sessionId, shown)
   }, [shown, everActive, held, sessionId, generation])
-
-  // Files dropped on or pasted into the terminal (PRD F19), wherever it is shown.
-  useEffect(() => {
-    const host = borrowedHost ?? hostRef.current
-    if (!everActive || held || !host) return
-    return attachFileInput(host, sessionId)
-  }, [everActive, held, sessionId, borrowedHost])
 
   // Hidden terminals give the WebGL context back (browsers cap live contexts).
   useEffect(() => {
@@ -107,7 +122,7 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
     // in the previous host. That effect shows it once the move is done.
     if (!host?.querySelector('.xterm')) return
     getXtermSurface(sessionId)?.setVisible(true)
-  }, [shown, everActive, sessionId, borrowedHost])
+  }, [shown, everActive, sessionId, borrowedHost, hostRef])
 
   useEffect(() => {
     const host = borrowedHost ?? hostRef.current
@@ -138,7 +153,27 @@ const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active,
       observer.disconnect()
       offReleased()
     }
-  }, [everActive, sessionId, borrowedHost])
+  }, [everActive, sessionId, borrowedHost, hostRef])
+}
+
+const TerminalPane = memo(function TerminalPane({ sessionId, cwd, agent, active, rect, held, live, resumeAgentSessionId, generation }: PaneProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  // The overview may show this terminal in its own host for a while (borrow.ts).
+  const borrowedHost = useBorrowedTerminal((s) => s.hosts[sessionId] ?? null)
+  const placed = rect !== undefined
+  const shown = placed || borrowedHost !== null
+  // Spawn lazily: nothing is created until the session has been shown once (a live process is attached at once).
+  const [everActive, setEverActive] = useState(placed || live)
+  if ((shown || live) && !everActive) setEverActive(true)
+
+  useTerminalHost(sessionId, hostRef, borrowedHost, { everActive, held, shown, cwd, agent, resumeAgentSessionId, generation })
+
+  // Files dropped on or pasted into the terminal (PRD F19), wherever it is shown.
+  useEffect(() => {
+    const host = borrowedHost ?? hostRef.current
+    if (!everActive || held || !host) return
+    return attachFileInput(host, sessionId)
+  }, [everActive, held, sessionId, borrowedHost])
 
   return (
     <div
