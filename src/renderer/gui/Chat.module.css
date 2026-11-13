@@ -1,5 +1,6 @@
 /* A GUI session (PRD F23, Figma 49″C–F, 49′C / 49′E, 51): the card a terminal would be, a column inside it (720 by
-   default, 设置 · 外观 · 对话宽度) — feed, then the cards, queued messages and composer, each a bg/section block 8 apart.
+   default, 设置 · 外观 · 对话宽度) — feed, then the cards and queued messages, each a bg/section block, and the composer (--composer-bg, Figma 79B),
+   8 apart.
    Colour only on status. */
 
 /* The card on the window's glass, like a terminal pane (TerminalArea.module.css). Its text, column and opacity follow
@@ -1199,18 +1200,22 @@
   gap: var(--space-4);
 }
 
-/* Figma 59J (as Paseo): a hairline round the box, drawn inside it so it takes no room; stronger while typing. */
+/* Figma 79B: a see-through fill one step lighter than the card and a hairline round the box, drawn inside it so it
+   takes no room (59J, as Paseo); stronger while typing. 实色 keeps the opaque bg/section (tokens.css). */
 .composer {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-8);
   border-radius: var(--radius-window);
-  background: var(--bg-section);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  background: var(--composer-bg);
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
-.composer:focus-within,
+.composer:focus-within {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
 .editBox:focus-within {
   box-shadow: inset 0 0 0 1px var(--border-default);
 }
