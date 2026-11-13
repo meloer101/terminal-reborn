@@ -1,12 +1,13 @@
 // Under the terminal of a session whose 同任务多解 report could not go through its agent's own channel (Figma 26J):
 // 送进去 types it as a message, which the user chose to send; a dialog on its screen refuses that like any send (§6.9).
 import { useState } from 'react'
-import { useActiveSession } from '../state/workspace'
+import type { SessionId } from '@shared/types'
+import { useSessionView } from '../state/workspace'
 import { PromptStrip } from './PromptStrip'
 import { sendHeldAttemptReport, useAttemptReports } from './report'
 
-export function HeldAttemptReportStrip() {
-  const active = useActiveSession()
+export function HeldAttemptReportStrip({ sessionId }: { sessionId: SessionId }) {
+  const active = useSessionView(sessionId)
   const id = active?.session.id ?? null
   const held = useAttemptReports((s) => (id ? s.held[id] : undefined))
   const [error, setError] = useState<string | null>(null)

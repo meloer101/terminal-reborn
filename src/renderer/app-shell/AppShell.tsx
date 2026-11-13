@@ -11,9 +11,7 @@ import { useWorkspace, type PanelView } from '../state/workspace'
 import { useIsKeyWindow, usePaneView } from '../state/window-scope'
 import { startSecondaryWindows } from './secondary-windows'
 import { startActivityReporting } from '../state/activity'
-import { EngineRestartedCard } from '../lifecycle/EngineRestartedCard'
-import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
-import { SetupStrip } from '../scripts/SetupStrip'
+import { startHostRestartTracking } from '../lifecycle/host-restart'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
@@ -28,11 +26,6 @@ import { startShipRuns } from '../pull-requests/ship-runner'
 import { startDispatchBridge } from '../dispatch/bridge'
 import { startRemoteBridge } from '../remote/bridge'
 import { startScheduleRunner } from '../schedules/runner'
-import { DispatchStrip } from '../dispatch/DispatchStrip'
-import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
-import { HeldReportsStrip } from '../dispatch/HeldReportsStrip'
-import { HeldAttemptReportStrip } from '../attempts/HeldAttemptReportStrip'
-import { PlanStrip } from '../attempts/PlanStrip'
 import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { startTaskSources } from '../attempts/sources'
 import { ArchiveSheet } from '../archive/ArchiveSheet'
@@ -107,6 +100,8 @@ export function AppShell() {
   useEffect(() => startConflictRadarBridge(), [])
   useEffect(() => startBranchSync(), [])
   useEffect(() => startPortAutoOpen(), [])
+  // A pty-host crash marks the sessions it took down; their panes offer the recovery (lifecycle/EngineRestartedCard).
+  useEffect(() => startHostRestartTracking(), [])
   // The scan runs for every live PTY. Subscribing here pushes the latest list to the sidebar and the overview,
   // including after a reload when nothing changed — the browser tab is just another watcher, not the scan itself.
   useEffect(() => {
@@ -130,16 +125,6 @@ export function AppShell() {
             <SplitArea />
             {!hasSession && <EmptyMain />}
           </section>
-          <div className={styles.sessionOnly} data-hidden={overview}>
-            <EngineRestartedCard />
-            <SessionErrorBar />
-            <SetupStrip />
-            <DispatchStrip />
-            <ScheduleConfirmStrip />
-            <HeldReportsStrip />
-            <HeldAttemptReportStrip />
-            <PlanStrip />
-          </div>
         </main>
         {panel.shown && (
           <aside

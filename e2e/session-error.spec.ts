@@ -46,6 +46,13 @@ test('an errored session names the error and offers 让 agent 修复 and a retry
   await expect(bar()).toContainText('pnpm build 失败 · 2 个错误')
   await expect(bar().getByRole('button', { name: '让 agent 修复' })).toBeEnabled()
   await expect(bar().getByRole('button', { name: '重试这一轮' })).toBeEnabled()
+  // In its pane, under the terminal's card (Figma 80A): as wide as the card, --card-gap (6) below it.
+  const card = await page.locator(`[data-region="terminal"] [data-session-id="${ERRORED}"]`).boundingBox()
+  const box = await bar().boundingBox()
+  expect(card && box).toBeTruthy()
+  expect(box!.x).toBeCloseTo(card!.x, 0)
+  expect(box!.width).toBeCloseTo(card!.width, 0)
+  expect(box!.y - (card!.y + card!.height)).toBeCloseTo(6, 0)
   for (const theme of ['dark', 'light'] as const) {
     await setTheme(theme)
     await page.waitForTimeout(150)

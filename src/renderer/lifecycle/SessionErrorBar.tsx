@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { SessionId } from '@shared/types'
 import { submitPrompt } from '../session-io'
 import { startSession } from '../state/session-start'
-import { useActiveSession, useWorkspace } from '../state/workspace'
+import { useSessionView, useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { stopNote } from '@shared/limit-resume'
 import { useLimitStop } from '../limit-resume/store'
@@ -26,8 +26,8 @@ async function retry(sessionId: SessionId, kind: RetryKind): Promise<void> {
  * An errored session says what went wrong and what to do next, under its terminal (phase 2b): the error in one
  * line, "让 agent 修复" (resume if needed, then hand it the error) and 重试.
  */
-export function SessionErrorBar() {
-  const active = useActiveSession()
+export function SessionErrorBar({ sessionId }: { sessionId: SessionId }) {
+  const active = useSessionView(sessionId)
   const id = active?.session.id ?? null
   const issue = useLaunchIssues((s) => (id ? s.issues[id] : undefined))
   const limit = useLimitStop(id ?? '')

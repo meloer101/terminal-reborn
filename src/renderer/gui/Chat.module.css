@@ -788,6 +788,19 @@
   padding: 0 var(--space-40);
 }
 
+/* The session's strips (lifecycle/PaneStrips, Figma 80B′): items of the dock like its cards, and drawn as one — a
+   bg/section block, no edge or shadow. Their own CSS draws them on the window's glass under a terminal. */
+.dockStrips {
+  display: contents;
+}
+
+/* Two classes: a strip's own module loads after this one and would win a tie. */
+.dock > .dockStrips > * {
+  border: 0;
+  background: var(--bg-section);
+  box-shadow: none;
+}
+
 /* Figma 59G: a session with nothing in it yet — the agent's mark and name over the composer, the two in the middle of
    the card. */
 .chat[data-empty] {

@@ -4,13 +4,14 @@
 // which the user chose to send; a dialog on its screen refuses that like any send (§6.9).
 import { useState } from 'react'
 import { Inbox } from 'lucide-react'
-import { useActiveSession } from '../state/workspace'
+import type { SessionId } from '@shared/types'
+import { useSessionView } from '../state/workspace'
 import { sendHeld } from './reports'
 import { useDispatch } from './store'
 import styles from '../scripts/SetupStrip.module.css'
 
-export function HeldReportsStrip() {
-  const active = useActiveSession()
+export function HeldReportsStrip({ sessionId }: { sessionId: SessionId }) {
+  const active = useSessionView(sessionId)
   const id = active?.session.id ?? null
   const held = useDispatch((s) => (id ? s.held[id] : undefined))
   const [error, setError] = useState<string | null>(null)

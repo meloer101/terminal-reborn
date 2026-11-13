@@ -5,7 +5,8 @@ import { useEffect, useRef } from 'react'
 import { Clock } from 'lucide-react'
 import { agentName } from '@shared/agents'
 import { monthDay, timingLabel } from '@shared/schedule'
-import { useActiveSession, useWorkspace } from '../state/workspace'
+import type { SessionId } from '@shared/types'
+import { useSessionView, useWorkspace } from '../state/workspace'
 import { decideScheduleRequests, useScheduleRequests, type ScheduleRequest } from './agent-requests'
 import styles from '../dispatch/DispatchStrip.module.css'
 import own from './ScheduleConfirmStrip.module.css'
@@ -18,14 +19,15 @@ const decide = (sessionId: string, go: boolean): void => {
   void decideScheduleRequests(sessionId, go, session)
 }
 
-export function ScheduleConfirmStrip() {
-  const id = useActiveSession()?.session.id ?? null
+/** `active`: its pane has the keyboard. */
+export function ScheduleConfirmStrip({ sessionId, active }: { sessionId: SessionId; active: boolean }) {
+  const id = useSessionView(sessionId)?.session.id ?? null
   const all = useScheduleRequests((s) => s.pending)
   const pending = id ? all.filter((r) => r.sessionId === id) : NONE
-  return id && pending.length > 0 ? <Strip sessionId={id} pending={pending} /> : null
+  return id && pending.length > 0 ? <Strip sessionId={id} pending={pending} active={active} /> : null
 }
 
-function Strip({ sessionId, pending }: { sessionId: string; pending: readonly ScheduleRequest[] }) {
+function Strip({ sessionId, pending, active }: { sessionId: string; pending: readonly ScheduleRequest[]; active: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const count = pending.length
 
@@ -38,15 +40,17 @@ function Strip({ sessionId, pending }: { sessionId: string; pending: readonly Sc
       if (event.key !== 'Enter' || !event.metaKey || event.shiftKey || event.altKey || event.ctrlKey) return
       if (event.isComposing || event.repeat || event.defaultPrevented || strip.offsetParent === null) return
       const target = event.target instanceof win.Element ? event.target : null
-      const fromHere = target !== null && (strip.contains(target) || target.closest('[data-region="terminal"]') !== null)
-      if (!fromHere && target !== strip.ownerDocument.body) return
+      // Its own pane only (a split shows a strip under each pane that has one); nothing focused is the active pane's.
+      const pane = strip.closest('[data-pane-box]')
+      const fromHere = target !== null && (strip.contains(target) || (pane !== null && pane.contains(target)))
+      if (!fromHere && !(active && target === strip.ownerDocument.body)) return
       event.preventDefault()
       event.stopPropagation()
       decide(sessionId, true)
     }
     win.addEventListener('keydown', onKeyDown, true)
     return () => win.removeEventListener('keydown', onKeyDown, true)
-  }, [sessionId])
+  }, [sessionId, active])
 
   return (
     <div ref={ref} className={styles.strip} role="region" aria-label={`想建 ${count} 个定时任务`} data-testid="schedule-strip">

@@ -3,14 +3,29 @@
   inset: 0;
 }
 
+/* A pane, placed by the main area (inline left / top / width / height): one session, or one per pane of a split (PRD
+   F20). The terminal's card fills it; the session's strips (lifecycle/PaneStrips), when it has any, sit under the card
+   at its width, --card-gap apart (Figma 80). */
+.slot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+}
+
+.slot[data-shown='false'] {
+  display: none;
+}
+
 /* Each terminal is a card (Figma 28 / 55): the agent's CLI, with its pane's header (SplitArea) over the top row. The
    background is the terminal's own (theme, picked or imported), never the shell's. */
 .pane {
   /* How far the header reaches over the grid; xterm-surface reads it to keep text clear of the header until there is
      more than a screen of it, then lets it scroll under. */
   --term-headroom: var(--titlebar-height);
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
   /* clip, not hidden: a hidden box can still be scrolled, and with the grid shifted down (headroom) focusing xterm's
      textarea scrolled the card by the shift, putting the first rows back under the header. */
   overflow: clip;
@@ -32,11 +47,6 @@
   border-radius: inherit;
   box-shadow: var(--card-edge);
   pointer-events: none;
-}
-
-/* Placed by the main area (inline left / top / width / height): one session, or one per pane of a split (PRD F20). */
-.pane[data-shown='false'] {
-  display: none;
 }
 
 /* The find bar (⌘F) floats over the focused pane's terminal; only the bar itself takes clicks. */
