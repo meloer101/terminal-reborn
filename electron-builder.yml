@@ -10,6 +10,10 @@ files:
   - '!node_modules/node-pty/prebuilds/win32-*/**'
   - '!node_modules/node-pty/{build,deps,src,scripts,typings,node-addon-api}/**'
   - '!node_modules/node-pty/lib/**/*.{test.js,map}'
+  # serve-sim runs only dist/serve-sim.js (+ dist/native, simduo, simcam, simax): its Swift sources, TypeScript sources and
+  # nested node_modules (inspect-webkit's 23 MB typescript, never loaded by the CLI) stay out.
+  - '!node_modules/serve-sim/{Sources,Tests,src,scripts,node_modules}/**'
+  - '!node_modules/serve-sim/Package.swift'
 extraResources:
   # Agent hook relay (src/main/hooks): found at process.resourcesPath/hooks when packaged.
   - from: resources/hooks
@@ -23,6 +27,10 @@ asarUnpack:
   - node_modules/node-pty/**
   # electron-liquid-glass's N-API prebuilds (Liquid Glass shell, PRD §5 v1.95): a .node cannot load from inside the asar.
   - node_modules/electron-liquid-glass/**
+  # serve-sim (iOS 模拟器 view, src/main/simulator): its CLI runs as a child process from app.asar.unpacked, loads its
+  # .node addon and execs its helper binaries there; it imports `ws`, which ESM resolution looks up next to it.
+  - node_modules/serve-sim/**
+  - node_modules/ws/**
 mac:
   icon: build/icon.icns
   # Chromium ships ~55 locale packs the app never uses (its UI copy is Chinese/English).
