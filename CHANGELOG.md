@@ -4,6 +4,19 @@ All notable changes to Wavi (named Terminal Reborn until v0.1.1). Format: [Keep 
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-13
+
+A terminal and an iOS simulator in the right panel: shells in the session's worktree, and a simulator you tap, scroll and type into without leaving Wavi.
+右侧栏加终端和 iOS 模拟器：在会话所在的 worktree 里开 shell，不离开 Wavi 就能点按、滚动、打字操作模拟器。
+
+### Right panel / 右侧栏
+- 终端 view: plain shells in the current session's worktree, one tab each, shared by that worktree's sessions; tabs come back after a reload or restart, and archiving a worktree ends its shells.
+  「终端」视图：当前会话所在 worktree 里的普通 shell，一个 tab 一个，同一个 worktree 的会话共用；重载、重启后 tab 接回，归档 worktree 时结束它的 shell。
+- iOS 模拟器 view: one simulator for the whole app, streamed and driven through serve-sim on 127.0.0.1; tap, drag, scroll, type, Home, rotate, pick or boot a device; the helper stops 60 s after the panel closes and when Wavi quits.
+  「iOS 模拟器」视图：全局一台，经 127.0.0.1 上的 serve-sim 显示画面和接收输入；点按、拖动、滚动、打字、主屏幕、旋转、选设备和启动设备；关面板 60 s 后和退出 Wavi 时停掉 helper。
+- The session header has six view icons; at the default 480 width the usage meter folds away and comes back past 524.
+  会话头的视图图标变成 6 个；默认 480 宽时额度收起，拖宽超过 524 才出现。
+
 ## [0.17.0] - 2026-11-12
 
 Ultracode and a merge chain that says what comes next: turn Ultracode on yourself and watch each workflow run in the chat and the sidebar; Git · 变更 says where a worktree is stuck and what the next step is. Windows get one 玻璃 material, cards sit 6 px in from the window's edges, and pictures you send stay on your message.
@@ -631,7 +644,9 @@ First public release. Unsigned (ad-hoc signature): see the README for the one-ti
 - The app tells you when a newer GitHub release exists (one notification per version; nothing is downloaded or installed automatically). No telemetry.
   有新版本时提示一次（不会自动下载或安装）；无任何遥测。
 
-[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/meloer101/terminal-reborn/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/meloer101/terminal-reborn/compare/v0.17.0...v0.18.0
+[0.17.0]: https://github.com/meloer101/terminal-reborn/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/meloer101/terminal-reborn/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/meloer101/terminal-reborn/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/meloer101/terminal-reborn/compare/v0.14.0...v0.15.0
