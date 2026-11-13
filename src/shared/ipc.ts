@@ -6,6 +6,7 @@ import type { GuiApi } from './gui-chat'
 import type { CliAgent } from './agents'
 import type { ActivitySummary, ConfirmOptions } from './lifecycle'
 import type { BrowserApi } from './browser'
+import type { SimulatorApi } from './simulator'
 import type { ScheduleApi } from './schedule'
 import type { CliPermission } from './gui-chat'
 import type { ArchiveApi } from './archive'
@@ -427,6 +428,8 @@ export interface TrApi {
   gitWorktrees: GitWorktreesApi
   /** The right panel's built-in browser and the session ports it lists (PRD F17 / F14); channels in BROWSER_IPC. */
   browser: BrowserApi
+  /** The right panel's iOS 模拟器 view (PRD F17); channels in SIMULATOR_IPC, frames over a MessagePort. */
+  simulator: SimulatorApi
   /** `.tr/settings.toml` scripts and TR_PORT (PRD F4). */
   repoScripts: RepoScriptsApi
   /** 定时任务 (PRD F24); channels in SCHEDULE_IPC. */
