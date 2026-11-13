@@ -126,7 +126,7 @@ test.describe('F17 right panel · 文件', () => {
     // F17: the header no longer repeats the agent status.
     await expect(header).not.toContainText('终端 ·')
     const switcher = header.getByRole('group', { name: '右侧栏' })
-    await expect(switcher.getByRole('button')).toHaveText(['', '', '', ''])
+    await expect(switcher.getByRole('button')).toHaveText(['', '', '', '', '', ''])
     await switcher.getByRole('button', { name: 'Git' }).click()
     await expect(panel()).toBeVisible()
     await expect(panel().getByRole('tab', { name: '图谱' })).toBeVisible()
