@@ -36,12 +36,16 @@ export function SimulatorView() {
 
   useEffect(() => {
     let cancelled = false
-    void window.tr.simulator.list().then((result) => {
-      if (cancelled) return
-      if (result.kind === 'no-xcode') return setListing({ kind: 'no-xcode' })
-      setListing({ kind: 'devices', runtimes: result.runtimes })
-      setChosen(initialDevice(result.runtimes, result.lastUdid)?.udid ?? null)
-    })
+    void window.tr.simulator
+      .list()
+      .then((result) => {
+        if (cancelled) return
+        if (result.kind === 'no-xcode') return setListing({ kind: 'no-xcode' })
+        setListing({ kind: 'devices', runtimes: result.runtimes })
+        setChosen(initialDevice(result.runtimes, result.lastUdid)?.udid ?? null)
+      })
+      // simctl failed (main logged why): an empty list, and the picker reads it again when opened.
+      .catch(() => !cancelled && setListing({ kind: 'devices', runtimes: [] }))
     return () => {
       cancelled = true
     }
@@ -57,7 +61,8 @@ export function SimulatorView() {
 
   /** Re-reads the list (a device may have booted or been added since) before the picker opens. */
   const refresh = async (): Promise<SimRuntimeGroup[]> => {
-    const result = await window.tr.simulator.list()
+    const result = await window.tr.simulator.list().catch(() => null)
+    if (!result) return listing.kind === 'devices' ? listing.runtimes : []
     if (result.kind === 'no-xcode') {
       setListing({ kind: 'no-xcode' })
       return []

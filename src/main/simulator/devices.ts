@@ -1,5 +1,4 @@
 // Xcode's simulators through `xcrun simctl` (PRD F17 · iOS 模拟器): list, boot, and the Device Hub input check.
-// No Electron imports, so the smoke script runs it in plain Node.
 import { execFile } from 'node:child_process'
 import { parseSimctlDevices, type SimRuntimeGroup } from '@shared/simulator'
 
@@ -17,16 +16,17 @@ function run(file: string, args: string[], timeout: number): Promise<string> {
 
 /**
  * The available iOS simulators; null when there is no Xcode to ask. `xcode-select -p` goes first: with no developer
- * tools at all, /usr/bin/xcrun would put up the system's "install the command line tools" dialog every time.
+ * tools at all, /usr/bin/xcrun would put up the system's "install the command line tools" dialog every time. With
+ * Xcode there, a failing or unreadable `simctl list` rejects (it is no sign of a missing Xcode).
  */
 export async function listDevices(): Promise<SimRuntimeGroup[] | null> {
   try {
     await run(XCODE_SELECT, ['-p'], 5_000)
-    const out = await run(XCRUN, ['simctl', 'list', 'devices', 'available', '-j'], 20_000)
-    return parseSimctlDevices(JSON.parse(out))
   } catch {
     return null
   }
+  const out = await run(XCRUN, ['simctl', 'list', 'devices', 'available', '-j'], 20_000)
+  return parseSimctlDevices(JSON.parse(out))
 }
 
 /** Boots the device (when it is not booted) and resolves once it has finished booting. Never shuts one down. */

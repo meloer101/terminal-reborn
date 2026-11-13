@@ -293,9 +293,9 @@ export class SessionTerminal {
     this.snapshotQuiet.touch()
   }
 
-  /** Saves what the terminal shows, if it changed since the last save. */
+  /** Saves what the terminal shows, if it changed since the last save. Never for a right-panel shell (never read). */
   saveSnapshot(): void {
-    if (!this.dirty || this.disposed) return
+    if (!this.dirty || this.disposed || isPanelTerminalId(this.sessionId)) return
     const snapshot = this.surface.snapshot()
     if (!snapshot) return
     this.dirty = false

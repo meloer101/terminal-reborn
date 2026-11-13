@@ -236,6 +236,9 @@ export function hidUsageForCode(code: string): number | null {
 /** Highest usage the key IPC accepts (the keyboard page's modifiers end at 0xe7). */
 export const MAX_HID_USAGE = 0xe7
 
+/** One wheel event moves at most this many screens (a hard fling on a trackpad stays well under it; main refuses more). */
+export const MAX_SCROLL = 4
+
 // ── Geometry (renderer) ──────────────────────────────────────────────────────
 
 export interface Size {

@@ -6,6 +6,7 @@ import {
   fitRect,
   hidUsageForCode,
   HOME_INDICATOR_BAND,
+  MAX_SCROLL,
   normalizedPoint,
   rawBottomEdge,
   rawDelta,
@@ -24,8 +25,6 @@ import styles from './SimulatorView.module.css'
 const INSET = 12
 /** Aspect of the placeholder before a frame says the real one (iPhone 17 Pro). */
 const PLACEHOLDER_SIZE: Size = { width: 1206, height: 2622 }
-/** One wheel event moves at most this many screens (main refuses more). */
-const MAX_SCROLL = 4
 
 function insetBox(size: Size): Rect {
   return { x: INSET, y: INSET, width: Math.max(0, size.width - 2 * INSET), height: Math.max(0, size.height - 2 * INSET) }
@@ -195,6 +194,8 @@ function useInput(canvasRef: RefObject<HTMLCanvasElement | null>, drawnRef: RefO
     const sim = window.tr.simulator
     let edge = 0
     let down = false
+    /** The last point sent, in device coordinates: a touch cut short ends there. */
+    let last = { x: 0, y: 0 }
 
     const local = (event: PointerEvent | WheelEvent) => {
       const box = canvas.getBoundingClientRect()
@@ -206,8 +207,8 @@ function useInput(canvasRef: RefObject<HTMLCanvasElement | null>, drawnRef: RefO
       const point = normalizedPoint(local(event), drawn.rect, phase !== 'begin')
       if (!point) return false
       if (phase === 'begin') edge = point.y >= HOME_INDICATOR_BAND ? rawBottomEdge(drawn.inputOrientation) : 0
-      const raw = rawPoint(drawn.inputOrientation, point.x, point.y)
-      sim.touch({ phase, x: raw.x, y: raw.y, edge })
+      last = rawPoint(drawn.inputOrientation, point.x, point.y)
+      sim.touch({ phase, x: last.x, y: last.y, edge })
       return true
     }
     const onDown = (event: PointerEvent) => {
@@ -268,6 +269,8 @@ function useInput(canvasRef: RefObject<HTMLCanvasElement | null>, drawnRef: RefO
     canvas.addEventListener('blur', releaseAll)
     return () => {
       releaseAll()
+      // The view went mid-drag (hidden, another device, the stream lost): the finger lifts where it was.
+      if (down) sim.touch({ phase: 'end', x: last.x, y: last.y, edge })
       canvas.removeEventListener('blur', releaseAll)
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)

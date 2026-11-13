@@ -1,7 +1,7 @@
 // Which simulators are streamed to which windows (PRD F17 · iOS 模拟器). One DeviceSession per device: boots it when
 // needed, owns its helper and input socket, reads frames only while some window shows it, and stops the helper a
-// while after the last one stopped showing it. A simulator is never shut down here. No Electron imports, so the smoke
-// script drives it in plain Node.
+// while after the last one stopped showing it. A simulator is never shut down here. No Electron imports: session.test.ts
+// drives it with fake deps.
 import {
   findDevice,
   ROTATE_RIGHT,
@@ -142,6 +142,7 @@ class DeviceSession {
     this.helper = null
     this.lastFrame = null
     this.starting = false
+    this.streamRetries = 0
   }
 
   private ensure(): void {

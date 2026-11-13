@@ -92,10 +92,10 @@ export async function closeWorktreeTabs(worktreeIds: readonly WorktreeId[]): Pro
   await Promise.all(unseen.map(endDetached))
 }
 
-// However a worktree leaves the workspace (removed, its project removed), its shells end with it.
+// However a worktree leaves the workspace (removed, archived, its project removed), its shells end with it.
 useWorkspace.subscribe((state, prev) => {
   if (state.worktrees === prev.worktrees) return
-  const kept = new Set(state.worktrees.map((w) => w.id))
-  const gone = prev.worktrees.filter((w) => !kept.has(w.id)).map((w) => w.id)
+  const kept = new Set(state.worktrees.filter((w) => !w.archived).map((w) => w.id))
+  const gone = prev.worktrees.filter((w) => !w.archived && !kept.has(w.id)).map((w) => w.id)
   if (gone.length) void closeWorktreeTabs(gone)
 })

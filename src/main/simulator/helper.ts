@@ -1,6 +1,6 @@
 // One serve-sim helper per simulator (PRD F17 · iOS 模拟器): the CLI in the foreground (`--no-preview`), bound to
 // 127.0.0.1 on a free port, run by this app's own binary as Node (ELECTRON_RUN_AS_NODE). It prints one JSON line with
-// its stream and input URLs. No Electron imports, so the smoke script runs it in plain Node.
+// its stream and input URLs. No Electron imports.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createServer } from 'node:net'
 
@@ -127,6 +127,7 @@ export class SimHelper {
       for (const line of chunk.split('\n')) if (line.trim() && !line.includes('codesign_util')) log(line.trim())
     })
     child.stdin?.on('error', () => {})
+    let onData: ((chunk: string) => void) | null = null
     const endpoints = await new Promise<HelperEndpoints>((resolve, reject) => {
       let out = ''
       const fail = (message: string) => {
@@ -135,8 +136,7 @@ export class SimHelper {
         reject(new Error(message))
       }
       const timer = setTimeout(() => fail('serve-sim did not start in time'), START_TIMEOUT_MS)
-      child.stdout?.setEncoding('utf8')
-      child.stdout?.on('data', (chunk: string) => {
+      onData = (chunk: string) => {
         out += chunk
         for (const line of out.split('\n')) {
           const parsed = parseHelperLine(line.trim(), udid)
@@ -147,12 +147,17 @@ export class SimHelper {
           }
         }
         if (out.length > 64 * 1024) fail('serve-sim printed no endpoints')
-      })
+      }
+      child.stdout?.setEncoding('utf8')
+      child.stdout?.on('data', onData)
       child.once('error', (error) => fail(error.message))
       child.once('exit', (code) => {
         clearTimeout(timer)
         reject(new Error(`serve-sim exited (${code ?? 'signal'}): ${stderr.trim().split('\n').pop() ?? ''}`))
       })
+    }).finally(() => {
+      // Startup is over: later output is neither parsed nor kept.
+      if (onData) child.stdout?.off('data', onData)
     })
     // Keep reading so a chatty helper never blocks on a full pipe.
     child.stdout?.resume()

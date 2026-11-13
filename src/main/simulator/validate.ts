@@ -5,14 +5,12 @@ import {
   HID_EDGE_RIGHT,
   isUdid,
   MAX_HID_USAGE,
+  MAX_SCROLL,
   type SimKeyPhase,
   type SimScroll,
   type SimTouch,
   type SimTouchPhase
 } from '@shared/simulator'
-
-/** One wheel event moves at most this many screens (a hard fling on a trackpad stays well under it). */
-const MAX_SCROLL = 4
 
 export function parseUdid(value: unknown): string {
   if (!isUdid(value)) throw new Error('not a simulator udid')

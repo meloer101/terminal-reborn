@@ -69,6 +69,8 @@ class PortViewer implements SimViewer {
   }
 
   private post(jpeg: Uint8Array): void {
+    // Anything waiting is older than this frame.
+    this.pending = null
     this.sentAt = Date.now()
     const message: SimFrameMessage = { jpeg }
     this.port?.postMessage(message)
@@ -98,10 +100,16 @@ export function registerSimulatorHandlers(): void {
       const created = new PortViewer(sender)
       viewer = created
       viewers.set(sender, created)
-      sender.once('destroyed', () => {
+      // The page goes without saying hide (reload, crash, window closed): the device stops counting it as a viewer.
+      const gone = () => {
         host.hide(created)
         created.close()
+      }
+      sender.on('did-start-navigation', (details) => {
+        if (details.isMainFrame && !details.isSameDocument) gone()
       })
+      sender.on('render-process-gone', gone)
+      sender.once('destroyed', gone)
     }
     return viewer
   }
@@ -121,7 +129,10 @@ export function registerSimulatorHandlers(): void {
 
   ipcMain.handle(SIMULATOR_IPC.list, async (event): Promise<SimulatorListing> => {
     if (!viewerOf(event)) throw new Error('not an app window')
-    const runtimes = await listDevices()
+    const runtimes = await listDevices().catch((error: unknown) => {
+      console.error('[simulator] simctl list:', error instanceof Error ? error.message : error)
+      throw error
+    })
     return runtimes ? { kind: 'devices', runtimes, lastUdid: remembered.get() } : { kind: 'no-xcode' }
   })
 
