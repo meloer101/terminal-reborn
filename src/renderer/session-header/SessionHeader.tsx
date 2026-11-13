@@ -1,5 +1,5 @@
 import { usageVendor } from '@shared/agents'
-import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Square, Workflow, X, type LucideIcon } from 'lucide-react'
+import { CircleAlert, Ellipsis, Folder, GitBranch, GitFork, Globe, PanelLeft, Paperclip, Play, Smartphone, Square, SquareTerminal, Workflow, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { compareByUrgency, needsAttention } from '@shared/session-status'
 import { useHooksHealth } from '../lifecycle/hooks-health'
@@ -25,12 +25,14 @@ import styles from './SessionHeader.module.css'
 import { formatAccelerator } from '../ui/menu-model'
 import { SHORTCUTS } from '@shared/shortcuts'
 
-/** Right panel switcher (Figma 13 "Pane switcher" 149:6398): one icon per view, the open one in Active. */
+/** Right panel switcher (Figma 13 "Pane switcher" 149:6398 · 76A): one icon per view, the open one in Active. */
 const PANE_ICONS: { view: PanelView; icon: LucideIcon }[] = [
   { view: 'browser', icon: Globe },
   { view: 'git', icon: GitBranch },
   { view: 'worktree', icon: GitFork },
-  { view: 'files', icon: Folder }
+  { view: 'files', icon: Folder },
+  { view: 'terminal', icon: SquareTerminal },
+  { view: 'simulator', icon: Smartphone }
 ]
 
 /** A pane of the main area's split (PRD F20 · Figma 21 PaneHeader): one header per pane. */

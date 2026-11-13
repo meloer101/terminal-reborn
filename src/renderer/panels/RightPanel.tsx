@@ -9,6 +9,8 @@ import { BrowserView } from './browser/BrowserView'
 import { FilesView } from './files/FilesView'
 import { GitView } from './git/GitView'
 import { WorktreeView } from './worktree/WorktreeView'
+import { TerminalView } from './terminal/TerminalView'
+import { SimulatorView } from './simulator/SimulatorView'
 import { PaneHeader } from './PaneHeader'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { startColumnResize } from '../ui/column-resize'
@@ -30,6 +32,10 @@ export function RightPanel({ view }: { view: PanelView }) {
           <GitView key={worktree.path} worktree={worktree} />
         ) : view === 'worktree' && worktree && project ? (
           <WorktreeView key={project.rootPath} projectId={project.id} root={project.rootPath} projectName={project.name} activeWorktreeId={worktree.id} />
+        ) : view === 'terminal' && worktree ? (
+          <TerminalView key={worktree.id} worktree={worktree} />
+        ) : view === 'simulator' ? (
+          <SimulatorView />
         ) : view === 'browser' && worktree && active ? (
           <BrowserView key={worktree.path} worktree={worktree.path} sessionId={active.session.id} kind={active.session.kind} />
         ) : (

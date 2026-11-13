@@ -17,9 +17,9 @@ import { sanitizeFixRuns, sanitizeSavedDispatch, sanitizeShipRuns, type SavedDis
 export const WORKSPACE_FILE_VERSION = 2
 
 /** The right panel's views (PRD F17). Files written before F17 said 'changes' / 'graph'; both read as 'git'. */
-export type PersistedRightPanel = 'browser' | 'git' | 'worktree' | 'files'
+export type PersistedRightPanel = 'browser' | 'git' | 'worktree' | 'files' | 'terminal' | 'simulator'
 
-export const RIGHT_PANEL_VIEWS: readonly PersistedRightPanel[] = ['browser', 'git', 'worktree', 'files']
+export const RIGHT_PANEL_VIEWS: readonly PersistedRightPanel[] = ['browser', 'git', 'worktree', 'files', 'terminal', 'simulator']
 
 /** Card width (F17): dragged by its left edge. */
 export const PANEL_WIDTH_DEFAULT = 480
