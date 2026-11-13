@@ -116,8 +116,8 @@
   --bg-float: #121212;
   /* A block set apart by its fill instead of a divider, e.g. Git · 变更's review result and ship zone (Figma bg/section). */
   --bg-section: #1a1a1a;
-  /* The GUI composer (Figma 79B): one step lighter than the chat card and see-through like it, so it stays a pane of
-     the card when the card lets the wallpaper through (玻璃, 对话不透明度 < 1). */
+  /* The GUI composer (Figma 79B / 79B″): bg/section laid over the chat card as a see-through tint, so it equals
+     bg/section on an opaque card and lets the wallpaper through with it (玻璃, 对话不透明度 < 1). */
   --composer-bg: #ffffff0f;
   --bg-inset: #050505;
   --bg-hover: #ffffff0a;
@@ -227,7 +227,7 @@
   --bg-raised: #ffffff;
   --bg-float: #ffffff;
   --bg-section: #f5f5f5;
-  --composer-bg: #ffffff8c;
+  --composer-bg: #0000000a;
   --bg-inset: #fafafa;
   --bg-hover: #0000000a;
   --bg-selected: #00000014;

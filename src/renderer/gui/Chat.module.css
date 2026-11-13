@@ -1,5 +1,6 @@
 /* A GUI session (PRD F23, Figma 49″C–F, 49′C / 49′E, 51): the card a terminal would be, a column inside it (720 by
-   default, 设置 · 外观 · 对话宽度) — feed, then the cards, queued messages and composer, each a bg/section block 8 apart.
+   default, 设置 · 外观 · 对话宽度) — feed, then the cards and queued messages, each a bg/section block, and the composer (--composer-bg, Figma 79B),
+   8 apart.
    Colour only on status. */
 
 /* The card on the window's glass, like a terminal pane (TerminalArea.module.css). Its text, column and opacity follow
