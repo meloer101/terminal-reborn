@@ -72,8 +72,11 @@ export function AppShell() {
   // The main window's own panes (F20 · 多窗口: the keyboard may be in another window).
   const mainActive = usePaneView().activeSessionId
   const hasSession = useWorkspace((s) => s.sessions.some((x) => x.id === mainActive))
-  // Which card opacity the sidebar and the right panel follow (PRD v1.179): the shown GUI session's chat, else the terminal's.
-  const sessionUi = useWorkspace((s) => (s.sessions.find((x) => x.id === mainActive)?.ui === 'gui' ? 'gui' : 'cli'))
+  // Which card opacity the sidebar and the right panel follow (PRD v1.179): the shown GUI session's chat, else (a CLI
+  // session, the welcome page, the overview — which keeps the last session active) the terminal's.
+  const sessionUi = useWorkspace((s) =>
+    s.mainView !== 'overview' && s.sessions.find((x) => x.id === mainActive)?.ui === 'gui' ? 'gui' : 'cli'
+  )
   const isKey = useIsKeyWindow()
   // The panel follows the active session's worktree, so it shows beside a session (not the overview or welcome page).
   const savedPanel = useWorkspace((s) => s.rightPanel)

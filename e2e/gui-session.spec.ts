@@ -80,6 +80,22 @@ test.describe('F23 GUI session (Claude)', () => {
     expect(Math.abs(hello!.x + hello!.width / 2 - (box!.x + box!.width / 2))).toBeLessThan(1)
     expect(box!.y).toBeGreaterThan(card!.y + card!.height / 3)
     await page.screenshot({ path: join(SHOTS, 'empty-dark.png') })
+    // PRD v1.179: beside a GUI session the sidebar is the chat card's opacity + 10%; the overview (which keeps this
+    // session active) takes the terminal's.
+    const setLook = (p: unknown) => page.evaluate((x) => (globalThis as unknown as { tr: { settings: { update(p: unknown): Promise<unknown> } } }).tr.settings.update(x), p)
+    const sidebarAlpha = () =>
+      page.locator('[data-region="sidebar"]').evaluate((el) => {
+        const m = /\/\s*([\d.]+)\)$/.exec(getComputedStyle(el).backgroundColor)
+        return m ? Number(m[1]) : 1
+      })
+    await setLook({ appearance: { terminalOpacity: 0.5, chat: { opacity: 0.3 } } })
+    await expect.poll(sidebarAlpha).toBeCloseTo(0.4)
+    await page.locator('[data-region="sidebar"]').getByRole('button', { name: /^总览/ }).click()
+    await expect.poll(sidebarAlpha).toBeCloseTo(0.6)
+    await page.locator('[data-region="sidebar"] [data-session-id="s1"]').click()
+    await expect(chat()).toBeVisible(WITHIN)
+    await expect.poll(sidebarAlpha).toBeCloseTo(0.4)
+    await setLook({ appearance: { terminalOpacity: 0.85, chat: { opacity: 0.85 } } })
     // Figma 65B: nothing said yet — the model button lists the agents first, the current one's models beside them.
     await composer().locator('[data-picker="model"]').click()
     await expect(page.getByTestId('gui-agent-menu').getByRole('menuitem', { name: 'Claude Code' })).toBeVisible(WITHIN)
