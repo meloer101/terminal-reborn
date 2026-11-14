@@ -186,6 +186,11 @@ test.describe('F17 right panel · 文件', () => {
     await expect(row('src/app.ts')).toHaveText('app.tsM')
     await expect(row('src/components')).toHaveAttribute('aria-expanded', 'false')
     await expect(panel().getByRole('button', { name: '有改动 2' })).toBeVisible()
+    // Files show their type's icon (Figma 72A), loaded under the renderer's CSP; folders keep lucide's.
+    for (const path of ['src/app.ts', 'README.md', '.gitignore']) {
+      await expect.poll(() => row(path).locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true)
+    }
+    await expect(row('src').locator('img')).toHaveCount(0)
     await row('src/app.ts').click()
     await shoot('13d-files')
   })

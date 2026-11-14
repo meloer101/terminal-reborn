@@ -153,11 +153,26 @@
   white-space: nowrap;
 }
 
+/* A file's type icon (Figma 72A): material-icon-theme colours, baked into the SVG. */
+.typeIcon {
+  width: 16px;
+  height: 16px;
+}
+
+:global(:root[data-theme='light']) .darkOnly,
+:global(:root:not([data-theme='light'])) .lightOnly {
+  display: none;
+}
+
 /* Ignored entries (.gitignore) are dimmed but still open. */
 .row[data-ignored='true'] .name,
 .row[data-ignored='true'] .icon,
 .row[data-ignored='true'] .chevron {
   color: var(--text-disabled);
+}
+
+.row[data-ignored='true'] .typeIcon {
+  opacity: 0.4;
 }
 
 /* Git letter: M → status/attention · A / U → diff/add-fg · D → diff/del-fg · "•" folders with changes. */

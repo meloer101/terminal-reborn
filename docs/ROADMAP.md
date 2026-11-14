@@ -8,6 +8,7 @@
 
 ## 当前位置
 
+- 2026-11-14：右侧栏 · 文件 按文件类型显示图标（PRD v1.180，Figma 72A / 72A′）：material-icon-theme 的 136 个图标，色度 × 0.65；文件夹不变，浅色主题下黑白标志换 `_light` 版。深色、浅色都截图对照过 72A / 72A′。
 - 2026-11-14：不透明度只留终端、对话两个（PRD v1.179）：最低 20%、默认 85%；终端页、对话页的预览垫上光场，拖动时看得到变化；去掉窗口底层不透明度，侧栏比当前会话的卡片厚 10%，右侧面板、总览、欢迎页跟卡片一样。全屏和真机上的效果还没在作者的 Mac 上看过。
 - 2026-11-13：GUI 输入框的底色改成叠在卡片上的半透明色（PRD v1.177，Figma 79B / 79B″）：玻璃材质、对话半透明时不再是一块不透明的黑底；卡片不透明和实色材质时和原来一样。
 - 2026-11-12：F17 右侧栏加「终端」和「iOS 模拟器」（PRD v1.176，Figma 76）：终端是当前 worktree 的 shell，多个 tab、重载和重启后接回；模拟器用 serve-sim 画面和输入，可点按、滚动、打字、主屏幕、旋转、选设备和启动设备。会话头 6 个图标，默认 480 宽时额度收起。打包后的 app（`npm run dist:dir`，Developer ID 签名、hardened runtime，未公证）里 helper 从 `app.asar.unpacked` 跑起来，点按、旋转、退出不留进程都验过。还没测：公证后的下载版、Xcode 27 的 Device Hub 路径、横屏 app 的画面方向。
@@ -494,6 +495,7 @@ PRD F25 / §6.20，Figma 74（`1177:54922`）。
 - 还没测：1 万行 diff 实际滚动帧率（行已窗口化）。“创建 PR”移到 M5（F16 之后）
 - [x] F17 Worktree 页签（2026-10-17）：`git worktree list` + 会话状态、未提交 `+N −M`、领先 / 落后，选中行展开详情和操作（打开文件夹 · 在此新建会话 · 复制路径 · 删除），可清理分组一键清理（只碰没有会话、已合并的）、没有会话分组逐个删除；删除在有改动、git 检查失败、分离 HEAD 有孤立提交、变基中、会话在跑时拒绝；监听 `.git` 变化 + 可见时轮询；e2e `worktree-panel.spec.ts`。以后：`worktree list -z`、lock 原因、squash / rebase 合并识别、删除时可选删分支（`branch -d`）、手动刷新和逐行错误、`core.fsmonitor=false`、我们 PTY 之外 cwd 在 worktree 里的进程。+ 已打开新建会话面板（2026-10-18）；“合并到 main…”已接上 F4（2026-10-18）；端口段显示预留的 TR_PORT 段（2026-10-18，PRD v1.28）
 - [x] F17 文件页签（2026-10-17）：按需加载的目录树 + git 状态、筛选和“有改动 N”、只读预览（行号 + 改动标记）、用默认编辑器打开、右键菜单、`fs.watch` 增量刷新；e2e `right-panel.spec.ts`。还没测：1 万文件仓库首屏 < 200 ms、切换会话 100 ms 内换内容
+  - [x] 文件按类型显示图标（2026-11-14，PRD v1.180，Figma 72A / 72A′）：`file-icon.ts` 查找（文件名 → 复合扩展名 → 扩展名），`file-icons.data.ts` 由 `scripts/update-file-icons.mjs` 生成；`file-icon.test.ts`，e2e `right-panel.spec.ts` 查图标在 CSP 下能加载。
 - [x] F13 一键 AI 审阅（2026-10-18）：“让 agent 审阅”在变更视图底部和总览“待审阅”行（展开后 / 浮层），向 Claude 发 `/code-review`、Codex 发 `/review`；agent 忙或未就绪时置灰写明原因，已退出的先 `--resume`；e2e 在 `merge-sheet.spec.ts`（2026-10-27 已删除；「审阅方式 · agent 自带命令」现在在 `merge-chain.spec.ts`）。2026-10-19 起默认走后台审阅，这条路径留作“审阅方式 · agent 自带命令”
 - [x] F13 后台审阅（2026-10-19，PRD v1.29）：主进程 `src/main/background-review.ts` 起只读的 `claude -p` / `codex exec`（登录 shell 的 PATH、提示走 stdin），diff 含未提交、未跟踪文本文件和对比基线的已提交，每段最多 40 万字符；结果落成带 P0–P3 和置信度的 F5 评论（P2 / P3 折叠、默认不勾，只发勾选的），变更视图底部显示状态、用时和花费、可取消；按 diff 哈希去重，新 diff 取消旧审阅；合并面板一行审阅状态和“先审阅”；设置 · 自动化 · 代码审阅（三个时机默认关，一轮结束用 prompt-submit / Stop + HEAD 比对）。测试：`src/main/background-review.test.ts`（真 git 仓库 + 假 CLI），e2e 在 `merge-sheet.spec.ts`（2026-10-27 已删除；后台审阅现在在 `merge-chain.spec.ts`）、`settings.spec.ts`。以后：真实 Codex 服务商上的结构化输出仍没跑通（§6.10）；审阅结果没有持久化，重启后同一 diff 会再审一次
 - [x] F15 归档（2026-10-19，Figma 16D，PRD v1.30）：会话右键“归档 worktree…”和 Worktree 详情“更多”打开 16D 面板；停会话（保留屏幕快照）→ 批准后运行 `archive`（失败可“仍然归档”）→ `src/main/archive-ref.ts` 把 HEAD、暂存区、未提交和未跟踪文件存进 `refs/wavi/archive/<id>` → 侧栏、总览、⌘K 会话和 ⌘1–9 里收起；会话在运行时不能归档。⌘K“历史”恢复：文件夹在就不动，没了就 `git worktree add` 回原分支（分支没了从快照重建）并放回改动，再删 ref；agent 第一次查看时 `--resume`。设置 · Worktree“合并后自动归档”（默认关）。测试：`archive-ref.test.ts`、`archive.test.ts`（真 git 仓库）、`workspace-model.test.ts`、`entries.test.ts`，e2e `archive.spec.ts`（16D 两种主题截图）。以后：历史里删除归档、归档太久的提醒和清理、Worktree 列表里标出已归档
