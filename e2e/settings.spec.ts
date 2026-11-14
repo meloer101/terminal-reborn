@@ -13,6 +13,7 @@ interface TrWindow {
         ports: { base: number }
         review: { beforeMerge: boolean; beforePush: boolean; afterTurnWithCommits: boolean; mode: string; rules: string; customRules: string; reviewer: string; model: string; codexModel: string }
       }>
+      update(patch: unknown): Promise<unknown>
     }
   }
 }
@@ -331,6 +332,8 @@ test('终端底色: 自定义 and an imported Ghostty theme set exactly the colo
 
   const app = await launchApp()
   const settings = await openSettings(app, '终端')
+  // An opaque terminal (85% by default since PRD v1.179): the colors are read off its background.
+  await settings.evaluate(() => (globalThis as unknown as TrWindow).tr.settings.update({ appearance: { terminalOpacity: 1 } }))
   const hex = settings.getByRole('textbox', { name: '底色值', exact: true })
 
   // Follows the theme at first: the value shows the theme's color but cannot be edited.
@@ -393,7 +396,7 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   const app = await launchApp()
   const settings = await openSettings(app, '对话')
   type Chat = { width: string; fontWeight: number; fontSize: number; opacity: number; avatar: string }
-  type Look = { chat: Chat; windowMaterial: string; shellOpacity: number; terminalOpacity: number }
+  type Look = { chat: Chat; windowMaterial: string; terminalOpacity: number }
   const look = async (): Promise<Look> => ((await readSettings(settings)).appearance as unknown as Look)
   const chatBg = () => settings.evaluate(() => document.documentElement.style.getPropertyValue('--tr-chat-bg'))
 
@@ -425,26 +428,25 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   await settings.getByRole('button', { name: '移除' }).click()
   await expect.poll(async () => (await look()).chat.avatar).toBe('')
 
-  // 外观 · 窗口: the material (macOS 26) and each material's own base-layer opacity.
+  // 外观 · 窗口: 玻璃 and 实色 (PRD v1.174, Figma 66′). No base-layer opacity since v1.179: the sidebar is one step (10%)
+  // more opaque than the shown session's card — the terminal's 85% default, the chat's 20% set above.
   await showTab(settings, '外观')
   const windowSection = settings.getByRole('region', { name: '窗口' })
-  // PRD v1.173 (Figma 66′): 玻璃 and 实色 only, one 窗口底层不透明度 that starts at 30%.
   await expect(windowSection.getByRole('radio')).toHaveText(['玻璃', '实色'])
-  expect(await look()).toMatchObject({ windowMaterial: 'glass', shellOpacity: 0.3 })
-  expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('color-mix(in srgb, var(--glass-shell-color) 30%, transparent)')
-  const shell = windowSection.getByRole('slider', { name: '窗口底层不透明度' })
-  await shell.focus()
-  await settings.keyboard.press('Home')
-  await expect.poll(async () => (await look()).shellOpacity).toBe(0)
-  await expect.poll(() => settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('transparent')
+  await expect(windowSection.getByRole('slider')).toHaveCount(0)
+  expect(await look()).toMatchObject({ windowMaterial: 'glass', terminalOpacity: 0.85 })
+  const rootVar = (name: string) => settings.evaluate((n) => document.documentElement.style.getPropertyValue(n), name)
+  expect(await rootVar('--tr-sidebar-cli')).toBe('color-mix(in srgb, var(--glass-shell-color) 95%, transparent)')
+  expect(await rootVar('--tr-sidebar-gui')).toBe('color-mix(in srgb, var(--glass-shell-color) 30%, transparent)')
+  expect(await rootVar('--tr-panel-gui')).toBe('color-mix(in srgb, var(--bg-app) 20%, transparent)')
 
   // 实色 (PRD v1.139, Figma 57C / 66B): opaque, so neither the base-layer opacity nor the full-screen field is offered,
   // and the chat and terminal cards are solid too: their opacities stay saved but are neither applied nor shown.
   await windowSection.getByRole('radio', { name: '实色' }).click()
   await expect.poll(async () => (await look()).windowMaterial).toBe('solid')
   await expect.poll(() => settings.evaluate(() => document.documentElement.dataset.material)).toBe('solid')
-  expect(await settings.evaluate(() => document.documentElement.style.getPropertyValue('--glass-shell'))).toBe('var(--glass-shell-color)')
-  await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toHaveCount(0)
+  expect(await rootVar('--tr-sidebar-cli')).toBe('var(--glass-shell-color)')
+  expect(await rootVar('--tr-panel-gui')).toBe('var(--bg-app)')
   await expect(settings.getByRole('region', { name: '全屏背景' })).toHaveCount(0)
   await expect.poll(chatBg).toBe('var(--bg-app)')
   expect((await look()).chat.opacity).toBe(0.2)
@@ -455,7 +457,6 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
 
   await showTab(settings, '外观')
   await windowSection.getByRole('radio', { name: '玻璃', exact: true }).click()
-  await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toBeVisible()
   await expect(settings.getByRole('region', { name: '全屏背景' })).toBeVisible()
   await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 20%, transparent)')
   await app.close()

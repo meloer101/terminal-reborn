@@ -10,7 +10,8 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius-window);
-  background: var(--bg-app);
+  /* The shown session's card opacity (AppShell, PRD v1.179). */
+  background: var(--tr-panel-bg, var(--bg-app));
   box-shadow: var(--card-shadow);
   color: var(--text-primary);
 }

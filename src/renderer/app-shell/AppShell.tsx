@@ -57,8 +57,8 @@ const windowWidth = () => window.innerWidth
 /**
  * Window layout (Figma Screens 01–08, glass shell Figma 28):
  *   sidebar (264 by default, user-sized) │ main: header 36 / terminal — or the overview │ right panel (F17, 480 by default, user-sized)
- * The whole window is fixed glass — native vibrancy under a per-theme tint (--glass-shell) — and only content sits in
- * opaque cards on it: each pane's terminal, the right panel's body, the overview. Headers and the sidebar are on the
+ * The whole window is glass — the sidebar tinted one step more opaque than the cards (PRD v1.179) — and content sits in
+ * cards on it: each pane's terminal, the right panel's body, the overview. Headers and the sidebar are on the
  * glass. The terminal is the whole input and output surface: keys go straight to the PTY, as in any terminal. The
  * terminal area can hold two to four sessions side by side, each with its own header (PRD F20, split/SplitArea).
  * Each region is owned by one feature directory; this file only arranges them.
@@ -72,6 +72,8 @@ export function AppShell() {
   // The main window's own panes (F20 · 多窗口: the keyboard may be in another window).
   const mainActive = usePaneView().activeSessionId
   const hasSession = useWorkspace((s) => s.sessions.some((x) => x.id === mainActive))
+  // Which card opacity the sidebar and the right panel follow (PRD v1.179): the shown GUI session's chat, else the terminal's.
+  const sessionUi = useWorkspace((s) => (s.sessions.find((x) => x.id === mainActive)?.ui === 'gui' ? 'gui' : 'cli'))
   const isKey = useIsKeyWindow()
   // The panel follows the active session's worktree, so it shows beside a session (not the overview or welcome page).
   const savedPanel = useWorkspace((s) => s.rightPanel)
@@ -119,7 +121,7 @@ export function AppShell() {
   }, [sessionPortKey])
 
   return (
-    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'} data-fullscreen={fullScreen}>
+    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'closed' : 'open'} data-fullscreen={fullScreen} data-session-ui={sessionUi}>
       <SidebarDrawer collapsed={sidebarCollapsed} width={sidebarWidth} resizable />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">

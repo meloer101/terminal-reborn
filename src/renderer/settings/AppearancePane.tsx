@@ -1,10 +1,10 @@
 // 设置 · 外观 (Figma 66A / 66B): what the whole window looks like — theme, material, 全屏背景. The terminal's and the
 // chat's own settings are on 终端 and 对话.
 import type { ReactNode } from 'react'
-import { FULLSCREEN_BACKDROPS, LIMITS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
+import { FULLSCREEN_BACKDROPS, type AppearancePatch, type AppearanceSettings, type FullscreenBackdrop } from '@shared/settings'
 import { Segmented } from '../ui/Segmented'
-import { PreviewPage, Row, Section, Slider, ThemeSwatches } from './controls'
-import { MATERIAL_OPTIONS, THEME_OPTIONS, formatPercent, isPageDefault, pageDefaults } from './appearance-form'
+import { PreviewPage, Row, Section, ThemeSwatches } from './controls'
+import { MATERIAL_OPTIONS, THEME_OPTIONS, isPageDefault, pageDefaults } from './appearance-form'
 import styles from './AppearancePane.module.css'
 
 const THEME_SWATCHES = THEME_OPTIONS.map((option) => ({ ...option, kind: option.value }))
@@ -38,8 +38,8 @@ const BACKDROP_OPTIONS: ReadonlyArray<{ value: FullscreenBackdrop; label: string
 ]
 
 /**
- * A small window over a desktop field, drawn with the variables the app applies on <html> (appearance/map.ts): the
- * sidebar is the shell over the base layer, the cards are the terminal and the chat at their opacities.
+ * A small window over a desktop field, drawn with the variables the app applies (appearance/map.ts, AppShell): the
+ * cards are the terminal and the chat at their opacities, the sidebar one step more opaque than the shown session's.
  */
 function WindowPreview() {
   return (
@@ -80,20 +80,6 @@ export function AppearancePane({ appearance, update }: { appearance: AppearanceS
         <Row label="材质" id="windowMaterial">
           <Segmented label="材质" value={appearance.windowMaterial} options={MATERIAL_OPTIONS} onChange={(windowMaterial) => update({ windowMaterial })} />
         </Row>
-        {/* 实色 (Figma 57C) has no base layer to show through. */}
-        {!solid && (
-          <Row label="窗口底层不透明度" id="shellOpacity">
-            <Slider
-              label="窗口底层不透明度"
-              value={appearance.shellOpacity}
-              min={LIMITS.shellOpacity.min}
-              max={LIMITS.shellOpacity.max}
-              step={0.01}
-              format={formatPercent}
-              onCommit={(shellOpacity) => update({ shellOpacity })}
-            />
-          </Row>
-        )}
       </Section>
 
       {/* 实色 (Figma 57C) draws no field in full screen, so there is nothing to choose. */}

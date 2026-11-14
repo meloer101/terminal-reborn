@@ -8,14 +8,17 @@ import {
   toAppearanceDom,
   chatFontStack,
   shownMaterial,
+  sidebarOpacity,
   toTerminalAppearance
 } from './map'
 
 const base: AppearanceSettings = DEFAULT_SETTINGS.appearance
+/** An opaque terminal (the defaults are 85% since PRD v1.179). */
+const opaque: AppearanceSettings = { ...base, terminalOpacity: 1 }
 
 describe('toTerminalAppearance', () => {
   it('maps font settings one to one', () => {
-    expect(toTerminalAppearance({ ...base, latinFont: 'Fira Code', cjkFont: 'Hiragino Sans GB', fontSize: 16, lineHeight: 1.4, ligatures: true })).toEqual({
+    expect(toTerminalAppearance({ ...base, latinFont: 'Fira Code', cjkFont: 'Hiragino Sans GB', fontSize: 16, lineHeight: 1.4, ligatures: true, terminalOpacity: 1 })).toEqual({
       fontFamily: 'Fira Code',
       cjkFontFamily: 'Hiragino Sans GB',
       fontSize: 16,
@@ -30,8 +33,8 @@ describe('toTerminalAppearance', () => {
 
 describe('terminal transparency', () => {
   it('is off for a solid, fully opaque terminal', () => {
-    expect(terminalBackgroundAlpha(base)).toBe(1)
-    expect(needsTransparency(base)).toBe(false)
+    expect(terminalBackgroundAlpha(opaque)).toBe(1)
+    expect(needsTransparency(opaque)).toBe(false)
   })
   it('turns on for opacity < 1', () => {
     const a = { ...base, terminalOpacity: 0.8 }
@@ -42,21 +45,21 @@ describe('terminal transparency', () => {
 
 describe('backdropCss', () => {
   it('is the theme terminal color, or nothing when translucent', () => {
-    expect(backdropCss(base)).toBe('var(--term-bg)')
+    expect(backdropCss(opaque)).toBe('var(--term-bg)')
     expect(backdropCss({ ...base, terminalOpacity: 0.7 })).toBe('transparent')
   })
 })
 
 describe('ringCss', () => {
   it('repeats the cell color at the terminal opacity around the canvas, nothing when opaque', () => {
-    expect(ringCss(base)).toBe('transparent')
+    expect(ringCss(opaque)).toBe('transparent')
     expect(ringCss({ ...base, terminalOpacity: 0.72 })).toBe('color-mix(in srgb, var(--term-bg) 72%, transparent)')
   })
 })
 
 describe('toAppearanceDom', () => {
   it('lets the surface layers go transparent only when the terminal is', () => {
-    expect(toAppearanceDom(base, false).vars['--tr-term-surface']).toBe('var(--term-bg)')
+    expect(toAppearanceDom(opaque, false).vars['--tr-term-surface']).toBe('var(--term-bg)')
     expect(toAppearanceDom({ ...base, terminalOpacity: 0.8 }, false).vars['--tr-term-surface']).toBe('transparent')
   })
 
@@ -77,32 +80,38 @@ describe('对话 and the window base layer (PRD v1.127, Figma 51)', () => {
     expect(vars['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 85%, transparent)')
   })
 
-  it('reads as today by default: 720 column, system UI font first, 14 / 22, opaque card, glass tinted 30%', () => {
+  it('reads as today by default: 720 column, system UI font first, 14 / 22; cards at 85% (PRD v1.179)', () => {
     const vars = toAppearanceDom(base, true).vars
     expect(vars['--chat-column']).toBe('720px')
     expect(vars['--chat-font']).toBe('-apple-system, BlinkMacSystemFont, "PingFang SC", var(--font-ui)')
     expect(vars['--chat-leading']).toBe('22px')
-    expect(vars['--tr-chat-bg']).toBe('var(--bg-app)')
-    expect(vars['--glass-shell']).toBe('color-mix(in srgb, var(--glass-shell-color) 30%, transparent)')
+    expect(vars['--tr-chat-bg']).toBe('color-mix(in srgb, var(--bg-app) 85%, transparent)')
+    expect(vars['--tr-term-ring']).toBe('color-mix(in srgb, var(--term-bg) 85%, transparent)')
   })
 
-  it('tints the glass by the one opacity: Liquid Glass on macOS 26, frosted before it, the same tint on both', () => {
-    const a = { ...base, windowMaterial: 'glass' as const, shellOpacity: 0.2 }
-    const tint = 'color-mix(in srgb, var(--glass-shell-color) 20%, transparent)'
-    expect(shownMaterial(a, true)).toBe('liquid')
-    expect(toAppearanceDom(a, true).vars['--glass-shell']).toBe(tint)
-    expect(shownMaterial(a, false)).toBe('frosted')
-    expect(toAppearanceDom(a, false).vars['--glass-shell']).toBe(tint)
-    expect(toAppearanceDom({ ...a, shellOpacity: 1 }, true).vars['--glass-shell']).toBe('var(--glass-shell-color)')
-    expect(toAppearanceDom({ ...a, shellOpacity: 0 }, true).vars['--glass-shell']).toBe('transparent')
+  it('the sidebar is one step (10%) more opaque than the current session’s card; the right panel matches the card (PRD v1.179)', () => {
+    const a = { ...base, terminalOpacity: 0.5, chat: { ...base.chat, opacity: 0.3 } }
+    const vars = toAppearanceDom(a, true).vars
+    expect(vars['--tr-sidebar-cli']).toBe('color-mix(in srgb, var(--glass-shell-color) 60%, transparent)')
+    expect(vars['--tr-sidebar-gui']).toBe('color-mix(in srgb, var(--glass-shell-color) 40%, transparent)')
+    expect(vars['--tr-panel-cli']).toBe('color-mix(in srgb, var(--bg-app) 50%, transparent)')
+    expect(vars['--tr-panel-gui']).toBe('color-mix(in srgb, var(--bg-app) 30%, transparent)')
+    // The defaults: cards 85%, sidebar 95%. Above 90% the sidebar is opaque.
+    expect(toAppearanceDom(base, true).vars['--tr-sidebar-cli']).toBe('color-mix(in srgb, var(--glass-shell-color) 95%, transparent)')
+    const opaque = toAppearanceDom({ ...a, terminalOpacity: 0.95 }, false).vars
+    expect(opaque['--tr-sidebar-cli']).toBe('var(--glass-shell-color)')
+    expect(sidebarOpacity(0.95)).toBe(1)
+    expect(sidebarOpacity(0.2)).toBeCloseTo(0.3)
   })
 
   it('实色 (PRD v1.139, Figma 57): an opaque shell on every macOS, named on <html> for the softened tokens', () => {
-    const a = { ...base, windowMaterial: 'solid' as const, shellOpacity: 0.6 }
+    const a = { ...base, windowMaterial: 'solid' as const, terminalOpacity: 0.4 }
     expect(shownMaterial(a, true)).toBe('solid')
     expect(shownMaterial(a, false)).toBe('solid')
     const dom = toAppearanceDom(a, false)
-    expect(dom.vars['--glass-shell']).toBe('var(--glass-shell-color)')
+    expect(dom.vars['--tr-sidebar-cli']).toBe('var(--glass-shell-color)')
+    expect(dom.vars['--tr-sidebar-gui']).toBe('var(--glass-shell-color)')
+    expect(dom.vars['--tr-panel-cli']).toBe('var(--bg-app)')
     expect(dom.attrs['data-material']).toBe('solid')
     expect(toAppearanceDom({ ...a, windowMaterial: 'glass' }, false).attrs['data-material']).toBe('frosted')
   })
