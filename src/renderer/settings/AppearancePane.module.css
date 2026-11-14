@@ -85,14 +85,22 @@
   object-fit: cover;
 }
 
+/* 终端 / 对话's previews sit on the desktop field (as 外观's small window), so the card's opacity shows while it is
+   dragged: on the sheet's own opaque colour a translucent card of that colour looks unchanged. */
+.previewField {
+  padding: var(--space-24);
+  border-radius: var(--radius-window);
+  background: var(--fs-field, var(--fsb-sky));
+}
+
 .chatPreview {
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
   padding: var(--space-20);
   border-radius: var(--radius-window);
-  /* bg/section, as Figma 51D: the sheet is bg/app, the chat's own card colour would not show on it. */
-  background: var(--bg-section);
+  /* The chat card's colour at its opacity (appearance/map.ts), as GUI sessions draw it. */
+  background: var(--tr-chat-bg, var(--bg-app));
   font: var(--chat-weight, 400) var(--chat-size, 14px) / var(--chat-leading, 22px) var(--chat-font, var(--font-ui));
   color: var(--text-primary);
 }

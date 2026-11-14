@@ -409,8 +409,8 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   const opacity = settings.getByRole('slider', { name: '对话不透明度' })
   await opacity.focus()
   await settings.keyboard.press('Home')
-  await expect.poll(async () => (await look()).chat.opacity).toBe(0.5)
-  await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 50%, transparent)')
+  await expect.poll(async () => (await look()).chat.opacity).toBe(0.2)
+  await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 20%, transparent)')
 
   // 我的头像: a picked picture is kept as its centred 256² square, beside its buttons on one line.
   const png = join(mkdtempSync(join(tmpdir(), 'tr-e2e-avatar-')), 'me.png')
@@ -447,7 +447,7 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toHaveCount(0)
   await expect(settings.getByRole('region', { name: '全屏背景' })).toHaveCount(0)
   await expect.poll(chatBg).toBe('var(--bg-app)')
-  expect((await look()).chat.opacity).toBe(0.5)
+  expect((await look()).chat.opacity).toBe(0.2)
   await showTab(settings, '对话')
   await expect(settings.getByRole('slider', { name: '对话不透明度' })).toHaveCount(0)
   await showTab(settings, '终端')
@@ -457,6 +457,6 @@ test('设置 · 对话 and 外观 · 窗口; 实色 makes every card solid (PRD 
   await windowSection.getByRole('radio', { name: '玻璃', exact: true }).click()
   await expect(windowSection.getByText('窗口底层不透明度', { exact: true })).toBeVisible()
   await expect(settings.getByRole('region', { name: '全屏背景' })).toBeVisible()
-  await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 50%, transparent)')
+  await expect.poll(chatBg).toBe('color-mix(in srgb, var(--bg-app) 20%, transparent)')
   await app.close()
 })

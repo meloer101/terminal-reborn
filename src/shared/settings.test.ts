@@ -14,7 +14,7 @@ describe('sanitizeSettings', () => {
     })
     expect(s.appearance.fontSize).toBe(28)
     expect(s.appearance.lineHeight).toBe(1)
-    expect(s.appearance.terminalOpacity).toBe(0.5)
+    expect(s.appearance.terminalOpacity).toBe(0.2)
     expect(s.appearance.theme).toBe('system')
     expect(s.appearance.latinFont).toBe('Menlo')
     expect(s.appearance.ligatures).toBe(false)
@@ -169,7 +169,7 @@ describe('设置 · 外观 · 对话 and the window material (PRD v1.127, Figma 
     const { chat, windowMaterial, shellOpacity } = sanitizeSettings({
       appearance: { chat: { width: 'huge', latinFont: '  Inter ', fontWeight: 900, fontSize: 40, opacity: 0.1, avatar: 'javascript:alert(1)' }, windowMaterial: 'stone', shellOpacity: 2 }
     }).appearance
-    expect(chat).toEqual({ width: 'narrow', latinFont: 'Inter', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 18, opacity: 0.5, avatar: '' })
+    expect(chat).toEqual({ width: 'narrow', latinFont: 'Inter', cjkFont: 'PingFang SC', fontWeight: 400, fontSize: 18, opacity: 0.2, avatar: '' })
     expect(windowMaterial).toBe('glass')
     expect(shellOpacity).toBe(1)
     expect(sanitizeSettings({ appearance: { shellOpacity: -1 } }).appearance.shellOpacity).toBe(0)

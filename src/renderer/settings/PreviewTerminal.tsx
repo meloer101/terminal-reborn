@@ -1,12 +1,16 @@
 import { useEffect, useRef } from 'react'
 import type { ITheme } from '@xterm/xterm'
 import type { AppearanceSettings } from '@shared/settings'
+import { needsTransparency } from '../appearance/map'
 import { buildFontStack } from '../terminal/appearance'
 import { XtermSurface } from '../terminal/xterm-surface'
 import { sampleRows, sampleScreen } from './preview-sample'
 import styles from './PreviewTerminal.module.css'
 
-type PreviewAppearance = Pick<AppearanceSettings, 'latinFont' | 'cjkFont' | 'fontSize' | 'lineHeight' | 'ligatures'> & {
+type PreviewAppearance = Pick<
+  AppearanceSettings,
+  'latinFont' | 'cjkFont' | 'fontSize' | 'lineHeight' | 'ligatures' | 'terminalOpacity' | 'windowMaterial'
+> & {
   /** The colors of a custom 终端底色, as the session terminals get them; undefined follows the theme. */
   customTheme?: ITheme | undefined
 }
@@ -18,6 +22,9 @@ function toSurface(a: PreviewAppearance) {
     fontSize: a.fontSize,
     lineHeight: a.lineHeight,
     ligatures: a.ligatures,
+    // Translucent: the cells stay clear and the card (.preview) paints the color once at the user's alpha, so text and
+    // padding sit on one flat tone over the field behind.
+    backgroundAlpha: needsTransparency(a) ? 0 : 1,
     customTheme: a.customTheme
   }
 }
@@ -76,16 +83,18 @@ export function PreviewTerminal({ appearance }: { appearance: PreviewAppearance 
     }
   }, [])
 
-  const { latinFont, cjkFont, fontSize, lineHeight, ligatures } = appearance
+  const { latinFont, cjkFont, fontSize, lineHeight, ligatures, terminalOpacity, windowMaterial } = appearance
   // The theme object is new on every settings update; its content decides whether the preview needs redrawing.
   const themeKey = JSON.stringify(appearance.customTheme ?? null)
   useEffect(() => {
     const term = surface.current
     if (!term) return
-    term.setAppearance(toSurface({ latinFont, cjkFont, fontSize, lineHeight, ligatures, customTheme: latest.current.customTheme }))
+    term.setAppearance(
+      toSurface({ latinFont, cjkFont, fontSize, lineHeight, ligatures, terminalOpacity, windowMaterial, customTheme: latest.current.customTheme })
+    )
     layout.current()
     term.write(sampleScreen())
-  }, [latinFont, cjkFont, fontSize, lineHeight, ligatures, themeKey])
+  }, [latinFont, cjkFont, fontSize, lineHeight, ligatures, terminalOpacity, windowMaterial, themeKey])
 
   return (
     <div

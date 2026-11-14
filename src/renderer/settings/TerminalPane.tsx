@@ -42,7 +42,11 @@ export function TerminalPane({ appearance, update }: { appearance: AppearanceSet
   return (
     <PreviewPage
       title="终端"
-      preview={<PreviewTerminal appearance={{ ...appearance, customTheme }} />}
+      preview={
+        <div className={styles.previewField}>
+          <PreviewTerminal appearance={{ ...appearance, customTheme }} />
+        </div>
+      }
       caption={previewCaption(appearance)}
       isDefault={isPageDefault(appearance, 'terminal')}
       onReset={() => update(pageDefaults('terminal'))}

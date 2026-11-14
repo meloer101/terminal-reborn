@@ -1,7 +1,10 @@
 .preview {
   padding: 18px var(--space-20);
   border-radius: 8px;
-  background: var(--term-bg);
+  /* The variables the session cards read (appearance/map.ts): opaque, the terminal color; translucent, the ring color
+     (the color at the user's alpha) over a clear backdrop. */
+  background-color: var(--tr-terminal-backdrop, var(--term-bg));
+  background-image: linear-gradient(var(--tr-term-ring, transparent), var(--tr-term-ring, transparent));
   overflow: hidden;
 }
 
@@ -10,4 +13,10 @@
   height: 260px;
   width: 100%;
   overflow: hidden;
+}
+
+/* xterm's stylesheet paints the viewport #000; the cells (or, translucent, the card) carry the color, as in the session
+   terminals (TerminalArea.module.css). */
+.host :global(.xterm-viewport) {
+  background: transparent !important;
 }

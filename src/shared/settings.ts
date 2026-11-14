@@ -55,7 +55,7 @@ export interface ChatAppearance {
   fontWeight: ChatWeight
   /** px */
   fontSize: number
-  /** Opacity of the chat card over the window's glass, 0.5–1 (as terminalOpacity). */
+  /** Opacity of the chat card over the window's glass, 0.2–1 (as terminalOpacity). */
   opacity: number
   /** The user's picture beside their messages: a 256² data URL (webp / png / jpeg), or '' for none. */
   avatar: string
@@ -84,7 +84,7 @@ export interface AppearanceSettings {
   terminalBackground: TerminalBackground
   /** Colors of an imported theme; null until one is imported. Applied while terminalBackground.mode is custom. */
   terminalColors: TerminalColors | null
-  /** Opacity of the terminal surface over the background, 0.5–1. */
+  /** Opacity of the terminal surface over the background, 0.2–1. */
   terminalOpacity: number
   /** Terminal screen reader mode (VoiceOver reads the output). */
   screenReader: boolean
@@ -281,10 +281,10 @@ const REVIEW_MODEL = /^[A-Za-z0-9._:@/-]{1,64}$/
 export const LIMITS = {
   fontSize: { min: 9, max: 28 },
   lineHeight: { min: 1, max: 2.2 },
-  terminalOpacity: { min: 0.5, max: 1 },
+  terminalOpacity: { min: 0.2, max: 1 },
   fontName: 120,
   chatFontSize: { min: 12, max: 18 },
-  chatOpacity: { min: 0.5, max: 1 },
+  chatOpacity: { min: 0.2, max: 1 },
   shellOpacity: { min: 0, max: 1 },
   /** A 256² webp is ~10–40 KB; the cap keeps a stray big image out of settings.json. */
   avatar: 400_000
