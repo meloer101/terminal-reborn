@@ -8,7 +8,8 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius-window);
-  background: var(--bg-app);
+  /* At the card opacity, as the cards beside the sidebar (AppShell's --tr-panel-bg, PRD v1.179). */
+  background: var(--tr-panel-bg, var(--bg-app));
   box-shadow: var(--card-edge), var(--card-shadow);
 }
 
