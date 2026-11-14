@@ -96,7 +96,7 @@ export function chatPreviewCaption(c: Pick<ChatAppearance, 'latinFont' | 'cjkFon
  * one click away on 外观.
  */
 export const RESET_KEYS = {
-  appearance: ['windowMaterial', 'shellOpacity'],
+  appearance: ['windowMaterial'],
   terminal: ['latinFont', 'cjkFont', 'fontSize', 'lineHeight', 'ligatures', 'terminalBackground', 'terminalColors', 'terminalOpacity', 'screenReader'],
   chat: ['chat']
 } as const satisfies Record<string, ReadonlyArray<keyof AppearanceSettings>>

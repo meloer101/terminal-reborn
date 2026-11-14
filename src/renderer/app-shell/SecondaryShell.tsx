@@ -28,6 +28,8 @@ export function SecondaryShell() {
   const isKey = useIsKeyWindow()
   const view = usePaneView()
   const hasSession = useWorkspace((s) => view.activeSessionId !== null && s.sessions.some((x) => x.id === view.activeSessionId))
+  // The sidebar follows the shown session's card opacity, as in the main window (PRD v1.179).
+  const sessionUi = useWorkspace((s) => (s.sessions.find((x) => x.id === view.activeSessionId)?.ui === 'gui' ? 'gui' : 'cli'))
   const project = useWorkspace((s) => (record?.projectId ? s.projects.find((p) => p.id === record.projectId) : undefined))
   const sidebarWidth = sidebarWidthFor(win.innerWidth, useWorkspace((s) => s.sidebarWidth))
 
@@ -37,7 +39,7 @@ export function SecondaryShell() {
   }, [win])
 
   return (
-    <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'}>
+    <div className={styles.shell} data-sidebar={collapsed ? 'closed' : 'open'} data-session-ui={sessionUi}>
       <SidebarDrawer collapsed={collapsed} width={sidebarWidth} />
       <div className={styles.surface}>
         <main className={styles.main} data-region="main">

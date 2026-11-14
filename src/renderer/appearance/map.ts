@@ -85,15 +85,26 @@ export const shownMaterial = (a: Pick<AppearanceSettings, 'windowMaterial'>, liq
 const over = (color: string, opacity: number): string =>
   opacity >= 1 ? color : opacity <= 0 ? 'transparent' : `color-mix(in srgb, ${color} ${+(opacity * 100).toFixed(2)}%, transparent)`
 
+/** How much more opaque the sidebar is than the card beside it (PRD v1.179). */
+const SIDEBAR_STEP = 0.1
+
+/** The sidebar's opacity beside a card at `card`: one step more, at most opaque. */
+export const sidebarOpacity = (card: number): number => Math.min(1, Math.round((card + SIDEBAR_STEP) * 100) / 100)
+
 export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): AppearanceDom {
   const transparent = needsTransparency(a)
   const chat = a.chat
   const material = shownMaterial(a, liquidGlass)
+  const cli = terminalBackgroundAlpha(a)
+  const gui = chatOpacity(a)
   return {
     vars: {
-      // 窗口底层不透明度 (PRD §5 v1.127, one value since v1.174): the theme's shell color over the base layer. 实色 (v1.139)
-      // covers the base layer with it: nothing of the desktop shows.
-      '--glass-shell': material === 'solid' ? 'var(--glass-shell-color)' : over('var(--glass-shell-color)', a.shellOpacity),
+      // The sidebar and the right panel follow the shown session's card (PRD v1.179; AppShell picks the cli or gui pair by
+      // the session): the panel at the card's opacity, the sidebar one step more opaque. Both are opaque under 实色.
+      '--tr-sidebar-cli': over('var(--glass-shell-color)', sidebarOpacity(cli)),
+      '--tr-sidebar-gui': over('var(--glass-shell-color)', sidebarOpacity(gui)),
+      '--tr-panel-cli': over('var(--bg-app)', cli),
+      '--tr-panel-gui': over('var(--bg-app)', gui),
       // 对话 (Figma 51D): GUI sessions read these (gui/Chat.module.css).
       '--chat-column': CHAT_COLUMN[chat.width],
       '--chat-font': chatFontStack(chat),
@@ -101,7 +112,7 @@ export function toAppearanceDom(a: AppearanceSettings, liquidGlass: boolean): Ap
       '--chat-size': `${chat.fontSize}px`,
       // 14 / 22 today: the same leading at every size.
       '--chat-leading': `${Math.round(chat.fontSize * (22 / 14))}px`,
-      '--tr-chat-bg': over('var(--bg-app)', chatOpacity(a)),
+      '--tr-chat-bg': over('var(--bg-app)', gui),
       // The user's picture beside their messages (Figma 51A); none hides it (data-chat-avatar).
       '--chat-avatar': chat.avatar ? `url("${chat.avatar}")` : null,
       // Only the terminal layers read --term-bg; --term-fg stays the theme's (the diff view uses it on app surfaces).

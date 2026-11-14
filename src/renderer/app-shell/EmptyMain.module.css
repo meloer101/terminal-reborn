@@ -11,7 +11,8 @@
   justify-content: center;
   padding: var(--space-40) var(--space-24) calc(var(--space-40) * 2 + var(--space-16));
   overflow-y: auto;
-  background: var(--bg-app);
+  /* At the card opacity, as the cards beside the sidebar (AppShell's --tr-panel-bg, PRD v1.179). */
+  background: var(--tr-panel-bg, var(--bg-app));
 }
 
 /* 14D: a dashed drop target inset 12. */

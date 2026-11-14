@@ -10,9 +10,20 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius-window);
-  background: var(--bg-app);
+  /* The shown session's card opacity (AppShell, PRD v1.179). */
+  background: var(--tr-panel-bg, var(--bg-app));
   box-shadow: var(--card-shadow);
   color: var(--text-primary);
+}
+
+/* The 终端 view: the terminal under its rows carries its own opacity (the cells, or the ring around them), so the card
+   paints only the rows above it — one translucent layer everywhere, not the panel's under the terminal's. */
+.card[data-view='terminal'] {
+  background: none;
+}
+
+.card[data-view='terminal'] > :not([data-testid='panel-terminal']) {
+  background: var(--tr-panel-bg, var(--bg-app));
 }
 
 /* The card's hairline edge and top light, over the rows (an inset shadow would sit under their backgrounds). */

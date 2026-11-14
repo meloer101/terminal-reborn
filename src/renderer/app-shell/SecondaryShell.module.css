@@ -10,7 +10,8 @@
   justify-content: center;
   gap: var(--space-8);
   padding: var(--space-40) var(--space-24);
-  background: var(--bg-app);
+  /* At the card opacity, as the cards beside the sidebar (AppShell's --tr-panel-bg, PRD v1.179). */
+  background: var(--tr-panel-bg, var(--bg-app));
   text-align: center;
 }
 

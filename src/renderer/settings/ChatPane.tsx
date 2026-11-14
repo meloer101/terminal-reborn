@@ -31,7 +31,11 @@ export function ChatPane({ appearance, update }: { appearance: AppearanceSetting
   return (
     <PreviewPage
       title="对话"
-      preview={<ChatPreview />}
+      preview={
+        <div className={styles.previewField}>
+          <ChatPreview />
+        </div>
+      }
       caption={chatPreviewCaption(chat)}
       isDefault={isPageDefault(appearance, 'chat')}
       onReset={() => update(pageDefaults('chat'))}

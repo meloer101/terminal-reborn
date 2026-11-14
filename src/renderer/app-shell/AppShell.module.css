@@ -1,5 +1,6 @@
-/* The window's fixed glass (PRD §5 玻璃外壳, Figma 28): native vibrancy (main/appearance.ts) under one tint per theme.
-   Only content sits on it in cards; nothing a theme import or terminal colour changes. */
+/* The window's glass (PRD §5 玻璃外壳, Figma 28): native glass or vibrancy (main/appearance.ts). Only the sidebar is tinted
+   with the theme's shell colour, so the cards sit on the bare glass at their own opacity; nothing a theme import or
+   terminal colour changes. */
 :global(html),
 :global(body) {
   background: transparent;
@@ -8,11 +9,24 @@
 /* The cards sit --card-gap in from the window's top, right and bottom edges (PRD §5 窗口留边, Figma 75), the left one
    too once the sidebar is hidden, so a card's corner never lands on the window's own. */
 .shell {
+  /* The shown session's pair (appearance/map.ts, PRD v1.179): a CLI session's or a GUI session's opacity. The fallbacks
+     are the theme's tokens, before the settings arrive. */
+  --tr-sidebar-bg: var(--tr-sidebar-cli, var(--glass-shell));
+  --tr-panel-bg: var(--tr-panel-cli, var(--bg-app));
   position: relative;
   display: flex;
   overflow: hidden;
   height: 100%;
-  background: var(--glass-shell);
+}
+
+.shell[data-session-ui='gui'] {
+  --tr-sidebar-bg: var(--tr-sidebar-gui, var(--glass-shell));
+  --tr-panel-bg: var(--tr-panel-gui, var(--bg-app));
+}
+
+/* 实色 (PRD v1.139): nothing of the desktop shows, the gaps between the cards included. */
+:global(:root[data-material='solid']) .shell {
+  background: var(--glass-shell-color);
 }
 
 /* 全屏背景 (PRD v1.97, Figma 38): full screen leaves no desktop behind the window for the glass to show, so the shell
@@ -49,9 +63,15 @@
   --text-mono-s-medium: var(--fs-text-mono-s-medium);
 }
 
+:global(:root:not([data-material='solid'])) .shell[data-fullscreen='true'] .sidebar {
+  background: none;
+}
+
 .sidebar {
   position: relative;
   flex: none;
+  /* One step more opaque than the card beside it (PRD v1.179). */
+  background: var(--tr-sidebar-bg);
   /* The user's width is set inline (AppShell); this is the default. */
   width: var(--sidebar-width);
   display: flex;
