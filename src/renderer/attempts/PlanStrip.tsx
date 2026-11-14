@@ -2,13 +2,14 @@
 // dialog from the plan's text. Approving or rejecting stays in the agent's own TUI.
 import { agentName } from '@shared/agents'
 import { promptPreview } from '@shared/attempt-groups'
-import { useActiveSession } from '../state/workspace'
+import type { SessionId } from '@shared/types'
+import { useSessionView } from '../state/workspace'
 import { PromptStrip } from './PromptStrip'
 import { openSameTask } from './same-task-store'
 import { useTaskSources } from './sources'
 
-export function PlanStrip() {
-  const active = useActiveSession()
+export function PlanStrip({ sessionId }: { sessionId: SessionId }) {
+  const active = useSessionView(sessionId)
   const session = active?.session
   const plan = useTaskSources((s) => (session ? s.plans[session.id] : undefined))
   if (!session || session.kind === 'shell' || !plan) return null

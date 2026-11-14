@@ -151,14 +151,6 @@
   display: none;
 }
 
-.sessionOnly {
-  display: contents;
-}
-
-.sessionOnly[data-hidden='true'] {
-  display: none;
-}
-
 .panel {
   position: relative;
   flex: none;

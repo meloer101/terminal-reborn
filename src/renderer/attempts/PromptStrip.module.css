@@ -5,7 +5,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-12);
-  margin: 0 var(--space-12) var(--space-8);
   padding: var(--space-12) var(--space-16);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-window);

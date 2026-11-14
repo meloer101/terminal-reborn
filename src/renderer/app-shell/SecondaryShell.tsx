@@ -5,15 +5,10 @@
 import { useEffect } from 'react'
 import { useWorkspace } from '../state/workspace'
 import { useIsKeyWindow, usePaneView, useSecondaryWindow, useSidebarCollapsed, useWindowScope } from '../state/window-scope'
-import { SessionErrorBar } from '../lifecycle/SessionErrorBar'
-import { SetupStrip } from '../scripts/SetupStrip'
-import { DispatchStrip } from '../dispatch/DispatchStrip'
-import { ScheduleConfirmStrip } from '../schedules/ScheduleConfirmStrip'
 import { SessionHeader } from '../session-header/SessionHeader'
 import { SessionDragGhost, SplitArea } from '../split/SplitArea'
 import { CommandPalette } from '../command-palette/CommandPalette'
 import { NewSessionSheet } from '../new-session/NewSessionSheet'
-import { PlanStrip } from '../attempts/PlanStrip'
 import { SameTaskSheet } from '../attempts/SameTaskSheet'
 import { MenuHost } from '../ui/MenuHost'
 import { sidebarWidthFor } from './layout'
@@ -53,11 +48,6 @@ export function SecondaryShell() {
               </div>
             )}
           </section>
-          <SessionErrorBar />
-          <SetupStrip />
-          <DispatchStrip />
-          <ScheduleConfirmStrip />
-          <PlanStrip />
         </main>
       </div>
       {/* Sheets and the palette open in the window with the keyboard. */}

@@ -1,6 +1,7 @@
 import { CircleAlert } from 'lucide-react'
 import { AGENT_NAME } from '../lifecycle/present'
-import { useActiveSession, useWorkspace } from '../state/workspace'
+import type { SessionId } from '@shared/types'
+import { useSessionView, useWorkspace } from '../state/workspace'
 import { StatusGlyph } from '../ui/StatusGlyph'
 import { continueAfterSetup, dismissSetupNote, useSetupRuns } from './setup-runs'
 import styles from './SetupStrip.module.css'
@@ -9,8 +10,8 @@ import styles from './SetupStrip.module.css'
  * Under the session, like the worktree-failed strip (PRD F4): the setup script failed — its output stays in the
  * terminal, and the agent starts when the user goes on — or it was not run because `.tr/settings.toml` is broken.
  */
-export function SetupStrip() {
-  const active = useActiveSession()
+export function SetupStrip({ sessionId }: { sessionId: SessionId }) {
+  const active = useSessionView(sessionId)
   const id = active?.session.id ?? null
   const run = useSetupRuns((s) => (id ? s.runs[id] : undefined))
   if (!active || !id || !run || (run.state !== 'failed' && run.state !== 'skipped')) return null

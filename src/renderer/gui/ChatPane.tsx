@@ -21,6 +21,7 @@ import { TodoCard } from './Todos'
 import { DispatchStripGui } from './Dispatch'
 import { retargetGuiSession } from './launch'
 import { useSessionMeta } from '../session-meta/store'
+import { PaneStrips } from '../lifecycle/PaneStrips'
 import type { WorkflowAsk } from './WorkflowCard'
 import type { WorkflowRun } from '@shared/workflow-run'
 import { cardKey, chatIsEmpty, currentTodos, projectChoices, shortAgentName, userCount, waitingToolId, withPendingSend, type PendingSend } from './model'
@@ -30,7 +31,7 @@ import styles from './Chat.module.css'
 
 const EMPTY = emptyGuiState()
 
-export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sessionId: SessionId; agent: AgentKind; cwd: string }) {
+export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd, active }: { sessionId: SessionId; agent: AgentKind; cwd: string; active: boolean }) {
   const state = useGuiSessions((s) => s.states[sessionId]) ?? EMPTY
   const rootRef = useRef<HTMLDivElement>(null)
   const cardKeys = useRef<CardKeys | null>(null)
@@ -242,6 +243,10 @@ export const ChatPane = memo(function ChatPane({ sessionId, agent, cwd }: { sess
         />
       )}
       <div className={styles.dock}>
+        {/* The session's strips (Figma 80B′): in the column, drawn like its other cards. */}
+        <div className={styles.dockStrips}>
+          <PaneStrips sessionId={sessionId} active={active} />
+        </div>
         {todos && <TodoCard todos={todos} />}
         <DispatchStripGui parentId={sessionId} />
         {prompt && !workflowAsk && <PromptCard key={prompt.id} sessionId={sessionId} prompt={prompt} agentLabel={label} answer={answer} pending={answering === prompt.id} bindKeys={bindKeys} />}
