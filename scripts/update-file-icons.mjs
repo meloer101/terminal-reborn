@@ -31,6 +31,9 @@ next.config.js next.config.mjs next.config.ts svelte.config.js webpack.config.js
 const pkg = process.argv[2]
 if (!pkg) throw new Error('usage: node scripts/update-file-icons.mjs <unpacked material-icon-theme package dir>')
 const { version } = JSON.parse(await readFile(path.join(pkg, 'package.json'), 'utf8'))
+// PRD v1.180 and THIRD_PARTY_NOTICES.md name this version; moving to another one updates them too.
+const VERSION = '5.40.0'
+if (version !== VERSION) throw new Error(`expected material-icon-theme ${VERSION}, got ${version}`)
 const manifest = JSON.parse(await readFile(path.join(pkg, 'dist/material-icons.json'), 'utf8'))
 
 const lowerKeys = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]))
@@ -46,11 +49,18 @@ for (const e of EXT) {
   byExt[e] = icon
   if (manifest.light.fileExtensions[e]) light[icon] = manifest.light.fileExtensions[e]
 }
+/** The icon file-icon.ts finds by extension: longest compound first; a leading dot is part of the name. */
+function extIcon(name) {
+  for (let dot = name.indexOf('.', 1); dot >= 0; dot = name.indexOf('.', dot + 1)) {
+    if (byExt[name.slice(dot + 1)]) return byExt[name.slice(dot + 1)]
+  }
+  return undefined
+}
 for (const n of NAMES) {
   const icon = n === '.env' ? 'tune' : fileNames[n]
   if (!icon) continue
   // A name whose icon its extension already gives is left to the extension.
-  if (icon !== byExt[n.split('.').pop()]) byName[n] = icon
+  if (icon !== extIcon(n)) byName[n] = icon
   if (lightNames[n]) light[icon] = lightNames[n]
 }
 

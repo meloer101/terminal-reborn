@@ -4,6 +4,7 @@ export const ICON_BY_NAME: Readonly<Record<string, string>> = {
  ".babelrc": "babel",
  ".cursorrules": "cursor",
  ".editorconfig": "editorconfig",
+ ".env": "tune",
  ".env.example": "tune",
  ".env.local": "tune",
  ".gitattributes": "git",

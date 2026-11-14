@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fileIcon } from './file-icon'
+import { ICON_BY_EXT, ICON_BY_NAME, ICON_SVG, LIGHT_ICON } from './file-icons.data'
 
 describe('fileIcon', () => {
   it('matches an exact file name before the extension, ignoring case', () => {
@@ -7,6 +8,13 @@ describe('fileIcon', () => {
     expect(fileIcon('CLAUDE.md')).toBe('claude')
     expect(fileIcon('LICENSE')).toBe('license')
     expect(fileIcon('.gitignore')).toBe('git')
+    // A leading dot is part of the name, so ".env" has no extension and needs its own entry.
+    expect(fileIcon('.env')).toBe('tune')
+  })
+
+  it('every icon a lookup can return has its SVG', () => {
+    const icons = [...Object.values(ICON_BY_NAME), ...Object.values(ICON_BY_EXT), ...Object.values(LIGHT_ICON)]
+    expect(icons.filter((icon) => !ICON_SVG[icon])).toEqual([])
   })
 
   it('prefers the longest compound extension', () => {
