@@ -5,6 +5,7 @@ import type { SessionId } from '@shared/types'
 import { PATHS_DRAG_TYPE } from '../../terminal/attachments'
 import { pointerAnchor } from '../../ui/menu'
 import { openFileMenu, runFileAction, type FileTarget } from './actions'
+import { fileIcon, fileIconUrl } from './file-icon'
 import { fileActionForKey } from './keys'
 import { select, showPreview, toggleDir } from './store'
 import { stepRow, type TreeRow } from './tree-model'
@@ -16,6 +17,21 @@ const MARK_LABEL: Record<NonNullable<TreeRow['mark']>, string> = {
   D: '已删除',
   U: '未跟踪',
   '•': '包含改动'
+}
+
+/** The file's type icon (Figma 72A / 72A′), or lucide File when its type has none. Icons with a light variant draw both;
+ * the theme's CSS shows one. */
+function TypeIcon({ name }: { name: string }) {
+  const dark = fileIcon(name)
+  if (!dark) return <File size={16} strokeWidth={1.75} />
+  const light = fileIcon(name, 'light') ?? dark
+  if (light === dark) return <img className={styles.typeIcon} src={fileIconUrl(dark)} alt="" draggable={false} />
+  return (
+    <>
+      <img className={`${styles.typeIcon} ${styles.darkOnly}`} src={fileIconUrl(dark)} alt="" draggable={false} />
+      <img className={`${styles.typeIcon} ${styles.lightOnly}`} src={fileIconUrl(light)} alt="" draggable={false} />
+    </>
+  )
 }
 
 interface Props {
@@ -145,7 +161,7 @@ export function FileTree({ ref, root, sessionId, rows, selected }: Props) {
                 <Folder size={16} strokeWidth={1.75} />
               )
             ) : (
-              <File size={16} strokeWidth={1.75} />
+              <TypeIcon name={row.name} />
             )}
           </span>
           <span className={styles.name}>{row.name}</span>
